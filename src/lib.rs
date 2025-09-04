@@ -13,7 +13,7 @@ pub use agent::{Agent, AgentStatus, AsAgent, AsAgentData, new_boxed};
 pub use askit::{ASKit, ASKitEvent, ASKitObserver};
 pub use config::{AgentConfig, AgentConfigs};
 pub use context::AgentContext;
-pub use data::{AgentData, AgentValue};
+pub use data::{AgentData, AgentValue, AgentValueMap};
 pub use definition::{
     AgentConfigEntry, AgentDefinition, AgentDefinitions, AgentDisplayConfigEntry,
 };
