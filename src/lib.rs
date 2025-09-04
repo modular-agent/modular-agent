@@ -1,5 +1,6 @@
 mod agent;
 mod askit;
+mod board_agent;
 mod config;
 mod context;
 mod data;

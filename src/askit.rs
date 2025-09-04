@@ -4,6 +4,8 @@ use std::sync::{Arc, Mutex};
 
 use tokio::sync::mpsc;
 
+use crate::board_agent;
+
 use super::agent::{AgentMessage, AgentStatus, AsyncAgent, agent_new};
 use super::config::AgentConfig;
 use super::context::AgentContext;
@@ -76,7 +78,12 @@ impl ASKit {
 
     pub fn init() -> Result<Self, AgentError> {
         let askit = Self::new();
+        askit.register_agents();
         Ok(askit)
+    }
+
+    fn register_agents(&self) {
+        board_agent::register_agents(self);
     }
 
     pub fn ready(&self) -> Result<(), AgentError> {
