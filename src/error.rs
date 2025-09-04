@@ -88,4 +88,7 @@ pub enum AgentError {
 
     #[error("Failed to get file stem from path")]
     FileSystemError,
+
+    #[error("Configuration error: {0}")]
+    InvalidConfig(String),
 }
