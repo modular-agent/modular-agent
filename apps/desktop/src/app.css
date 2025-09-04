@@ -1,0 +1,7 @@
+@import 'tailwindcss';
+
+@plugin 'flowbite/plugin';
+
+@custom-variant dark (&:is(.dark *));
+
+@source "../node_modules/flowbite-svelte/dist";
