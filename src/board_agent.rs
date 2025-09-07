@@ -149,7 +149,7 @@ static CONFIG_BOARD_NAME: &str = "$board";
 pub fn register_agents(askit: &ASKit) {
     // BoardInAgent
     askit.register_agent(
-        AgentDefinition::new("Board", "$board_in", Some(new_boxed::<BoardInAgent>))
+        AgentDefinition::new("Board", "core_board_in", Some(new_boxed::<BoardInAgent>))
             .with_title("Board In")
             .with_category("Core")
             .with_inputs(vec!["*"])
@@ -163,7 +163,7 @@ pub fn register_agents(askit: &ASKit) {
 
     // BoardOutAgent
     askit.register_agent(
-        AgentDefinition::new("Board", "$board_out", Some(new_boxed::<BoardOutAgent>))
+        AgentDefinition::new("Board", "core_board_out", Some(new_boxed::<BoardOutAgent>))
             .with_title("Board Out")
             .with_category("Core")
             .with_outputs(vec!["*"])

@@ -38,6 +38,9 @@ pub struct ASKit {
     // agent flows
     pub(crate) flows: Arc<Mutex<AgentFlows>>,
 
+    // agent def name -> config
+    pub(crate) global_configs: Arc<Mutex<HashMap<String, AgentConfig>>>,
+
     // message sender
     pub(crate) tx: Arc<Mutex<Option<mpsc::Sender<AgentEventMessage>>>>,
 
@@ -49,21 +52,14 @@ impl ASKit {
     pub fn new() -> Self {
         Self {
             agents: Default::default(),
-
             agent_txs: Default::default(),
-
             board_out_agents: Default::default(),
-
             board_data: Default::default(),
-
             edges: Default::default(),
-
             defs: Default::default(),
-
             flows: Default::default(),
-
+            global_configs: Default::default(),
             tx: Arc::new(Mutex::new(None)),
-
             observers: Default::default(),
         }
     }
@@ -636,6 +632,16 @@ impl ASKit {
             }
         }
         Ok(())
+    }
+
+    pub fn get_global_config(&self, def_name: &str) -> Option<AgentConfig> {
+        let global_configs = self.global_configs.lock().unwrap();
+        global_configs.get(def_name).cloned()
+    }
+
+    pub fn set_global_config(&self, def_name: &str, config: AgentConfig) {
+        let mut global_configs = self.global_configs.lock().unwrap();
+        global_configs.insert(def_name.to_string(), config);
     }
 
     pub async fn agent_input(

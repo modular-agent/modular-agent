@@ -91,4 +91,10 @@ pub enum AgentError {
 
     #[error("Configuration error: {0}")]
     InvalidConfig(String),
+
+    #[error("No configuration available")]
+    NoConfig,
+
+    #[error("No global configuration available")]
+    NoGlobalConfig,
 }

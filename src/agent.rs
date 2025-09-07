@@ -40,6 +40,10 @@ pub trait Agent {
 
     fn set_config(&mut self, config: AgentConfig) -> Result<(), AgentError>;
 
+    fn get_global_config(&self) -> Option<AgentConfig> {
+        self.askit().get_global_config(self.def_name())
+    }
+
     fn start(&mut self) -> Result<(), AgentError>;
 
     fn stop(&mut self) -> Result<(), AgentError>;
