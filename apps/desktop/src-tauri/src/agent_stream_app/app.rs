@@ -190,6 +190,7 @@ impl ASKitObserver for ASApp {
 pub fn init(app: &AppHandle) -> Result<()> {
     let askit = ASKit::init()?;
     askit_std_agents::register_agents(&askit);
+    askit_rig_agents::register_agents(&askit);
 
     askit.new_agent_flow("main")?;
 
