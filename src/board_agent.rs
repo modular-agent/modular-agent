@@ -1,3 +1,4 @@
+use async_trait::async_trait;
 use std::vec;
 
 use super::agent::{Agent, AsAgent, AsAgentData, new_boxed};
@@ -13,6 +14,7 @@ struct BoardInAgent {
     board_name: Option<String>,
 }
 
+#[async_trait]
 impl AsAgent for BoardInAgent {
     fn new(
         askit: ASKit,
@@ -42,7 +44,7 @@ impl AsAgent for BoardInAgent {
         Ok(())
     }
 
-    fn process(&mut self, ctx: AgentContext, data: AgentData) -> Result<(), AgentError> {
+    async fn process(&mut self, ctx: AgentContext, data: AgentData) -> Result<(), AgentError> {
         let mut board_name = self.board_name.clone().unwrap_or_default();
         if board_name.is_empty() {
             // if board_name is not set, stop processing

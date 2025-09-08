@@ -3,7 +3,7 @@ use std::ops::Not;
 
 use serde::{Deserialize, Serialize};
 
-use super::agent::AsyncAgent;
+use super::agent::Agent;
 use super::askit::ASKit;
 use super::config::AgentConfig;
 use super::data::AgentValue;
@@ -100,7 +100,7 @@ pub type AgentNewBoxedFn = fn(
     id: String,
     def_name: String,
     config: Option<AgentConfig>,
-) -> Result<Box<dyn AsyncAgent>, AgentError>;
+) -> Result<Box<dyn Agent + Send + Sync>, AgentError>;
 
 impl AgentDefinition {
     pub fn new(

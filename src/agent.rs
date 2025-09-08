@@ -1,3 +1,5 @@
+use async_trait::async_trait;
+
 use super::askit::ASKit;
 use super::config::AgentConfig;
 use super::context::AgentContext;
@@ -18,6 +20,7 @@ pub enum AgentMessage {
     Stop,
 }
 
+#[async_trait]
 pub trait Agent {
     fn new(
         askit: ASKit,
@@ -48,7 +51,7 @@ pub trait Agent {
 
     fn stop(&mut self) -> Result<(), AgentError>;
 
-    fn process(&mut self, ctx: AgentContext, data: AgentData) -> Result<(), AgentError>;
+    async fn process(&mut self, ctx: AgentContext, data: AgentData) -> Result<(), AgentError>;
 }
 
 pub struct AsAgentData {
@@ -72,6 +75,7 @@ impl AsAgentData {
     }
 }
 
+#[async_trait]
 pub trait AsAgent {
     fn new(
         askit: ASKit,
@@ -80,7 +84,7 @@ pub trait AsAgent {
         config: Option<AgentConfig>,
     ) -> Result<Self, AgentError>
     where
-        Self: Sized;
+        Self: Sized + Send + Sync;
 
     fn data(&self) -> &AsAgentData;
 
@@ -98,12 +102,13 @@ pub trait AsAgent {
         Ok(())
     }
 
-    fn process(&mut self, _ctx: AgentContext, _data: AgentData) -> Result<(), AgentError> {
+    async fn process(&mut self, _ctx: AgentContext, _data: AgentData) -> Result<(), AgentError> {
         Ok(())
     }
 }
 
-impl<T: AsAgent> Agent for T {
+#[async_trait]
+impl<T: AsAgent + Send + Sync> Agent for T {
     fn new(
         askit: ASKit,
         id: String,
@@ -159,25 +164,30 @@ impl<T: AsAgent> Agent for T {
         Ok(())
     }
 
-    fn process(&mut self, ctx: AgentContext, data: AgentData) -> Result<(), AgentError> {
-        if let Err(e) = self.process(ctx, data) {
+    async fn process(&mut self, ctx: AgentContext, data: AgentData) -> Result<(), AgentError> {
+        if let Err(e) = self.process(ctx, data).await {
             self.askit()
                 .emit_error(self.id().to_string(), e.to_string());
             return Err(e);
         }
         Ok(())
     }
+
+    fn get_global_config(&self) -> Option<AgentConfig> {
+        self.askit().get_global_config(self.def_name())
+    }
 }
 
-pub trait AsyncAgent: Agent + Send + Sync + 'static {}
-impl<T: Agent + Send + Sync + 'static> AsyncAgent for T {}
+// pub trait UnsendAsyncAgent: Agent + Send + Sync + 'static {}
 
-pub fn new_boxed<T: AsyncAgent>(
+// impl<T: Agent + Send + Sync + 'static> AsyncAgent for T {}
+
+pub fn new_boxed<T: Agent + Send + Sync + 'static>(
     askit: ASKit,
     id: String,
     def_name: String,
     config: Option<AgentConfig>,
-) -> Result<Box<dyn AsyncAgent>, AgentError> {
+) -> Result<Box<dyn Agent + Send + Sync>, AgentError> {
     Ok(Box::new(T::new(askit, id, def_name, config)?))
 }
 
@@ -186,7 +196,7 @@ pub fn agent_new(
     agent_id: String,
     def_name: &str,
     config: Option<AgentConfig>,
-) -> Result<Box<dyn AsyncAgent>, AgentError> {
+) -> Result<Box<dyn Agent + Send + Sync>, AgentError> {
     let def;
     {
         let defs = askit.defs.lock().unwrap();

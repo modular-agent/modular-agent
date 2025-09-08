@@ -1,5 +1,7 @@
 extern crate agent_stream_kit as askit;
 
+use async_trait::async_trait;
+
 use askit::{
     ASKit, AgentConfig, AgentContext, AgentData, AgentDefinition, AgentDisplayConfigEntry,
     AgentError, AgentOutput, AsAgent, AsAgentData, new_boxed,
@@ -12,6 +14,7 @@ pub struct CounterAgent {
     count: i64,
 }
 
+#[async_trait]
 impl AsAgent for CounterAgent {
     fn new(
         askit: ASKit,
@@ -39,7 +42,7 @@ impl AsAgent for CounterAgent {
         Ok(())
     }
 
-    fn process(&mut self, ctx: AgentContext, _data: AgentData) -> Result<(), AgentError> {
+    async fn process(&mut self, ctx: AgentContext, _data: AgentData) -> Result<(), AgentError> {
         let ch = ctx.ch();
         if ch == CH_RESET {
             self.count = 0;

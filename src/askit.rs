@@ -2,11 +2,11 @@ use std::collections::HashMap;
 use std::sync::atomic::AtomicUsize;
 use std::sync::{Arc, Mutex};
 
-use tokio::sync::mpsc;
+use tokio::sync::{Mutex as AsyncMutex, mpsc};
 
 use crate::board_agent;
 
-use super::agent::{AgentMessage, AgentStatus, AsyncAgent, agent_new};
+use super::agent::{Agent, AgentMessage, AgentStatus, agent_new};
 use super::config::AgentConfig;
 use super::context::AgentContext;
 use super::data::AgentData;
@@ -18,7 +18,8 @@ use super::message::{self, AgentEventMessage};
 #[derive(Clone)]
 pub struct ASKit {
     // agent id -> agent
-    pub(crate) agents: Arc<Mutex<HashMap<String, Arc<Mutex<Box<dyn AsyncAgent>>>>>>,
+    pub(crate) agents:
+        Arc<Mutex<HashMap<String, Arc<AsyncMutex<Box<dyn Agent + Send + Sync + 'static>>>>>>,
 
     // agent id -> sender
     pub(crate) agent_txs: Arc<Mutex<HashMap<String, AgentMessageSender>>>,
@@ -82,9 +83,9 @@ impl ASKit {
         board_agent::register_agents(self);
     }
 
-    pub fn ready(&self) -> Result<(), AgentError> {
+    pub async fn ready(&self) -> Result<(), AgentError> {
         self.spawn_message_loop()?;
-        self.start_agent_flows()?;
+        self.start_agent_flows().await?;
         Ok(())
     }
 
@@ -228,17 +229,20 @@ impl ASKit {
         Ok(())
     }
 
-    pub fn remove_agent_flow(&self, flow_name: &str) -> Result<(), AgentError> {
-        let mut flows = self.flows.lock().unwrap();
-        let Some(flow) = flows.remove(flow_name) else {
-            return Err(AgentError::FlowNotFound(flow_name.to_string()));
+    pub async fn remove_agent_flow(&self, flow_name: &str) -> Result<(), AgentError> {
+        let flow = {
+            let mut flows = self.flows.lock().unwrap();
+            let Some(flow) = flows.remove(flow_name) else {
+                return Err(AgentError::FlowNotFound(flow_name.to_string()));
+            };
+            flow.clone()
         };
 
-        flow.stop(self)?;
+        flow.stop(self).await?;
 
         // Remove all nodes and edges associated with the flow
         for node in flow.nodes() {
-            self.remove_agent(&node.id)?;
+            self.remove_agent(&node.id).await?;
         }
         for edge in flow.edges() {
             self.remove_edge(edge);
@@ -280,7 +284,7 @@ impl ASKit {
             &node.def_name,
             node.config.clone(),
         ) {
-            agents.insert(node.id.clone(), Arc::new(Mutex::new(agent)));
+            agents.insert(node.id.clone(), Arc::new(AsyncMutex::new(agent)));
             log::info!("Agent {} created", node.id);
         } else {
             return Err(AgentError::AgentCreationFailed(node.id.to_string()));
@@ -349,18 +353,24 @@ impl ASKit {
         Ok(())
     }
 
-    pub fn remove_agent_flow_node(&self, flow_name: &str, node_id: &str) -> Result<(), AgentError> {
-        let mut flows = self.flows.lock().unwrap();
-        let Some(flow) = flows.get_mut(flow_name) else {
-            return Err(AgentError::FlowNotFound(flow_name.to_string()));
-        };
-        flow.remove_node(node_id);
-        self.remove_agent(node_id)?;
+    pub async fn remove_agent_flow_node(
+        &self,
+        flow_name: &str,
+        node_id: &str,
+    ) -> Result<(), AgentError> {
+        {
+            let mut flows = self.flows.lock().unwrap();
+            let Some(flow) = flows.get_mut(flow_name) else {
+                return Err(AgentError::FlowNotFound(flow_name.to_string()));
+            };
+            flow.remove_node(node_id);
+        }
+        self.remove_agent(node_id).await?;
         Ok(())
     }
 
-    pub(crate) fn remove_agent(&self, agent_id: &str) -> Result<(), AgentError> {
-        self.stop_agent(agent_id)?;
+    pub(crate) async fn remove_agent(&self, agent_id: &str) -> Result<(), AgentError> {
+        self.stop_agent(agent_id).await?;
 
         // remove from edges
         {
@@ -421,16 +431,16 @@ impl ASKit {
         flow::copy_sub_flow(nodes, edges)
     }
 
-    pub fn start_agent_flow(&self, name: &str) -> Result<(), AgentError> {
+    pub async fn start_agent_flow(&self, name: &str) -> Result<(), AgentError> {
         let flows = self.flows.lock().unwrap();
         let Some(flow) = flows.get(name) else {
             return Err(AgentError::FlowNotFound(name.to_string()));
         };
-        flow.start(self)?;
+        flow.start(self).await?;
         Ok(())
     }
 
-    pub fn start_agent(&self, agent_id: &str) -> Result<(), AgentError> {
+    pub async fn start_agent(&self, agent_id: &str) -> Result<(), AgentError> {
         let agent = {
             let agents = self.agents.lock().unwrap();
             let Some(a) = agents.get(agent_id) else {
@@ -439,7 +449,7 @@ impl ASKit {
             a.clone()
         };
         let def_name = {
-            let agent = agent.lock().unwrap();
+            let agent = agent.lock().await;
             agent.def_name().to_string()
         };
         let uses_native_thread = {
@@ -450,7 +460,7 @@ impl ASKit {
             def.native_thread
         };
         let agent_status = {
-            let agent = agent.lock().unwrap();
+            let agent = agent.lock().await;
             agent.status().clone()
         };
         if agent_status == AgentStatus::Init {
@@ -465,8 +475,8 @@ impl ASKit {
                 };
 
                 let agent_id = agent_id.to_string();
-                std::thread::spawn(move || {
-                    if let Err(e) = agent.lock().unwrap().start() {
+                std::thread::spawn(async move || {
+                    if let Err(e) = agent.lock().await.start() {
                         log::error!("Failed to start agent {}: {}", agent_id, e);
                     }
 
@@ -475,20 +485,17 @@ impl ASKit {
                             AgentMessage::Input { ctx, data } => {
                                 agent
                                     .lock()
-                                    .unwrap()
+                                    .await
                                     .process(ctx, data)
+                                    .await
                                     .unwrap_or_else(|e| {
                                         log::error!("Process Error {}: {}", agent_id, e);
                                     });
                             }
                             AgentMessage::Config { config } => {
-                                agent
-                                    .lock()
-                                    .unwrap()
-                                    .set_config(config)
-                                    .unwrap_or_else(|e| {
-                                        log::error!("Config Error {}: {}", agent_id, e);
-                                    });
+                                agent.lock().await.set_config(config).unwrap_or_else(|e| {
+                                    log::error!("Config Error {}: {}", agent_id, e);
+                                });
                             }
                             AgentMessage::Stop => {
                                 break;
@@ -506,8 +513,11 @@ impl ASKit {
 
                 let agent_id = agent_id.to_string();
                 tokio::spawn(async move {
-                    if let Err(e) = agent.lock().unwrap().start() {
-                        log::error!("Failed to start agent {}: {}", agent_id, e);
+                    {
+                        let mut agent_guard = agent.lock().await;
+                        if let Err(e) = agent_guard.start() {
+                            log::error!("Failed to start agent {}: {}", agent_id, e);
+                        }
                     }
 
                     while let Some(message) = rx.recv().await {
@@ -515,20 +525,17 @@ impl ASKit {
                             AgentMessage::Input { ctx, data } => {
                                 agent
                                     .lock()
-                                    .unwrap()
+                                    .await
                                     .process(ctx, data)
+                                    .await
                                     .unwrap_or_else(|e| {
                                         log::error!("Process Error {}: {}", agent_id, e);
                                     });
                             }
                             AgentMessage::Config { config } => {
-                                agent
-                                    .lock()
-                                    .unwrap()
-                                    .set_config(config)
-                                    .unwrap_or_else(|e| {
-                                        log::error!("Config Error {}: {}", agent_id, e);
-                                    });
+                                agent.lock().await.set_config(config).unwrap_or_else(|e| {
+                                    log::error!("Config Error {}: {}", agent_id, e);
+                                });
                             }
                             AgentMessage::Stop => {
                                 rx.close();
@@ -542,7 +549,7 @@ impl ASKit {
         Ok(())
     }
 
-    pub fn stop_agent(&self, agent_id: &str) -> Result<(), AgentError> {
+    pub async fn stop_agent(&self, agent_id: &str) -> Result<(), AgentError> {
         let agent = {
             let agents = self.agents.lock().unwrap();
             let Some(a) = agents.get(agent_id) else {
@@ -552,7 +559,7 @@ impl ASKit {
         };
 
         let agent_status = {
-            let agent = agent.lock().unwrap();
+            let agent = agent.lock().await;
             agent.status().clone()
         };
         if agent_status == AgentStatus::Start {
@@ -584,7 +591,7 @@ impl ASKit {
                 }
             }
 
-            agent.lock().unwrap().stop()?;
+            agent.lock().await.stop()?;
         }
 
         Ok(())
@@ -604,11 +611,11 @@ impl ASKit {
         };
 
         let agent_status = {
-            let agent = agent.lock().unwrap();
+            let agent = agent.lock().await;
             agent.status().clone()
         };
         if agent_status == AgentStatus::Init {
-            agent.lock().unwrap().set_config(config.clone())?;
+            agent.lock().await.set_config(config.clone())?;
         } else if agent_status == AgentStatus::Start {
             let tx = {
                 let agent_txs = self.agent_txs.lock().unwrap();
@@ -650,7 +657,7 @@ impl ASKit {
         ctx: AgentContext,
         data: AgentData,
     ) -> Result<(), AgentError> {
-        let agent: Arc<Mutex<Box<dyn AsyncAgent>>> = {
+        let agent: Arc<AsyncMutex<Box<dyn Agent + Send + Sync>>> = {
             let agents = self.agents.lock().unwrap();
             let Some(a) = agents.get(&agent_id) else {
                 return Err(AgentError::AgentNotFound(agent_id.to_string()));
@@ -659,7 +666,7 @@ impl ASKit {
         };
 
         let agent_status = {
-            let agent = agent.lock().unwrap();
+            let agent = agent.lock().await;
             agent.status().clone()
         };
         if agent_status == AgentStatus::Start {
@@ -746,14 +753,14 @@ impl ASKit {
         Ok(())
     }
 
-    fn start_agent_flows(&self) -> Result<(), AgentError> {
+    async fn start_agent_flows(&self) -> Result<(), AgentError> {
         let agent_flow_names;
         {
             let agent_flows = self.flows.lock().unwrap();
             agent_flow_names = agent_flows.keys().cloned().collect::<Vec<_>>();
         }
         for name in agent_flow_names {
-            self.start_agent_flow(&name).unwrap_or_else(|e| {
+            self.start_agent_flow(&name).await.unwrap_or_else(|e| {
                 log::error!("Failed to start agent flow: {}", e);
             });
         }

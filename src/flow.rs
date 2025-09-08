@@ -78,24 +78,24 @@ impl AgentFlow {
         self.edges = edges;
     }
 
-    pub fn start(&self, askit: &ASKit) -> Result<(), AgentError> {
+    pub async fn start(&self, askit: &ASKit) -> Result<(), AgentError> {
         for agent in self.nodes.iter() {
             if !agent.enabled {
                 continue;
             }
-            askit.start_agent(&agent.id).unwrap_or_else(|e| {
+            askit.start_agent(&agent.id).await.unwrap_or_else(|e| {
                 log::error!("Failed to start agent {}: {}", agent.id, e);
             });
         }
         Ok(())
     }
 
-    pub fn stop(&self, askit: &ASKit) -> Result<(), AgentError> {
+    pub async fn stop(&self, askit: &ASKit) -> Result<(), AgentError> {
         for agent in self.nodes.iter() {
             if !agent.enabled {
                 continue;
             }
-            askit.stop_agent(&agent.id).unwrap_or_else(|e| {
+            askit.stop_agent(&agent.id).await.unwrap_or_else(|e| {
                 log::error!("Failed to stop agent {}: {}", agent.id, e);
             });
         }
