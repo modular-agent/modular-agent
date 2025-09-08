@@ -1,4 +1,4 @@
-use std::{path::PathBuf, sync::Mutex};
+use std::path::PathBuf;
 
 use anyhow::{bail, Context as _, Result};
 use dirs;
@@ -14,44 +14,40 @@ use askit_std_agents;
 use super::observer::ASAppObserver;
 
 pub struct ASApp {
-    askit: Mutex<ASKit>,
+    askit: ASKit,
 }
 
 impl ASApp {
     pub fn get_agent_definitions(&self) -> AgentDefinitions {
-        let askit = self.askit.lock().unwrap();
-        askit.get_agent_definitions()
+        self.askit.get_agent_definitions()
     }
 
     // Agent
 
     pub async fn set_agent_config(&self, agent_id: String, config: AgentConfig) -> Result<()> {
-        let askit = self.askit.lock().unwrap().clone();
-        askit.set_agent_config(agent_id, config).await?;
+        self.askit.set_agent_config(agent_id, config).await?;
         Ok(())
     }
 
-    pub fn start_agent(&self, agent_id: &str) -> Result<()> {
-        let askit = self.askit.lock().unwrap().clone();
-        tauri::async_runtime::block_on(async move {
-            askit.start_agent(agent_id).unwrap_or_else(|e| {
-                log::error!("Failed to start agent: {}", e);
-            });
+    pub async fn start_agent(&self, agent_id: &str) -> Result<()> {
+        self.askit.start_agent(agent_id).await.unwrap_or_else(|e| {
+            log::error!("Failed to start agent: {}", e);
         });
         Ok(())
     }
 
-    pub fn stop_agent(&self, agent_id: &str) -> Result<()> {
-        let askit = self.askit.lock().unwrap();
-        askit.stop_agent(agent_id)?;
+    pub async fn stop_agent(&self, agent_id: &str) -> Result<()> {
+        self.askit.stop_agent(agent_id).await.unwrap_or_else(|e| {
+            log::error!("Failed to stop agent: {}", e);
+        });
         Ok(())
     }
 
     // AgentFlow
 
     pub fn new_agent_flow_node(&self, def_name: &str) -> Result<AgentFlowNode> {
-        let askit = self.askit.lock().unwrap();
-        let def = askit
+        let def = self
+            .askit
             .get_agent_definition(def_name)
             .with_context(|| format!("Agent definition '{}' not found", def_name))?;
         let node = AgentFlowNode::new(&def)?;
@@ -59,38 +55,34 @@ impl ASApp {
     }
 
     pub fn add_agent_flow_node(&self, flow_name: &str, node: AgentFlowNode) -> Result<()> {
-        let askit = self.askit.lock().unwrap();
-        askit.add_agent_flow_node(flow_name, &node)?;
+        self.askit.add_agent_flow_node(flow_name, &node)?;
         Ok(())
     }
 
-    pub fn remove_agent_flow_node(&self, flow_name: &str, node_id: &str) -> Result<()> {
-        let askit = self.askit.lock().unwrap();
-        askit.remove_agent_flow_node(flow_name, node_id)?;
+    pub async fn remove_agent_flow_node(&self, flow_name: &str, node_id: &str) -> Result<()> {
+        self.askit
+            .remove_agent_flow_node(flow_name, node_id)
+            .await?;
         Ok(())
     }
 
     pub fn add_agent_flow_edge(&self, flow_name: &str, edge: AgentFlowEdge) -> Result<()> {
-        let askit = self.askit.lock().unwrap();
-        askit.add_agent_flow_edge(flow_name, &edge)?;
+        self.askit.add_agent_flow_edge(flow_name, &edge)?;
         Ok(())
     }
 
     pub fn remove_agent_flow_edge(&self, flow_name: &str, edge_id: &str) -> Result<()> {
-        let askit = self.askit.lock().unwrap();
-        askit.remove_agent_flow_edge(flow_name, edge_id)?;
+        self.askit.remove_agent_flow_edge(flow_name, edge_id)?;
         Ok(())
     }
 
     pub fn insert_agent_flow(&self, flow: AgentFlow) -> Result<()> {
-        let askit = self.askit.lock().unwrap();
-        askit.insert_agent_flow(flow)?;
+        self.askit.insert_agent_flow(flow)?;
         Ok(())
     }
 
-    pub fn remove_agent_flow(&self, name: &str) -> Result<()> {
-        let askit = self.askit.lock().unwrap();
-        askit.remove_agent_flow(name)?;
+    pub async fn remove_agent_flow(&self, name: &str) -> Result<()> {
+        self.askit.remove_agent_flow(name).await?;
         Ok(())
     }
 
@@ -121,12 +113,11 @@ impl ASApp {
         let path = PathBuf::from(path);
         let mut flow = self.read_agent_flow(path)?;
 
-        let askit = self.askit.lock().unwrap();
-        let name = askit.unique_flow_name(flow.name());
+        let name = self.askit.unique_flow_name(flow.name());
         flow.set_name(name);
         flow.disable_all_nodes();
 
-        askit
+        self.askit
             .add_agent_flow(&flow)
             .context("Failed to add agent flow")?;
 
@@ -166,8 +157,7 @@ impl ASApp {
         nodes: &Vec<AgentFlowNode>,
         edges: &Vec<AgentFlowEdge>,
     ) -> (Vec<AgentFlowNode>, Vec<AgentFlowEdge>) {
-        let askit = self.askit.lock().unwrap();
-        askit.copy_sub_flow(nodes, edges)
+        self.askit.copy_sub_flow(nodes, edges)
     }
 }
 
@@ -198,18 +188,16 @@ pub fn init(app: &AppHandle) -> Result<()> {
     // // read_agent_flows_dir(app, &askit)?;
     // flow::init(&mut sflows)?;
 
-    let asapp = ASApp {
-        askit: Mutex::new(askit),
-    };
+    let asapp = ASApp { askit };
     app.manage(asapp);
 
     Ok(())
 }
 
-pub fn ready(app: &AppHandle) -> Result<()> {
+pub async fn ready(app: &AppHandle) -> Result<()> {
     let asapp = app.state::<ASApp>();
-    let askit = asapp.askit.lock().unwrap();
-    askit.ready()?;
+    let askit = &asapp.askit;
+    askit.ready().await?;
     let observer = ASAppObserver { app: app.clone() };
     askit.subscribe(Box::new(observer));
     Ok(())
@@ -217,7 +205,7 @@ pub fn ready(app: &AppHandle) -> Result<()> {
 
 pub fn quit(app: &AppHandle) {
     let asapp = app.state::<ASApp>();
-    let askit = asapp.askit.lock().unwrap();
+    let askit = &asapp.askit;
     askit.quit();
 }
 
@@ -242,20 +230,23 @@ pub async fn set_agent_config_cmd(
 }
 
 #[tauri::command]
-pub fn start_agent_cmd(asapp: State<'_, ASApp>, agent_id: String) -> Result<(), String> {
-    asapp.start_agent(&agent_id).map_err(|e| e.to_string())
+pub async fn start_agent_cmd(asapp: State<'_, ASApp>, agent_id: String) -> Result<(), String> {
+    asapp
+        .start_agent(&agent_id)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub fn stop_agent_cmd(asapp: State<'_, ASApp>, agent_id: String) -> Result<(), String> {
-    asapp.stop_agent(&agent_id).map_err(|e| e.to_string())
+pub async fn stop_agent_cmd(asapp: State<'_, ASApp>, agent_id: String) -> Result<(), String> {
+    asapp.stop_agent(&agent_id).await.map_err(|e| e.to_string())
 }
 
 // flow commands
 
 #[tauri::command]
 pub fn get_agent_flows_cmd(asapp: State<'_, ASApp>) -> Result<Value, String> {
-    let askit = asapp.askit.lock().unwrap();
+    let askit = &asapp.askit;
     let flows = askit.get_agent_flows();
     let value = serde_json::to_value(&flows).map_err(|e| e.to_string())?;
     Ok(value)
@@ -263,7 +254,7 @@ pub fn get_agent_flows_cmd(asapp: State<'_, ASApp>) -> Result<Value, String> {
 
 #[tauri::command]
 pub fn new_agent_flow_cmd(asapp: State<ASApp>, name: String) -> Result<AgentFlow, String> {
-    let askit = asapp.askit.lock().unwrap();
+    let askit = &asapp.askit;
     let flow = askit.new_agent_flow(&name).map_err(|e| e.to_string())?;
     Ok(flow)
 }
@@ -274,15 +265,18 @@ pub fn rename_agent_flow_cmd(
     old_name: String,
     new_name: String,
 ) -> Result<String, String> {
-    let askit = app.askit.lock().unwrap();
+    let askit = &app.askit;
     askit
         .rename_agent_flow(&old_name, &new_name)
         .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub fn remove_agent_flow_cmd(asapp: State<ASApp>, name: String) -> Result<(), String> {
-    asapp.remove_agent_flow(&name).map_err(|e| e.to_string())
+pub async fn remove_agent_flow_cmd(asapp: State<'_, ASApp>, name: String) -> Result<(), String> {
+    asapp
+        .remove_agent_flow(&name)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -324,13 +318,14 @@ pub fn add_agent_flow_node_cmd(
 }
 
 #[tauri::command]
-pub fn remove_agent_flow_node_cmd(
+pub async fn remove_agent_flow_node_cmd(
     asapp: State<'_, ASApp>,
     flow_name: String,
     node_id: String,
 ) -> Result<(), String> {
     asapp
         .remove_agent_flow_node(&flow_name, &node_id)
+        .await
         .map_err(|e| e.to_string())
 }
 

@@ -40,7 +40,6 @@ dependencies = [
  "tauri-plugin-single-instance",
  "tauri-plugin-store",
  "tauri-plugin-window-state",
- "thiserror 2.0.16",
  "tokio",
  "tonic-build",
 ]
@@ -49,6 +48,7 @@ dependencies = [
 name = "agent-stream-kit"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "log",
  "serde",
  "serde_json",
@@ -167,6 +167,7 @@ name = "askit-rig-agents"
 version = "0.1.0"
 dependencies = [
  "agent-stream-kit",
+ "async-trait",
  "log",
  "rig-core",
  "serde",
@@ -180,6 +181,7 @@ name = "askit-std-agents"
 version = "0.1.0"
 dependencies = [
  "agent-stream-kit",
+ "async-trait",
  "log",
  "serde",
  "serde_json",

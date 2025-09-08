@@ -111,7 +111,7 @@ pub fn run() {
         .run(|app, event| match event {
             tauri::RunEvent::Ready => {
                 tauri::async_runtime::block_on(async move {
-                    agent_stream_app::app::ready(app).unwrap_or_else(|e| {
+                    agent_stream_app::app::ready(app).await.unwrap_or_else(|e| {
                         log::error!("Failed to start agents: {}", e);
                     });
                     log::info!("Agent Stream App is ready.");
