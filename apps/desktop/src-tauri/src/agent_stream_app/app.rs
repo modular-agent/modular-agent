@@ -85,27 +85,56 @@ impl ASApp {
 
     pub async fn remove_agent_flow(&self, name: &str) -> Result<()> {
         self.askit.remove_agent_flow(name).await?;
+
+        let flow_path = self.agent_flow_path(name)?;
+        if flow_path.exists() {
+            std::fs::remove_file(flow_path).with_context(|| "Failed to remove agent flow file")?;
+        }
+
         Ok(())
     }
 
-    pub fn save_agent_flow(&self, agent_flow: AgentFlow) -> Result<()> {
+    pub fn rename_agent_flow(&self, old_name: &str, new_name: &str) -> Result<String> {
+        let new_flow_path = self.agent_flow_path(new_name)?;
+        if new_flow_path.exists() {
+            bail!("Agent flow file already exists: {:?}", new_flow_path);
+        }
+
+        self.askit.rename_agent_flow(old_name, new_name)?;
+
+        let old_flow_path = self.agent_flow_path(old_name)?;
+        if old_flow_path.exists() {
+            std::fs::rename(old_flow_path, new_flow_path)
+                .with_context(|| "Failed to rename old agent flow file")?;
+        }
+
+        Ok(new_name.to_string())
+    }
+
+    fn agent_flow_path(&self, flow_name: &str) -> Result<PathBuf> {
         let mut flow_path = agent_flows_dir()?;
 
-        let path_components: Vec<&str> = agent_flow.name().split('/').collect();
-        for &component in &path_components[..path_components.len() - 1] {
+        let path_components: Vec<&str> = flow_name.split('/').collect();
+        for &component in &path_components[..path_components.len()] {
             flow_path = flow_path.join(component);
         }
+
+        flow_path = flow_path.with_extension("json");
+
+        Ok(flow_path)
+    }
+
+    pub fn save_agent_flow(&self, agent_flow: AgentFlow) -> Result<()> {
+        let flow_path = self.agent_flow_path(agent_flow.name())?;
+
         // Ensure the parent directory exists
-        if !flow_path.exists() {
-            std::fs::create_dir_all(flow_path.clone())?;
+        let parent_path = flow_path.parent().context("no parent path")?;
+        if !parent_path.exists() {
+            std::fs::create_dir_all(parent_path)?;
         }
 
-        let flow_file = flow_path
-            .join(path_components.last().context("no last component")?)
-            .with_extension("json");
-
         let json = agent_flow.to_json()?;
-        std::fs::write(flow_file, json).with_context(|| "Failed to write agent flow file")?;
+        std::fs::write(flow_path, json).with_context(|| "Failed to write agent flow file")?;
 
         Ok(())
     }
@@ -329,12 +358,11 @@ pub fn new_agent_flow_cmd(asapp: State<ASApp>, name: String) -> Result<AgentFlow
 
 #[tauri::command]
 pub fn rename_agent_flow_cmd(
-    app: State<ASApp>,
+    asapp: State<'_, ASApp>,
     old_name: String,
     new_name: String,
 ) -> Result<String, String> {
-    let askit = &app.askit;
-    askit
+    asapp
         .rename_agent_flow(&old_name, &new_name)
         .map_err(|e| e.to_string())
 }
