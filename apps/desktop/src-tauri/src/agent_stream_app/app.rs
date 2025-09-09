@@ -6,12 +6,14 @@ use serde_json::Value;
 use tauri::{AppHandle, Manager, State};
 
 use agent_stream_kit::{
-    ASKit, ASKitEvent, ASKitObserver, Agent, AgentConfig, AgentDefinitions, AgentFlow,
-    AgentFlowEdge, AgentFlowNode,
+    ASKit, ASKitEvent, ASKitObserver, AgentConfig, AgentDefinitions, AgentFlow, AgentFlowEdge,
+    AgentFlowNode,
 };
 use askit_std_agents;
 
 use super::observer::ASAppObserver;
+
+static ASKIT_FLOWS_PATH: &'static str = ".askit/flows";
 
 pub struct ASApp {
     askit: ASKit,
@@ -87,8 +89,7 @@ impl ASApp {
     }
 
     pub fn save_agent_flow(&self, agent_flow: AgentFlow) -> Result<()> {
-        let home_dir = dirs::home_dir().with_context(|| "Failed to get home directory")?;
-        let mut flow_path = home_dir.join(".askit/flows");
+        let mut flow_path = agent_flows_dir()?;
 
         let path_components: Vec<&str> = agent_flow.name().split('/').collect();
         for &component in &path_components[..path_components.len() - 1] {
@@ -105,6 +106,63 @@ impl ASApp {
 
         let json = agent_flow.to_json()?;
         std::fs::write(flow_file, json).with_context(|| "Failed to write agent flow file")?;
+
+        Ok(())
+    }
+
+    fn read_agent_flows_dir(&self) -> Result<()> {
+        let flows_dir = agent_flows_dir()?;
+        if !flows_dir.exists() {
+            std::fs::create_dir_all(&flows_dir)
+                .with_context(|| "Failed to create flows directory")?;
+            return Ok(());
+        }
+
+        self.read_agent_flows_dir_recursive(&flows_dir, "")?;
+
+        Ok(())
+    }
+
+    fn read_agent_flows_dir_recursive(&self, dir: &PathBuf, name_prefix: &str) -> Result<()> {
+        if !dir.exists() || !dir.is_dir() {
+            return Ok(());
+        }
+
+        let entries = std::fs::read_dir(dir)
+            .with_context(|| format!("Failed to read directory: {:?}", dir))?;
+
+        for entry in entries {
+            let entry = entry.with_context(|| "Failed to read directory entry")?;
+            let path = entry.path();
+            if path.is_dir() {
+                let dir_name = path
+                    .file_name()
+                    .context("Failed to get directory name")?
+                    .to_string_lossy();
+                let new_prefix = if name_prefix.is_empty() {
+                    dir_name.to_string()
+                } else {
+                    format!("{}/{}", name_prefix, dir_name)
+                };
+                self.read_agent_flows_dir_recursive(&path, &new_prefix)?;
+            } else if path.is_file() && path.extension().unwrap_or_default() == "json" {
+                match self.read_agent_flow(path) {
+                    Ok(flow) => {
+                        if name_prefix.is_empty() {
+                            self.askit.add_agent_flow(&flow)?;
+                        } else {
+                            let mut flow = flow;
+                            let full_name = format!("{}/{}", name_prefix, flow.name());
+                            flow.set_name(full_name);
+                            self.askit.add_agent_flow(&flow)?;
+                        }
+                    }
+                    Err(e) => {
+                        log::error!("Failed to read agent flow: {}", e);
+                    }
+                }
+            }
+        }
 
         Ok(())
     }
@@ -182,13 +240,17 @@ pub fn init(app: &AppHandle) -> Result<()> {
     askit_std_agents::register_agents(&askit);
     askit_rig_agents::register_agents(&askit);
 
-    askit.new_agent_flow("main")?;
-
-    // let mut sflows = HashMap::new();
-    // // read_agent_flows_dir(app, &askit)?;
-    // flow::init(&mut sflows)?;
-
     let asapp = ASApp { askit };
+    asapp.read_agent_flows_dir().unwrap_or_else(|e| {
+        log::error!("Failed to read agent flows: {}", e);
+    });
+
+    if asapp.askit.get_agent_flows().get("main").is_none() {
+        if let Err(e) = asapp.askit.new_agent_flow("main") {
+            log::error!("Failed to create main agent flow: {}", e);
+        };
+    }
+
     app.manage(asapp);
 
     Ok(())
@@ -207,6 +269,12 @@ pub fn quit(app: &AppHandle) {
     let asapp = app.state::<ASApp>();
     let askit = &asapp.askit;
     askit.quit();
+}
+
+fn agent_flows_dir() -> Result<PathBuf> {
+    let home_dir = dirs::home_dir().with_context(|| "Failed to get home directory")?;
+    let flows_dir = home_dir.join(ASKIT_FLOWS_PATH);
+    Ok(flows_dir)
 }
 
 // Tauri Commands

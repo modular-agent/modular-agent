@@ -3,13 +3,12 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{
     collections::HashMap,
-    path::PathBuf,
     sync::{LazyLock, Mutex},
 };
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_store::StoreExt;
 
-use agent_stream_kit::{ASKit, AgentConfig, AgentConfigs};
+use agent_stream_kit::{AgentConfig, AgentConfigs};
 
 use super::app::ASApp;
 

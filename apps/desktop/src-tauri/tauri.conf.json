@@ -14,8 +14,7 @@
       {
         "title": "Agent Stream App",
         "width": 1600,
-        "height": 900,
-        "visible": false
+        "height": 900
       }
     ]
   },
