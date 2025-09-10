@@ -6,7 +6,7 @@
 <br>
 
 ![Badge Language] 
-[![Badge License]][License] 
+![Badge License]
 
 </div>
 
@@ -21,4 +21,4 @@
 <!----------------------------------{ Badges }--------------------------------->
 
 [Badge Language]: https://img.shields.io/github/languages/top/stn/agent-stream-kit
-[Badge License]: https://img.shields.io/github/license/stn/agent-stream-kit
+[Badge License]: https://img.shields.io/badge/license-Apache--2.0_OR_MIT-blue
