@@ -47,6 +47,8 @@ dependencies = [
 [[package]]
 name = "agent-stream-kit"
 version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "09347a7310f8c19c14d4204d93f7daa0943888f047063ce668e2ced5bac9ed5c"
 dependencies = [
  "async-trait",
  "log",
@@ -165,6 +167,8 @@ dependencies = [
 [[package]]
 name = "askit-rig-agents"
 version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e9f74ccc6fef026f400c46d04cc49f5110d46a3a8dcd6e00414a2d6c4421c204"
 dependencies = [
  "agent-stream-kit",
  "async-trait",
@@ -179,6 +183,8 @@ dependencies = [
 [[package]]
 name = "askit-std-agents"
 version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9874db8b88322bd4d9b86533c767fcfdca4080abdf8cc89f049168f8094e51c0"
 dependencies = [
  "agent-stream-kit",
  "async-trait",
