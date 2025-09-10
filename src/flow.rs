@@ -104,7 +104,7 @@ impl AgentFlow {
 
     pub fn disable_all_nodes(&mut self) {
         for node in self.nodes.iter_mut() {
-            node.disable();
+            node.enabled = false;
         }
     }
 
@@ -188,14 +188,6 @@ impl AgentFlowNode {
             extensions: HashMap::new(),
         })
     }
-
-    fn enable(&mut self) {
-        self.enabled = true;
-    }
-
-    fn disable(&mut self) {
-        self.enabled = false;
-    }
 }
 
 static NODE_ID_COUNTER: AtomicUsize = AtomicUsize::new(1);
@@ -206,7 +198,7 @@ fn new_id() -> String {
         .to_string();
 }
 
-// // AgentFlowEdge
+// AgentFlowEdge
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct AgentFlowEdge {

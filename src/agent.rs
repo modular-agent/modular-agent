@@ -178,10 +178,6 @@ impl<T: AsAgent + Send + Sync> Agent for T {
     }
 }
 
-// pub trait UnsendAsyncAgent: Agent + Send + Sync + 'static {}
-
-// impl<T: Agent + Send + Sync + 'static> AsyncAgent for T {}
-
 pub fn new_boxed<T: Agent + Send + Sync + 'static>(
     askit: ASKit,
     id: String,
