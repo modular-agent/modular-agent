@@ -1,6 +1,6 @@
 <div align="center">
 
-<img alt="Agent Stream Kit" width="40%" src="https://github.com/stn/agent-stream-kit/blob/main/docs/img/ask_title.png?raw=true">
+<img alt="Agent Stream Kit" width="190" height="90" src="https://github.com/stn/agent-stream-kit/blob/main/docs/img/ask_title.png?raw=true">
 
 <br>
 <br>
