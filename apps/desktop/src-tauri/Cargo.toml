@@ -1,6 +1,6 @@
 [package]
 name = "agent-stream-app"
-version = "0.1.0"
+version = "0.1.1"
 description = "Agent Stream App"
 authors = ["Akira Ishino <akira@lumilab.jp>"]
 edition = "2021"
@@ -39,5 +39,10 @@ tokio = { version = "1", features = ["full"] }
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-autostart = "2"
 tauri-plugin-global-shortcut = "2"
-tauri-plugin-single-instance = "2"
+tauri-plugin-single-instance = "2.3"
 tauri-plugin-window-state = "2"
+
+#[patch.crates-io]
+#agent-stream-kit = { path = "../../agent-stream-kit" }
+#askit-std-agents = { path = "../../askit-std-agents" }
+#askit-rig-agents = { path = "../../askit-rig-agents" }
