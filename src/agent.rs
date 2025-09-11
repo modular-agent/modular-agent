@@ -5,6 +5,7 @@ use super::config::AgentConfig;
 use super::context::AgentContext;
 use super::data::AgentData;
 use super::error::AgentError;
+use super::runtime::runtime;
 
 #[derive(Debug, Default, Clone, PartialEq)]
 pub enum AgentStatus {
@@ -52,6 +53,10 @@ pub trait Agent {
     fn stop(&mut self) -> Result<(), AgentError>;
 
     async fn process(&mut self, ctx: AgentContext, data: AgentData) -> Result<(), AgentError>;
+
+    fn runtime(&self) -> &tokio::runtime::Runtime {
+        runtime()
+    }
 }
 
 pub struct AsAgentData {
