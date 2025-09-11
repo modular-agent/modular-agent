@@ -214,7 +214,7 @@ impl ASKit {
 
         // add nodes into agents
         for node in agent_flow.nodes().iter() {
-            self.add_agent(node).unwrap_or_else(|e| {
+            self.add_agent(name, node).unwrap_or_else(|e| {
                 log::error!("Failed to add_agent_node {}: {}", node.id, e);
             });
         }
@@ -269,23 +269,27 @@ impl ASKit {
             return Err(AgentError::FlowNotFound(flow_name.to_string()));
         };
         flow.add_node(node.clone());
-        self.add_agent(node)?;
+        self.add_agent(flow_name, node)?;
         Ok(())
     }
 
-    pub(crate) fn add_agent(&self, node: &AgentFlowNode) -> Result<(), AgentError> {
+    pub(crate) fn add_agent(
+        &self,
+        flow_name: &str,
+        node: &AgentFlowNode,
+    ) -> Result<(), AgentError> {
         let mut agents = self.agents.lock().unwrap();
         if agents.contains_key(&node.id) {
             return Err(AgentError::AgentAlreadyExists(node.id.to_string()));
         }
-        if let Ok(agent) = agent_new(
+        if let Ok(mut agent) = agent_new(
             self.clone(),
             node.id.clone(),
             &node.def_name,
             node.config.clone(),
         ) {
+            agent.set_flow_name(flow_name.to_string());
             agents.insert(node.id.clone(), Arc::new(AsyncMutex::new(agent)));
-            log::info!("Agent {} created", node.id);
         } else {
             return Err(AgentError::AgentCreationFailed(node.id.to_string()));
         }

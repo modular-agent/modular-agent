@@ -48,6 +48,10 @@ pub trait Agent {
         self.askit().get_global_config(self.def_name())
     }
 
+    fn flow_name(&self) -> &str;
+
+    fn set_flow_name(&mut self, flow_name: String);
+
     fn start(&mut self) -> Result<(), AgentError>;
 
     fn stop(&mut self) -> Result<(), AgentError>;
@@ -65,6 +69,7 @@ pub struct AsAgentData {
     pub id: String,
     pub status: AgentStatus,
     pub def_name: String,
+    pub flow_name: String,
     pub config: Option<AgentConfig>,
 }
 
@@ -75,6 +80,7 @@ impl AsAgentData {
             id,
             status: AgentStatus::Init,
             def_name,
+            flow_name: String::new(),
             config,
         }
     }
@@ -148,6 +154,14 @@ impl<T: AsAgent + Send + Sync> Agent for T {
     fn set_config(&mut self, config: AgentConfig) -> Result<(), AgentError> {
         self.mut_data().config = Some(config.clone());
         self.set_config(config)
+    }
+
+    fn flow_name(&self) -> &str {
+        &self.data().flow_name
+    }
+
+    fn set_flow_name(&mut self, flow_name: String) {
+        self.mut_data().flow_name = flow_name.clone();
     }
 
     fn start(&mut self) -> Result<(), AgentError> {
