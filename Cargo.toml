@@ -3,22 +3,10 @@ resolver = "3"
 members = [
     "agent-stream-kit",
     "askit-std-agents",
+    "askit-rig-agents",
 ]
 
 [workspace.package]
 edition = "2024"
 authors = ["Akira Ishino <akira@lumilab.jp>"]
 license = "Apache-2.0 OR MIT"
-
-[workspace.dependencies]
-async-trait = "0.1"
-chrono = "0.4.42"
-cron = "0.15.0"
-handlebars = "6.3.2"
-log = "0.4.28"
-regex = "1.11.2"
-rig-core = "0.19.0"
-serde = "1"
-serde_json = "1"
-thiserror = "2"
-tokio = "1"
