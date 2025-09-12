@@ -1,0 +1,15 @@
+[package]
+name = "agent-stream-kit"
+version = "0.1.4"
+description = "Agent Stream Kit"
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+async-trait.workspace = true
+log.workspace = true
+serde = { workspace = true, features = ["derive", "rc"] }
+serde_json.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["rt", "rt-multi-thread", "sync"] }
