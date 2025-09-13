@@ -4,14 +4,14 @@ use agent_stream_kit::{
 };
 use async_trait::async_trait;
 
-// Stream agent
-struct StreamAgent {
+// Task agent
+struct TaskAgent {
     data: AsAgentData,
     last_id: i64,
 }
 
 #[async_trait]
-impl AsAgent for StreamAgent {
+impl AsAgent for TaskAgent {
     fn new(
         askit: ASKit,
         id: String,
@@ -33,21 +33,21 @@ impl AsAgent for StreamAgent {
     }
 
     async fn process(&mut self, ctx: AgentContext, data: AgentData) -> Result<(), AgentError> {
-        let stream_name = self
+        let task_name = self
             .config()
             .ok_or(AgentError::NoConfig)?
-            .get(CONFIG_STREAM)
-            .ok_or(AgentError::InvalidConfig("missing stream".into()))?
+            .get(CONFIG_TASK)
+            .ok_or(AgentError::InvalidConfig("missing task".into()))?
             .as_str()
             .ok_or(AgentError::InvalidConfig("failed as_str".into()))?
             .to_string();
-        if stream_name.is_empty() {
+        if task_name.is_empty() {
             self.try_output(ctx, CH_DATA, data)?;
             return Ok(());
         }
 
         self.last_id += 1;
-        let key = format!("{}:$stream:{}", self.flow_name(), stream_name);
+        let key = format!("{}:$task:{}", self.flow_name(), task_name);
         let new_ctx = ctx.with_var(key, AgentValue::new_integer(self.last_id));
         self.try_output(new_ctx, CH_DATA, data)?;
 
@@ -55,8 +55,8 @@ impl AsAgent for StreamAgent {
     }
 }
 
-// Stream Zip agent
-struct StreamZipAgent {
+// Task Zip agent
+struct TaskZipAgent {
     data: AsAgentData,
     n: usize,
     in_channels: Vec<String>,
@@ -66,7 +66,7 @@ struct StreamZipAgent {
 }
 
 #[async_trait]
-impl AsAgent for StreamZipAgent {
+impl AsAgent for TaskZipAgent {
     fn new(
         askit: ASKit,
         id: String,
@@ -133,27 +133,27 @@ impl AsAgent for StreamZipAgent {
             }
         }
 
-        let stream_name = self
+        let task_name = self
             .config()
             .ok_or(AgentError::NoConfig)?
-            .get(CONFIG_STREAM)
-            .ok_or(AgentError::InvalidConfig("missing stream".into()))?
+            .get(CONFIG_TASK)
+            .ok_or(AgentError::InvalidConfig("missing task".into()))?
             .as_str()
             .ok_or(AgentError::InvalidConfig("failed as_str".into()))?
             .to_string();
 
-        if !stream_name.is_empty() {
-            let key = format!("{}:$stream:{}", self.flow_name(), stream_name);
+        if !task_name.is_empty() {
+            let key = format!("{}:$task:{}", self.flow_name(), task_name);
             let Some(value) = ctx.get_var(key.as_str()) else {
-                // value does not have the stream key
+                // value does not have the task key
                 return Ok(());
             };
-            let Some(stream_id) = value.as_i64() else {
+            let Some(task_id) = value.as_i64() else {
                 // value is not a number
                 return Ok(());
             };
-            if stream_id != self.current_id {
-                self.current_id = stream_id;
+            if task_id != self.current_id {
+                self.current_id = task_id;
                 for i in 0..self.n {
                     self.input_value[i] = None;
                 }
@@ -189,7 +189,7 @@ impl AsAgent for StreamZipAgent {
 }
 
 static AGENT_KIND: &str = "agent";
-static CATEGORY: &str = "Core/Stream";
+static CATEGORY: &str = "Core/Task";
 
 static CH_DATA: &str = "data";
 static CH_IN1: &str = "in1";
@@ -197,7 +197,7 @@ static CH_IN2: &str = "in2";
 static CH_IN3: &str = "in3";
 static CH_IN4: &str = "in4";
 
-static CONFIG_STREAM: &str = "stream";
+static CONFIG_TASK: &str = "task";
 static CONFIG_KEY1: &str = "key1";
 static CONFIG_KEY2: &str = "key2";
 static CONFIG_KEY3: &str = "key3";
@@ -206,116 +206,104 @@ static CONFIG_N: &str = "n";
 
 pub fn register_agents(askit: &ASKit) {
     askit.register_agent(
-        AgentDefinition::new(AGENT_KIND, "std_stream", Some(new_boxed::<StreamAgent>))
-            .with_title("Stream")
+        AgentDefinition::new(AGENT_KIND, "std_task", Some(new_boxed::<TaskAgent>))
+            .with_title("Task")
             .with_category(CATEGORY)
             .with_inputs(vec![CH_DATA])
             .with_outputs(vec![CH_DATA])
             .with_default_config(vec![(
-                CONFIG_STREAM.into(),
+                CONFIG_TASK.into(),
                 AgentConfigEntry::new(AgentValue::new_string(""), "string"),
             )]),
     );
 
     askit.register_agent(
-        AgentDefinition::new(
-            AGENT_KIND,
-            "std_stream_zip2",
-            Some(new_boxed::<StreamZipAgent>),
-        )
-        .with_title("Zip2")
-        .with_category(CATEGORY)
-        .with_inputs(vec![CH_IN1, CH_IN2])
-        .with_outputs(vec![CH_DATA])
-        .with_default_config(vec![
-            (
-                CONFIG_N.into(),
-                AgentConfigEntry::new(AgentValue::new_integer(2), "integer").with_hidden(),
-            ),
-            (
-                CONFIG_STREAM.into(),
-                AgentConfigEntry::new(AgentValue::new_string(""), "string"),
-            ),
-            (
-                CONFIG_KEY1.into(),
-                AgentConfigEntry::new(AgentValue::new_string(""), "string"),
-            ),
-            (
-                CONFIG_KEY2.into(),
-                AgentConfigEntry::new(AgentValue::new_string(""), "string"),
-            ),
-        ]),
+        AgentDefinition::new(AGENT_KIND, "std_task_zip2", Some(new_boxed::<TaskZipAgent>))
+            .with_title("Zip2")
+            .with_category(CATEGORY)
+            .with_inputs(vec![CH_IN1, CH_IN2])
+            .with_outputs(vec![CH_DATA])
+            .with_default_config(vec![
+                (
+                    CONFIG_N.into(),
+                    AgentConfigEntry::new(AgentValue::new_integer(2), "integer").with_hidden(),
+                ),
+                (
+                    CONFIG_TASK.into(),
+                    AgentConfigEntry::new(AgentValue::new_string(""), "string"),
+                ),
+                (
+                    CONFIG_KEY1.into(),
+                    AgentConfigEntry::new(AgentValue::new_string(""), "string"),
+                ),
+                (
+                    CONFIG_KEY2.into(),
+                    AgentConfigEntry::new(AgentValue::new_string(""), "string"),
+                ),
+            ]),
     );
 
     askit.register_agent(
-        AgentDefinition::new(
-            AGENT_KIND,
-            "std_stream_zip3",
-            Some(new_boxed::<StreamZipAgent>),
-        )
-        .with_title("Zip3")
-        .with_category(CATEGORY)
-        .with_inputs(vec![CH_IN1, CH_IN2, CH_IN3])
-        .with_outputs(vec![CH_DATA])
-        .with_default_config(vec![
-            (
-                CONFIG_N.into(),
-                AgentConfigEntry::new(AgentValue::new_integer(3), "integer").with_hidden(),
-            ),
-            (
-                CONFIG_STREAM.into(),
-                AgentConfigEntry::new(AgentValue::new_string(""), "string"),
-            ),
-            (
-                CONFIG_KEY1.into(),
-                AgentConfigEntry::new(AgentValue::new_string(""), "string"),
-            ),
-            (
-                CONFIG_KEY2.into(),
-                AgentConfigEntry::new(AgentValue::new_string(""), "string"),
-            ),
-            (
-                CONFIG_KEY3.into(),
-                AgentConfigEntry::new(AgentValue::new_string(""), "string"),
-            ),
-        ]),
+        AgentDefinition::new(AGENT_KIND, "std_task_zip3", Some(new_boxed::<TaskZipAgent>))
+            .with_title("Zip3")
+            .with_category(CATEGORY)
+            .with_inputs(vec![CH_IN1, CH_IN2, CH_IN3])
+            .with_outputs(vec![CH_DATA])
+            .with_default_config(vec![
+                (
+                    CONFIG_N.into(),
+                    AgentConfigEntry::new(AgentValue::new_integer(3), "integer").with_hidden(),
+                ),
+                (
+                    CONFIG_TASK.into(),
+                    AgentConfigEntry::new(AgentValue::new_string(""), "string"),
+                ),
+                (
+                    CONFIG_KEY1.into(),
+                    AgentConfigEntry::new(AgentValue::new_string(""), "string"),
+                ),
+                (
+                    CONFIG_KEY2.into(),
+                    AgentConfigEntry::new(AgentValue::new_string(""), "string"),
+                ),
+                (
+                    CONFIG_KEY3.into(),
+                    AgentConfigEntry::new(AgentValue::new_string(""), "string"),
+                ),
+            ]),
     );
 
     askit.register_agent(
-        AgentDefinition::new(
-            AGENT_KIND,
-            "std_stream_zip4",
-            Some(new_boxed::<StreamZipAgent>),
-        )
-        .with_title("Zip4")
-        .with_category(CATEGORY)
-        .with_inputs(vec![CH_IN1, CH_IN2, CH_IN3, CH_IN4])
-        .with_outputs(vec![CH_DATA])
-        .with_default_config(vec![
-            (
-                CONFIG_N.into(),
-                AgentConfigEntry::new(AgentValue::new_integer(4), "integer").with_hidden(),
-            ),
-            (
-                CONFIG_STREAM.into(),
-                AgentConfigEntry::new(AgentValue::new_string(""), "string"),
-            ),
-            (
-                CONFIG_KEY1.into(),
-                AgentConfigEntry::new(AgentValue::new_string(""), "string"),
-            ),
-            (
-                CONFIG_KEY2.into(),
-                AgentConfigEntry::new(AgentValue::new_string(""), "string"),
-            ),
-            (
-                CONFIG_KEY3.into(),
-                AgentConfigEntry::new(AgentValue::new_string(""), "string"),
-            ),
-            (
-                CONFIG_KEY4.into(),
-                AgentConfigEntry::new(AgentValue::new_string(""), "string"),
-            ),
-        ]),
+        AgentDefinition::new(AGENT_KIND, "std_task_zip4", Some(new_boxed::<TaskZipAgent>))
+            .with_title("Zip4")
+            .with_category(CATEGORY)
+            .with_inputs(vec![CH_IN1, CH_IN2, CH_IN3, CH_IN4])
+            .with_outputs(vec![CH_DATA])
+            .with_default_config(vec![
+                (
+                    CONFIG_N.into(),
+                    AgentConfigEntry::new(AgentValue::new_integer(4), "integer").with_hidden(),
+                ),
+                (
+                    CONFIG_TASK.into(),
+                    AgentConfigEntry::new(AgentValue::new_string(""), "string"),
+                ),
+                (
+                    CONFIG_KEY1.into(),
+                    AgentConfigEntry::new(AgentValue::new_string(""), "string"),
+                ),
+                (
+                    CONFIG_KEY2.into(),
+                    AgentConfigEntry::new(AgentValue::new_string(""), "string"),
+                ),
+                (
+                    CONFIG_KEY3.into(),
+                    AgentConfigEntry::new(AgentValue::new_string(""), "string"),
+                ),
+                (
+                    CONFIG_KEY4.into(),
+                    AgentConfigEntry::new(AgentValue::new_string(""), "string"),
+                ),
+            ]),
     );
 }
