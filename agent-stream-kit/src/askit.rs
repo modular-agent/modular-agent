@@ -674,7 +674,7 @@ impl ASKit {
             agent.status().clone()
         };
         if agent_status == AgentStatus::Start {
-            let ch = ctx.ch().to_string();
+            let ch = ctx.port().to_string();
             let message = AgentMessage::Input { ctx, data };
 
             let tx = {

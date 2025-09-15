@@ -73,9 +73,9 @@ pub async fn agent_out(env: &ASKit, source_agent: String, ctx: AgentContext, dat
     for target in targets.unwrap() {
         let (target_agent, source_handle, target_handle) = target;
 
-        if source_handle != ctx.ch() && source_handle != "*" {
-            // Skip if source_handle does not match with the given ch.
-            // "*" is a wildcard, and outputs messages of all channels.
+        if source_handle != ctx.port() && source_handle != "*" {
+            // Skip if source_handle does not match with the given port.
+            // "*" is a wildcard, and outputs messages of all ports.
             continue;
         }
 
@@ -86,14 +86,14 @@ pub async fn agent_out(env: &ASKit, source_agent: String, ctx: AgentContext, dat
             }
         }
 
-        let target_ch = if target_handle == "*" {
-            // If target_handle is "*", use the ch specified by the source agent
-            ctx.ch().to_string()
+        let target_port = if target_handle == "*" {
+            // If target_handle is "*", use the port specified by the source agent
+            ctx.port().to_string()
         } else {
             target_handle.clone()
         };
 
-        let target_ctx = ctx.with_ch(target_ch);
+        let target_ctx = ctx.with_port(target_port);
 
         env.agent_input(target_agent.clone(), target_ctx, data.clone())
             .await
@@ -127,13 +127,13 @@ pub async fn board_out(env: &ASKit, name: String, ctx: AgentContext, data: Agent
             continue;
         };
         for (target_agent, _source_handle, target_handle) in edges {
-            let target_ch = if target_handle == "*" {
+            let target_port = if target_handle == "*" {
                 // If target_handle is "*", use the board name
                 name.clone()
             } else {
                 target_handle.clone()
             };
-            let target_ctx = ctx.with_ch(target_ch);
+            let target_ctx = ctx.with_port(target_port);
             env.agent_input(target_agent.clone(), target_ctx, data.clone())
                 .await
                 .unwrap_or_else(|e| {

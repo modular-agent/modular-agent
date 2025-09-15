@@ -64,9 +64,9 @@ impl AsAgent for StringJoinAgent {
             out = out.replace("\\r", "\r");
             out = out.replace("\\\\", "\\");
             let out_data = AgentData::new_string(out);
-            self.try_output(ctx, CH_STRING, out_data)
+            self.try_output(ctx, PORT_STRING, out_data)
         } else {
-            self.try_output(ctx, CH_STRING, data)
+            self.try_output(ctx, PORT_STRING, data)
         }
     }
 }
@@ -130,9 +130,9 @@ impl AsAgent for TextJoinAgent {
             out = out.replace("\\r", "\r");
             out = out.replace("\\\\", "\\");
             let out_data = AgentData::new_text(out);
-            self.try_output(ctx, CH_TEXT, out_data)
+            self.try_output(ctx, PORT_TEXT, out_data)
         } else {
-            self.try_output(ctx, CH_TEXT, data)
+            self.try_output(ctx, PORT_TEXT, data)
         }
     }
 }
@@ -189,13 +189,13 @@ impl AsAgent for TemplateStringAgent {
                 })?;
                 out_arr.push(AgentValue::new_string(rendered_string));
             }
-            self.try_output(ctx, CH_STRING, AgentData::new_array("string", out_arr))
+            self.try_output(ctx, PORT_STRING, AgentData::new_array("string", out_arr))
         } else {
             let rendered_string = reg.render_template(&template, &data).map_err(|e| {
                 AgentError::InvalidValue(format!("Failed to render template: {}", e))
             })?;
             let out_data = AgentData::new_string(rendered_string);
-            self.try_output(ctx, CH_STRING, out_data)
+            self.try_output(ctx, PORT_STRING, out_data)
         }
     }
 }
@@ -252,13 +252,13 @@ impl AsAgent for TemplateTextAgent {
                 })?;
                 out_arr.push(AgentValue::new_string(rendered_string));
             }
-            self.try_output(ctx, CH_TEXT, AgentData::new_array("text", out_arr))
+            self.try_output(ctx, PORT_TEXT, AgentData::new_array("text", out_arr))
         } else {
             let rendered_string = reg.render_template(&template, &data).map_err(|e| {
                 AgentError::InvalidValue(format!("Failed to render template: {}", e))
             })?;
             let out_data = AgentData::new_text(rendered_string);
-            self.try_output(ctx, CH_TEXT, out_data)
+            self.try_output(ctx, PORT_TEXT, out_data)
         }
     }
 }
@@ -303,7 +303,7 @@ impl AsAgent for TemplateArrayAgent {
             let rendered_string = reg.render_template(&template, &data).map_err(|e| {
                 AgentError::InvalidValue(format!("Failed to render template: {}", e))
             })?;
-            self.try_output(ctx, CH_TEXT, AgentData::new_text(rendered_string))
+            self.try_output(ctx, PORT_TEXT, AgentData::new_text(rendered_string))
         } else {
             let kind = &data.kind;
             let d = AgentData::new_array(kind, vec![data.value.clone()]);
@@ -311,7 +311,7 @@ impl AsAgent for TemplateArrayAgent {
                 AgentError::InvalidValue(format!("Failed to render template: {}", e))
             })?;
             let out_data = AgentData::new_text(rendered_string);
-            self.try_output(ctx, CH_TEXT, out_data)
+            self.try_output(ctx, PORT_TEXT, out_data)
         }
     }
 }
@@ -319,11 +319,11 @@ impl AsAgent for TemplateArrayAgent {
 static AGENT_KIND: &str = "agent";
 static CATEGORY: &str = "Core/String";
 
-static CH_DATA: &str = "data";
-static CH_STRING: &str = "string";
-static CH_STRINGS: &str = "strings";
-static CH_TEXT: &str = "text";
-static CH_TEXTS: &str = "texts";
+static PORT_DATA: &str = "data";
+static PORT_STRING: &str = "string";
+static PORT_STRINGS: &str = "strings";
+static PORT_TEXT: &str = "text";
+static PORT_TEXTS: &str = "texts";
 
 static CONFIG_SEP: &str = "sep";
 static CONFIG_TEMPLATE: &str = "template";
@@ -337,8 +337,8 @@ pub fn register_agents(askit: &ASKit) {
         )
         .with_title("Text Join")
         .with_category(CATEGORY)
-        .with_inputs(vec![CH_TEXTS])
-        .with_outputs(vec![CH_TEXT])
+        .with_inputs(vec![PORT_TEXTS])
+        .with_outputs(vec![PORT_TEXT])
         .with_default_config(vec![(
             CONFIG_SEP.into(),
             AgentConfigEntry::new(AgentValue::new_string("\\n"), "string"),
@@ -353,8 +353,8 @@ pub fn register_agents(askit: &ASKit) {
         )
         .with_title("String Join")
         .with_category(CATEGORY)
-        .with_inputs(vec![CH_STRINGS])
-        .with_outputs(vec![CH_STRING])
+        .with_inputs(vec![PORT_STRINGS])
+        .with_outputs(vec![PORT_STRING])
         .with_default_config(vec![(
             CONFIG_SEP.into(),
             AgentConfigEntry::new(AgentValue::new_string("\\n"), "string"),
@@ -369,8 +369,8 @@ pub fn register_agents(askit: &ASKit) {
         )
         .with_title("Template Array")
         .with_category(CATEGORY)
-        .with_inputs(vec![CH_DATA])
-        .with_outputs(vec![CH_TEXT])
+        .with_inputs(vec![PORT_DATA])
+        .with_outputs(vec![PORT_TEXT])
         .with_default_config(vec![(
             CONFIG_TEMPLATE.into(),
             AgentConfigEntry::new(AgentValue::new_string("{{value}}"), "text"),
@@ -385,8 +385,8 @@ pub fn register_agents(askit: &ASKit) {
         )
         .with_title("Template String")
         .with_category(CATEGORY)
-        .with_inputs(vec![CH_DATA])
-        .with_outputs(vec![CH_STRING])
+        .with_inputs(vec![PORT_DATA])
+        .with_outputs(vec![PORT_STRING])
         .with_default_config(vec![(
             CONFIG_TEMPLATE.into(),
             AgentConfigEntry::new(AgentValue::new_string("{{value}}"), "string"),
@@ -401,8 +401,8 @@ pub fn register_agents(askit: &ASKit) {
         )
         .with_title("Template Text")
         .with_category(CATEGORY)
-        .with_inputs(vec![CH_DATA])
-        .with_outputs(vec![CH_TEXT])
+        .with_inputs(vec![PORT_DATA])
+        .with_outputs(vec![PORT_TEXT])
         .with_default_config(vec![(
             CONFIG_TEMPLATE.into(),
             AgentConfigEntry::new(AgentValue::new_string("{{value}}"), "text"),

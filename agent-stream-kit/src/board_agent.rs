@@ -51,11 +51,11 @@ impl AsAgent for BoardInAgent {
             return Ok(());
         }
         if board_name == "*" {
-            if ctx.ch().is_empty() {
-                // ch should not be empty, but just in case
+            if ctx.port().is_empty() {
+                // port should not be empty, but just in case
                 return Ok(());
             }
-            board_name = ctx.ch().to_string();
+            board_name = ctx.port().to_string();
         }
         let askit = self.askit();
         {

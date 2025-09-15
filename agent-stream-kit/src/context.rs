@@ -6,7 +6,7 @@ use super::data::AgentValue;
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct AgentContext {
-    ch: String,
+    port: String,
 
     #[serde(skip_serializing_if = "Option::is_none")]
     vars: Option<Arc<BTreeMap<String, AgentValue>>>,
@@ -17,27 +17,27 @@ impl AgentContext {
         Self::default()
     }
 
-    // ch
+    // Port
 
-    pub fn new_with_ch(ch: impl Into<String>) -> Self {
+    pub fn new_with_port(port: impl Into<String>) -> Self {
         Self {
-            ch: ch.into(),
+            port: port.into(),
             vars: None,
         }
     }
 
-    pub fn with_ch(&self, ch: impl Into<String>) -> Self {
+    pub fn with_port(&self, port: impl Into<String>) -> Self {
         Self {
-            ch: ch.into(),
+            port: port.into(),
             vars: self.vars.clone(),
         }
     }
 
-    pub fn ch(&self) -> &str {
-        &self.ch
+    pub fn port(&self) -> &str {
+        &self.port
     }
 
-    // vars
+    // Variables
 
     pub fn get_var(&self, key: &str) -> Option<&AgentValue> {
         self.vars.as_ref().and_then(|vars| vars.get(key))
@@ -51,7 +51,7 @@ impl AgentContext {
         };
         vars.insert(key, value);
         Self {
-            ch: self.ch.clone(),
+            port: self.port.clone(),
             vars: Some(Arc::new(vars)),
         }
     }

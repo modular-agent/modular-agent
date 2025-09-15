@@ -42,13 +42,13 @@ impl AsAgent for CounterAgent {
     }
 
     async fn process(&mut self, ctx: AgentContext, _data: AgentData) -> Result<(), AgentError> {
-        let ch = ctx.ch();
-        if ch == CH_RESET {
+        let ch = ctx.port();
+        if ch == PORT_RESET {
             self.count = 0;
-        } else if ch == CH_IN {
+        } else if ch == PORT_IN {
             self.count += 1;
         }
-        self.try_output(ctx, CH_COUNT, AgentData::new_integer(self.count))?;
+        self.try_output(ctx, PORT_COUNT, AgentData::new_integer(self.count))?;
         self.emit_display(DISPLAY_COUNT, AgentData::new_integer(self.count));
 
         Ok(())
@@ -57,9 +57,9 @@ impl AsAgent for CounterAgent {
 
 static CATEGORY: &str = "Core/Utils";
 
-static CH_IN: &str = "in";
-static CH_RESET: &str = "reset";
-static CH_COUNT: &str = "count";
+static PORT_IN: &str = "in";
+static PORT_RESET: &str = "reset";
+static PORT_COUNT: &str = "count";
 
 static DISPLAY_COUNT: &str = "count";
 
@@ -70,8 +70,8 @@ pub fn register_agents(askit: &ASKit) {
             .with_title("Counter")
             // .with_description("Display value on the node")
             .with_category(CATEGORY)
-            .with_inputs(vec![CH_IN, CH_RESET])
-            .with_outputs(vec![CH_COUNT])
+            .with_inputs(vec![PORT_IN, PORT_RESET])
+            .with_outputs(vec![PORT_COUNT])
             .with_display_config(vec![(
                 DISPLAY_COUNT.into(),
                 AgentDisplayConfigEntry::new("integer").with_hide_title(),

@@ -8,17 +8,17 @@ pub trait AgentOutput {
     fn try_output_raw(
         &self,
         ctx: AgentContext,
-        ch: String,
+        port: String,
         data: AgentData,
     ) -> Result<(), AgentError>;
 
     fn try_output<S: Into<String>>(
         &self,
         ctx: AgentContext,
-        ch: S,
+        port: S,
         data: AgentData,
     ) -> Result<(), AgentError> {
-        self.try_output_raw(ctx, ch.into(), data)
+        self.try_output_raw(ctx, port.into(), data)
     }
 
     fn emit_display_raw(&self, key: String, data: AgentData);
@@ -39,10 +39,10 @@ impl<T: Agent> AgentOutput for T {
     fn try_output_raw(
         &self,
         ctx: AgentContext,
-        ch: String,
+        port: String,
         data: AgentData,
     ) -> Result<(), AgentError> {
-        let new_ctx = ctx.with_ch(ch);
+        let new_ctx = ctx.with_port(port);
         self.askit()
             .try_send_agent_out(self.id().into(), new_ctx, data)
     }

@@ -35,7 +35,7 @@ impl AsAgent for ToJsonAgent {
     async fn process(&mut self, ctx: AgentContext, data: AgentData) -> Result<(), AgentError> {
         let json = serde_json::to_string_pretty(&data.value)
             .map_err(|e| AgentError::InvalidValue(e.to_string()))?;
-        self.try_output(ctx, CH_JSON, AgentData::new_text(json))?;
+        self.try_output(ctx, PORT_JSON, AgentData::new_text(json))?;
         Ok(())
     }
 }
@@ -74,7 +74,7 @@ impl AsAgent for FromJsonAgent {
         let json_value: serde_json::Value =
             serde_json::from_str(s).map_err(|e| AgentError::InvalidValue(e.to_string()))?;
         let data = AgentData::from_json_value(json_value)?;
-        self.try_output(ctx, CH_DATA, data)?;
+        self.try_output(ctx, PORT_DATA, data)?;
         Ok(())
     }
 }
@@ -148,7 +148,7 @@ impl AsAgent for GetPropertyAgent {
             };
             self.try_output(
                 ctx,
-                CH_DATA,
+                PORT_DATA,
                 AgentData::new_array(kind.to_string(), out_arr),
             )?;
         } else if data.is_object() {
@@ -167,7 +167,7 @@ impl AsAgent for GetPropertyAgent {
                 }
             }
 
-            self.try_output(ctx, CH_DATA, AgentData::from_value(value))?;
+            self.try_output(ctx, PORT_DATA, AgentData::from_value(value))?;
         }
 
         Ok(())
@@ -177,8 +177,8 @@ impl AsAgent for GetPropertyAgent {
 static AGENT_KIND: &str = "agent";
 static CATEGORY: &str = "Core/Data";
 
-static CH_DATA: &str = "data";
-static CH_JSON: &str = "json";
+static PORT_DATA: &str = "data";
+static PORT_JSON: &str = "json";
 
 static CONFIG_PROPERTY: &str = "property";
 
@@ -187,8 +187,8 @@ pub fn register_agents(askit: &ASKit) {
         AgentDefinition::new(AGENT_KIND, "std_to_json", Some(new_boxed::<ToJsonAgent>))
             .with_title("To JSON")
             .with_category(CATEGORY)
-            .with_inputs(vec![CH_DATA])
-            .with_outputs(vec![CH_JSON]),
+            .with_inputs(vec![PORT_DATA])
+            .with_outputs(vec![PORT_JSON]),
     );
 
     askit.register_agent(
@@ -199,8 +199,8 @@ pub fn register_agents(askit: &ASKit) {
         )
         .with_title("From JSON")
         .with_category(CATEGORY)
-        .with_inputs(vec![CH_JSON])
-        .with_outputs(vec![CH_DATA]),
+        .with_inputs(vec![PORT_JSON])
+        .with_outputs(vec![PORT_DATA]),
     );
 
     askit.register_agent(
@@ -211,8 +211,8 @@ pub fn register_agents(askit: &ASKit) {
         )
         .with_title("Get Property")
         .with_category(CATEGORY)
-        .with_inputs(vec![CH_DATA])
-        .with_outputs(vec![CH_DATA])
+        .with_inputs(vec![PORT_DATA])
+        .with_outputs(vec![PORT_DATA])
         .with_default_config(vec![(
             CONFIG_PROPERTY.into(),
             AgentConfigEntry::new(AgentValue::new_string(""), "string"),

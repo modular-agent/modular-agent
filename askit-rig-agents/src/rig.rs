@@ -44,13 +44,13 @@ impl AsAgent for RigMemoryAgent {
     }
 
     async fn process(&mut self, ctx: AgentContext, data: AgentData) -> Result<(), AgentError> {
-        if ctx.ch() == CH_RESET {
+        if ctx.port() == PORT_RESET {
             // Reset command empties the memory
             self.memory.clear();
 
             self.try_output(
                 ctx,
-                CH_MEMORY,
+                PORT_MEMORY,
                 AgentData::new_array("message", self.memory.clone()),
             )?;
 
@@ -95,7 +95,7 @@ impl AsAgent for RigMemoryAgent {
 
             self.try_output(
                 ctx.clone(),
-                CH_MESSAGE,
+                PORT_MESSAGE,
                 AgentData::new_custom_object("message", map),
             )?;
 
@@ -105,7 +105,7 @@ impl AsAgent for RigMemoryAgent {
 
         self.try_output(
             ctx,
-            CH_MEMORY,
+            PORT_MEMORY,
             AgentData::new_array("message", self.memory.clone()),
         )?;
 
@@ -311,10 +311,10 @@ impl AsAgent for RigOllamaAgent {
                     .ok_or_else(|| AgentError::InvalidValue("wrong object".to_string()))?
                     .to_owned(),
             );
-            self.try_output(ctx.clone(), CH_MESSAGE, out_message)?;
+            self.try_output(ctx.clone(), PORT_MESSAGE, out_message)?;
         } else if out_messages.len() > 1 {
             let out_message = AgentData::new_array("message", out_messages);
-            self.try_output(ctx.clone(), CH_MESSAGE, out_message)?;
+            self.try_output(ctx.clone(), PORT_MESSAGE, out_message)?;
         }
 
         if out_responses.len() == 1 {
@@ -325,10 +325,10 @@ impl AsAgent for RigOllamaAgent {
                     .ok_or_else(|| AgentError::InvalidValue("wrong object".to_string()))?
                     .to_owned(),
             );
-            self.try_output(ctx, CH_RESPONSE, out_response)?;
+            self.try_output(ctx, PORT_RESPONSE, out_response)?;
         } else if out_responses.len() > 1 {
             let out_response = AgentData::new_array("response", out_responses);
-            self.try_output(ctx, CH_RESPONSE, out_response)?;
+            self.try_output(ctx, PORT_RESPONSE, out_response)?;
         }
 
         Ok(())
@@ -620,13 +620,13 @@ impl AsAgent for RigPreambleAgent {
             .get_string_or_default(CONFIG_TEXT);
 
         if preamble.is_empty() {
-            self.try_output(ctx, CH_MESSAGE, data)?;
+            self.try_output(ctx, PORT_MESSAGE, data)?;
             return Ok(());
         }
 
         let data = add_preamble_to_data(preamble, data)?;
 
-        self.try_output(ctx, CH_MESSAGE, data)?;
+        self.try_output(ctx, PORT_MESSAGE, data)?;
 
         Ok(())
     }
@@ -729,7 +729,7 @@ impl AsAgent for RigUserMessageWithImageAgent {
 
         let out_data = combine_text_and_image_data(text, data)?;
 
-        self.try_output(ctx, CH_MESSAGE, out_data)?;
+        self.try_output(ctx, PORT_MESSAGE, out_data)?;
 
         Ok(())
     }
@@ -816,11 +816,11 @@ fn combine_text_and_image_value(text: String, value: AgentValue) -> Result<Agent
 static AGENT_KIND: &str = "agent";
 static CATEGORY: &str = "Core/Rig";
 
-static CH_IMAGE: &str = "image";
-static CH_MEMORY: &str = "memory";
-static CH_MESSAGE: &str = "message";
-static CH_RESET: &str = "reset";
-static CH_RESPONSE: &str = "response";
+static PORT_IMAGE: &str = "image";
+static PORT_MEMORY: &str = "memory";
+static PORT_MESSAGE: &str = "message";
+static PORT_RESET: &str = "reset";
+static PORT_RESPONSE: &str = "response";
 
 static CONFIG_MODEL: &str = "model";
 // static CONFIG_OLLAMA_URL: &str = "ollama_url";
@@ -837,8 +837,8 @@ pub fn register_agents(askit: &ASKit) {
             .with_title("Rig Memory")
             .with_description("Stores recent input data")
             .with_category(CATEGORY)
-            .with_inputs(vec![CH_MESSAGE, CH_RESET])
-            .with_outputs(vec![CH_MESSAGE, CH_MEMORY])
+            .with_inputs(vec![PORT_MESSAGE, PORT_RESET])
+            .with_outputs(vec![PORT_MESSAGE, PORT_MEMORY])
             .with_default_config(vec![(
                 CONFIG_N.into(),
                 AgentConfigEntry::new(AgentValue::new_integer(DEFAULT_CONFIG_N), "integer")
@@ -852,8 +852,8 @@ pub fn register_agents(askit: &ASKit) {
             // .use_native_thread()
             .with_title("Rig Ollama")
             .with_category(CATEGORY)
-            .with_inputs(vec![CH_MESSAGE])
-            .with_outputs(vec![CH_MESSAGE, CH_RESPONSE])
+            .with_inputs(vec![PORT_MESSAGE])
+            .with_outputs(vec![PORT_MESSAGE, PORT_RESPONSE])
             // .with_global_config(vec![(
             //     CONFIG_OLLAMA_URL.into(),
             //     AgentConfigEntry::new(AgentValue::new_string(DEFAULT_OLLAMA_URL), "string")
@@ -875,8 +875,8 @@ pub fn register_agents(askit: &ASKit) {
         // .use_native_thread()
         .with_title("Rig Preamble")
         .with_category(CATEGORY)
-        .with_inputs(vec![CH_MESSAGE])
-        .with_outputs(vec![CH_MESSAGE])
+        .with_inputs(vec![PORT_MESSAGE])
+        .with_outputs(vec![PORT_MESSAGE])
         .with_default_config(vec![(
             CONFIG_TEXT.into(),
             AgentConfigEntry::new(AgentValue::new_string(""), "text"),
@@ -892,8 +892,8 @@ pub fn register_agents(askit: &ASKit) {
         // .use_native_thread()
         .with_title("Rig User Message with Image")
         .with_category(CATEGORY)
-        .with_inputs(vec![CH_IMAGE])
-        .with_outputs(vec![CH_MESSAGE])
+        .with_inputs(vec![PORT_IMAGE])
+        .with_outputs(vec![PORT_MESSAGE])
         .with_default_config(vec![(
             CONFIG_TEXT.into(),
             AgentConfigEntry::new(AgentValue::new_string(""), "text"),
