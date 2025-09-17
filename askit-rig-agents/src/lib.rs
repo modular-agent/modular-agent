@@ -1,7 +1,9 @@
 use agent_stream_kit::ASKit;
 
-pub mod rig;
+pub mod ollama;
+pub mod prompt;
 
 pub fn register_agents(askit: &ASKit) {
-    rig::register_agents(askit);
+    ollama::register_agents(askit);
+    prompt::register_agents(askit);
 }
