@@ -24,7 +24,7 @@ impl AsAgent for BoardInAgent {
     ) -> Result<Self, AgentError> {
         let board_name = config
             .as_ref()
-            .and_then(|c| c.get_string(CONFIG_BOARD_NAME));
+            .and_then(|c| c.get_string(CONFIG_BOARD_NAME).ok());
         Ok(Self {
             data: AsAgentData::new(askit, id, def_name, config),
             board_name,
@@ -40,7 +40,11 @@ impl AsAgent for BoardInAgent {
     }
 
     fn set_config(&mut self, config: AgentConfig) -> Result<(), AgentError> {
-        self.board_name = config.get_string(CONFIG_BOARD_NAME);
+        self.board_name = config.get_string(CONFIG_BOARD_NAME).ok();
+        Ok(())
+    }
+
+    fn start(&mut self) -> Result<(), AgentError> {
         Ok(())
     }
 
@@ -82,7 +86,7 @@ impl AsAgent for BoardOutAgent {
     ) -> Result<Self, AgentError> {
         let board_name = config
             .as_ref()
-            .and_then(|c| c.get_string(CONFIG_BOARD_NAME));
+            .and_then(|c| c.get_string(CONFIG_BOARD_NAME).ok());
         Ok(Self {
             data: AsAgentData::new(askit, id, def_name, config),
             board_name,
@@ -122,7 +126,7 @@ impl AsAgent for BoardOutAgent {
     }
 
     fn set_config(&mut self, config: AgentConfig) -> Result<(), AgentError> {
-        let board_name = config.get_string(CONFIG_BOARD_NAME);
+        let board_name = config.get_string(CONFIG_BOARD_NAME).ok();
         if self.board_name != board_name {
             if let Some(board_name) = &self.board_name {
                 let askit = self.askit();

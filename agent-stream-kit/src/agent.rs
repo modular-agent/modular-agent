@@ -40,7 +40,7 @@ pub trait Agent {
 
     fn def_name(&self) -> &str;
 
-    fn config(&self) -> Option<&AgentConfig>;
+    fn config(&self) -> Result<&AgentConfig, AgentError>;
 
     fn set_config(&mut self, config: AgentConfig) -> Result<(), AgentError>;
 
@@ -147,8 +147,8 @@ impl<T: AsAgent + Send + Sync> Agent for T {
         self.data().def_name.as_str()
     }
 
-    fn config(&self) -> Option<&AgentConfig> {
-        self.data().config.as_ref()
+    fn config(&self) -> Result<&AgentConfig, AgentError> {
+        self.data().config.as_ref().ok_or(AgentError::NoConfig)
     }
 
     fn set_config(&mut self, config: AgentConfig) -> Result<(), AgentError> {

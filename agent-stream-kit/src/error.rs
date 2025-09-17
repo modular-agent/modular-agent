@@ -95,6 +95,9 @@ pub enum AgentError {
     #[error("No configuration available")]
     NoConfig,
 
+    #[error("Unknown configuration: {0}")]
+    UnknownConfig(String),
+
     #[error("No global configuration available")]
     NoGlobalConfig,
 }

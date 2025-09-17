@@ -102,13 +102,7 @@ impl AsAgent for GetPropertyAgent {
     }
 
     async fn process(&mut self, ctx: AgentContext, data: AgentData) -> Result<(), AgentError> {
-        let property = self
-            .config()
-            .ok_or(AgentError::NoConfig)?
-            .get(CONFIG_PROPERTY)
-            .ok_or_else(|| AgentError::InvalidValue("missing property".to_string()))?
-            .as_str()
-            .ok_or_else(|| AgentError::InvalidValue("failed as_str".to_string()))?;
+        let property = self.config()?.get_string(CONFIG_PROPERTY)?;
 
         if property.is_empty() {
             return Ok(());

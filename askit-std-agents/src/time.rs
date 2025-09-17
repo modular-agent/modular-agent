@@ -39,7 +39,7 @@ impl AsAgent for DelayAgent {
     }
 
     async fn process(&mut self, ctx: AgentContext, data: AgentData) -> Result<(), AgentError> {
-        let config = self.config().ok_or(AgentError::NoConfig)?;
+        let config = self.config()?;
         let delay_ms = config.get_integer_or(CONFIG_DELAY, DELAY_MS_DEFAULT);
         let max_num_data = config.get_integer_or(CONFIG_MAX_NUM_DATA, MAX_NUM_DATA_DEFAULT);
 
@@ -129,8 +129,8 @@ impl AsAgent for IntervalTimerAgent {
     ) -> Result<Self, AgentError> {
         let interval = config
             .as_ref()
-            .and_then(|c| c.get_string(CONFIG_INTERVAL))
-            .unwrap_or_else(|| INTERVAL_DEFAULT.to_string());
+            .ok_or(AgentError::NoConfig)?
+            .get_string_or(CONFIG_INTERVAL, INTERVAL_DEFAULT);
         let interval_ms = parse_duration_to_ms(&interval)?;
 
         Ok(Self {
@@ -158,15 +158,14 @@ impl AsAgent for IntervalTimerAgent {
 
     fn set_config(&mut self, config: AgentConfig) -> Result<(), AgentError> {
         // Check if interval has changed
-        if let Some(interval) = config.get_string(CONFIG_INTERVAL) {
-            let new_interval = parse_duration_to_ms(&interval)?;
-            if new_interval != self.interval_ms {
-                self.interval_ms = new_interval;
-                if *self.status() == AgentStatus::Start {
-                    // Restart the timer with the new interval
-                    self.stop_timer()?;
-                    self.start_timer()?;
-                }
+        let interval = config.get_string(CONFIG_INTERVAL)?;
+        let new_interval = parse_duration_to_ms(&interval)?;
+        if new_interval != self.interval_ms {
+            self.interval_ms = new_interval;
+            if *self.status() == AgentStatus::Start {
+                // Restart the timer with the new interval
+                self.stop_timer()?;
+                self.start_timer()?;
             }
         }
         Ok(())
@@ -199,7 +198,7 @@ impl AsAgent for OnStartAgent {
     }
 
     fn start(&mut self) -> Result<(), AgentError> {
-        let config = self.config().ok_or(AgentError::NoConfig)?;
+        let config = self.config()?;
         let delay_ms = config.get_integer_or(CONFIG_DELAY, DELAY_MS_DEFAULT);
 
         let askit = self.askit().clone();
@@ -340,10 +339,9 @@ impl AsAgent for ScheduleTimerAgent {
         };
 
         if let Some(config) = config {
-            if let Some(schedule_str) = config.get_string(CONFIG_SCHEDULE) {
-                if !schedule_str.is_empty() {
-                    agent.parse_schedule(&schedule_str)?;
-                }
+            let schedule_str = config.get_string(CONFIG_SCHEDULE)?;
+            if !schedule_str.is_empty() {
+                agent.parse_schedule(&schedule_str)?;
             }
         }
 
@@ -371,15 +369,14 @@ impl AsAgent for ScheduleTimerAgent {
 
     fn set_config(&mut self, config: AgentConfig) -> Result<(), AgentError> {
         // Check if schedule has changed
-        if let Some(schedule_str) = config.get_string(CONFIG_SCHEDULE) {
-            self.parse_schedule(&schedule_str)?;
+        let schedule_str = config.get_string(CONFIG_SCHEDULE)?;
+        self.parse_schedule(&schedule_str)?;
 
-            if *self.status() == AgentStatus::Start {
-                // Restart the timer with the new schedule
-                self.stop_timer()?;
-                if self.cron_schedule.is_some() {
-                    self.start_timer()?;
-                }
+        if *self.status() == AgentStatus::Start {
+            // Restart the timer with the new schedule
+            self.stop_timer()?;
+            if self.cron_schedule.is_some() {
+                self.start_timer()?;
             }
         }
         Ok(())
@@ -464,14 +461,14 @@ impl AsAgent for ThrottleTimeAgent {
     ) -> Result<Self, AgentError> {
         let time = config
             .as_ref()
-            .and_then(|c| c.get_string(CONFIG_TIME))
-            .unwrap_or_else(|| TIME_DEFAULT.to_string());
+            .ok_or(AgentError::NoConfig)?
+            .get_string_or(CONFIG_TIME, TIME_DEFAULT);
         let time_ms = parse_duration_to_ms(&time)?;
 
         let max_num_data = config
             .as_ref()
-            .and_then(|c| c.get_integer(CONFIG_MAX_NUM_DATA))
-            .unwrap_or(0);
+            .ok_or(AgentError::NoConfig)?
+            .get_integer_or(CONFIG_MAX_NUM_DATA, 0);
 
         Ok(Self {
             data: AsAgentData::new(askit, id, def_name, config),
@@ -496,23 +493,22 @@ impl AsAgent for ThrottleTimeAgent {
 
     fn set_config(&mut self, config: AgentConfig) -> Result<(), AgentError> {
         // Check if interval has changed
-        if let Some(time) = config.get_string(CONFIG_TIME) {
-            let new_time = parse_duration_to_ms(&time)?;
-            if new_time != self.time_ms {
-                self.time_ms = new_time;
-            }
+        let time = config.get_string(CONFIG_TIME)?;
+        let new_time = parse_duration_to_ms(&time)?;
+        if new_time != self.time_ms {
+            self.time_ms = new_time;
         }
+
         // Check if max_num_data has changed
-        if let Some(max_num_data) = config.get_integer(CONFIG_MAX_NUM_DATA) {
-            if self.max_num_data != max_num_data {
-                let mut wd = self.waiting_data.lock().unwrap();
-                let wd_len = wd.len();
-                if max_num_data >= 0 && wd_len > (max_num_data as usize) {
-                    // If we have reached the max data to keep, we drop the oldest one
-                    wd.drain(0..(wd_len - (max_num_data as usize)));
-                }
-                self.max_num_data = max_num_data;
+        let max_num_data = config.get_integer(CONFIG_MAX_NUM_DATA)?;
+        if self.max_num_data != max_num_data {
+            let mut wd = self.waiting_data.lock().unwrap();
+            let wd_len = wd.len();
+            if max_num_data >= 0 && wd_len > (max_num_data as usize) {
+                // If we have reached the max data to keep, we drop the oldest one
+                wd.drain(0..(wd_len - (max_num_data as usize)));
             }
+            self.max_num_data = max_num_data;
         }
         Ok(())
     }

@@ -29,14 +29,7 @@ impl AsAgent for TaskAgent {
     }
 
     async fn process(&mut self, ctx: AgentContext, data: AgentData) -> Result<(), AgentError> {
-        let task_name = self
-            .config()
-            .ok_or(AgentError::NoConfig)?
-            .get(CONFIG_TASK)
-            .ok_or(AgentError::InvalidConfig("missing task".into()))?
-            .as_str()
-            .ok_or(AgentError::InvalidConfig("failed as_str".into()))?
-            .to_string();
+        let task_name = self.config()?.get_string(CONFIG_TASK)?;
         if task_name.is_empty() {
             self.try_output(ctx, PORT_DATA, data)?;
             return Ok(());
@@ -94,11 +87,7 @@ impl AsAgent for TaskZipAgent {
     }
 
     fn set_config(&mut self, config: AgentConfig) -> Result<(), AgentError> {
-        let n = config
-            .get(CONFIG_N)
-            .ok_or(AgentError::NoConfig)?
-            .as_i64()
-            .ok_or(AgentError::InvalidConfig("failed as_i64".into()))?;
+        let n = config.get_integer(CONFIG_N)?;
         if n <= 1 {
             return Err(AgentError::InvalidConfig("n must be greater than 1".into()));
         }
@@ -129,15 +118,7 @@ impl AsAgent for TaskZipAgent {
             }
         }
 
-        let task_name = self
-            .config()
-            .ok_or(AgentError::NoConfig)?
-            .get(CONFIG_TASK)
-            .ok_or(AgentError::InvalidConfig("missing task".into()))?
-            .as_str()
-            .ok_or(AgentError::InvalidConfig("failed as_str".into()))?
-            .to_string();
-
+        let task_name = self.config()?.get_string(CONFIG_TASK)?;
         if !task_name.is_empty() {
             let key = format!("{}:$task:{}", self.flow_name(), task_name);
             let Some(value) = ctx.get_var(key.as_str()) else {

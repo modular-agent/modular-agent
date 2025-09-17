@@ -58,20 +58,15 @@ impl AsAgent for RigMemoryAgent {
         self.memory.extend(history);
 
         // Trim to max size if needed
-        if let Some(n) = self
-            .config()
-            .ok_or(AgentError::NoConfig)?
-            .get_integer(CONFIG_N)
-        {
-            if n > 0 {
-                let n = n as usize;
+        let n = self.config()?.get_integer(CONFIG_N)?;
+        if n > 0 {
+            let n = n as usize;
 
-                // If the n is smaller than the current number of data,
-                // trim the oldest data to fit the n
-                if n < self.memory.len() {
-                    let data_to_remove = self.memory.len() - n;
-                    self.memory.drain(0..data_to_remove);
-                }
+            // If the n is smaller than the current number of data,
+            // trim the oldest data to fit the n
+            if n < self.memory.len() {
+                let data_to_remove = self.memory.len() - n;
+                self.memory.drain(0..data_to_remove);
             }
         }
 
@@ -255,10 +250,7 @@ impl AsAgent for RigOllamaAgent {
     }
 
     async fn process(&mut self, ctx: AgentContext, data: AgentData) -> Result<(), AgentError> {
-        let config_model = &self
-            .config()
-            .ok_or(AgentError::NoConfig)?
-            .get_string_or_default(CONFIG_MODEL);
+        let config_model = &self.config()?.get_string_or_default(CONFIG_MODEL);
         if config_model.is_empty() {
             return Ok(());
         }
@@ -609,10 +601,7 @@ impl AsAgent for RigPreambleAgent {
     }
 
     async fn process(&mut self, ctx: AgentContext, data: AgentData) -> Result<(), AgentError> {
-        let preamble = self
-            .config()
-            .ok_or(AgentError::NoConfig)?
-            .get_string_or_default(CONFIG_TEXT);
+        let preamble = self.config()?.get_string_or_default(CONFIG_TEXT);
 
         if preamble.is_empty() {
             self.try_output(ctx, PORT_MESSAGE, data)?;
@@ -717,10 +706,7 @@ impl AsAgent for RigUserMessageWithImageAgent {
     }
 
     async fn process(&mut self, ctx: AgentContext, data: AgentData) -> Result<(), AgentError> {
-        let text = self
-            .config()
-            .ok_or(AgentError::NoConfig)?
-            .get_string_or_default(CONFIG_TEXT);
+        let text = self.config()?.get_string_or_default(CONFIG_TEXT);
 
         let out_data = combine_text_and_image_data(text, data)?;
 

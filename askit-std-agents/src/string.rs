@@ -42,7 +42,7 @@ impl AsAgent for StringJoinAgent {
     }
 
     async fn process(&mut self, ctx: AgentContext, data: AgentData) -> Result<(), AgentError> {
-        let config = self.config().ok_or(AgentError::NoConfig)?;
+        let config = self.config()?;
 
         let sep = config.get_string_or_default(CONFIG_SEP);
 
@@ -108,7 +108,7 @@ impl AsAgent for TextJoinAgent {
     }
 
     async fn process(&mut self, ctx: AgentContext, data: AgentData) -> Result<(), AgentError> {
-        let config = self.config().ok_or(AgentError::NoConfig)?;
+        let config = self.config()?;
 
         let sep = config.get_string_or_default(CONFIG_SEP);
 
@@ -160,7 +160,7 @@ impl AsAgent for TemplateStringAgent {
     }
 
     async fn process(&mut self, ctx: AgentContext, data: AgentData) -> Result<(), AgentError> {
-        let config = self.config().ok_or(AgentError::NoConfig)?;
+        let config = self.config()?;
 
         let template = config.get_string_or_default(CONFIG_TEMPLATE);
         if template.is_empty() {
@@ -223,7 +223,7 @@ impl AsAgent for TemplateTextAgent {
     }
 
     async fn process(&mut self, ctx: AgentContext, data: AgentData) -> Result<(), AgentError> {
-        let config = self.config().ok_or(AgentError::NoConfig)?;
+        let config = self.config()?;
 
         let template = config.get_string_or_default(CONFIG_TEMPLATE);
         if template.is_empty() {
@@ -286,7 +286,7 @@ impl AsAgent for TemplateArrayAgent {
     }
 
     async fn process(&mut self, ctx: AgentContext, data: AgentData) -> Result<(), AgentError> {
-        let config = self.config().ok_or(AgentError::NoConfig)?;
+        let config = self.config()?;
 
         let template = config.get_string_or_default(CONFIG_TEMPLATE);
         if template.is_empty() {

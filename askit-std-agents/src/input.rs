@@ -65,13 +65,12 @@ impl AsAgent for BooleanInputAgent {
 
     fn set_config(&mut self, config: AgentConfig) -> Result<(), AgentError> {
         if *self.status() == AgentStatus::Start {
-            if let Some(value) = config.get_bool(CONFIG_BOOLEAN) {
-                self.try_output(
-                    AgentContext::new(),
-                    CONFIG_BOOLEAN,
-                    AgentData::new_boolean(value),
-                )?;
-            }
+            let value = config.get_bool(CONFIG_BOOLEAN)?;
+            self.try_output(
+                AgentContext::new(),
+                CONFIG_BOOLEAN,
+                AgentData::new_boolean(value),
+            )?;
         }
         Ok(())
     }
@@ -104,13 +103,12 @@ impl AsAgent for IntegerInputAgent {
 
     fn set_config(&mut self, config: AgentConfig) -> Result<(), AgentError> {
         if *self.status() == AgentStatus::Start {
-            if let Some(value) = config.get_integer(CONFIG_INTEGER) {
-                self.try_output(
-                    AgentContext::new(),
-                    CONFIG_INTEGER,
-                    AgentData::new_integer(value),
-                )?;
-            }
+            let value = config.get_integer(CONFIG_INTEGER)?;
+            self.try_output(
+                AgentContext::new(),
+                CONFIG_INTEGER,
+                AgentData::new_integer(value),
+            )?;
         }
 
         Ok(())
@@ -144,13 +142,12 @@ impl AsAgent for NumberInputAgent {
 
     fn set_config(&mut self, config: AgentConfig) -> Result<(), AgentError> {
         if *self.status() == AgentStatus::Start {
-            if let Some(value) = config.get_number(CONFIG_NUMBER) {
-                self.try_output(
-                    AgentContext::new(),
-                    CONFIG_NUMBER,
-                    AgentData::new_number(value),
-                )?;
-            }
+            let value = config.get_number(CONFIG_NUMBER)?;
+            self.try_output(
+                AgentContext::new(),
+                CONFIG_NUMBER,
+                AgentData::new_number(value),
+            )?;
         }
 
         Ok(())
@@ -184,13 +181,12 @@ impl AsAgent for StringInputAgent {
 
     fn set_config(&mut self, config: AgentConfig) -> Result<(), AgentError> {
         if *self.status() == AgentStatus::Start {
-            if let Some(value) = config.get_string(CONFIG_STRING) {
-                self.try_output(
-                    AgentContext::new(),
-                    CONFIG_STRING,
-                    AgentData::new_string(value),
-                )?;
-            }
+            let value = config.get_string(CONFIG_STRING)?;
+            self.try_output(
+                AgentContext::new(),
+                CONFIG_STRING,
+                AgentData::new_string(value),
+            )?;
         }
         Ok(())
     }
@@ -223,9 +219,8 @@ impl AsAgent for TextInputAgent {
 
     fn set_config(&mut self, config: AgentConfig) -> Result<(), AgentError> {
         if *self.status() == AgentStatus::Start {
-            if let Some(value) = config.get_string(CONFIG_TEXT) {
-                self.try_output(AgentContext::new(), CONFIG_TEXT, AgentData::new_text(value))?;
-            }
+            let value = config.get_string(CONFIG_TEXT)?;
+            self.try_output(AgentContext::new(), CONFIG_TEXT, AgentData::new_text(value))?;
         }
         Ok(())
     }
@@ -258,25 +253,24 @@ impl AsAgent for ObjectInputAgent {
 
     fn set_config(&mut self, config: AgentConfig) -> Result<(), AgentError> {
         if *self.status() == AgentStatus::Start {
-            if let Some(value) = config.get(CONFIG_OBJECT) {
-                if let Some(obj) = value.as_object() {
-                    self.try_output(
-                        AgentContext::new(),
-                        CONFIG_OBJECT,
-                        AgentData::new_object(obj.clone()),
-                    )?;
-                } else if let Some(arr) = value.as_array() {
-                    self.try_output(
-                        AgentContext::new(),
-                        CONFIG_OBJECT,
-                        AgentData::new_array("object", arr.clone()),
-                    )?;
-                } else {
-                    return Err(AgentError::InvalidConfig(format!(
-                        "Invalid object value for config '{}'",
-                        CONFIG_OBJECT
-                    )));
-                }
+            let value = config.get(CONFIG_OBJECT)?;
+            if let Some(obj) = value.as_object() {
+                self.try_output(
+                    AgentContext::new(),
+                    CONFIG_OBJECT,
+                    AgentData::new_object(obj.clone()),
+                )?;
+            } else if let Some(arr) = value.as_array() {
+                self.try_output(
+                    AgentContext::new(),
+                    CONFIG_OBJECT,
+                    AgentData::new_array("object", arr.clone()),
+                )?;
+            } else {
+                return Err(AgentError::InvalidConfig(format!(
+                    "Invalid object value for config '{}'",
+                    CONFIG_OBJECT
+                )));
             }
         }
         Ok(())
