@@ -8,7 +8,6 @@ license.workspace = true
 
 [dependencies]
 agent-stream-kit = { version = "0.2", path = "../agent-stream-kit" }
-async-trait = "0.1"
 chrono = "0.4"
 cron = "0.15"
 handlebars = "6"

@@ -58,7 +58,6 @@ name = "askit-rig-agents"
 version = "0.2.0"
 dependencies = [
  "agent-stream-kit",
- "async-trait",
  "rig-core",
  "serde_json",
 ]
@@ -68,7 +67,6 @@ name = "askit-std-agents"
 version = "0.2.1"
 dependencies = [
  "agent-stream-kit",
- "async-trait",
  "chrono",
  "cron",
  "handlebars",

@@ -3,17 +3,12 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use std::vec;
 
-use async_trait::async_trait;
+use agent_stream_kit::prelude::*;
 use chrono::{DateTime, Local, Utc};
 use cron::Schedule;
 use log;
 use regex::Regex;
 use tokio::task::JoinHandle;
-
-use agent_stream_kit::{
-    ASKit, Agent, AgentConfig, AgentConfigEntry, AgentContext, AgentData, AgentDefinition,
-    AgentError, AgentOutput, AgentStatus, AgentValue, AsAgent, AsAgentData, new_boxed,
-};
 
 // Delay Agent
 struct DelayAgent {
