@@ -197,7 +197,7 @@ impl<T: AsAgent + Send + Sync> Agent for T {
     }
 }
 
-pub fn new_boxed<T: Agent + Send + Sync + 'static>(
+pub fn new_agent_boxed<T: Agent + Send + Sync + 'static>(
     askit: ASKit,
     id: String,
     def_name: String,

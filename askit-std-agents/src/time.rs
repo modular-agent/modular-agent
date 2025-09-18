@@ -3,7 +3,11 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use std::vec;
 
-use agent_stream_kit::prelude::*;
+use agent_stream_kit::{
+    ASKit, Agent, AgentConfig, AgentConfigEntry, AgentContext, AgentData, AgentDefinition,
+    AgentError, AgentOutput, AgentStatus, AgentValue, AsAgent, AsAgentData, async_trait,
+    new_agent_boxed,
+};
 use chrono::{DateTime, Local, Utc};
 use cron::Schedule;
 use log;
@@ -610,7 +614,7 @@ static TIME_DEFAULT: &str = "1s";
 pub fn register_agents(askit: &ASKit) {
     // Delay Agent
     askit.register_agent(
-        AgentDefinition::new(AGENT_KIND, "std_delay", Some(new_boxed::<DelayAgent>))
+        AgentDefinition::new(AGENT_KIND, "std_delay", Some(new_agent_boxed::<DelayAgent>))
             .with_title("Delay")
             .with_description("Delays output by a specified time")
             .with_category(CATEGORY)
@@ -635,7 +639,7 @@ pub fn register_agents(askit: &ASKit) {
         AgentDefinition::new(
             AGENT_KIND,
             "std_interval_timer",
-            Some(new_boxed::<IntervalTimerAgent>),
+            Some(new_agent_boxed::<IntervalTimerAgent>),
         )
         .with_title("Interval Timer")
         .with_description("Outputs a unit signal at specified intervals")
@@ -650,15 +654,19 @@ pub fn register_agents(askit: &ASKit) {
 
     // OnStart
     askit.register_agent(
-        AgentDefinition::new(AGENT_KIND, "std_on_start", Some(new_boxed::<OnStartAgent>))
-            .with_title("On Start")
-            .with_category(CATEGORY)
-            .with_outputs(vec![PORT_UNIT])
-            .with_default_config(vec![(
-                CONFIG_DELAY.into(),
-                AgentConfigEntry::new(AgentValue::new_integer(DELAY_MS_DEFAULT), "integer")
-                    .with_title("delay (ms)"),
-            )]),
+        AgentDefinition::new(
+            AGENT_KIND,
+            "std_on_start",
+            Some(new_agent_boxed::<OnStartAgent>),
+        )
+        .with_title("On Start")
+        .with_category(CATEGORY)
+        .with_outputs(vec![PORT_UNIT])
+        .with_default_config(vec![(
+            CONFIG_DELAY.into(),
+            AgentConfigEntry::new(AgentValue::new_integer(DELAY_MS_DEFAULT), "integer")
+                .with_title("delay (ms)"),
+        )]),
     );
 
     // Schedule Timer Agent
@@ -666,7 +674,7 @@ pub fn register_agents(askit: &ASKit) {
         AgentDefinition::new(
             AGENT_KIND,
             "std_schedule_timer",
-            Some(new_boxed::<ScheduleTimerAgent>),
+            Some(new_agent_boxed::<ScheduleTimerAgent>),
         )
         .with_title("Schedule Timer")
         .with_category(CATEGORY)
@@ -683,7 +691,7 @@ pub fn register_agents(askit: &ASKit) {
         AgentDefinition::new(
             AGENT_KIND,
             "std_throttle_time",
-            Some(new_boxed::<ThrottleTimeAgent>),
+            Some(new_agent_boxed::<ThrottleTimeAgent>),
         )
         .with_title("Throttle Time")
         .with_category(CATEGORY)

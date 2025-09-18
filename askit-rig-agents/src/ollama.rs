@@ -1,7 +1,10 @@
 use std::sync::{Arc, Mutex};
 use std::vec;
 
-use agent_stream_kit::prelude::*;
+use agent_stream_kit::{
+    ASKit, Agent, AgentConfig, AgentConfigEntry, AgentContext, AgentData, AgentDefinition,
+    AgentError, AgentOutput, AgentValue, AsAgent, AsAgentData, async_trait, new_agent_boxed,
+};
 use rig::client::CompletionClient;
 use rig::completion::CompletionRequestBuilder;
 use rig::providers::ollama::{self, ClientBuilder};
@@ -160,21 +163,25 @@ const DEFAULT_CONFIG_MODEL: &str = "gemma3:4b";
 
 pub fn register_agents(askit: &ASKit) {
     askit.register_agent(
-        AgentDefinition::new(AGENT_KIND, "rig_ollama", Some(new_boxed::<RigOllamaAgent>))
-            // .use_native_thread()
-            .with_title("Rig Ollama")
-            .with_category(CATEGORY)
-            .with_inputs(vec![PORT_MESSAGE])
-            .with_outputs(vec![PORT_MESSAGE, PORT_RESPONSE])
-            // .with_global_config(vec![(
-            //     CONFIG_OLLAMA_URL.into(),
-            //     AgentConfigEntry::new(AgentValue::new_string(DEFAULT_OLLAMA_URL), "string")
-            //         .with_title("Ollama URL"),
-            // )])
-            .with_default_config(vec![(
-                CONFIG_MODEL.into(),
-                AgentConfigEntry::new(AgentValue::new_string(DEFAULT_CONFIG_MODEL), "string")
-                    .with_title("Chat Model"),
-            )]),
+        AgentDefinition::new(
+            AGENT_KIND,
+            "rig_ollama",
+            Some(new_agent_boxed::<RigOllamaAgent>),
+        )
+        // .use_native_thread()
+        .with_title("Rig Ollama")
+        .with_category(CATEGORY)
+        .with_inputs(vec![PORT_MESSAGE])
+        .with_outputs(vec![PORT_MESSAGE, PORT_RESPONSE])
+        // .with_global_config(vec![(
+        //     CONFIG_OLLAMA_URL.into(),
+        //     AgentConfigEntry::new(AgentValue::new_string(DEFAULT_OLLAMA_URL), "string")
+        //         .with_title("Ollama URL"),
+        // )])
+        .with_default_config(vec![(
+            CONFIG_MODEL.into(),
+            AgentConfigEntry::new(AgentValue::new_string(DEFAULT_CONFIG_MODEL), "string")
+                .with_title("Chat Model"),
+        )]),
     );
 }

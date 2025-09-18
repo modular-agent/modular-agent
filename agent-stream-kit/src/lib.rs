@@ -11,7 +11,7 @@ mod message;
 mod output;
 mod runtime;
 
-pub use agent::{Agent, AgentStatus, AsAgent, AsAgentData, new_boxed};
+pub use agent::{Agent, AgentStatus, AsAgent, AsAgentData, new_agent_boxed};
 pub use askit::{ASKit, ASKitEvent, ASKitObserver};
 pub use config::{AgentConfig, AgentConfigs};
 pub use context::AgentContext;
@@ -23,4 +23,5 @@ pub use error::AgentError;
 pub use flow::{AgentFlow, AgentFlowEdge, AgentFlowNode, AgentFlows};
 pub use output::AgentOutput;
 
-pub mod prelude;
+// re-export async_trait
+pub use async_trait::async_trait;

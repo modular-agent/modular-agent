@@ -1,4 +1,7 @@
-use agent_stream_kit::prelude::*;
+use agent_stream_kit::{
+    ASKit, AgentConfig, AgentConfigEntry, AgentContext, AgentData, AgentDefinition, AgentError,
+    AgentOutput, AgentValue, AgentValueMap, AsAgent, AsAgentData, async_trait, new_agent_boxed,
+};
 
 // Zip agent
 struct ZipAgent {
@@ -129,7 +132,7 @@ static CONFIG_N: &str = "n";
 
 pub fn register_agents(askit: &ASKit) {
     askit.register_agent(
-        AgentDefinition::new(AGENT_KIND, "std_zip2", Some(new_boxed::<ZipAgent>))
+        AgentDefinition::new(AGENT_KIND, "std_zip2", Some(new_agent_boxed::<ZipAgent>))
             .with_title("Zip2")
             .with_category(CATEGORY)
             .with_inputs(vec![PORT_IN1, PORT_IN2])
@@ -151,7 +154,7 @@ pub fn register_agents(askit: &ASKit) {
     );
 
     askit.register_agent(
-        AgentDefinition::new(AGENT_KIND, "std_zip3", Some(new_boxed::<ZipAgent>))
+        AgentDefinition::new(AGENT_KIND, "std_zip3", Some(new_agent_boxed::<ZipAgent>))
             .with_title("Zip3")
             .with_category(CATEGORY)
             .with_inputs(vec![PORT_IN1, PORT_IN2, PORT_IN3])
@@ -177,7 +180,7 @@ pub fn register_agents(askit: &ASKit) {
     );
 
     askit.register_agent(
-        AgentDefinition::new(AGENT_KIND, "std_zip4", Some(new_boxed::<ZipAgent>))
+        AgentDefinition::new(AGENT_KIND, "std_zip4", Some(new_agent_boxed::<ZipAgent>))
             .with_title("Zip4")
             .with_category(CATEGORY)
             .with_inputs(vec![PORT_IN1, PORT_IN2, PORT_IN3, PORT_IN4])

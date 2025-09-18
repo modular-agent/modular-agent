@@ -1,7 +1,10 @@
 use std::fs;
 use std::path::Path;
 
-use agent_stream_kit::prelude::*;
+use agent_stream_kit::{
+    ASKit, AgentConfig, AgentContext, AgentData, AgentDefinition, AgentError, AgentOutput,
+    AgentValue, AsAgent, AsAgentData, async_trait, new_agent_boxed,
+};
 
 // List Files Agent
 struct ListFilesAgent {
@@ -201,7 +204,7 @@ pub fn register_agents(askit: &ASKit) {
         AgentDefinition::new(
             AGENT_KIND,
             "std_list_files",
-            Some(new_boxed::<ListFilesAgent>),
+            Some(new_agent_boxed::<ListFilesAgent>),
         )
         .with_title("List Files")
         .with_category(CATEGORY)
@@ -214,7 +217,7 @@ pub fn register_agents(askit: &ASKit) {
         AgentDefinition::new(
             AGENT_KIND,
             "std_read_text_file",
-            Some(new_boxed::<ReadTextFileAgent>),
+            Some(new_agent_boxed::<ReadTextFileAgent>),
         )
         .with_title("Read Text File")
         .with_category(CATEGORY)
@@ -227,7 +230,7 @@ pub fn register_agents(askit: &ASKit) {
         AgentDefinition::new(
             AGENT_KIND,
             "std_write_text_file",
-            Some(new_boxed::<WriteTextFileAgent>),
+            Some(new_agent_boxed::<WriteTextFileAgent>),
         )
         .with_title("Write Text File")
         .with_category(CATEGORY)

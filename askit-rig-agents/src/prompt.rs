@@ -1,6 +1,10 @@
 use std::vec;
 
-use agent_stream_kit::prelude::*;
+use agent_stream_kit::{
+    ASKit, Agent, AgentConfig, AgentConfigEntry, AgentContext, AgentData, AgentDefinition,
+    AgentError, AgentOutput, AgentValue, AgentValueMap, AsAgent, AsAgentData, async_trait,
+    new_agent_boxed,
+};
 use rig::OneOrMany;
 
 // Memory Agent
@@ -667,25 +671,29 @@ const DEFAULT_CONFIG_N: i64 = 10;
 
 pub fn register_agents(askit: &ASKit) {
     askit.register_agent(
-        AgentDefinition::new(AGENT_KIND, "rig_memory", Some(new_boxed::<RigMemoryAgent>))
-            .with_title("Rig Memory")
-            .with_description("Stores recent input data")
-            .with_category(CATEGORY)
-            .with_inputs(vec![PORT_MESSAGE, PORT_RESET])
-            .with_outputs(vec![PORT_MESSAGE, PORT_MEMORY])
-            .with_default_config(vec![(
-                CONFIG_N.into(),
-                AgentConfigEntry::new(AgentValue::new_integer(DEFAULT_CONFIG_N), "integer")
-                    .with_title("Memory Size")
-                    .with_description("-1 = unlimited"),
-            )]),
+        AgentDefinition::new(
+            AGENT_KIND,
+            "rig_memory",
+            Some(new_agent_boxed::<RigMemoryAgent>),
+        )
+        .with_title("Rig Memory")
+        .with_description("Stores recent input data")
+        .with_category(CATEGORY)
+        .with_inputs(vec![PORT_MESSAGE, PORT_RESET])
+        .with_outputs(vec![PORT_MESSAGE, PORT_MEMORY])
+        .with_default_config(vec![(
+            CONFIG_N.into(),
+            AgentConfigEntry::new(AgentValue::new_integer(DEFAULT_CONFIG_N), "integer")
+                .with_title("Memory Size")
+                .with_description("-1 = unlimited"),
+        )]),
     );
 
     askit.register_agent(
         AgentDefinition::new(
             AGENT_KIND,
             "rig_preamble",
-            Some(new_boxed::<RigPreambleAgent>),
+            Some(new_agent_boxed::<RigPreambleAgent>),
         )
         // .use_native_thread()
         .with_title("Rig Preamble")
@@ -702,7 +710,7 @@ pub fn register_agents(askit: &ASKit) {
         AgentDefinition::new(
             AGENT_KIND,
             "rig_user_message_with_image",
-            Some(new_boxed::<RigUserMessageWithImageAgent>),
+            Some(new_agent_boxed::<RigUserMessageWithImageAgent>),
         )
         // .use_native_thread()
         .with_title("Rig User Message with Image")

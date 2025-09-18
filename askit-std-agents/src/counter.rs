@@ -1,6 +1,9 @@
 use std::vec;
 
-use agent_stream_kit::prelude::*;
+use agent_stream_kit::{
+    ASKit, AgentConfig, AgentContext, AgentData, AgentDefinition, AgentDisplayConfigEntry,
+    AgentError, AgentOutput, AsAgent, AsAgentData, async_trait, new_agent_boxed,
+};
 
 /// Counter
 struct CounterAgent {
@@ -61,15 +64,19 @@ static DISPLAY_COUNT: &str = "count";
 pub fn register_agents(askit: &ASKit) {
     // Counter Agent
     askit.register_agent(
-        AgentDefinition::new("agent", "std_counter", Some(new_boxed::<CounterAgent>))
-            .with_title("Counter")
-            // .with_description("Display value on the node")
-            .with_category(CATEGORY)
-            .with_inputs(vec![PORT_IN, PORT_RESET])
-            .with_outputs(vec![PORT_COUNT])
-            .with_display_config(vec![(
-                DISPLAY_COUNT.into(),
-                AgentDisplayConfigEntry::new("integer").with_hide_title(),
-            )]),
+        AgentDefinition::new(
+            "agent",
+            "std_counter",
+            Some(new_agent_boxed::<CounterAgent>),
+        )
+        .with_title("Counter")
+        // .with_description("Display value on the node")
+        .with_category(CATEGORY)
+        .with_inputs(vec![PORT_IN, PORT_RESET])
+        .with_outputs(vec![PORT_COUNT])
+        .with_display_config(vec![(
+            DISPLAY_COUNT.into(),
+            AgentDisplayConfigEntry::new("integer").with_hide_title(),
+        )]),
     );
 }

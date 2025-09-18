@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use std::vec;
 
-use super::agent::{Agent, AsAgent, AsAgentData, new_boxed};
+use super::agent::{Agent, AsAgent, AsAgentData, new_agent_boxed};
 use super::askit::ASKit;
 use super::config::AgentConfig;
 use super::context::AgentContext;
@@ -155,28 +155,35 @@ static CONFIG_BOARD_NAME: &str = "$board";
 pub fn register_agents(askit: &ASKit) {
     // BoardInAgent
     askit.register_agent(
-        AgentDefinition::new("Board", "core_board_in", Some(new_boxed::<BoardInAgent>))
-            .with_title("Board In")
-            .with_category("Core")
-            .with_inputs(vec!["*"])
-            .with_default_config(vec![(
-                CONFIG_BOARD_NAME.into(),
-                AgentConfigEntry::new(AgentValue::new_string(""), "string")
-                    .with_title("Board Name")
-                    .with_description("* = source kind"),
-            )]),
+        AgentDefinition::new(
+            "Board",
+            "core_board_in",
+            Some(new_agent_boxed::<BoardInAgent>),
+        )
+        .with_title("Board In")
+        .with_category("Core")
+        .with_inputs(vec!["*"])
+        .with_default_config(vec![(
+            CONFIG_BOARD_NAME.into(),
+            AgentConfigEntry::new(AgentValue::new_string(""), "string")
+                .with_title("Board Name")
+                .with_description("* = source kind"),
+        )]),
     );
 
     // BoardOutAgent
     askit.register_agent(
-        AgentDefinition::new("Board", "core_board_out", Some(new_boxed::<BoardOutAgent>))
-            .with_title("Board Out")
-            .with_category("Core")
-            .with_outputs(vec!["*"])
-            .with_default_config(vec![(
-                CONFIG_BOARD_NAME.into(),
-                AgentConfigEntry::new(AgentValue::new_string(""), "string")
-                    .with_title("Board Name"),
-            )]),
+        AgentDefinition::new(
+            "Board",
+            "core_board_out",
+            Some(new_agent_boxed::<BoardOutAgent>),
+        )
+        .with_title("Board Out")
+        .with_category("Core")
+        .with_outputs(vec!["*"])
+        .with_default_config(vec![(
+            CONFIG_BOARD_NAME.into(),
+            AgentConfigEntry::new(AgentValue::new_string(""), "string").with_title("Board Name"),
+        )]),
     );
 }

@@ -1,6 +1,10 @@
 use std::vec;
 
-use agent_stream_kit::prelude::*;
+use agent_stream_kit::{
+    ASKit, AgentConfig, AgentContext, AgentData, AgentDefinition, AgentDisplayConfigEntry,
+    AgentError, AgentOutput, AgentValue, AgentValueMap, AsAgent, AsAgentData, async_trait,
+    new_agent_boxed,
+};
 
 // Display Data
 struct DisplayDataAgent {
@@ -92,7 +96,7 @@ pub fn register_agents(askit: &ASKit) {
         AgentDefinition::new(
             KIND,
             "std_display_data",
-            Some(new_boxed::<DisplayDataAgent>),
+            Some(new_agent_boxed::<DisplayDataAgent>),
         )
         .with_title("Display Data")
         .with_category(CATEGORY)
@@ -105,13 +109,17 @@ pub fn register_agents(askit: &ASKit) {
 
     // Debug Data Agent
     askit.register_agent(
-        AgentDefinition::new(KIND, "std_debug_data", Some(new_boxed::<DebugDataAgent>))
-            .with_title("Debug Data")
-            .with_category(CATEGORY)
-            .with_inputs(vec!["*"])
-            .with_display_config(vec![(
-                DISPLAY_DATA.into(),
-                AgentDisplayConfigEntry::new("object").with_hide_title(),
-            )]),
+        AgentDefinition::new(
+            KIND,
+            "std_debug_data",
+            Some(new_agent_boxed::<DebugDataAgent>),
+        )
+        .with_title("Debug Data")
+        .with_category(CATEGORY)
+        .with_inputs(vec!["*"])
+        .with_display_config(vec![(
+            DISPLAY_DATA.into(),
+            AgentDisplayConfigEntry::new("object").with_hide_title(),
+        )]),
     );
 }

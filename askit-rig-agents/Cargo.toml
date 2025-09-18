@@ -7,6 +7,6 @@ authors.workspace = true
 license.workspace = true
 
 [dependencies]
-agent-stream-kit = { version = "0.3", path = "../agent-stream-kit" }
+agent-stream-kit = { version = "0.4", path = "../agent-stream-kit" }
 rig-core = "0.19"
 serde_json = "1"

@@ -1,6 +1,9 @@
 use std::vec;
 
-use agent_stream_kit::prelude::*;
+use agent_stream_kit::{
+    ASKit, Agent, AgentConfig, AgentConfigEntry, AgentContext, AgentData, AgentDefinition,
+    AgentError, AgentOutput, AgentValue, AsAgent, AsAgentData, async_trait, new_agent_boxed,
+};
 
 // To JSON
 struct ToJsonAgent {
@@ -174,18 +177,22 @@ static CONFIG_PROPERTY: &str = "property";
 
 pub fn register_agents(askit: &ASKit) {
     askit.register_agent(
-        AgentDefinition::new(AGENT_KIND, "std_to_json", Some(new_boxed::<ToJsonAgent>))
-            .with_title("To JSON")
-            .with_category(CATEGORY)
-            .with_inputs(vec![PORT_DATA])
-            .with_outputs(vec![PORT_JSON]),
+        AgentDefinition::new(
+            AGENT_KIND,
+            "std_to_json",
+            Some(new_agent_boxed::<ToJsonAgent>),
+        )
+        .with_title("To JSON")
+        .with_category(CATEGORY)
+        .with_inputs(vec![PORT_DATA])
+        .with_outputs(vec![PORT_JSON]),
     );
 
     askit.register_agent(
         AgentDefinition::new(
             AGENT_KIND,
             "std_from_json",
-            Some(new_boxed::<FromJsonAgent>),
+            Some(new_agent_boxed::<FromJsonAgent>),
         )
         .with_title("From JSON")
         .with_category(CATEGORY)
@@ -197,7 +204,7 @@ pub fn register_agents(askit: &ASKit) {
         AgentDefinition::new(
             AGENT_KIND,
             "std_get_property",
-            Some(new_boxed::<GetPropertyAgent>),
+            Some(new_agent_boxed::<GetPropertyAgent>),
         )
         .with_title("Get Property")
         .with_category(CATEGORY)

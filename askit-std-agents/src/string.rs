@@ -1,4 +1,7 @@
-use agent_stream_kit::prelude::*;
+use agent_stream_kit::{
+    ASKit, Agent, AgentConfig, AgentConfigEntry, AgentContext, AgentData, AgentDefinition,
+    AgentError, AgentOutput, AgentValue, AsAgent, AsAgentData, async_trait, new_agent_boxed,
+};
 use handlebars::Handlebars;
 
 /// The `StringJoinAgent` is responsible for joining an array of strings into a single string
@@ -329,7 +332,7 @@ pub fn register_agents(askit: &ASKit) {
         AgentDefinition::new(
             AGENT_KIND,
             "std_text_join",
-            Some(new_boxed::<TextJoinAgent>),
+            Some(new_agent_boxed::<TextJoinAgent>),
         )
         .with_title("Text Join")
         .with_category(CATEGORY)
@@ -345,7 +348,7 @@ pub fn register_agents(askit: &ASKit) {
         AgentDefinition::new(
             AGENT_KIND,
             "std_string_join",
-            Some(new_boxed::<StringJoinAgent>),
+            Some(new_agent_boxed::<StringJoinAgent>),
         )
         .with_title("String Join")
         .with_category(CATEGORY)
@@ -361,7 +364,7 @@ pub fn register_agents(askit: &ASKit) {
         AgentDefinition::new(
             AGENT_KIND,
             "std_template_array",
-            Some(new_boxed::<TemplateArrayAgent>),
+            Some(new_agent_boxed::<TemplateArrayAgent>),
         )
         .with_title("Template Array")
         .with_category(CATEGORY)
@@ -377,7 +380,7 @@ pub fn register_agents(askit: &ASKit) {
         AgentDefinition::new(
             AGENT_KIND,
             "std_template_string",
-            Some(new_boxed::<TemplateStringAgent>),
+            Some(new_agent_boxed::<TemplateStringAgent>),
         )
         .with_title("Template String")
         .with_category(CATEGORY)
@@ -393,7 +396,7 @@ pub fn register_agents(askit: &ASKit) {
         AgentDefinition::new(
             AGENT_KIND,
             "std_template_text",
-            Some(new_boxed::<TemplateTextAgent>),
+            Some(new_agent_boxed::<TemplateTextAgent>),
         )
         .with_title("Template Text")
         .with_category(CATEGORY)
