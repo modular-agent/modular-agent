@@ -5,8 +5,8 @@ pub mod data;
 pub mod display;
 pub mod file;
 pub mod input;
+pub mod stream;
 pub mod string;
-pub mod task;
 pub mod time;
 
 pub fn register_agents(askit: &ASKit) {
@@ -15,7 +15,7 @@ pub fn register_agents(askit: &ASKit) {
     display::register_agents(askit);
     file::register_agents(askit);
     input::register_agents(askit);
-    task::register_agents(askit);
+    stream::register_agents(askit);
     string::register_agents(askit);
     time::register_agents(askit);
 }

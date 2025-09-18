@@ -1,61 +1,17 @@
 use agent_stream_kit::prelude::*;
 
-// Task agent
-struct TaskAgent {
-    data: AsAgentData,
-    last_id: i64,
-}
-
-#[async_trait]
-impl AsAgent for TaskAgent {
-    fn new(
-        askit: ASKit,
-        id: String,
-        def_name: String,
-        config: Option<AgentConfig>,
-    ) -> Result<Self, AgentError> {
-        Ok(Self {
-            data: AsAgentData::new(askit, id, def_name, config),
-            last_id: 0,
-        })
-    }
-
-    fn data(&self) -> &AsAgentData {
-        &self.data
-    }
-
-    fn mut_data(&mut self) -> &mut AsAgentData {
-        &mut self.data
-    }
-
-    async fn process(&mut self, ctx: AgentContext, data: AgentData) -> Result<(), AgentError> {
-        let task_name = self.config()?.get_string(CONFIG_TASK)?;
-        if task_name.is_empty() {
-            self.try_output(ctx, PORT_DATA, data)?;
-            return Ok(());
-        }
-
-        self.last_id += 1;
-        let key = format!("{}:$task:{}", self.flow_name(), task_name);
-        let new_ctx = ctx.with_var(key, AgentValue::new_integer(self.last_id));
-        self.try_output(new_ctx, PORT_DATA, data)?;
-
-        Ok(())
-    }
-}
-
-// Task Zip agent
-struct TaskZipAgent {
+// Zip agent
+struct ZipAgent {
     data: AsAgentData,
     n: usize,
-    in_channels: Vec<String>,
+    in_ports: Vec<String>,
     keys: Vec<String>,
     input_value: Vec<Option<AgentValue>>,
-    current_id: i64,
+    current_id: usize,
 }
 
 #[async_trait]
-impl AsAgent for TaskZipAgent {
+impl AsAgent for ZipAgent {
     fn new(
         askit: ASKit,
         id: String,
@@ -65,10 +21,10 @@ impl AsAgent for TaskZipAgent {
         let mut this = Self {
             data: AsAgentData::new(askit, id, def_name, config.clone()),
             n: 0,
-            in_channels: Vec::new(),
+            in_ports: Vec::new(),
             keys: Vec::new(),
             input_value: Vec::new(),
-            current_id: -1,
+            current_id: 0,
         };
         if let Some(c) = config {
             AsAgent::set_config(&mut this, c)?;
@@ -98,12 +54,12 @@ impl AsAgent for TaskZipAgent {
                 .collect();
         } else {
             self.n = n;
-            self.in_channels = (0..self.n).map(|i| format!("in{}", i + 1)).collect();
+            self.in_ports = (0..self.n).map(|i| format!("in{}", i + 1)).collect();
             self.keys = (0..self.n)
                 .map(|i| config.get_string_or_default(&format!("key{}", i + 1)))
                 .collect();
             self.input_value = vec![None; self.n];
-            self.current_id = -1;
+            self.current_id = 0;
         }
         Ok(())
     }
@@ -118,27 +74,18 @@ impl AsAgent for TaskZipAgent {
             }
         }
 
-        let task_name = self.config()?.get_string(CONFIG_TASK)?;
-        if !task_name.is_empty() {
-            let key = format!("{}:$task:{}", self.flow_name(), task_name);
-            let Some(value) = ctx.get_var(key.as_str()) else {
-                // value does not have the task key
-                return Ok(());
-            };
-            let Some(task_id) = value.as_i64() else {
-                // value is not a number
-                return Ok(());
-            };
-            if task_id != self.current_id {
-                self.current_id = task_id;
-                for i in 0..self.n {
-                    self.input_value[i] = None;
-                }
+        // Reset input values if context ID changes
+        let ctx_id = ctx.id();
+        if ctx_id != self.current_id {
+            self.current_id = ctx_id;
+            for i in 0..self.n {
+                self.input_value[i] = None;
             }
         }
 
+        // Store the input value
         for i in 0..self.n {
-            if ctx.port() == self.in_channels[i] {
+            if ctx.port() == self.in_ports[i] {
                 self.input_value[i] = Some(data.value.clone());
             }
         }
@@ -166,7 +113,7 @@ impl AsAgent for TaskZipAgent {
 }
 
 static AGENT_KIND: &str = "agent";
-static CATEGORY: &str = "Core/Task";
+static CATEGORY: &str = "Core/Stream";
 
 static PORT_DATA: &str = "data";
 static PORT_IN1: &str = "in1";
@@ -174,7 +121,6 @@ static PORT_IN2: &str = "in2";
 static PORT_IN3: &str = "in3";
 static PORT_IN4: &str = "in4";
 
-static CONFIG_TASK: &str = "task";
 static CONFIG_KEY1: &str = "key1";
 static CONFIG_KEY2: &str = "key2";
 static CONFIG_KEY3: &str = "key3";
@@ -183,19 +129,7 @@ static CONFIG_N: &str = "n";
 
 pub fn register_agents(askit: &ASKit) {
     askit.register_agent(
-        AgentDefinition::new(AGENT_KIND, "std_task", Some(new_boxed::<TaskAgent>))
-            .with_title("Task")
-            .with_category(CATEGORY)
-            .with_inputs(vec![PORT_DATA])
-            .with_outputs(vec![PORT_DATA])
-            .with_default_config(vec![(
-                CONFIG_TASK.into(),
-                AgentConfigEntry::new(AgentValue::new_string(""), "string"),
-            )]),
-    );
-
-    askit.register_agent(
-        AgentDefinition::new(AGENT_KIND, "std_task_zip2", Some(new_boxed::<TaskZipAgent>))
+        AgentDefinition::new(AGENT_KIND, "std_zip2", Some(new_boxed::<ZipAgent>))
             .with_title("Zip2")
             .with_category(CATEGORY)
             .with_inputs(vec![PORT_IN1, PORT_IN2])
@@ -204,10 +138,6 @@ pub fn register_agents(askit: &ASKit) {
                 (
                     CONFIG_N.into(),
                     AgentConfigEntry::new(AgentValue::new_integer(2), "integer").with_hidden(),
-                ),
-                (
-                    CONFIG_TASK.into(),
-                    AgentConfigEntry::new(AgentValue::new_string(""), "string"),
                 ),
                 (
                     CONFIG_KEY1.into(),
@@ -221,7 +151,7 @@ pub fn register_agents(askit: &ASKit) {
     );
 
     askit.register_agent(
-        AgentDefinition::new(AGENT_KIND, "std_task_zip3", Some(new_boxed::<TaskZipAgent>))
+        AgentDefinition::new(AGENT_KIND, "std_zip3", Some(new_boxed::<ZipAgent>))
             .with_title("Zip3")
             .with_category(CATEGORY)
             .with_inputs(vec![PORT_IN1, PORT_IN2, PORT_IN3])
@@ -230,10 +160,6 @@ pub fn register_agents(askit: &ASKit) {
                 (
                     CONFIG_N.into(),
                     AgentConfigEntry::new(AgentValue::new_integer(3), "integer").with_hidden(),
-                ),
-                (
-                    CONFIG_TASK.into(),
-                    AgentConfigEntry::new(AgentValue::new_string(""), "string"),
                 ),
                 (
                     CONFIG_KEY1.into(),
@@ -251,7 +177,7 @@ pub fn register_agents(askit: &ASKit) {
     );
 
     askit.register_agent(
-        AgentDefinition::new(AGENT_KIND, "std_task_zip4", Some(new_boxed::<TaskZipAgent>))
+        AgentDefinition::new(AGENT_KIND, "std_zip4", Some(new_boxed::<ZipAgent>))
             .with_title("Zip4")
             .with_category(CATEGORY)
             .with_inputs(vec![PORT_IN1, PORT_IN2, PORT_IN3, PORT_IN4])
@@ -260,10 +186,6 @@ pub fn register_agents(askit: &ASKit) {
                 (
                     CONFIG_N.into(),
                     AgentConfigEntry::new(AgentValue::new_integer(4), "integer").with_hidden(),
-                ),
-                (
-                    CONFIG_TASK.into(),
-                    AgentConfigEntry::new(AgentValue::new_string(""), "string"),
                 ),
                 (
                     CONFIG_KEY1.into(),
