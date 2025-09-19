@@ -2,6 +2,7 @@
 resolver = "3"
 members = [
     "agent-stream-kit",
+    "askit-llm-agents",
     "askit-std-agents",
     "askit-rig-agents",
 ]

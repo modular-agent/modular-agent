@@ -1,0 +1,12 @@
+[package]
+name = "askit-llm-agents"
+version = "0.1.0"
+description = "LLM Agents for Agent Stream Kit"
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+agent-stream-kit = { version = "0.4", path = "../agent-stream-kit" }
+ollama-rs = "0.3.2"
+serde_json = "1"
