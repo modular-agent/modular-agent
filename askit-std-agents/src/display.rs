@@ -68,14 +68,14 @@ impl AsAgent for DebugDataAgent {
         &mut self.data
     }
 
-    async fn process(&mut self, _ctx: AgentContext, data: AgentData) -> Result<(), AgentError> {
+    async fn process(&mut self, ctx: AgentContext, data: AgentData) -> Result<(), AgentError> {
         let value = AgentValue::new_object(AgentValueMap::from([
             ("kind".to_string(), AgentValue::new_string(data.kind)),
             ("value".to_string(), data.value),
         ]));
-        let json =
-            serde_json::to_value(&value).map_err(|e| AgentError::InvalidValue(e.to_string()))?;
-        let ctx = AgentValue::from_json_value(json)?;
+        let ctx_json =
+            serde_json::to_value(&ctx).map_err(|e| AgentError::InvalidValue(e.to_string()))?;
+        let ctx = AgentValue::from_json_value(ctx_json)?;
         let debug_data = AgentData::new_object(AgentValueMap::from([
             ("ctx".to_string(), ctx),
             ("data".to_string(), value),
