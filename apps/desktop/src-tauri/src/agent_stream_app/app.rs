@@ -6,8 +6,8 @@ use serde_json::Value;
 use tauri::{AppHandle, Manager, State};
 
 use agent_stream_kit::{
-    ASKit, ASKitEvent, ASKitObserver, AgentConfig, AgentDefinitions, AgentFlow, AgentFlowEdge,
-    AgentFlowNode,
+    ASKit, ASKitEvent, ASKitObserver, AgentConfig, AgentConfigs, AgentDefinitions, AgentFlow,
+    AgentFlowEdge, AgentFlowNode,
 };
 use askit_std_agents;
 
@@ -22,6 +22,27 @@ pub struct ASApp {
 impl ASApp {
     pub fn get_agent_definitions(&self) -> AgentDefinitions {
         self.askit.get_agent_definitions()
+    }
+
+    // Global Configs
+    pub fn init_global_configs(&self) {
+        self.askit.init_global_configs();
+    }
+
+    pub fn set_global_configs(&self, configs: AgentConfigs) {
+        self.askit.set_global_configs(configs);
+    }
+
+    pub fn get_global_configs(&self) -> AgentConfigs {
+        self.askit.get_global_configs()
+    }
+
+    pub fn set_global_config(&self, agent_name: String, config: Value) {
+        if let Ok(config) = serde_json::from_value::<AgentConfig>(config) {
+            self.askit.set_global_config(agent_name, config);
+        } else {
+            log::error!("Failed to parse agent config for {}", agent_name);
+        }
     }
 
     // Agent
@@ -267,6 +288,7 @@ impl ASKitObserver for ASApp {
 pub fn init(app: &AppHandle) -> Result<()> {
     let askit = ASKit::init()?;
     askit_std_agents::register_agents(&askit);
+    askit_llm_agents::register_agents(&askit);
     askit_rig_agents::register_agents(&askit);
 
     let asapp = ASApp { askit };

@@ -43,7 +43,7 @@ pub fn run() {
                     log::error!("Failed to initialize agent: {}", e);
                     app_handle.exit(1);
                 });
-                agent_stream_app::settings::set_agent_global_configs(&app_handle).unwrap_or_else(
+                agent_stream_app::settings::init_agent_global_configs(&app_handle).unwrap_or_else(
                     |e| {
                         log::error!("Failed to set agent global configs: {}", e);
                         app_handle.exit(1);

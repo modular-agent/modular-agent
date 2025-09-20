@@ -8,15 +8,12 @@ use std::{
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_store::StoreExt;
 
-use agent_stream_kit::{AgentConfig, AgentConfigs};
-
 use super::app::ASApp;
 
 const SETTINGS_JSON: &str = "settings.json";
 
 pub fn init(app: &AppHandle) -> Result<()> {
     init_core_settings(app)?;
-    init_agent_global_configs(app)?;
     Ok(())
 }
 
@@ -31,12 +28,9 @@ pub fn save(app: &AppHandle) -> Result<()> {
     }
     store.set("core", settings_json);
 
-    let agent_settings = app.state::<Mutex<AgentConfigs>>();
-    let agent_settings_json;
-    {
-        let agent_settings = agent_settings.lock().unwrap();
-        agent_settings_json = serde_json::to_value(&*agent_settings)?;
-    }
+    let asapp = app.state::<ASApp>();
+    let agent_settings = asapp.get_global_configs();
+    let agent_settings_json = serde_json::to_value(agent_settings)?;
     store.set("agents", agent_settings_json);
 
     Ok(())
@@ -152,78 +146,34 @@ pub fn set_core_settings_cmd(
 }
 
 pub fn init_agent_global_configs(app: &AppHandle) -> Result<()> {
-    let store = app.store(SETTINGS_JSON)?;
-
-    let mut agent_global_configs = AgentConfigs::default();
-    if let Some(value) = store.get("agents") {
-        agent_global_configs = serde_json::from_value(value).unwrap_or_else(|e| {
-            log::error!("Failed to load agent settings: {}", e);
-            Default::default()
-        });
-    }
-
-    app.manage(Mutex::new(agent_global_configs));
-
-    Ok(())
-}
-
-pub fn set_agent_global_configs(app: &AppHandle) -> Result<()> {
     let asapp = app.state::<ASApp>();
-    let agent_global_configs = app.state::<Mutex<AgentConfigs>>();
-    {
-        let mut agent_global_configs = agent_global_configs.lock().unwrap();
+    asapp.init_global_configs();
 
-        // update the stored agent_setting by merging with global config
-        let agent_defs = asapp.get_agent_definitions();
-        for (agent_name, agent_def) in agent_defs.iter() {
-            if let Some(global_config) = agent_def.global_config.as_ref() {
-                if let Some(existing_config) = agent_global_configs.get_mut(agent_name) {
-                    for (key, config_entry) in global_config.iter() {
-                        if !existing_config.contains_key(key) {
-                            existing_config.set(key.clone(), config_entry.value.clone());
-                        }
-                    }
-                } else {
-                    let mut new_config = AgentConfig::default();
-                    for (key, config_entry) in global_config.iter() {
-                        new_config.set(key.clone(), config_entry.value.clone());
-                    }
-                    agent_global_configs.insert(agent_name.clone(), new_config);
-                }
-            }
-        }
+    let store = app.store(SETTINGS_JSON)?;
+    if let Some(value) = store.get("agents") {
+        let agent_global_configs = serde_json::from_value(value).unwrap_or_default();
+        asapp.set_global_configs(agent_global_configs);
     }
 
     Ok(())
-}
-
-pub fn get_agent_global_config(app: &AppHandle, agent_name: &str) -> Option<AgentConfig> {
-    let agent_configs = app.state::<Mutex<AgentConfigs>>();
-    let configs = agent_configs.lock().unwrap();
-    configs.get(agent_name).cloned()
 }
 
 #[tauri::command]
-pub fn get_agent_global_configs_cmd(
-    agent_configs: State<Mutex<AgentConfigs>>,
-) -> Result<Value, String> {
-    let configs = agent_configs.lock().unwrap();
-    let json = serde_json::to_value(&*configs).map_err(|e| e.to_string())?;
-    Ok(json)
+pub fn get_agent_global_configs_cmd(app: AppHandle) -> Result<Value, String> {
+    let asapp = app.state::<ASApp>();
+    let global_configs = asapp.get_global_configs();
+    let json = serde_json::to_value(&global_configs).map_err(|e| e.to_string())?;
+    return Ok(json);
 }
 
 #[tauri::command]
 pub fn set_agent_global_config_cmd(
     app: AppHandle,
-    agent_configs: State<Mutex<AgentConfigs>>,
     agent_name: String,
     agent_config: Value,
 ) -> Result<(), String> {
-    let config: AgentConfig = serde_json::from_value(agent_config).map_err(|e| e.to_string())?;
-    {
-        let mut configs = agent_configs.lock().unwrap();
-        configs.insert(agent_name, config);
-    }
+    let asapp = app.state::<ASApp>();
+    asapp.set_global_config(agent_name, agent_config);
     save(&app).map_err(|e| e.to_string())?;
     Ok(())
 }
