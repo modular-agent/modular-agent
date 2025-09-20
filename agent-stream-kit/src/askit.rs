@@ -4,16 +4,15 @@ use std::sync::{Arc, Mutex};
 
 use tokio::sync::{Mutex as AsyncMutex, mpsc};
 
+use crate::agent::{Agent, AgentMessage, AgentStatus, agent_new};
 use crate::board_agent;
-
-use super::agent::{Agent, AgentMessage, AgentStatus, agent_new};
-use super::config::AgentConfig;
-use super::context::AgentContext;
-use super::data::AgentData;
-use super::definition::{AgentDefaultConfig, AgentDefinition, AgentDefinitions};
-use super::error::AgentError;
-use super::flow::{self, AgentFlow, AgentFlowEdge, AgentFlowNode, AgentFlows};
-use super::message::{self, AgentEventMessage};
+use crate::config::{AgentConfig, AgentConfigs};
+use crate::context::AgentContext;
+use crate::data::AgentData;
+use crate::definition::{AgentDefaultConfig, AgentDefinition, AgentDefinitions};
+use crate::error::AgentError;
+use crate::flow::{self, AgentFlow, AgentFlowEdge, AgentFlowNode, AgentFlows};
+use crate::message::{self, AgentEventMessage};
 
 #[derive(Clone)]
 pub struct ASKit {
@@ -645,14 +644,48 @@ impl ASKit {
         Ok(())
     }
 
+    pub fn init_global_configs(&self) {
+        let mut global_configs = self.global_configs.lock().unwrap();
+
+        let agent_defs = self.defs.lock().unwrap();
+        for (agent_name, agent_def) in agent_defs.iter() {
+            if let Some(default_config) = agent_def.global_config.as_ref() {
+                let mut new_config = AgentConfig::default();
+                for (key, config_entry) in default_config.iter() {
+                    new_config.set(key.clone(), config_entry.value.clone());
+                }
+                global_configs.insert(agent_name.clone(), new_config);
+            }
+        }
+    }
+
     pub fn get_global_config(&self, def_name: &str) -> Option<AgentConfig> {
         let global_configs = self.global_configs.lock().unwrap();
         global_configs.get(def_name).cloned()
     }
 
-    pub fn set_global_config(&self, def_name: &str, config: AgentConfig) {
+    pub fn set_global_config(&self, def_name: String, config: AgentConfig) {
         let mut global_configs = self.global_configs.lock().unwrap();
-        global_configs.insert(def_name.to_string(), config);
+
+        let Some(existing_config) = global_configs.get_mut(&def_name) else {
+            global_configs.insert(def_name, config);
+            return;
+        };
+
+        for (key, value) in config {
+            existing_config.set(key, value);
+        }
+    }
+
+    pub fn set_global_configs(&self, new_configs: AgentConfigs) {
+        for (agent_name, new_config) in new_configs {
+            self.set_global_config(agent_name, new_config);
+        }
+    }
+
+    pub fn get_global_configs(&self) -> AgentConfigs {
+        let global_configs = self.global_configs.lock().unwrap();
+        global_configs.clone()
     }
 
     pub async fn agent_input(

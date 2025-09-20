@@ -16,20 +16,22 @@ pub struct OllamaAgent {
 }
 
 impl OllamaAgent {
-    // fn get_ollama_url(&self) -> Result<String, AgentError> {
-    //     let mut ollama_url = self
-    //         .get_global_config()
-    //         .ok_or(AgentError::NoGlobalConfig)?
-    //         .get_string_or_default(CONFIG_OLLAMA_URL);
-    //     if ollama_url.is_empty() {
-    //         if let Ok(ollama_host) = std::env::var("OLLAMA_HOST") {
-    //             ollama_url = format!("http://{}", ollama_host);
-    //         } else {
-    //             ollama_url = DEFAULT_OLLAMA_URL.to_string();
-    //         }
-    //     }
-    //     Ok(ollama_url)
-    // }
+    fn get_ollama_url(&self) -> Result<String, AgentError> {
+        if let Some(ollama_url) = self
+            .get_global_config()
+            .and_then(|cfg| cfg.get_string(CONFIG_OLLAMA_URL).ok())
+        {
+            if !ollama_url.is_empty() {
+                return Ok(ollama_url);
+            }
+        }
+        if let Ok(ollama_api_base_url) = std::env::var("OLLAMA_API_BASE_URL") {
+            return Ok(ollama_api_base_url);
+        } else if let Ok(ollama_host) = std::env::var("OLLAMA_HOST") {
+            return Ok(format!("http://{}:11434", ollama_host));
+        }
+        Ok(DEFAULT_OLLAMA_URL.to_string())
+    }
 
     fn get_client(&mut self) -> Result<Ollama, AgentError> {
         let mut client_guard = self.client.lock().unwrap();
@@ -38,8 +40,7 @@ impl OllamaAgent {
             return Ok(client.clone());
         }
 
-        let api_base_url =
-            std::env::var("OLLAMA_API_BASE_URL").unwrap_or_else(|_| DEFAULT_OLLAMA_URL.to_string());
+        let api_base_url = self.get_ollama_url()?;
         let (api_base, port) = api_base_url
             .rsplit_once(':')
             .unwrap_or(("http://localhost", "11434"));
@@ -118,7 +119,7 @@ static PORT_MESSAGE: &str = "message";
 static PORT_RESPONSE: &str = "response";
 
 static CONFIG_MODEL: &str = "model";
-// static CONFIG_OLLAMA_URL: &str = "ollama_url";
+static CONFIG_OLLAMA_URL: &str = "ollama_url";
 
 const DEFAULT_CONFIG_MODEL: &str = "gemma3:4b";
 const DEFAULT_OLLAMA_URL: &str = "http://localhost:11434";
@@ -131,11 +132,11 @@ pub fn register_agents(askit: &ASKit) {
             .with_category(CATEGORY)
             .with_inputs(vec![PORT_MESSAGE])
             .with_outputs(vec![PORT_MESSAGE, PORT_RESPONSE])
-            // .with_global_config(vec![(
-            //     CONFIG_OLLAMA_URL.into(),
-            //     AgentConfigEntry::new(AgentValue::new_string(DEFAULT_OLLAMA_URL), "string")
-            //         .with_title("Ollama URL"),
-            // )])
+            .with_global_config(vec![(
+                CONFIG_OLLAMA_URL.into(),
+                AgentConfigEntry::new(AgentValue::new_string(DEFAULT_OLLAMA_URL), "string")
+                    .with_title("Ollama URL"),
+            )])
             .with_default_config(vec![(
                 CONFIG_MODEL.into(),
                 AgentConfigEntry::new(AgentValue::new_string(DEFAULT_CONFIG_MODEL), "string")
