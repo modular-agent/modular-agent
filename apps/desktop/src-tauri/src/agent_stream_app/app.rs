@@ -25,10 +25,6 @@ impl ASApp {
     }
 
     // Global Configs
-    pub fn init_global_configs(&self) {
-        self.askit.init_global_configs();
-    }
-
     pub fn set_global_configs(&self, configs: AgentConfigs) {
         self.askit.set_global_configs(configs);
     }

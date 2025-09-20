@@ -145,16 +145,13 @@ pub fn set_core_settings_cmd(
     Ok(())
 }
 
-pub fn init_agent_global_configs(app: &AppHandle) -> Result<()> {
-    let asapp = app.state::<ASApp>();
-    asapp.init_global_configs();
-
+pub fn set_agent_global_configs(app: &AppHandle) -> Result<()> {
     let store = app.store(SETTINGS_JSON)?;
     if let Some(value) = store.get("agents") {
         let agent_global_configs = serde_json::from_value(value).unwrap_or_default();
+        let asapp = app.state::<ASApp>();
         asapp.set_global_configs(agent_global_configs);
     }
-
     Ok(())
 }
 
