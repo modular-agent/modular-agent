@@ -94,8 +94,20 @@ impl ASKit {
     }
 
     pub fn register_agent(&self, def: AgentDefinition) {
+        let def_name = def.name.clone();
+        let def_global_config = def.global_config.clone();
+
         let mut defs = self.defs.lock().unwrap();
         defs.insert(def.name.clone(), def);
+
+        // if there is a global config, set it
+        if let Some(def_global_config) = def_global_config {
+            let mut new_config = AgentConfig::default();
+            for (key, config_entry) in def_global_config.iter() {
+                new_config.set(key.clone(), config_entry.value.clone());
+            }
+            self.set_global_config(def_name, new_config);
+        }
     }
 
     pub fn get_agent_definitions(&self) -> AgentDefinitions {
@@ -642,21 +654,6 @@ impl ASKit {
             }
         }
         Ok(())
-    }
-
-    pub fn init_global_configs(&self) {
-        let mut global_configs = self.global_configs.lock().unwrap();
-
-        let agent_defs = self.defs.lock().unwrap();
-        for (agent_name, agent_def) in agent_defs.iter() {
-            if let Some(default_config) = agent_def.global_config.as_ref() {
-                let mut new_config = AgentConfig::default();
-                for (key, config_entry) in default_config.iter() {
-                    new_config.set(key.clone(), config_entry.value.clone());
-                }
-                global_configs.insert(agent_name.clone(), new_config);
-            }
-        }
     }
 
     pub fn get_global_config(&self, def_name: &str) -> Option<AgentConfig> {
