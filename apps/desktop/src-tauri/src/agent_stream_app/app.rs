@@ -6,8 +6,7 @@ use serde_json::Value;
 use tauri::{AppHandle, Manager, State};
 
 use agent_stream_kit::{
-    ASKit, ASKitEvent, ASKitObserver, AgentConfig, AgentConfigs, AgentDefinitions, AgentFlow,
-    AgentFlowEdge, AgentFlowNode,
+    ASKit, AgentConfig, AgentConfigs, AgentDefinitions, AgentFlow, AgentFlowEdge, AgentFlowNode,
 };
 use askit_std_agents;
 
@@ -262,22 +261,6 @@ impl ASApp {
         edges: &Vec<AgentFlowEdge>,
     ) -> (Vec<AgentFlowNode>, Vec<AgentFlowEdge>) {
         self.askit.copy_sub_flow(nodes, edges)
-    }
-}
-
-impl ASKitObserver for ASApp {
-    fn notify(&self, event: ASKitEvent) {
-        match event {
-            ASKitEvent::AgentIn(agent_id, channel) => {
-                log::info!("Agent input: {} - {:?}", agent_id, channel);
-            }
-            ASKitEvent::AgentDisplay(agent_id, key, data) => {
-                log::info!("Agent display: {} - {}: {:?}", agent_id, key, data);
-            }
-            ASKitEvent::AgentError(agent_id, message) => {
-                log::error!("Agent error: {} - {}", agent_id, message);
-            }
-        }
     }
 }
 

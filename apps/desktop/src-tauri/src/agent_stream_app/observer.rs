@@ -65,23 +65,27 @@ impl ASAppObserver {
 }
 
 impl ASKitObserver for ASAppObserver {
-    fn notify(&self, event: ASKitEvent) {
+    fn notify(&self, event: &ASKitEvent) {
         match event {
             ASKitEvent::AgentIn(agent_id, channel) => {
-                self.emit_input(agent_id, channel).unwrap_or_else(|e| {
-                    log::error!("Failed to emit input message: {}", e);
-                });
+                self.emit_input(agent_id.to_string(), channel.to_string())
+                    .unwrap_or_else(|e| {
+                        log::error!("Failed to emit input message: {}", e);
+                    });
             }
             ASKitEvent::AgentDisplay(agent_id, key, data) => {
-                self.emit_display(agent_id, key, data).unwrap_or_else(|e| {
-                    log::error!("Failed to emit display message: {}", e);
-                });
+                self.emit_display(agent_id.to_string(), key.to_string(), data.clone())
+                    .unwrap_or_else(|e| {
+                        log::error!("Failed to emit display message: {}", e);
+                    });
             }
             ASKitEvent::AgentError(agent_id, message) => {
-                self.emit_error(agent_id, message).unwrap_or_else(|e| {
-                    log::error!("Failed to emit error message: {}", e);
-                });
+                self.emit_error(agent_id.to_string(), message.to_string())
+                    .unwrap_or_else(|e| {
+                        log::error!("Failed to emit error message: {}", e);
+                    });
             }
+            _ => {}
         }
     }
 }
