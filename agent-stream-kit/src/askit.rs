@@ -685,7 +685,7 @@ impl ASKit {
         global_configs.clone()
     }
 
-    pub async fn agent_input(
+    pub(crate) async fn agent_input(
         &self,
         agent_id: String,
         ctx: AgentContext,
@@ -750,7 +750,11 @@ impl ASKit {
         message::try_send_agent_out(self, agent_id, ctx, data)
     }
 
-    pub fn try_send_board_out(
+    pub fn write_board_data(&self, name: String, data: AgentData) -> Result<(), AgentError> {
+        self.try_send_board_out(name, AgentContext::new(), data)
+    }
+
+    pub(crate) fn try_send_board_out(
         &self,
         name: String,
         ctx: AgentContext,
@@ -814,25 +818,25 @@ impl ASKit {
     }
 
     pub(crate) fn emit_error(&self, agent_id: String, message: String) {
-        self.notify_observers(ASKitEvent::AgentError(agent_id.clone(), message.clone()));
+        self.notify_observers(ASKitEvent::AgentError(agent_id, message));
     }
 
     pub(crate) fn emit_input(&self, agent_id: String, ch: String) {
-        self.notify_observers(ASKitEvent::AgentIn(agent_id.clone(), ch.clone()));
+        self.notify_observers(ASKitEvent::AgentIn(agent_id, ch));
     }
 
     pub(crate) fn emit_display(&self, agent_id: String, key: String, data: AgentData) {
-        self.notify_observers(ASKitEvent::AgentDisplay(
-            agent_id.clone(),
-            key.clone(),
-            data.clone(),
-        ));
+        self.notify_observers(ASKitEvent::AgentDisplay(agent_id, key, data));
+    }
+
+    pub(crate) fn emit_board(&self, name: String, data: AgentData) {
+        self.notify_observers(ASKitEvent::Board(name, data));
     }
 
     fn notify_observers(&self, event: ASKitEvent) {
         let observers = self.observers.lock().unwrap();
         for (_id, observer) in observers.iter() {
-            observer.notify(event.clone());
+            observer.notify(&event);
         }
     }
 }
@@ -842,10 +846,11 @@ pub enum ASKitEvent {
     AgentIn(String, String),                 // (agent_id, channel)
     AgentDisplay(String, String, AgentData), // (agent_id, key, data)
     AgentError(String, String),              // (agent_id, message)
+    Board(String, AgentData),                // (board name, data)
 }
 
 pub trait ASKitObserver {
-    fn notify(&self, event: ASKitEvent);
+    fn notify(&self, event: &ASKitEvent);
 }
 
 static OBSERVER_ID_COUNTER: AtomicUsize = AtomicUsize::new(1);

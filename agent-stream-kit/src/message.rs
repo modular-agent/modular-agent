@@ -109,36 +109,35 @@ pub async fn board_out(env: &ASKit, name: String, ctx: AgentContext, data: Agent
         let env_board_nodes = env.board_out_agents.lock().unwrap();
         board_nodes = env_board_nodes.get(&name).cloned();
     }
-    let Some(board_nodes) = board_nodes else {
-        // board not found
-        return;
-    };
+    if let Some(board_nodes) = board_nodes {
+        for node in board_nodes {
+            // Perhaps we could process this by send_message_to BoardOutAgent
 
-    for node in board_nodes {
-        // Perhaps we could process this by send_message_to BoardOutAgent
-
-        let edges;
-        {
-            let env_edges = env.edges.lock().unwrap();
-            edges = env_edges.get(&node).cloned();
-        }
-        let Some(edges) = edges else {
-            // edges not found
-            continue;
-        };
-        for (target_agent, _source_handle, target_handle) in edges {
-            let target_port = if target_handle == "*" {
-                // If target_handle is "*", use the board name
-                name.clone()
-            } else {
-                target_handle.clone()
+            let edges;
+            {
+                let env_edges = env.edges.lock().unwrap();
+                edges = env_edges.get(&node).cloned();
+            }
+            let Some(edges) = edges else {
+                // edges not found
+                continue;
             };
-            let target_ctx = ctx.with_port(target_port);
-            env.agent_input(target_agent.clone(), target_ctx, data.clone())
-                .await
-                .unwrap_or_else(|e| {
-                    log::error!("Failed to send message to {}: {}", target_agent, e);
-                });
+            for (target_agent, _source_handle, target_handle) in edges {
+                let target_port = if target_handle == "*" {
+                    // If target_handle is "*", use the board name
+                    name.clone()
+                } else {
+                    target_handle.clone()
+                };
+                let target_ctx = ctx.with_port(target_port);
+                env.agent_input(target_agent.clone(), target_ctx, data.clone())
+                    .await
+                    .unwrap_or_else(|e| {
+                        log::error!("Failed to send message to {}: {}", target_agent, e);
+                    });
+            }
         }
     }
+
+    env.emit_board(name, data);
 }

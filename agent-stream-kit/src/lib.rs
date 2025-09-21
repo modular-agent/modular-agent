@@ -1,3 +1,9 @@
+//! Agent Stream Kit - A framework for building and managing agents in Rust
+//!
+//! This crate provides a set of tools and abstractions to create, configure, and run agents
+//! in a stream-based architecture. It includes support for defining agent behaviors, managing
+//! agent flows, handling agent input and output.
+
 mod agent;
 mod askit;
 mod board_agent;
