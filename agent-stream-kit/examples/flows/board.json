@@ -1,0 +1,31 @@
+{
+  "nodes": [
+    {
+      "id": "1",
+      "def_name": "core_board_in",
+      "enabled": true,
+      "config": {
+        "$board": "user input"
+      },
+      "x": 697.8953929737366,
+      "y": 297.4728540764279
+    },
+    {
+      "id": "2",
+      "def_name": "core_board_out",
+      "enabled": true,
+      "config": {
+        "$board": "user input"
+      },
+      "x": 979.6977534832558,
+      "y": 299.3961574562046
+    }
+  ],
+  "edges": [],
+  "name": "board",
+  "viewport": {
+    "x": -384.43496782940633,
+    "y": -171.18333956259124,
+    "zoom": 1.1486983549970349
+  }
+}
