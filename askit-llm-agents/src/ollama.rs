@@ -16,21 +16,21 @@ pub struct OllamaAgent {
 }
 
 impl OllamaAgent {
-    fn get_ollama_url(&self) -> Result<String, AgentError> {
+    fn get_ollama_url(&self) -> String {
         if let Some(ollama_url) = self
             .get_global_config()
             .and_then(|cfg| cfg.get_string(CONFIG_OLLAMA_URL).ok())
         {
             if !ollama_url.is_empty() {
-                return Ok(ollama_url);
+                return ollama_url;
             }
         }
         if let Ok(ollama_api_base_url) = std::env::var("OLLAMA_API_BASE_URL") {
-            return Ok(ollama_api_base_url);
+            return ollama_api_base_url;
         } else if let Ok(ollama_host) = std::env::var("OLLAMA_HOST") {
-            return Ok(format!("http://{}:11434", ollama_host));
+            return format!("http://{}:11434", ollama_host);
         }
-        Ok(DEFAULT_OLLAMA_URL.to_string())
+        DEFAULT_OLLAMA_URL.to_string()
     }
 
     fn get_client(&mut self) -> Result<Ollama, AgentError> {
@@ -40,7 +40,7 @@ impl OllamaAgent {
             return Ok(client.clone());
         }
 
-        let api_base_url = self.get_ollama_url()?;
+        let api_base_url = self.get_ollama_url();
         let (api_base, port) = api_base_url
             .rsplit_once(':')
             .unwrap_or(("http://localhost", "11434"));
