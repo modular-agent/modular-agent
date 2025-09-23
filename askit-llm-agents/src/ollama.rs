@@ -23,7 +23,7 @@ impl OllamaManager {
         }
     }
 
-    fn get_ollama_url(global_config: Option<&AgentConfig>) -> String {
+    fn get_ollama_url(global_config: Option<AgentConfig>) -> String {
         if let Some(ollama_url) =
             global_config.and_then(|cfg| cfg.get_string(CONFIG_OLLAMA_URL).ok())
         {
@@ -39,13 +39,14 @@ impl OllamaManager {
         DEFAULT_OLLAMA_URL.to_string()
     }
 
-    fn get_client(&self, global_config: Option<&AgentConfig>) -> Result<Ollama, AgentError> {
+    fn get_client(&self, askit: &ASKit) -> Result<Ollama, AgentError> {
         let mut client_guard = self.client.lock().unwrap();
 
         if let Some(client) = client_guard.as_ref() {
             return Ok(client.clone());
         }
 
+        let global_config = askit.get_global_config("ollama_completion");
         let api_base_url = Self::get_ollama_url(global_config);
         let (api_base, port) = api_base_url
             .rsplit_once(':')
@@ -97,7 +98,7 @@ impl AsAgent for OllamaCompletionAgent {
             return Ok(());
         }
 
-        let client = self.manager.get_client(self.get_global_config().as_ref())?;
+        let client = self.manager.get_client(self.askit())?;
         let res = client
             .generate(GenerationRequest::new(config_model.to_string(), message))
             .await
@@ -165,7 +166,7 @@ impl AsAgent for OllamaChatAgent {
             return Ok(());
         }
 
-        let mut client = self.manager.get_client(self.get_global_config().as_ref())?;
+        let mut client = self.manager.get_client(self.askit())?;
         let res = client
             .send_chat_messages_with_history(
                 &mut self.history,
