@@ -10,6 +10,7 @@ use ollama_rs::Ollama;
 use ollama_rs::generation::chat::ChatMessage;
 use ollama_rs::generation::chat::request::ChatMessageRequest;
 use ollama_rs::generation::completion::request::GenerationRequest;
+use ollama_rs::models::ModelOptions;
 
 // Shared client management for Ollama agents
 struct OllamaManager {
@@ -102,6 +103,17 @@ impl AsAgent for OllamaCompletionAgent {
             request = request.system(config_system);
         }
 
+        let config_options = self.config()?.get_string_or_default(CONFIG_OPTIONS);
+        if !config_options.is_empty() && config_options != "{}" {
+            if let Ok(options_json) = serde_json::from_str::<ModelOptions>(&config_options) {
+                request = request.options(options_json);
+            } else {
+                return Err(AgentError::InvalidValue(
+                    "Invalid JSON in options".to_string(),
+                ));
+            }
+        }
+
         let client = self.manager.get_client(self.askit())?;
         let res = client
             .generate(request)
@@ -171,14 +183,24 @@ impl AsAgent for OllamaChatAgent {
         }
 
         let mut client = self.manager.get_client(self.askit())?;
+        let mut request = ChatMessageRequest::new(
+            config_model.to_string(),
+            vec![ChatMessage::user(message.to_string())],
+        );
+
+        let config_options = self.config()?.get_string_or_default(CONFIG_OPTIONS);
+        if !config_options.is_empty() && config_options != "{}" {
+            if let Ok(options_json) = serde_json::from_str::<ModelOptions>(&config_options) {
+                request = request.options(options_json);
+            } else {
+                return Err(AgentError::InvalidValue(
+                    "Invalid JSON in options".to_string(),
+                ));
+            }
+        }
+
         let res = client
-            .send_chat_messages_with_history(
-                &mut self.history,
-                ChatMessageRequest::new(
-                    config_model.to_string(),
-                    vec![ChatMessage::user(message.to_string())],
-                ),
-            )
+            .send_chat_messages_with_history(&mut self.history, request)
             .await
             .map_err(|e| AgentError::IoError(format!("Ollama Error: {}", e)))?;
 
@@ -211,6 +233,7 @@ static PORT_RESPONSE: &str = "response";
 
 static CONFIG_MODEL: &str = "model";
 static CONFIG_OLLAMA_URL: &str = "ollama_url";
+static CONFIG_OPTIONS: &str = "options";
 static CONFIG_SYSTEM: &str = "system";
 
 const DEFAULT_CONFIG_MODEL: &str = "gemma3:4b";
@@ -243,6 +266,10 @@ pub fn register_agents(askit: &ASKit) {
                 CONFIG_SYSTEM.into(),
                 AgentConfigEntry::new(AgentValue::new_string(""), "text").with_title("System"),
             ),
+            (
+                CONFIG_OPTIONS.into(),
+                AgentConfigEntry::new(AgentValue::new_string("{}"), "text").with_title("Options"),
+            ),
         ]),
     );
 
@@ -257,10 +284,16 @@ pub fn register_agents(askit: &ASKit) {
         .with_category(CATEGORY)
         .with_inputs(vec![PORT_MESSAGE])
         .with_outputs(vec![PORT_MESSAGE, PORT_RESPONSE])
-        .with_default_config(vec![(
-            CONFIG_MODEL.into(),
-            AgentConfigEntry::new(AgentValue::new_string(DEFAULT_CONFIG_MODEL), "string")
-                .with_title("Model"),
-        )]),
+        .with_default_config(vec![
+            (
+                CONFIG_MODEL.into(),
+                AgentConfigEntry::new(AgentValue::new_string(DEFAULT_CONFIG_MODEL), "string")
+                    .with_title("Model"),
+            ),
+            (
+                CONFIG_OPTIONS.into(),
+                AgentConfigEntry::new(AgentValue::new_string("{}"), "text").with_title("Options"),
+            ),
+        ]),
     );
 }
