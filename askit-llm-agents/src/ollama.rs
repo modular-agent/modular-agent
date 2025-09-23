@@ -48,11 +48,8 @@ impl OllamaManager {
 
         let global_config = askit.get_global_config("ollama_completion");
         let api_base_url = Self::get_ollama_url(global_config);
-        let (api_base, port) = api_base_url
-            .rsplit_once(':')
-            .unwrap_or(("http://localhost", "11434"));
-        let port = port.parse::<u16>().unwrap_or(11434);
-        let new_client = Ollama::new(api_base, port);
+        let new_client = Ollama::try_new(api_base_url)
+            .map_err(|e| AgentError::IoError(format!("Ollama Client Error: {}", e)))?;
         *client_guard = Some(new_client.clone());
 
         Ok(new_client)
@@ -98,9 +95,16 @@ impl AsAgent for OllamaCompletionAgent {
             return Ok(());
         }
 
+        let mut request = GenerationRequest::new(config_model.to_string(), message);
+
+        let config_system = self.config()?.get_string_or_default(CONFIG_SYSTEM);
+        if !config_system.is_empty() {
+            request = request.system(config_system);
+        }
+
         let client = self.manager.get_client(self.askit())?;
         let res = client
-            .generate(GenerationRequest::new(config_model.to_string(), message))
+            .generate(request)
             .await
             .map_err(|e| AgentError::IoError(format!("Ollama Error: {}", e)))?;
 
@@ -207,6 +211,7 @@ static PORT_RESPONSE: &str = "response";
 
 static CONFIG_MODEL: &str = "model";
 static CONFIG_OLLAMA_URL: &str = "ollama_url";
+static CONFIG_SYSTEM: &str = "system";
 
 const DEFAULT_CONFIG_MODEL: &str = "gemma3:4b";
 const DEFAULT_OLLAMA_URL: &str = "http://localhost:11434";
@@ -228,11 +233,17 @@ pub fn register_agents(askit: &ASKit) {
             AgentConfigEntry::new(AgentValue::new_string(DEFAULT_OLLAMA_URL), "string")
                 .with_title("Ollama URL"),
         )])
-        .with_default_config(vec![(
-            CONFIG_MODEL.into(),
-            AgentConfigEntry::new(AgentValue::new_string(DEFAULT_CONFIG_MODEL), "string")
-                .with_title("Model"),
-        )]),
+        .with_default_config(vec![
+            (
+                CONFIG_MODEL.into(),
+                AgentConfigEntry::new(AgentValue::new_string(DEFAULT_CONFIG_MODEL), "string")
+                    .with_title("Model"),
+            ),
+            (
+                CONFIG_SYSTEM.into(),
+                AgentConfigEntry::new(AgentValue::new_string(""), "text").with_title("System"),
+            ),
+        ]),
     );
 
     askit.register_agent(
