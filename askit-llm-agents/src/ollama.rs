@@ -11,6 +11,7 @@ use ollama_rs::{
     generation::{
         chat::{ChatMessage, MessageRole, request::ChatMessageRequest},
         completion::request::GenerationRequest,
+        embeddings::request::GenerateEmbeddingsRequest,
     },
     history::ChatHistory,
     models::ModelOptions,
@@ -211,12 +212,79 @@ impl AsAgent for OllamaChatAgent {
     }
 }
 
+// Ollama Embeddings Agent
+pub struct OllamaEmbeddingsAgent {
+    data: AsAgentData,
+    manager: OllamaManager,
+}
+
+#[async_trait]
+impl AsAgent for OllamaEmbeddingsAgent {
+    fn new(
+        askit: ASKit,
+        id: String,
+        def_name: String,
+        config: Option<AgentConfig>,
+    ) -> Result<Self, AgentError> {
+        Ok(Self {
+            data: AsAgentData::new(askit, id, def_name, config),
+            manager: OllamaManager::new(),
+        })
+    }
+
+    fn data(&self) -> &AsAgentData {
+        &self.data
+    }
+
+    fn mut_data(&mut self) -> &mut AsAgentData {
+        &mut self.data
+    }
+
+    async fn process(&mut self, ctx: AgentContext, data: AgentData) -> Result<(), AgentError> {
+        let config_model = &self.config()?.get_string_or_default(CONFIG_MODEL);
+        if config_model.is_empty() {
+            return Ok(());
+        }
+
+        let input = data.as_str().unwrap_or(""); // TODO: other types
+        if input.is_empty() {
+            return Ok(());
+        }
+
+        let client = self.manager.get_client(self.askit())?;
+        let mut request = GenerateEmbeddingsRequest::new(config_model.to_string(), input.into());
+
+        let config_options = self.config()?.get_string_or_default(CONFIG_OPTIONS);
+        if !config_options.is_empty() && config_options != "{}" {
+            if let Ok(options_json) = serde_json::from_str::<ModelOptions>(&config_options) {
+                request = request.options(options_json);
+            } else {
+                return Err(AgentError::InvalidValue(
+                    "Invalid JSON in options".to_string(),
+                ));
+            }
+        }
+
+        let res = client
+            .generate_embeddings(request)
+            .await
+            .map_err(|e| AgentError::IoError(format!("Ollama Error: {}", e)))?;
+
+        let embeddings = AgentData::from_serialize(&res.embeddings)?;
+        self.try_output(ctx.clone(), PORT_EMBEDDINGS, embeddings)?;
+
+        Ok(())
+    }
+}
+
 static AGENT_KIND: &str = "agent";
 static CATEGORY: &str = "LLM";
 
+static PORT_EMBEDDINGS: &str = "embeddings";
+static PORT_HISTORY: &str = "history";
+static PORT_INPUT: &str = "input";
 static PORT_MESSAGE: &str = "message";
 static PORT_RESPONSE: &str = "response";
-static PORT_HISTORY: &str = "history";
 
 static CONFIG_MODEL: &str = "model";
 static CONFIG_OLLAMA_URL: &str = "ollama_url";
@@ -271,6 +339,30 @@ pub fn register_agents(askit: &ASKit) {
         .with_category(CATEGORY)
         .with_inputs(vec![PORT_MESSAGE])
         .with_outputs(vec![PORT_MESSAGE, PORT_RESPONSE, PORT_HISTORY])
+        .with_default_config(vec![
+            (
+                CONFIG_MODEL.into(),
+                AgentConfigEntry::new(AgentValue::string(DEFAULT_CONFIG_MODEL), "string")
+                    .with_title("Model"),
+            ),
+            (
+                CONFIG_OPTIONS.into(),
+                AgentConfigEntry::new(AgentValue::string("{}"), "text").with_title("Options"),
+            ),
+        ]),
+    );
+
+    askit.register_agent(
+        AgentDefinition::new(
+            AGENT_KIND,
+            "ollama_embeddings",
+            Some(new_agent_boxed::<OllamaEmbeddingsAgent>),
+        )
+        // .use_native_thread()
+        .with_title("Ollama Embeddings")
+        .with_category(CATEGORY)
+        .with_inputs(vec![PORT_INPUT])
+        .with_outputs(vec![PORT_EMBEDDINGS])
         .with_default_config(vec![
             (
                 CONFIG_MODEL.into(),
