@@ -3,14 +3,19 @@ use std::vec;
 
 use agent_stream_kit::{
     ASKit, Agent, AgentConfig, AgentConfigEntry, AgentContext, AgentData, AgentDefinition,
-    AgentError, AgentOutput, AgentValue, AgentValueMap, AsAgent, AsAgentData, async_trait,
-    new_agent_boxed,
+    AgentError, AgentOutput, AgentValue, AsAgent, AsAgentData, async_trait, new_agent_boxed,
 };
-use ollama_rs::Ollama;
-use ollama_rs::generation::chat::ChatMessage;
-use ollama_rs::generation::chat::request::ChatMessageRequest;
-use ollama_rs::generation::completion::request::GenerationRequest;
-use ollama_rs::models::ModelOptions;
+
+use ollama_rs::{
+    Ollama,
+    generation::{
+        chat::{ChatMessage, MessageRole, request::ChatMessageRequest},
+        completion::request::GenerationRequest,
+    },
+    models::ModelOptions,
+};
+
+use crate::message::Message;
 
 // Shared client management for Ollama agents
 struct OllamaManager {
@@ -120,21 +125,10 @@ impl AsAgent for OllamaCompletionAgent {
             .await
             .map_err(|e| AgentError::IoError(format!("Ollama Error: {}", e)))?;
 
-        let out_message = AgentData::new_custom_object(
-            "message",
-            AgentValueMap::from([
-                ("role".to_string(), AgentValue::new_string("assistant")),
-                (
-                    "content".to_string(),
-                    AgentValue::new_string(res.response.clone()),
-                ),
-            ]),
-        );
-        self.try_output(ctx.clone(), PORT_MESSAGE, out_message)?;
+        let message = Message::assistant(res.response.clone());
+        self.try_output(ctx.clone(), PORT_MESSAGE, message.into())?;
 
-        let res_json = serde_json::to_value(&res)
-            .map_err(|e| AgentError::InvalidValue(format!("serde_json error: {}", e)))?;
-        let out_response = AgentData::from_json_value(res_json)?;
+        let out_response = AgentData::from_serialize(&res)?;
         self.try_output(ctx, PORT_RESPONSE, out_response)?;
 
         Ok(())
@@ -204,21 +198,10 @@ impl AsAgent for OllamaChatAgent {
             .await
             .map_err(|e| AgentError::IoError(format!("Ollama Error: {}", e)))?;
 
-        let out_message = AgentData::new_custom_object(
-            "message",
-            AgentValueMap::from([
-                ("role".to_string(), AgentValue::new_string("assistant")),
-                (
-                    "content".to_string(),
-                    AgentValue::new_string(res.message.content.clone()),
-                ),
-            ]),
-        );
-        self.try_output(ctx.clone(), PORT_MESSAGE, out_message)?;
+        let message: Message = res.message.clone().into();
+        self.try_output(ctx.clone(), PORT_MESSAGE, message.into())?;
 
-        let res_json = serde_json::to_value(&res)
-            .map_err(|e| AgentError::InvalidValue(format!("serde_json error: {}", e)))?;
-        let out_response = AgentData::from_json_value(res_json)?;
+        let out_response = AgentData::from_serialize(&res)?;
         self.try_output(ctx, PORT_RESPONSE, out_response)?;
 
         Ok(())
@@ -296,4 +279,31 @@ pub fn register_agents(askit: &ASKit) {
             ),
         ]),
     );
+}
+
+impl From<ChatMessage> for Message {
+    fn from(msg: ChatMessage) -> Self {
+        let role = match msg.role {
+            MessageRole::User => "user",
+            MessageRole::Assistant => "assistant",
+            MessageRole::System => "system",
+            MessageRole::Tool => "tool",
+        };
+        Self {
+            role: role.to_string(),
+            content: msg.content,
+        }
+    }
+}
+
+impl From<Message> for ChatMessage {
+    fn from(msg: Message) -> Self {
+        match msg.role.as_str() {
+            "user" => ChatMessage::user(msg.content),
+            "assistant" => ChatMessage::assistant(msg.content),
+            "system" => ChatMessage::system(msg.content),
+            "tool" => ChatMessage::tool(msg.content),
+            _ => ChatMessage::user(msg.content), // Default to user if unknown role
+        }
+    }
 }
