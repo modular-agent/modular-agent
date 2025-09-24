@@ -12,6 +12,7 @@ use ollama_rs::{
         chat::{ChatMessage, MessageRole, request::ChatMessageRequest},
         completion::request::GenerationRequest,
     },
+    history::ChatHistory,
     models::ModelOptions,
 };
 
@@ -139,7 +140,7 @@ impl AsAgent for OllamaCompletionAgent {
 pub struct OllamaChatAgent {
     data: AsAgentData,
     manager: OllamaManager,
-    history: Vec<ChatMessage>,
+    history: MessageHistory,
 }
 
 #[async_trait]
@@ -153,7 +154,7 @@ impl AsAgent for OllamaChatAgent {
         Ok(Self {
             data: AsAgentData::new(askit, id, def_name, config),
             manager: OllamaManager::new(),
-            history: vec![],
+            history: MessageHistory(vec![]),
         })
     }
 
@@ -202,7 +203,9 @@ impl AsAgent for OllamaChatAgent {
         self.try_output(ctx.clone(), PORT_MESSAGE, message.into())?;
 
         let out_response = AgentData::from_serialize(&res)?;
-        self.try_output(ctx, PORT_RESPONSE, out_response)?;
+        self.try_output(ctx.clone(), PORT_RESPONSE, out_response)?;
+
+        self.try_output(ctx, PORT_HISTORY, self.history.clone().into())?;
 
         Ok(())
     }
@@ -213,6 +216,7 @@ static CATEGORY: &str = "LLM";
 
 static PORT_MESSAGE: &str = "message";
 static PORT_RESPONSE: &str = "response";
+static PORT_HISTORY: &str = "history";
 
 static CONFIG_MODEL: &str = "model";
 static CONFIG_OLLAMA_URL: &str = "ollama_url";
@@ -266,7 +270,7 @@ pub fn register_agents(askit: &ASKit) {
         .with_title("Ollama Chat")
         .with_category(CATEGORY)
         .with_inputs(vec![PORT_MESSAGE])
-        .with_outputs(vec![PORT_MESSAGE, PORT_RESPONSE])
+        .with_outputs(vec![PORT_MESSAGE, PORT_RESPONSE, PORT_HISTORY])
         .with_default_config(vec![
             (
                 CONFIG_MODEL.into(),
@@ -305,5 +309,25 @@ impl From<Message> for ChatMessage {
             "tool" => ChatMessage::tool(msg.content),
             _ => ChatMessage::user(msg.content), // Default to user if unknown role
         }
+    }
+}
+
+#[derive(Clone)]
+pub struct MessageHistory(pub Vec<Message>);
+
+impl ChatHistory for MessageHistory {
+    fn push(&mut self, message: ChatMessage) {
+        self.0.push(message.into());
+    }
+
+    fn messages(&self) -> std::borrow::Cow<'_, [ChatMessage]> {
+        let messages: Vec<ChatMessage> = self.0.iter().map(|msg| msg.clone().into()).collect();
+        std::borrow::Cow::Owned(messages)
+    }
+}
+
+impl From<MessageHistory> for AgentData {
+    fn from(history: MessageHistory) -> Self {
+        AgentData::new_array("message", history.0.into_iter().map(|m| m.into()).collect())
     }
 }
