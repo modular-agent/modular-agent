@@ -119,6 +119,30 @@ impl AgentData {
         })
     }
 
+    /// Create AgentData from any Serialize with automatic kind inference
+    pub fn from_serialize<T: Serialize>(value: &T) -> Result<Self, AgentError> {
+        let json_value = serde_json::to_value(value)
+            .map_err(|e| AgentError::InvalidValue(format!("Failed to serialize: {}", e)))?;
+        Self::from_json_value(json_value)
+    }
+
+    /// Create AgentData from any Serialize with custom kind
+    pub fn from_serialize_with_kind<T: Serialize>(
+        kind: impl Into<String>,
+        value: &T,
+    ) -> Result<Self, AgentError> {
+        let json_value = serde_json::to_value(value)
+            .map_err(|e| AgentError::InvalidValue(format!("Failed to serialize: {}", e)))?;
+        Self::from_json_data(kind, json_value)
+    }
+
+    /// Convert AgentData to a Deserialize
+    pub fn to_deserialize<T: for<'de> Deserialize<'de>>(&self) -> Result<T, AgentError> {
+        let json_value = self.value.to_json_value();
+        serde_json::from_value(json_value)
+            .map_err(|e| AgentError::InvalidValue(format!("Failed to deserialize: {}", e)))
+    }
+
     #[allow(unused)]
     pub fn is_unit(&self) -> bool {
         self.kind == "unit"
@@ -551,6 +575,20 @@ impl AgentValue {
                 serde_json::Value::Array(arr)
             }
         }
+    }
+
+    /// Create AgentValue from Serialize
+    pub fn from_serialize<T: Serialize>(value: &T) -> Result<Self, AgentError> {
+        let json_value = serde_json::to_value(value)
+            .map_err(|e| AgentError::InvalidValue(format!("Failed to serialize: {}", e)))?;
+        Self::from_json_value(json_value)
+    }
+
+    /// Convert AgentValue to a Deserialize
+    pub fn to_deserialize<T: for<'de> Deserialize<'de>>(&self) -> Result<T, AgentError> {
+        let json_value = self.to_json_value();
+        serde_json::from_value(json_value)
+            .map_err(|e| AgentError::InvalidValue(format!("Failed to deserialize: {}", e)))
     }
 
     #[allow(unused)]
@@ -2134,5 +2172,92 @@ mod tests {
                 ]))
             );
         }
+    }
+
+    #[test]
+    fn test_serialize_deserialize_roundtrip() {
+        #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+        struct TestStruct {
+            name: String,
+            age: i64,
+            active: bool,
+        }
+
+        let test_data = TestStruct {
+            name: "Alice".to_string(),
+            age: 30,
+            active: true,
+        };
+
+        // Test AgentData roundtrip
+        let agent_data = AgentData::from_serialize(&test_data).unwrap();
+        assert_eq!(agent_data.kind, "object");
+        assert_eq!(agent_data.get_str("name"), Some("Alice"));
+        assert_eq!(agent_data.get_i64("age"), Some(30));
+        assert_eq!(agent_data.get_bool("active"), Some(true));
+
+        let restored: TestStruct = agent_data.to_deserialize().unwrap();
+        assert_eq!(restored, test_data);
+
+        // Test AgentData with custom kind
+        let agent_data_custom = AgentData::from_serialize_with_kind("person", &test_data).unwrap();
+        assert_eq!(agent_data_custom.kind, "person");
+        let restored_custom: TestStruct = agent_data_custom.to_deserialize().unwrap();
+        assert_eq!(restored_custom, test_data);
+
+        // Test AgentValue roundtrip
+        let agent_value = AgentValue::from_serialize(&test_data).unwrap();
+        assert!(agent_value.is_object());
+        assert_eq!(agent_value.get_str("name"), Some("Alice"));
+
+        let restored_value: TestStruct = agent_value.to_deserialize().unwrap();
+        assert_eq!(restored_value, test_data);
+    }
+
+    #[test]
+    fn test_serialize_deserialize_nested() {
+        #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+        struct Address {
+            street: String,
+            city: String,
+            zip: String,
+        }
+
+        #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+        struct Person {
+            name: String,
+            age: i64,
+            address: Address,
+            tags: Vec<String>,
+        }
+
+        let person = Person {
+            name: "Bob".to_string(),
+            age: 25,
+            address: Address {
+                street: "123 Main St".to_string(),
+                city: "Springfield".to_string(),
+                zip: "12345".to_string(),
+            },
+            tags: vec!["developer".to_string(), "rust".to_string()],
+        };
+
+        // Test AgentData roundtrip with nested structures
+        let agent_data = AgentData::from_serialize(&person).unwrap();
+        assert_eq!(agent_data.kind, "object");
+        assert_eq!(agent_data.get_str("name"), Some("Bob"));
+
+        let address = agent_data.get_object("address").unwrap();
+        assert_eq!(
+            address.get("city").and_then(|v| v.as_str()),
+            Some("Springfield")
+        );
+
+        let tags = agent_data.get_array("tags").unwrap();
+        assert_eq!(tags.len(), 2);
+        assert_eq!(tags[0].as_str(), Some("developer"));
+
+        let restored: Person = agent_data.to_deserialize().unwrap();
+        assert_eq!(restored, person);
     }
 }
