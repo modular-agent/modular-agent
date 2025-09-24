@@ -34,7 +34,7 @@ impl AsAgent for ToJsonAgent {
     async fn process(&mut self, ctx: AgentContext, data: AgentData) -> Result<(), AgentError> {
         let json = serde_json::to_string_pretty(&data.value)
             .map_err(|e| AgentError::InvalidValue(e.to_string()))?;
-        self.try_output(ctx, PORT_JSON, AgentData::new_text(json))?;
+        self.try_output(ctx, PORT_JSON, AgentData::text(json))?;
         Ok(())
     }
 }
@@ -72,7 +72,7 @@ impl AsAgent for FromJsonAgent {
             .ok_or_else(|| AgentError::InvalidValue("not a string".to_string()))?;
         let json_value: serde_json::Value =
             serde_json::from_str(s).map_err(|e| AgentError::InvalidValue(e.to_string()))?;
-        let data = AgentData::from_json_value(json_value)?;
+        let data = AgentData::from_json(json_value)?;
         self.try_output(ctx, PORT_DATA, data)?;
         Ok(())
     }
@@ -122,13 +122,13 @@ impl AsAgent for GetPropertyAgent {
                 let mut value = v.clone();
                 for prop in &props {
                     let Some(obj) = value.as_object() else {
-                        value = AgentValue::new_unit();
+                        value = AgentValue::unit();
                         break;
                     };
                     if let Some(v) = obj.get(*prop) {
                         value = v.clone();
                     } else {
-                        value = AgentValue::new_unit();
+                        value = AgentValue::unit();
                         break;
                     }
                 }
@@ -139,23 +139,19 @@ impl AsAgent for GetPropertyAgent {
             } else {
                 &out_arr[0].kind()
             };
-            self.try_output(
-                ctx,
-                PORT_DATA,
-                AgentData::new_array(kind.to_string(), out_arr),
-            )?;
+            self.try_output(ctx, PORT_DATA, AgentData::array(kind.to_string(), out_arr))?;
         } else if data.is_object() {
             let mut value = data.value;
             for prop in props {
                 let Some(obj) = value.as_object() else {
-                    value = AgentValue::new_unit();
+                    value = AgentValue::unit();
                     break;
                 };
                 if let Some(v) = obj.get(prop) {
                     value = v.clone();
                 } else {
                     // TODO: Add a config to determine whether to output unit
-                    value = AgentValue::new_unit();
+                    value = AgentValue::unit();
                     break;
                 }
             }
@@ -212,7 +208,7 @@ pub fn register_agents(askit: &ASKit) {
         .with_outputs(vec![PORT_DATA])
         .with_default_config(vec![(
             CONFIG_PROPERTY.into(),
-            AgentConfigEntry::new(AgentValue::new_string(""), "string"),
+            AgentConfigEntry::new(AgentValue::string(""), "string"),
         )]),
     );
 }

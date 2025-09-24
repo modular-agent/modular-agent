@@ -1,4 +1,4 @@
-use agent_stream_kit::{AgentData, AgentError, AgentValue, AgentValueMap};
+use agent_stream_kit::{AgentData, AgentError, AgentValue};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -70,28 +70,27 @@ impl TryFrom<AgentValue> for Message {
 
 impl From<Message> for AgentData {
     fn from(msg: Message) -> Self {
-        AgentData::new_custom_object(
+        AgentData::object_with_kind(
             "message",
-            AgentValueMap::from([
-                ("role".to_string(), AgentValue::new_string(msg.role)),
-                ("content".to_string(), AgentValue::new_string(msg.content)),
-            ]),
+            [
+                ("role".to_string(), AgentValue::string(msg.role)),
+                ("content".to_string(), AgentValue::string(msg.content)),
+            ].into(),
         )
     }
 }
 
 impl From<Message> for AgentValue {
     fn from(msg: Message) -> Self {
-        AgentValue::new_object(AgentValueMap::from([
-            ("role".to_string(), AgentValue::new_string(msg.role)),
-            ("content".to_string(), AgentValue::new_string(msg.content)),
-        ]))
+        AgentValue::object([
+            ("role".to_string(), AgentValue::string(msg.role)),
+            ("content".to_string(), AgentValue::string(msg.content)),
+        ].into())
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use agent_stream_kit::AgentValueMap;
 
     use super::*;
 
@@ -115,7 +114,7 @@ mod tests {
 
     #[test]
     fn test_message_from_string_value() {
-        let value = AgentValue::new_string("Just a simple message");
+        let value = AgentValue::string("Just a simple message");
         let msg: Message = value.try_into().unwrap();
         assert_eq!(msg.role, "user");
         assert_eq!(msg.content, "Just a simple message");
@@ -123,13 +122,13 @@ mod tests {
 
     #[test]
     fn test_message_from_object_value() {
-        let value = AgentValue::new_object(AgentValueMap::from([
-            ("role".to_string(), AgentValue::new_string("assistant")),
+        let value = AgentValue::object([
+            ("role".to_string(), AgentValue::string("assistant")),
             (
                 "content".to_string(),
-                AgentValue::new_string("Here is some information."),
+                AgentValue::string("Here is some information."),
             ),
-        ]));
+        ].into());
         let msg: Message = value.try_into().unwrap();
         assert_eq!(msg.role, "assistant");
         assert_eq!(msg.content, "Here is some information.");
@@ -137,17 +136,17 @@ mod tests {
 
     #[test]
     fn test_message_from_invalid_value() {
-        let value = AgentValue::new_integer(42);
+        let value = AgentValue::integer(42);
         let result: Result<Message, AgentError> = value.try_into();
         assert!(result.is_err());
     }
 
     #[test]
     fn test_message_invalid_object() {
-        let value = AgentValue::new_object(AgentValueMap::from([(
+        let value = AgentValue::object([(
             "some_key".to_string(),
-            AgentValue::new_string("some_value"),
-        )]));
+            AgentValue::string("some_value"),
+        )].into());
         let result: Result<Message, AgentError> = value.try_into();
         assert!(result.is_err());
     }

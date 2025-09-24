@@ -2,7 +2,7 @@ use std::vec;
 
 use agent_stream_kit::{
     ASKit, AgentConfig, AgentContext, AgentData, AgentDefinition, AgentDisplayConfigEntry,
-    AgentError, AgentOutput, AgentValue, AgentValueMap, AsAgent, AsAgentData, async_trait,
+    AgentError, AgentOutput, AgentValue, AsAgent, AsAgentData, async_trait,
     new_agent_boxed,
 };
 
@@ -69,17 +69,17 @@ impl AsAgent for DebugDataAgent {
     }
 
     async fn process(&mut self, ctx: AgentContext, data: AgentData) -> Result<(), AgentError> {
-        let value = AgentValue::new_object(AgentValueMap::from([
-            ("kind".to_string(), AgentValue::new_string(data.kind)),
+        let value = AgentValue::object([
+            ("kind".to_string(), AgentValue::string(data.kind)),
             ("value".to_string(), data.value),
-        ]));
+        ].into());
         let ctx_json =
             serde_json::to_value(&ctx).map_err(|e| AgentError::InvalidValue(e.to_string()))?;
-        let ctx = AgentValue::from_json_value(ctx_json)?;
-        let debug_data = AgentData::new_object(AgentValueMap::from([
+        let ctx = AgentValue::from_json(ctx_json)?;
+        let debug_data = AgentData::object([
             ("ctx".to_string(), ctx),
             ("data".to_string(), value),
-        ]));
+        ].into());
         self.emit_display(DISPLAY_DATA, debug_data);
         Ok(())
     }

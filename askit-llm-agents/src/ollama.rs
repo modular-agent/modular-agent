@@ -240,22 +240,22 @@ pub fn register_agents(askit: &ASKit) {
         .with_outputs(vec![PORT_MESSAGE, PORT_RESPONSE])
         .with_global_config(vec![(
             CONFIG_OLLAMA_URL.into(),
-            AgentConfigEntry::new(AgentValue::new_string(DEFAULT_OLLAMA_URL), "string")
+            AgentConfigEntry::new(AgentValue::string(DEFAULT_OLLAMA_URL), "string")
                 .with_title("Ollama URL"),
         )])
         .with_default_config(vec![
             (
                 CONFIG_MODEL.into(),
-                AgentConfigEntry::new(AgentValue::new_string(DEFAULT_CONFIG_MODEL), "string")
+                AgentConfigEntry::new(AgentValue::string(DEFAULT_CONFIG_MODEL), "string")
                     .with_title("Model"),
             ),
             (
                 CONFIG_SYSTEM.into(),
-                AgentConfigEntry::new(AgentValue::new_string(""), "text").with_title("System"),
+                AgentConfigEntry::new(AgentValue::string(""), "text").with_title("System"),
             ),
             (
                 CONFIG_OPTIONS.into(),
-                AgentConfigEntry::new(AgentValue::new_string("{}"), "text").with_title("Options"),
+                AgentConfigEntry::new(AgentValue::string("{}"), "text").with_title("Options"),
             ),
         ]),
     );
@@ -274,12 +274,12 @@ pub fn register_agents(askit: &ASKit) {
         .with_default_config(vec![
             (
                 CONFIG_MODEL.into(),
-                AgentConfigEntry::new(AgentValue::new_string(DEFAULT_CONFIG_MODEL), "string")
+                AgentConfigEntry::new(AgentValue::string(DEFAULT_CONFIG_MODEL), "string")
                     .with_title("Model"),
             ),
             (
                 CONFIG_OPTIONS.into(),
-                AgentConfigEntry::new(AgentValue::new_string("{}"), "text").with_title("Options"),
+                AgentConfigEntry::new(AgentValue::string("{}"), "text").with_title("Options"),
             ),
         ]),
     );
@@ -328,6 +328,6 @@ impl ChatHistory for MessageHistory {
 
 impl From<MessageHistory> for AgentData {
     fn from(history: MessageHistory) -> Self {
-        AgentData::new_array("message", history.0.into_iter().map(|m| m.into()).collect())
+        AgentData::array("message", history.0.into_iter().map(|m| m.into()).collect())
     }
 }

@@ -165,7 +165,7 @@ pub fn register_agents(askit: &ASKit) {
         .with_inputs(vec!["*"])
         .with_default_config(vec![(
             CONFIG_BOARD_NAME.into(),
-            AgentConfigEntry::new(AgentValue::new_string(""), "string")
+            AgentConfigEntry::new(AgentValue::string(""), "string")
                 .with_title("Board Name")
                 .with_description("* = source kind"),
         )]),
@@ -183,7 +183,7 @@ pub fn register_agents(askit: &ASKit) {
         .with_outputs(vec!["*"])
         .with_default_config(vec![(
             CONFIG_BOARD_NAME.into(),
-            AgentConfigEntry::new(AgentValue::new_string(""), "string").with_title("Board Name"),
+            AgentConfigEntry::new(AgentValue::string(""), "string").with_title("Board Name"),
         )]),
     );
 }

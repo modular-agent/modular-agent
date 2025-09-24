@@ -2,8 +2,7 @@ use std::vec;
 
 use agent_stream_kit::{
     ASKit, Agent, AgentConfig, AgentConfigEntry, AgentContext, AgentData, AgentDefinition,
-    AgentError, AgentOutput, AgentValue, AgentValueMap, AsAgent, AsAgentData, async_trait,
-    new_agent_boxed,
+    AgentError, AgentOutput, AgentValue, AsAgent, AsAgentData, async_trait, new_agent_boxed,
 };
 use rig::OneOrMany;
 
@@ -46,7 +45,7 @@ impl AsAgent for RigMemoryAgent {
             self.try_output(
                 ctx,
                 PORT_MEMORY,
-                AgentData::new_array("message", self.memory.clone()),
+                AgentData::array("message", self.memory.clone()),
             )?;
 
             return Ok(());
@@ -80,13 +79,13 @@ impl AsAgent for RigMemoryAgent {
                 .clone();
             map.insert(
                 "history".to_string(),
-                AgentValue::new_array(self.memory.clone()),
+                AgentValue::array(self.memory.clone()),
             );
 
             self.try_output(
                 ctx.clone(),
                 PORT_MESSAGE,
-                AgentData::new_custom_object("message", map),
+                AgentData::object_with_kind("message", map),
             )?;
 
             // Add the user message to the memory
@@ -96,7 +95,7 @@ impl AsAgent for RigMemoryAgent {
         self.try_output(
             ctx,
             PORT_MEMORY,
-            AgentData::new_array("message", self.memory.clone()),
+            AgentData::array("message", self.memory.clone()),
         )?;
 
         Ok(())
@@ -134,7 +133,7 @@ fn value_to_message_history(
         if last_role == "user" {
             let last_message = out_value.pop().unwrap();
             return Ok((
-                Some(AgentData::new_custom_object(
+                Some(AgentData::object_with_kind(
                     "message",
                     last_message
                         .as_object()
@@ -151,10 +150,17 @@ fn value_to_message_history(
     }
 
     if value.is_string() {
-        let mut map = AgentValueMap::new();
-        map.insert("content".to_string(), value.clone());
-        map.insert("role".to_string(), AgentValue::new_string("user"));
-        return Ok((Some(AgentData::new_custom_object("message", map)), vec![]));
+        return Ok((
+            Some(AgentData::object_with_kind(
+                "message",
+                [
+                    ("content".to_string(), AgentValue::string("")),
+                    ("role".to_string(), AgentValue::string("user")),
+                ]
+                .into(),
+            )),
+            vec![],
+        ));
     }
 
     if value.is_object() {
@@ -170,7 +176,7 @@ fn value_to_message_history(
 
         if role == "user" {
             return Ok((
-                Some(AgentData::new_custom_object("message", map.to_owned())),
+                Some(AgentData::object_with_kind("message", map.to_owned())),
                 vec![],
             ));
         }
@@ -486,7 +492,7 @@ fn add_preamble_to_data(preamble: String, data: AgentData) -> Result<AgentData, 
             .as_object()
             .ok_or_else(|| AgentError::InvalidValue("wrong object".to_string()))?
             .to_owned();
-        return Ok(AgentData::new_custom_object("message", map));
+        return Ok(AgentData::object_with_kind("message", map));
     }
 
     if value.is_array() {
@@ -494,7 +500,7 @@ fn add_preamble_to_data(preamble: String, data: AgentData) -> Result<AgentData, 
             .as_array()
             .ok_or_else(|| AgentError::InvalidValue("wrong array".to_string()))?
             .to_owned();
-        return Ok(AgentData::new_array("message", arr));
+        return Ok(AgentData::array("message", arr));
     }
 
     Err(AgentError::InvalidValue(
@@ -507,11 +513,14 @@ fn add_preamble_to_value(preamble: String, value: AgentValue) -> Result<AgentVal
         let content = value
             .as_str()
             .ok_or_else(|| AgentError::InvalidValue("wrong string".to_string()))?;
-        let mut out_value = AgentValueMap::new();
-        out_value.insert("content".to_string(), AgentValue::new_string(content));
-        out_value.insert("role".to_string(), AgentValue::new_string("user"));
-        out_value.insert("preamble".to_string(), AgentValue::new_string(preamble));
-        return Ok(AgentValue::new_object(out_value));
+        return Ok(AgentValue::object(
+            [
+                ("content".to_string(), AgentValue::string(content)),
+                ("role".to_string(), AgentValue::string("user")),
+                ("preamble".to_string(), AgentValue::string(preamble)),
+            ]
+            .into(),
+        ));
     }
 
     if value.is_object() {
@@ -519,8 +528,8 @@ fn add_preamble_to_value(preamble: String, value: AgentValue) -> Result<AgentVal
             .as_object()
             .ok_or_else(|| AgentError::InvalidValue("wrong object value".to_string()))?
             .clone();
-        out_value.insert("preamble".to_string(), AgentValue::new_string(preamble));
-        return Ok(AgentValue::new_object(out_value));
+        out_value.insert("preamble".to_string(), AgentValue::string(preamble));
+        return Ok(AgentValue::object(out_value));
     }
 
     if value.is_array() {
@@ -533,7 +542,7 @@ fn add_preamble_to_value(preamble: String, value: AgentValue) -> Result<AgentVal
             let item = add_preamble_to_value(preamble.clone(), item)?;
             out_value.push(item);
         }
-        return Ok(AgentValue::new_array(out_value));
+        return Ok(AgentValue::array(out_value));
     }
 
     return Err(AgentError::InvalidValue(
@@ -586,7 +595,7 @@ fn combine_text_and_image_data(text: String, data: AgentData) -> Result<AgentDat
             .as_object()
             .ok_or_else(|| AgentError::InvalidValue("wrong object".to_string()))?
             .to_owned();
-        return Ok(AgentData::new_custom_object("message", map));
+        return Ok(AgentData::object_with_kind("message", map));
     }
 
     if value.is_array() {
@@ -594,7 +603,7 @@ fn combine_text_and_image_data(text: String, data: AgentData) -> Result<AgentDat
             .as_array()
             .ok_or_else(|| AgentError::InvalidValue("wrong array".to_string()))?
             .to_owned();
-        return Ok(AgentData::new_array("message", arr));
+        return Ok(AgentData::array("message", arr));
     }
 
     Err(AgentError::InvalidValue(
@@ -605,11 +614,14 @@ fn combine_text_and_image_data(text: String, data: AgentData) -> Result<AgentDat
 fn combine_text_and_image_value(text: String, value: AgentValue) -> Result<AgentValue, AgentError> {
     // if value.is_image() || value.is_string() {
     if value.is_string() {
-        let mut out_value = AgentValueMap::new();
-        out_value.insert("images".to_string(), AgentValue::new_array(vec![value]));
-        out_value.insert("role".to_string(), AgentValue::new_string("user"));
-        out_value.insert("content".to_string(), AgentValue::new_string(text));
-        return Ok(AgentValue::new_object(out_value));
+        return Ok(AgentValue::object(
+            [
+                ("content".to_string(), AgentValue::string(text)),
+                ("role".to_string(), AgentValue::string("user")),
+                ("images".to_string(), AgentValue::array(vec![value])),
+            ]
+            .into(),
+        ));
     }
 
     // if value.is_object() {
@@ -648,7 +660,7 @@ fn combine_text_and_image_value(text: String, value: AgentValue) -> Result<Agent
             let item = combine_text_and_image_value(text.clone(), item)?;
             out_value.push(item);
         }
-        return Ok(AgentValue::new_array(out_value));
+        return Ok(AgentValue::array(out_value));
     }
 
     Err(AgentError::InvalidValue(
@@ -683,7 +695,7 @@ pub fn register_agents(askit: &ASKit) {
         .with_outputs(vec![PORT_MESSAGE, PORT_MEMORY])
         .with_default_config(vec![(
             CONFIG_N.into(),
-            AgentConfigEntry::new(AgentValue::new_integer(DEFAULT_CONFIG_N), "integer")
+            AgentConfigEntry::new(AgentValue::integer(DEFAULT_CONFIG_N), "integer")
                 .with_title("Memory Size")
                 .with_description("-1 = unlimited"),
         )]),
@@ -702,7 +714,7 @@ pub fn register_agents(askit: &ASKit) {
         .with_outputs(vec![PORT_MESSAGE])
         .with_default_config(vec![(
             CONFIG_TEXT.into(),
-            AgentConfigEntry::new(AgentValue::new_string(""), "text"),
+            AgentConfigEntry::new(AgentValue::string(""), "text"),
         )]),
     );
 
@@ -719,7 +731,7 @@ pub fn register_agents(askit: &ASKit) {
         .with_outputs(vec![PORT_MESSAGE])
         .with_default_config(vec![(
             CONFIG_TEXT.into(),
-            AgentConfigEntry::new(AgentValue::new_string(""), "text"),
+            AgentConfigEntry::new(AgentValue::string(""), "text"),
         )]),
     );
 }

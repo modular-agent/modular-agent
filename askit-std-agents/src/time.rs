@@ -98,7 +98,7 @@ impl IntervalTimerAgent {
                 if let Err(e) = askit.try_send_agent_out(
                     agent_id.clone(),
                     AgentContext::new_with_port(PORT_UNIT),
-                    AgentData::new_unit(),
+                    AgentData::unit(),
                 ) {
                     log::error!("Failed to send interval timer output: {}", e);
                 }
@@ -214,7 +214,7 @@ impl AsAgent for OnStartAgent {
             if let Err(e) = askit.try_send_agent_out(
                 agent_id,
                 AgentContext::new_with_port(PORT_UNIT),
-                AgentData::new_unit(),
+                AgentData::unit(),
             ) {
                 log::error!("Failed to send delayed output: {}", e);
             }
@@ -290,7 +290,7 @@ impl ScheduleTimerAgent {
                 if let Err(e) = askit.try_send_agent_out(
                     agent_id.clone(),
                     AgentContext::new_with_port(PORT_TIME),
-                    AgentData::new_integer(current_local_time),
+                    AgentData::integer(current_local_time),
                 ) {
                     log::error!("Failed to send schedule timer output: {}", e);
                 }
@@ -623,12 +623,12 @@ pub fn register_agents(askit: &ASKit) {
             .with_default_config(vec![
                 (
                     CONFIG_DELAY.into(),
-                    AgentConfigEntry::new(AgentValue::new_integer(DELAY_MS_DEFAULT), "integer")
+                    AgentConfigEntry::new(AgentValue::integer(DELAY_MS_DEFAULT), "integer")
                         .with_title("delay (ms)"),
                 ),
                 (
                     CONFIG_MAX_NUM_DATA.into(),
-                    AgentConfigEntry::new(AgentValue::new_integer(MAX_NUM_DATA_DEFAULT), "integer")
+                    AgentConfigEntry::new(AgentValue::integer(MAX_NUM_DATA_DEFAULT), "integer")
                         .with_title("max num data"),
                 ),
             ]),
@@ -647,7 +647,7 @@ pub fn register_agents(askit: &ASKit) {
         .with_outputs(vec![PORT_UNIT])
         .with_default_config(vec![(
             CONFIG_INTERVAL.into(),
-            AgentConfigEntry::new(AgentValue::new_string(INTERVAL_DEFAULT), "string")
+            AgentConfigEntry::new(AgentValue::string(INTERVAL_DEFAULT), "string")
                 .with_description("(ex. 10s, 5m, 100ms, 1h, 1d)"),
         )]),
     );
@@ -664,7 +664,7 @@ pub fn register_agents(askit: &ASKit) {
         .with_outputs(vec![PORT_UNIT])
         .with_default_config(vec![(
             CONFIG_DELAY.into(),
-            AgentConfigEntry::new(AgentValue::new_integer(DELAY_MS_DEFAULT), "integer")
+            AgentConfigEntry::new(AgentValue::integer(DELAY_MS_DEFAULT), "integer")
                 .with_title("delay (ms)"),
         )]),
     );
@@ -681,7 +681,7 @@ pub fn register_agents(askit: &ASKit) {
         .with_outputs(vec![PORT_TIME])
         .with_default_config(vec![(
             CONFIG_SCHEDULE.into(),
-            AgentConfigEntry::new(AgentValue::new_string("0 0 * * * *"), "string")
+            AgentConfigEntry::new(AgentValue::string("0 0 * * * *"), "string")
                 .with_description("sec min hour day month week year"),
         )]),
     );
@@ -700,12 +700,12 @@ pub fn register_agents(askit: &ASKit) {
         .with_default_config(vec![
             (
                 CONFIG_TIME.into(),
-                AgentConfigEntry::new(AgentValue::new_string(TIME_DEFAULT), "string")
+                AgentConfigEntry::new(AgentValue::string(TIME_DEFAULT), "string")
                     .with_description("(ex. 10s, 5m, 100ms, 1h, 1d)"),
             ),
             (
                 CONFIG_MAX_NUM_DATA.into(),
-                AgentConfigEntry::new(AgentValue::new_integer(0), "integer")
+                AgentConfigEntry::new(AgentValue::integer(0), "integer")
                     .with_title("max num data")
                     .with_description("0: no data, -1: all data"),
             ),

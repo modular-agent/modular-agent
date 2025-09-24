@@ -107,7 +107,7 @@ impl AsAgent for ZipAgent {
             let value = self.input_value[i].take().unwrap();
             map.insert(key, value);
         }
-        let out_data = AgentData::new_object(map);
+        let out_data = AgentData::object(map);
 
         self.try_output(ctx, PORT_DATA, out_data)?;
 
@@ -140,15 +140,15 @@ pub fn register_agents(askit: &ASKit) {
             .with_default_config(vec![
                 (
                     CONFIG_N.into(),
-                    AgentConfigEntry::new(AgentValue::new_integer(2), "integer").with_hidden(),
+                    AgentConfigEntry::new(AgentValue::integer(2), "integer").with_hidden(),
                 ),
                 (
                     CONFIG_KEY1.into(),
-                    AgentConfigEntry::new(AgentValue::new_string(""), "string"),
+                    AgentConfigEntry::new(AgentValue::string(""), "string"),
                 ),
                 (
                     CONFIG_KEY2.into(),
-                    AgentConfigEntry::new(AgentValue::new_string(""), "string"),
+                    AgentConfigEntry::new(AgentValue::string(""), "string"),
                 ),
             ]),
     );
@@ -162,19 +162,19 @@ pub fn register_agents(askit: &ASKit) {
             .with_default_config(vec![
                 (
                     CONFIG_N.into(),
-                    AgentConfigEntry::new(AgentValue::new_integer(3), "integer").with_hidden(),
+                    AgentConfigEntry::new(AgentValue::integer(3), "integer").with_hidden(),
                 ),
                 (
                     CONFIG_KEY1.into(),
-                    AgentConfigEntry::new(AgentValue::new_string(""), "string"),
+                    AgentConfigEntry::new(AgentValue::string(""), "string"),
                 ),
                 (
                     CONFIG_KEY2.into(),
-                    AgentConfigEntry::new(AgentValue::new_string(""), "string"),
+                    AgentConfigEntry::new(AgentValue::string(""), "string"),
                 ),
                 (
                     CONFIG_KEY3.into(),
-                    AgentConfigEntry::new(AgentValue::new_string(""), "string"),
+                    AgentConfigEntry::new(AgentValue::string(""), "string"),
                 ),
             ]),
     );
@@ -188,23 +188,23 @@ pub fn register_agents(askit: &ASKit) {
             .with_default_config(vec![
                 (
                     CONFIG_N.into(),
-                    AgentConfigEntry::new(AgentValue::new_integer(4), "integer").with_hidden(),
+                    AgentConfigEntry::new(AgentValue::integer(4), "integer").with_hidden(),
                 ),
                 (
                     CONFIG_KEY1.into(),
-                    AgentConfigEntry::new(AgentValue::new_string(""), "string"),
+                    AgentConfigEntry::new(AgentValue::string(""), "string"),
                 ),
                 (
                     CONFIG_KEY2.into(),
-                    AgentConfigEntry::new(AgentValue::new_string(""), "string"),
+                    AgentConfigEntry::new(AgentValue::string(""), "string"),
                 ),
                 (
                     CONFIG_KEY3.into(),
-                    AgentConfigEntry::new(AgentValue::new_string(""), "string"),
+                    AgentConfigEntry::new(AgentValue::string(""), "string"),
                 ),
                 (
                     CONFIG_KEY4.into(),
-                    AgentConfigEntry::new(AgentValue::new_string(""), "string"),
+                    AgentConfigEntry::new(AgentValue::string(""), "string"),
                 ),
             ]),
     );

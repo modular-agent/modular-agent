@@ -34,7 +34,7 @@ impl AsAgent for UnitInputAgent {
         // Since set_config is called even when the agent is not running,
         // we need to check the status before outputting the value.
         if *self.status() == AgentStatus::Start {
-            self.try_output(AgentContext::new(), CONFIG_UNIT, AgentData::new_unit())?;
+            self.try_output(AgentContext::new(), CONFIG_UNIT, AgentData::unit())?;
         }
 
         Ok(())
@@ -72,7 +72,7 @@ impl AsAgent for BooleanInputAgent {
             self.try_output(
                 AgentContext::new(),
                 CONFIG_BOOLEAN,
-                AgentData::new_boolean(value),
+                AgentData::boolean(value),
             )?;
         }
         Ok(())
@@ -110,7 +110,7 @@ impl AsAgent for IntegerInputAgent {
             self.try_output(
                 AgentContext::new(),
                 CONFIG_INTEGER,
-                AgentData::new_integer(value),
+                AgentData::integer(value),
             )?;
         }
 
@@ -146,11 +146,7 @@ impl AsAgent for NumberInputAgent {
     fn set_config(&mut self, config: AgentConfig) -> Result<(), AgentError> {
         if *self.status() == AgentStatus::Start {
             let value = config.get_number(CONFIG_NUMBER)?;
-            self.try_output(
-                AgentContext::new(),
-                CONFIG_NUMBER,
-                AgentData::new_number(value),
-            )?;
+            self.try_output(AgentContext::new(), CONFIG_NUMBER, AgentData::number(value))?;
         }
 
         Ok(())
@@ -185,11 +181,7 @@ impl AsAgent for StringInputAgent {
     fn set_config(&mut self, config: AgentConfig) -> Result<(), AgentError> {
         if *self.status() == AgentStatus::Start {
             let value = config.get_string(CONFIG_STRING)?;
-            self.try_output(
-                AgentContext::new(),
-                CONFIG_STRING,
-                AgentData::new_string(value),
-            )?;
+            self.try_output(AgentContext::new(), CONFIG_STRING, AgentData::string(value))?;
         }
         Ok(())
     }
@@ -223,7 +215,7 @@ impl AsAgent for TextInputAgent {
     fn set_config(&mut self, config: AgentConfig) -> Result<(), AgentError> {
         if *self.status() == AgentStatus::Start {
             let value = config.get_string(CONFIG_TEXT)?;
-            self.try_output(AgentContext::new(), CONFIG_TEXT, AgentData::new_text(value))?;
+            self.try_output(AgentContext::new(), CONFIG_TEXT, AgentData::text(value))?;
         }
         Ok(())
     }
@@ -261,13 +253,13 @@ impl AsAgent for ObjectInputAgent {
                 self.try_output(
                     AgentContext::new(),
                     CONFIG_OBJECT,
-                    AgentData::new_object(obj.clone()),
+                    AgentData::object(obj.clone()),
                 )?;
             } else if let Some(arr) = value.as_array() {
                 self.try_output(
                     AgentContext::new(),
                     CONFIG_OBJECT,
-                    AgentData::new_array("object", arr.clone()),
+                    AgentData::array("object", arr.clone()),
                 )?;
             } else {
                 return Err(AgentError::InvalidConfig(format!(
@@ -306,7 +298,7 @@ pub fn register_agents(askit: &ASKit) {
         .with_outputs(vec![CONFIG_UNIT])
         .with_default_config(vec![(
             CONFIG_UNIT.into(),
-            AgentConfigEntry::new(AgentValue::new_unit(), "unit"),
+            AgentConfigEntry::new(AgentValue::unit(), "unit"),
         )]),
     );
 
@@ -322,7 +314,7 @@ pub fn register_agents(askit: &ASKit) {
         .with_outputs(vec![CONFIG_BOOLEAN])
         .with_default_config(vec![(
             CONFIG_BOOLEAN.into(),
-            AgentConfigEntry::new(AgentValue::new_boolean(false), "boolean"),
+            AgentConfigEntry::new(AgentValue::boolean(false), "boolean"),
         )]),
     );
 
@@ -338,7 +330,7 @@ pub fn register_agents(askit: &ASKit) {
         .with_outputs(vec![CONFIG_INTEGER])
         .with_default_config(vec![(
             CONFIG_INTEGER.into(),
-            AgentConfigEntry::new(AgentValue::new_integer(0), "integer"),
+            AgentConfigEntry::new(AgentValue::integer(0), "integer"),
         )]),
     );
 
@@ -354,7 +346,7 @@ pub fn register_agents(askit: &ASKit) {
         .with_outputs(vec![CONFIG_NUMBER])
         .with_default_config(vec![(
             CONFIG_NUMBER.into(),
-            AgentConfigEntry::new(AgentValue::new_number(0.0), "number"),
+            AgentConfigEntry::new(AgentValue::number(0.0), "number"),
         )]),
     );
 
@@ -370,7 +362,7 @@ pub fn register_agents(askit: &ASKit) {
         .with_outputs(vec![CONFIG_STRING])
         .with_default_config(vec![(
             CONFIG_STRING.into(),
-            AgentConfigEntry::new(AgentValue::new_string(""), "string"),
+            AgentConfigEntry::new(AgentValue::string(""), "string"),
         )]),
     );
 
@@ -386,7 +378,7 @@ pub fn register_agents(askit: &ASKit) {
         .with_outputs(vec![CONFIG_TEXT])
         .with_default_config(vec![(
             CONFIG_TEXT.into(),
-            AgentConfigEntry::new(AgentValue::new_string(""), "text"),
+            AgentConfigEntry::new(AgentValue::string(""), "text"),
         )]),
     );
 
@@ -402,7 +394,7 @@ pub fn register_agents(askit: &ASKit) {
         .with_outputs(vec![CONFIG_OBJECT])
         .with_default_config(vec![(
             CONFIG_OBJECT.into(),
-            AgentConfigEntry::new(AgentValue::default_object(), "object"),
+            AgentConfigEntry::new(AgentValue::object_default(), "object"),
         )]),
     );
 }

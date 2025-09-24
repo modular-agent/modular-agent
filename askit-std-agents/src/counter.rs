@@ -35,7 +35,7 @@ impl AsAgent for CounterAgent {
 
     fn start(&mut self) -> Result<(), AgentError> {
         self.count = 0;
-        self.emit_display(DISPLAY_COUNT, AgentData::new_integer(0));
+        self.emit_display(DISPLAY_COUNT, AgentData::integer(0));
         Ok(())
     }
 
@@ -46,8 +46,8 @@ impl AsAgent for CounterAgent {
         } else if ch == PORT_IN {
             self.count += 1;
         }
-        self.try_output(ctx, PORT_COUNT, AgentData::new_integer(self.count))?;
-        self.emit_display(DISPLAY_COUNT, AgentData::new_integer(self.count));
+        self.try_output(ctx, PORT_COUNT, AgentData::integer(self.count))?;
+        self.emit_display(DISPLAY_COUNT, AgentData::integer(self.count));
 
         Ok(())
     }

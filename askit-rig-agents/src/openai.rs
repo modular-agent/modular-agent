@@ -3,7 +3,7 @@ use std::vec;
 
 use agent_stream_kit::{
     ASKit, Agent, AgentConfig, AgentConfigEntry, AgentContext, AgentData, AgentDefinition,
-    AgentError, AgentOutput, AgentValue, AgentValueMap, AsAgent, AsAgentData, async_trait,
+    AgentError, AgentOutput, AgentValue, AsAgent, AsAgentData, async_trait,
     new_agent_boxed,
 };
 use rig::client::CompletionClient;
@@ -116,24 +116,24 @@ impl AsAgent for RigOpenAIAgent {
                         "missing content text in a response".to_string(),
                     ));
                 };
-                let msg_value = AgentValue::new_object(AgentValueMap::from([
-                    ("role".to_string(), AgentValue::new_string(role.to_string())),
+                let msg_value = AgentValue::object([
+                    ("role".to_string(), AgentValue::string(role.to_string())),
                     (
                         "content".to_string(),
-                        AgentValue::new_string(content.to_string()),
+                        AgentValue::string(content.to_string()),
                     ),
-                ]));
+                ].into());
                 out_messages.push(msg_value);
             }
 
             let resp_json = serde_json::to_value(&response.raw_response)
                 .map_err(|e| AgentError::InvalidValue(format!("serde_json error: {}", e)))?;
-            let resp_value = AgentValue::from_json_value(resp_json)?;
+            let resp_value = AgentValue::from_json(resp_json)?;
             out_responses.push(resp_value);
         }
 
         if out_messages.len() == 1 {
-            let out_message = AgentData::new_custom_object(
+            let out_message = AgentData::object_with_kind(
                 "message",
                 out_messages[0]
                     .as_object()
@@ -142,12 +142,12 @@ impl AsAgent for RigOpenAIAgent {
             );
             self.try_output(ctx.clone(), PORT_MESSAGE, out_message)?;
         } else if out_messages.len() > 1 {
-            let out_message = AgentData::new_array("message", out_messages);
+            let out_message = AgentData::array("message", out_messages);
             self.try_output(ctx.clone(), PORT_MESSAGE, out_message)?;
         }
 
         if out_responses.len() == 1 {
-            let out_response = AgentData::new_custom_object(
+            let out_response = AgentData::object_with_kind(
                 "response",
                 out_responses[0]
                     .as_object()
@@ -156,7 +156,7 @@ impl AsAgent for RigOpenAIAgent {
             );
             self.try_output(ctx, PORT_RESPONSE, out_response)?;
         } else if out_responses.len() > 1 {
-            let out_response = AgentData::new_array("response", out_responses);
+            let out_response = AgentData::array("response", out_responses);
             self.try_output(ctx, PORT_RESPONSE, out_response)?;
         }
 
@@ -187,7 +187,7 @@ pub fn register_agents(askit: &ASKit) {
         .with_outputs(vec![PORT_MESSAGE, PORT_RESPONSE])
         .with_default_config(vec![(
             CONFIG_MODEL.into(),
-            AgentConfigEntry::new(AgentValue::new_string(DEFAULT_CONFIG_MODEL), "string")
+            AgentConfigEntry::new(AgentValue::string(DEFAULT_CONFIG_MODEL), "string")
                 .with_title("Chat Model"),
         )]),
     );

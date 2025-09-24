@@ -108,17 +108,17 @@ impl AsAgent for RigOllamaAgent {
 
             let msg_json = serde_json::to_value(response.raw_response.message.clone())
                 .map_err(|e| AgentError::InvalidValue(format!("serde_json error: {}", e)))?;
-            let msg_value = AgentValue::from_json_value(msg_json)?;
+            let msg_value = AgentValue::from_json(msg_json)?;
             out_messages.push(msg_value);
 
             let resp_json = serde_json::to_value(response.raw_response)
                 .map_err(|e| AgentError::InvalidValue(format!("serde_json error: {}", e)))?;
-            let resp_value = AgentValue::from_json_value(resp_json)?;
+            let resp_value = AgentValue::from_json(resp_json)?;
             out_responses.push(resp_value);
         }
 
         if out_messages.len() == 1 {
-            let out_message = AgentData::new_custom_object(
+            let out_message = AgentData::object_with_kind(
                 "message",
                 out_messages[0]
                     .as_object()
@@ -127,12 +127,12 @@ impl AsAgent for RigOllamaAgent {
             );
             self.try_output(ctx.clone(), PORT_MESSAGE, out_message)?;
         } else if out_messages.len() > 1 {
-            let out_message = AgentData::new_array("message", out_messages);
+            let out_message = AgentData::array("message", out_messages);
             self.try_output(ctx.clone(), PORT_MESSAGE, out_message)?;
         }
 
         if out_responses.len() == 1 {
-            let out_response = AgentData::new_custom_object(
+            let out_response = AgentData::object_with_kind(
                 "response",
                 out_responses[0]
                     .as_object()
@@ -141,7 +141,7 @@ impl AsAgent for RigOllamaAgent {
             );
             self.try_output(ctx, PORT_RESPONSE, out_response)?;
         } else if out_responses.len() > 1 {
-            let out_response = AgentData::new_array("response", out_responses);
+            let out_response = AgentData::array("response", out_responses);
             self.try_output(ctx, PORT_RESPONSE, out_response)?;
         }
 
@@ -180,7 +180,7 @@ pub fn register_agents(askit: &ASKit) {
         // )])
         .with_default_config(vec![(
             CONFIG_MODEL.into(),
-            AgentConfigEntry::new(AgentValue::new_string(DEFAULT_CONFIG_MODEL), "string")
+            AgentConfigEntry::new(AgentValue::string(DEFAULT_CONFIG_MODEL), "string")
                 .with_title("Chat Model"),
         )]),
     );

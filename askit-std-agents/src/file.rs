@@ -66,10 +66,10 @@ impl AsAgent for ListFilesAgent {
                 AgentError::InvalidValue(format!("Failed to read directory entry: {}", e))
             })?;
             let file_name = entry.file_name().to_string_lossy().to_string();
-            files.push(AgentValue::new_string(file_name));
+            files.push(AgentValue::string(file_name));
         }
 
-        let out_data = AgentData::new_array("string", files);
+        let out_data = AgentData::array("string", files);
         self.try_output(ctx, PORT_FILES, out_data)
     }
 }
@@ -123,7 +123,7 @@ impl AsAgent for ReadTextFileAgent {
         let content = fs::read_to_string(path).map_err(|e| {
             AgentError::InvalidValue(format!("Failed to read file {}: {}", path.display(), e))
         })?;
-        let out_data = AgentData::new_text(content);
+        let out_data = AgentData::text(content);
         self.try_output(ctx, PORT_TEXT, out_data)
     }
 }

@@ -32,10 +32,7 @@ async fn main() {
         }
 
         askit
-            .write_board_data(
-                "user input".to_string(),
-                AgentData::new_string(input.trim()),
-            )
+            .write_board_data("user input".to_string(), AgentData::string(input.trim()))
             .unwrap();
     }
 
