@@ -1,13 +1,13 @@
 [package]
 name = "askit-std-agents"
-version = "0.3.2"
+version = "0.3.3"
 description = "Standard Agents of Agent Stream Kit"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
 
 [dependencies]
-agent-stream-kit = { version = "0.5", path = "../agent-stream-kit" }
+agent-stream-kit = { version = "0.6", path = "../agent-stream-kit" }
 chrono = "0.4"
 cron = "0.15"
 handlebars = "6"

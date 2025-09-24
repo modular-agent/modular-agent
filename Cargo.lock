@@ -19,7 +19,7 @@ checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 
 [[package]]
 name = "agent-stream-kit"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "async-trait",
  "log",
@@ -55,16 +55,17 @@ checksum = "b0f477b951e452a0b6b4a10b53ccd569042d1d01729b519e02074a9c0958a063"
 
 [[package]]
 name = "askit-llm-agents"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "agent-stream-kit",
  "ollama-rs",
+ "serde",
  "serde_json",
 ]
 
 [[package]]
 name = "askit-rig-agents"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "agent-stream-kit",
  "rig-core",
@@ -73,7 +74,7 @@ dependencies = [
 
 [[package]]
 name = "askit-std-agents"
-version = "0.3.2"
+version = "0.3.3"
 dependencies = [
  "agent-stream-kit",
  "chrono",

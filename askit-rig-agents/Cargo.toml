@@ -1,12 +1,12 @@
 [package]
 name = "askit-rig-agents"
-version = "0.3.1"
+version = "0.3.2"
 description = "Rig Agents for Agent Stream Kit"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
 
 [dependencies]
-agent-stream-kit = { version = "0.5", path = "../agent-stream-kit" }
+agent-stream-kit = { version = "0.6", path = "../agent-stream-kit" }
 rig-core = "0.19"
 serde_json = "1"
