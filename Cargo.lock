@@ -55,10 +55,11 @@ checksum = "b0f477b951e452a0b6b4a10b53ccd569042d1d01729b519e02074a9c0958a063"
 
 [[package]]
 name = "askit-llm-agents"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "agent-stream-kit",
  "ollama-rs",
+ "sakura-ai-rs",
  "serde",
  "serde_json",
 ]
@@ -1436,6 +1437,21 @@ name = "ryu"
 version = "1.0.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "28d3b2b1366ec20994f1fd18c3c594f05c5dd4bc44d8bb0c1c632c8d6829481f"
+
+[[package]]
+name = "sakura-ai-rs"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "94c1f1bf12a99d1209d0475af0f75780f5fd05c6449d5ab3c6d04180cc7f2ef5"
+dependencies = [
+ "async-stream",
+ "chrono",
+ "ollama-rs",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "url",
+]
 
 [[package]]
 name = "schannel"
