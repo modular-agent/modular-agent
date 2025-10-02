@@ -27,14 +27,23 @@ impl SakuraAIManager {
         }
     }
 
-    fn get_client(&self) -> Result<SakuraAI, AgentError> {
+    fn get_client(&self, askit: &ASKit) -> Result<SakuraAI, AgentError> {
         let mut client_guard = self.client.lock().unwrap();
 
         if let Some(client) = client_guard.as_ref() {
             return Ok(client.clone());
         }
 
-        let new_client = SakuraAI::default();
+        let mut new_client = SakuraAI::default();
+
+        if let Some(api_key) = askit
+            .get_global_config("sakura_ai_chat")
+            .and_then(|cfg| cfg.get_string(CONFIG_SAKURA_AI_API_KEY).ok())
+            .filter(|key| !key.is_empty())
+        {
+            new_client = new_client.with_api_key(&api_key);
+        }
+
         *client_guard = Some(new_client.clone());
 
         Ok(new_client)
@@ -82,7 +91,7 @@ impl AsAgent for SakuraAIChatAgent {
             return Ok(());
         }
 
-        let client = self.manager.get_client()?;
+        let client = self.manager.get_client(self.askit())?;
         let mut request = ChatMessageRequest::new(
             config_model.to_string(),
             vec![ChatMessage::user(message.to_string())],
@@ -123,6 +132,7 @@ static PORT_HISTORY: &str = "history";
 static PORT_MESSAGE: &str = "message";
 static PORT_RESPONSE: &str = "response";
 
+static CONFIG_SAKURA_AI_API_KEY: &str = "sakura_ai_api_key";
 static CONFIG_MODEL: &str = "model";
 static CONFIG_OPTIONS: &str = "options";
 
@@ -140,6 +150,10 @@ pub fn register_agents(askit: &ASKit) {
         .with_category(CATEGORY)
         .with_inputs(vec![PORT_MESSAGE])
         .with_outputs(vec![PORT_MESSAGE, PORT_RESPONSE, PORT_HISTORY])
+        .with_global_config(vec![(
+            CONFIG_SAKURA_AI_API_KEY.into(),
+            AgentConfigEntry::new(AgentValue::string(""), "string").with_title("Sakura AI API Key"),
+        )])
         .with_default_config(vec![
             (
                 CONFIG_MODEL.into(),

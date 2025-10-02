@@ -1,6 +1,6 @@
 [package]
 name = "askit-llm-agents"
-version = "0.2.1"
+version = "0.2.2"
 description = "LLM Agents for Agent Stream Kit"
 edition.workspace = true
 authors.workspace = true
@@ -9,6 +9,6 @@ license.workspace = true
 [dependencies]
 agent-stream-kit = { version = "0.6", path = "../agent-stream-kit" }
 ollama-rs = { version = "0.3.2" }
-sakura-ai-rs = { version = "0.1" }
+sakura-ai-rs = { version = "0.1.2" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
