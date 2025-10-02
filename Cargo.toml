@@ -1,6 +1,7 @@
 [workspace]
 resolver = "3"
 members = [
+    "askit-cozodb-agents",
     "agent-stream-kit",
     "askit-llm-agents",
     "askit-std-agents",
