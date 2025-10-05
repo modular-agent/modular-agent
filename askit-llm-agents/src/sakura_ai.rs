@@ -12,8 +12,7 @@ use ollama_rs::{
 };
 use sakura_ai_rs::SakuraAI;
 
-use crate::message::Message;
-use crate::ollama::MessageHistory;
+use crate::message::{Message, MessageHistory};
 
 // Shared client management for SakuraAI agents
 struct SakuraAIManager {

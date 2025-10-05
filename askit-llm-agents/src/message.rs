@@ -75,17 +75,36 @@ impl From<Message> for AgentData {
             [
                 ("role".to_string(), AgentValue::string(msg.role)),
                 ("content".to_string(), AgentValue::string(msg.content)),
-            ].into(),
+            ]
+            .into(),
         )
     }
 }
 
 impl From<Message> for AgentValue {
     fn from(msg: Message) -> Self {
-        AgentValue::object([
-            ("role".to_string(), AgentValue::string(msg.role)),
-            ("content".to_string(), AgentValue::string(msg.content)),
-        ].into())
+        AgentValue::object(
+            [
+                ("role".to_string(), AgentValue::string(msg.role)),
+                ("content".to_string(), AgentValue::string(msg.content)),
+            ]
+            .into(),
+        )
+    }
+}
+
+#[derive(Clone)]
+pub struct MessageHistory(pub Vec<Message>);
+
+impl MessageHistory {
+    pub fn push(&mut self, message: Message) {
+        self.0.push(message);
+    }
+}
+
+impl From<MessageHistory> for AgentData {
+    fn from(history: MessageHistory) -> Self {
+        AgentData::array("message", history.0.into_iter().map(|m| m.into()).collect())
     }
 }
 
@@ -122,13 +141,16 @@ mod tests {
 
     #[test]
     fn test_message_from_object_value() {
-        let value = AgentValue::object([
-            ("role".to_string(), AgentValue::string("assistant")),
-            (
-                "content".to_string(),
-                AgentValue::string("Here is some information."),
-            ),
-        ].into());
+        let value = AgentValue::object(
+            [
+                ("role".to_string(), AgentValue::string("assistant")),
+                (
+                    "content".to_string(),
+                    AgentValue::string("Here is some information."),
+                ),
+            ]
+            .into(),
+        );
         let msg: Message = value.try_into().unwrap();
         assert_eq!(msg.role, "assistant");
         assert_eq!(msg.content, "Here is some information.");
@@ -143,10 +165,8 @@ mod tests {
 
     #[test]
     fn test_message_invalid_object() {
-        let value = AgentValue::object([(
-            "some_key".to_string(),
-            AgentValue::string("some_value"),
-        )].into());
+        let value =
+            AgentValue::object([("some_key".to_string(), AgentValue::string("some_value"))].into());
         let result: Result<Message, AgentError> = value.try_into();
         assert!(result.is_err());
     }

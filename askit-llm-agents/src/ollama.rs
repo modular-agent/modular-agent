@@ -17,7 +17,7 @@ use ollama_rs::{
     models::ModelOptions,
 };
 
-use crate::message::Message;
+use crate::message::{Message, MessageHistory};
 
 // Shared client management for Ollama agents
 struct OllamaManager {
@@ -404,9 +404,6 @@ impl From<Message> for ChatMessage {
     }
 }
 
-#[derive(Clone)]
-pub struct MessageHistory(pub Vec<Message>);
-
 impl ChatHistory for MessageHistory {
     fn push(&mut self, message: ChatMessage) {
         self.0.push(message.into());
@@ -415,11 +412,5 @@ impl ChatHistory for MessageHistory {
     fn messages(&self) -> std::borrow::Cow<'_, [ChatMessage]> {
         let messages: Vec<ChatMessage> = self.0.iter().map(|msg| msg.clone().into()).collect();
         std::borrow::Cow::Owned(messages)
-    }
-}
-
-impl From<MessageHistory> for AgentData {
-    fn from(history: MessageHistory) -> Self {
-        AgentData::array("message", history.0.into_iter().map(|m| m.into()).collect())
     }
 }
