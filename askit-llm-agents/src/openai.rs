@@ -15,6 +15,7 @@ use async_openai::{
         ChatCompletionRequestUserMessageArgs, ChatCompletionResponseMessage,
         CreateChatCompletionRequest, CreateChatCompletionRequestArgs, CreateCompletionRequest,
         CreateCompletionRequestArgs, CreateEmbeddingRequestArgs, Role,
+        responses::{self, CreateResponse, CreateResponseArgs, OutputContent, OutputMessage},
     },
 };
 
@@ -318,6 +319,212 @@ impl AsAgent for OpenAIEmbeddingsAgent {
     }
 }
 
+// OpenAI Responses Agent
+// https://platform.openai.com/docs/api-reference/responses
+pub struct OpenAIResponsesAgent {
+    data: AsAgentData,
+    manager: OpenAIManager,
+    history: MessageHistory,
+}
+
+#[async_trait]
+impl AsAgent for OpenAIResponsesAgent {
+    fn new(
+        askit: ASKit,
+        id: String,
+        def_name: String,
+        config: Option<AgentConfig>,
+    ) -> Result<Self, AgentError> {
+        Ok(Self {
+            data: AsAgentData::new(askit, id, def_name, config),
+            manager: OpenAIManager::new(),
+            history: MessageHistory(vec![]),
+        })
+    }
+
+    fn data(&self) -> &AsAgentData {
+        &self.data
+    }
+
+    fn mut_data(&mut self) -> &mut AsAgentData {
+        &mut self.data
+    }
+
+    async fn process(&mut self, ctx: AgentContext, data: AgentData) -> Result<(), AgentError> {
+        let config_model = &self.config()?.get_string_or_default(CONFIG_MODEL);
+        if config_model.is_empty() {
+            return Ok(());
+        }
+
+        let message = data.as_str().unwrap_or("");
+        if message.is_empty() {
+            return Ok(());
+        }
+
+        let enable_history = self.config()?.get_bool_or_default(CONFIG_HISTORY);
+        let input = if enable_history {
+            // self.history.push(Message::user(message.to_string()));
+            // self.history.0.clone()
+            let items = self
+                .history
+                .0
+                .iter()
+                .map(|m| m.into())
+                .collect::<Vec<responses::InputItem>>();
+            responses::Input::Items(items)
+        } else {
+            message.into()
+        };
+
+        let mut request = CreateResponseArgs::default()
+            .model(config_model)
+            .input(input)
+            .build()
+            .map_err(|e| AgentError::InvalidValue(format!("Failed to build request: {}", e)))?;
+
+        let config_options = self.config()?.get_string_or_default(CONFIG_OPTIONS);
+        if !config_options.is_empty() && config_options != "{}" {
+            // Merge options into request
+            let options_json = serde_json::from_str::<serde_json::Value>(&config_options)
+                .map_err(|e| AgentError::InvalidValue(format!("Invalid JSON in options: {}", e)))?;
+
+            let mut request_json = serde_json::to_value(&request)
+                .map_err(|e| AgentError::InvalidValue(format!("Serialization error: {}", e)))?;
+
+            if let (Some(request_obj), Some(options_obj)) =
+                (request_json.as_object_mut(), options_json.as_object())
+            {
+                for (key, value) in options_obj {
+                    request_obj.insert(key.clone(), value.clone());
+                }
+            }
+            request = serde_json::from_value::<CreateResponse>(request_json)
+                .map_err(|e| AgentError::InvalidValue(format!("Deserialization error: {}", e)))?;
+        }
+
+        let client = self.manager.get_client(self.askit())?;
+        let res = client
+            .responses()
+            .create(request)
+            .await
+            .map_err(|e| AgentError::IoError(format!("OpenAI Error: {}", e)))?;
+
+        let res_message: Message = res.output[0].clone().into();
+        self.try_output(ctx.clone(), PORT_MESSAGE, res_message.clone().into())?;
+
+        let out_response = AgentData::from_serialize(&res)?;
+        self.try_output(ctx.clone(), PORT_RESPONSE, out_response)?;
+
+        let enable_history = self.config()?.get_bool_or_default(CONFIG_HISTORY);
+        if enable_history {
+            self.history.push(res_message.into());
+            self.try_output(ctx, PORT_HISTORY, self.history.clone().into())?;
+        }
+
+        Ok(())
+    }
+}
+
+impl From<ChatCompletionResponseMessage> for Message {
+    fn from(msg: ChatCompletionResponseMessage) -> Self {
+        let role = match msg.role {
+            Role::System => "system",
+            Role::User => "user",
+            Role::Assistant => "assistant",
+            Role::Tool => "tool",
+            Role::Function => "function",
+        };
+        Self {
+            role: role.to_string(),
+            content: msg.content.unwrap_or_default(),
+        }
+    }
+}
+
+impl From<Message> for ChatCompletionRequestMessage {
+    fn from(msg: Message) -> Self {
+        match msg.role.as_str() {
+            "system" => ChatCompletionRequestSystemMessageArgs::default()
+                .content(msg.content.clone())
+                .build()
+                .unwrap()
+                .into(),
+            "user" => ChatCompletionRequestUserMessageArgs::default()
+                .content(msg.content.clone())
+                .build()
+                .unwrap()
+                .into(),
+            "assistant" => ChatCompletionRequestAssistantMessageArgs::default()
+                .content(msg.content.clone())
+                .build()
+                .unwrap()
+                .into(),
+            "tool" => ChatCompletionRequestToolMessageArgs::default()
+                .content(msg.content.clone())
+                .build()
+                .unwrap()
+                .into(),
+            _ => ChatCompletionRequestUserMessageArgs::default()
+                .content(msg.content.clone())
+                .build()
+                .unwrap()
+                .into(),
+        }
+    }
+}
+
+impl From<&Message> for responses::InputItem {
+    fn from(msg: &Message) -> Self {
+        responses::InputItem::Message(responses::InputMessage {
+            kind: responses::InputMessageType::Message,
+            role: match msg.role.as_str() {
+                "system" => responses::Role::System,
+                "user" => responses::Role::User,
+                "assistant" => responses::Role::Assistant,
+                "developer" => responses::Role::Developer,
+                _ => responses::Role::Developer,
+            },
+            content: responses::InputContent::TextInput(msg.content.clone()),
+        })
+    }
+}
+
+impl From<OutputContent> for Message {
+    fn from(content: OutputContent) -> Self {
+        match content {
+            OutputContent::Message(msg) => msg.into(),
+            _ => Self {
+                role: "<unknown>".to_string(),
+                content: "".to_string(),
+            },
+        }
+    }
+}
+
+impl From<OutputMessage> for Message {
+    fn from(msg: OutputMessage) -> Self {
+        let role = match msg.role {
+            responses::Role::System => "system",
+            responses::Role::User => "user",
+            responses::Role::Assistant => "assistant",
+            responses::Role::Developer => "developer",
+        };
+        let content = msg
+            .content
+            .into_iter()
+            .map(|c| match c {
+                responses::Content::OutputText(t) => t.text,
+                responses::Content::Refusal(r) => format!("Refusal: {}", r.refusal),
+            })
+            .collect::<Vec<String>>()
+            .join(" ");
+        Self {
+            role: role.to_string(),
+            content,
+        }
+    }
+}
+
 static AGENT_KIND: &str = "agent";
 static CATEGORY: &str = "LLM";
 
@@ -415,52 +622,37 @@ pub fn register_agents(askit: &ASKit) {
             ),
         ]),
     );
-}
 
-impl From<ChatCompletionResponseMessage> for Message {
-    fn from(msg: ChatCompletionResponseMessage) -> Self {
-        let role = match msg.role {
-            Role::System => "system",
-            Role::User => "user",
-            Role::Assistant => "assistant",
-            Role::Tool => "tool",
-            Role::Function => "function",
-        };
-        Self {
-            role: role.to_string(),
-            content: msg.content.unwrap_or_default(),
-        }
-    }
-}
-
-impl From<Message> for ChatCompletionRequestMessage {
-    fn from(msg: Message) -> Self {
-        match msg.role.as_str() {
-            "system" => ChatCompletionRequestSystemMessageArgs::default()
-                .content(msg.content.clone())
-                .build()
-                .unwrap()
-                .into(),
-            "user" => ChatCompletionRequestUserMessageArgs::default()
-                .content(msg.content.clone())
-                .build()
-                .unwrap()
-                .into(),
-            "assistant" => ChatCompletionRequestAssistantMessageArgs::default()
-                .content(msg.content.clone())
-                .build()
-                .unwrap()
-                .into(),
-            "tool" => ChatCompletionRequestToolMessageArgs::default()
-                .content(msg.content.clone())
-                .build()
-                .unwrap()
-                .into(),
-            _ => ChatCompletionRequestUserMessageArgs::default()
-                .content(msg.content.clone())
-                .build()
-                .unwrap()
-                .into(),
-        }
-    }
+    askit.register_agent(
+        AgentDefinition::new(
+            AGENT_KIND,
+            "openai_responses",
+            Some(new_agent_boxed::<OpenAIResponsesAgent>),
+        )
+        // .use_native_thread()
+        .with_title("OpenAI Responses")
+        .with_category(CATEGORY)
+        .with_inputs(vec![PORT_MESSAGE])
+        .with_outputs(vec![PORT_MESSAGE, PORT_RESPONSE, PORT_HISTORY])
+        .with_global_config(vec![(
+            CONFIG_OPENAI_API_KEY.into(),
+            AgentConfigEntry::new(AgentValue::string(""), "string").with_title("OpenAI API Key"),
+        )])
+        .with_default_config(vec![
+            (
+                CONFIG_MODEL.into(),
+                AgentConfigEntry::new(AgentValue::string(DEFAULT_CONFIG_MODEL), "string")
+                    .with_title("Model"),
+            ),
+            (
+                CONFIG_HISTORY.into(),
+                AgentConfigEntry::new(AgentValue::boolean(false), "boolean")
+                    .with_title("Enable History"),
+            ),
+            (
+                CONFIG_OPTIONS.into(),
+                AgentConfigEntry::new(AgentValue::string("{}"), "text").with_title("Options"),
+            ),
+        ]),
+    );
 }
