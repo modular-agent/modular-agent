@@ -119,6 +119,7 @@ dependencies = [
  "sakura-ai-rs",
  "serde",
  "serde_json",
+ "tokio-stream",
 ]
 
 [[package]]
@@ -1864,6 +1865,8 @@ dependencies = [
  "serde_json",
  "static_assertions",
  "thiserror 2.0.16",
+ "tokio",
+ "tokio-stream",
  "url",
 ]
 
@@ -2803,6 +2806,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0fda2ff0d084019ba4d7c6f371c95d8fd75ce3524c3cb8fb653a3023f6323e64"
 
 [[package]]
+name = "signal-hook-registry"
+version = "1.4.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b2a4719bff48cee6b39d12c020eeb490953ad2443b7055bd0b21fca26bd8c28b"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "siphasher"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3128,7 +3140,9 @@ dependencies = [
  "io-uring",
  "libc",
  "mio",
+ "parking_lot",
  "pin-project-lite",
+ "signal-hook-registry",
  "slab",
  "socket2",
  "tokio-macros",

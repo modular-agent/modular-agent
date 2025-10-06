@@ -157,7 +157,7 @@ impl AsAgent for OpenAIChatAgent {
         Ok(Self {
             data: AsAgentData::new(askit, id, def_name, config),
             manager: OpenAIManager::new(),
-            history: MessageHistory(vec![]),
+            history: MessageHistory::default(),
         })
     }
 
@@ -182,9 +182,8 @@ impl AsAgent for OpenAIChatAgent {
 
         let history_size = self.config()?.get_integer_or_default(CONFIG_HISTORY);
         let messages = if history_size > 0 {
-            self.history
-                .push(Message::user(message.to_string()), history_size);
-            self.history.0.clone()
+            self.history.push(Message::user(message.to_string()));
+            self.history.messages.clone()
         } else {
             vec![Message::user(message.to_string())]
         }
@@ -233,7 +232,7 @@ impl AsAgent for OpenAIChatAgent {
 
         let history_size = self.config()?.get_integer_or_default(CONFIG_HISTORY);
         if history_size > 0 {
-            self.history.push(res_message.into(), history_size);
+            self.history.push(res_message.into());
             self.try_output(ctx, PORT_HISTORY, self.history.clone().into())?;
         }
 
@@ -339,7 +338,7 @@ impl AsAgent for OpenAIResponsesAgent {
         Ok(Self {
             data: AsAgentData::new(askit, id, def_name, config),
             manager: OpenAIManager::new(),
-            history: MessageHistory(vec![]),
+            history: MessageHistory::default(),
         })
     }
 
@@ -366,7 +365,7 @@ impl AsAgent for OpenAIResponsesAgent {
         let input = if history_size > 0 {
             let items = self
                 .history
-                .0
+                .messages
                 .iter()
                 .map(|m| m.into())
                 .collect::<Vec<responses::InputItem>>();
@@ -408,7 +407,7 @@ impl AsAgent for OpenAIResponsesAgent {
             .await
             .map_err(|e| AgentError::IoError(format!("OpenAI Error: {}", e)))?;
 
-        let res_message: Message = res.output[0].clone().into();
+        let res_message: Message = Message::assistant(get_output_text(&res)); // TODO: better conversion
         self.try_output(ctx.clone(), PORT_MESSAGE, res_message.clone().into())?;
 
         let out_response = AgentData::from_serialize(&res)?;
@@ -416,12 +415,26 @@ impl AsAgent for OpenAIResponsesAgent {
 
         let history_size = self.config()?.get_integer_or_default(CONFIG_HISTORY);
         if history_size > 0 {
-            self.history.push(res_message.into(), history_size);
+            self.history.push(res_message.into());
             self.try_output(ctx, PORT_HISTORY, self.history.clone().into())?;
         }
 
         Ok(())
     }
+}
+
+fn get_output_text(response: &responses::Response) -> String {
+    let mut output_text: Vec<String> = vec![];
+    response.output.iter().for_each(|msg| {
+        if let responses::OutputContent::Message(m) = msg {
+            m.content.iter().for_each(|c| {
+                if let responses::Content::OutputText(t) = c {
+                    output_text.push(t.text.clone());
+                }
+            });
+        }
+    });
+    output_text.join(" ")
 }
 
 impl From<ChatCompletionResponseMessage> for Message {

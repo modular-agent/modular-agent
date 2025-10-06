@@ -67,7 +67,7 @@ impl AsAgent for SakuraAIChatAgent {
         Ok(Self {
             data: AsAgentData::new(askit, id, def_name, config),
             manager: SakuraAIManager::new(),
-            history: MessageHistory(vec![]),
+            history: MessageHistory::default(),
         })
     }
 
@@ -77,6 +77,14 @@ impl AsAgent for SakuraAIChatAgent {
 
     fn mut_data(&mut self) -> &mut AsAgentData {
         &mut self.data
+    }
+
+    fn set_config(&mut self, config: AgentConfig) -> Result<(), AgentError> {
+        let history_size = config.get_integer_or_default(CONFIG_HISTORY);
+        if history_size != self.config()?.get_integer_or_default(CONFIG_HISTORY) {
+            self.history = MessageHistory::new(self.history.messages.clone(), history_size);
+        }
+        Ok(())
     }
 
     async fn process(&mut self, ctx: AgentContext, data: AgentData) -> Result<(), AgentError> {
@@ -124,12 +132,6 @@ impl AsAgent for SakuraAIChatAgent {
         self.try_output(ctx.clone(), PORT_RESPONSE, out_response)?;
 
         if history_size > 0 {
-            if self.history.0.len() > history_size as usize {
-                self.history
-                    .0
-                    .drain(0..(self.history.0.len() - history_size as usize));
-            }
-
             self.try_output(ctx, PORT_HISTORY, self.history.clone().into())?;
         }
 

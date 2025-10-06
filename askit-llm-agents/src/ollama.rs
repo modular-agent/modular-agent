@@ -16,6 +16,7 @@ use ollama_rs::{
     history::ChatHistory,
     models::ModelOptions,
 };
+use tokio_stream::StreamExt;
 
 use crate::message::{Message, MessageHistory};
 
@@ -141,7 +142,7 @@ impl AsAgent for OllamaCompletionAgent {
 pub struct OllamaChatAgent {
     data: AsAgentData,
     manager: OllamaManager,
-    history: MessageHistory,
+    history: Arc<Mutex<MessageHistory>>,
 }
 
 #[async_trait]
@@ -155,7 +156,7 @@ impl AsAgent for OllamaChatAgent {
         Ok(Self {
             data: AsAgentData::new(askit, id, def_name, config),
             manager: OllamaManager::new(),
-            history: MessageHistory(vec![]),
+            history: Arc::new(Mutex::new(MessageHistory::default())),
         })
     }
 
@@ -165,6 +166,15 @@ impl AsAgent for OllamaChatAgent {
 
     fn mut_data(&mut self) -> &mut AsAgentData {
         &mut self.data
+    }
+
+    fn set_config(&mut self, config: AgentConfig) -> Result<(), AgentError> {
+        let history_size = config.get_integer_or_default(CONFIG_HISTORY);
+        if history_size != self.config()?.get_integer_or_default(CONFIG_HISTORY) {
+            let mut history = self.history.lock().unwrap();
+            *history = MessageHistory::new(history.messages.clone(), history_size);
+        }
+        Ok(())
     }
 
     async fn process(&mut self, ctx: AgentContext, data: AgentData) -> Result<(), AgentError> {
@@ -196,30 +206,61 @@ impl AsAgent for OllamaChatAgent {
         }
 
         let history_size = self.config()?.get_integer_or_default(CONFIG_HISTORY);
+        let use_stream = self.config()?.get_bool_or_default(CONFIG_STREAM);
 
-        let res = if history_size > 0 {
-            client
-                .send_chat_messages_with_history(&mut self.history, request)
-                .await
-        } else {
-            client.send_chat_messages(request).await
-        }
-        .map_err(|e| AgentError::IoError(format!("Ollama Error: {}", e)))?;
-
-        let message: Message = res.message.clone().into();
-        self.try_output(ctx.clone(), PORT_MESSAGE, message.into())?;
-
-        let out_response = AgentData::from_serialize(&res)?;
-        self.try_output(ctx.clone(), PORT_RESPONSE, out_response)?;
-
-        if history_size > 0 {
-            if self.history.0.len() > history_size as usize {
-                self.history
-                    .0
-                    .drain(0..(self.history.0.len() - history_size as usize));
+        if use_stream {
+            let mut stream = if history_size > 0 {
+                client
+                    .send_chat_messages_with_history_stream(self.history.clone(), request)
+                    .await
+            } else {
+                client.send_chat_messages_stream(request).await
             }
+            .map_err(|e| AgentError::IoError(format!("Ollama Error: {}", e)))?;
 
-            self.try_output(ctx, PORT_HISTORY, self.history.clone().into())?;
+            let mut content = String::new();
+            while let Some(res) = stream.next().await {
+                let res = res.map_err(|_| AgentError::IoError(format!("Ollama Stream Error")))?;
+
+                content.push_str(&res.message.content);
+
+                let message = Message::assistant(content.clone());
+                self.try_output(ctx.clone(), PORT_MESSAGE, message.into())?;
+
+                let out_response = AgentData::from_serialize(&res)?;
+                self.try_output(ctx.clone(), PORT_RESPONSE, out_response)?;
+
+                if res.done {
+                    break;
+                }
+            }
+            if history_size > 0 {
+                let messages = self.history.lock().unwrap();
+                self.try_output(ctx.clone(), PORT_HISTORY, messages.clone().into())?;
+            }
+        } else {
+            let res = if history_size > 0 {
+                let mut history = self.history.lock().unwrap().clone();
+                let res = client
+                    .send_chat_messages_with_history(&mut history, request)
+                    .await;
+                *self.history.lock().unwrap() = history;
+                res
+            } else {
+                client.send_chat_messages(request).await
+            }
+            .map_err(|e| AgentError::IoError(format!("Ollama Error: {}", e)))?;
+
+            let message: Message = res.message.clone().into();
+            self.try_output(ctx.clone(), PORT_MESSAGE, message.into())?;
+
+            let out_response = AgentData::from_serialize(&res)?;
+            self.try_output(ctx.clone(), PORT_RESPONSE, out_response)?;
+
+            if history_size > 0 {
+                let messages = self.history.lock().unwrap();
+                self.try_output(ctx, PORT_HISTORY, messages.clone().into())?;
+            }
         }
 
         Ok(())
@@ -291,6 +332,45 @@ impl AsAgent for OllamaEmbeddingsAgent {
     }
 }
 
+impl From<ChatMessage> for Message {
+    fn from(msg: ChatMessage) -> Self {
+        let role = match msg.role {
+            MessageRole::User => "user",
+            MessageRole::Assistant => "assistant",
+            MessageRole::System => "system",
+            MessageRole::Tool => "tool",
+        };
+        Self {
+            role: role.to_string(),
+            content: msg.content,
+        }
+    }
+}
+
+impl From<Message> for ChatMessage {
+    fn from(msg: Message) -> Self {
+        match msg.role.as_str() {
+            "user" => ChatMessage::user(msg.content),
+            "assistant" => ChatMessage::assistant(msg.content),
+            "system" => ChatMessage::system(msg.content),
+            "tool" => ChatMessage::tool(msg.content),
+            _ => ChatMessage::user(msg.content), // Default to user if unknown role
+        }
+    }
+}
+
+impl ChatHistory for MessageHistory {
+    fn push(&mut self, message: ChatMessage) {
+        self.push(message.into());
+    }
+
+    fn messages(&self) -> std::borrow::Cow<'_, [ChatMessage]> {
+        let messages: Vec<ChatMessage> =
+            self.messages.iter().map(|msg| msg.clone().into()).collect();
+        std::borrow::Cow::Owned(messages)
+    }
+}
+
 static AGENT_KIND: &str = "agent";
 static CATEGORY: &str = "LLM";
 
@@ -304,6 +384,7 @@ static CONFIG_HISTORY: &str = "history";
 static CONFIG_MODEL: &str = "model";
 static CONFIG_OLLAMA_URL: &str = "ollama_url";
 static CONFIG_OPTIONS: &str = "options";
+static CONFIG_STREAM: &str = "stream";
 static CONFIG_SYSTEM: &str = "system";
 
 const DEFAULT_CONFIG_MODEL: &str = "gemma3:4b";
@@ -365,6 +446,10 @@ pub fn register_agents(askit: &ASKit) {
                 AgentConfigEntry::new(AgentValue::integer(0), "integer").with_title("History Size"),
             ),
             (
+                CONFIG_STREAM.into(),
+                AgentConfigEntry::new(AgentValue::boolean(false), "boolean").with_title("Stream"),
+            ),
+            (
                 CONFIG_OPTIONS.into(),
                 AgentConfigEntry::new(AgentValue::string("{}"), "text").with_title("Options"),
             ),
@@ -394,42 +479,4 @@ pub fn register_agents(askit: &ASKit) {
             ),
         ]),
     );
-}
-
-impl From<ChatMessage> for Message {
-    fn from(msg: ChatMessage) -> Self {
-        let role = match msg.role {
-            MessageRole::User => "user",
-            MessageRole::Assistant => "assistant",
-            MessageRole::System => "system",
-            MessageRole::Tool => "tool",
-        };
-        Self {
-            role: role.to_string(),
-            content: msg.content,
-        }
-    }
-}
-
-impl From<Message> for ChatMessage {
-    fn from(msg: Message) -> Self {
-        match msg.role.as_str() {
-            "user" => ChatMessage::user(msg.content),
-            "assistant" => ChatMessage::assistant(msg.content),
-            "system" => ChatMessage::system(msg.content),
-            "tool" => ChatMessage::tool(msg.content),
-            _ => ChatMessage::user(msg.content), // Default to user if unknown role
-        }
-    }
-}
-
-impl ChatHistory for MessageHistory {
-    fn push(&mut self, message: ChatMessage) {
-        self.0.push(message.into());
-    }
-
-    fn messages(&self) -> std::borrow::Cow<'_, [ChatMessage]> {
-        let messages: Vec<ChatMessage> = self.0.iter().map(|msg| msg.clone().into()).collect();
-        std::borrow::Cow::Owned(messages)
-    }
 }

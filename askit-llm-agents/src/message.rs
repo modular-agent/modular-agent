@@ -93,21 +93,39 @@ impl From<Message> for AgentValue {
     }
 }
 
-#[derive(Clone)]
-pub struct MessageHistory(pub Vec<Message>);
+#[derive(Clone, Default)]
+pub struct MessageHistory {
+    pub messages: Vec<Message>,
+    max_size: i64,
+}
 
 impl MessageHistory {
-    pub fn push(&mut self, message: Message, max_size: i64) {
-        if max_size > 0 && self.0.len() >= max_size as usize {
-            self.0.remove(0);
+    pub fn new(messages: Vec<Message>, max_size: i64) -> Self {
+        let mut messages = messages;
+        if max_size > 0 {
+            if messages.len() > max_size as usize {
+                messages = messages[messages.len() - max_size as usize..].to_vec();
+            }
+        } else {
+            messages = Vec::new();
         }
-        self.0.push(message);
+        Self { messages, max_size }
+    }
+
+    pub fn push(&mut self, message: Message) {
+        if self.max_size > 0 && self.messages.len() >= self.max_size as usize {
+            self.messages.remove(0);
+        }
+        self.messages.push(message);
     }
 }
 
 impl From<MessageHistory> for AgentData {
     fn from(history: MessageHistory) -> Self {
-        AgentData::array("message", history.0.into_iter().map(|m| m.into()).collect())
+        AgentData::array(
+            "message",
+            history.messages.into_iter().map(|m| m.into()).collect(),
+        )
     }
 }
 
