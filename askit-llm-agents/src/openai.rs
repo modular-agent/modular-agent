@@ -12,7 +12,8 @@ use async_openai::{
         ChatCompletionRequestAssistantMessageArgs, ChatCompletionRequestMessage,
         ChatCompletionRequestSystemMessageArgs, ChatCompletionRequestToolMessageArgs,
         ChatCompletionRequestUserMessageArgs, ChatCompletionResponseMessage,
-        CreateChatCompletionRequestArgs, CreateCompletionRequestArgs, Role,
+        CreateChatCompletionRequest, CreateChatCompletionRequestArgs, CreateCompletionRequest,
+        CreateCompletionRequestArgs, Role,
     },
 };
 
@@ -93,27 +94,31 @@ impl AsAgent for OpenAICompletionAgent {
             return Ok(());
         }
 
-        let request = CreateCompletionRequestArgs::default()
+        let mut request = CreateCompletionRequestArgs::default()
             .model(config_model)
             .prompt(message)
             .build()
             .map_err(|e| AgentError::InvalidValue(format!("Failed to build request: {}", e)))?;
 
-        // let config_system = self.config()?.get_string_or_default(CONFIG_SYSTEM);
-        // if !config_system.is_empty() {
-        //     request = request.system(config_system);
-        // }
+        let config_options = self.config()?.get_string_or_default(CONFIG_OPTIONS);
+        if !config_options.is_empty() && config_options != "{}" {
+            // Merge options into request
+            let options_json = serde_json::from_str::<serde_json::Value>(&config_options)
+                .map_err(|e| AgentError::InvalidValue(format!("Invalid JSON in options: {}", e)))?;
 
-        // let config_options = self.config()?.get_string_or_default(CONFIG_OPTIONS);
-        // if !config_options.is_empty() && config_options != "{}" {
-        //     if let Ok(options_json) = serde_json::from_str::<ModelOptions>(&config_options) {
-        //         request = request.options(options_json);
-        //     } else {
-        //         return Err(AgentError::InvalidValue(
-        //             "Invalid JSON in options".to_string(),
-        //         ));
-        //     }
-        // }
+            let mut request_json = serde_json::to_value(&request)
+                .map_err(|e| AgentError::InvalidValue(format!("Serialization error: {}", e)))?;
+
+            if let (Some(request_obj), Some(options_obj)) =
+                (request_json.as_object_mut(), options_json.as_object())
+            {
+                for (key, value) in options_obj {
+                    request_obj.insert(key.clone(), value.clone());
+                }
+            }
+            request = serde_json::from_value::<CreateCompletionRequest>(request_json)
+                .map_err(|e| AgentError::InvalidValue(format!("Deserialization error: {}", e)))?;
+        }
 
         let client = self.manager.get_client(self.askit())?;
         let res = client
@@ -184,25 +189,33 @@ impl AsAgent for OpenAIChatAgent {
         .map(|m| m.into())
         .collect::<Vec<ChatCompletionRequestMessage>>();
 
-        let client = self.manager.get_client(self.askit())?;
-
-        let request = CreateChatCompletionRequestArgs::default()
+        let mut request = CreateChatCompletionRequestArgs::default()
             .model(config_model)
             .messages(messages)
             .build()
             .map_err(|e| AgentError::InvalidValue(format!("Failed to build request: {}", e)))?;
 
-        // let config_options = self.config()?.get_string_or_default(CONFIG_OPTIONS);
-        // if !config_options.is_empty() && config_options != "{}" {
-        //     if let Ok(options_json) = serde_json::from_str::<ModelOptions>(&config_options) {
-        //         request = request.options(options_json);
-        //     } else {
-        //         return Err(AgentError::InvalidValue(
-        //             "Invalid JSON in options".to_string(),
-        //         ));
-        //     }
-        // }
+        let config_options = self.config()?.get_string_or_default(CONFIG_OPTIONS);
+        if !config_options.is_empty() && config_options != "{}" {
+            // Merge options into request
+            let options_json = serde_json::from_str::<serde_json::Value>(&config_options)
+                .map_err(|e| AgentError::InvalidValue(format!("Invalid JSON in options: {}", e)))?;
 
+            let mut request_json = serde_json::to_value(&request)
+                .map_err(|e| AgentError::InvalidValue(format!("Serialization error: {}", e)))?;
+
+            if let (Some(request_obj), Some(options_obj)) =
+                (request_json.as_object_mut(), options_json.as_object())
+            {
+                for (key, value) in options_obj {
+                    request_obj.insert(key.clone(), value.clone());
+                }
+            }
+            request = serde_json::from_value::<CreateChatCompletionRequest>(request_json)
+                .map_err(|e| AgentError::InvalidValue(format!("Deserialization error: {}", e)))?;
+        }
+
+        let client = self.manager.get_client(self.askit())?;
         let res = client
             .chat()
             .create(request)
@@ -303,7 +316,6 @@ static CONFIG_MODEL: &str = "model";
 static CONFIG_OPENAI_API_KEY: &str = "openai_api_key";
 static CONFIG_OPTIONS: &str = "options";
 static CONFIG_HISTORY: &str = "history";
-static CONFIG_SYSTEM: &str = "system";
 
 const DEFAULT_CONFIG_MODEL: &str = "gpt-5-nano";
 
@@ -325,14 +337,10 @@ pub fn register_agents(askit: &ASKit) {
                 AgentConfigEntry::new(AgentValue::string("gpt-3.5-turbo-instruct"), "string")
                     .with_title("Model"),
             ),
-            // (
-            //     CONFIG_SYSTEM.into(),
-            //     AgentConfigEntry::new(AgentValue::string(""), "text").with_title("System"),
-            // ),
-            // (
-            //     CONFIG_OPTIONS.into(),
-            //     AgentConfigEntry::new(AgentValue::string("{}"), "text").with_title("Options"),
-            // ),
+            (
+                CONFIG_OPTIONS.into(),
+                AgentConfigEntry::new(AgentValue::string("{}"), "text").with_title("Options"),
+            ),
         ]),
     );
 
