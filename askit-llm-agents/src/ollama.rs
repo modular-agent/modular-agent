@@ -195,10 +195,16 @@ impl AsAgent for OllamaChatAgent {
             }
         }
 
-        let res = client
-            .send_chat_messages_with_history(&mut self.history, request)
-            .await
-            .map_err(|e| AgentError::IoError(format!("Ollama Error: {}", e)))?;
+        let history_size = self.config()?.get_integer_or_default(CONFIG_HISTORY);
+
+        let res = if history_size > 0 {
+            client
+                .send_chat_messages_with_history(&mut self.history, request)
+                .await
+        } else {
+            client.send_chat_messages(request).await
+        }
+        .map_err(|e| AgentError::IoError(format!("Ollama Error: {}", e)))?;
 
         let message: Message = res.message.clone().into();
         self.try_output(ctx.clone(), PORT_MESSAGE, message.into())?;
@@ -206,7 +212,15 @@ impl AsAgent for OllamaChatAgent {
         let out_response = AgentData::from_serialize(&res)?;
         self.try_output(ctx.clone(), PORT_RESPONSE, out_response)?;
 
-        self.try_output(ctx, PORT_HISTORY, self.history.clone().into())?;
+        if history_size > 0 {
+            if self.history.0.len() > history_size as usize {
+                self.history
+                    .0
+                    .drain(0..(self.history.0.len() - history_size as usize));
+            }
+
+            self.try_output(ctx, PORT_HISTORY, self.history.clone().into())?;
+        }
 
         Ok(())
     }
@@ -286,6 +300,7 @@ static PORT_INPUT: &str = "input";
 static PORT_MESSAGE: &str = "message";
 static PORT_RESPONSE: &str = "response";
 
+static CONFIG_HISTORY: &str = "history";
 static CONFIG_MODEL: &str = "model";
 static CONFIG_OLLAMA_URL: &str = "ollama_url";
 static CONFIG_OPTIONS: &str = "options";
@@ -344,6 +359,10 @@ pub fn register_agents(askit: &ASKit) {
                 CONFIG_MODEL.into(),
                 AgentConfigEntry::new(AgentValue::string(DEFAULT_CONFIG_MODEL), "string")
                     .with_title("Model"),
+            ),
+            (
+                CONFIG_HISTORY.into(),
+                AgentConfigEntry::new(AgentValue::integer(0), "integer").with_title("History Size"),
             ),
             (
                 CONFIG_OPTIONS.into(),

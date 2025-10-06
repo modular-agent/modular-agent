@@ -97,7 +97,10 @@ impl From<Message> for AgentValue {
 pub struct MessageHistory(pub Vec<Message>);
 
 impl MessageHistory {
-    pub fn push(&mut self, message: Message) {
+    pub fn push(&mut self, message: Message, max_size: i64) {
+        if max_size > 0 && self.0.len() >= max_size as usize {
+            self.0.remove(0);
+        }
         self.0.push(message);
     }
 }

@@ -180,9 +180,10 @@ impl AsAgent for OpenAIChatAgent {
             return Ok(());
         }
 
-        let enable_history = self.config()?.get_bool_or_default(CONFIG_HISTORY);
-        let messages = if enable_history {
-            self.history.push(Message::user(message.to_string()));
+        let history_size = self.config()?.get_integer_or_default(CONFIG_HISTORY);
+        let messages = if history_size > 0 {
+            self.history
+                .push(Message::user(message.to_string()), history_size);
             self.history.0.clone()
         } else {
             vec![Message::user(message.to_string())]
@@ -230,9 +231,9 @@ impl AsAgent for OpenAIChatAgent {
         let out_response = AgentData::from_serialize(&res)?;
         self.try_output(ctx.clone(), PORT_RESPONSE, out_response)?;
 
-        let enable_history = self.config()?.get_bool_or_default(CONFIG_HISTORY);
-        if enable_history {
-            self.history.push(res_message.into());
+        let history_size = self.config()?.get_integer_or_default(CONFIG_HISTORY);
+        if history_size > 0 {
+            self.history.push(res_message.into(), history_size);
             self.try_output(ctx, PORT_HISTORY, self.history.clone().into())?;
         }
 
@@ -361,10 +362,8 @@ impl AsAgent for OpenAIResponsesAgent {
             return Ok(());
         }
 
-        let enable_history = self.config()?.get_bool_or_default(CONFIG_HISTORY);
-        let input = if enable_history {
-            // self.history.push(Message::user(message.to_string()));
-            // self.history.0.clone()
+        let history_size = self.config()?.get_integer_or_default(CONFIG_HISTORY);
+        let input = if history_size > 0 {
             let items = self
                 .history
                 .0
@@ -415,9 +414,9 @@ impl AsAgent for OpenAIResponsesAgent {
         let out_response = AgentData::from_serialize(&res)?;
         self.try_output(ctx.clone(), PORT_RESPONSE, out_response)?;
 
-        let enable_history = self.config()?.get_bool_or_default(CONFIG_HISTORY);
-        if enable_history {
-            self.history.push(res_message.into());
+        let history_size = self.config()?.get_integer_or_default(CONFIG_HISTORY);
+        if history_size > 0 {
+            self.history.push(res_message.into(), history_size);
             self.try_output(ctx, PORT_HISTORY, self.history.clone().into())?;
         }
 
@@ -589,8 +588,7 @@ pub fn register_agents(askit: &ASKit) {
             ),
             (
                 CONFIG_HISTORY.into(),
-                AgentConfigEntry::new(AgentValue::boolean(false), "boolean")
-                    .with_title("Enable History"),
+                AgentConfigEntry::new(AgentValue::integer(0), "integer").with_title("History Size"),
             ),
             (
                 CONFIG_OPTIONS.into(),
@@ -646,8 +644,7 @@ pub fn register_agents(askit: &ASKit) {
             ),
             (
                 CONFIG_HISTORY.into(),
-                AgentConfigEntry::new(AgentValue::boolean(false), "boolean")
-                    .with_title("Enable History"),
+                AgentConfigEntry::new(AgentValue::integer(0), "integer").with_title("History Size"),
             ),
             (
                 CONFIG_OPTIONS.into(),
