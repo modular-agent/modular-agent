@@ -5,6 +5,7 @@ use agent_stream_kit::{
     ASKit, Agent, AgentConfig, AgentConfigEntry, AgentContext, AgentData, AgentDefinition,
     AgentError, AgentOutput, AgentValue, AsAgent, AsAgentData, async_trait, new_agent_boxed,
 };
+use async_openai::types::CreateEmbeddingRequest;
 use async_openai::{
     Client,
     config::OpenAIConfig,
@@ -13,7 +14,7 @@ use async_openai::{
         ChatCompletionRequestSystemMessageArgs, ChatCompletionRequestToolMessageArgs,
         ChatCompletionRequestUserMessageArgs, ChatCompletionResponseMessage,
         CreateChatCompletionRequest, CreateChatCompletionRequestArgs, CreateCompletionRequest,
-        CreateCompletionRequestArgs, Role,
+        CreateCompletionRequestArgs, CreateEmbeddingRequestArgs, Role,
     },
 };
 
@@ -238,70 +239,84 @@ impl AsAgent for OpenAIChatAgent {
     }
 }
 
-// // OpenAI Embeddings Agent
-// pub struct OpenAIEmbeddingsAgent {
-//     data: AsAgentData,
-//     manager: OpenAIManager,
-// }
+// OpenAI Embeddings Agent
+pub struct OpenAIEmbeddingsAgent {
+    data: AsAgentData,
+    manager: OpenAIManager,
+}
 
-// #[async_trait]
-// impl AsAgent for OpenAIEmbeddingsAgent {
-//     fn new(
-//         askit: ASKit,
-//         id: String,
-//         def_name: String,
-//         config: Option<AgentConfig>,
-//     ) -> Result<Self, AgentError> {
-//         Ok(Self {
-//             data: AsAgentData::new(askit, id, def_name, config),
-//             manager: OpenAIManager::new(),
-//         })
-//     }
+#[async_trait]
+impl AsAgent for OpenAIEmbeddingsAgent {
+    fn new(
+        askit: ASKit,
+        id: String,
+        def_name: String,
+        config: Option<AgentConfig>,
+    ) -> Result<Self, AgentError> {
+        Ok(Self {
+            data: AsAgentData::new(askit, id, def_name, config),
+            manager: OpenAIManager::new(),
+        })
+    }
 
-//     fn data(&self) -> &AsAgentData {
-//         &self.data
-//     }
+    fn data(&self) -> &AsAgentData {
+        &self.data
+    }
 
-//     fn mut_data(&mut self) -> &mut AsAgentData {
-//         &mut self.data
-//     }
+    fn mut_data(&mut self) -> &mut AsAgentData {
+        &mut self.data
+    }
 
-//     async fn process(&mut self, ctx: AgentContext, data: AgentData) -> Result<(), AgentError> {
-//         let config_model = &self.config()?.get_string_or_default(CONFIG_MODEL);
-//         if config_model.is_empty() {
-//             return Ok(());
-//         }
+    async fn process(&mut self, ctx: AgentContext, data: AgentData) -> Result<(), AgentError> {
+        let config_model = &self.config()?.get_string_or_default(CONFIG_MODEL);
+        if config_model.is_empty() {
+            return Ok(());
+        }
 
-//         let input = data.as_str().unwrap_or(""); // TODO: other types
-//         if input.is_empty() {
-//             return Ok(());
-//         }
+        let input = data.as_str().unwrap_or(""); // TODO: other types
+        if input.is_empty() {
+            return Ok(());
+        }
 
-//         let client = self.manager.get_client(self.askit())?;
-//         let mut request = GenerateEmbeddingsRequest::new(config_model.to_string(), input.into());
+        let client = self.manager.get_client(self.askit())?;
+        let mut request = CreateEmbeddingRequestArgs::default()
+            .model(config_model.to_string())
+            .input(vec![input])
+            .build()
+            .map_err(|e| AgentError::InvalidValue(format!("Failed to build request: {}", e)))?;
 
-//         let config_options = self.config()?.get_string_or_default(CONFIG_OPTIONS);
-//         if !config_options.is_empty() && config_options != "{}" {
-//             if let Ok(options_json) = serde_json::from_str::<ModelOptions>(&config_options) {
-//                 request = request.options(options_json);
-//             } else {
-//                 return Err(AgentError::InvalidValue(
-//                     "Invalid JSON in options".to_string(),
-//                 ));
-//             }
-//         }
+        let config_options = self.config()?.get_string_or_default(CONFIG_OPTIONS);
+        if !config_options.is_empty() && config_options != "{}" {
+            // Merge options into request
+            let options_json = serde_json::from_str::<serde_json::Value>(&config_options)
+                .map_err(|e| AgentError::InvalidValue(format!("Invalid JSON in options: {}", e)))?;
 
-//         let res = client
-//             .generate_embeddings(request)
-//             .await
-//             .map_err(|e| AgentError::IoError(format!("OpenAI Error: {}", e)))?;
+            let mut request_json = serde_json::to_value(&request)
+                .map_err(|e| AgentError::InvalidValue(format!("Serialization error: {}", e)))?;
 
-//         let embeddings = AgentData::from_serialize(&res.embeddings)?;
-//         self.try_output(ctx.clone(), PORT_EMBEDDINGS, embeddings)?;
+            if let (Some(request_obj), Some(options_obj)) =
+                (request_json.as_object_mut(), options_json.as_object())
+            {
+                for (key, value) in options_obj {
+                    request_obj.insert(key.clone(), value.clone());
+                }
+            }
+            request = serde_json::from_value::<CreateEmbeddingRequest>(request_json)
+                .map_err(|e| AgentError::InvalidValue(format!("Deserialization error: {}", e)))?;
+        }
 
-//         Ok(())
-//     }
-// }
+        let res = client
+            .embeddings()
+            .create(request)
+            .await
+            .map_err(|e| AgentError::IoError(format!("OpenAI Error: {}", e)))?;
+
+        let data = AgentData::from_serialize(&res.data)?;
+        self.try_output(ctx.clone(), PORT_EMBEDDINGS, data)?;
+
+        Ok(())
+    }
+}
 
 static AGENT_KIND: &str = "agent";
 static CATEGORY: &str = "LLM";
@@ -377,29 +392,29 @@ pub fn register_agents(askit: &ASKit) {
         ]),
     );
 
-    // askit.register_agent(
-    //     AgentDefinition::new(
-    //         AGENT_KIND,
-    //         "ollama_embeddings",
-    //         Some(new_agent_boxed::<OpenAIEmbeddingsAgent>),
-    //     )
-    //     // .use_native_thread()
-    //     .with_title("OpenAI Embeddings")
-    //     .with_category(CATEGORY)
-    //     .with_inputs(vec![PORT_INPUT])
-    //     .with_outputs(vec![PORT_EMBEDDINGS])
-    //     .with_default_config(vec![
-    //         (
-    //             CONFIG_MODEL.into(),
-    //             AgentConfigEntry::new(AgentValue::string(DEFAULT_CONFIG_MODEL), "string")
-    //                 .with_title("Model"),
-    //         ),
-    //         (
-    //             CONFIG_OPTIONS.into(),
-    //             AgentConfigEntry::new(AgentValue::string("{}"), "text").with_title("Options"),
-    //         ),
-    //     ]),
-    // );
+    askit.register_agent(
+        AgentDefinition::new(
+            AGENT_KIND,
+            "openai_embeddings",
+            Some(new_agent_boxed::<OpenAIEmbeddingsAgent>),
+        )
+        // .use_native_thread()
+        .with_title("OpenAI Embeddings")
+        .with_category(CATEGORY)
+        .with_inputs(vec![PORT_INPUT])
+        .with_outputs(vec![PORT_EMBEDDINGS])
+        .with_default_config(vec![
+            (
+                CONFIG_MODEL.into(),
+                AgentConfigEntry::new(AgentValue::string("text-embedding-3-small"), "string")
+                    .with_title("Model"),
+            ),
+            (
+                CONFIG_OPTIONS.into(),
+                AgentConfigEntry::new(AgentValue::string("{}"), "text").with_title("Options"),
+            ),
+        ]),
+    );
 }
 
 impl From<ChatCompletionResponseMessage> for Message {
