@@ -11,6 +11,7 @@ use ollama_rs::{
     models::ModelOptions,
 };
 use sakura_ai_rs::SakuraAI;
+use tokio_stream::StreamExt;
 
 use crate::message::{Message, MessageHistory};
 
@@ -53,7 +54,7 @@ impl SakuraAIManager {
 pub struct SakuraAIChatAgent {
     data: AsAgentData,
     manager: SakuraAIManager,
-    history: MessageHistory,
+    history: Arc<Mutex<MessageHistory>>,
 }
 
 #[async_trait]
@@ -67,7 +68,7 @@ impl AsAgent for SakuraAIChatAgent {
         Ok(Self {
             data: AsAgentData::new(askit, id, def_name, config),
             manager: SakuraAIManager::new(),
-            history: MessageHistory::default(),
+            history: Arc::new(Mutex::new(MessageHistory::default())),
         })
     }
 
@@ -82,7 +83,8 @@ impl AsAgent for SakuraAIChatAgent {
     fn set_config(&mut self, config: AgentConfig) -> Result<(), AgentError> {
         let history_size = config.get_integer_or_default(CONFIG_HISTORY);
         if history_size != self.config()?.get_integer_or_default(CONFIG_HISTORY) {
-            self.history = MessageHistory::new(self.history.messages.clone(), history_size);
+            let mut history_guard = self.history.lock().unwrap();
+            *history_guard = MessageHistory::new(history_guard.messages.clone(), history_size);
         }
         Ok(())
     }
@@ -116,23 +118,60 @@ impl AsAgent for SakuraAIChatAgent {
         }
 
         let history_size = self.config()?.get_integer_or_default(CONFIG_HISTORY);
-        let res = if history_size > 0 {
-            client
-                .send_chat_messages_with_history(&mut self.history, request)
-                .await
+        let use_stream = self.config()?.get_bool_or_default(CONFIG_STREAM);
+        if use_stream {
+            let mut stream = if history_size > 0 {
+                client
+                    .send_chat_messages_with_history_stream(self.history.clone(), request)
+                    .await
+            } else {
+                client.send_chat_messages_stream(request).await
+            }
+            .map_err(|e| AgentError::IoError(format!("Ollama Error: {}", e)))?;
+
+            let mut content = String::new();
+            while let Some(res) = stream.next().await {
+                let res = res.map_err(|_| AgentError::IoError(format!("Ollama Stream Error")))?;
+
+                content.push_str(&res.message.content);
+
+                let message = Message::assistant(content.clone());
+                self.try_output(ctx.clone(), PORT_MESSAGE, message.into())?;
+
+                let out_response = AgentData::from_serialize(&res)?;
+                self.try_output(ctx.clone(), PORT_RESPONSE, out_response)?;
+
+                if res.done {
+                    break;
+                }
+            }
+            if history_size > 0 {
+                let messages = self.history.lock().unwrap();
+                self.try_output(ctx.clone(), PORT_HISTORY, messages.clone().into())?;
+            }
         } else {
-            client.send_chat_messages(request).await
-        }
-        .map_err(|e| AgentError::IoError(format!("SakuraAI Error: {}", e)))?;
+            let res = if history_size > 0 {
+                let mut history = self.history.lock().unwrap().clone();
+                let res = client
+                    .send_chat_messages_with_history(&mut history, request)
+                    .await;
+                *self.history.lock().unwrap() = history;
+                res
+            } else {
+                client.send_chat_messages(request).await
+            }
+            .map_err(|e| AgentError::IoError(format!("Ollama Error: {}", e)))?;
 
-        let message: Message = res.message.clone().into();
-        self.try_output(ctx.clone(), PORT_MESSAGE, message.into())?;
+            let message: Message = res.message.clone().into();
+            self.try_output(ctx.clone(), PORT_MESSAGE, message.into())?;
 
-        let out_response = AgentData::from_serialize(&res)?;
-        self.try_output(ctx.clone(), PORT_RESPONSE, out_response)?;
+            let out_response = AgentData::from_serialize(&res)?;
+            self.try_output(ctx.clone(), PORT_RESPONSE, out_response)?;
 
-        if history_size > 0 {
-            self.try_output(ctx, PORT_HISTORY, self.history.clone().into())?;
+            if history_size > 0 {
+                let messages = self.history.lock().unwrap();
+                self.try_output(ctx, PORT_HISTORY, messages.clone().into())?;
+            }
         }
 
         Ok(())
@@ -148,6 +187,7 @@ static PORT_RESPONSE: &str = "response";
 
 static CONFIG_HISTORY: &str = "history";
 static CONFIG_SAKURA_AI_API_KEY: &str = "sakura_ai_api_key";
+static CONFIG_STREAM: &str = "stream";
 static CONFIG_MODEL: &str = "model";
 static CONFIG_OPTIONS: &str = "options";
 
@@ -178,6 +218,10 @@ pub fn register_agents(askit: &ASKit) {
             (
                 CONFIG_HISTORY.into(),
                 AgentConfigEntry::new(AgentValue::integer(0), "integer").with_title("History Size"),
+            ),
+            (
+                CONFIG_STREAM.into(),
+                AgentConfigEntry::new(AgentValue::boolean(false), "boolean").with_title("Stream"),
             ),
             (
                 CONFIG_OPTIONS.into(),
