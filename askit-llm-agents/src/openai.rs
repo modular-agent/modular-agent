@@ -1,3 +1,5 @@
+#![cfg(feature = "openai")]
+
 use std::sync::{Arc, Mutex};
 use std::vec;
 

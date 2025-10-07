@@ -1,3 +1,5 @@
+#![cfg(feature = "ollama")]
+
 use std::sync::{Arc, Mutex};
 use std::vec;
 
