@@ -5,7 +5,6 @@ use agent_stream_kit::{
     ASKit, Agent, AgentConfig, AgentConfigEntry, AgentContext, AgentData, AgentDefinition,
     AgentError, AgentOutput, AgentValue, AsAgent, AsAgentData, async_trait, new_agent_boxed,
 };
-use async_openai::types::CreateEmbeddingRequest;
 use async_openai::{
     Client,
     config::OpenAIConfig,
@@ -14,10 +13,11 @@ use async_openai::{
         ChatCompletionRequestSystemMessageArgs, ChatCompletionRequestToolMessageArgs,
         ChatCompletionRequestUserMessageArgs, ChatCompletionResponseMessage,
         CreateChatCompletionRequest, CreateChatCompletionRequestArgs, CreateCompletionRequest,
-        CreateCompletionRequestArgs, CreateEmbeddingRequestArgs, Role,
+        CreateCompletionRequestArgs, CreateEmbeddingRequest, CreateEmbeddingRequestArgs, Role,
         responses::{self, CreateResponse, CreateResponseArgs, OutputContent, OutputMessage},
     },
 };
+use futures::StreamExt;
 
 use crate::message::{Message, MessageHistory};
 
@@ -191,9 +191,12 @@ impl AsAgent for OpenAIChatAgent {
         .map(|m| m.into())
         .collect::<Vec<ChatCompletionRequestMessage>>();
 
+        let use_stream = self.config()?.get_bool_or_default(CONFIG_STREAM);
+
         let mut request = CreateChatCompletionRequestArgs::default()
             .model(config_model)
             .messages(messages)
+            .stream(use_stream)
             .build()
             .map_err(|e| AgentError::InvalidValue(format!("Failed to build request: {}", e)))?;
 
@@ -218,22 +221,56 @@ impl AsAgent for OpenAIChatAgent {
         }
 
         let client = self.manager.get_client(self.askit())?;
-        let res = client
-            .chat()
-            .create(request)
-            .await
-            .map_err(|e| AgentError::IoError(format!("OpenAI Error: {}", e)))?;
 
-        let res_message: Message = res.choices[0].message.clone().into();
-        self.try_output(ctx.clone(), PORT_MESSAGE, res_message.clone().into())?;
+        if use_stream {
+            let mut stream = client
+                .chat()
+                .create_stream(request)
+                .await
+                .map_err(|e| AgentError::IoError(format!("OpenAI Stream Error: {}", e)))?;
+            let mut content = String::new();
+            while let Some(res) = stream.next().await {
+                let res = res.map_err(|_| AgentError::IoError(format!("OpenAI Stream Error")))?;
+                res.choices.iter().for_each(|c| {
+                    if let Some(ref delta_content) = c.delta.content {
+                        content.push_str(delta_content);
+                    }
+                });
 
-        let out_response = AgentData::from_serialize(&res)?;
-        self.try_output(ctx.clone(), PORT_RESPONSE, out_response)?;
+                let message = Message::assistant(content.clone());
+                self.try_output(ctx.clone(), PORT_MESSAGE, message.into())?;
 
-        let history_size = self.config()?.get_integer_or_default(CONFIG_HISTORY);
-        if history_size > 0 {
-            self.history.push(res_message.into());
-            self.try_output(ctx, PORT_HISTORY, self.history.clone().into())?;
+                let out_response = AgentData::from_serialize(&res)?;
+                self.try_output(ctx.clone(), PORT_RESPONSE, out_response)?;
+            }
+            if history_size > 0 {
+                self.history.push(Message::assistant(content));
+                self.try_output(ctx, PORT_HISTORY, self.history.clone().into())?;
+            }
+        } else {
+            let res = client
+                .chat()
+                .create(request)
+                .await
+                .map_err(|e| AgentError::IoError(format!("OpenAI Error: {}", e)))?;
+
+            let mut content = String::new();
+            res.choices.iter().for_each(|c| {
+                if let Some(ref c) = c.message.content {
+                    content.push_str(c);
+                }
+            });
+
+            let res_message = Message::assistant(content);
+            self.try_output(ctx.clone(), PORT_MESSAGE, res_message.clone().into())?;
+
+            let out_response = AgentData::from_serialize(&res)?;
+            self.try_output(ctx.clone(), PORT_RESPONSE, out_response)?;
+
+            if history_size > 0 {
+                self.history.push(res_message.into());
+                self.try_output(ctx, PORT_HISTORY, self.history.clone().into())?;
+            }
         }
 
         Ok(())
@@ -363,6 +400,7 @@ impl AsAgent for OpenAIResponsesAgent {
 
         let history_size = self.config()?.get_integer_or_default(CONFIG_HISTORY);
         let input = if history_size > 0 {
+            self.history.push(Message::user(message.to_string()));
             let items = self
                 .history
                 .messages
@@ -374,9 +412,12 @@ impl AsAgent for OpenAIResponsesAgent {
             message.into()
         };
 
+        let use_stream = self.config()?.get_bool_or_default(CONFIG_STREAM);
+
         let mut request = CreateResponseArgs::default()
             .model(config_model)
             .input(input)
+            .stream(use_stream)
             .build()
             .map_err(|e| AgentError::InvalidValue(format!("Failed to build request: {}", e)))?;
 
@@ -401,22 +442,56 @@ impl AsAgent for OpenAIResponsesAgent {
         }
 
         let client = self.manager.get_client(self.askit())?;
-        let res = client
-            .responses()
-            .create(request)
-            .await
-            .map_err(|e| AgentError::IoError(format!("OpenAI Error: {}", e)))?;
 
-        let res_message: Message = Message::assistant(get_output_text(&res)); // TODO: better conversion
-        self.try_output(ctx.clone(), PORT_MESSAGE, res_message.clone().into())?;
+        if use_stream {
+            let mut stream = client
+                .responses()
+                .create_stream(request)
+                .await
+                .map_err(|e| AgentError::IoError(format!("OpenAI Stream Error: {}", e)))?;
+            let mut content = String::new();
+            while let Some(res) = stream.next().await {
+                let res_event =
+                    res.map_err(|e| AgentError::IoError(format!("OpenAI Stream Error: {}", e)))?;
+                match &res_event {
+                    responses::ResponseEvent::ResponseOutputTextDelta(delta) => {
+                        content.push_str(&delta.delta);
+                    }
+                    responses::ResponseEvent::ResponseCompleted(_) => {
+                        let out_response = AgentData::from_serialize(&res_event)?;
+                        self.try_output(ctx.clone(), PORT_RESPONSE, out_response)?;
+                        break;
+                    }
+                    _ => {}
+                }
 
-        let out_response = AgentData::from_serialize(&res)?;
-        self.try_output(ctx.clone(), PORT_RESPONSE, out_response)?;
+                let message = Message::assistant(content.clone());
+                self.try_output(ctx.clone(), PORT_MESSAGE, message.into())?;
 
-        let history_size = self.config()?.get_integer_or_default(CONFIG_HISTORY);
-        if history_size > 0 {
-            self.history.push(res_message.into());
-            self.try_output(ctx, PORT_HISTORY, self.history.clone().into())?;
+                let out_response = AgentData::from_serialize(&res_event)?;
+                self.try_output(ctx.clone(), PORT_RESPONSE, out_response)?;
+            }
+            if history_size > 0 {
+                self.history.push(Message::assistant(content));
+                self.try_output(ctx, PORT_HISTORY, self.history.clone().into())?;
+            }
+        } else {
+            let res = client
+                .responses()
+                .create(request)
+                .await
+                .map_err(|e| AgentError::IoError(format!("OpenAI Error: {}", e)))?;
+
+            let res_message: Message = Message::assistant(get_output_text(&res)); // TODO: better conversion
+            self.try_output(ctx.clone(), PORT_MESSAGE, res_message.clone().into())?;
+
+            let out_response = AgentData::from_serialize(&res)?;
+            self.try_output(ctx.clone(), PORT_RESPONSE, out_response)?;
+
+            if history_size > 0 {
+                self.history.push(res_message.into());
+                self.try_output(ctx, PORT_HISTORY, self.history.clone().into())?;
+            }
         }
 
         Ok(())
@@ -424,17 +499,17 @@ impl AsAgent for OpenAIResponsesAgent {
 }
 
 fn get_output_text(response: &responses::Response) -> String {
-    let mut output_text: Vec<String> = vec![];
+    let mut output_text = String::new();
     response.output.iter().for_each(|msg| {
         if let responses::OutputContent::Message(m) = msg {
             m.content.iter().for_each(|c| {
                 if let responses::Content::OutputText(t) = c {
-                    output_text.push(t.text.clone());
+                    output_text.push_str(&t.text);
                 }
             });
         }
     });
-    output_text.join(" ")
+    output_text
 }
 
 impl From<ChatCompletionResponseMessage> for Message {
@@ -549,6 +624,7 @@ static PORT_RESPONSE: &str = "response";
 static CONFIG_MODEL: &str = "model";
 static CONFIG_OPENAI_API_KEY: &str = "openai_api_key";
 static CONFIG_OPTIONS: &str = "options";
+static CONFIG_STREAM: &str = "stream";
 static CONFIG_HISTORY: &str = "history";
 
 const DEFAULT_CONFIG_MODEL: &str = "gpt-5-nano";
@@ -602,6 +678,10 @@ pub fn register_agents(askit: &ASKit) {
             (
                 CONFIG_HISTORY.into(),
                 AgentConfigEntry::new(AgentValue::integer(0), "integer").with_title("History Size"),
+            ),
+            (
+                CONFIG_STREAM.into(),
+                AgentConfigEntry::new(AgentValue::boolean(false), "boolean").with_title("Stream"),
             ),
             (
                 CONFIG_OPTIONS.into(),
@@ -658,6 +738,10 @@ pub fn register_agents(askit: &ASKit) {
             (
                 CONFIG_HISTORY.into(),
                 AgentConfigEntry::new(AgentValue::integer(0), "integer").with_title("History Size"),
+            ),
+            (
+                CONFIG_STREAM.into(),
+                AgentConfigEntry::new(AgentValue::boolean(false), "boolean").with_title("Stream"),
             ),
             (
                 CONFIG_OPTIONS.into(),

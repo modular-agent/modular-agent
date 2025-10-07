@@ -115,6 +115,7 @@ version = "0.2.4"
 dependencies = [
  "agent-stream-kit",
  "async-openai",
+ "futures",
  "ollama-rs",
  "sakura-ai-rs",
  "serde",
