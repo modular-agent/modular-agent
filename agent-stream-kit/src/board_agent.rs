@@ -5,7 +5,7 @@ use super::agent::{Agent, AsAgent, AsAgentData, new_agent_boxed};
 use super::askit::ASKit;
 use super::config::AgentConfig;
 use super::context::AgentContext;
-use super::data::{AgentData, AgentValue};
+use super::data::AgentData;
 use super::definition::{AgentConfigEntry, AgentDefinition};
 use super::error::AgentError;
 
@@ -164,8 +164,8 @@ pub fn register_agents(askit: &ASKit) {
         .with_category("Core")
         .with_inputs(vec!["*"])
         .with_default_config(vec![(
-            CONFIG_BOARD_NAME.into(),
-            AgentConfigEntry::new(AgentValue::string(""), "string")
+            CONFIG_BOARD_NAME,
+            AgentConfigEntry::new("", "string")
                 .with_title("Board Name")
                 .with_description("* = source kind"),
         )]),
@@ -182,8 +182,8 @@ pub fn register_agents(askit: &ASKit) {
         .with_category("Core")
         .with_outputs(vec!["*"])
         .with_default_config(vec![(
-            CONFIG_BOARD_NAME.into(),
-            AgentConfigEntry::new(AgentValue::string(""), "string").with_title("Board Name"),
+            CONFIG_BOARD_NAME,
+            AgentConfigEntry::new("", "string").with_title("Board Name"),
         )]),
     );
 }

@@ -3,8 +3,7 @@ use std::vec;
 
 use agent_stream_kit::{
     ASKit, Agent, AgentConfig, AgentConfigEntry, AgentContext, AgentData, AgentDefinition,
-    AgentError, AgentOutput, AgentValue, AsAgent, AsAgentData, async_trait,
-    new_agent_boxed,
+    AgentError, AgentOutput, AgentValue, AsAgent, AsAgentData, async_trait, new_agent_boxed,
 };
 use rig::client::CompletionClient;
 use rig::completion::CompletionRequestBuilder;
@@ -116,13 +115,16 @@ impl AsAgent for RigOpenAIAgent {
                         "missing content text in a response".to_string(),
                     ));
                 };
-                let msg_value = AgentValue::object([
-                    ("role".to_string(), AgentValue::string(role.to_string())),
-                    (
-                        "content".to_string(),
-                        AgentValue::string(content.to_string()),
-                    ),
-                ].into());
+                let msg_value = AgentValue::object(
+                    [
+                        ("role".to_string(), AgentValue::string(role.to_string())),
+                        (
+                            "content".to_string(),
+                            AgentValue::string(content.to_string()),
+                        ),
+                    ]
+                    .into(),
+                );
                 out_messages.push(msg_value);
             }
 
@@ -186,9 +188,8 @@ pub fn register_agents(askit: &ASKit) {
         .with_inputs(vec![PORT_MESSAGE])
         .with_outputs(vec![PORT_MESSAGE, PORT_RESPONSE])
         .with_default_config(vec![(
-            CONFIG_MODEL.into(),
-            AgentConfigEntry::new(AgentValue::string(DEFAULT_CONFIG_MODEL), "string")
-                .with_title("Chat Model"),
+            CONFIG_MODEL,
+            AgentConfigEntry::new(DEFAULT_CONFIG_MODEL, "string").with_title("Chat Model"),
         )]),
     );
 }

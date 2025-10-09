@@ -75,7 +75,7 @@ pub fn register_agents(askit: &ASKit) {
         .with_inputs(vec![PORT_IN, PORT_RESET])
         .with_outputs(vec![PORT_COUNT])
         .with_display_config(vec![(
-            DISPLAY_COUNT.into(),
+            DISPLAY_COUNT,
             AgentDisplayConfigEntry::new("integer").with_hide_title(),
         )]),
     );

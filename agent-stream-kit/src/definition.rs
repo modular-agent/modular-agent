@@ -141,19 +141,19 @@ impl AgentDefinition {
         self
     }
 
-    pub fn with_default_config(mut self, config: AgentDefaultConfig) -> Self {
-        self.default_config = Some(config);
+    pub fn with_default_config(mut self, config: Vec<(&str, AgentConfigEntry)>) -> Self {
+        self.default_config = Some(config.into_iter().map(|(k, v)| (k.into(), v)).collect());
         self
     }
 
     #[allow(unused)]
-    pub fn with_global_config(mut self, config: AgentGlobalConfig) -> Self {
-        self.global_config = Some(config);
+    pub fn with_global_config(mut self, config: Vec<(&str, AgentConfigEntry)>) -> Self {
+        self.global_config = Some(config.into_iter().map(|(k, v)| (k.into(), v)).collect());
         self
     }
 
-    pub fn with_display_config(mut self, config: AgentDisplayConfig) -> Self {
-        self.display_config = Some(config);
+    pub fn with_display_config(mut self, config: Vec<(&str, AgentDisplayConfigEntry)>) -> Self {
+        self.display_config = Some(config.into_iter().map(|(k, v)| (k.into(), v)).collect());
         self
     }
 
@@ -164,9 +164,9 @@ impl AgentDefinition {
 }
 
 impl AgentConfigEntry {
-    pub fn new(value: AgentValue, type_: &str) -> Self {
+    pub fn new<V: Into<AgentValue>>(value: V, type_: &str) -> Self {
         Self {
-            value,
+            value: value.into(),
             type_: Some(type_.into()),
             ..Default::default()
         }
@@ -333,13 +333,13 @@ mod tests {
         .with_outputs(vec!["out"])
         .with_display_config(vec![
             (
-                "value".into(),
+                "value",
                 AgentDisplayConfigEntry::new("string")
                     .with_title("display_title")
                     .with_description("display_description"),
             ),
             (
-                "hide_title_value".into(),
+                "hide_title_value",
                 AgentDisplayConfigEntry::new("integer").with_hide_title(),
             ),
         ])

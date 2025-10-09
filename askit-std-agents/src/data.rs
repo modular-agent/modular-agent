@@ -206,9 +206,6 @@ pub fn register_agents(askit: &ASKit) {
         .with_category(CATEGORY)
         .with_inputs(vec![PORT_DATA])
         .with_outputs(vec![PORT_DATA])
-        .with_default_config(vec![(
-            CONFIG_PROPERTY.into(),
-            AgentConfigEntry::new(AgentValue::string(""), "string"),
-        )]),
+        .with_default_config(vec![(CONFIG_PROPERTY, AgentConfigEntry::new("", "string"))]),
     );
 }

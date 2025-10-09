@@ -803,6 +803,48 @@ impl<'de> Deserialize<'de> for AgentValue {
     }
 }
 
+impl From<()> for AgentValue {
+    fn from(_: ()) -> Self {
+        AgentValue::unit()
+    }
+}
+
+impl From<bool> for AgentValue {
+    fn from(value: bool) -> Self {
+        AgentValue::boolean(value)
+    }
+}
+
+impl From<i32> for AgentValue {
+    fn from(value: i32) -> Self {
+        AgentValue::integer(value as i64)
+    }
+}
+
+impl From<i64> for AgentValue {
+    fn from(value: i64) -> Self {
+        AgentValue::integer(value)
+    }
+}
+
+impl From<f64> for AgentValue {
+    fn from(value: f64) -> Self {
+        AgentValue::number(value)
+    }
+}
+
+impl From<String> for AgentValue {
+    fn from(value: String) -> Self {
+        AgentValue::string(value)
+    }
+}
+
+impl From<&str> for AgentValue {
+    fn from(value: &str) -> Self {
+        AgentValue::string(value)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

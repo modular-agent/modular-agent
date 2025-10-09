@@ -694,8 +694,8 @@ pub fn register_agents(askit: &ASKit) {
         .with_inputs(vec![PORT_MESSAGE, PORT_RESET])
         .with_outputs(vec![PORT_MESSAGE, PORT_MEMORY])
         .with_default_config(vec![(
-            CONFIG_N.into(),
-            AgentConfigEntry::new(AgentValue::integer(DEFAULT_CONFIG_N), "integer")
+            CONFIG_N,
+            AgentConfigEntry::new(DEFAULT_CONFIG_N, "integer")
                 .with_title("Memory Size")
                 .with_description("-1 = unlimited"),
         )]),
@@ -712,10 +712,7 @@ pub fn register_agents(askit: &ASKit) {
         .with_category(CATEGORY)
         .with_inputs(vec![PORT_MESSAGE])
         .with_outputs(vec![PORT_MESSAGE])
-        .with_default_config(vec![(
-            CONFIG_TEXT.into(),
-            AgentConfigEntry::new(AgentValue::string(""), "text"),
-        )]),
+        .with_default_config(vec![(CONFIG_TEXT, AgentConfigEntry::new("", "text"))]),
     );
 
     askit.register_agent(
@@ -729,9 +726,6 @@ pub fn register_agents(askit: &ASKit) {
         .with_category(CATEGORY)
         .with_inputs(vec![PORT_IMAGE])
         .with_outputs(vec![PORT_MESSAGE])
-        .with_default_config(vec![(
-            CONFIG_TEXT.into(),
-            AgentConfigEntry::new(AgentValue::string(""), "text"),
-        )]),
+        .with_default_config(vec![(CONFIG_TEXT, AgentConfigEntry::new("", "text"))]),
     );
 }

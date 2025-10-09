@@ -2,8 +2,7 @@ use std::vec;
 
 use agent_stream_kit::{
     ASKit, AgentConfig, AgentContext, AgentData, AgentDefinition, AgentDisplayConfigEntry,
-    AgentError, AgentOutput, AgentValue, AsAgent, AsAgentData, async_trait,
-    new_agent_boxed,
+    AgentError, AgentOutput, AgentValue, AsAgent, AsAgentData, async_trait, new_agent_boxed,
 };
 
 // Display Data
@@ -69,17 +68,18 @@ impl AsAgent for DebugDataAgent {
     }
 
     async fn process(&mut self, ctx: AgentContext, data: AgentData) -> Result<(), AgentError> {
-        let value = AgentValue::object([
-            ("kind".to_string(), AgentValue::string(data.kind)),
-            ("value".to_string(), data.value),
-        ].into());
+        let value = AgentValue::object(
+            [
+                ("kind".to_string(), data.kind.into()),
+                ("value".to_string(), data.value),
+            ]
+            .into(),
+        );
         let ctx_json =
             serde_json::to_value(&ctx).map_err(|e| AgentError::InvalidValue(e.to_string()))?;
         let ctx = AgentValue::from_json(ctx_json)?;
-        let debug_data = AgentData::object([
-            ("ctx".to_string(), ctx),
-            ("data".to_string(), value),
-        ].into());
+        let debug_data =
+            AgentData::object([("ctx".to_string(), ctx), ("data".to_string(), value)].into());
         self.emit_display(DISPLAY_DATA, debug_data);
         Ok(())
     }
@@ -102,7 +102,7 @@ pub fn register_agents(askit: &ASKit) {
         .with_category(CATEGORY)
         .with_inputs(vec!["data"])
         .with_display_config(vec![(
-            DISPLAY_DATA.into(),
+            DISPLAY_DATA,
             AgentDisplayConfigEntry::new("*").with_hide_title(),
         )]),
     );
@@ -118,7 +118,7 @@ pub fn register_agents(askit: &ASKit) {
         .with_category(CATEGORY)
         .with_inputs(vec!["*"])
         .with_display_config(vec![(
-            DISPLAY_DATA.into(),
+            DISPLAY_DATA,
             AgentDisplayConfigEntry::new("object").with_hide_title(),
         )]),
     );

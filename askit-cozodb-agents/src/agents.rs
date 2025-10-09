@@ -4,7 +4,7 @@ use std::vec;
 
 use agent_stream_kit::{
     ASKit, Agent, AgentConfig, AgentConfigEntry, AgentContext, AgentData, AgentDefinition,
-    AgentError, AgentOutput, AgentValue, AsAgent, AsAgentData, async_trait, new_agent_boxed,
+    AgentError, AgentOutput, AsAgent, AsAgentData, async_trait, new_agent_boxed,
 };
 use cozo::DbInstance;
 
@@ -105,12 +105,12 @@ pub fn register_agents(askit: &ASKit) {
         .with_outputs(vec![PORT_RESULT])
         .with_default_config(vec![
             (
-                CONFIG_DB.into(),
-                AgentConfigEntry::new(AgentValue::string(""), "string").with_title("Database"),
+                CONFIG_DB,
+                AgentConfigEntry::new("", "string").with_title("Database"),
             ),
             (
-                CONFIG_SCRIPT.into(),
-                AgentConfigEntry::new(AgentValue::string(""), "text").with_title("Script"),
+                CONFIG_SCRIPT,
+                AgentConfigEntry::new("", "text").with_title("Script"),
             ),
         ]),
     );

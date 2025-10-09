@@ -5,8 +5,7 @@ use std::vec;
 
 use agent_stream_kit::{
     ASKit, Agent, AgentConfig, AgentConfigEntry, AgentContext, AgentData, AgentDefinition,
-    AgentError, AgentOutput, AgentStatus, AgentValue, AsAgent, AsAgentData, async_trait,
-    new_agent_boxed,
+    AgentError, AgentOutput, AgentStatus, AsAgent, AsAgentData, async_trait, new_agent_boxed,
 };
 use chrono::{DateTime, Local, Utc};
 use cron::Schedule;
@@ -622,13 +621,12 @@ pub fn register_agents(askit: &ASKit) {
             .with_outputs(vec!["*"])
             .with_default_config(vec![
                 (
-                    CONFIG_DELAY.into(),
-                    AgentConfigEntry::new(AgentValue::integer(DELAY_MS_DEFAULT), "integer")
-                        .with_title("delay (ms)"),
+                    CONFIG_DELAY,
+                    AgentConfigEntry::new(DELAY_MS_DEFAULT, "integer").with_title("delay (ms)"),
                 ),
                 (
-                    CONFIG_MAX_NUM_DATA.into(),
-                    AgentConfigEntry::new(AgentValue::integer(MAX_NUM_DATA_DEFAULT), "integer")
+                    CONFIG_MAX_NUM_DATA,
+                    AgentConfigEntry::new(MAX_NUM_DATA_DEFAULT, "integer")
                         .with_title("max num data"),
                 ),
             ]),
@@ -646,8 +644,8 @@ pub fn register_agents(askit: &ASKit) {
         .with_category(CATEGORY)
         .with_outputs(vec![PORT_UNIT])
         .with_default_config(vec![(
-            CONFIG_INTERVAL.into(),
-            AgentConfigEntry::new(AgentValue::string(INTERVAL_DEFAULT), "string")
+            CONFIG_INTERVAL,
+            AgentConfigEntry::new(INTERVAL_DEFAULT, "string")
                 .with_description("(ex. 10s, 5m, 100ms, 1h, 1d)"),
         )]),
     );
@@ -663,9 +661,8 @@ pub fn register_agents(askit: &ASKit) {
         .with_category(CATEGORY)
         .with_outputs(vec![PORT_UNIT])
         .with_default_config(vec![(
-            CONFIG_DELAY.into(),
-            AgentConfigEntry::new(AgentValue::integer(DELAY_MS_DEFAULT), "integer")
-                .with_title("delay (ms)"),
+            CONFIG_DELAY,
+            AgentConfigEntry::new(DELAY_MS_DEFAULT, "integer").with_title("delay (ms)"),
         )]),
     );
 
@@ -680,8 +677,8 @@ pub fn register_agents(askit: &ASKit) {
         .with_category(CATEGORY)
         .with_outputs(vec![PORT_TIME])
         .with_default_config(vec![(
-            CONFIG_SCHEDULE.into(),
-            AgentConfigEntry::new(AgentValue::string("0 0 * * * *"), "string")
+            CONFIG_SCHEDULE,
+            AgentConfigEntry::new("0 0 * * * *", "string")
                 .with_description("sec min hour day month week year"),
         )]),
     );
@@ -699,13 +696,13 @@ pub fn register_agents(askit: &ASKit) {
         .with_outputs(vec!["*"])
         .with_default_config(vec![
             (
-                CONFIG_TIME.into(),
-                AgentConfigEntry::new(AgentValue::string(TIME_DEFAULT), "string")
+                CONFIG_TIME,
+                AgentConfigEntry::new(TIME_DEFAULT, "string")
                     .with_description("(ex. 10s, 5m, 100ms, 1h, 1d)"),
             ),
             (
-                CONFIG_MAX_NUM_DATA.into(),
-                AgentConfigEntry::new(AgentValue::integer(0), "integer")
+                CONFIG_MAX_NUM_DATA,
+                AgentConfigEntry::new(0, "integer")
                     .with_title("max num data")
                     .with_description("0: no data, -1: all data"),
             ),

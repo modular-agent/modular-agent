@@ -2,8 +2,8 @@ use std::fs;
 use std::path::Path;
 
 use agent_stream_kit::{
-    ASKit, AgentConfig, AgentContext, AgentData, AgentDefinition, AgentError, AgentOutput,
-    AgentValue, AsAgent, AsAgentData, async_trait, new_agent_boxed,
+    ASKit, AgentConfig, AgentContext, AgentData, AgentDefinition, AgentError, AgentOutput, AsAgent,
+    AsAgentData, async_trait, new_agent_boxed,
 };
 
 // List Files Agent
@@ -66,7 +66,7 @@ impl AsAgent for ListFilesAgent {
                 AgentError::InvalidValue(format!("Failed to read directory entry: {}", e))
             })?;
             let file_name = entry.file_name().to_string_lossy().to_string();
-            files.push(AgentValue::string(file_name));
+            files.push(file_name.into());
         }
 
         let out_data = AgentData::array("string", files);

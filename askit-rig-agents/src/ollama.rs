@@ -174,12 +174,12 @@ pub fn register_agents(askit: &ASKit) {
         .with_inputs(vec![PORT_MESSAGE])
         .with_outputs(vec![PORT_MESSAGE, PORT_RESPONSE])
         // .with_global_config(vec![(
-        //     CONFIG_OLLAMA_URL.into(),
+        //     CONFIG_OLLAMA_URL,
         //     AgentConfigEntry::new(AgentValue::new_string(DEFAULT_OLLAMA_URL), "string")
         //         .with_title("Ollama URL"),
         // )])
         .with_default_config(vec![(
-            CONFIG_MODEL.into(),
+            CONFIG_MODEL,
             AgentConfigEntry::new(AgentValue::string(DEFAULT_CONFIG_MODEL), "string")
                 .with_title("Chat Model"),
         )]),

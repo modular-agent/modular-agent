@@ -5,7 +5,7 @@ use std::vec;
 
 use agent_stream_kit::{
     ASKit, Agent, AgentConfig, AgentConfigEntry, AgentContext, AgentData, AgentDefinition,
-    AgentError, AgentOutput, AgentValue, AsAgent, AsAgentData, async_trait, new_agent_boxed,
+    AgentError, AgentOutput, AsAgent, AsAgentData, async_trait, new_agent_boxed,
 };
 
 use ollama_rs::{
@@ -208,26 +208,25 @@ pub fn register_agents(askit: &ASKit) {
         .with_inputs(vec![PORT_MESSAGE])
         .with_outputs(vec![PORT_MESSAGE, PORT_RESPONSE, PORT_HISTORY])
         .with_global_config(vec![(
-            CONFIG_SAKURA_AI_API_KEY.into(),
-            AgentConfigEntry::new(AgentValue::string(""), "string").with_title("Sakura AI API Key"),
+            CONFIG_SAKURA_AI_API_KEY,
+            AgentConfigEntry::new("", "string").with_title("Sakura AI API Key"),
         )])
         .with_default_config(vec![
             (
-                CONFIG_MODEL.into(),
-                AgentConfigEntry::new(AgentValue::string(DEFAULT_CONFIG_MODEL), "string")
-                    .with_title("Model"),
+                CONFIG_MODEL,
+                AgentConfigEntry::new(DEFAULT_CONFIG_MODEL, "string").with_title("Model"),
             ),
             (
-                CONFIG_HISTORY.into(),
-                AgentConfigEntry::new(AgentValue::integer(0), "integer").with_title("History Size"),
+                CONFIG_HISTORY,
+                AgentConfigEntry::new(0, "integer").with_title("History Size"),
             ),
             (
-                CONFIG_STREAM.into(),
-                AgentConfigEntry::new(AgentValue::boolean(false), "boolean").with_title("Stream"),
+                CONFIG_STREAM,
+                AgentConfigEntry::new(false, "boolean").with_title("Stream"),
             ),
             (
-                CONFIG_OPTIONS.into(),
-                AgentConfigEntry::new(AgentValue::string("{}"), "text").with_title("Options"),
+                CONFIG_OPTIONS,
+                AgentConfigEntry::new("{}", "text").with_title("Options"),
             ),
         ]),
     );

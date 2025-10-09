@@ -1,6 +1,6 @@
 use agent_stream_kit::{
     ASKit, Agent, AgentConfig, AgentConfigEntry, AgentContext, AgentData, AgentDefinition,
-    AgentError, AgentOutput, AgentValue, AsAgent, AsAgentData, async_trait, new_agent_boxed,
+    AgentError, AgentOutput, AsAgent, AsAgentData, async_trait, new_agent_boxed,
 };
 use handlebars::Handlebars;
 
@@ -186,7 +186,7 @@ impl AsAgent for TemplateStringAgent {
                 let rendered_string = reg.render_template(&template, &d).map_err(|e| {
                     AgentError::InvalidValue(format!("Failed to render template: {}", e))
                 })?;
-                out_arr.push(AgentValue::string(rendered_string));
+                out_arr.push(rendered_string.into());
             }
             self.try_output(ctx, PORT_STRING, AgentData::array("string", out_arr))
         } else {
@@ -249,7 +249,7 @@ impl AsAgent for TemplateTextAgent {
                 let rendered_string = reg.render_template(&template, &d).map_err(|e| {
                     AgentError::InvalidValue(format!("Failed to render template: {}", e))
                 })?;
-                out_arr.push(AgentValue::string(rendered_string));
+                out_arr.push(rendered_string.into());
             }
             self.try_output(ctx, PORT_TEXT, AgentData::array("text", out_arr))
         } else {
@@ -338,10 +338,7 @@ pub fn register_agents(askit: &ASKit) {
         .with_category(CATEGORY)
         .with_inputs(vec![PORT_TEXTS])
         .with_outputs(vec![PORT_TEXT])
-        .with_default_config(vec![(
-            CONFIG_SEP.into(),
-            AgentConfigEntry::new(AgentValue::string("\\n"), "string"),
-        )]),
+        .with_default_config(vec![(CONFIG_SEP, AgentConfigEntry::new("\\n", "string"))]),
     );
 
     askit.register_agent(
@@ -354,10 +351,7 @@ pub fn register_agents(askit: &ASKit) {
         .with_category(CATEGORY)
         .with_inputs(vec![PORT_STRINGS])
         .with_outputs(vec![PORT_STRING])
-        .with_default_config(vec![(
-            CONFIG_SEP.into(),
-            AgentConfigEntry::new(AgentValue::string("\\n"), "string"),
-        )]),
+        .with_default_config(vec![(CONFIG_SEP, AgentConfigEntry::new("\\n", "string"))]),
     );
 
     askit.register_agent(
@@ -371,8 +365,8 @@ pub fn register_agents(askit: &ASKit) {
         .with_inputs(vec![PORT_DATA])
         .with_outputs(vec![PORT_TEXT])
         .with_default_config(vec![(
-            CONFIG_TEMPLATE.into(),
-            AgentConfigEntry::new(AgentValue::string("{{value}}"), "text"),
+            CONFIG_TEMPLATE,
+            AgentConfigEntry::new("{{value}}", "text"),
         )]),
     );
 
@@ -387,8 +381,8 @@ pub fn register_agents(askit: &ASKit) {
         .with_inputs(vec![PORT_DATA])
         .with_outputs(vec![PORT_STRING])
         .with_default_config(vec![(
-            CONFIG_TEMPLATE.into(),
-            AgentConfigEntry::new(AgentValue::string("{{value}}"), "string"),
+            CONFIG_TEMPLATE,
+            AgentConfigEntry::new("{{value}}", "string"),
         )]),
     );
 
@@ -403,8 +397,8 @@ pub fn register_agents(askit: &ASKit) {
         .with_inputs(vec![PORT_DATA])
         .with_outputs(vec![PORT_TEXT])
         .with_default_config(vec![(
-            CONFIG_TEMPLATE.into(),
-            AgentConfigEntry::new(AgentValue::string("{{value}}"), "text"),
+            CONFIG_TEMPLATE,
+            AgentConfigEntry::new("{{value}}", "text"),
         )]),
     );
 }
