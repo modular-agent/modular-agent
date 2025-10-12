@@ -13,13 +13,14 @@ impl<R: Runtime> ASKitObserver for BoardObserver<R> {
             ASKitEvent::Board(name, data) => {
                 self.app
                     .emit(
-                        "plugin:askit|notify_board",
+                        "notify_board",
                         BoardMessage {
                             name: name.to_string(),
                             data: data.clone(),
                         },
-                    )
-                    .unwrap();
+                    ).unwrap_or_else(|e| {
+                        eprintln!("Failed to emit board event: {}", e);
+                    });
             }
             _ => {}
         }
