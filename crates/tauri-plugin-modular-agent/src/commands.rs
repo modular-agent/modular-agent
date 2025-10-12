@@ -1,13 +1,14 @@
-use tauri::{AppHandle, command, Runtime};
+use agent_stream_kit::AgentData;
+use tauri::{AppHandle, Runtime};
 
-use crate::models::*;
 use crate::Result;
-use crate::AskitExt;
+use crate::ASKitExt;
 
-#[command]
-pub(crate) async fn ping<R: Runtime>(
+#[tauri::command]
+pub(crate) fn write_board<R: Runtime>(
     app: AppHandle<R>,
-    payload: PingRequest,
-) -> Result<PingResponse> {
-    app.askit().ping(payload)
+    board: String,
+    message: String,
+) -> Result<()> {
+    app.askit().write_board_data(board, AgentData::string(message)).map_err(Into::into)
 }

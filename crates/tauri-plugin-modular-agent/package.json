@@ -1,7 +1,8 @@
 {
   "name": "tauri-plugin-askit-api",
   "version": "0.1.0",
-  "author": "You",
+  "license": "MIT OR Apache-2.0",
+  "author": "Akira Ishino",
   "description": "",
   "type": "module",
   "types": "./dist-js/index.d.ts",

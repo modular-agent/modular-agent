@@ -1,3 +1,4 @@
+use agent_stream_kit::{AgentData};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -10,4 +11,10 @@ pub struct PingRequest {
 #[serde(rename_all = "camelCase")]
 pub struct PingResponse {
   pub value: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct BoardMessage {
+  pub name: String,
+  pub data: AgentData,
 }

@@ -1,6 +1,6 @@
 <script>
   import Greet from './lib/Greet.svelte'
-  import { ping } from 'tauri-plugin-askit-api'
+  import { writeBoard } from 'tauri-plugin-askit-api'
 
 	let response = $state('')
 
@@ -8,8 +8,8 @@
 		response += `[${new Date().toLocaleTimeString()}] ` + (typeof returnValue === 'string' ? returnValue : JSON.stringify(returnValue)) + '<br>'
 	}
 
-	function _ping() {
-		ping("Pong!").then(updateResponse).catch(updateResponse)
+	function _writeBoard() {
+		writeBoard("user_message", "Hi!").then(updateResponse).catch(updateResponse)
 	}
 </script>
 
@@ -37,7 +37,7 @@
   </div>
 
   <div>
-    <button onclick="{_ping}">Ping</button>
+    <button onclick="{_writeBoard}">Ping</button>
     <div>{@html response}</div>
   </div>
 

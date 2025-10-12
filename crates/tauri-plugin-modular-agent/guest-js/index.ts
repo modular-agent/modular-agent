@@ -1,9 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
 
-export async function ping(value: string): Promise<string | null> {
-  return await invoke<{value?: string}>('plugin:askit|ping', {
-    payload: {
-      value,
-    },
-  }).then((r) => (r.value ? r.value : null));
+export async function writeBoard(board: string, message: string): Promise<void> {
+  await invoke<{value?: string}>('plugin:askit|write_board', { board, message })
 }
