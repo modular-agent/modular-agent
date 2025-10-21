@@ -10,7 +10,7 @@ license.workspace = true
 agent-stream-kit = { version = "0.7", path = "../agent-stream-kit" }
 async-openai = { version = "0.29.3", optional = true }
 futures = { version = "0.3.31", optional = true }
-ollama-rs = { version = "0.3.2", features = ["stream"], optional = true }
+ollama-rs = { version = "0.3.2", default-features = false, features = ["rustls", "stream"], optional = true }
 sakura-ai-rs = { version = "0.1.2", features = ["stream"], optional = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
