@@ -4,15 +4,20 @@ use tauri::{
   Manager, Runtime, RunEvent,
 };
 
+#[cfg(desktop)]
+mod desktop;
+#[cfg(mobile)]
+mod mobile;
+
 mod commands;
 mod error;
 mod models;
 mod observer;
 
-use observer::BoardObserver;
-
 pub use error::{Error, Result};
 pub use models::*;
+
+use observer::BoardObserver;
 
 /// Extensions to [`tauri::App`], [`tauri::AppHandle`] and [`tauri::Window`] to access the askit APIs.
 pub trait ASKitExt<R: Runtime> {
@@ -29,12 +34,15 @@ impl<R: Runtime, T: Manager<R>> crate::ASKitExt<R> for T {
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
   Builder::new("askit")
     .invoke_handler(tauri::generate_handler![commands::write_board])
-    .setup(|app, _api| {
-        let askit = ASKit::init().unwrap();
-          askit.subscribe(Box::new(BoardObserver {
-              app: app.clone(),
-          }));
-        app.manage(askit);
+    .setup(|app, api| {
+      #[cfg(mobile)]
+      let askit = mobile::init(app, api)?;
+      #[cfg(desktop)]
+      let askit = desktop::init(app, api)?;
+      askit.subscribe(Box::new(BoardObserver {
+          app: app.clone(),
+      }));
+      app.manage(askit);
       Ok(())
     })
     .on_event(|app, event| {
