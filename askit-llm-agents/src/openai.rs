@@ -668,7 +668,7 @@ pub fn register_agents(askit: &ASKit) {
         .with_outputs(vec![PORT_MESSAGE, PORT_RESPONSE, PORT_HISTORY])
         .with_global_config(vec![(
             CONFIG_OPENAI_API_KEY,
-            AgentConfigEntry::new("", "string").with_title("OpenAI API Key"),
+            AgentConfigEntry::new("", "password").with_title("OpenAI API Key"),
         )])
         .with_default_config(vec![
             (
@@ -724,10 +724,6 @@ pub fn register_agents(askit: &ASKit) {
         .with_category(CATEGORY)
         .with_inputs(vec![PORT_MESSAGE])
         .with_outputs(vec![PORT_MESSAGE, PORT_RESPONSE, PORT_HISTORY])
-        .with_global_config(vec![(
-            CONFIG_OPENAI_API_KEY,
-            AgentConfigEntry::new("", "string").with_title("OpenAI API Key"),
-        )])
         .with_default_config(vec![
             (
                 CONFIG_MODEL,

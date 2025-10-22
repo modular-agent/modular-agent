@@ -209,7 +209,7 @@ pub fn register_agents(askit: &ASKit) {
         .with_outputs(vec![PORT_MESSAGE, PORT_RESPONSE, PORT_HISTORY])
         .with_global_config(vec![(
             CONFIG_SAKURA_AI_API_KEY,
-            AgentConfigEntry::new("", "string").with_title("Sakura AI API Key"),
+            AgentConfigEntry::new("", "password").with_title("Sakura AI API Key"),
         )])
         .with_default_config(vec![
             (
