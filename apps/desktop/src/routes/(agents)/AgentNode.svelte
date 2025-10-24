@@ -312,6 +312,22 @@
           }
         }}
       />
+    {:else if ty === "password"}
+      <Input
+        class="nodrag flex-none"
+        type="password"
+        value={config}
+        onkeydown={(evt) => {
+          if (evt.key === "Enter") {
+            updateConfig(key, evt.currentTarget.value);
+          }
+        }}
+        onchange={(evt) => {
+          if (evt.currentTarget.value !== data.config[key]) {
+            updateConfig(key, evt.currentTarget.value);
+          }
+        }}
+      />
     {:else if ty === "text"}
       <Textarea
         class="nodrag nowheel flex-1"

@@ -34,6 +34,7 @@ export type SAgentConfigValueType =
   | "integer"
   | "number"
   | "string"
+  | "password"
   | "text"
   | "object";
 
