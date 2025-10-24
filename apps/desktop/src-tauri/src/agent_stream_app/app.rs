@@ -9,6 +9,7 @@ use agent_stream_kit::{
     ASKit, AgentConfig, AgentConfigs, AgentDefinitions, AgentFlow, AgentFlowEdge, AgentFlowNode,
 };
 use askit_std_agents;
+use tauri_plugin_askit::ASKitExt;
 
 use super::observer::ASAppObserver;
 
@@ -265,13 +266,15 @@ impl ASApp {
 }
 
 pub fn init(app: &AppHandle) -> Result<()> {
-    let askit = ASKit::init()?;
+    let askit = app.askit();
     askit_std_agents::register_agents(&askit);
     askit_llm_agents::register_agents(&askit);
     // askit_rig_agents::register_agents(&askit);
     askit_cozodb_agents::register_agents(&askit);
 
-    let asapp = ASApp { askit };
+    let asapp = ASApp {
+        askit: askit.clone(),
+    };
     asapp.read_agent_flows_dir().unwrap_or_else(|e| {
         log::error!("Failed to read agent flows: {}", e);
     });
@@ -290,17 +293,12 @@ pub fn init(app: &AppHandle) -> Result<()> {
 pub async fn ready(app: &AppHandle) -> Result<()> {
     let asapp = app.state::<ASApp>();
     let askit = &asapp.askit;
-    askit.ready().await?;
     let observer = ASAppObserver { app: app.clone() };
     askit.subscribe(Box::new(observer));
     Ok(())
 }
 
-pub fn quit(app: &AppHandle) {
-    let asapp = app.state::<ASApp>();
-    let askit = &asapp.askit;
-    askit.quit();
-}
+pub fn quit(_app: &AppHandle) {}
 
 fn agent_flows_dir() -> Result<PathBuf> {
     let home_dir = dirs::home_dir().with_context(|| "Failed to get home directory")?;
