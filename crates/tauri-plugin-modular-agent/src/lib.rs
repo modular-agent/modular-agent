@@ -4,11 +4,6 @@ use tauri::{
   Manager, Runtime, RunEvent,
 };
 
-#[cfg(desktop)]
-mod desktop;
-#[cfg(mobile)]
-mod mobile;
-
 mod commands;
 mod error;
 mod models;
@@ -34,11 +29,8 @@ impl<R: Runtime, T: Manager<R>> crate::ASKitExt<R> for T {
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
   Builder::new("askit")
     .invoke_handler(tauri::generate_handler![commands::write_board])
-    .setup(|app, api| {
-      #[cfg(mobile)]
-      let askit = mobile::init(app, api)?;
-      #[cfg(desktop)]
-      let askit = desktop::init(app, api)?;
+    .setup(|app, _api| {
+      let askit = ASKit::init()?;
       askit.subscribe(Box::new(BoardObserver {
           app: app.clone(),
       }));
