@@ -270,6 +270,16 @@ impl ASKit {
         Ok(())
     }
 
+    pub fn new_agent_flow_node(
+        &self,
+        def_name: &str,
+    ) -> Result<AgentFlowNode, AgentError> {
+        let def = self.get_agent_definition(def_name).ok_or_else(|| {
+            AgentError::AgentDefinitionNotFound(def_name.to_string())
+        })?;
+        AgentFlowNode::new(&def)
+    }
+
     pub fn add_agent_flow_node(
         &self,
         flow_name: &str,
@@ -447,11 +457,26 @@ impl ASKit {
     }
 
     pub async fn start_agent_flow(&self, name: &str) -> Result<(), AgentError> {
-        let flows = self.flows.lock().unwrap();
-        let Some(flow) = flows.get(name) else {
-            return Err(AgentError::FlowNotFound(name.to_string()));
+        let flow = {
+            let flows = self.flows.lock().unwrap();
+            let Some(flow) = flows.get(name) else {
+                return Err(AgentError::FlowNotFound(name.to_string()));
+            };
+            flow.clone()
         };
         flow.start(self).await?;
+        Ok(())
+    }
+
+    pub async fn stop_agent_flow(&self, name: &str) -> Result<(), AgentError> {
+        let flow = {
+            let flows = self.flows.lock().unwrap();
+            let Some(flow) = flows.get(name) else {
+                return Err(AgentError::FlowNotFound(name.to_string()));
+            };
+            flow.clone()
+        };
+        flow.stop(self).await?;
         Ok(())
     }
 

@@ -23,7 +23,8 @@ pub use config::{AgentConfig, AgentConfigs};
 pub use context::AgentContext;
 pub use data::{AgentData, AgentValue, AgentValueMap};
 pub use definition::{
-    AgentConfigEntry, AgentDefinition, AgentDefinitions, AgentDisplayConfigEntry,
+    AgentConfigEntry, AgentDefaultConfig, AgentDefinition, AgentDefinitions,
+    AgentDisplayConfigEntry,
 };
 pub use error::AgentError;
 pub use flow::{AgentFlow, AgentFlowEdge, AgentFlowNode, AgentFlows};
