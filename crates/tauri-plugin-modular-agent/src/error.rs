@@ -6,11 +6,12 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub enum Error {
   #[error(transparent)]
   Io(#[from] std::io::Error),
+
   #[error(transparent)]
   ASKit(#[from] agent_stream_kit::AgentError),
-  #[cfg(mobile)]
+
   #[error(transparent)]
-  PluginInvoke(#[from] tauri::plugin::mobile::PluginInvokeError),
+  SerdeJson(#[from] serde_json::error::Error),
 }
 
 impl Serialize for Error {

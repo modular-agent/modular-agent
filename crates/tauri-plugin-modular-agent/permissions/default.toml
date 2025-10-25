@@ -1,3 +1,30 @@
 [default]
 description = "Default permissions for the plugin"
-permissions = ["allow-write-board"]
+permissions = [
+    "allow-get-agent-definition",
+    "allow-get-agent-definitions",
+    "allow-get-agent-flows",
+    "allow-new-agent-flow",
+    "allow-rename-agent-flow",
+    "allow-unique-flow-name",
+    "allow-add-agent-flow",
+    "allow-remove-agent-flow",
+    "allow-insert-agent-flow",
+    "allow-copy-sub-flow",
+    "allow-start-agent-flow",
+    "allow-stop-agent-flow",
+    "allow-new-agent-flow-node",
+    "allow-add-agent-flow-node",
+    "allow-remove-agent-flow-node",
+    "allow-add-agent-flow-edge",
+    "allow-remove-agent-flow-edge",
+    "allow-start-agent",
+    "allow-stop-agent",
+    "allow-write-board",
+    "allow-set-agent-config",
+    "allow-get-global-config",
+    "allow-get-global-configs",
+    "allow-set-global-config",
+    "allow-set-global-configs",
+    "allow-get-agent-default-config",
+]

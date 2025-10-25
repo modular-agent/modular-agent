@@ -28,7 +28,34 @@ impl<R: Runtime, T: Manager<R>> crate::ASKitExt<R> for T {
 /// Initializes the plugin.
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
   Builder::new("askit")
-    .invoke_handler(tauri::generate_handler![commands::write_board])
+    .invoke_handler(tauri::generate_handler![
+      commands::get_agent_definition,
+      commands::get_agent_definitions,
+      commands::get_agent_flows,
+      commands::new_agent_flow,
+      commands::rename_agent_flow,
+      commands::unique_flow_name,
+      commands::add_agent_flow,
+      commands::remove_agent_flow,
+      commands::insert_agent_flow,
+      commands::copy_sub_flow,
+      commands::start_agent_flow,
+      commands::stop_agent_flow,
+      commands::new_agent_flow_node,
+      commands::add_agent_flow_node,
+      commands::remove_agent_flow_node,
+      commands::add_agent_flow_edge,
+      commands::remove_agent_flow_edge,
+      commands::start_agent,
+      commands::stop_agent,
+      commands::write_board,
+      commands::set_agent_config,
+      commands::get_global_config,
+      commands::get_global_configs,
+      commands::set_global_config,
+      commands::set_global_configs,
+      commands::get_agent_default_config,
+    ])
     .setup(|app, _api| {
       let askit = ASKit::init()?;
       askit.subscribe(Box::new(BoardObserver {
