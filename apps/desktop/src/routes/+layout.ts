@@ -1,7 +1,8 @@
-import type { SAgentDefinitions } from "$lib/types";
+import { getAgentDefinitions, getAgentFlows, getGlobalConfigs } from "tauri-plugin-askit-api";
+import type { AgentDefinitions } from "tauri-plugin-askit-api";
 
-import { deserializeAgentFlow, getAgentFlows, getAgentDefs } from "@/lib/agent";
-import { getAgentGlobalConfigs, getCoreSettings } from "@/lib/utils";
+import { deserializeAgentFlow } from "@/lib/agent";
+import { getCoreSettings } from "@/lib/utils";
 
 // Tauri doesn't have a Node.js server to do proper SSR
 // so we will use adapter-static to prerender the app (SSG)
@@ -12,8 +13,8 @@ export const ssr = false;
 export async function load() {
   const coreSettings = await getCoreSettings();
 
-  const agentDefs: SAgentDefinitions = await getAgentDefs();
-  const agentGlobalConfigs = await getAgentGlobalConfigs();
+  const agentDefs: AgentDefinitions = await getAgentDefinitions();
+  const agentGlobalConfigs = await getGlobalConfigs();
 
   const sAgentFlows = await getAgentFlows();
   const agentFlows = Object.fromEntries(

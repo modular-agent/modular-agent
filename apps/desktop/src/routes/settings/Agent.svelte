@@ -2,16 +2,17 @@
   import { message } from "@tauri-apps/plugin-dialog";
 
   import { Button, Input, NumberInput, Textarea, Toggle } from "flowbite-svelte";
+  import { setGlobalConfig } from "tauri-plugin-askit-api";
+  import type { AgentConfig, AgentDefinition } from "tauri-plugin-askit-api";
 
   import Card from "@/components/Card.svelte";
   import { deserializeAgentConfig, serializeAgentFlowNodeConfig } from "@/lib/agent";
-  import type { SAgentConfig, SAgentDefinition } from "@/lib/types";
-  import { exitApp, setAgentGlobalConfig } from "@/lib/utils";
+  import { exitApp } from "@/lib/utils";
 
   interface Props {
     agentName: string;
-    agentConfig: SAgentConfig;
-    agentDef: SAgentDefinition | null;
+    agentConfig: AgentConfig;
+    agentDef: AgentDefinition | null;
   }
 
   const { agentName, agentConfig, agentDef }: Props = $props();
@@ -21,7 +22,7 @@
   async function saveConfig() {
     let sconfig = serializeAgentFlowNodeConfig(config, agentDef?.global_config ?? null);
     if (sconfig) {
-      setAgentGlobalConfig(agentName, sconfig);
+      setGlobalConfig(agentName, sconfig);
     }
 
     // confirm restart

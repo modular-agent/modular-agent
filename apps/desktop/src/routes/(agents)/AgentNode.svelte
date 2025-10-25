@@ -15,12 +15,13 @@
   import { useSvelteFlow, type NodeProps } from "@xyflow/svelte";
   import { Button, Input, NumberInput, Popover, Textarea, Toggle } from "flowbite-svelte";
   import { ExclamationCircleOutline } from "flowbite-svelte-icons";
+  import { setAgentConfig } from "tauri-plugin-askit-api";
 
   import Messages from "@/components/Messages.svelte";
   import {
     getAgentDefinitionsContext,
     serializeAgentFlowNodeConfig,
-    setAgentConfig,
+    // setAgentConfig,
   } from "@/lib/agent";
   import {
     subscribeDisplayMessage,
@@ -28,10 +29,10 @@
     subscribeInputMessage,
   } from "@/lib/shared.svelte";
   import type {
-    AgentFlowNodeConfig,
-    AgentFlowNodeDisplay,
-    SAgentConfigEntry,
-    SAgentDisplayConfigEntry,
+    TAgentFlowNodeConfig,
+    TAgentFlowNodeDisplay,
+    AgentConfigEntry,
+    AgentDisplayConfigEntry,
   } from "@/lib/types";
 
   import NodeBase from "./NodeBase.svelte";
@@ -41,8 +42,8 @@
       name: string;
       title: string | null;
       enabled: boolean;
-      config: AgentFlowNodeConfig;
-      display: AgentFlowNodeDisplay;
+      config: TAgentFlowNodeConfig;
+      display: TAgentFlowNodeDisplay;
     };
   };
 
@@ -229,7 +230,7 @@
 {#snippet display(
   key: string,
   data: { kind: string; value: any },
-  display_config: SAgentDisplayConfigEntry,
+  display_config: AgentDisplayConfigEntry,
 )}
   {#if display_config?.hideTitle === true}
     <h3 class="flex-none">{display_config?.title || key}</h3>
@@ -249,7 +250,7 @@
   {/if}
 {/snippet}
 
-{#snippet inputItem(key: string, default_config: SAgentConfigEntry)}
+{#snippet inputItem(key: string, default_config: AgentConfigEntry)}
   {#if default_config?.hidden !== true}
     {@const config = data.config[key]}
     {@const ty = default_config?.type}

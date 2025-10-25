@@ -17,14 +17,13 @@
 
   import { Handle, NodeResizer, Position } from "@xyflow/svelte";
   import type { NodeProps, ResizeDragEvent, ResizeParams } from "@xyflow/svelte";
-
-  import type { SAgentDefinition } from "@/lib/types";
+  import type { AgentDefinition } from "tauri-plugin-askit-api";
 
   type Props = NodeProps & {
     data: {
       enabled: boolean;
     };
-    agentDef: SAgentDefinition | null;
+    agentDef: AgentDefinition | null;
     titleColor: string;
     inputCount: number;
     title: Snippet;

@@ -1,12 +1,11 @@
 <script lang="ts">
   import { Accordion } from "flowbite-svelte";
-
-  import type { SAgentDefinitions } from "@/lib/types";
+  import type { AgentDefinitions } from "tauri-plugin-askit-api";
 
   import AgentListItems from "./AgentListItems.svelte";
 
   interface Props {
-    agentDefs: SAgentDefinitions;
+    agentDefs: AgentDefinitions;
     onAddAgent: (agentName: string) => Promise<void>;
   }
 

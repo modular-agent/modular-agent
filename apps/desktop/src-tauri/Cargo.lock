@@ -25,7 +25,7 @@ checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 
 [[package]]
 name = "agent-stream-app"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "agent-stream-kit",
  "anyhow",
@@ -54,7 +54,7 @@ dependencies = [
 
 [[package]]
 name = "agent-stream-kit"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "async-trait",
  "log",
@@ -193,7 +193,9 @@ dependencies = [
 
 [[package]]
 name = "askit-llm-agents"
-version = "0.3.2"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c2f39d73bcb2e4d73734a4bd2f9670f635e7b85fa3cab8fe69b2810759e71437"
 dependencies = [
  "agent-stream-kit",
  "async-openai",
@@ -288,9 +290,9 @@ dependencies = [
 
 [[package]]
 name = "async-openai"
-version = "0.30.1"
+version = "0.29.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6bf39a15c8d613eb61892dc9a287c02277639ebead41ee611ad23aaa613f1a82"
+checksum = "c58fd812d4b7152e0f748254c03927f27126a5d83fccf265b2baddaaa1aeea41"
 dependencies = [
  "async-openai-macros",
  "backoff",
@@ -2439,7 +2441,6 @@ dependencies = [
  "tokio",
  "tokio-rustls",
  "tower-service",
- "webpki-roots 1.0.3",
 ]
 
 [[package]]
@@ -3139,7 +3140,7 @@ checksum = "05015102dad0f7d61691ca347e9d9d9006685a64aefb3d79eecf62665de2153d"
 dependencies = [
  "rustls 0.21.12",
  "rustls-webpki 0.101.7",
- "webpki-roots 0.25.4",
+ "webpki-roots",
 ]
 
 [[package]]
@@ -4733,7 +4734,6 @@ dependencies = [
  "wasm-bindgen-futures",
  "wasm-streams",
  "web-sys",
- "webpki-roots 1.0.3",
 ]
 
 [[package]]
@@ -5937,10 +5937,11 @@ dependencies = [
 
 [[package]]
 name = "tauri-plugin-askit"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "agent-stream-kit",
  "serde",
+ "serde_json",
  "tauri",
  "tauri-plugin",
  "thiserror 2.0.17",
@@ -7124,15 +7125,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5f20c57d8d7db6d3b86154206ae5d8fba62dd39573114de97c2cb0578251f8e1"
 
 [[package]]
-name = "webpki-roots"
-version = "1.0.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "32b130c0d2d49f8b6889abc456e795e82525204f27c42cf767cf0d7734e089b8"
-dependencies = [
- "rustls-pki-types",
-]
-
-[[package]]
 name = "webview2-com"
 version = "0.38.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7966,5 +7958,5 @@ dependencies = [
 ]
 
 [[patch.unused]]
-name = "askit-rig-agents"
-version = "0.3.3"
+name = "askit-llm-agents"
+version = "0.3.2"

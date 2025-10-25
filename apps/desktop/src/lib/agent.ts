@@ -3,49 +3,52 @@ import { invoke } from "@tauri-apps/api/core";
 import { getContext, setContext } from "svelte";
 
 import type {
+  AgentConfig,
+  AgentDefaultConfig,
+  AgentDefinitions,
+  AgentDisplayConfig,
   AgentFlow,
   AgentFlowEdge,
   AgentFlowNode,
-  AgentFlowNodeConfig,
-  AgentFlowNodeDisplay,
-  SAgentConfig,
-  SAgentDefaultConfig,
-  SAgentDefinitions,
-  SAgentDisplayConfig,
-  SAgentFlow,
-  SAgentFlowEdge,
-  SAgentFlowNode,
-  SAgentFlows,
+  AgentFlows,
   Viewport,
+} from "tauri-plugin-askit-api";
+
+import type {
+  TAgentFlow,
+  TAgentFlowEdge,
+  TAgentFlowNode,
+  TAgentFlowNodeConfig,
+  TAgentFlowNodeDisplay,
 } from "./types";
 
-export async function startAgent(agentId: string): Promise<void> {
-  await invoke("start_agent_cmd", { agentId });
-}
+// export async function startAgent(agentId: string): Promise<void> {
+//   await invoke("start_agent_cmd", { agentId });
+// }
 
-export async function stopAgent(agentId: string): Promise<void> {
-  await invoke("stop_agent_cmd", { agentId });
-}
+// export async function stopAgent(agentId: string): Promise<void> {
+//   await invoke("stop_agent_cmd", { agentId });
+// }
 
-export async function setAgentConfig(agentId: string, config: SAgentConfig): Promise<void> {
-  await invoke("set_agent_config_cmd", { agentId, config });
-}
+// export async function setAgentConfig(agentId: string, config: SAgentConfig): Promise<void> {
+//   await invoke("set_agent_config_cmd", { agentId, config });
+// }
 
-export async function getAgentDefs(): Promise<SAgentDefinitions> {
-  return await invoke("get_agent_defs_cmd");
-}
+// export async function getAgentDefs(): Promise<SAgentDefinitions> {
+//   return await invoke("get_agent_defs_cmd");
+// }
 
-export async function getAgentFlows(): Promise<SAgentFlows> {
-  return await invoke("get_agent_flows_cmd");
-}
+// export async function getAgentFlows(): Promise<AgentFlows> {
+//   return await invoke("get_agent_flows_cmd");
+// }
 
-export async function importAgentFlow(path: string): Promise<SAgentFlow> {
+export async function importAgentFlow(path: string): Promise<AgentFlow> {
   return await invoke("import_agent_flow_cmd", { path });
 }
 
-export async function newAgentFlow(name: string): Promise<SAgentFlow> {
-  return await invoke("new_agent_flow_cmd", { name });
-}
+// export async function newAgentFlow(name: string): Promise<AgentFlow> {
+//   return await invoke("new_agent_flow_cmd", { name });
+// }
 
 export async function renameAgentFlow(oldName: string, newName: string): Promise<string> {
   return await invoke("rename_agent_flow_cmd", { oldName, newName });
@@ -55,60 +58,60 @@ export async function removeAgentFlow(name: string): Promise<void> {
   await invoke("remove_agent_flow_cmd", { name });
 }
 
-export async function saveAgentFlow(agentFlow: SAgentFlow): Promise<void> {
+export async function saveAgentFlow(agentFlow: AgentFlow): Promise<void> {
   await invoke("save_agent_flow_cmd", { agentFlow });
 }
 
-export async function insertAgentFlow(agentFlow: SAgentFlow): Promise<void> {
-  await invoke("insert_agent_flow_cmd", { agentFlow });
-}
+// export async function insertAgentFlow(agentFlow: AgentFlow): Promise<void> {
+//   await invoke("insert_agent_flow_cmd", { agentFlow });
+// }
 
 const agentDefinitionsKey = Symbol("agentDefinitions");
 
-export function setAgentDefinitionsContext(defs: SAgentDefinitions): void {
+export function setAgentDefinitionsContext(defs: AgentDefinitions): void {
   setContext(agentDefinitionsKey, defs);
 }
 
-export function getAgentDefinitionsContext(): SAgentDefinitions {
+export function getAgentDefinitionsContext(): AgentDefinitions {
   return getContext(agentDefinitionsKey);
 }
 
-export async function addAgentFlowNode(flowName: string, node: SAgentFlowNode): Promise<void> {
-  await invoke("add_agent_flow_node_cmd", { flowName, node });
-}
+// export async function addAgentFlowNode(flowName: string, node: AgentFlowNode): Promise<void> {
+//   await invoke("add_agent_flow_node_cmd", { flowName, node });
+// }
 
-export async function newAgentFlowNode(defName: string): Promise<SAgentFlowNode> {
-  return await invoke("new_agent_flow_node_cmd", { defName });
-}
+// export async function newAgentFlowNode(defName: string): Promise<AgentFlowNode> {
+//   return await invoke("new_agent_flow_node_cmd", { defName });
+// }
 
-export async function removeAgentFlowNode(flowName: string, nodeId: string): Promise<void> {
-  await invoke("remove_agent_flow_node_cmd", { flowName, nodeId });
-}
+// export async function removeAgentFlowNode(flowName: string, nodeId: string): Promise<void> {
+//   await invoke("remove_agent_flow_node_cmd", { flowName, nodeId });
+// }
 
-export async function addAgentFlowEdge(flowName: string, edge: SAgentFlowEdge): Promise<void> {
-  await invoke("add_agent_flow_edge_cmd", { flowName, edge });
-}
+// export async function addAgentFlowEdge(flowName: string, edge: AgentFlowEdge): Promise<void> {
+//   await invoke("add_agent_flow_edge_cmd", { flowName, edge });
+// }
 
-export async function removeAgentFlowEdge(flowName: string, edgeId: string): Promise<void> {
-  await invoke("remove_agent_flow_edge_cmd", { flowName, edgeId });
-}
+// export async function removeAgentFlowEdge(flowName: string, edgeId: string): Promise<void> {
+//   await invoke("remove_agent_flow_edge_cmd", { flowName, edgeId });
+// }
 
-export async function copySubFlow(
-  flowName: string,
-  nodes: SAgentFlowNode[],
-  edges: SAgentFlowEdge[],
-): Promise<[SAgentFlowNode[], SAgentFlowEdge[]]> {
-  return await invoke("copy_sub_flow_cmd", { flowName, nodes, edges });
-}
+// export async function copySubFlow(
+//   flowName: string,
+//   nodes: AgentFlowNode[],
+//   edges: AgentFlowEdge[],
+// ): Promise<[AgentFlowNode[], AgentFlowEdge[]]> {
+//   return await invoke("copy_sub_flow_cmd", { flowName, nodes, edges });
+// }
 
 // Agent Flow
 
 // deserialize: SAgentFlow -> AgentFlow
 
 export function deserializeAgentFlow(
-  flow: SAgentFlow,
-  agent_settings: SAgentDefinitions,
-): AgentFlow {
+  flow: AgentFlow,
+  agent_settings: AgentDefinitions,
+): TAgentFlow {
   // Deserialize nodes first
   const nodes = flow.nodes.map((node) => deserializeAgentFlowNode(node, agent_settings));
 
@@ -148,9 +151,9 @@ export function deserializeAgentFlow(
 }
 
 export function deserializeAgentFlowNode(
-  node: SAgentFlowNode,
-  agentDefs: SAgentDefinitions,
-): AgentFlowNode {
+  node: AgentFlowNode,
+  agentDefs: AgentDefinitions,
+): TAgentFlowNode {
   const agentDef = agentDefs[node.def_name];
   const default_config = agentDef?.default_config;
   const display_config = agentDef?.display_config;
@@ -174,10 +177,10 @@ export function deserializeAgentFlowNode(
 }
 
 export function deserializeAgentConfig(
-  node_config: SAgentConfig | null,
-  default_config: SAgentDefaultConfig | null,
-): AgentFlowNodeConfig {
-  let agent_config: AgentFlowNodeConfig = {};
+  node_config: AgentConfig | null,
+  default_config: AgentDefaultConfig | null,
+): TAgentFlowNodeConfig {
+  let agent_config: TAgentFlowNodeConfig = {};
   let config_types: Record<string, string | null> = {};
 
   if (default_config) {
@@ -216,19 +219,19 @@ export function deserializeAgentConfig(
 }
 
 export function deserializeAgentDisplayConfig(
-  display_config: SAgentDisplayConfig | null,
-): AgentFlowNodeDisplay | null {
+  display_config: AgentDisplayConfig | null,
+): TAgentFlowNodeDisplay | null {
   if (!display_config) {
     return null;
   }
-  let display: AgentFlowNodeDisplay = {};
+  let display: TAgentFlowNodeDisplay = {};
   display_config.forEach(([key, _entry]) => {
     display[key] = null;
   });
   return display;
 }
 
-export function deserializeAgentFlowEdge(edge: SAgentFlowEdge): AgentFlowEdge {
+export function deserializeAgentFlowEdge(edge: AgentFlowEdge): TAgentFlowEdge {
   return {
     id: edge.id,
     source: edge.source,
@@ -241,12 +244,12 @@ export function deserializeAgentFlowEdge(edge: SAgentFlowEdge): AgentFlowEdge {
 // serialize: AgentFlow -> SAgentFlow
 
 export function serializeAgentFlow(
-  nodes: AgentFlowNode[],
-  edges: AgentFlowEdge[],
+  nodes: TAgentFlowNode[],
+  edges: TAgentFlowEdge[],
   name: string,
-  agent_defs: SAgentDefinitions,
+  agent_defs: AgentDefinitions,
   viewport: Viewport,
-): SAgentFlow {
+): AgentFlow {
   return {
     nodes: nodes.map((node) => serializeAgentFlowNode(node, agent_defs)),
     edges: edges.map((edge) => serializeAgentFlowEdge(edge)),
@@ -256,9 +259,9 @@ export function serializeAgentFlow(
 }
 
 export function serializeAgentFlowNode(
-  node: AgentFlowNode,
-  agent_defs: SAgentDefinitions,
-): SAgentFlowNode {
+  node: TAgentFlowNode,
+  agent_defs: AgentDefinitions,
+): AgentFlowNode {
   return {
     id: node.id,
     def_name: node.data.name,
@@ -276,14 +279,14 @@ export function serializeAgentFlowNode(
 }
 
 export function serializeAgentFlowNodeConfig(
-  node_config: AgentFlowNodeConfig | null,
-  default_config: SAgentDefaultConfig | null,
-): SAgentConfig | null {
+  node_config: TAgentFlowNodeConfig | null,
+  default_config: AgentDefaultConfig | null,
+): AgentConfig | null {
   if (node_config === null) {
     return null;
   }
 
-  let config: SAgentConfig = {};
+  let config: AgentConfig = {};
 
   if (default_config === null || default_config === undefined) {
     // if no default config, just return the node_config as is
@@ -316,7 +319,7 @@ export function serializeAgentFlowNodeConfig(
   return config;
 }
 
-export function serializeAgentFlowEdge(edge: AgentFlowEdge): SAgentFlowEdge {
+export function serializeAgentFlowEdge(edge: TAgentFlowEdge): AgentFlowEdge {
   return {
     id: edge.id,
     source: edge.source,

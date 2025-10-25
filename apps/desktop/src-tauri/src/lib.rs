@@ -44,12 +44,12 @@ pub fn run() {
                     log::error!("Failed to initialize agent: {}", e);
                     app_handle.exit(1);
                 });
-                agent_stream_app::settings::set_agent_global_configs(&app_handle).unwrap_or_else(
-                    |e| {
-                        log::error!("Failed to set agent global configs: {}", e);
-                        app_handle.exit(1);
-                    },
-                );
+                // agent_stream_app::settings::set_agent_global_configs(&app_handle).unwrap_or_else(
+                //     |e| {
+                //         log::error!("Failed to set agent global configs: {}", e);
+                //         app_handle.exit(1);
+                //     },
+                // );
                 agent_stream_app::autostart::init(&app_handle).unwrap_or_else(|e| {
                     log::error!("Failed to initialize autostart: {}", e);
                 });
@@ -70,27 +70,12 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             exit_app_cmd,
-            agent_stream_app::app::get_agent_defs_cmd,
-            agent_stream_app::app::set_agent_config_cmd,
-            agent_stream_app::app::start_agent_cmd,
-            agent_stream_app::app::stop_agent_cmd,
-            agent_stream_app::app::get_agent_flows_cmd,
-            agent_stream_app::app::new_agent_flow_cmd,
             agent_stream_app::app::rename_agent_flow_cmd,
             agent_stream_app::app::remove_agent_flow_cmd,
-            agent_stream_app::app::add_agent_flow_edge_cmd,
-            agent_stream_app::app::remove_agent_flow_edge_cmd,
-            agent_stream_app::app::new_agent_flow_node_cmd,
-            agent_stream_app::app::add_agent_flow_node_cmd,
-            agent_stream_app::app::remove_agent_flow_node_cmd,
             agent_stream_app::app::import_agent_flow_cmd,
             agent_stream_app::app::save_agent_flow_cmd,
-            agent_stream_app::app::insert_agent_flow_cmd,
-            agent_stream_app::app::copy_sub_flow_cmd,
             agent_stream_app::settings::get_core_settings_cmd,
             agent_stream_app::settings::set_core_settings_cmd,
-            agent_stream_app::settings::get_agent_global_configs_cmd,
-            agent_stream_app::settings::set_agent_global_config_cmd,
         ])
         .on_window_event(|window, event| match event {
             tauri::WindowEvent::CloseRequested { api, .. } => {

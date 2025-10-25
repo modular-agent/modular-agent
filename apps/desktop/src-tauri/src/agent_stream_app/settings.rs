@@ -6,9 +6,8 @@ use std::{
     sync::{LazyLock, Mutex},
 };
 use tauri::{AppHandle, Manager, State};
+use tauri_plugin_askit::ASKitExt;
 use tauri_plugin_store::StoreExt;
-
-use super::app::ASApp;
 
 const SETTINGS_JSON: &str = "settings.json";
 
@@ -28,8 +27,7 @@ pub fn save(app: &AppHandle) -> Result<()> {
     }
     store.set("core", settings_json);
 
-    let asapp = app.state::<ASApp>();
-    let agent_settings = asapp.get_global_configs();
+    let agent_settings = app.askit().get_global_configs();
     let agent_settings_json = serde_json::to_value(agent_settings)?;
     store.set("agents", agent_settings_json);
 
@@ -142,35 +140,5 @@ pub fn set_core_settings_cmd(
 
     save(&app).map_err(|e| e.to_string())?;
 
-    Ok(())
-}
-
-pub fn set_agent_global_configs(app: &AppHandle) -> Result<()> {
-    let store = app.store(SETTINGS_JSON)?;
-    if let Some(value) = store.get("agents") {
-        let agent_global_configs = serde_json::from_value(value).unwrap_or_default();
-        let asapp = app.state::<ASApp>();
-        asapp.set_global_configs(agent_global_configs);
-    }
-    Ok(())
-}
-
-#[tauri::command]
-pub fn get_agent_global_configs_cmd(app: AppHandle) -> Result<Value, String> {
-    let asapp = app.state::<ASApp>();
-    let global_configs = asapp.get_global_configs();
-    let json = serde_json::to_value(&global_configs).map_err(|e| e.to_string())?;
-    return Ok(json);
-}
-
-#[tauri::command]
-pub fn set_agent_global_config_cmd(
-    app: AppHandle,
-    agent_name: String,
-    agent_config: Value,
-) -> Result<(), String> {
-    let asapp = app.state::<ASApp>();
-    asapp.set_global_config(agent_name, agent_config);
-    save(&app).map_err(|e| e.to_string())?;
     Ok(())
 }

@@ -17,38 +17,35 @@
   import { Button, ButtonGroup, GradientButton, Modal, Toast } from "flowbite-svelte";
   import { ExclamationCircleOutline, PauseOutline, PlayOutline } from "flowbite-svelte-icons";
   import hotkeys from "hotkeys-js";
-
   import {
     addAgentFlowEdge,
+    newAgentFlowNode,
     addAgentFlowNode,
     removeAgentFlowEdge,
     removeAgentFlowNode,
+    startAgent,
+    stopAgent,
+    newAgentFlow,
+    copySubFlow,
+    insertAgentFlow,
+  } from "tauri-plugin-askit-api";
+  import type { AgentFlowNode, AgentFlowEdge } from "tauri-plugin-askit-api";
+
+  import {
     deserializeAgentFlow,
     deserializeAgentFlowEdge,
     deserializeAgentFlowNode,
     importAgentFlow,
-    newAgentFlow,
-    newAgentFlowNode,
+    removeAgentFlow,
+    renameAgentFlow,
     saveAgentFlow,
     serializeAgentFlow,
     serializeAgentFlowEdge,
     serializeAgentFlowNode,
     setAgentDefinitionsContext,
-    startAgent,
-    stopAgent,
-    renameAgentFlow,
-    removeAgentFlow,
-    copySubFlow,
-    insertAgentFlow,
   } from "@/lib/agent";
   import { flowNameState } from "@/lib/shared.svelte";
-  import type {
-    AgentFlowNode,
-    AgentFlowEdge,
-    SAgentFlowNode,
-    SAgentFlowEdge,
-    AgentFlow,
-  } from "@/lib/types";
+  import type { TAgentFlowNode, TAgentFlowEdge, TAgentFlow } from "@/lib/types";
 
   import AgentList from "./AgentList.svelte";
   import AgentNode from "./AgentNode.svelte";
@@ -66,11 +63,11 @@
     agent: AgentNode,
   };
 
-  let nodes = $state.raw<AgentFlowNode[]>([]);
-  let edges = $state.raw<AgentFlowEdge[]>([]);
+  let nodes = $state.raw<TAgentFlowNode[]>([]);
+  let edges = $state.raw<TAgentFlowEdge[]>([]);
 
   const agentDefs = data.agentDefs;
-  const flows = getContext<() => Record<string, AgentFlow>>("agentFlows");
+  const flows = getContext<() => Record<string, TAgentFlow>>("agentFlows");
 
   let flowNames = $state.raw<string[]>([]);
 
@@ -131,7 +128,7 @@
     await checkEdgeChange(edges);
   }
 
-  async function checkNodeChange(nodes: AgentFlowNode[]) {
+  async function checkNodeChange(nodes: TAgentFlowNode[]) {
     const nodeIds = new Set(nodes.map((node) => node.id));
 
     const deletedNodes = flows()[flowNameState.name]?.nodes.filter((node) => !nodeIds.has(node.id));
@@ -145,7 +142,7 @@
     }
   }
 
-  async function checkEdgeChange(edges: AgentFlowEdge[]) {
+  async function checkEdgeChange(edges: TAgentFlowEdge[]) {
     const edgeIds = new Set(edges.map((edge) => edge.id));
 
     const deletedEdges = flows()[flowNameState.name]?.edges.filter((edge) => !edgeIds.has(edge.id));
@@ -176,10 +173,10 @@
 
   // cut, copy and paste
 
-  let copiedNodes = $state.raw<SAgentFlowNode[]>([]);
-  let copiedEdges = $state.raw<SAgentFlowEdge[]>([]);
+  let copiedNodes = $state.raw<AgentFlowNode[]>([]);
+  let copiedEdges = $state.raw<AgentFlowEdge[]>([]);
 
-  function selectedNodesAndEdges(): [AgentFlowNode[], AgentFlowEdge[]] {
+  function selectedNodesAndEdges(): [TAgentFlowNode[], TAgentFlowEdge[]] {
     const selectedNodes = nodes.filter((node) => node.selected);
     const selectedEdges = edges.filter((edge) => edge.selected);
     return [selectedNodes, selectedEdges];
@@ -534,7 +531,7 @@
   function handleNodeContextMenu({ event, node }: { event: MouseEvent; node: Node }) {
     event.preventDefault();
 
-    const agentNode = node as unknown as AgentFlowNode;
+    const agentNode = node as unknown as TAgentFlowNode;
 
     const [selectedNodes, _] = selectedNodesAndEdges();
     if (!selectedNodes.some((n) => n.id === agentNode.id)) {

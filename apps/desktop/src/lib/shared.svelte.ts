@@ -2,7 +2,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 import { writable, type Writable } from "svelte/store";
 
-import type { DisplayMessage, ErrorMessage, InputMessage } from "@/lib/types";
+import type { DisplayMessage, ErrorMessage, InputMessage } from "tauri-plugin-askit-api";
 
 // Display Message
 

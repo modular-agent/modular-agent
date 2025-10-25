@@ -2,12 +2,9 @@ use std::path::PathBuf;
 
 use anyhow::{bail, Context as _, Result};
 use dirs;
-use serde_json::Value;
 use tauri::{AppHandle, Manager, State};
 
-use agent_stream_kit::{
-    ASKit, AgentConfig, AgentConfigs, AgentDefinitions, AgentFlow, AgentFlowEdge, AgentFlowNode,
-};
+use agent_stream_kit::{ASKit, AgentFlow, AgentFlowNode};
 use askit_std_agents;
 use tauri_plugin_askit::ASKitExt;
 
@@ -20,85 +17,7 @@ pub struct ASApp {
 }
 
 impl ASApp {
-    pub fn get_agent_definitions(&self) -> AgentDefinitions {
-        self.askit.get_agent_definitions()
-    }
-
-    // Global Configs
-    pub fn set_global_configs(&self, configs: AgentConfigs) {
-        self.askit.set_global_configs(configs);
-    }
-
-    pub fn get_global_configs(&self) -> AgentConfigs {
-        self.askit.get_global_configs()
-    }
-
-    pub fn set_global_config(&self, agent_name: String, config: Value) {
-        if let Ok(config) = serde_json::from_value::<AgentConfig>(config) {
-            self.askit.set_global_config(agent_name, config);
-        } else {
-            log::error!("Failed to parse agent config for {}", agent_name);
-        }
-    }
-
-    // Agent
-
-    pub async fn set_agent_config(&self, agent_id: String, config: AgentConfig) -> Result<()> {
-        self.askit.set_agent_config(agent_id, config).await?;
-        Ok(())
-    }
-
-    pub async fn start_agent(&self, agent_id: &str) -> Result<()> {
-        self.askit.start_agent(agent_id).await.unwrap_or_else(|e| {
-            log::error!("Failed to start agent: {}", e);
-        });
-        Ok(())
-    }
-
-    pub async fn stop_agent(&self, agent_id: &str) -> Result<()> {
-        self.askit.stop_agent(agent_id).await.unwrap_or_else(|e| {
-            log::error!("Failed to stop agent: {}", e);
-        });
-        Ok(())
-    }
-
     // AgentFlow
-
-    pub fn new_agent_flow_node(&self, def_name: &str) -> Result<AgentFlowNode> {
-        let def = self
-            .askit
-            .get_agent_definition(def_name)
-            .with_context(|| format!("Agent definition '{}' not found", def_name))?;
-        let node = AgentFlowNode::new(&def)?;
-        Ok(node)
-    }
-
-    pub fn add_agent_flow_node(&self, flow_name: &str, node: AgentFlowNode) -> Result<()> {
-        self.askit.add_agent_flow_node(flow_name, &node)?;
-        Ok(())
-    }
-
-    pub async fn remove_agent_flow_node(&self, flow_name: &str, node_id: &str) -> Result<()> {
-        self.askit
-            .remove_agent_flow_node(flow_name, node_id)
-            .await?;
-        Ok(())
-    }
-
-    pub fn add_agent_flow_edge(&self, flow_name: &str, edge: AgentFlowEdge) -> Result<()> {
-        self.askit.add_agent_flow_edge(flow_name, &edge)?;
-        Ok(())
-    }
-
-    pub fn remove_agent_flow_edge(&self, flow_name: &str, edge_id: &str) -> Result<()> {
-        self.askit.remove_agent_flow_edge(flow_name, edge_id)?;
-        Ok(())
-    }
-
-    pub fn insert_agent_flow(&self, flow: AgentFlow) -> Result<()> {
-        self.askit.insert_agent_flow(flow)?;
-        Ok(())
-    }
 
     pub async fn remove_agent_flow(&self, name: &str) -> Result<()> {
         self.askit.remove_agent_flow(name).await?;
@@ -249,19 +168,11 @@ impl ASApp {
         flow.set_name(base_name.clone());
 
         // Rename IDs in the flow
-        let (nodes, edges) = self.copy_sub_flow(flow.nodes(), flow.edges());
+        let (nodes, edges) = self.askit.copy_sub_flow(flow.nodes(), flow.edges());
         flow.set_nodes(nodes);
         flow.set_edges(edges);
 
         Ok(flow)
-    }
-
-    fn copy_sub_flow(
-        &self,
-        nodes: &Vec<AgentFlowNode>,
-        edges: &Vec<AgentFlowEdge>,
-    ) -> (Vec<AgentFlowNode>, Vec<AgentFlowEdge>) {
-        self.askit.copy_sub_flow(nodes, edges)
     }
 }
 
@@ -306,56 +217,6 @@ fn agent_flows_dir() -> Result<PathBuf> {
     Ok(flows_dir)
 }
 
-// Tauri Commands
-
-#[tauri::command]
-pub fn get_agent_defs_cmd(asapp: State<'_, ASApp>) -> Result<Value, String> {
-    let defs = asapp.get_agent_definitions();
-    serde_json::to_value(defs).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-pub async fn set_agent_config_cmd(
-    asapp: State<'_, ASApp>,
-    agent_id: String,
-    config: AgentConfig,
-) -> Result<(), String> {
-    asapp
-        .set_agent_config(agent_id, config)
-        .await
-        .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-pub async fn start_agent_cmd(asapp: State<'_, ASApp>, agent_id: String) -> Result<(), String> {
-    asapp
-        .start_agent(&agent_id)
-        .await
-        .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-pub async fn stop_agent_cmd(asapp: State<'_, ASApp>, agent_id: String) -> Result<(), String> {
-    asapp.stop_agent(&agent_id).await.map_err(|e| e.to_string())
-}
-
-// flow commands
-
-#[tauri::command]
-pub fn get_agent_flows_cmd(asapp: State<'_, ASApp>) -> Result<Value, String> {
-    let askit = &asapp.askit;
-    let flows = askit.get_agent_flows();
-    let value = serde_json::to_value(&flows).map_err(|e| e.to_string())?;
-    Ok(value)
-}
-
-#[tauri::command]
-pub fn new_agent_flow_cmd(asapp: State<ASApp>, name: String) -> Result<AgentFlow, String> {
-    let askit = &asapp.askit;
-    let flow = askit.new_agent_flow(&name).map_err(|e| e.to_string())?;
-    Ok(flow)
-}
-
 #[tauri::command]
 pub fn rename_agent_flow_cmd(
     asapp: State<'_, ASApp>,
@@ -376,13 +237,6 @@ pub async fn remove_agent_flow_cmd(asapp: State<'_, ASApp>, name: String) -> Res
 }
 
 #[tauri::command]
-pub fn insert_agent_flow_cmd(asapp: State<'_, ASApp>, agent_flow: AgentFlow) -> Result<(), String> {
-    asapp
-        .insert_agent_flow(agent_flow)
-        .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
 pub fn save_agent_flow_cmd(asapp: State<ASApp>, agent_flow: AgentFlow) -> Result<(), String> {
     asapp.save_agent_flow(agent_flow).map_err(|e| e.to_string())
 }
@@ -390,68 +244,4 @@ pub fn save_agent_flow_cmd(asapp: State<ASApp>, agent_flow: AgentFlow) -> Result
 #[tauri::command]
 pub fn import_agent_flow_cmd(asapp: State<ASApp>, path: String) -> Result<AgentFlow, String> {
     asapp.import_agent_flow(path).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-pub fn new_agent_flow_node_cmd(
-    asapp: State<'_, ASApp>,
-    def_name: String,
-) -> Result<AgentFlowNode, String> {
-    asapp
-        .new_agent_flow_node(&def_name)
-        .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-pub fn add_agent_flow_node_cmd(
-    asapp: State<'_, ASApp>,
-    flow_name: String,
-    node: AgentFlowNode,
-) -> Result<(), String> {
-    asapp
-        .add_agent_flow_node(&flow_name, node)
-        .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-pub async fn remove_agent_flow_node_cmd(
-    asapp: State<'_, ASApp>,
-    flow_name: String,
-    node_id: String,
-) -> Result<(), String> {
-    asapp
-        .remove_agent_flow_node(&flow_name, &node_id)
-        .await
-        .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-pub fn add_agent_flow_edge_cmd(
-    asapp: State<'_, ASApp>,
-    flow_name: String,
-    edge: AgentFlowEdge,
-) -> Result<(), String> {
-    asapp
-        .add_agent_flow_edge(&flow_name, edge)
-        .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-pub fn remove_agent_flow_edge_cmd(
-    asapp: State<'_, ASApp>,
-    flow_name: String,
-    edge_id: String,
-) -> Result<(), String> {
-    asapp
-        .remove_agent_flow_edge(&flow_name, &edge_id)
-        .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-pub fn copy_sub_flow_cmd(
-    asapp: State<ASApp>,
-    nodes: Vec<AgentFlowNode>,
-    edges: Vec<AgentFlowEdge>,
-) -> (Vec<AgentFlowNode>, Vec<AgentFlowEdge>) {
-    asapp.copy_sub_flow(&nodes, &edges)
 }
