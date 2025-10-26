@@ -182,8 +182,8 @@ export async function stopAgentFlow(flowName: string): Promise<void> {
 
 export async function newAgentFlowNode(
   defName: string
-): Promise<void> {
-  await invoke<void>('plugin:askit|new_agent_flow_node', { defName })
+): Promise<AgentFlowNode> {
+  return await invoke<any>('plugin:askit|new_agent_flow_node', { defName })
 }
 
 export async function addAgentFlowNode(
