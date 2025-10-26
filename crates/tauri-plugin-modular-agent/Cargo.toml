@@ -1,10 +1,10 @@
 [package]
 name = "tauri-plugin-askit"
 version = "0.2.0"
-authors = [ "Akira Ishino <akira@lumilab.jp>" ]
-description = ""
+authors = ["Akira Ishino <akira@lumilab.jp>"]
+license = "Apache-2.0 OR MIT"
+description = "Tauri plugin for Agent Stream Kit"
 edition = "2021"
-rust-version = "1.77.2"
 exclude = ["/examples", "/dist-js", "/guest-js", "/node_modules"]
 links = "tauri-plugin-askit"
 

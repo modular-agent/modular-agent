@@ -3,7 +3,7 @@
   "version": "0.2.0",
   "license": "MIT OR Apache-2.0",
   "author": "Akira Ishino",
-  "description": "",
+  "description": "Tauri plugin for Agent Stream Kit",
   "type": "module",
   "types": "./dist-js/index.d.ts",
   "main": "./dist-js/index.cjs",
