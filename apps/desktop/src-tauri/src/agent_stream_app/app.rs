@@ -4,7 +4,7 @@ use anyhow::{bail, Context as _, Result};
 use dirs;
 use tauri::{AppHandle, Manager, State};
 
-use agent_stream_kit::{ASKit, AgentFlow, AgentFlowNode};
+use agent_stream_kit::{ASKit, AgentFlow};
 use askit_std_agents;
 use tauri_plugin_askit::ASKitExt;
 
