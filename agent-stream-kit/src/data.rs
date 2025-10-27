@@ -52,13 +52,6 @@ impl AgentData {
         }
     }
 
-    pub fn text(value: impl Into<String>) -> Self {
-        AgentData {
-            kind: "text".to_string(),
-            value: AgentValue::string(value.into()),
-        }
-    }
-
     // pub fn new_image(value: PhotonImage) -> Self {
     //     AgentData {
     //         kind: "image".to_string(),
@@ -161,11 +154,6 @@ impl AgentData {
         self.kind == "string"
     }
 
-    #[allow(unused)]
-    pub fn is_text(&self) -> bool {
-        self.kind == "text"
-    }
-
     // #[allow(unused)]
     // pub fn is_image(&self) -> bool {
     //     self.kind == "image"
@@ -178,7 +166,6 @@ impl AgentData {
             && !self.is_integer()
             && !self.is_number()
             && !self.is_string()
-            && !self.is_text()
     }
 
     #[allow(unused)]
@@ -482,7 +469,7 @@ impl AgentValue {
                 }
                 _ => Err(AgentError::InvalidValue("number".into())),
             },
-            "string" | "text" => match value {
+            "string" => match value {
                 serde_json::Value::String(s) => Ok(AgentValue::string(s)),
                 serde_json::Value::Array(a) => {
                     let mut agent_arr = Vec::new();
@@ -877,8 +864,8 @@ mod tests {
         assert!(matches!(str_data.value, AgentValue::String(_)));
         assert_eq!(str_data.as_str().unwrap(), "hello");
 
-        let text_data = AgentData::text("multiline\ntext\n\n".to_string());
-        assert_eq!(text_data.kind, "text");
+        let text_data = AgentData::string("multiline\ntext\n\n".to_string());
+        assert_eq!(text_data.kind, "string");
         assert!(matches!(text_data.value, AgentValue::String(_)));
         assert_eq!(text_data.as_str().unwrap(), "multiline\ntext\n\n");
 
@@ -937,12 +924,9 @@ mod tests {
         assert_eq!(str_data.kind, "string");
         assert_eq!(str_data.value, AgentValue::string("hello\nworld\n\n"));
 
-        let text_data = AgentData::from_json_with_kind("text", json!("hello")).unwrap();
-        assert_eq!(text_data.kind, "text");
-        assert_eq!(text_data.value, AgentValue::string("hello"));
-
-        let text_data = AgentData::from_json_with_kind("text", json!("hello\nworld\n\n")).unwrap();
-        assert_eq!(text_data.kind, "text");
+        let text_data =
+            AgentData::from_json_with_kind("string", json!("hello\nworld\n\n")).unwrap();
+        assert_eq!(text_data.kind, "string");
         assert_eq!(text_data.value, AgentValue::string("hello\nworld\n\n"));
 
         // let img_data = AgentData::from_json_data("image",
@@ -1040,8 +1024,9 @@ mod tests {
         );
 
         let array_data =
-            AgentData::from_json_with_kind("text", json!(["test", "hello\nworld\n", ""])).unwrap();
-        assert_eq!(array_data.kind, "text");
+            AgentData::from_json_with_kind("string", json!(["test", "hello\nworld\n", ""]))
+                .unwrap();
+        assert_eq!(array_data.kind, "string");
         assert_eq!(
             array_data.value,
             AgentValue::array(vec![
@@ -1315,21 +1300,6 @@ mod tests {
             );
         }
 
-        // Test Text serialization
-        {
-            let data = AgentData::text("Hello, world!");
-            assert_eq!(
-                serde_json::to_string(&data).unwrap(),
-                r#"{"kind":"text","value":"Hello, world!"}"#
-            );
-
-            let data = AgentData::text("hello\nworld\n\n");
-            assert_eq!(
-                serde_json::to_string(&data).unwrap(),
-                r#"{"kind":"text","value":"hello\nworld\n\n"}"#
-            );
-        }
-
         // // Test Image serialization
         // {
         //     let data = AgentData::new_image(PhotonImage::new(vec![0u8, 0u8, 0u8, 0u8], 1, 1));
@@ -1424,19 +1394,6 @@ mod tests {
             assert_eq!(
                 serde_json::to_string(&data).unwrap(),
                 r#"{"kind":"string","value":["test","hello\nworld\n",""]}"#
-            );
-
-            let data = AgentData::array(
-                "text",
-                vec![
-                    AgentValue::string("test"),
-                    AgentValue::string("hello\nworld\n"),
-                    AgentValue::string(""),
-                ],
-            );
-            assert_eq!(
-                serde_json::to_string(&data).unwrap(),
-                r#"{"kind":"text","value":["test","hello\nworld\n",""]}"#
             );
 
             let data = AgentData::array(
@@ -1648,21 +1605,6 @@ mod tests {
             );
 
             let deserialized: AgentData =
-                serde_json::from_str(r#"{"kind":"text","value":["test","hello\nworld\n",""]}"#)
-                    .unwrap();
-            assert_eq!(
-                deserialized,
-                AgentData::array(
-                    "text",
-                    vec![
-                        AgentValue::string("test"),
-                        AgentValue::string("hello\nworld\n"),
-                        AgentValue::string(""),
-                    ]
-                )
-            );
-
-            let deserialized: AgentData =
                     serde_json::from_str(r#"{"kind":"object","value":[{"key1":"test","key2":1},{"key1":"test2","key2":"hi"},{}]}"#)
                         .unwrap();
             assert_eq!(
@@ -1853,7 +1795,7 @@ mod tests {
             panic!("Expected string value");
         }
 
-        let text = AgentValue::from_kind_json("text", json!("multiline\ntext")).unwrap();
+        let text = AgentValue::from_kind_json("string", json!("multiline\ntext")).unwrap();
         assert!(matches!(text, AgentValue::String(_)));
         if let AgentValue::String(t) = text {
             assert_eq!(*t, "multiline\ntext");
@@ -1934,7 +1876,8 @@ mod tests {
             }
         }
 
-        let text_array = AgentValue::from_kind_json("text", json!(["hello", "world!\n"])).unwrap();
+        let text_array =
+            AgentValue::from_kind_json("string", json!(["hello", "world!\n"])).unwrap();
         assert!(matches!(text_array, AgentValue::Array(_)));
         if let AgentValue::Array(arr) = text_array {
             assert_eq!(arr.len(), 2);

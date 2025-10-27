@@ -34,7 +34,7 @@ impl AsAgent for ToJsonAgent {
     async fn process(&mut self, ctx: AgentContext, data: AgentData) -> Result<(), AgentError> {
         let json = serde_json::to_string_pretty(&data.value)
             .map_err(|e| AgentError::InvalidValue(e.to_string()))?;
-        self.try_output(ctx, PORT_JSON, AgentData::text(json))?;
+        self.try_output(ctx, PORT_JSON, AgentData::string(json))?;
         Ok(())
     }
 }

@@ -215,7 +215,7 @@ impl AsAgent for TextInputAgent {
     fn set_config(&mut self, config: AgentConfig) -> Result<(), AgentError> {
         if *self.status() == AgentStatus::Start {
             let value = config.get_string(CONFIG_TEXT)?;
-            self.try_output(AgentContext::new(), CONFIG_TEXT, AgentData::text(value))?;
+            self.try_output(AgentContext::new(), CONFIG_TEXT, AgentData::string(value))?;
         }
         Ok(())
     }

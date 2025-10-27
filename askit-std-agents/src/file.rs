@@ -123,7 +123,7 @@ impl AsAgent for ReadTextFileAgent {
         let content = fs::read_to_string(path).map_err(|e| {
             AgentError::InvalidValue(format!("Failed to read file {}: {}", path.display(), e))
         })?;
-        let out_data = AgentData::text(content);
+        let out_data = AgentData::string(content);
         self.try_output(ctx, PORT_TEXT, out_data)
     }
 }

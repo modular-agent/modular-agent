@@ -100,7 +100,7 @@ pub fn register_agents(askit: &ASKit) {
         )
         .with_title("Display Data")
         .with_category(CATEGORY)
-        .with_inputs(vec!["data"])
+        .with_inputs(vec!["*"])
         .with_display_config(vec![(
             DISPLAY_DATA,
             AgentDisplayConfigEntry::new("*").with_hide_title(),
