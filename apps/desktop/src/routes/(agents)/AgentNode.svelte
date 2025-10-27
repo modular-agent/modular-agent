@@ -16,24 +16,16 @@
   import { Button, Input, NumberInput, Popover, Textarea, Toggle } from "flowbite-svelte";
   import { ExclamationCircleOutline } from "flowbite-svelte-icons";
   import { setAgentConfig } from "tauri-plugin-askit-api";
+  import type { AgentConfigEntry, AgentDisplayConfigEntry } from "tauri-plugin-askit-api";
 
   import Messages from "@/components/Messages.svelte";
-  import {
-    getAgentDefinitionsContext,
-    serializeAgentFlowNodeConfig,
-    // setAgentConfig,
-  } from "@/lib/agent";
+  import { getAgentDefinitionsContext, serializeAgentFlowNodeConfig } from "@/lib/agent";
   import {
     subscribeDisplayMessage,
     subscribeErrorMessage,
     subscribeInputMessage,
   } from "@/lib/shared.svelte";
-  import type {
-    TAgentFlowNodeConfig,
-    TAgentFlowNodeDisplay,
-    AgentConfigEntry,
-    AgentDisplayConfigEntry,
-  } from "@/lib/types";
+  import type { TAgentFlowNodeConfig, TAgentFlowNodeDisplay } from "@/lib/types";
 
   import NodeBase from "./NodeBase.svelte";
 
@@ -115,6 +107,21 @@
   let titleColor = $derived(titleColorMap[agentDef?.kind ?? "default"] ?? titleColorMap.default);
 
   const uid = $props.id();
+
+  function inferTypeForDisplay(config: AgentDisplayConfigEntry, data: any): string {
+    let ty = config.type;
+    if (ty === null || ty === "*") {
+      ty = data?.kind;
+      if (ty === null) {
+        return "object";
+      } else if (ty === "string") {
+        if (typeof data?.value === "string" && data.value.includes("\n")) {
+          ty = "text";
+        }
+      }
+    }
+    return ty;
+  }
 </script>
 
 {#snippet title()}
@@ -236,8 +243,7 @@
     <h3 class="flex-none">{display_config?.title || key}</h3>
     <p class="flex-none text-xs text-gray-500">{display_config?.description}</p>
   {/if}
-  {@const dct = display_config?.type}
-  {@const ty = dct === "*" ? data?.kind : dct}
+  {@const ty = inferTypeForDisplay(display_config, data)}
   {@const value = data?.value}
   {#if value instanceof Array && ty !== "object" && ty !== "message"}
     <div class="flex-none flex flex-col gap-2">
