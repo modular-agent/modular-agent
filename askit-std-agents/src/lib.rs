@@ -9,6 +9,9 @@ pub mod stream;
 pub mod string;
 pub mod time;
 
+#[cfg(feature = "yaml")]
+pub mod yaml;
+
 pub fn register_agents(askit: &ASKit) {
     counter::register_agents(askit);
     data::register_agents(askit);
@@ -18,4 +21,7 @@ pub fn register_agents(askit: &ASKit) {
     stream::register_agents(askit);
     string::register_agents(askit);
     time::register_agents(askit);
+
+    #[cfg(feature = "yaml")]
+    yaml::register_agents(askit);
 }
