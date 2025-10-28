@@ -104,7 +104,7 @@ impl AsAgent for TemplateStringAgent {
             return Err(AgentError::InvalidConfig("template is not set".into()));
         }
 
-        let reg = Handlebars::new();
+        let reg = handlebars_new();
 
         if data.is_array() {
             let kind = &data.kind;
@@ -167,7 +167,7 @@ impl AsAgent for TemplateTextAgent {
             return Err(AgentError::InvalidConfig("template is not set".into()));
         }
 
-        let reg = Handlebars::new();
+        let reg = handlebars_new();
 
         if data.is_array() {
             let kind = &data.kind;
@@ -230,7 +230,7 @@ impl AsAgent for TemplateArrayAgent {
             return Err(AgentError::InvalidConfig("template is not set".into()));
         }
 
-        let reg = Handlebars::new();
+        let reg = handlebars_new();
 
         if data.is_array() {
             let rendered_string = reg.render_template(&template, &data).map_err(|e| {
@@ -248,6 +248,52 @@ impl AsAgent for TemplateArrayAgent {
         }
     }
 }
+
+fn handlebars_new<'a>() -> Handlebars<'a> {
+    let mut reg = Handlebars::new();
+    reg.register_escape_fn(handlebars::no_escape);
+    reg.register_helper("to_json", Box::new(to_json_helper));
+
+    #[cfg(feature = "yaml")]
+    reg.register_helper("to_yaml", Box::new(to_yaml_helper));
+
+    reg
+}
+
+fn to_json_helper(
+    h: &handlebars::Helper<'_>,
+    _: &handlebars::Handlebars<'_>,
+    _: &handlebars::Context,
+    _: &mut handlebars::RenderContext<'_, '_>,
+    out: &mut dyn handlebars::Output,
+) -> handlebars::HelperResult {
+    if let Some(value) = h.param(0) {
+        let json_str = serde_json::to_string_pretty(&value.value()).map_err(|e| {
+            handlebars::RenderErrorReason::Other(format!("Failed to serialize to JSON: {}", e))
+        })?;
+        out.write(&json_str)?;
+    }
+    Ok(())
+}
+
+#[cfg(feature = "yaml")]
+fn to_yaml_helper(
+    h: &handlebars::Helper<'_>,
+    _: &handlebars::Handlebars<'_>,
+    _: &handlebars::Context,
+    _: &mut handlebars::RenderContext<'_, '_>,
+    out: &mut dyn handlebars::Output,
+) -> handlebars::HelperResult {
+    if let Some(value) = h.param(0) {
+        let yaml_str = serde_yaml_ng::to_string(&value.value()).map_err(|e| {
+            handlebars::RenderErrorReason::Other(format!("Failed to serialize to YAML: {}", e))
+        })?;
+        out.write(&yaml_str)?;
+    }
+    Ok(())
+}
+
+// Agent Definitions
 
 static AGENT_KIND: &str = "agent";
 static CATEGORY: &str = "Core/String";
