@@ -222,7 +222,7 @@
       return;
     }
 
-    let [cnodes, cedges] = await copySubFlow(flowNameState.name, copiedNodes, copiedEdges);
+    let [cnodes, cedges] = await copySubFlow(copiedNodes, copiedEdges);
     if (cnodes.length == 0 && cedges.length == 0) return;
 
     let new_nodes = [];
