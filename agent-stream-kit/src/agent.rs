@@ -16,8 +16,14 @@ pub enum AgentStatus {
 }
 
 pub enum AgentMessage {
-    Input { ctx: AgentContext, data: AgentData },
-    Config { config: AgentConfig },
+    Input {
+        ctx: AgentContext,
+        pin: String,
+        data: AgentData,
+    },
+    Config {
+        config: AgentConfig,
+    },
     Stop,
 }
 
@@ -56,7 +62,12 @@ pub trait Agent {
 
     fn stop(&mut self) -> Result<(), AgentError>;
 
-    async fn process(&mut self, ctx: AgentContext, data: AgentData) -> Result<(), AgentError>;
+    async fn process(
+        &mut self,
+        ctx: AgentContext,
+        pin: String,
+        data: AgentData,
+    ) -> Result<(), AgentError>;
 
     fn runtime(&self) -> &tokio::runtime::Runtime {
         runtime()
@@ -113,7 +124,12 @@ pub trait AsAgent {
         Ok(())
     }
 
-    async fn process(&mut self, _ctx: AgentContext, _data: AgentData) -> Result<(), AgentError> {
+    async fn process(
+        &mut self,
+        _ctx: AgentContext,
+        _pin: String,
+        _data: AgentData,
+    ) -> Result<(), AgentError> {
         Ok(())
     }
 }
@@ -183,8 +199,13 @@ impl<T: AsAgent + Send + Sync> Agent for T {
         Ok(())
     }
 
-    async fn process(&mut self, ctx: AgentContext, data: AgentData) -> Result<(), AgentError> {
-        if let Err(e) = self.process(ctx, data).await {
+    async fn process(
+        &mut self,
+        ctx: AgentContext,
+        pin: String,
+        data: AgentData,
+    ) -> Result<(), AgentError> {
+        if let Err(e) = self.process(ctx, pin, data).await {
             self.askit()
                 .emit_error(self.id().to_string(), e.to_string());
             return Err(e);

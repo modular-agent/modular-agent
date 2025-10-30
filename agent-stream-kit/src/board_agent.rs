@@ -48,18 +48,23 @@ impl AsAgent for BoardInAgent {
         Ok(())
     }
 
-    async fn process(&mut self, ctx: AgentContext, data: AgentData) -> Result<(), AgentError> {
+    async fn process(
+        &mut self,
+        ctx: AgentContext,
+        pin: String,
+        data: AgentData,
+    ) -> Result<(), AgentError> {
         let mut board_name = self.board_name.clone().unwrap_or_default();
         if board_name.is_empty() {
             // if board_name is not set, stop processing
             return Ok(());
         }
         if board_name == "*" {
-            if ctx.port().is_empty() {
+            if pin.is_empty() {
                 // port should not be empty, but just in case
                 return Ok(());
             }
-            board_name = ctx.port().to_string();
+            board_name = pin.clone();
         }
         let askit = self.askit();
         {

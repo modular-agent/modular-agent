@@ -41,7 +41,12 @@ impl AsAgent for DelayAgent {
         &mut self.data
     }
 
-    async fn process(&mut self, ctx: AgentContext, data: AgentData) -> Result<(), AgentError> {
+    async fn process(
+        &mut self,
+        ctx: AgentContext,
+        pin: String,
+        data: AgentData,
+    ) -> Result<(), AgentError> {
         let config = self.config()?;
         let delay_ms = config.get_integer_or(CONFIG_DELAY, DELAY_MS_DEFAULT);
         let max_num_data = config.get_integer_or(CONFIG_MAX_NUM_DATA, MAX_NUM_DATA_DEFAULT);
@@ -58,7 +63,7 @@ impl AsAgent for DelayAgent {
 
         tokio::time::sleep(Duration::from_millis(delay_ms as u64)).await;
 
-        self.try_output(ctx.clone(), ctx.port().to_string(), data.clone())?;
+        self.try_output(ctx.clone(), pin, data.clone())?;
 
         let mut num_waiting_data = self.num_waiting_data.lock().unwrap();
         *num_waiting_data -= 1;
@@ -96,7 +101,8 @@ impl IntervalTimerAgent {
                 // Create a unit output
                 if let Err(e) = askit.try_send_agent_out(
                     agent_id.clone(),
-                    AgentContext::new_with_port(PORT_UNIT),
+                    AgentContext::new(),
+                    PIN_UNIT.to_string(),
                     AgentData::unit(),
                 ) {
                     log::error!("Failed to send interval timer output: {}", e);
@@ -212,7 +218,8 @@ impl AsAgent for OnStartAgent {
 
             if let Err(e) = askit.try_send_agent_out(
                 agent_id,
-                AgentContext::new_with_port(PORT_UNIT),
+                AgentContext::new(),
+                PIN_UNIT.to_string(),
                 AgentData::unit(),
             ) {
                 log::error!("Failed to send delayed output: {}", e);
@@ -288,7 +295,8 @@ impl ScheduleTimerAgent {
                 // Output the timestamp as an integer
                 if let Err(e) = askit.try_send_agent_out(
                     agent_id.clone(),
-                    AgentContext::new_with_port(PORT_TIME),
+                    AgentContext::new(),
+                    PIN_TIME.to_string(),
                     AgentData::integer(current_local_time),
                 ) {
                     log::error!("Failed to send schedule timer output: {}", e);
@@ -392,7 +400,7 @@ struct ThrottleTimeAgent {
     timer_handle: Arc<Mutex<Option<JoinHandle<()>>>>,
     time_ms: u64,
     max_num_data: i64,
-    waiting_data: Arc<Mutex<Vec<(AgentContext, AgentData)>>>,
+    waiting_data: Arc<Mutex<Vec<(AgentContext, String, AgentData)>>>,
 }
 
 impl ThrottleTimeAgent {
@@ -419,9 +427,9 @@ impl ThrottleTimeAgent {
                 let mut wd = waiting_data.lock().unwrap();
                 if wd.len() > 0 {
                     // If there are data waiting, output the first one
-                    let (ctx, data) = wd.remove(0);
+                    let (ctx, pin, data) = wd.remove(0);
                     askit
-                        .try_send_agent_out(agent_id.clone(), ctx, data)
+                        .try_send_agent_out(agent_id.clone(), ctx, pin, data)
                         .unwrap_or_else(|e| {
                             log::error!("Failed to send delayed output: {}", e);
                         });
@@ -516,7 +524,12 @@ impl AsAgent for ThrottleTimeAgent {
         Ok(())
     }
 
-    async fn process(&mut self, ctx: AgentContext, data: AgentData) -> Result<(), AgentError> {
+    async fn process(
+        &mut self,
+        ctx: AgentContext,
+        pin: String,
+        data: AgentData,
+    ) -> Result<(), AgentError> {
         if self.timer_handle.lock().unwrap().is_some() {
             // If the timer is running, we just add the data to the waiting list
             let mut wd = self.waiting_data.lock().unwrap();
@@ -526,7 +539,7 @@ impl AsAgent for ThrottleTimeAgent {
                 return Ok(());
             }
 
-            wd.push((ctx, data));
+            wd.push((ctx, pin, data));
             if self.max_num_data > 0 && wd.len() > self.max_num_data as usize {
                 // If we have reached the max data to keep, we drop the oldest one
                 wd.remove(0);
@@ -539,8 +552,7 @@ impl AsAgent for ThrottleTimeAgent {
         self.start_timer()?;
 
         // Output the data
-        let ch = ctx.port().to_string();
-        self.try_output(ctx, ch, data)?;
+        self.try_output(ctx, pin, data)?;
 
         Ok(())
     }
@@ -596,8 +608,8 @@ fn parse_duration_to_ms(duration_str: &str) -> Result<u64, AgentError> {
 static AGENT_KIND: &str = "Agent";
 static CATEGORY: &str = "Core/Time";
 
-static PORT_TIME: &str = "time";
-static PORT_UNIT: &str = "unit";
+static PIN_TIME: &str = "time";
+static PIN_UNIT: &str = "unit";
 
 static CONFIG_DELAY: &str = "delay";
 static CONFIG_MAX_NUM_DATA: &str = "max_num_data";
@@ -642,7 +654,7 @@ pub fn register_agents(askit: &ASKit) {
         .with_title("Interval Timer")
         .with_description("Outputs a unit signal at specified intervals")
         .with_category(CATEGORY)
-        .with_outputs(vec![PORT_UNIT])
+        .with_outputs(vec![PIN_UNIT])
         .with_default_config(vec![(
             CONFIG_INTERVAL,
             AgentConfigEntry::new(INTERVAL_DEFAULT, "string")
@@ -659,7 +671,7 @@ pub fn register_agents(askit: &ASKit) {
         )
         .with_title("On Start")
         .with_category(CATEGORY)
-        .with_outputs(vec![PORT_UNIT])
+        .with_outputs(vec![PIN_UNIT])
         .with_default_config(vec![(
             CONFIG_DELAY,
             AgentConfigEntry::new(DELAY_MS_DEFAULT, "integer").with_title("delay (ms)"),
@@ -675,7 +687,7 @@ pub fn register_agents(askit: &ASKit) {
         )
         .with_title("Schedule Timer")
         .with_category(CATEGORY)
-        .with_outputs(vec![PORT_TIME])
+        .with_outputs(vec![PIN_TIME])
         .with_default_config(vec![(
             CONFIG_SCHEDULE,
             AgentConfigEntry::new("0 0 * * * *", "string")

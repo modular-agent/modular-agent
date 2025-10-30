@@ -33,10 +33,15 @@ impl AsAgent for ToYamlAgent {
         &mut self.data
     }
 
-    async fn process(&mut self, ctx: AgentContext, data: AgentData) -> Result<(), AgentError> {
+    async fn process(
+        &mut self,
+        ctx: AgentContext,
+        _pin: String,
+        data: AgentData,
+    ) -> Result<(), AgentError> {
         let yaml = serde_yaml_ng::to_string(&data.value)
             .map_err(|e| AgentError::InvalidValue(e.to_string()))?;
-        self.try_output(ctx, PORT_YAML, AgentData::string(yaml))?;
+        self.try_output(ctx, PIN_YAML, AgentData::string(yaml))?;
         Ok(())
     }
 }
@@ -67,7 +72,12 @@ impl AsAgent for FromYamlAgent {
         &mut self.data
     }
 
-    async fn process(&mut self, ctx: AgentContext, data: AgentData) -> Result<(), AgentError> {
+    async fn process(
+        &mut self,
+        ctx: AgentContext,
+        _pin: String,
+        data: AgentData,
+    ) -> Result<(), AgentError> {
         let s = data
             .value
             .as_str()
@@ -75,7 +85,7 @@ impl AsAgent for FromYamlAgent {
         let value: serde_json::Value =
             serde_yaml_ng::from_str(s).map_err(|e| AgentError::InvalidValue(e.to_string()))?;
         let data = AgentData::from_json(value)?;
-        self.try_output(ctx, PORT_DATA, data)?;
+        self.try_output(ctx, PIN_DATA, data)?;
         Ok(())
     }
 }
@@ -83,8 +93,8 @@ impl AsAgent for FromYamlAgent {
 static AGENT_KIND: &str = "agent";
 static CATEGORY: &str = "Core/Data";
 
-static PORT_DATA: &str = "data";
-static PORT_YAML: &str = "yaml";
+static PIN_DATA: &str = "data";
+static PIN_YAML: &str = "yaml";
 
 pub fn register_agents(askit: &ASKit) {
     askit.register_agent(
@@ -95,8 +105,8 @@ pub fn register_agents(askit: &ASKit) {
         )
         .with_title("To YAML")
         .with_category(CATEGORY)
-        .with_inputs(vec![PORT_DATA])
-        .with_outputs(vec![PORT_YAML]),
+        .with_inputs(vec![PIN_DATA])
+        .with_outputs(vec![PIN_YAML]),
     );
 
     askit.register_agent(
@@ -107,7 +117,7 @@ pub fn register_agents(askit: &ASKit) {
         )
         .with_title("From YAML")
         .with_category(CATEGORY)
-        .with_inputs(vec![PORT_YAML])
-        .with_outputs(vec![PORT_DATA]),
+        .with_inputs(vec![PIN_YAML])
+        .with_outputs(vec![PIN_DATA]),
     );
 }

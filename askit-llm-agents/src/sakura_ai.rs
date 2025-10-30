@@ -91,7 +91,12 @@ impl AsAgent for SakuraAIChatAgent {
         Ok(())
     }
 
-    async fn process(&mut self, ctx: AgentContext, data: AgentData) -> Result<(), AgentError> {
+    async fn process(
+        &mut self,
+        ctx: AgentContext,
+        _pin: String,
+        data: AgentData,
+    ) -> Result<(), AgentError> {
         let config_model = &self.config()?.get_string_or_default(CONFIG_MODEL);
         if config_model.is_empty() {
             return Ok(());

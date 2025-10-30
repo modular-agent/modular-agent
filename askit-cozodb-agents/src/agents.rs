@@ -56,7 +56,12 @@ impl AsAgent for CozoDbScriptgent {
         &mut self.data
     }
 
-    async fn process(&mut self, ctx: AgentContext, data: AgentData) -> Result<(), AgentError> {
+    async fn process(
+        &mut self,
+        ctx: AgentContext,
+        _pin: String,
+        data: AgentData,
+    ) -> Result<(), AgentError> {
         let config = self.config()?;
         let db = get_db_instance(&config.get_string_or_default(CONFIG_DB))?;
         let script = config.get_string(CONFIG_SCRIPT)?;

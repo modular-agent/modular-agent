@@ -32,7 +32,12 @@ impl AsAgent for ListFilesAgent {
         &mut self.data
     }
 
-    async fn process(&mut self, ctx: AgentContext, data: AgentData) -> Result<(), AgentError> {
+    async fn process(
+        &mut self,
+        ctx: AgentContext,
+        _pin: String,
+        data: AgentData,
+    ) -> Result<(), AgentError> {
         let path = data
             .as_str()
             .ok_or_else(|| AgentError::InvalidValue("path is not a string".to_string()))?;
@@ -70,7 +75,7 @@ impl AsAgent for ListFilesAgent {
         }
 
         let out_data = AgentData::array("string", files);
-        self.try_output(ctx, PORT_FILES, out_data)
+        self.try_output(ctx, PIN_FILES, out_data)
     }
 }
 
@@ -100,7 +105,12 @@ impl AsAgent for ReadTextFileAgent {
         &mut self.data
     }
 
-    async fn process(&mut self, ctx: AgentContext, data: AgentData) -> Result<(), AgentError> {
+    async fn process(
+        &mut self,
+        ctx: AgentContext,
+        _pin: String,
+        data: AgentData,
+    ) -> Result<(), AgentError> {
         let path = data
             .as_str()
             .ok_or_else(|| AgentError::InvalidValue("path is not a string".into()))?;
@@ -124,7 +134,7 @@ impl AsAgent for ReadTextFileAgent {
             AgentError::InvalidValue(format!("Failed to read file {}: {}", path.display(), e))
         })?;
         let out_data = AgentData::string(content);
-        self.try_output(ctx, PORT_TEXT, out_data)
+        self.try_output(ctx, PIN_TEXT, out_data)
     }
 }
 
@@ -154,7 +164,12 @@ impl AsAgent for WriteTextFileAgent {
         &mut self.data
     }
 
-    async fn process(&mut self, ctx: AgentContext, data: AgentData) -> Result<(), AgentError> {
+    async fn process(
+        &mut self,
+        ctx: AgentContext,
+        _pin: String,
+        data: AgentData,
+    ) -> Result<(), AgentError> {
         let input = data
             .as_object()
             .ok_or_else(|| AgentError::InvalidValue("Input is not an object".into()))?;
@@ -186,17 +201,17 @@ impl AsAgent for WriteTextFileAgent {
             AgentError::InvalidValue(format!("Failed to write file {}: {}", path.display(), e))
         })?;
 
-        self.try_output(ctx, PORT_DATA, data)
+        self.try_output(ctx, PIN_DATA, data)
     }
 }
 
 static AGENT_KIND: &str = "agent";
 static CATEGORY: &str = "Core/File";
 
-static PORT_PATH: &str = "path";
-static PORT_FILES: &str = "files";
-static PORT_TEXT: &str = "text";
-static PORT_DATA: &str = "data";
+static PIN_PATH: &str = "path";
+static PIN_FILES: &str = "files";
+static PIN_TEXT: &str = "text";
+static PIN_DATA: &str = "data";
 
 pub fn register_agents(askit: &ASKit) {
     // List Files Agent
@@ -208,8 +223,8 @@ pub fn register_agents(askit: &ASKit) {
         )
         .with_title("List Files")
         .with_category(CATEGORY)
-        .with_inputs(vec![PORT_PATH])
-        .with_outputs(vec![PORT_FILES]),
+        .with_inputs(vec![PIN_PATH])
+        .with_outputs(vec![PIN_FILES]),
     );
 
     // Read Text File Agent
@@ -221,8 +236,8 @@ pub fn register_agents(askit: &ASKit) {
         )
         .with_title("Read Text File")
         .with_category(CATEGORY)
-        .with_inputs(vec![PORT_PATH])
-        .with_outputs(vec![PORT_TEXT]),
+        .with_inputs(vec![PIN_PATH])
+        .with_outputs(vec![PIN_TEXT]),
     );
 
     // Write Text File Agent
@@ -234,7 +249,7 @@ pub fn register_agents(askit: &ASKit) {
         )
         .with_title("Write Text File")
         .with_category(CATEGORY)
-        .with_inputs(vec![PORT_DATA])
-        .with_outputs(vec![PORT_DATA]),
+        .with_inputs(vec![PIN_DATA])
+        .with_outputs(vec![PIN_DATA]),
     );
 }

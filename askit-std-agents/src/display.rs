@@ -35,7 +35,12 @@ impl AsAgent for DisplayDataAgent {
         Ok(())
     }
 
-    async fn process(&mut self, _ctx: AgentContext, data: AgentData) -> Result<(), AgentError> {
+    async fn process(
+        &mut self,
+        _ctx: AgentContext,
+        _pin: String,
+        data: AgentData,
+    ) -> Result<(), AgentError> {
         self.emit_display(DISPLAY_DATA, data);
         Ok(())
     }
@@ -67,7 +72,12 @@ impl AsAgent for DebugDataAgent {
         &mut self.data
     }
 
-    async fn process(&mut self, ctx: AgentContext, data: AgentData) -> Result<(), AgentError> {
+    async fn process(
+        &mut self,
+        ctx: AgentContext,
+        _pin: String,
+        data: AgentData,
+    ) -> Result<(), AgentError> {
         let value = AgentValue::object(
             [
                 ("kind".to_string(), data.kind.into()),

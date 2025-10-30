@@ -67,7 +67,12 @@ impl AsAgent for ZipAgent {
         Ok(())
     }
 
-    async fn process(&mut self, ctx: AgentContext, data: AgentData) -> Result<(), AgentError> {
+    async fn process(
+        &mut self,
+        ctx: AgentContext,
+        pin: String,
+        data: AgentData,
+    ) -> Result<(), AgentError> {
         for i in 0..self.n {
             if self.keys[i].is_empty() {
                 return Err(AgentError::InvalidConfig(format!(
@@ -88,7 +93,7 @@ impl AsAgent for ZipAgent {
 
         // Store the input value
         for i in 0..self.n {
-            if ctx.port() == self.in_ports[i] {
+            if pin == self.in_ports[i] {
                 self.input_value[i] = Some(data.value.clone());
             }
         }
@@ -109,7 +114,7 @@ impl AsAgent for ZipAgent {
         }
         let out_data = AgentData::object(map);
 
-        self.try_output(ctx, PORT_DATA, out_data)?;
+        self.try_output(ctx, PIN_DATA, out_data)?;
 
         Ok(())
     }
@@ -118,11 +123,11 @@ impl AsAgent for ZipAgent {
 static AGENT_KIND: &str = "agent";
 static CATEGORY: &str = "Core/Stream";
 
-static PORT_DATA: &str = "data";
-static PORT_IN1: &str = "in1";
-static PORT_IN2: &str = "in2";
-static PORT_IN3: &str = "in3";
-static PORT_IN4: &str = "in4";
+static PIN_DATA: &str = "data";
+static PIN_IN1: &str = "in1";
+static PIN_IN2: &str = "in2";
+static PIN_IN3: &str = "in3";
+static PIN_IN4: &str = "in4";
 
 static CONFIG_KEY1: &str = "key1";
 static CONFIG_KEY2: &str = "key2";
@@ -135,8 +140,8 @@ pub fn register_agents(askit: &ASKit) {
         AgentDefinition::new(AGENT_KIND, "std_zip2", Some(new_agent_boxed::<ZipAgent>))
             .with_title("Zip2")
             .with_category(CATEGORY)
-            .with_inputs(vec![PORT_IN1, PORT_IN2])
-            .with_outputs(vec![PORT_DATA])
+            .with_inputs(vec![PIN_IN1, PIN_IN2])
+            .with_outputs(vec![PIN_DATA])
             .with_default_config(vec![
                 (CONFIG_N, AgentConfigEntry::new(2, "integer").with_hidden()),
                 (CONFIG_KEY1, AgentConfigEntry::new("", "string")),
@@ -148,8 +153,8 @@ pub fn register_agents(askit: &ASKit) {
         AgentDefinition::new(AGENT_KIND, "std_zip3", Some(new_agent_boxed::<ZipAgent>))
             .with_title("Zip3")
             .with_category(CATEGORY)
-            .with_inputs(vec![PORT_IN1, PORT_IN2, PORT_IN3])
-            .with_outputs(vec![PORT_DATA])
+            .with_inputs(vec![PIN_IN1, PIN_IN2, PIN_IN3])
+            .with_outputs(vec![PIN_DATA])
             .with_default_config(vec![
                 (CONFIG_N, AgentConfigEntry::new(3, "integer").with_hidden()),
                 (CONFIG_KEY1, AgentConfigEntry::new("", "string")),
@@ -162,8 +167,8 @@ pub fn register_agents(askit: &ASKit) {
         AgentDefinition::new(AGENT_KIND, "std_zip4", Some(new_agent_boxed::<ZipAgent>))
             .with_title("Zip4")
             .with_category(CATEGORY)
-            .with_inputs(vec![PORT_IN1, PORT_IN2, PORT_IN3, PORT_IN4])
-            .with_outputs(vec![PORT_DATA])
+            .with_inputs(vec![PIN_IN1, PIN_IN2, PIN_IN3, PIN_IN4])
+            .with_outputs(vec![PIN_DATA])
             .with_default_config(vec![
                 (CONFIG_N, AgentConfigEntry::new(4, "integer").with_hidden()),
                 (CONFIG_KEY1, AgentConfigEntry::new("", "string")),

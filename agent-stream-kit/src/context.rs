@@ -14,8 +14,6 @@ use super::data::AgentValue;
 pub struct AgentContext {
     id: usize,
 
-    port: String,
-
     #[serde(skip_serializing_if = "Option::is_none")]
     vars: Option<Arc<BTreeMap<String, AgentValue>>>,
 }
@@ -24,35 +22,12 @@ impl AgentContext {
     pub fn new() -> Self {
         Self {
             id: new_id(),
-            port: "".to_string(),
             vars: None,
-        }
-    }
-
-    // Port
-
-    pub fn new_with_port(port: impl Into<String>) -> Self {
-        Self {
-            id: new_id(),
-            port: port.into(),
-            vars: None,
-        }
-    }
-
-    pub fn with_port(&self, port: impl Into<String>) -> Self {
-        Self {
-            id: self.id,
-            port: port.into(),
-            vars: self.vars.clone(),
         }
     }
 
     pub fn id(&self) -> usize {
         self.id
-    }
-
-    pub fn port(&self) -> &str {
-        &self.port
     }
 
     // Variables
@@ -70,7 +45,6 @@ impl AgentContext {
         vars.insert(key, value);
         Self {
             id: self.id,
-            port: self.port.clone(),
             vars: Some(Arc::new(vars)),
         }
     }

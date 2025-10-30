@@ -270,13 +270,10 @@ impl ASKit {
         Ok(())
     }
 
-    pub fn new_agent_flow_node(
-        &self,
-        def_name: &str,
-    ) -> Result<AgentFlowNode, AgentError> {
-        let def = self.get_agent_definition(def_name).ok_or_else(|| {
-            AgentError::AgentDefinitionNotFound(def_name.to_string())
-        })?;
+    pub fn new_agent_flow_node(&self, def_name: &str) -> Result<AgentFlowNode, AgentError> {
+        let def = self
+            .get_agent_definition(def_name)
+            .ok_or_else(|| AgentError::AgentDefinitionNotFound(def_name.to_string()))?;
         AgentFlowNode::new(&def)
     }
 
@@ -522,11 +519,11 @@ impl ASKit {
 
                     while let Ok(message) = rx.recv() {
                         match message {
-                            AgentMessage::Input { ctx, data } => {
+                            AgentMessage::Input { ctx, pin, data } => {
                                 agent
                                     .lock()
                                     .await
-                                    .process(ctx, data)
+                                    .process(ctx, pin, data)
                                     .await
                                     .unwrap_or_else(|e| {
                                         log::error!("Process Error {}: {}", agent_id, e);
@@ -562,11 +559,11 @@ impl ASKit {
 
                     while let Some(message) = rx.recv().await {
                         match message {
-                            AgentMessage::Input { ctx, data } => {
+                            AgentMessage::Input { ctx, pin, data } => {
                                 agent
                                     .lock()
                                     .await
-                                    .process(ctx, data)
+                                    .process(ctx, pin, data)
                                     .await
                                     .unwrap_or_else(|e| {
                                         log::error!("Process Error {}: {}", agent_id, e);
@@ -714,6 +711,7 @@ impl ASKit {
         &self,
         agent_id: String,
         ctx: AgentContext,
+        pin: String,
         data: AgentData,
     ) -> Result<(), AgentError> {
         let agent: Arc<AsyncMutex<Box<dyn Agent + Send + Sync>>> = {
@@ -728,32 +726,37 @@ impl ASKit {
             let agent = agent.lock().await;
             agent.status().clone()
         };
-        if agent_status == AgentStatus::Start {
-            let ch = ctx.port().to_string();
-            let message = AgentMessage::Input { ctx, data };
-
-            let tx = {
-                let agent_txs = self.agent_txs.lock().unwrap();
-                let Some(tx) = agent_txs.get(&agent_id) else {
-                    return Err(AgentError::AgentTxNotFound(agent_id.to_string()));
-                };
-                tx.clone()
-            };
-            match tx {
-                AgentMessageSender::Sync(tx) => {
-                    tx.send(message).map_err(|_| {
-                        AgentError::SendMessageFailed("Failed to send input message".to_string())
-                    })?;
-                }
-                AgentMessageSender::Async(tx) => {
-                    tx.send(message).await.map_err(|_| {
-                        AgentError::SendMessageFailed("Failed to send input message".to_string())
-                    })?;
-                }
-            }
-
-            self.emit_input(agent_id.to_string(), ch);
+        if agent_status != AgentStatus::Start {
+            return Ok(());
         }
+
+        let message = AgentMessage::Input {
+            ctx,
+            pin: pin.clone(),
+            data,
+        };
+
+        let tx = {
+            let agent_txs = self.agent_txs.lock().unwrap();
+            let Some(tx) = agent_txs.get(&agent_id) else {
+                return Err(AgentError::AgentTxNotFound(agent_id.to_string()));
+            };
+            tx.clone()
+        };
+        match tx {
+            AgentMessageSender::Sync(tx) => {
+                tx.send(message).map_err(|_| {
+                    AgentError::SendMessageFailed("Failed to send input message".to_string())
+                })?;
+            }
+            AgentMessageSender::Async(tx) => {
+                tx.send(message).await.map_err(|_| {
+                    AgentError::SendMessageFailed("Failed to send input message".to_string())
+                })?;
+            }
+        }
+        self.emit_input(agent_id.to_string(), pin);
+
         Ok(())
     }
 
@@ -761,18 +764,20 @@ impl ASKit {
         &self,
         agent_id: String,
         ctx: AgentContext,
+        pin: String,
         data: AgentData,
     ) -> Result<(), AgentError> {
-        message::send_agent_out(self, agent_id, ctx, data).await
+        message::send_agent_out(self, agent_id, ctx, pin, data).await
     }
 
     pub fn try_send_agent_out(
         &self,
         agent_id: String,
         ctx: AgentContext,
+        pin: String,
         data: AgentData,
     ) -> Result<(), AgentError> {
-        message::try_send_agent_out(self, agent_id, ctx, data)
+        message::try_send_agent_out(self, agent_id, ctx, pin, data)
     }
 
     pub fn write_board_data(&self, name: String, data: AgentData) -> Result<(), AgentError> {
@@ -803,8 +808,13 @@ impl ASKit {
                 use AgentEventMessage::*;
 
                 match message {
-                    AgentOut { agent, ctx, data } => {
-                        message::agent_out(&askit, agent, ctx, data).await;
+                    AgentOut {
+                        agent,
+                        ctx,
+                        pin,
+                        data,
+                    } => {
+                        message::agent_out(&askit, agent, ctx, pin, data).await;
                     }
                     BoardOut { name, ctx, data } => {
                         message::board_out(&askit, name, ctx, data).await;
@@ -846,8 +856,8 @@ impl ASKit {
         self.notify_observers(ASKitEvent::AgentError(agent_id, message));
     }
 
-    pub(crate) fn emit_input(&self, agent_id: String, ch: String) {
-        self.notify_observers(ASKitEvent::AgentIn(agent_id, ch));
+    pub(crate) fn emit_input(&self, agent_id: String, pin: String) {
+        self.notify_observers(ASKitEvent::AgentIn(agent_id, pin));
     }
 
     pub(crate) fn emit_display(&self, agent_id: String, key: String, data: AgentData) {

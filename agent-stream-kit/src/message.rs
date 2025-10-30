@@ -8,6 +8,7 @@ pub enum AgentEventMessage {
     AgentOut {
         agent: String,
         ctx: AgentContext,
+        pin: String,
         data: AgentData,
     },
     BoardOut {
@@ -21,11 +22,17 @@ pub async fn send_agent_out(
     askit: &ASKit,
     agent: String,
     ctx: AgentContext,
+    pin: String,
     data: AgentData,
 ) -> Result<(), AgentError> {
     askit
         .tx()?
-        .send(AgentEventMessage::AgentOut { agent, ctx, data })
+        .send(AgentEventMessage::AgentOut {
+            agent,
+            ctx,
+            pin,
+            data,
+        })
         .await
         .map_err(|_| AgentError::SendMessageFailed("Failed to send AgentOut message".to_string()))
 }
@@ -34,11 +41,17 @@ pub fn try_send_agent_out(
     askit: &ASKit,
     agent: String,
     ctx: AgentContext,
+    pin: String,
     data: AgentData,
 ) -> Result<(), AgentError> {
     askit
         .tx()?
-        .try_send(AgentEventMessage::AgentOut { agent, ctx, data })
+        .try_send(AgentEventMessage::AgentOut {
+            agent,
+            ctx,
+            pin,
+            data,
+        })
         .map_err(|_| {
             AgentError::SendMessageFailed("Failed to try_send AgentOut message".to_string())
         })
@@ -59,7 +72,13 @@ pub fn try_send_board_out(
 }
 
 // Processing AgentOut message
-pub async fn agent_out(env: &ASKit, source_agent: String, ctx: AgentContext, data: AgentData) {
+pub async fn agent_out(
+    env: &ASKit,
+    source_agent: String,
+    ctx: AgentContext,
+    pin: String,
+    data: AgentData,
+) {
     let targets;
     {
         let env_edges = env.edges.lock().unwrap();
@@ -73,7 +92,7 @@ pub async fn agent_out(env: &ASKit, source_agent: String, ctx: AgentContext, dat
     for target in targets.unwrap() {
         let (target_agent, source_handle, target_handle) = target;
 
-        if source_handle != ctx.port() && source_handle != "*" {
+        if source_handle != pin && source_handle != "*" {
             // Skip if source_handle does not match with the given port.
             // "*" is a wildcard, and outputs messages of all ports.
             continue;
@@ -86,16 +105,14 @@ pub async fn agent_out(env: &ASKit, source_agent: String, ctx: AgentContext, dat
             }
         }
 
-        let target_port = if target_handle == "*" {
+        let target_pin = if target_handle == "*" {
             // If target_handle is "*", use the port specified by the source agent
-            ctx.port().to_string()
+            pin.clone()
         } else {
             target_handle.clone()
         };
 
-        let target_ctx = ctx.with_port(target_port);
-
-        env.agent_input(target_agent.clone(), target_ctx, data.clone())
+        env.agent_input(target_agent.clone(), ctx.clone(), target_pin, data.clone())
             .await
             .unwrap_or_else(|e| {
                 log::error!("Failed to send message to {}: {}", target_agent, e);
@@ -123,14 +140,13 @@ pub async fn board_out(env: &ASKit, name: String, ctx: AgentContext, data: Agent
                 continue;
             };
             for (target_agent, _source_handle, target_handle) in edges {
-                let target_port = if target_handle == "*" {
+                let target_pin = if target_handle == "*" {
                     // If target_handle is "*", use the board name
                     name.clone()
                 } else {
                     target_handle.clone()
                 };
-                let target_ctx = ctx.with_port(target_port);
-                env.agent_input(target_agent.clone(), target_ctx, data.clone())
+                env.agent_input(target_agent.clone(), ctx.clone(), target_pin, data.clone())
                     .await
                     .unwrap_or_else(|e| {
                         log::error!("Failed to send message to {}: {}", target_agent, e);
