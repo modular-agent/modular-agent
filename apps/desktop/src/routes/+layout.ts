@@ -1,4 +1,4 @@
-import { getAgentDefinitions, getAgentFlows, getGlobalConfigs } from "tauri-plugin-askit-api";
+import { getAgentDefinitions, getAgentFlows, getGlobalConfigsMap } from "tauri-plugin-askit-api";
 import type { AgentDefinitions } from "tauri-plugin-askit-api";
 
 import { deserializeAgentFlow } from "@/lib/agent";
@@ -14,7 +14,7 @@ export async function load() {
   const coreSettings = await getCoreSettings();
 
   const agentDefs: AgentDefinitions = await getAgentDefinitions();
-  const agentGlobalConfigs = await getGlobalConfigs();
+  const agentGlobalConfigsMap = await getGlobalConfigsMap();
 
   const sAgentFlows = await getAgentFlows();
   const agentFlows = Object.fromEntries(
@@ -25,7 +25,7 @@ export async function load() {
     // dailyStats,
     coreSettings,
     agentDefs,
-    agentGlobalConfigs,
+    agentGlobalConfigsMap,
     agentFlows,
   };
 }

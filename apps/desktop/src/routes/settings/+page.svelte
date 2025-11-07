@@ -5,7 +5,7 @@
   const { data } = $props();
 
   const settings = $derived(data.coreSettings);
-  const agentGlobalConfigs = $derived(data.agentGlobalConfigs);
+  const agentGlobalConfigsMap = $derived(data.agentGlobalConfigsMap);
   const agentDefs = $derived(data.agentDefs);
 </script>
 
@@ -14,7 +14,7 @@
   <Core {settings} />
 
   <h2 class="text-xl font-semibold sm:text-2xl">Agents</h2>
-  {#each Object.entries(agentGlobalConfigs) as [agentName, agentConfig]}
-    <Agent {agentName} {agentConfig} agentDef={agentDefs[agentName]} />
+  {#each Object.entries(agentGlobalConfigsMap) as [agentName, agentConfigs]}
+    <Agent {agentName} {agentConfigs} agentDef={agentDefs[agentName]} />
   {/each}
 </main>

@@ -111,6 +111,7 @@ $effect.root(() => {
   });
 
   return () => {
+    // unlistenConfig?.();
     unlistenDisplay?.();
     unlistenError?.();
     unlistenInput?.();

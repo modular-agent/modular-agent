@@ -13,6 +13,28 @@ pub struct ASAppObserver {
 }
 
 impl ASAppObserver {
+    fn emit_display(&self, agent_id: String, key: String, data: AgentData) -> Result<()> {
+        #[derive(Clone, Serialize)]
+        struct DisplayMessage {
+            agent_id: String,
+            key: String,
+            data: AgentData,
+        }
+
+        self.app
+            .emit(
+                EMIT_DISPLAY,
+                DisplayMessage {
+                    agent_id,
+                    key,
+                    data,
+                },
+            )
+            .context("Failed to emit display message")?;
+
+        Ok(())
+    }
+
     fn emit_error(&self, agent_id: String, message: String) -> Result<()> {
         #[derive(Clone, Serialize)]
         struct ErrorMessage {
@@ -40,39 +62,11 @@ impl ASAppObserver {
 
         Ok(())
     }
-
-    fn emit_display(&self, agent_id: String, key: String, data: AgentData) -> Result<()> {
-        #[derive(Clone, Serialize)]
-        struct DisplayMessage {
-            agent_id: String,
-            key: String,
-            data: AgentData,
-        }
-
-        self.app
-            .emit(
-                EMIT_DISPLAY,
-                DisplayMessage {
-                    agent_id,
-                    key,
-                    data,
-                },
-            )
-            .context("Failed to emit display message")?;
-
-        Ok(())
-    }
 }
 
 impl ASKitObserver for ASAppObserver {
     fn notify(&self, event: &ASKitEvent) {
         match event {
-            ASKitEvent::AgentIn(agent_id, channel) => {
-                self.emit_input(agent_id.to_string(), channel.to_string())
-                    .unwrap_or_else(|e| {
-                        log::error!("Failed to emit input message: {}", e);
-                    });
-            }
             ASKitEvent::AgentDisplay(agent_id, key, data) => {
                 self.emit_display(agent_id.to_string(), key.to_string(), data.clone())
                     .unwrap_or_else(|e| {
@@ -83,6 +77,12 @@ impl ASKitObserver for ASAppObserver {
                 self.emit_error(agent_id.to_string(), message.to_string())
                     .unwrap_or_else(|e| {
                         log::error!("Failed to emit error message: {}", e);
+                    });
+            }
+            ASKitEvent::AgentIn(agent_id, channel) => {
+                self.emit_input(agent_id.to_string(), channel.to_string())
+                    .unwrap_or_else(|e| {
+                        log::error!("Failed to emit input message: {}", e);
                     });
             }
             _ => {}

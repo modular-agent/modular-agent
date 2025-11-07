@@ -44,12 +44,12 @@ pub fn run() {
                     log::error!("Failed to initialize agent: {}", e);
                     app_handle.exit(1);
                 });
-                // agent_stream_app::settings::set_agent_global_configs(&app_handle).unwrap_or_else(
-                //     |e| {
-                //         log::error!("Failed to set agent global configs: {}", e);
-                //         app_handle.exit(1);
-                //     },
-                // );
+                agent_stream_app::settings::load_agent_global_configs(&app_handle).unwrap_or_else(
+                    |e| {
+                        log::error!("Failed to load agent global configs: {}", e);
+                        app_handle.exit(1);
+                    },
+                );
                 agent_stream_app::autostart::init(&app_handle).unwrap_or_else(|e| {
                     log::error!("Failed to initialize autostart: {}", e);
                 });

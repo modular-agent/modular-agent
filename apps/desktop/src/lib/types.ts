@@ -16,11 +16,11 @@ export type TAgentFlowNodeData = {
   name: string;
   enabled: boolean;
   title: string | null;
-  config: TAgentFlowNodeConfig | null;
-  display: TAgentFlowNodeDisplay | null;
+  configs: TAgentFlowNodeConfigs | null;
+  displays: TAgentFlowNodeDisplays | null;
 };
 
-export type TAgentFlowNodeConfig = Record<string, any>;
-export type TAgentFlowNodeDisplay = Record<string, any>;
+export type TAgentFlowNodeConfigs = Record<string, any>;
+export type TAgentFlowNodeDisplays = Record<string, any>;
 
 export type TAgentFlowEdge = Edge;

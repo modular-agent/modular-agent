@@ -1,3 +1,4 @@
+use agent_stream_kit::AgentValue;
 use anyhow::{Context as _, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -27,7 +28,7 @@ pub fn save(app: &AppHandle) -> Result<()> {
     }
     store.set("core", settings_json);
 
-    let agent_settings = app.askit().get_global_configs();
+    let agent_settings = app.askit().get_global_configs_map();
     let agent_settings_json = serde_json::to_value(agent_settings)?;
     store.set("agents", agent_settings_json);
 
@@ -89,6 +90,28 @@ fn init_core_settings(app: &AppHandle) -> Result<()> {
     }
 
     app.manage(Mutex::new(core_settings));
+
+    Ok(())
+}
+
+pub fn load_agent_global_configs(app: &AppHandle) -> Result<()> {
+    let store = app.store(SETTINGS_JSON)?;
+
+    if let Some(store_value) = store.get("agents") {
+        let mut global_configs_map = app.askit().get_global_configs_map();
+        for (agent_name, configs) in store_value.as_object().unwrap_or(&Default::default()) {
+            if let Some(agent_configs) = global_configs_map.get_mut(agent_name) {
+                for (key, value) in configs.as_object().unwrap_or(&Default::default()) {
+                    if agent_configs.contains_key(key) {
+                        if let Ok(value) = AgentValue::from_json(value.clone()) {
+                            agent_configs.set(key.clone(), value);
+                        }
+                    }
+                }
+            }
+        }
+        app.askit().set_global_configs_map(global_configs_map);
+    }
 
     Ok(())
 }
