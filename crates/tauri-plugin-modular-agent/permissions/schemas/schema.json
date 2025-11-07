@@ -355,6 +355,18 @@
           "markdownDescription": "Denies the get_agent_default_config command without any pre-configured scope."
         },
         {
+          "description": "Enables the get_agent_default_configs command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-agent-default-configs",
+          "markdownDescription": "Enables the get_agent_default_configs command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_agent_default_configs command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-agent-default-configs",
+          "markdownDescription": "Denies the get_agent_default_configs command without any pre-configured scope."
+        },
+        {
           "description": "Enables the get_agent_definition command without any pre-configured scope.",
           "type": "string",
           "const": "allow-get-agent-definition",
@@ -425,6 +437,18 @@
           "type": "string",
           "const": "deny-get-global-configs",
           "markdownDescription": "Denies the get_global_configs command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the get_global_configs_map command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-global-configs-map",
+          "markdownDescription": "Enables the get_global_configs_map command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_global_configs_map command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-global-configs-map",
+          "markdownDescription": "Denies the get_global_configs_map command without any pre-configured scope."
         },
         {
           "description": "Enables the insert_agent_flow command without any pre-configured scope.",
@@ -523,6 +547,18 @@
           "markdownDescription": "Denies the set_agent_config command without any pre-configured scope."
         },
         {
+          "description": "Enables the set_agent_configs command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-set-agent-configs",
+          "markdownDescription": "Enables the set_agent_configs command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the set_agent_configs command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-set-agent-configs",
+          "markdownDescription": "Denies the set_agent_configs command without any pre-configured scope."
+        },
+        {
           "description": "Enables the set_global_config command without any pre-configured scope.",
           "type": "string",
           "const": "allow-set-global-config",
@@ -545,6 +581,18 @@
           "type": "string",
           "const": "deny-set-global-configs",
           "markdownDescription": "Denies the set_global_configs command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the set_global_configs_map command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-set-global-configs-map",
+          "markdownDescription": "Enables the set_global_configs_map command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the set_global_configs_map command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-set-global-configs-map",
+          "markdownDescription": "Denies the set_global_configs_map command without any pre-configured scope."
         },
         {
           "description": "Enables the start_agent command without any pre-configured scope.",
@@ -619,10 +667,10 @@
           "markdownDescription": "Denies the write_board command without any pre-configured scope."
         },
         {
-          "description": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-get-agent-definition`\n- `allow-get-agent-definitions`\n- `allow-get-agent-flows`\n- `allow-new-agent-flow`\n- `allow-rename-agent-flow`\n- `allow-unique-flow-name`\n- `allow-add-agent-flow`\n- `allow-remove-agent-flow`\n- `allow-insert-agent-flow`\n- `allow-copy-sub-flow`\n- `allow-start-agent-flow`\n- `allow-stop-agent-flow`\n- `allow-new-agent-flow-node`\n- `allow-add-agent-flow-node`\n- `allow-remove-agent-flow-node`\n- `allow-add-agent-flow-edge`\n- `allow-remove-agent-flow-edge`\n- `allow-start-agent`\n- `allow-stop-agent`\n- `allow-write-board`\n- `allow-set-agent-config`\n- `allow-get-global-config`\n- `allow-get-global-configs`\n- `allow-set-global-config`\n- `allow-set-global-configs`\n- `allow-get-agent-default-config`",
+          "description": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-get-agent-definition`\n- `allow-get-agent-definitions`\n- `allow-get-agent-flows`\n- `allow-new-agent-flow`\n- `allow-rename-agent-flow`\n- `allow-unique-flow-name`\n- `allow-add-agent-flow`\n- `allow-remove-agent-flow`\n- `allow-insert-agent-flow`\n- `allow-copy-sub-flow`\n- `allow-start-agent-flow`\n- `allow-stop-agent-flow`\n- `allow-new-agent-flow-node`\n- `allow-add-agent-flow-node`\n- `allow-remove-agent-flow-node`\n- `allow-add-agent-flow-edge`\n- `allow-remove-agent-flow-edge`\n- `allow-start-agent`\n- `allow-stop-agent`\n- `allow-write-board`\n- `allow-set-agent-configs`\n- `allow-get-global-configs`\n- `allow-get-global-configs-map`\n- `allow-set-global-configs`\n- `allow-set-global-configs-map`\n- `allow-get-agent-default-configs`",
           "type": "string",
           "const": "default",
-          "markdownDescription": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-get-agent-definition`\n- `allow-get-agent-definitions`\n- `allow-get-agent-flows`\n- `allow-new-agent-flow`\n- `allow-rename-agent-flow`\n- `allow-unique-flow-name`\n- `allow-add-agent-flow`\n- `allow-remove-agent-flow`\n- `allow-insert-agent-flow`\n- `allow-copy-sub-flow`\n- `allow-start-agent-flow`\n- `allow-stop-agent-flow`\n- `allow-new-agent-flow-node`\n- `allow-add-agent-flow-node`\n- `allow-remove-agent-flow-node`\n- `allow-add-agent-flow-edge`\n- `allow-remove-agent-flow-edge`\n- `allow-start-agent`\n- `allow-stop-agent`\n- `allow-write-board`\n- `allow-set-agent-config`\n- `allow-get-global-config`\n- `allow-get-global-configs`\n- `allow-set-global-config`\n- `allow-set-global-configs`\n- `allow-get-agent-default-config`"
+          "markdownDescription": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-get-agent-definition`\n- `allow-get-agent-definitions`\n- `allow-get-agent-flows`\n- `allow-new-agent-flow`\n- `allow-rename-agent-flow`\n- `allow-unique-flow-name`\n- `allow-add-agent-flow`\n- `allow-remove-agent-flow`\n- `allow-insert-agent-flow`\n- `allow-copy-sub-flow`\n- `allow-start-agent-flow`\n- `allow-stop-agent-flow`\n- `allow-new-agent-flow-node`\n- `allow-add-agent-flow-node`\n- `allow-remove-agent-flow-node`\n- `allow-add-agent-flow-edge`\n- `allow-remove-agent-flow-edge`\n- `allow-start-agent`\n- `allow-stop-agent`\n- `allow-write-board`\n- `allow-set-agent-configs`\n- `allow-get-global-configs`\n- `allow-get-global-configs-map`\n- `allow-set-global-configs`\n- `allow-set-global-configs-map`\n- `allow-get-agent-default-configs`"
         }
       ]
     }

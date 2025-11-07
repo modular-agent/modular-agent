@@ -1,11 +1,11 @@
-use agent_stream_kit::{AgentConfigs, AgentDefinition, AgentDefinitions, AgentFlowEdge, AgentFlowNode, AgentFlows};
 use agent_stream_kit::{
-    AgentConfig, AgentData, AgentDefaultConfig, AgentFlow,
+    AgentConfigs, AgentConfigsMap, AgentData, AgentDefaultConfigs, AgentDefinition, AgentDefinitions,
+    AgentFlow, AgentFlowEdge, AgentFlowNode, AgentFlows,
 };
 use tauri::{AppHandle, Runtime};
 
-use crate::Result;
 use crate::ASKitExt;
+use crate::Result;
 
 // agent definition
 
@@ -49,28 +49,20 @@ pub(crate) fn rename_agent_flow<R: Runtime>(
 }
 
 #[tauri::command]
-pub(crate) fn unique_flow_name<R: Runtime>(
-    app: tauri::AppHandle<R>,
-    name: String,
- ) -> String {
+pub(crate) fn unique_flow_name<R: Runtime>(app: tauri::AppHandle<R>, name: String) -> String {
     app.askit().unique_flow_name(&name)
 }
 
 #[tauri::command]
-pub(crate) fn add_agent_flow<R: Runtime>(
-    app: AppHandle<R>,
-    agent_flow: AgentFlow,
-) -> Result<()> {
-    app.askit()
-        .add_agent_flow(&agent_flow)
-        .map_err(Into::into)
+pub(crate) fn add_agent_flow<R: Runtime>(app: AppHandle<R>, agent_flow: AgentFlow) -> Result<()> {
+    app.askit().add_agent_flow(&agent_flow).map_err(Into::into)
 }
 
 #[tauri::command]
 pub(crate) async fn remove_agent_flow<R: Runtime>(
     app: tauri::AppHandle<R>,
     flow_name: String,
- ) -> Result<()> {
+) -> Result<()> {
     app.askit()
         .remove_agent_flow(&flow_name)
         .await
@@ -125,7 +117,9 @@ pub fn new_agent_flow_node<R: Runtime>(
     app: AppHandle<R>,
     def_name: String,
 ) -> Result<AgentFlowNode> {
-    app.askit().new_agent_flow_node(&def_name).map_err(Into::into)
+    app.askit()
+        .new_agent_flow_node(&def_name)
+        .map_err(Into::into)
 }
 
 #[tauri::command]
@@ -134,7 +128,9 @@ pub(crate) fn add_agent_flow_node<R: Runtime>(
     flow_name: String,
     node: AgentFlowNode,
 ) -> Result<()> {
-    app.askit().add_agent_flow_node(&flow_name, &node).map_err(Into::into)
+    app.askit()
+        .add_agent_flow_node(&flow_name, &node)
+        .map_err(Into::into)
 }
 
 #[tauri::command]
@@ -143,7 +139,10 @@ pub(crate) async fn remove_agent_flow_node<R: Runtime>(
     flow_name: String,
     node_id: String,
 ) -> Result<()> {
-    app.askit().remove_agent_flow_node(&flow_name, &node_id).await.map_err(Into::into)
+    app.askit()
+        .remove_agent_flow_node(&flow_name, &node_id)
+        .await
+        .map_err(Into::into)
 }
 
 // edge
@@ -154,7 +153,9 @@ pub(crate) fn add_agent_flow_edge<R: Runtime>(
     flow_name: String,
     edge: AgentFlowEdge,
 ) -> Result<()> {
-    app.askit().add_agent_flow_edge(&flow_name, &edge).map_err(Into::into)
+    app.askit()
+        .add_agent_flow_edge(&flow_name, &edge)
+        .map_err(Into::into)
 }
 
 #[tauri::command]
@@ -163,31 +164,21 @@ pub(crate) fn remove_agent_flow_edge<R: Runtime>(
     flow_name: String,
     edge_id: String,
 ) -> Result<()> {
-    app.askit().remove_agent_flow_edge(&flow_name, &edge_id).map_err(Into::into)
+    app.askit()
+        .remove_agent_flow_edge(&flow_name, &edge_id)
+        .map_err(Into::into)
 }
 
 // agent
 
 #[tauri::command]
-pub(crate) async fn start_agent<R: Runtime>(
-    app: AppHandle<R>,
-    agent_id: String,
-) -> Result<()> {
-    app.askit()
-        .start_agent(&agent_id)
-        .await
-        .map_err(Into::into)
+pub(crate) async fn start_agent<R: Runtime>(app: AppHandle<R>, agent_id: String) -> Result<()> {
+    app.askit().start_agent(&agent_id).await.map_err(Into::into)
 }
 
 #[tauri::command]
-pub(crate) async fn stop_agent<R: Runtime>(
-    app: AppHandle<R>,
-    agent_id: String,
-) -> Result<()> {
-    app.askit()
-        .stop_agent(&agent_id)
-        .await
-        .map_err(Into::into)
+pub(crate) async fn stop_agent<R: Runtime>(app: AppHandle<R>, agent_id: String) -> Result<()> {
+    app.askit().stop_agent(&agent_id).await.map_err(Into::into)
 }
 
 // board commands
@@ -198,59 +189,56 @@ pub(crate) fn write_board<R: Runtime>(
     board: String,
     message: String,
 ) -> Result<()> {
-    app.askit().write_board_data(board, AgentData::string(message)).map_err(Into::into)
+    app.askit()
+        .write_board_data(board, AgentData::string(message))
+        .map_err(Into::into)
 }
 
 // config
 
 #[tauri::command]
-pub(crate) async fn set_agent_config<R: Runtime>(
+pub(crate) async fn set_agent_configs<R: Runtime>(
     app: AppHandle<R>,
     agent_id: String,
-    config: AgentConfig,
+    configs: AgentConfigs,
 ) -> Result<()> {
     app.askit()
-        .set_agent_config(agent_id, config)
+        .set_agent_configs(agent_id, configs)
         .await
         .map_err(Into::into)
 }
 
 #[tauri::command]
-pub(crate) fn get_global_config<R: Runtime>(
-    app: AppHandle<R>,
-    def_name: String,
-) -> Option<AgentConfig> {
-    app.askit().get_global_config(&def_name)
-}
-
-#[tauri::command]
 pub(crate) fn get_global_configs<R: Runtime>(
     app: AppHandle<R>,
-) -> AgentConfigs {
-    app.askit().get_global_configs()
+    def_name: String,
+) -> Option<AgentConfigs> {
+    app.askit().get_global_configs(&def_name)
 }
 
 #[tauri::command]
-pub(crate) fn set_global_config<R: Runtime>(
-    app: AppHandle<R>,
-    def_name: String,
-    config: AgentConfig,
-) {
-    app.askit().set_global_config(def_name, config);
+pub(crate) fn get_global_configs_map<R: Runtime>(app: AppHandle<R>) -> AgentConfigsMap {
+    app.askit().get_global_configs_map()
 }
 
 #[tauri::command]
 pub(crate) fn set_global_configs<R: Runtime>(
     app: AppHandle<R>,
+    def_name: String,
     configs: AgentConfigs,
 ) {
-    app.askit().set_global_configs(configs)
+    app.askit().set_global_configs(def_name, configs);
 }
 
 #[tauri::command]
-pub(crate) async fn get_agent_default_config<R: Runtime>(
+pub(crate) fn set_global_configs_map<R: Runtime>(app: AppHandle<R>, configs: AgentConfigsMap) {
+    app.askit().set_global_configs_map(configs)
+}
+
+#[tauri::command]
+pub(crate) async fn get_agent_default_configs<R: Runtime>(
     app: AppHandle<R>,
     def_name: String,
-) -> Option<AgentDefaultConfig> {
-    app.askit().get_agent_default_config(&def_name)
+) -> Option<AgentDefaultConfigs> {
+    app.askit().get_agent_default_configs(&def_name)
 }

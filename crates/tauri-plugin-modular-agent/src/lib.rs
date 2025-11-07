@@ -49,12 +49,12 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
       commands::start_agent,
       commands::stop_agent,
       commands::write_board,
-      commands::set_agent_config,
-      commands::get_global_config,
+      commands::set_agent_configs,
       commands::get_global_configs,
-      commands::set_global_config,
+      commands::get_global_configs_map,
       commands::set_global_configs,
-      commands::get_agent_default_config,
+      commands::set_global_configs_map,
+      commands::get_agent_default_configs,
     ])
     .setup(|app, _api| {
       let askit = ASKit::init()?;

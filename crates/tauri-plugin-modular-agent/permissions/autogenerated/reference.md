@@ -24,12 +24,12 @@ Default permissions for the plugin
 - `allow-start-agent`
 - `allow-stop-agent`
 - `allow-write-board`
-- `allow-set-agent-config`
-- `allow-get-global-config`
+- `allow-set-agent-configs`
 - `allow-get-global-configs`
-- `allow-set-global-config`
+- `allow-get-global-configs-map`
 - `allow-set-global-configs`
-- `allow-get-agent-default-config`
+- `allow-set-global-configs-map`
+- `allow-get-agent-default-configs`
 
 ## Permission Table
 
@@ -166,6 +166,32 @@ Enables the get_agent_default_config command without any pre-configured scope.
 <td>
 
 Denies the get_agent_default_config command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`askit:allow-get-agent-default-configs`
+
+</td>
+<td>
+
+Enables the get_agent_default_configs command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`askit:deny-get-agent-default-configs`
+
+</td>
+<td>
+
+Denies the get_agent_default_configs command without any pre-configured scope.
 
 </td>
 </tr>
@@ -322,6 +348,32 @@ Enables the get_global_configs command without any pre-configured scope.
 <td>
 
 Denies the get_global_configs command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`askit:allow-get-global-configs-map`
+
+</td>
+<td>
+
+Enables the get_global_configs_map command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`askit:deny-get-global-configs-map`
+
+</td>
+<td>
+
+Denies the get_global_configs_map command without any pre-configured scope.
 
 </td>
 </tr>
@@ -537,6 +589,32 @@ Denies the set_agent_config command without any pre-configured scope.
 <tr>
 <td>
 
+`askit:allow-set-agent-configs`
+
+</td>
+<td>
+
+Enables the set_agent_configs command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`askit:deny-set-agent-configs`
+
+</td>
+<td>
+
+Denies the set_agent_configs command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
 `askit:allow-set-global-config`
 
 </td>
@@ -582,6 +660,32 @@ Enables the set_global_configs command without any pre-configured scope.
 <td>
 
 Denies the set_global_configs command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`askit:allow-set-global-configs-map`
+
+</td>
+<td>
+
+Enables the set_global_configs_map command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`askit:deny-set-global-configs-map`
+
+</td>
+<td>
+
+Denies the set_global_configs_map command without any pre-configured scope.
 
 </td>
 </tr>

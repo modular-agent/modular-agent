@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core'
 
 export type AgentDefinitions = Record<string, AgentDefinition>;
-export type AgentGlobalConfigs = Record<string, AgentConfigs>;
+export type AgentGlobalConfigsMap = Record<string, AgentConfigs>;
 
 export type AgentDefinition = {
   kind: string;
@@ -12,13 +12,13 @@ export type AgentDefinition = {
   path: string;
   inputs: string[] | null;
   outputs: string[] | null;
-  default_config: AgentDefaultConfig | null;
-  global_config: AgentGlobalConfig | null;
-  display_config: AgentDisplayConfig | null;
+  default_configs: AgentDefaultConfigs | null;
+  global_configs: AgentGlobalConfigs | null;
+  display_configs: AgentDisplayConfigs | null;
 };
 
-export type AgentDefaultConfig = [string, AgentConfigEntry][];
-export type AgentGlobalConfig = [string, AgentConfigEntry][];
+export type AgentDefaultConfigs = [string, AgentConfigEntry][];
+export type AgentGlobalConfigs = [string, AgentConfigEntry][];
 
 export type AgentConfigEntry = {
   value: any;
@@ -38,7 +38,7 @@ export type AgentConfigValueType =
   | "text"
   | "object";
 
-export type AgentDisplayConfig = [string, AgentDisplayConfigEntry][];
+export type AgentDisplayConfigs = [string, AgentDisplayConfigEntry][];
 
 export type AgentDisplayConfigEntry = {
   type: AgentDisplayConfigType | null;
@@ -66,14 +66,14 @@ export type AgentFlow = {
   viewport: Viewport | null;
 };
 
-export type AgentConfigs = Record<string, AgentConfig>;
-export type AgentConfig = Record<string, any>;
+export type AgentConfigsMap = Record<string, AgentConfigs>;
+export type AgentConfigs = Record<string, any>;
 
 export type AgentFlowNode = {
   id: string;
   def_name: string;
   enabled: boolean;
-  config: AgentConfig | null;
+  configs: AgentConfigs | null;
   title: string | null;
   x: number;
   y: number;
@@ -109,6 +109,12 @@ export type Settings = {
 };
 
 // emit
+
+export type ConfigMessage = {
+  agent_id: string;
+  key: string;
+  data: any;
+};
 
 export type DisplayMessage = {
   agent_id: string;
@@ -232,31 +238,31 @@ export async function writeBoard(board: string, message: string): Promise<void> 
   await invoke<void>('plugin:askit|write_board', { board, message })
 }
 
-// config
+// configs
 
-export async function setAgentConfig(
+export async function setAgentConfigs(
   agentId: string,
-  config: Record<string, any>
+  configs: Record<string, any>
 ): Promise<void> {
-  await invoke<void>('plugin:askit|set_agent_config', { agentId, config })
+  await invoke<void>('plugin:askit|set_agent_configs', { agentId, configs })
 }
 
-export async function getGlobalConfig(defName: string): Promise<AgentConfig | null> {
-  return await invoke<any>('plugin:askit|get_global_config', { defName })
+export async function getGlobalConfigs(defName: string): Promise<AgentConfigs | null> {
+  return await invoke<any>('plugin:askit|get_global_configs', { defName })
 }
 
-export async function getGlobalConfigs(): Promise<AgentConfigs> {
-  return await invoke<any>('plugin:askit|get_global_configs', {})
+export async function getGlobalConfigsMap(): Promise<AgentConfigsMap> {
+  return await invoke<any>('plugin:askit|get_global_configs_map', {})
 }
 
-export async function setGlobalConfig(defName: string, config: AgentConfig): Promise<void> {
-  await invoke<void>('plugin:askit|set_global_config', { defName, config })
+export async function setGlobalConfigs(defName: string, configs: AgentConfigs): Promise<void> {
+  await invoke<void>('plugin:askit|set_global_configs', { defName, configs })
 }
 
-export async function setGlobalConfigs(configs: AgentConfigs): Promise<void> {
-  await invoke<void>('plugin:askit|set_global_configs', { configs })
+export async function setGlobalConfigsMap(configs: AgentConfigsMap): Promise<void> {
+  await invoke<void>('plugin:askit|set_global_configs_map', { configs })
 }
 
-export async function getAgentDefaultConfig(defName: string): Promise<AgentDefaultConfig | null> {
-  return await invoke<any>('plugin:askit|get_agent_default_config', { defName })
+export async function getAgentDefaultConfigs(defName: string): Promise<AgentDefaultConfigs | null> {
+  return await invoke<any>('plugin:askit|get_agent_default_configs', { defName })
 }

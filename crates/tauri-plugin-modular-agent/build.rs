@@ -19,12 +19,12 @@ const COMMANDS: &[&str] = &[
   "start_agent",
   "stop_agent",
   "write_board",
-  "set_agent_config",
-  "get_global_config",
+  "set_agent_configs",
   "get_global_configs",
-  "set_global_config",
+  "get_global_configs_map",
   "set_global_configs",
-  "get_agent_default_config",
+  "set_global_configs_map",
+  "get_agent_default_configs",
 ];
 
 fn main() {
