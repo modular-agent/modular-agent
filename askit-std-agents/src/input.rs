@@ -1,7 +1,7 @@
 use std::vec;
 
 use agent_stream_kit::{
-    ASKit, Agent, AgentConfig, AgentConfigEntry, AgentContext, AgentData, AgentDefinition,
+    ASKit, Agent, AgentConfigEntry, AgentConfigs, AgentContext, AgentData, AgentDefinition,
     AgentError, AgentOutput, AgentStatus, AgentValue, AsAgent, AsAgentData, new_agent_boxed,
 };
 
@@ -15,10 +15,10 @@ impl AsAgent for UnitInputAgent {
         askit: ASKit,
         id: String,
         def_name: String,
-        config: Option<AgentConfig>,
+        configs: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AsAgentData::new(askit, id, def_name, config),
+            data: AsAgentData::new(askit, id, def_name, configs),
         })
     }
 
@@ -30,7 +30,7 @@ impl AsAgent for UnitInputAgent {
         &mut self.data
     }
 
-    fn set_config(&mut self, _config: AgentConfig) -> Result<(), AgentError> {
+    fn configs_changed(&mut self) -> Result<(), AgentError> {
         // Since set_config is called even when the agent is not running,
         // we need to check the status before outputting the value.
         if *self.status() == AgentStatus::Start {
@@ -51,10 +51,10 @@ impl AsAgent for BooleanInputAgent {
         askit: ASKit,
         id: String,
         def_name: String,
-        config: Option<AgentConfig>,
+        configs: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AsAgentData::new(askit, id, def_name, config),
+            data: AsAgentData::new(askit, id, def_name, configs),
         })
     }
 
@@ -66,9 +66,9 @@ impl AsAgent for BooleanInputAgent {
         &mut self.data
     }
 
-    fn set_config(&mut self, config: AgentConfig) -> Result<(), AgentError> {
+    fn configs_changed(&mut self) -> Result<(), AgentError> {
         if *self.status() == AgentStatus::Start {
-            let value = config.get_bool(CONFIG_BOOLEAN)?;
+            let value = self.configs()?.get_bool(CONFIG_BOOLEAN)?;
             self.try_output(
                 AgentContext::new(),
                 CONFIG_BOOLEAN,
@@ -89,10 +89,10 @@ impl AsAgent for IntegerInputAgent {
         askit: ASKit,
         id: String,
         def_name: String,
-        config: Option<AgentConfig>,
+        configs: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AsAgentData::new(askit, id, def_name, config),
+            data: AsAgentData::new(askit, id, def_name, configs),
         })
     }
 
@@ -104,16 +104,15 @@ impl AsAgent for IntegerInputAgent {
         &mut self.data
     }
 
-    fn set_config(&mut self, config: AgentConfig) -> Result<(), AgentError> {
+    fn configs_changed(&mut self) -> Result<(), AgentError> {
         if *self.status() == AgentStatus::Start {
-            let value = config.get_integer(CONFIG_INTEGER)?;
+            let value = self.configs()?.get_integer(CONFIG_INTEGER)?;
             self.try_output(
                 AgentContext::new(),
                 CONFIG_INTEGER,
                 AgentData::integer(value),
             )?;
         }
-
         Ok(())
     }
 }
@@ -128,10 +127,10 @@ impl AsAgent for NumberInputAgent {
         askit: ASKit,
         id: String,
         def_name: String,
-        config: Option<AgentConfig>,
+        configs: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AsAgentData::new(askit, id, def_name, config),
+            data: AsAgentData::new(askit, id, def_name, configs),
         })
     }
 
@@ -143,12 +142,11 @@ impl AsAgent for NumberInputAgent {
         &mut self.data
     }
 
-    fn set_config(&mut self, config: AgentConfig) -> Result<(), AgentError> {
+    fn configs_changed(&mut self) -> Result<(), AgentError> {
         if *self.status() == AgentStatus::Start {
-            let value = config.get_number(CONFIG_NUMBER)?;
+            let value = self.configs()?.get_number(CONFIG_NUMBER)?;
             self.try_output(AgentContext::new(), CONFIG_NUMBER, AgentData::number(value))?;
         }
-
         Ok(())
     }
 }
@@ -163,10 +161,10 @@ impl AsAgent for StringInputAgent {
         askit: ASKit,
         id: String,
         def_name: String,
-        config: Option<AgentConfig>,
+        configs: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AsAgentData::new(askit, id, def_name, config),
+            data: AsAgentData::new(askit, id, def_name, configs),
         })
     }
 
@@ -178,9 +176,9 @@ impl AsAgent for StringInputAgent {
         &mut self.data
     }
 
-    fn set_config(&mut self, config: AgentConfig) -> Result<(), AgentError> {
+    fn configs_changed(&mut self) -> Result<(), AgentError> {
         if *self.status() == AgentStatus::Start {
-            let value = config.get_string(CONFIG_STRING)?;
+            let value = self.configs()?.get_string(CONFIG_STRING)?;
             self.try_output(AgentContext::new(), CONFIG_STRING, AgentData::string(value))?;
         }
         Ok(())
@@ -197,10 +195,10 @@ impl AsAgent for TextInputAgent {
         askit: ASKit,
         id: String,
         def_name: String,
-        config: Option<AgentConfig>,
+        configs: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AsAgentData::new(askit, id, def_name, config),
+            data: AsAgentData::new(askit, id, def_name, configs),
         })
     }
 
@@ -212,9 +210,9 @@ impl AsAgent for TextInputAgent {
         &mut self.data
     }
 
-    fn set_config(&mut self, config: AgentConfig) -> Result<(), AgentError> {
+    fn configs_changed(&mut self) -> Result<(), AgentError> {
         if *self.status() == AgentStatus::Start {
-            let value = config.get_string(CONFIG_TEXT)?;
+            let value = self.configs()?.get_string(CONFIG_TEXT)?;
             self.try_output(AgentContext::new(), CONFIG_TEXT, AgentData::string(value))?;
         }
         Ok(())
@@ -231,10 +229,10 @@ impl AsAgent for ObjectInputAgent {
         askit: ASKit,
         id: String,
         def_name: String,
-        config: Option<AgentConfig>,
+        configs: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AsAgentData::new(askit, id, def_name, config),
+            data: AsAgentData::new(askit, id, def_name, configs),
         })
     }
 
@@ -246,9 +244,9 @@ impl AsAgent for ObjectInputAgent {
         &mut self.data
     }
 
-    fn set_config(&mut self, config: AgentConfig) -> Result<(), AgentError> {
+    fn configs_changed(&mut self) -> Result<(), AgentError> {
         if *self.status() == AgentStatus::Start {
-            let value = config.get(CONFIG_OBJECT)?;
+            let value = self.configs()?.get(CONFIG_OBJECT)?;
             if let Some(obj) = value.as_object() {
                 self.try_output(
                     AgentContext::new(),
@@ -296,7 +294,7 @@ pub fn register_agents(askit: &ASKit) {
         .with_title("Unit Input")
         .with_category(CATEGORY)
         .with_outputs(vec![CONFIG_UNIT])
-        .with_default_config(vec![(CONFIG_UNIT, AgentConfigEntry::new((), "unit"))]),
+        .with_default_configs(vec![(CONFIG_UNIT, AgentConfigEntry::new((), "unit"))]),
     );
 
     // Boolean Input
@@ -309,7 +307,7 @@ pub fn register_agents(askit: &ASKit) {
         .with_title("Boolean Input")
         .with_category(CATEGORY)
         .with_outputs(vec![CONFIG_BOOLEAN])
-        .with_default_config(vec![(
+        .with_default_configs(vec![(
             CONFIG_BOOLEAN,
             AgentConfigEntry::new(false, "boolean"),
         )]),
@@ -325,7 +323,7 @@ pub fn register_agents(askit: &ASKit) {
         .with_title("Integer Input")
         .with_category(CATEGORY)
         .with_outputs(vec![CONFIG_INTEGER])
-        .with_default_config(vec![(CONFIG_INTEGER, AgentConfigEntry::new(0, "integer"))]),
+        .with_default_configs(vec![(CONFIG_INTEGER, AgentConfigEntry::new(0, "integer"))]),
     );
 
     // Number Input
@@ -338,7 +336,7 @@ pub fn register_agents(askit: &ASKit) {
         .with_title("Number Input")
         .with_category(CATEGORY)
         .with_outputs(vec![CONFIG_NUMBER])
-        .with_default_config(vec![(CONFIG_NUMBER, AgentConfigEntry::new(0.0, "number"))]),
+        .with_default_configs(vec![(CONFIG_NUMBER, AgentConfigEntry::new(0.0, "number"))]),
     );
 
     // String Input
@@ -351,7 +349,7 @@ pub fn register_agents(askit: &ASKit) {
         .with_title("String Input")
         .with_category(CATEGORY)
         .with_outputs(vec![CONFIG_STRING])
-        .with_default_config(vec![(CONFIG_STRING, AgentConfigEntry::new("", "string"))]),
+        .with_default_configs(vec![(CONFIG_STRING, AgentConfigEntry::new("", "string"))]),
     );
 
     // Text Input
@@ -364,7 +362,7 @@ pub fn register_agents(askit: &ASKit) {
         .with_title("Text Input")
         .with_category(CATEGORY)
         .with_outputs(vec![CONFIG_TEXT])
-        .with_default_config(vec![(CONFIG_TEXT, AgentConfigEntry::new("", "text"))]),
+        .with_default_configs(vec![(CONFIG_TEXT, AgentConfigEntry::new("", "text"))]),
     );
 
     // Object Input
@@ -377,7 +375,7 @@ pub fn register_agents(askit: &ASKit) {
         .with_title("Object Input")
         .with_category(CATEGORY)
         .with_outputs(vec![CONFIG_OBJECT])
-        .with_default_config(vec![(
+        .with_default_configs(vec![(
             CONFIG_OBJECT,
             AgentConfigEntry::new(AgentValue::object_default(), "object"),
         )]),

@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use std::vec;
 
 use agent_stream_kit::{
-    ASKit, Agent, AgentConfig, AgentConfigEntry, AgentContext, AgentData, AgentDefinition,
+    ASKit, Agent, AgentConfigEntry, AgentConfigs, AgentContext, AgentData, AgentDefinition,
     AgentError, AgentOutput, AsAgent, AsAgentData, async_trait, new_agent_boxed,
 };
 
@@ -34,7 +34,7 @@ impl OllamaManager {
         }
     }
 
-    fn get_ollama_url(global_config: Option<AgentConfig>) -> String {
+    fn get_ollama_url(global_config: Option<AgentConfigs>) -> String {
         if let Some(ollama_url) =
             global_config.and_then(|cfg| cfg.get_string(CONFIG_OLLAMA_URL).ok())
         {
@@ -57,7 +57,7 @@ impl OllamaManager {
             return Ok(client.clone());
         }
 
-        let global_config = askit.get_global_config("ollama_completion");
+        let global_config = askit.get_global_configs("ollama_completion");
         let api_base_url = Self::get_ollama_url(global_config);
         let new_client = Ollama::try_new(api_base_url)
             .map_err(|e| AgentError::IoError(format!("Ollama Client Error: {}", e)))?;
@@ -79,7 +79,7 @@ impl AsAgent for OllamaCompletionAgent {
         askit: ASKit,
         id: String,
         def_name: String,
-        config: Option<AgentConfig>,
+        config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
             data: AsAgentData::new(askit, id, def_name, config),
@@ -101,7 +101,7 @@ impl AsAgent for OllamaCompletionAgent {
         _pin: String,
         data: AgentData,
     ) -> Result<(), AgentError> {
-        let config_model = &self.config()?.get_string_or_default(CONFIG_MODEL);
+        let config_model = &self.configs()?.get_string_or_default(CONFIG_MODEL);
         if config_model.is_empty() {
             return Ok(());
         }
@@ -113,12 +113,12 @@ impl AsAgent for OllamaCompletionAgent {
 
         let mut request = GenerationRequest::new(config_model.to_string(), message);
 
-        let config_system = self.config()?.get_string_or_default(CONFIG_SYSTEM);
+        let config_system = self.configs()?.get_string_or_default(CONFIG_SYSTEM);
         if !config_system.is_empty() {
             request = request.system(config_system);
         }
 
-        let config_options = self.config()?.get_string_or_default(CONFIG_OPTIONS);
+        let config_options = self.configs()?.get_string_or_default(CONFIG_OPTIONS);
         if !config_options.is_empty() && config_options != "{}" {
             if let Ok(options_json) = serde_json::from_str::<ModelOptions>(&config_options) {
                 request = request.options(options_json);
@@ -158,7 +158,7 @@ impl AsAgent for OllamaChatAgent {
         askit: ASKit,
         id: String,
         def_name: String,
-        config: Option<AgentConfig>,
+        config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
             data: AsAgentData::new(askit, id, def_name, config),
@@ -175,9 +175,9 @@ impl AsAgent for OllamaChatAgent {
         &mut self.data
     }
 
-    fn set_config(&mut self, config: AgentConfig) -> Result<(), AgentError> {
-        let history_size = config.get_integer_or_default(CONFIG_HISTORY);
-        if history_size != self.config()?.get_integer_or_default(CONFIG_HISTORY) {
+    fn configs_changed(&mut self) -> Result<(), AgentError> {
+        let history_size = self.configs()?.get_integer_or_default(CONFIG_HISTORY);
+        if history_size != self.configs()?.get_integer_or_default(CONFIG_HISTORY) {
             let mut history = self.history.lock().unwrap();
             *history = MessageHistory::new(history.messages.clone(), history_size);
         }
@@ -190,7 +190,7 @@ impl AsAgent for OllamaChatAgent {
         _pin: String,
         data: AgentData,
     ) -> Result<(), AgentError> {
-        let config_model = &self.config()?.get_string_or_default(CONFIG_MODEL);
+        let config_model = &self.configs()?.get_string_or_default(CONFIG_MODEL);
         if config_model.is_empty() {
             return Ok(());
         }
@@ -206,7 +206,7 @@ impl AsAgent for OllamaChatAgent {
             vec![ChatMessage::user(message.to_string())],
         );
 
-        let config_options = self.config()?.get_string_or_default(CONFIG_OPTIONS);
+        let config_options = self.configs()?.get_string_or_default(CONFIG_OPTIONS);
         if !config_options.is_empty() && config_options != "{}" {
             if let Ok(options_json) = serde_json::from_str::<ModelOptions>(&config_options) {
                 request = request.options(options_json);
@@ -217,9 +217,9 @@ impl AsAgent for OllamaChatAgent {
             }
         }
 
-        let history_size = self.config()?.get_integer_or_default(CONFIG_HISTORY);
-        let use_stream = self.config()?.get_bool_or_default(CONFIG_STREAM);
+        let history_size = self.configs()?.get_integer_or_default(CONFIG_HISTORY);
 
+        let use_stream = self.configs()?.get_bool_or_default(CONFIG_STREAM);
         if use_stream {
             let mut stream = if history_size > 0 {
                 client
@@ -291,7 +291,7 @@ impl AsAgent for OllamaEmbeddingsAgent {
         askit: ASKit,
         id: String,
         def_name: String,
-        config: Option<AgentConfig>,
+        config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
             data: AsAgentData::new(askit, id, def_name, config),
@@ -313,7 +313,7 @@ impl AsAgent for OllamaEmbeddingsAgent {
         _pin: String,
         data: AgentData,
     ) -> Result<(), AgentError> {
-        let config_model = &self.config()?.get_string_or_default(CONFIG_MODEL);
+        let config_model = &self.configs()?.get_string_or_default(CONFIG_MODEL);
         if config_model.is_empty() {
             return Ok(());
         }
@@ -326,7 +326,7 @@ impl AsAgent for OllamaEmbeddingsAgent {
         let client = self.manager.get_client(self.askit())?;
         let mut request = GenerateEmbeddingsRequest::new(config_model.to_string(), input.into());
 
-        let config_options = self.config()?.get_string_or_default(CONFIG_OPTIONS);
+        let config_options = self.configs()?.get_string_or_default(CONFIG_OPTIONS);
         if !config_options.is_empty() && config_options != "{}" {
             if let Ok(options_json) = serde_json::from_str::<ModelOptions>(&config_options) {
                 request = request.options(options_json);
@@ -419,11 +419,11 @@ pub fn register_agents(askit: &ASKit) {
         .with_category(CATEGORY)
         .with_inputs(vec![PORT_MESSAGE])
         .with_outputs(vec![PORT_MESSAGE, PORT_RESPONSE])
-        .with_global_config(vec![(
+        .with_global_configs(vec![(
             CONFIG_OLLAMA_URL,
             AgentConfigEntry::new(DEFAULT_OLLAMA_URL, "string").with_title("Ollama URL"),
         )])
-        .with_default_config(vec![
+        .with_default_configs(vec![
             (
                 CONFIG_MODEL,
                 AgentConfigEntry::new(DEFAULT_CONFIG_MODEL, "string").with_title("Model"),
@@ -450,7 +450,7 @@ pub fn register_agents(askit: &ASKit) {
         .with_category(CATEGORY)
         .with_inputs(vec![PORT_MESSAGE])
         .with_outputs(vec![PORT_MESSAGE, PORT_RESPONSE, PORT_HISTORY])
-        .with_default_config(vec![
+        .with_default_configs(vec![
             (
                 CONFIG_MODEL,
                 AgentConfigEntry::new(DEFAULT_CONFIG_MODEL, "string").with_title("Model"),
@@ -481,7 +481,7 @@ pub fn register_agents(askit: &ASKit) {
         .with_category(CATEGORY)
         .with_inputs(vec![PORT_INPUT])
         .with_outputs(vec![PORT_EMBEDDINGS])
-        .with_default_config(vec![
+        .with_default_configs(vec![
             (
                 CONFIG_MODEL,
                 AgentConfigEntry::new(DEFAULT_CONFIG_MODEL, "string").with_title("Model"),

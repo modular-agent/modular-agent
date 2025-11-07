@@ -3,7 +3,7 @@
 use std::vec;
 
 use agent_stream_kit::{
-    ASKit, AgentConfig, AgentContext, AgentData, AgentDefinition, AgentError, AgentOutput, AsAgent,
+    ASKit, AgentConfigs, AgentContext, AgentData, AgentDefinition, AgentError, AgentOutput, AsAgent,
     AsAgentData, async_trait, new_agent_boxed,
 };
 
@@ -18,7 +18,7 @@ impl AsAgent for ToYamlAgent {
         askit: ASKit,
         id: String,
         def_name: String,
-        config: Option<AgentConfig>,
+        config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
             data: AsAgentData::new(askit, id, def_name, config),
@@ -57,7 +57,7 @@ impl AsAgent for FromYamlAgent {
         askit: ASKit,
         id: String,
         def_name: String,
-        config: Option<AgentConfig>,
+        config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
             data: AsAgentData::new(askit, id, def_name, config),

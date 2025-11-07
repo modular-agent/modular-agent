@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use super::askit::ASKit;
-use super::config::AgentConfig;
+use super::config::AgentConfigs;
 use super::definition::AgentDefinition;
 use super::error::AgentError;
 
@@ -162,7 +162,7 @@ pub struct AgentFlowNode {
     pub enabled: bool,
 
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub config: Option<AgentConfig>,
+    pub configs: Option<AgentConfigs>,
 
     #[serde(flatten)]
     pub extensions: HashMap<String, Value>,
@@ -170,12 +170,12 @@ pub struct AgentFlowNode {
 
 impl AgentFlowNode {
     pub fn new(def: &AgentDefinition) -> Result<Self, AgentError> {
-        let config = if let Some(default_config) = &def.default_config {
-            let mut config = AgentConfig::new();
-            for (key, entry) in default_config {
-                config.set(key.clone(), entry.value.clone());
+        let configs = if let Some(default_configs) = &def.default_configs {
+            let mut configs = AgentConfigs::new();
+            for (key, entry) in default_configs {
+                configs.set(key.clone(), entry.value.clone());
             }
-            Some(config)
+            Some(configs)
         } else {
             None
         };
@@ -184,7 +184,7 @@ impl AgentFlowNode {
             id: new_id(),
             def_name: def.name.clone(),
             enabled: false,
-            config,
+            configs,
             extensions: HashMap::new(),
         })
     }

@@ -100,4 +100,7 @@ pub enum AgentError {
 
     #[error("No global configuration available")]
     NoGlobalConfig,
+
+    #[error("Pin not found: {0}")]
+    PinNotFound(String),
 }

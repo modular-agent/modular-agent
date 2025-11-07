@@ -1,7 +1,7 @@
 use std::vec;
 
 use agent_stream_kit::{
-    ASKit, AgentConfig, AgentContext, AgentData, AgentDefinition, AgentDisplayConfigEntry,
+    ASKit, AgentConfigs, AgentContext, AgentData, AgentDefinition, AgentDisplayConfigEntry,
     AgentError, AgentOutput, AgentValue, AsAgent, AsAgentData, async_trait, new_agent_boxed,
 };
 
@@ -16,7 +16,7 @@ impl AsAgent for DisplayDataAgent {
         askit: ASKit,
         id: String,
         def_name: String,
-        config: Option<AgentConfig>,
+        config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
             data: AsAgentData::new(askit, id, def_name, config),
@@ -57,7 +57,7 @@ impl AsAgent for DebugDataAgent {
         askit: ASKit,
         id: String,
         def_name: String,
-        config: Option<AgentConfig>,
+        config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
             data: AsAgentData::new(askit, id, def_name, config),
@@ -111,7 +111,7 @@ pub fn register_agents(askit: &ASKit) {
         .with_title("Display Data")
         .with_category(CATEGORY)
         .with_inputs(vec!["*"])
-        .with_display_config(vec![(
+        .with_display_configs(vec![(
             DISPLAY_DATA,
             AgentDisplayConfigEntry::new("*").with_hide_title(),
         )]),
@@ -127,7 +127,7 @@ pub fn register_agents(askit: &ASKit) {
         .with_title("Debug Data")
         .with_category(CATEGORY)
         .with_inputs(vec!["*"])
-        .with_display_config(vec![(
+        .with_display_configs(vec![(
             DISPLAY_DATA,
             AgentDisplayConfigEntry::new("object").with_hide_title(),
         )]),

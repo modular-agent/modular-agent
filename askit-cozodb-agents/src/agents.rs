@@ -3,7 +3,7 @@ use std::sync::{Mutex, OnceLock};
 use std::vec;
 
 use agent_stream_kit::{
-    ASKit, Agent, AgentConfig, AgentConfigEntry, AgentContext, AgentData, AgentDefinition,
+    ASKit, Agent, AgentConfigEntry, AgentConfigs, AgentContext, AgentData, AgentDefinition,
     AgentError, AgentOutput, AsAgent, AsAgentData, async_trait, new_agent_boxed,
 };
 use cozo::DbInstance;
@@ -41,7 +41,7 @@ impl AsAgent for CozoDbScriptgent {
         askit: ASKit,
         id: String,
         def_name: String,
-        config: Option<AgentConfig>,
+        config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
             data: AsAgentData::new(askit, id, def_name, config),
@@ -62,7 +62,7 @@ impl AsAgent for CozoDbScriptgent {
         _pin: String,
         data: AgentData,
     ) -> Result<(), AgentError> {
-        let config = self.config()?;
+        let config = self.configs()?;
         let db = get_db_instance(&config.get_string_or_default(CONFIG_DB))?;
         let script = config.get_string(CONFIG_SCRIPT)?;
         if script.is_empty() {
@@ -108,7 +108,7 @@ pub fn register_agents(askit: &ASKit) {
         .with_category(CATEGORY)
         .with_inputs(vec![PORT_PARAMS])
         .with_outputs(vec![PORT_RESULT])
-        .with_default_config(vec![
+        .with_default_configs(vec![
             (
                 CONFIG_DB,
                 AgentConfigEntry::new("", "string").with_title("Database"),

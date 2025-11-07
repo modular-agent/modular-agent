@@ -6,10 +6,10 @@ use tokio::sync::{Mutex as AsyncMutex, mpsc};
 
 use crate::agent::{Agent, AgentMessage, AgentStatus, agent_new};
 use crate::board_agent;
-use crate::config::{AgentConfig, AgentConfigs};
+use crate::config::{AgentConfigs, AgentConfigsMap};
 use crate::context::AgentContext;
 use crate::data::AgentData;
-use crate::definition::{AgentDefaultConfig, AgentDefinition, AgentDefinitions};
+use crate::definition::{AgentDefaultConfigs, AgentDefinition, AgentDefinitions};
 use crate::error::AgentError;
 use crate::flow::{self, AgentFlow, AgentFlowEdge, AgentFlowNode, AgentFlows};
 use crate::message::{self, AgentEventMessage};
@@ -39,7 +39,7 @@ pub struct ASKit {
     pub(crate) flows: Arc<Mutex<AgentFlows>>,
 
     // agent def name -> config
-    pub(crate) global_configs: Arc<Mutex<HashMap<String, AgentConfig>>>,
+    pub(crate) global_configs_map: Arc<Mutex<HashMap<String, AgentConfigs>>>,
 
     // message sender
     pub(crate) tx: Arc<Mutex<Option<mpsc::Sender<AgentEventMessage>>>>,
@@ -58,7 +58,7 @@ impl ASKit {
             edges: Default::default(),
             defs: Default::default(),
             flows: Default::default(),
-            global_configs: Default::default(),
+            global_configs_map: Default::default(),
             tx: Arc::new(Mutex::new(None)),
             observers: Default::default(),
         }
@@ -95,18 +95,18 @@ impl ASKit {
 
     pub fn register_agent(&self, def: AgentDefinition) {
         let def_name = def.name.clone();
-        let def_global_config = def.global_config.clone();
+        let def_global_configs = def.global_configs.clone();
 
         let mut defs = self.defs.lock().unwrap();
         defs.insert(def.name.clone(), def);
 
         // if there is a global config, set it
-        if let Some(def_global_config) = def_global_config {
-            let mut new_config = AgentConfig::default();
-            for (key, config_entry) in def_global_config.iter() {
-                new_config.set(key.clone(), config_entry.value.clone());
+        if let Some(def_global_configs) = def_global_configs {
+            let mut new_configs = AgentConfigs::default();
+            for (key, config_entry) in def_global_configs.iter() {
+                new_configs.set(key.clone(), config_entry.value.clone());
             }
-            self.set_global_config(def_name, new_config);
+            self.set_global_configs(def_name, new_configs);
         }
     }
 
@@ -120,12 +120,12 @@ impl ASKit {
         defs.get(def_name).cloned()
     }
 
-    pub fn get_agent_default_config(&self, def_name: &str) -> Option<AgentDefaultConfig> {
+    pub fn get_agent_default_configs(&self, def_name: &str) -> Option<AgentDefaultConfigs> {
         let defs = self.defs.lock().unwrap();
         let Some(def) = defs.get(def_name) else {
             return None;
         };
-        def.default_config.clone()
+        def.default_configs.clone()
     }
 
     // // flow
@@ -304,7 +304,7 @@ impl ASKit {
             self.clone(),
             node.id.clone(),
             &node.def_name,
-            node.config.clone(),
+            node.configs.clone(),
         ) {
             agent.set_flow_name(flow_name.to_string());
             agents.insert(node.id.clone(), Arc::new(AsyncMutex::new(agent)));
@@ -529,8 +529,8 @@ impl ASKit {
                                         log::error!("Process Error {}: {}", agent_id, e);
                                     });
                             }
-                            AgentMessage::Config { config } => {
-                                agent.lock().await.set_config(config).unwrap_or_else(|e| {
+                            AgentMessage::Config { configs } => {
+                                agent.lock().await.set_configs(configs).unwrap_or_else(|e| {
                                     log::error!("Config Error {}: {}", agent_id, e);
                                 });
                             }
@@ -569,8 +569,8 @@ impl ASKit {
                                         log::error!("Process Error {}: {}", agent_id, e);
                                     });
                             }
-                            AgentMessage::Config { config } => {
-                                agent.lock().await.set_config(config).unwrap_or_else(|e| {
+                            AgentMessage::Config { configs } => {
+                                agent.lock().await.set_configs(configs).unwrap_or_else(|e| {
                                     log::error!("Config Error {}: {}", agent_id, e);
                                 });
                             }
@@ -634,10 +634,10 @@ impl ASKit {
         Ok(())
     }
 
-    pub async fn set_agent_config(
+    pub async fn set_agent_configs(
         &self,
         agent_id: String,
-        config: AgentConfig,
+        configs: AgentConfigs,
     ) -> Result<(), AgentError> {
         let agent = {
             let agents = self.agents.lock().unwrap();
@@ -652,7 +652,7 @@ impl ASKit {
             agent.status().clone()
         };
         if agent_status == AgentStatus::Init {
-            agent.lock().await.set_config(config.clone())?;
+            agent.lock().await.set_configs(configs.clone())?;
         } else if agent_status == AgentStatus::Start {
             let tx = {
                 let agent_txs = self.agent_txs.lock().unwrap();
@@ -661,7 +661,7 @@ impl ASKit {
                 };
                 tx.clone()
             };
-            let message = AgentMessage::Config { config };
+            let message = AgentMessage::Config { configs };
             match tx {
                 AgentMessageSender::Sync(tx) => {
                     tx.send(message).map_err(|_| {
@@ -678,33 +678,33 @@ impl ASKit {
         Ok(())
     }
 
-    pub fn get_global_config(&self, def_name: &str) -> Option<AgentConfig> {
-        let global_configs = self.global_configs.lock().unwrap();
-        global_configs.get(def_name).cloned()
+    pub fn get_global_configs(&self, def_name: &str) -> Option<AgentConfigs> {
+        let global_configs_map = self.global_configs_map.lock().unwrap();
+        global_configs_map.get(def_name).cloned()
     }
 
-    pub fn set_global_config(&self, def_name: String, config: AgentConfig) {
-        let mut global_configs = self.global_configs.lock().unwrap();
+    pub fn set_global_configs(&self, def_name: String, configs: AgentConfigs) {
+        let mut global_configs_map = self.global_configs_map.lock().unwrap();
 
-        let Some(existing_config) = global_configs.get_mut(&def_name) else {
-            global_configs.insert(def_name, config);
+        let Some(existing_configs) = global_configs_map.get_mut(&def_name) else {
+            global_configs_map.insert(def_name, configs);
             return;
         };
 
-        for (key, value) in config {
-            existing_config.set(key, value);
+        for (key, value) in configs {
+            existing_configs.set(key, value);
         }
     }
 
-    pub fn set_global_configs(&self, new_configs: AgentConfigs) {
-        for (agent_name, new_config) in new_configs {
-            self.set_global_config(agent_name, new_config);
+    pub fn set_global_configs_map(&self, new_configs_map: AgentConfigsMap) {
+        for (agent_name, new_configs) in new_configs_map {
+            self.set_global_configs(agent_name, new_configs);
         }
     }
 
-    pub fn get_global_configs(&self) -> AgentConfigs {
-        let global_configs = self.global_configs.lock().unwrap();
-        global_configs.clone()
+    pub fn get_global_configs_map(&self) -> AgentConfigsMap {
+        let global_configs_map = self.global_configs_map.lock().unwrap();
+        global_configs_map.clone()
     }
 
     pub(crate) async fn agent_input(
@@ -727,6 +727,13 @@ impl ASKit {
             agent.status().clone()
         };
         if agent_status != AgentStatus::Start {
+            return Ok(());
+        }
+
+        if pin.starts_with("config:") {
+            let config_key = pin[7..].to_string();
+            let mut agent = agent.lock().await;
+            agent.set_config(config_key.clone(), data.value.clone())?;
             return Ok(());
         }
 
@@ -755,7 +762,7 @@ impl ASKit {
                 })?;
             }
         }
-        self.emit_input(agent_id.to_string(), pin);
+        self.emit_agent_input(agent_id.to_string(), pin);
 
         Ok(())
     }
@@ -852,16 +859,16 @@ impl ASKit {
         observers.remove(&observer_id);
     }
 
-    pub(crate) fn emit_error(&self, agent_id: String, message: String) {
+    pub(crate) fn emit_agent_display(&self, agent_id: String, key: String, data: AgentData) {
+        self.notify_observers(ASKitEvent::AgentDisplay(agent_id, key, data));
+    }
+
+    pub(crate) fn emit_agent_error(&self, agent_id: String, message: String) {
         self.notify_observers(ASKitEvent::AgentError(agent_id, message));
     }
 
-    pub(crate) fn emit_input(&self, agent_id: String, pin: String) {
+    pub(crate) fn emit_agent_input(&self, agent_id: String, pin: String) {
         self.notify_observers(ASKitEvent::AgentIn(agent_id, pin));
-    }
-
-    pub(crate) fn emit_display(&self, agent_id: String, key: String, data: AgentData) {
-        self.notify_observers(ASKitEvent::AgentDisplay(agent_id, key, data));
     }
 
     pub(crate) fn emit_board(&self, name: String, data: AgentData) {
@@ -878,9 +885,9 @@ impl ASKit {
 
 #[derive(Clone, Debug)]
 pub enum ASKitEvent {
-    AgentIn(String, String),                 // (agent_id, channel)
     AgentDisplay(String, String, AgentData), // (agent_id, key, data)
     AgentError(String, String),              // (agent_id, message)
+    AgentIn(String, String),                 // (agent_id, pin)
     Board(String, AgentData),                // (board name, data)
 }
 

@@ -4,7 +4,7 @@ use std::time::Duration;
 use std::vec;
 
 use agent_stream_kit::{
-    ASKit, Agent, AgentConfig, AgentConfigEntry, AgentContext, AgentData, AgentDefinition,
+    ASKit, Agent, AgentConfigEntry, AgentConfigs, AgentContext, AgentData, AgentDefinition,
     AgentError, AgentOutput, AgentStatus, AsAgent, AsAgentData, async_trait, new_agent_boxed,
 };
 use chrono::{DateTime, Local, Utc};
@@ -25,7 +25,7 @@ impl AsAgent for DelayAgent {
         askit: ASKit,
         id: String,
         def_name: String,
-        config: Option<AgentConfig>,
+        config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
             data: AsAgentData::new(askit, id, def_name, config),
@@ -47,7 +47,7 @@ impl AsAgent for DelayAgent {
         pin: String,
         data: AgentData,
     ) -> Result<(), AgentError> {
-        let config = self.config()?;
+        let config = self.configs()?;
         let delay_ms = config.get_integer_or(CONFIG_DELAY, DELAY_MS_DEFAULT);
         let max_num_data = config.get_integer_or(CONFIG_MAX_NUM_DATA, MAX_NUM_DATA_DEFAULT);
 
@@ -134,7 +134,7 @@ impl AsAgent for IntervalTimerAgent {
         askit: ASKit,
         id: String,
         def_name: String,
-        config: Option<AgentConfig>,
+        config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         let interval = config
             .as_ref()
@@ -165,9 +165,9 @@ impl AsAgent for IntervalTimerAgent {
         self.stop_timer()
     }
 
-    fn set_config(&mut self, config: AgentConfig) -> Result<(), AgentError> {
+    fn configs_changed(&mut self) -> Result<(), AgentError> {
         // Check if interval has changed
-        let interval = config.get_string(CONFIG_INTERVAL)?;
+        let interval = self.configs()?.get_string(CONFIG_INTERVAL)?;
         let new_interval = parse_duration_to_ms(&interval)?;
         if new_interval != self.interval_ms {
             self.interval_ms = new_interval;
@@ -191,7 +191,7 @@ impl AsAgent for OnStartAgent {
         askit: ASKit,
         id: String,
         def_name: String,
-        config: Option<AgentConfig>,
+        config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
             data: AsAgentData::new(askit, id, def_name, config),
@@ -207,7 +207,7 @@ impl AsAgent for OnStartAgent {
     }
 
     fn start(&mut self) -> Result<(), AgentError> {
-        let config = self.config()?;
+        let config = self.configs()?;
         let delay_ms = config.get_integer_or(CONFIG_DELAY, DELAY_MS_DEFAULT);
 
         let askit = self.askit().clone();
@@ -341,7 +341,7 @@ impl AsAgent for ScheduleTimerAgent {
         askit: ASKit,
         id: String,
         def_name: String,
-        config: Option<AgentConfig>,
+        config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         let mut agent = Self {
             data: AsAgentData::new(askit, id, def_name, config.clone()),
@@ -378,9 +378,9 @@ impl AsAgent for ScheduleTimerAgent {
         self.stop_timer()
     }
 
-    fn set_config(&mut self, config: AgentConfig) -> Result<(), AgentError> {
+    fn configs_changed(&mut self) -> Result<(), AgentError> {
         // Check if schedule has changed
-        let schedule_str = config.get_string(CONFIG_SCHEDULE)?;
+        let schedule_str = self.configs()?.get_string(CONFIG_SCHEDULE)?;
         self.parse_schedule(&schedule_str)?;
 
         if *self.status() == AgentStatus::Start {
@@ -468,7 +468,7 @@ impl AsAgent for ThrottleTimeAgent {
         askit: ASKit,
         id: String,
         def_name: String,
-        config: Option<AgentConfig>,
+        config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         let time = config
             .as_ref()
@@ -502,16 +502,16 @@ impl AsAgent for ThrottleTimeAgent {
         self.stop_timer()
     }
 
-    fn set_config(&mut self, config: AgentConfig) -> Result<(), AgentError> {
+    fn configs_changed(&mut self) -> Result<(), AgentError> {
         // Check if interval has changed
-        let time = config.get_string(CONFIG_TIME)?;
+        let time = self.configs()?.get_string(CONFIG_TIME)?;
         let new_time = parse_duration_to_ms(&time)?;
         if new_time != self.time_ms {
             self.time_ms = new_time;
         }
 
         // Check if max_num_data has changed
-        let max_num_data = config.get_integer(CONFIG_MAX_NUM_DATA)?;
+        let max_num_data = self.configs()?.get_integer(CONFIG_MAX_NUM_DATA)?;
         if self.max_num_data != max_num_data {
             let mut wd = self.waiting_data.lock().unwrap();
             let wd_len = wd.len();
@@ -631,7 +631,7 @@ pub fn register_agents(askit: &ASKit) {
             .with_category(CATEGORY)
             .with_inputs(vec!["*"])
             .with_outputs(vec!["*"])
-            .with_default_config(vec![
+            .with_default_configs(vec![
                 (
                     CONFIG_DELAY,
                     AgentConfigEntry::new(DELAY_MS_DEFAULT, "integer").with_title("delay (ms)"),
@@ -655,7 +655,7 @@ pub fn register_agents(askit: &ASKit) {
         .with_description("Outputs a unit signal at specified intervals")
         .with_category(CATEGORY)
         .with_outputs(vec![PIN_UNIT])
-        .with_default_config(vec![(
+        .with_default_configs(vec![(
             CONFIG_INTERVAL,
             AgentConfigEntry::new(INTERVAL_DEFAULT, "string")
                 .with_description("(ex. 10s, 5m, 100ms, 1h, 1d)"),
@@ -672,7 +672,7 @@ pub fn register_agents(askit: &ASKit) {
         .with_title("On Start")
         .with_category(CATEGORY)
         .with_outputs(vec![PIN_UNIT])
-        .with_default_config(vec![(
+        .with_default_configs(vec![(
             CONFIG_DELAY,
             AgentConfigEntry::new(DELAY_MS_DEFAULT, "integer").with_title("delay (ms)"),
         )]),
@@ -688,7 +688,7 @@ pub fn register_agents(askit: &ASKit) {
         .with_title("Schedule Timer")
         .with_category(CATEGORY)
         .with_outputs(vec![PIN_TIME])
-        .with_default_config(vec![(
+        .with_default_configs(vec![(
             CONFIG_SCHEDULE,
             AgentConfigEntry::new("0 0 * * * *", "string")
                 .with_description("sec min hour day month week year"),
@@ -706,7 +706,7 @@ pub fn register_agents(askit: &ASKit) {
         .with_category(CATEGORY)
         .with_inputs(vec!["*"])
         .with_outputs(vec!["*"])
-        .with_default_config(vec![
+        .with_default_configs(vec![
             (
                 CONFIG_TIME,
                 AgentConfigEntry::new(TIME_DEFAULT, "string")

@@ -1,7 +1,7 @@
 use std::vec;
 
 use agent_stream_kit::{
-    ASKit, Agent, AgentConfig, AgentConfigEntry, AgentContext, AgentData, AgentDefinition,
+    ASKit, Agent, AgentConfigEntry, AgentConfigs, AgentContext, AgentData, AgentDefinition,
     AgentError, AgentOutput, AgentValue, AsAgent, AsAgentData, async_trait, new_agent_boxed,
 };
 
@@ -16,7 +16,7 @@ impl AsAgent for ToJsonAgent {
         askit: ASKit,
         id: String,
         def_name: String,
-        config: Option<AgentConfig>,
+        config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
             data: AsAgentData::new(askit, id, def_name, config),
@@ -55,7 +55,7 @@ impl AsAgent for FromJsonAgent {
         askit: ASKit,
         id: String,
         def_name: String,
-        config: Option<AgentConfig>,
+        config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
             data: AsAgentData::new(askit, id, def_name, config),
@@ -99,7 +99,7 @@ impl AsAgent for GetPropertyAgent {
         askit: ASKit,
         id: String,
         def_name: String,
-        config: Option<AgentConfig>,
+        config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
             data: AsAgentData::new(askit, id, def_name, config),
@@ -120,7 +120,7 @@ impl AsAgent for GetPropertyAgent {
         _pin: String,
         data: AgentData,
     ) -> Result<(), AgentError> {
-        let property = self.config()?.get_string(CONFIG_PROPERTY)?;
+        let property = self.configs()?.get_string(CONFIG_PROPERTY)?;
 
         if property.is_empty() {
             return Ok(());
@@ -221,6 +221,6 @@ pub fn register_agents(askit: &ASKit) {
         .with_category(CATEGORY)
         .with_inputs(vec![PIN_DATA])
         .with_outputs(vec![PIN_DATA])
-        .with_default_config(vec![(CONFIG_PROPERTY, AgentConfigEntry::new("", "string"))]),
+        .with_default_configs(vec![(CONFIG_PROPERTY, AgentConfigEntry::new("", "string"))]),
     );
 }

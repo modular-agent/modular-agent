@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use std::vec;
 
 use agent_stream_kit::{
-    ASKit, Agent, AgentConfig, AgentConfigEntry, AgentContext, AgentData, AgentDefinition,
+    ASKit, Agent, AgentConfigEntry, AgentConfigs, AgentContext, AgentData, AgentDefinition,
     AgentError, AgentOutput, AsAgent, AsAgentData, async_trait, new_agent_boxed,
 };
 
@@ -39,7 +39,7 @@ impl SakuraAIManager {
         let mut new_client = SakuraAI::default();
 
         if let Some(api_key) = askit
-            .get_global_config("sakura_ai_chat")
+            .get_global_configs("sakura_ai_chat")
             .and_then(|cfg| cfg.get_string(CONFIG_SAKURA_AI_API_KEY).ok())
             .filter(|key| !key.is_empty())
         {
@@ -65,7 +65,7 @@ impl AsAgent for SakuraAIChatAgent {
         askit: ASKit,
         id: String,
         def_name: String,
-        config: Option<AgentConfig>,
+        config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
             data: AsAgentData::new(askit, id, def_name, config),
@@ -82,9 +82,9 @@ impl AsAgent for SakuraAIChatAgent {
         &mut self.data
     }
 
-    fn set_config(&mut self, config: AgentConfig) -> Result<(), AgentError> {
-        let history_size = config.get_integer_or_default(CONFIG_HISTORY);
-        if history_size != self.config()?.get_integer_or_default(CONFIG_HISTORY) {
+    fn configs_changed(&mut self) -> Result<(), AgentError> {
+        let history_size = self.configs()?.get_integer_or_default(CONFIG_HISTORY);
+        if history_size != self.configs()?.get_integer_or_default(CONFIG_HISTORY) {
             let mut history_guard = self.history.lock().unwrap();
             *history_guard = MessageHistory::new(history_guard.messages.clone(), history_size);
         }
@@ -97,7 +97,7 @@ impl AsAgent for SakuraAIChatAgent {
         _pin: String,
         data: AgentData,
     ) -> Result<(), AgentError> {
-        let config_model = &self.config()?.get_string_or_default(CONFIG_MODEL);
+        let config_model = &self.configs()?.get_string_or_default(CONFIG_MODEL);
         if config_model.is_empty() {
             return Ok(());
         }
@@ -113,7 +113,7 @@ impl AsAgent for SakuraAIChatAgent {
             vec![ChatMessage::user(message.to_string())],
         );
 
-        let config_options = self.config()?.get_string_or_default(CONFIG_OPTIONS);
+        let config_options = self.configs()?.get_string_or_default(CONFIG_OPTIONS);
         if !config_options.is_empty() && config_options != "{}" {
             if let Ok(options_json) = serde_json::from_str::<ModelOptions>(&config_options) {
                 request = request.options(options_json);
@@ -124,8 +124,8 @@ impl AsAgent for SakuraAIChatAgent {
             }
         }
 
-        let history_size = self.config()?.get_integer_or_default(CONFIG_HISTORY);
-        let use_stream = self.config()?.get_bool_or_default(CONFIG_STREAM);
+        let history_size = self.configs()?.get_integer_or_default(CONFIG_HISTORY);
+        let use_stream = self.configs()?.get_bool_or_default(CONFIG_STREAM);
         if use_stream {
             let mut stream = if history_size > 0 {
                 client
@@ -212,11 +212,11 @@ pub fn register_agents(askit: &ASKit) {
         .with_category(CATEGORY)
         .with_inputs(vec![PORT_MESSAGE])
         .with_outputs(vec![PORT_MESSAGE, PORT_RESPONSE, PORT_HISTORY])
-        .with_global_config(vec![(
+        .with_global_configs(vec![(
             CONFIG_SAKURA_AI_API_KEY,
             AgentConfigEntry::new("", "password").with_title("Sakura AI API Key"),
         )])
-        .with_default_config(vec![
+        .with_default_configs(vec![
             (
                 CONFIG_MODEL,
                 AgentConfigEntry::new(DEFAULT_CONFIG_MODEL, "string").with_title("Model"),

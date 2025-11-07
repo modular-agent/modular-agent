@@ -1,7 +1,7 @@
 use std::vec;
 
 use agent_stream_kit::{
-    ASKit, AgentConfig, AgentContext, AgentData, AgentDefinition, AgentDisplayConfigEntry,
+    ASKit, AgentConfigs, AgentContext, AgentData, AgentDefinition, AgentDisplayConfigEntry,
     AgentError, AgentOutput, AsAgent, AsAgentData, async_trait, new_agent_boxed,
 };
 
@@ -17,7 +17,7 @@ impl AsAgent for CounterAgent {
         askit: ASKit,
         id: String,
         def_name: String,
-        config: Option<AgentConfig>,
+        config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
             data: AsAgentData::new(askit, id, def_name, config),
@@ -78,7 +78,7 @@ pub fn register_agents(askit: &ASKit) {
         .with_category(CATEGORY)
         .with_inputs(vec![PIN_IN, PIN_RESET])
         .with_outputs(vec![PIN_COUNT])
-        .with_display_config(vec![(
+        .with_display_configs(vec![(
             DISPLAY_COUNT,
             AgentDisplayConfigEntry::new("integer").with_hide_title(),
         )]),

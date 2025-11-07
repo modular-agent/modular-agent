@@ -1,6 +1,7 @@
 use agent_stream_kit::{
-    ASKit, AgentConfig, AgentConfigEntry, AgentContext, AgentData, AgentDefinition, AgentError,
-    AgentOutput, AgentValue, AgentValueMap, AsAgent, AsAgentData, async_trait, new_agent_boxed,
+    ASKit, Agent, AgentConfigEntry, AgentConfigs, AgentContext, AgentData, AgentDefinition,
+    AgentError, AgentOutput, AgentValue, AgentValueMap, AsAgent, AsAgentData, async_trait,
+    new_agent_boxed,
 };
 
 // Zip agent
@@ -19,22 +20,16 @@ impl AsAgent for ZipAgent {
         askit: ASKit,
         id: String,
         def_name: String,
-        config: Option<AgentConfig>,
+        config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
-        let mut this = Self {
+        Ok(Self {
             data: AsAgentData::new(askit, id, def_name, config.clone()),
             n: 0,
             in_ports: Vec::new(),
             keys: Vec::new(),
             input_value: Vec::new(),
             current_id: 0,
-        };
-        if let Some(c) = config {
-            AsAgent::set_config(&mut this, c)?;
-        } else {
-            return Err(AgentError::InvalidConfig("missing config".into()));
-        }
-        Ok(this)
+        })
     }
 
     fn data(&self) -> &AsAgentData {
@@ -45,21 +40,29 @@ impl AsAgent for ZipAgent {
         &mut self.data
     }
 
-    fn set_config(&mut self, config: AgentConfig) -> Result<(), AgentError> {
-        let n = config.get_integer(CONFIG_N)?;
+    fn configs_changed(&mut self) -> Result<(), AgentError> {
+        let n = self.configs()?.get_integer(CONFIG_N)?;
         if n <= 1 {
             return Err(AgentError::InvalidConfig("n must be greater than 1".into()));
         }
         let n = n as usize;
         if self.n == n {
             self.keys = (0..self.n)
-                .map(|i| config.get_string_or_default(&format!("key{}", i + 1)))
+                .map(|i| {
+                    self.configs()
+                        .and_then(|c| c.get_string(&format!("key{}", i + 1)))
+                        .unwrap_or_default()
+                })
                 .collect();
         } else {
             self.n = n;
             self.in_ports = (0..self.n).map(|i| format!("in{}", i + 1)).collect();
             self.keys = (0..self.n)
-                .map(|i| config.get_string_or_default(&format!("key{}", i + 1)))
+                .map(|i| {
+                    self.configs()
+                        .and_then(|c| c.get_string(&format!("key{}", i + 1)))
+                        .unwrap_or_default()
+                })
                 .collect();
             self.input_value = vec![None; self.n];
             self.current_id = 0;
@@ -142,7 +145,7 @@ pub fn register_agents(askit: &ASKit) {
             .with_category(CATEGORY)
             .with_inputs(vec![PIN_IN1, PIN_IN2])
             .with_outputs(vec![PIN_DATA])
-            .with_default_config(vec![
+            .with_default_configs(vec![
                 (CONFIG_N, AgentConfigEntry::new(2, "integer").with_hidden()),
                 (CONFIG_KEY1, AgentConfigEntry::new("", "string")),
                 (CONFIG_KEY2, AgentConfigEntry::new("", "string")),
@@ -155,7 +158,7 @@ pub fn register_agents(askit: &ASKit) {
             .with_category(CATEGORY)
             .with_inputs(vec![PIN_IN1, PIN_IN2, PIN_IN3])
             .with_outputs(vec![PIN_DATA])
-            .with_default_config(vec![
+            .with_default_configs(vec![
                 (CONFIG_N, AgentConfigEntry::new(3, "integer").with_hidden()),
                 (CONFIG_KEY1, AgentConfigEntry::new("", "string")),
                 (CONFIG_KEY2, AgentConfigEntry::new("", "string")),
@@ -169,7 +172,7 @@ pub fn register_agents(askit: &ASKit) {
             .with_category(CATEGORY)
             .with_inputs(vec![PIN_IN1, PIN_IN2, PIN_IN3, PIN_IN4])
             .with_outputs(vec![PIN_DATA])
-            .with_default_config(vec![
+            .with_default_configs(vec![
                 (CONFIG_N, AgentConfigEntry::new(4, "integer").with_hidden()),
                 (CONFIG_KEY1, AgentConfigEntry::new("", "string")),
                 (CONFIG_KEY2, AgentConfigEntry::new("", "string")),

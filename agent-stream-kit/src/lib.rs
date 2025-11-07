@@ -19,11 +19,11 @@ mod runtime;
 
 pub use agent::{Agent, AgentStatus, AsAgent, AsAgentData, new_agent_boxed};
 pub use askit::{ASKit, ASKitEvent, ASKitObserver};
-pub use config::{AgentConfig, AgentConfigs};
+pub use config::{AgentConfigs, AgentConfigsMap};
 pub use context::AgentContext;
 pub use data::{AgentData, AgentValue, AgentValueMap};
 pub use definition::{
-    AgentConfigEntry, AgentDefaultConfig, AgentDefinition, AgentDefinitions,
+    AgentConfigEntry, AgentDefaultConfigs, AgentDefinition, AgentDefinitions,
     AgentDisplayConfigEntry,
 };
 pub use error::AgentError;

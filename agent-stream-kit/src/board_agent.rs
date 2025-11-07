@@ -3,7 +3,7 @@ use std::vec;
 
 use super::agent::{Agent, AsAgent, AsAgentData, new_agent_boxed};
 use super::askit::ASKit;
-use super::config::AgentConfig;
+use super::config::AgentConfigs;
 use super::context::AgentContext;
 use super::data::AgentData;
 use super::definition::{AgentConfigEntry, AgentDefinition};
@@ -20,7 +20,7 @@ impl AsAgent for BoardInAgent {
         askit: ASKit,
         id: String,
         def_name: String,
-        config: Option<AgentConfig>,
+        config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         let board_name = config
             .as_ref()
@@ -39,8 +39,11 @@ impl AsAgent for BoardInAgent {
         &mut self.data
     }
 
-    fn set_config(&mut self, config: AgentConfig) -> Result<(), AgentError> {
-        self.board_name = config.get_string(CONFIG_BOARD_NAME).ok();
+    fn configs_changed(&mut self) -> Result<(), AgentError> {
+        self.board_name = self
+            .configs()
+            .and_then(|c| c.get_string(CONFIG_BOARD_NAME))
+            .ok();
         Ok(())
     }
 
@@ -87,7 +90,7 @@ impl AsAgent for BoardOutAgent {
         askit: ASKit,
         id: String,
         def_name: String,
-        config: Option<AgentConfig>,
+        config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         let board_name = config
             .as_ref()
@@ -130,8 +133,11 @@ impl AsAgent for BoardOutAgent {
         Ok(())
     }
 
-    fn set_config(&mut self, config: AgentConfig) -> Result<(), AgentError> {
-        let board_name = config.get_string(CONFIG_BOARD_NAME).ok();
+    fn configs_changed(&mut self) -> Result<(), AgentError> {
+        let board_name = self
+            .configs()
+            .and_then(|c| c.get_string(CONFIG_BOARD_NAME))
+            .ok();
         if self.board_name != board_name {
             if let Some(board_name) = &self.board_name {
                 let askit = self.askit();
@@ -168,7 +174,7 @@ pub fn register_agents(askit: &ASKit) {
         .with_title("Board In")
         .with_category("Core")
         .with_inputs(vec!["*"])
-        .with_default_config(vec![(
+        .with_default_configs(vec![(
             CONFIG_BOARD_NAME,
             AgentConfigEntry::new("", "string")
                 .with_title("Board Name")
@@ -186,7 +192,7 @@ pub fn register_agents(askit: &ASKit) {
         .with_title("Board Out")
         .with_category("Core")
         .with_outputs(vec!["*"])
-        .with_default_config(vec![(
+        .with_default_configs(vec![(
             CONFIG_BOARD_NAME,
             AgentConfigEntry::new("", "string").with_title("Board Name"),
         )]),

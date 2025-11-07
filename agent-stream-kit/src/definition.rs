@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use super::agent::Agent;
 use super::askit::ASKit;
-use super::config::AgentConfig;
+use super::config::AgentConfigs;
 use super::data::AgentValue;
 use super::error::AgentError;
 
@@ -33,13 +33,13 @@ pub struct AgentDefinition {
     pub outputs: Option<Vec<String>>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub default_config: Option<AgentDefaultConfig>,
+    pub default_configs: Option<AgentDefaultConfigs>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub global_config: Option<AgentGlobalConfig>,
+    pub global_configs: Option<AgentGlobalConfigs>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub display_config: Option<AgentDisplayConfig>,
+    pub display_configs: Option<AgentDisplayConfigs>,
 
     #[serde(default, skip_serializing_if = "<&bool>::not")]
     pub native_thread: bool,
@@ -48,8 +48,8 @@ pub struct AgentDefinition {
     pub new_boxed: Option<AgentNewBoxedFn>,
 }
 
-pub type AgentDefaultConfig = Vec<(String, AgentConfigEntry)>;
-pub type AgentGlobalConfig = Vec<(String, AgentConfigEntry)>;
+pub type AgentDefaultConfigs = Vec<(String, AgentConfigEntry)>;
+pub type AgentGlobalConfigs = Vec<(String, AgentConfigEntry)>;
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct AgentConfigEntry {
@@ -70,7 +70,7 @@ pub struct AgentConfigEntry {
     pub hidden: bool,
 }
 
-pub type AgentDisplayConfig = Vec<(String, AgentDisplayConfigEntry)>;
+pub type AgentDisplayConfigs = Vec<(String, AgentDisplayConfigEntry)>;
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct AgentDisplayConfigEntry {
@@ -99,7 +99,7 @@ pub type AgentNewBoxedFn = fn(
     askit: ASKit,
     id: String,
     def_name: String,
-    config: Option<AgentConfig>,
+    configs: Option<AgentConfigs>,
 ) -> Result<Box<dyn Agent + Send + Sync>, AgentError>;
 
 impl AgentDefinition {
@@ -141,19 +141,19 @@ impl AgentDefinition {
         self
     }
 
-    pub fn with_default_config(mut self, config: Vec<(&str, AgentConfigEntry)>) -> Self {
-        self.default_config = Some(config.into_iter().map(|(k, v)| (k.into(), v)).collect());
+    pub fn with_default_configs(mut self, configs: Vec<(&str, AgentConfigEntry)>) -> Self {
+        self.default_configs = Some(configs.into_iter().map(|(k, v)| (k.into(), v)).collect());
         self
     }
 
     #[allow(unused)]
-    pub fn with_global_config(mut self, config: Vec<(&str, AgentConfigEntry)>) -> Self {
-        self.global_config = Some(config.into_iter().map(|(k, v)| (k.into(), v)).collect());
+    pub fn with_global_configs(mut self, configs: Vec<(&str, AgentConfigEntry)>) -> Self {
+        self.global_configs = Some(configs.into_iter().map(|(k, v)| (k.into(), v)).collect());
         self
     }
 
-    pub fn with_display_config(mut self, config: Vec<(&str, AgentDisplayConfigEntry)>) -> Self {
-        self.display_config = Some(config.into_iter().map(|(k, v)| (k.into(), v)).collect());
+    pub fn with_display_configs(mut self, configs: Vec<(&str, AgentDisplayConfigEntry)>) -> Self {
+        self.display_configs = Some(configs.into_iter().map(|(k, v)| (k.into(), v)).collect());
         self
     }
 
@@ -229,7 +229,7 @@ mod tests {
         let def = AgentDefinition::new(
             "test",
             "echo",
-            Some(|_app, _id, _def_name, _config| {
+            Some(|_app, _id, _def_name, _configs| {
                 Err(AgentError::NotImplemented("Echo agent".into()))
             }),
         );
@@ -240,7 +240,7 @@ mod tests {
         assert!(def.category.is_none());
         assert!(def.inputs.is_none());
         assert!(def.outputs.is_none());
-        assert!(def.display_config.is_none());
+        assert!(def.display_configs.is_none());
     }
 
     #[test]
@@ -253,15 +253,15 @@ mod tests {
         assert_eq!(def.category.unwrap(), "Test");
         assert_eq!(def.inputs.unwrap(), vec!["in"]);
         assert_eq!(def.outputs.unwrap(), vec!["out"]);
-        let display_config = def.display_config.unwrap();
-        assert_eq!(display_config.len(), 2);
-        let entry = &display_config[0];
+        let display_configs = def.display_configs.unwrap();
+        assert_eq!(display_configs.len(), 2);
+        let entry = &display_configs[0];
         assert_eq!(entry.0, "value");
         assert_eq!(entry.1.type_.as_ref().unwrap(), "string");
         assert_eq!(entry.1.title.as_ref().unwrap(), "display_title");
         assert_eq!(entry.1.description.as_ref().unwrap(), "display_description");
         assert_eq!(entry.1.hide_title, false);
-        let entry = &display_config[1];
+        let entry = &display_configs[1];
         assert_eq!(entry.0, "hide_title_value");
         assert_eq!(entry.1.type_.as_ref().unwrap(), "integer");
         assert_eq!(entry.1.title, None);
@@ -274,7 +274,7 @@ mod tests {
         let def = AgentDefinition::new(
             "test",
             "echo",
-            Some(|_app, _id, _def_name, _config| {
+            Some(|_app, _id, _def_name, _configs| {
                 Err(AgentError::NotImplemented("Echo agent".into()))
             }),
         );
@@ -289,13 +289,13 @@ mod tests {
         print!("{}", json);
         assert_eq!(
             json,
-            r#"{"kind":"test","name":"echo","title":"Echo","category":"Test","inputs":["in"],"outputs":["out"],"display_config":[["value",{"type":"string","title":"display_title","description":"display_description"}],["hide_title_value",{"type":"integer","hide_title":true}]]}"#
+            r#"{"kind":"test","name":"echo","title":"Echo","category":"Test","inputs":["in"],"outputs":["out"],"display_configs":[["value",{"type":"string","title":"display_title","description":"display_description"}],["hide_title_value",{"type":"integer","hide_title":true}]]}"#
         );
     }
 
     #[test]
     fn test_deserialize_echo_agent_definition() {
-        let json = r#"{"kind":"test","name":"echo","title":"Echo","category":"Test","inputs":["in"],"outputs":["out"],"display_config":[["value",{"type":"string","title":"display_title","description":"display_description"}],["hide_title_value",{"type":"integer","hide_title":true}]]}"#;
+        let json = r#"{"kind":"test","name":"echo","title":"Echo","category":"Test","inputs":["in"],"outputs":["out"],"display_configs":[["value",{"type":"string","title":"display_title","description":"display_description"}],["hide_title_value",{"type":"integer","hide_title":true}]]}"#;
         let def: AgentDefinition = serde_json::from_str(json).unwrap();
         assert_eq!(def.kind, "test");
         assert_eq!(def.name, "echo");
@@ -303,15 +303,15 @@ mod tests {
         assert_eq!(def.category.unwrap(), "Test");
         assert_eq!(def.inputs.unwrap(), vec!["in"]);
         assert_eq!(def.outputs.unwrap(), vec!["out"]);
-        let display_config = def.display_config.unwrap();
-        assert_eq!(display_config.len(), 2);
-        let entry = &display_config[0];
+        let display_configs = def.display_configs.unwrap();
+        assert_eq!(display_configs.len(), 2);
+        let entry = &display_configs[0];
         assert_eq!(entry.0, "value");
         assert_eq!(entry.1.type_.as_ref().unwrap(), "string");
         assert_eq!(entry.1.title.as_ref().unwrap(), "display_title");
         assert_eq!(entry.1.description.as_ref().unwrap(), "display_description");
         assert_eq!(entry.1.hide_title, false);
-        let entry = &display_config[1];
+        let entry = &display_configs[1];
         assert_eq!(entry.0, "hide_title_value");
         assert_eq!(entry.1.type_.as_ref().unwrap(), "integer");
         assert_eq!(entry.1.title, None);
@@ -323,7 +323,7 @@ mod tests {
         AgentDefinition::new(
             "test",
             "echo",
-            Some(|_app, _id, _def_name, _config| {
+            Some(|_app, _id, _def_name, _configs| {
                 Err(AgentError::NotImplemented("Echo agent".into()))
             }),
         )
@@ -331,7 +331,7 @@ mod tests {
         .with_category("Test")
         .with_inputs(vec!["in"])
         .with_outputs(vec!["out"])
-        .with_display_config(vec![
+        .with_display_configs(vec![
             (
                 "value",
                 AgentDisplayConfigEntry::new("string")

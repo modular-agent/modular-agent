@@ -5,12 +5,12 @@ use serde::{Deserialize, Serialize};
 use crate::data::AgentValue;
 use crate::error::AgentError;
 
-pub type AgentConfigs = HashMap<String, AgentConfig>;
+pub type AgentConfigsMap = HashMap<String, AgentConfigs>;
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
-pub struct AgentConfig(BTreeMap<String, AgentValue>);
+pub struct AgentConfigs(BTreeMap<String, AgentValue>);
 
-impl AgentConfig {
+impl AgentConfigs {
     pub fn new() -> Self {
         Self(BTreeMap::new())
     }
@@ -151,7 +151,7 @@ impl AgentConfig {
     }
 }
 
-impl IntoIterator for AgentConfig {
+impl IntoIterator for AgentConfigs {
     type Item = (String, AgentValue);
     type IntoIter = std::collections::btree_map::IntoIter<String, AgentValue>;
 
@@ -160,7 +160,7 @@ impl IntoIterator for AgentConfig {
     }
 }
 
-impl<'a> IntoIterator for &'a AgentConfig {
+impl<'a> IntoIterator for &'a AgentConfigs {
     type Item = (&'a String, &'a AgentValue);
     type IntoIter = std::collections::btree_map::Iter<'a, String, AgentValue>;
 

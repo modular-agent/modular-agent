@@ -90,9 +90,9 @@ pub async fn agent_out(
     }
 
     for target in targets.unwrap() {
-        let (target_agent, source_handle, target_handle) = target;
+        let (target_agent, source_pin, target_pin) = target;
 
-        if source_handle != pin && source_handle != "*" {
+        if source_pin != pin && source_pin != "*" {
             // Skip if source_handle does not match with the given port.
             // "*" is a wildcard, and outputs messages of all ports.
             continue;
@@ -105,11 +105,11 @@ pub async fn agent_out(
             }
         }
 
-        let target_pin = if target_handle == "*" {
+        let target_pin = if target_pin == "*" {
             // If target_handle is "*", use the port specified by the source agent
             pin.clone()
         } else {
-            target_handle.clone()
+            target_pin.clone()
         };
 
         env.agent_input(target_agent.clone(), ctx.clone(), target_pin, data.clone())

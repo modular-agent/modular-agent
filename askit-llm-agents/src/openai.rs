@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use std::vec;
 
 use agent_stream_kit::{
-    ASKit, Agent, AgentConfig, AgentConfigEntry, AgentContext, AgentData, AgentDefinition,
+    ASKit, Agent, AgentConfigEntry, AgentConfigs, AgentContext, AgentData, AgentDefinition,
     AgentError, AgentOutput, AsAgent, AsAgentData, async_trait, new_agent_boxed,
 };
 use async_openai::{
@@ -45,7 +45,7 @@ impl OpenAIManager {
         let mut new_client = Client::new();
 
         if let Some(api_key) = askit
-            .get_global_config("openai_chat")
+            .get_global_configs("openai_chat")
             .and_then(|cfg| cfg.get_string(CONFIG_OPENAI_API_KEY).ok())
             .filter(|key| !key.is_empty())
         {
@@ -71,7 +71,7 @@ impl AsAgent for OpenAICompletionAgent {
         askit: ASKit,
         id: String,
         def_name: String,
-        config: Option<AgentConfig>,
+        config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
             data: AsAgentData::new(askit, id, def_name, config),
@@ -93,7 +93,7 @@ impl AsAgent for OpenAICompletionAgent {
         _pin: String,
         data: AgentData,
     ) -> Result<(), AgentError> {
-        let config_model = &self.config()?.get_string_or_default(CONFIG_MODEL);
+        let config_model = &self.configs()?.get_string_or_default(CONFIG_MODEL);
         if config_model.is_empty() {
             return Ok(());
         }
@@ -109,7 +109,7 @@ impl AsAgent for OpenAICompletionAgent {
             .build()
             .map_err(|e| AgentError::InvalidValue(format!("Failed to build request: {}", e)))?;
 
-        let config_options = self.config()?.get_string_or_default(CONFIG_OPTIONS);
+        let config_options = self.configs()?.get_string_or_default(CONFIG_OPTIONS);
         if !config_options.is_empty() && config_options != "{}" {
             // Merge options into request
             let options_json = serde_json::from_str::<serde_json::Value>(&config_options)
@@ -159,7 +159,7 @@ impl AsAgent for OpenAIChatAgent {
         askit: ASKit,
         id: String,
         def_name: String,
-        config: Option<AgentConfig>,
+        config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
             data: AsAgentData::new(askit, id, def_name, config),
@@ -182,7 +182,7 @@ impl AsAgent for OpenAIChatAgent {
         _pin: String,
         data: AgentData,
     ) -> Result<(), AgentError> {
-        let config_model = &self.config()?.get_string_or_default(CONFIG_MODEL);
+        let config_model = &self.configs()?.get_string_or_default(CONFIG_MODEL);
         if config_model.is_empty() {
             return Ok(());
         }
@@ -192,7 +192,7 @@ impl AsAgent for OpenAIChatAgent {
             return Ok(());
         }
 
-        let history_size = self.config()?.get_integer_or_default(CONFIG_HISTORY);
+        let history_size = self.configs()?.get_integer_or_default(CONFIG_HISTORY);
         let messages = if history_size > 0 {
             self.history.push(Message::user(message.to_string()));
             self.history.messages.clone()
@@ -203,7 +203,7 @@ impl AsAgent for OpenAIChatAgent {
         .map(|m| m.into())
         .collect::<Vec<ChatCompletionRequestMessage>>();
 
-        let use_stream = self.config()?.get_bool_or_default(CONFIG_STREAM);
+        let use_stream = self.configs()?.get_bool_or_default(CONFIG_STREAM);
 
         let mut request = CreateChatCompletionRequestArgs::default()
             .model(config_model)
@@ -212,7 +212,7 @@ impl AsAgent for OpenAIChatAgent {
             .build()
             .map_err(|e| AgentError::InvalidValue(format!("Failed to build request: {}", e)))?;
 
-        let config_options = self.config()?.get_string_or_default(CONFIG_OPTIONS);
+        let config_options = self.configs()?.get_string_or_default(CONFIG_OPTIONS);
         if !config_options.is_empty() && config_options != "{}" {
             // Merge options into request
             let options_json = serde_json::from_str::<serde_json::Value>(&config_options)
@@ -301,7 +301,7 @@ impl AsAgent for OpenAIEmbeddingsAgent {
         askit: ASKit,
         id: String,
         def_name: String,
-        config: Option<AgentConfig>,
+        config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
             data: AsAgentData::new(askit, id, def_name, config),
@@ -323,7 +323,7 @@ impl AsAgent for OpenAIEmbeddingsAgent {
         _pin: String,
         data: AgentData,
     ) -> Result<(), AgentError> {
-        let config_model = &self.config()?.get_string_or_default(CONFIG_MODEL);
+        let config_model = &self.configs()?.get_string_or_default(CONFIG_MODEL);
         if config_model.is_empty() {
             return Ok(());
         }
@@ -340,7 +340,7 @@ impl AsAgent for OpenAIEmbeddingsAgent {
             .build()
             .map_err(|e| AgentError::InvalidValue(format!("Failed to build request: {}", e)))?;
 
-        let config_options = self.config()?.get_string_or_default(CONFIG_OPTIONS);
+        let config_options = self.configs()?.get_string_or_default(CONFIG_OPTIONS);
         if !config_options.is_empty() && config_options != "{}" {
             // Merge options into request
             let options_json = serde_json::from_str::<serde_json::Value>(&config_options)
@@ -387,7 +387,7 @@ impl AsAgent for OpenAIResponsesAgent {
         askit: ASKit,
         id: String,
         def_name: String,
-        config: Option<AgentConfig>,
+        config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
             data: AsAgentData::new(askit, id, def_name, config),
@@ -410,7 +410,7 @@ impl AsAgent for OpenAIResponsesAgent {
         _pin: String,
         data: AgentData,
     ) -> Result<(), AgentError> {
-        let config_model = &self.config()?.get_string_or_default(CONFIG_MODEL);
+        let config_model = &self.configs()?.get_string_or_default(CONFIG_MODEL);
         if config_model.is_empty() {
             return Ok(());
         }
@@ -420,7 +420,7 @@ impl AsAgent for OpenAIResponsesAgent {
             return Ok(());
         }
 
-        let history_size = self.config()?.get_integer_or_default(CONFIG_HISTORY);
+        let history_size = self.configs()?.get_integer_or_default(CONFIG_HISTORY);
         let input = if history_size > 0 {
             self.history.push(Message::user(message.to_string()));
             let items = self
@@ -434,7 +434,7 @@ impl AsAgent for OpenAIResponsesAgent {
             message.into()
         };
 
-        let use_stream = self.config()?.get_bool_or_default(CONFIG_STREAM);
+        let use_stream = self.configs()?.get_bool_or_default(CONFIG_STREAM);
 
         let mut request = CreateResponseArgs::default()
             .model(config_model)
@@ -443,7 +443,7 @@ impl AsAgent for OpenAIResponsesAgent {
             .build()
             .map_err(|e| AgentError::InvalidValue(format!("Failed to build request: {}", e)))?;
 
-        let config_options = self.config()?.get_string_or_default(CONFIG_OPTIONS);
+        let config_options = self.configs()?.get_string_or_default(CONFIG_OPTIONS);
         if !config_options.is_empty() && config_options != "{}" {
             // Merge options into request
             let options_json = serde_json::from_str::<serde_json::Value>(&config_options)
@@ -663,7 +663,7 @@ pub fn register_agents(askit: &ASKit) {
         .with_category(CATEGORY)
         .with_inputs(vec![PORT_MESSAGE])
         .with_outputs(vec![PORT_MESSAGE, PORT_RESPONSE])
-        .with_default_config(vec![
+        .with_default_configs(vec![
             (
                 CONFIG_MODEL,
                 AgentConfigEntry::new("gpt-3.5-turbo-instruct", "string").with_title("Model"),
@@ -686,11 +686,11 @@ pub fn register_agents(askit: &ASKit) {
         .with_category(CATEGORY)
         .with_inputs(vec![PORT_MESSAGE])
         .with_outputs(vec![PORT_MESSAGE, PORT_RESPONSE, PORT_HISTORY])
-        .with_global_config(vec![(
+        .with_global_configs(vec![(
             CONFIG_OPENAI_API_KEY,
             AgentConfigEntry::new("", "password").with_title("OpenAI API Key"),
         )])
-        .with_default_config(vec![
+        .with_default_configs(vec![
             (
                 CONFIG_MODEL,
                 AgentConfigEntry::new(DEFAULT_CONFIG_MODEL, "string").with_title("Model"),
@@ -721,7 +721,7 @@ pub fn register_agents(askit: &ASKit) {
         .with_category(CATEGORY)
         .with_inputs(vec![PORT_INPUT])
         .with_outputs(vec![PORT_EMBEDDINGS])
-        .with_default_config(vec![
+        .with_default_configs(vec![
             (
                 CONFIG_MODEL,
                 AgentConfigEntry::new("text-embedding-3-small", "string").with_title("Model"),
@@ -744,7 +744,7 @@ pub fn register_agents(askit: &ASKit) {
         .with_category(CATEGORY)
         .with_inputs(vec![PORT_MESSAGE])
         .with_outputs(vec![PORT_MESSAGE, PORT_RESPONSE, PORT_HISTORY])
-        .with_default_config(vec![
+        .with_default_configs(vec![
             (
                 CONFIG_MODEL,
                 AgentConfigEntry::new(DEFAULT_CONFIG_MODEL, "string").with_title("Model"),

@@ -1,5 +1,5 @@
 use agent_stream_kit::{
-    ASKit, Agent, AgentConfig, AgentConfigEntry, AgentContext, AgentData, AgentDefinition,
+    ASKit, Agent, AgentConfigs, AgentConfigEntry, AgentContext, AgentData, AgentDefinition,
     AgentError, AgentOutput, AsAgent, AsAgentData, async_trait, new_agent_boxed,
 };
 use handlebars::Handlebars;
@@ -29,7 +29,7 @@ impl AsAgent for StringJoinAgent {
         askit: ASKit,
         id: String,
         def_name: String,
-        config: Option<AgentConfig>,
+        config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
             data: AsAgentData::new(askit, id, def_name, config),
@@ -50,7 +50,7 @@ impl AsAgent for StringJoinAgent {
         _pin: String,
         data: AgentData,
     ) -> Result<(), AgentError> {
-        let config = self.config()?;
+        let config = self.configs()?;
 
         let sep = config.get_string_or_default(CONFIG_SEP);
 
@@ -86,7 +86,7 @@ impl AsAgent for TemplateStringAgent {
         askit: ASKit,
         id: String,
         def_name: String,
-        config: Option<AgentConfig>,
+        config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
             data: AsAgentData::new(askit, id, def_name, config),
@@ -107,7 +107,7 @@ impl AsAgent for TemplateStringAgent {
         _pin: String,
         data: AgentData,
     ) -> Result<(), AgentError> {
-        let config = self.config()?;
+        let config = self.configs()?;
 
         let template = config.get_string_or_default(CONFIG_TEMPLATE);
         if template.is_empty() {
@@ -154,7 +154,7 @@ impl AsAgent for TemplateTextAgent {
         askit: ASKit,
         id: String,
         def_name: String,
-        config: Option<AgentConfig>,
+        config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
             data: AsAgentData::new(askit, id, def_name, config),
@@ -175,7 +175,7 @@ impl AsAgent for TemplateTextAgent {
         _pin: String,
         data: AgentData,
     ) -> Result<(), AgentError> {
-        let config = self.config()?;
+        let config = self.configs()?;
 
         let template = config.get_string_or_default(CONFIG_TEMPLATE);
         if template.is_empty() {
@@ -222,7 +222,7 @@ impl AsAgent for TemplateArrayAgent {
         askit: ASKit,
         id: String,
         def_name: String,
-        config: Option<AgentConfig>,
+        config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
             data: AsAgentData::new(askit, id, def_name, config),
@@ -243,7 +243,7 @@ impl AsAgent for TemplateArrayAgent {
         _pin: String,
         data: AgentData,
     ) -> Result<(), AgentError> {
-        let config = self.config()?;
+        let config = self.configs()?;
 
         let template = config.get_string_or_default(CONFIG_TEMPLATE);
         if template.is_empty() {
@@ -336,7 +336,7 @@ pub fn register_agents(askit: &ASKit) {
         .with_category(CATEGORY)
         .with_inputs(vec![PIN_STRINGS])
         .with_outputs(vec![PIN_STRING])
-        .with_default_config(vec![(CONFIG_SEP, AgentConfigEntry::new("\\n", "string"))]),
+        .with_default_configs(vec![(CONFIG_SEP, AgentConfigEntry::new("\\n", "string"))]),
     );
 
     askit.register_agent(
@@ -349,7 +349,7 @@ pub fn register_agents(askit: &ASKit) {
         .with_category(CATEGORY)
         .with_inputs(vec![PIN_DATA])
         .with_outputs(vec![PIN_STRING])
-        .with_default_config(vec![(
+        .with_default_configs(vec![(
             CONFIG_TEMPLATE,
             AgentConfigEntry::new("{{value}}", "text"),
         )]),
@@ -365,7 +365,7 @@ pub fn register_agents(askit: &ASKit) {
         .with_category(CATEGORY)
         .with_inputs(vec![PIN_DATA])
         .with_outputs(vec![PIN_STRING])
-        .with_default_config(vec![(
+        .with_default_configs(vec![(
             CONFIG_TEMPLATE,
             AgentConfigEntry::new("{{value}}", "string"),
         )]),
@@ -381,7 +381,7 @@ pub fn register_agents(askit: &ASKit) {
         .with_category(CATEGORY)
         .with_inputs(vec![PIN_DATA])
         .with_outputs(vec![PIN_STRING])
-        .with_default_config(vec![(
+        .with_default_configs(vec![(
             CONFIG_TEMPLATE,
             AgentConfigEntry::new("{{value}}", "text"),
         )]),

@@ -47,10 +47,12 @@ impl<T: Agent> AgentOutput for T {
     }
 
     fn emit_display_raw(&self, key: String, data: AgentData) {
-        self.askit().emit_display(self.id().to_string(), key, data);
+        self.askit()
+            .emit_agent_display(self.id().to_string(), key, data);
     }
 
     fn emit_error_raw(&self, message: String) {
-        self.askit().emit_error(self.id().to_string(), message);
+        self.askit()
+            .emit_agent_error(self.id().to_string(), message);
     }
 }

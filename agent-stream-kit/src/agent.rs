@@ -1,7 +1,9 @@
 use async_trait::async_trait;
 
+use crate::AgentValue;
+
 use super::askit::ASKit;
-use super::config::AgentConfig;
+use super::config::AgentConfigs;
 use super::context::AgentContext;
 use super::data::AgentData;
 use super::error::AgentError;
@@ -22,7 +24,7 @@ pub enum AgentMessage {
         data: AgentData,
     },
     Config {
-        config: AgentConfig,
+        configs: AgentConfigs,
     },
     Stop,
 }
@@ -33,7 +35,7 @@ pub trait Agent {
         askit: ASKit,
         id: String,
         def_name: String,
-        config: Option<AgentConfig>,
+        configs: Option<AgentConfigs>,
     ) -> Result<Self, AgentError>
     where
         Self: Sized;
@@ -46,12 +48,14 @@ pub trait Agent {
 
     fn def_name(&self) -> &str;
 
-    fn config(&self) -> Result<&AgentConfig, AgentError>;
+    fn configs(&self) -> Result<&AgentConfigs, AgentError>;
 
-    fn set_config(&mut self, config: AgentConfig) -> Result<(), AgentError>;
+    fn set_config(&mut self, key: String, value: AgentValue) -> Result<(), AgentError>;
 
-    fn get_global_config(&self) -> Option<AgentConfig> {
-        self.askit().get_global_config(self.def_name())
+    fn set_configs(&mut self, configs: AgentConfigs) -> Result<(), AgentError>;
+
+    fn get_global_configs(&self) -> Option<AgentConfigs> {
+        self.askit().get_global_configs(self.def_name())
     }
 
     fn flow_name(&self) -> &str;
@@ -81,18 +85,18 @@ pub struct AsAgentData {
     pub status: AgentStatus,
     pub def_name: String,
     pub flow_name: String,
-    pub config: Option<AgentConfig>,
+    pub configs: Option<AgentConfigs>,
 }
 
 impl AsAgentData {
-    pub fn new(askit: ASKit, id: String, def_name: String, config: Option<AgentConfig>) -> Self {
+    pub fn new(askit: ASKit, id: String, def_name: String, configs: Option<AgentConfigs>) -> Self {
         Self {
             askit,
             id,
             status: AgentStatus::Init,
             def_name,
             flow_name: String::new(),
-            config,
+            configs,
         }
     }
 }
@@ -103,7 +107,7 @@ pub trait AsAgent {
         askit: ASKit,
         id: String,
         def_name: String,
-        config: Option<AgentConfig>,
+        configs: Option<AgentConfigs>,
     ) -> Result<Self, AgentError>
     where
         Self: Sized + Send + Sync;
@@ -112,7 +116,7 @@ pub trait AsAgent {
 
     fn mut_data(&mut self) -> &mut AsAgentData;
 
-    fn set_config(&mut self, _config: AgentConfig) -> Result<(), AgentError> {
+    fn configs_changed(&mut self) -> Result<(), AgentError> {
         Ok(())
     }
 
@@ -140,9 +144,9 @@ impl<T: AsAgent + Send + Sync> Agent for T {
         askit: ASKit,
         id: String,
         def_name: String,
-        config: Option<AgentConfig>,
+        configs: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
-        let mut agent = T::new(askit, id, def_name, config)?;
+        let mut agent = T::new(askit, id, def_name, configs)?;
         agent.mut_data().status = AgentStatus::Init;
         Ok(agent)
     }
@@ -163,13 +167,21 @@ impl<T: AsAgent + Send + Sync> Agent for T {
         self.data().def_name.as_str()
     }
 
-    fn config(&self) -> Result<&AgentConfig, AgentError> {
-        self.data().config.as_ref().ok_or(AgentError::NoConfig)
+    fn configs(&self) -> Result<&AgentConfigs, AgentError> {
+        self.data().configs.as_ref().ok_or(AgentError::NoConfig)
     }
 
-    fn set_config(&mut self, config: AgentConfig) -> Result<(), AgentError> {
-        self.mut_data().config = Some(config.clone());
-        self.set_config(config)
+    fn set_config(&mut self, key: String, value: AgentValue) -> Result<(), AgentError> {
+        if let Some(configs) = &mut self.mut_data().configs {
+            configs.set(key.clone(), value.clone());
+            self.configs_changed()?;
+        }
+        Ok(())
+    }
+
+    fn set_configs(&mut self, configs: AgentConfigs) -> Result<(), AgentError> {
+        self.mut_data().configs = Some(configs);
+        self.configs_changed()
     }
 
     fn flow_name(&self) -> &str {
@@ -185,7 +197,7 @@ impl<T: AsAgent + Send + Sync> Agent for T {
 
         if let Err(e) = self.start() {
             self.askit()
-                .emit_error(self.id().to_string(), e.to_string());
+                .emit_agent_error(self.id().to_string(), e.to_string());
             return Err(e);
         }
 
@@ -207,14 +219,14 @@ impl<T: AsAgent + Send + Sync> Agent for T {
     ) -> Result<(), AgentError> {
         if let Err(e) = self.process(ctx, pin, data).await {
             self.askit()
-                .emit_error(self.id().to_string(), e.to_string());
+                .emit_agent_error(self.id().to_string(), e.to_string());
             return Err(e);
         }
         Ok(())
     }
 
-    fn get_global_config(&self) -> Option<AgentConfig> {
-        self.askit().get_global_config(self.def_name())
+    fn get_global_configs(&self) -> Option<AgentConfigs> {
+        self.askit().get_global_configs(self.def_name())
     }
 }
 
@@ -222,16 +234,16 @@ pub fn new_agent_boxed<T: Agent + Send + Sync + 'static>(
     askit: ASKit,
     id: String,
     def_name: String,
-    config: Option<AgentConfig>,
+    configs: Option<AgentConfigs>,
 ) -> Result<Box<dyn Agent + Send + Sync>, AgentError> {
-    Ok(Box::new(T::new(askit, id, def_name, config)?))
+    Ok(Box::new(T::new(askit, id, def_name, configs)?))
 }
 
 pub fn agent_new(
     askit: ASKit,
     agent_id: String,
     def_name: &str,
-    config: Option<AgentConfig>,
+    configs: Option<AgentConfigs>,
 ) -> Result<Box<dyn Agent + Send + Sync>, AgentError> {
     let def;
     {
@@ -242,8 +254,29 @@ pub fn agent_new(
             .clone();
     }
 
+    let default_config = def.default_configs.clone();
+    let configs = match (default_config, configs) {
+        (Some(def_cfg), Some(mut cfg)) => {
+            for (k, v) in def_cfg.iter() {
+                if !cfg.contains_key(k) {
+                    cfg.set(k.clone(), v.value.clone());
+                }
+            }
+            Some(cfg)
+        }
+        (Some(def_cfg), None) => {
+            let mut cfg = AgentConfigs::default();
+            for (k, v) in def_cfg.iter() {
+                cfg.set(k.clone(), v.value.clone());
+            }
+            Some(cfg)
+        }
+        (None, Some(cfg)) => Some(cfg),
+        (None, None) => None,
+    };
+
     if let Some(new_boxed) = def.new_boxed {
-        return new_boxed(askit, agent_id, def_name.to_string(), config);
+        return new_boxed(askit, agent_id, def_name.to_string(), configs);
     }
 
     match def.kind.as_str() {
