@@ -21,7 +21,7 @@ use async_openai::{
 };
 use futures::StreamExt;
 
-use crate::message::{Message, MessageHistory};
+use crate::message::{self, Message, MessageHistory};
 
 // Shared client management for OpenAI agents
 struct OpenAIManager {
@@ -98,14 +98,38 @@ impl AsAgent for OpenAICompletionAgent {
             return Ok(());
         }
 
-        let message = data.as_str().unwrap_or("");
-        if message.is_empty() {
-            return Ok(());
+        let mut messages;
+        {
+            if data.is_array() {
+                let arr = data.as_array().unwrap();
+                messages = Vec::new();
+                for item in arr {
+                    let msg: Message = item.clone().try_into()?;
+                    messages.push(msg);
+                }
+                // Check if the last message is user
+                if let Some(last_msg) = messages.last() {
+                    if last_msg.role != "user" {
+                        return Ok(());
+                    }
+                }
+            } else {
+                let message = data.as_str().unwrap_or("");
+                if message.is_empty() {
+                    return Ok(());
+                }
+                messages = vec![Message::user(message.to_string())];
+            }
         }
 
         let mut request = CreateCompletionRequestArgs::default()
             .model(config_model)
-            .prompt(message)
+            .prompt(
+                messages
+                    .iter()
+                    .map(|m| m.content.clone())
+                    .collect::<Vec<String>>(),
+            )
             .build()
             .map_err(|e| AgentError::InvalidValue(format!("Failed to build request: {}", e)))?;
 
@@ -187,21 +211,44 @@ impl AsAgent for OpenAIChatAgent {
             return Ok(());
         }
 
-        let message = data.as_str().unwrap_or("");
-        if message.is_empty() {
-            return Ok(());
+        let mut messages;
+        {
+            if data.is_array() {
+                let arr = data.as_array().unwrap();
+                messages = Vec::new();
+                for item in arr {
+                    let msg: Message = item.clone().try_into()?;
+                    messages.push(msg);
+                }
+                // Check if the last message is user
+                if let Some(last_msg) = messages.last() {
+                    if last_msg.role != "user" {
+                        return Ok(());
+                    }
+                }
+            } else {
+                let message = data.as_str().unwrap_or("");
+                if message.is_empty() {
+                    return Ok(());
+                }
+                messages = vec![Message::user(message.to_string())];
+            }
         }
 
         let history_size = self.configs()?.get_integer_or_default(CONFIG_HISTORY);
-        let messages = if history_size > 0 {
-            self.history.push(Message::user(message.to_string()));
-            self.history.messages.clone()
-        } else {
-            vec![Message::user(message.to_string())]
+        self.history.set_size(history_size);
+
+        if history_size > 0 {
+            for message in &messages {
+                self.history.push(message.clone());
+            }
+            messages = self.history.messages().clone()
         }
-        .into_iter()
-        .map(|m| m.into())
-        .collect::<Vec<ChatCompletionRequestMessage>>();
+
+        let messages = messages
+            .into_iter()
+            .map(|m| m.into())
+            .collect::<Vec<ChatCompletionRequestMessage>>();
 
         let use_stream = self.configs()?.get_bool_or_default(CONFIG_STREAM);
 
@@ -421,11 +468,13 @@ impl AsAgent for OpenAIResponsesAgent {
         }
 
         let history_size = self.configs()?.get_integer_or_default(CONFIG_HISTORY);
+        self.history.set_size(history_size);
+
         let input = if history_size > 0 {
             self.history.push(Message::user(message.to_string()));
             let items = self
                 .history
-                .messages
+                .messages()
                 .iter()
                 .map(|m| m.into())
                 .collect::<Vec<responses::InputItem>>();

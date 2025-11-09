@@ -13,13 +13,6 @@ impl Message {
         Self { role, content }
     }
 
-    pub fn user(content: String) -> Self {
-        Self {
-            role: "user".to_string(),
-            content,
-        }
-    }
-
     pub fn assistant(content: String) -> Self {
         Self {
             role: "assistant".to_string(),
@@ -30,6 +23,13 @@ impl Message {
     pub fn system(content: String) -> Self {
         Self {
             role: "system".to_string(),
+            content,
+        }
+    }
+
+    pub fn user(content: String) -> Self {
+        Self {
+            role: "user".to_string(),
             content,
         }
     }
@@ -95,21 +95,63 @@ impl From<Message> for AgentValue {
 
 #[derive(Clone, Default)]
 pub struct MessageHistory {
-    pub messages: Vec<Message>,
+    messages: Vec<Message>,
     max_size: i64,
+    system_message: Option<Message>,
+    include_system: bool,
 }
 
 impl MessageHistory {
     pub fn new(messages: Vec<Message>, max_size: i64) -> Self {
         let mut messages = messages;
+        let mut system_message = None;
         if max_size > 0 {
             if messages.len() > max_size as usize {
+                // find system message if it will be excluded from history
+                for i in 0..(max_size - 1) as usize {
+                    if messages[i].role == "system" {
+                        system_message = Some(messages[i].clone());
+                        break;
+                    }
+                }
                 messages = messages[messages.len() - max_size as usize..].to_vec();
             }
-        } else {
-            messages = Vec::new();
         }
-        Self { messages, max_size }
+        Self {
+            messages,
+            max_size,
+            system_message,
+            include_system: false,
+        }
+    }
+
+    pub fn from_json(value: serde_json::Value) -> Result<Self, AgentError> {
+        match value {
+            serde_json::Value::Array(arr) => {
+                let messages: Vec<Message> = arr
+                    .into_iter()
+                    .map(|v| serde_json::from_value(v))
+                    .collect::<Result<Vec<_>, _>>()
+                    .map_err(|e| {
+                        AgentError::InvalidValue(format!("Invalid message format: {}", e))
+                    })?;
+                Ok(MessageHistory::new(messages, 0))
+            }
+            _ => Err(AgentError::InvalidValue(
+                "Expected JSON array for MessageHistory".to_string(),
+            )),
+        }
+    }
+
+    pub fn parse(s: &str) -> Result<Self, AgentError> {
+        let value: serde_json::Value = serde_json::from_str(s).map_err(|e| {
+            AgentError::InvalidValue(format!("Failed to parse JSON for MessageHistory: {}", e))
+        })?;
+        Self::from_json(value)
+    }
+
+    pub fn include_system(&mut self, include: bool) {
+        self.include_system = include;
     }
 
     pub fn push(&mut self, message: Message) {
@@ -118,13 +160,44 @@ impl MessageHistory {
         }
         self.messages.push(message);
     }
+
+    pub fn reset(&mut self) {
+        self.messages.clear();
+    }
+
+    pub fn set_size(&mut self, size: i64) {
+        self.max_size = size;
+        if self.max_size > 0 && self.messages.len() > self.max_size as usize {
+            // find system message if it will be excluded from history
+            for i in 0..(self.max_size - 1) as usize {
+                if self.messages[i].role == "system" {
+                    self.system_message = Some(self.messages[i].clone());
+                    break;
+                }
+            }
+            self.messages = self.messages[self.messages.len() - self.max_size as usize..].to_vec();
+        }
+    }
+
+    pub fn messages(&self) -> Vec<Message> {
+        if self.include_system {
+            let mut msgs = Vec::new();
+            if let Some(sys_msg) = &self.system_message {
+                msgs.push(sys_msg.clone());
+            }
+            msgs.extend(self.messages.clone());
+            msgs
+        } else {
+            self.messages.clone()
+        }
+    }
 }
 
 impl From<MessageHistory> for AgentData {
     fn from(history: MessageHistory) -> Self {
         AgentData::array(
             "message",
-            history.messages.into_iter().map(|m| m.into()).collect(),
+            history.messages().into_iter().map(|m| m.into()).collect(),
         )
     }
 }
@@ -175,6 +248,32 @@ mod tests {
         let msg: Message = value.try_into().unwrap();
         assert_eq!(msg.role, "assistant");
         assert_eq!(msg.content, "Here is some information.");
+    }
+
+    #[test]
+    fn test_message_history_from_json() {
+        let value: serde_json::Value = serde_json::json!([
+            { "role": "user", "content": "Hello" },
+            { "role": "assistant", "content": "Hi there!" }
+        ]);
+        let history = MessageHistory::from_json(value).unwrap();
+        assert_eq!(history.messages.len(), 2);
+        assert_eq!(history.messages[0].role, "user");
+        assert_eq!(history.messages[0].content, "Hello");
+        assert_eq!(history.messages[1].role, "assistant");
+        assert_eq!(history.messages[1].content, "Hi there!");
+    }
+
+    #[test]
+    fn test_message_history_parse() {
+        let history = MessageHistory::parse(
+            r#"[{"role": "user", "content": "Hello"}, {"role": "assistant", "content": "Hi there!"}]"#,
+        ).unwrap();
+        assert_eq!(history.messages.len(), 2);
+        assert_eq!(history.messages[0].role, "user");
+        assert_eq!(history.messages[0].content, "Hello");
+        assert_eq!(history.messages[1].role, "assistant");
+        assert_eq!(history.messages[1].content, "Hi there!");
     }
 
     #[test]

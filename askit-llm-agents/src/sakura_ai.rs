@@ -8,10 +8,7 @@ use agent_stream_kit::{
     AgentError, AgentOutput, AsAgent, AsAgentData, async_trait, new_agent_boxed,
 };
 
-use ollama_rs::{
-    generation::chat::{ChatMessage, request::ChatMessageRequest},
-    models::ModelOptions,
-};
+use ollama_rs::{generation::chat::request::ChatMessageRequest, models::ModelOptions};
 use sakura_ai_rs::SakuraAI;
 use tokio_stream::StreamExt;
 
@@ -82,14 +79,14 @@ impl AsAgent for SakuraAIChatAgent {
         &mut self.data
     }
 
-    fn configs_changed(&mut self) -> Result<(), AgentError> {
-        let history_size = self.configs()?.get_integer_or_default(CONFIG_HISTORY);
-        if history_size != self.configs()?.get_integer_or_default(CONFIG_HISTORY) {
-            let mut history_guard = self.history.lock().unwrap();
-            *history_guard = MessageHistory::new(history_guard.messages.clone(), history_size);
-        }
-        Ok(())
-    }
+    // fn configs_changed(&mut self) -> Result<(), AgentError> {
+    //     let history_size = self.configs()?.get_integer_or_default(CONFIG_HISTORY);
+    //     if history_size != self.configs()?.get_integer_or_default(CONFIG_HISTORY) {
+    //         let mut history_guard = self.history.lock().unwrap();
+    //         *history_guard = MessageHistory::new(history_guard.messages.clone(), history_size);
+    //     }
+    //     Ok(())
+    // }
 
     async fn process(
         &mut self,
@@ -102,15 +99,34 @@ impl AsAgent for SakuraAIChatAgent {
             return Ok(());
         }
 
-        let message = data.as_str().unwrap_or("");
-        if message.is_empty() {
-            return Ok(());
+        let mut messages;
+        {
+            if data.is_array() {
+                let arr = data.as_array().unwrap();
+                messages = Vec::new();
+                for item in arr {
+                    let msg: Message = item.clone().try_into()?;
+                    messages.push(msg);
+                }
+                // Check if the last message is user
+                if let Some(last_msg) = messages.last() {
+                    if last_msg.role != "user" {
+                        return Ok(());
+                    }
+                }
+            } else {
+                let message = data.as_str().unwrap_or("");
+                if message.is_empty() {
+                    return Ok(());
+                }
+                messages = vec![Message::user(message.to_string())];
+            }
         }
 
         let client = self.manager.get_client(self.askit())?;
         let mut request = ChatMessageRequest::new(
             config_model.to_string(),
-            vec![ChatMessage::user(message.to_string())],
+            messages.into_iter().map(|m| m.into()).collect(),
         );
 
         let config_options = self.configs()?.get_string_or_default(CONFIG_OPTIONS);
@@ -125,6 +141,11 @@ impl AsAgent for SakuraAIChatAgent {
         }
 
         let history_size = self.configs()?.get_integer_or_default(CONFIG_HISTORY);
+        {
+            let mut history = self.history.lock().unwrap();
+            history.set_size(history_size);
+        }
+
         let use_stream = self.configs()?.get_bool_or_default(CONFIG_STREAM);
         if use_stream {
             let mut stream = if history_size > 0 {

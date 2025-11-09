@@ -1,5 +1,6 @@
 use agent_stream_kit::ASKit;
 
+pub mod common;
 pub mod message;
 
 #[cfg(feature = "ollama")]
@@ -12,6 +13,8 @@ pub mod openai;
 pub mod sakura_ai;
 
 pub fn register_agents(askit: &ASKit) {
+    common::register_agents(askit);
+
     #[cfg(feature = "ollama")]
     ollama::register_agents(askit);
 

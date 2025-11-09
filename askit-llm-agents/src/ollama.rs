@@ -175,14 +175,14 @@ impl AsAgent for OllamaChatAgent {
         &mut self.data
     }
 
-    fn configs_changed(&mut self) -> Result<(), AgentError> {
-        let history_size = self.configs()?.get_integer_or_default(CONFIG_HISTORY);
-        if history_size != self.configs()?.get_integer_or_default(CONFIG_HISTORY) {
-            let mut history = self.history.lock().unwrap();
-            *history = MessageHistory::new(history.messages.clone(), history_size);
-        }
-        Ok(())
-    }
+    // fn configs_changed(&mut self) -> Result<(), AgentError> {
+    //     let history_size = self.configs()?.get_integer_or_default(CONFIG_HISTORY);
+    //     if history_size != self.configs()?.get_integer_or_default(CONFIG_HISTORY) {
+    //         let mut history = self.history.lock().unwrap();
+    //         *history = MessageHistory::new(history.messages.clone(), history_size);
+    //     }
+    //     Ok(())
+    // }
 
     async fn process(
         &mut self,
@@ -195,15 +195,34 @@ impl AsAgent for OllamaChatAgent {
             return Ok(());
         }
 
-        let message = data.as_str().unwrap_or("");
-        if message.is_empty() {
-            return Ok(());
+        let mut messages;
+        {
+            if data.is_array() {
+                let arr = data.as_array().unwrap();
+                messages = Vec::new();
+                for item in arr {
+                    let msg: Message = item.clone().try_into()?;
+                    messages.push(msg);
+                }
+                // Check if the last message is user
+                if let Some(last_msg) = messages.last() {
+                    if last_msg.role != "user" {
+                        return Ok(());
+                    }
+                }
+            } else {
+                let message = data.as_str().unwrap_or("");
+                if message.is_empty() {
+                    return Ok(());
+                }
+                messages = vec![Message::user(message.to_string())];
+            }
         }
 
         let mut client = self.manager.get_client(self.askit())?;
         let mut request = ChatMessageRequest::new(
             config_model.to_string(),
-            vec![ChatMessage::user(message.to_string())],
+            messages.into_iter().map(|m| m.into()).collect(),
         );
 
         let config_options = self.configs()?.get_string_or_default(CONFIG_OPTIONS);
@@ -218,6 +237,10 @@ impl AsAgent for OllamaChatAgent {
         }
 
         let history_size = self.configs()?.get_integer_or_default(CONFIG_HISTORY);
+        {
+            let mut history = self.history.lock().unwrap();
+            history.set_size(history_size);
+        }
 
         let use_stream = self.configs()?.get_bool_or_default(CONFIG_STREAM);
         if use_stream {
@@ -382,8 +405,11 @@ impl ChatHistory for MessageHistory {
     }
 
     fn messages(&self) -> std::borrow::Cow<'_, [ChatMessage]> {
-        let messages: Vec<ChatMessage> =
-            self.messages.iter().map(|msg| msg.clone().into()).collect();
+        let messages: Vec<ChatMessage> = self
+            .messages()
+            .iter()
+            .map(|msg| msg.clone().into())
+            .collect();
         std::borrow::Cow::Owned(messages)
     }
 }
@@ -401,6 +427,7 @@ static CONFIG_HISTORY: &str = "history";
 static CONFIG_MODEL: &str = "model";
 static CONFIG_OLLAMA_URL: &str = "ollama_url";
 static CONFIG_OPTIONS: &str = "options";
+// static CONFIG_PREAMBLE: &str = "preamble";
 static CONFIG_STREAM: &str = "stream";
 static CONFIG_SYSTEM: &str = "system";
 
