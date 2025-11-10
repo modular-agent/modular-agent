@@ -5,7 +5,7 @@ use std::{
 
 use agent_stream_kit::{
     ASKit, Agent, AgentConfigEntry, AgentConfigs, AgentContext, AgentData, AgentDefinition,
-    AgentError, AgentOutput, AsAgent, AsAgentData, async_trait, new_agent_boxed,
+    AgentError, AgentOutput, AgentValue, AsAgent, AsAgentData, async_trait, new_agent_boxed,
 };
 
 use crate::message::{Message, MessageHistory};
@@ -200,9 +200,7 @@ impl AsAgent for MessageHistoryAgent {
                 let preamble_history = MessageHistory::parse(&preamble_str).map_err(|e| {
                     AgentError::InvalidValue(format!("Failed to parse preamble messages: {}", e))
                 })?;
-                for message in preamble_history.messages() {
-                    history.push(message);
-                }
+                *history = preamble_history;
             }
         }
 
@@ -210,12 +208,50 @@ impl AsAgent for MessageHistoryAgent {
             AgentError::InvalidValue(format!("Failed to convert data to Message: {}", e))
         })?;
 
-        history.push(message);
+        history.push(message.clone());
+        self.try_output(ctx.clone(), PORT_HISTORY, history.clone().into())?;
 
-        let messages: AgentData = history.clone().into();
-        self.try_output(ctx, PORT_MESSAGES, messages)?;
+        if message.role != "user" {
+            return Ok(());
+        }
+
+        let messages: AgentData = AgentData::object(
+            [
+                ("message".to_string(), message.into()),
+                (
+                    "history".to_string(),
+                    AgentValue::array(
+                        history
+                            .messages()
+                            .iter()
+                            .cloned()
+                            .map(|m| m.into())
+                            .collect(),
+                    ),
+                ),
+            ]
+            .into(),
+        );
+        self.try_output(ctx, PORT_MESSAGE_HISTORY, messages)?;
+
         Ok(())
     }
+}
+
+pub fn is_message(data: &AgentData) -> bool {
+    if data.is_object() {
+        let obj = data.as_object().unwrap();
+        return obj.contains_key("role") && obj.contains_key("content");
+    }
+    false
+}
+
+pub fn is_message_history(data: &AgentData) -> bool {
+    if data.is_object() {
+        let obj = data.as_object().unwrap();
+        return obj.contains_key("message") && obj.contains_key("history");
+    }
+    false
 }
 
 static AGENT_KIND: &str = "agent";
@@ -223,6 +259,8 @@ static CATEGORY: &str = "LLM";
 
 static PORT_MESSAGE: &str = "message";
 static PORT_MESSAGES: &str = "messages";
+static PORT_MESSAGE_HISTORY: &str = "message_history";
+static PORT_HISTORY: &str = "history";
 static PORT_RESET: &str = "reset";
 
 static CONFIG_HISTORY_SIZE: &str = "history_size";
@@ -279,7 +317,7 @@ pub fn register_agents(askit: &ASKit) {
         .with_title("Message History")
         .with_category(CATEGORY)
         .with_inputs(vec![PORT_MESSAGE, PORT_RESET])
-        .with_outputs(vec![PORT_MESSAGES])
+        .with_outputs(vec![PORT_MESSAGE_HISTORY, PORT_HISTORY])
         .with_default_configs(vec![
             (CONFIG_PREAMBLE, AgentConfigEntry::new("", "text")),
             (CONFIG_HISTORY_SIZE, AgentConfigEntry::new(0, "integer")),

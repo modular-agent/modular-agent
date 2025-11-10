@@ -149,7 +149,6 @@ impl AsAgent for OllamaCompletionAgent {
 pub struct OllamaChatAgent {
     data: AsAgentData,
     manager: OllamaManager,
-    history: Arc<Mutex<MessageHistory>>,
 }
 
 #[async_trait]
@@ -163,7 +162,6 @@ impl AsAgent for OllamaChatAgent {
         Ok(Self {
             data: AsAgentData::new(askit, id, def_name, config),
             manager: OllamaManager::new(),
-            history: Arc::new(Mutex::new(MessageHistory::default())),
         })
     }
 
@@ -174,15 +172,6 @@ impl AsAgent for OllamaChatAgent {
     fn mut_data(&mut self) -> &mut AsAgentData {
         &mut self.data
     }
-
-    // fn configs_changed(&mut self) -> Result<(), AgentError> {
-    //     let history_size = self.configs()?.get_integer_or_default(CONFIG_HISTORY);
-    //     if history_size != self.configs()?.get_integer_or_default(CONFIG_HISTORY) {
-    //         let mut history = self.history.lock().unwrap();
-    //         *history = MessageHistory::new(history.messages.clone(), history_size);
-    //     }
-    //     Ok(())
-    // }
 
     async fn process(
         &mut self,
@@ -195,31 +184,43 @@ impl AsAgent for OllamaChatAgent {
             return Ok(());
         }
 
-        let mut messages;
-        {
-            if data.is_array() {
-                let arr = data.as_array().unwrap();
-                messages = Vec::new();
-                for item in arr {
-                    let msg: Message = item.clone().try_into()?;
-                    messages.push(msg);
-                }
-                // Check if the last message is user
-                if let Some(last_msg) = messages.last() {
-                    if last_msg.role != "user" {
-                        return Ok(());
+        let mut messages: Vec<Message> = Vec::new();
+
+        if data.is_string() {
+            let message = data.as_str().unwrap_or("");
+            if message.is_empty() {
+                return Ok(());
+            }
+            messages.push(Message::user(message.to_string()));
+        } else if data.is_object() {
+            let obj = data.as_object().unwrap();
+            if obj.contains_key("role") && obj.contains_key("content") {
+                let msg: Message = data.clone().try_into()?;
+                messages.push(msg);
+            } else {
+                if obj.contains_key("history") {
+                    let history_data = obj.get("history").unwrap();
+                    if history_data.is_array() {
+                        let arr = history_data.as_array().unwrap();
+                        for item in arr {
+                            let msg: Message = item.clone().try_into()?;
+                            messages.push(msg);
+                        }
                     }
                 }
-            } else {
-                let message = data.as_str().unwrap_or("");
-                if message.is_empty() {
-                    return Ok(());
+                if obj.contains_key("message") {
+                    let msg_data = obj.get("message").unwrap();
+                    let msg: Message = msg_data.clone().try_into()?;
+                    messages.push(msg);
                 }
-                messages = vec![Message::user(message.to_string())];
             }
         }
 
-        let mut client = self.manager.get_client(self.askit())?;
+        if messages.is_empty() {
+            return Ok(());
+        }
+
+        let client = self.manager.get_client(self.askit())?;
         let mut request = ChatMessageRequest::new(
             config_model.to_string(),
             messages.into_iter().map(|m| m.into()).collect(),
@@ -236,22 +237,12 @@ impl AsAgent for OllamaChatAgent {
             }
         }
 
-        let history_size = self.configs()?.get_integer_or_default(CONFIG_HISTORY);
-        {
-            let mut history = self.history.lock().unwrap();
-            history.set_size(history_size);
-        }
-
         let use_stream = self.configs()?.get_bool_or_default(CONFIG_STREAM);
         if use_stream {
-            let mut stream = if history_size > 0 {
-                client
-                    .send_chat_messages_with_history_stream(self.history.clone(), request)
-                    .await
-            } else {
-                client.send_chat_messages_stream(request).await
-            }
-            .map_err(|e| AgentError::IoError(format!("Ollama Error: {}", e)))?;
+            let mut stream = client
+                .send_chat_messages_stream(request)
+                .await
+                .map_err(|e| AgentError::IoError(format!("Ollama Error: {}", e)))?;
 
             let mut content = String::new();
             while let Some(res) = stream.next().await {
@@ -269,33 +260,17 @@ impl AsAgent for OllamaChatAgent {
                     break;
                 }
             }
-            if history_size > 0 {
-                let messages = self.history.lock().unwrap();
-                self.try_output(ctx.clone(), PORT_HISTORY, messages.clone().into())?;
-            }
         } else {
-            let res = if history_size > 0 {
-                let mut history = self.history.lock().unwrap().clone();
-                let res = client
-                    .send_chat_messages_with_history(&mut history, request)
-                    .await;
-                *self.history.lock().unwrap() = history;
-                res
-            } else {
-                client.send_chat_messages(request).await
-            }
-            .map_err(|e| AgentError::IoError(format!("Ollama Error: {}", e)))?;
+            let res = client
+                .send_chat_messages(request)
+                .await
+                .map_err(|e| AgentError::IoError(format!("Ollama Error: {}", e)))?;
 
             let message: Message = res.message.clone().into();
             self.try_output(ctx.clone(), PORT_MESSAGE, message.into())?;
 
             let out_response = AgentData::from_serialize(&res)?;
             self.try_output(ctx.clone(), PORT_RESPONSE, out_response)?;
-
-            if history_size > 0 {
-                let messages = self.history.lock().unwrap();
-                self.try_output(ctx, PORT_HISTORY, messages.clone().into())?;
-            }
         }
 
         Ok(())
@@ -418,16 +393,13 @@ static AGENT_KIND: &str = "agent";
 static CATEGORY: &str = "LLM";
 
 static PORT_EMBEDDINGS: &str = "embeddings";
-static PORT_HISTORY: &str = "history";
 static PORT_INPUT: &str = "input";
 static PORT_MESSAGE: &str = "message";
 static PORT_RESPONSE: &str = "response";
 
-static CONFIG_HISTORY: &str = "history";
 static CONFIG_MODEL: &str = "model";
 static CONFIG_OLLAMA_URL: &str = "ollama_url";
 static CONFIG_OPTIONS: &str = "options";
-// static CONFIG_PREAMBLE: &str = "preamble";
 static CONFIG_STREAM: &str = "stream";
 static CONFIG_SYSTEM: &str = "system";
 
@@ -476,15 +448,11 @@ pub fn register_agents(askit: &ASKit) {
         .with_title("Ollama Chat")
         .with_category(CATEGORY)
         .with_inputs(vec![PORT_MESSAGE])
-        .with_outputs(vec![PORT_MESSAGE, PORT_RESPONSE, PORT_HISTORY])
+        .with_outputs(vec![PORT_MESSAGE, PORT_RESPONSE])
         .with_default_configs(vec![
             (
                 CONFIG_MODEL,
                 AgentConfigEntry::new(DEFAULT_CONFIG_MODEL, "string").with_title("Model"),
-            ),
-            (
-                CONFIG_HISTORY,
-                AgentConfigEntry::new(0, "integer").with_title("History Size"),
             ),
             (
                 CONFIG_STREAM,
