@@ -237,6 +237,7 @@ impl AsAgent for OllamaChatAgent {
             }
         }
 
+        let id = uuid::Uuid::new_v4().to_string();
         let use_stream = self.configs()?.get_bool_or_default(CONFIG_STREAM);
         if use_stream {
             let mut stream = client
@@ -250,7 +251,8 @@ impl AsAgent for OllamaChatAgent {
 
                 content.push_str(&res.message.content);
 
-                let message = Message::assistant(content.clone());
+                let mut message = Message::assistant(content.clone());
+                message.id = Some(id.clone());
                 self.try_output(ctx.clone(), PORT_MESSAGE, message.into())?;
 
                 let out_response = AgentData::from_serialize(&res)?;
@@ -266,7 +268,8 @@ impl AsAgent for OllamaChatAgent {
                 .await
                 .map_err(|e| AgentError::IoError(format!("Ollama Error: {}", e)))?;
 
-            let message: Message = res.message.clone().into();
+            let mut message: Message = res.message.clone().into();
+            message.id = Some(id.clone());
             self.try_output(ctx.clone(), PORT_MESSAGE, message.into())?;
 
             let out_response = AgentData::from_serialize(&res)?;
@@ -355,10 +358,7 @@ impl From<ChatMessage> for Message {
             MessageRole::System => "system",
             MessageRole::Tool => "tool",
         };
-        Self {
-            role: role.to_string(),
-            content: msg.content,
-        }
+        Message::new(role.to_string(), msg.content)
     }
 }
 

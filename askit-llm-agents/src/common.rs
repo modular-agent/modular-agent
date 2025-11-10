@@ -183,8 +183,10 @@ impl AsAgent for MessageHistoryAgent {
         data: AgentData,
     ) -> Result<(), AgentError> {
         if pin == PORT_RESET {
+            self.first_run = true;
             let mut history = self.history.lock().unwrap();
             history.reset();
+            return Ok(());
         }
 
         let history_size = self.configs()?.get_integer_or_default(CONFIG_HISTORY_SIZE);

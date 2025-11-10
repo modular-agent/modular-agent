@@ -296,7 +296,8 @@ impl AsAgent for OpenAIChatAgent {
                     }
                 });
 
-                let message = Message::assistant(content.clone());
+                let mut message = Message::assistant(content.clone());
+                message.id = Some(res.id.clone());
                 self.try_output(ctx.clone(), PORT_MESSAGE, message.into())?;
 
                 let out_response = AgentData::from_serialize(&res)?;
@@ -316,7 +317,8 @@ impl AsAgent for OpenAIChatAgent {
                 }
             });
 
-            let res_message = Message::assistant(content);
+            let mut res_message = Message::assistant(content);
+            res_message.id = Some(res.id.clone());
             self.try_output(ctx.clone(), PORT_MESSAGE, res_message.clone().into())?;
 
             let out_response = AgentData::from_serialize(&res)?;
@@ -530,11 +532,13 @@ impl AsAgent for OpenAIResponsesAgent {
                 .await
                 .map_err(|e| AgentError::IoError(format!("OpenAI Stream Error: {}", e)))?;
             let mut content = String::new();
+            let mut id = None;
             while let Some(res) = stream.next().await {
                 let res_event =
                     res.map_err(|e| AgentError::IoError(format!("OpenAI Stream Error: {}", e)))?;
                 match &res_event {
                     responses::ResponseEvent::ResponseOutputTextDelta(delta) => {
+                        id = Some(delta.item_id.clone());
                         content.push_str(&delta.delta);
                     }
                     responses::ResponseEvent::ResponseCompleted(_) => {
@@ -545,7 +549,8 @@ impl AsAgent for OpenAIResponsesAgent {
                     _ => {}
                 }
 
-                let message = Message::assistant(content.clone());
+                let mut message = Message::assistant(content.clone());
+                message.id = id.clone();
                 self.try_output(ctx.clone(), PORT_MESSAGE, message.into())?;
 
                 let out_response = AgentData::from_serialize(&res_event)?;
@@ -558,7 +563,8 @@ impl AsAgent for OpenAIResponsesAgent {
                 .await
                 .map_err(|e| AgentError::IoError(format!("OpenAI Error: {}", e)))?;
 
-            let res_message: Message = Message::assistant(get_output_text(&res)); // TODO: better conversion
+            let mut res_message: Message = Message::assistant(get_output_text(&res)); // TODO: better conversion
+            res_message.id = Some(res.id.clone());
             self.try_output(ctx.clone(), PORT_MESSAGE, res_message.clone().into())?;
 
             let out_response = AgentData::from_serialize(&res)?;
@@ -592,10 +598,7 @@ impl From<ChatCompletionResponseMessage> for Message {
             Role::Tool => "tool",
             Role::Function => "function",
         };
-        Self {
-            role: role.to_string(),
-            content: msg.content.unwrap_or_default(),
-        }
+        Message::new(role.to_string(), msg.content.unwrap_or_default())
     }
 }
 
@@ -651,10 +654,7 @@ impl From<OutputContent> for Message {
     fn from(content: OutputContent) -> Self {
         match content {
             OutputContent::Message(msg) => msg.into(),
-            _ => Self {
-                role: "<unknown>".to_string(),
-                content: "".to_string(),
-            },
+            _ => Message::new("unknown".to_string(), "".to_string()),
         }
     }
 }
@@ -676,10 +676,9 @@ impl From<OutputMessage> for Message {
             })
             .collect::<Vec<String>>()
             .join(" ");
-        Self {
-            role: role.to_string(),
-            content,
-        }
+        let mut message = Message::new(role.to_string(), content);
+        message.id = Some(msg.id);
+        message
     }
 }
 

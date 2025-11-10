@@ -141,6 +141,7 @@ impl AsAgent for SakuraAIChatAgent {
             }
         }
 
+        let id = uuid::Uuid::new_v4().to_string();
         let use_stream = self.configs()?.get_bool_or_default(CONFIG_STREAM);
         if use_stream {
             let mut stream = client
@@ -154,7 +155,8 @@ impl AsAgent for SakuraAIChatAgent {
 
                 content.push_str(&res.message.content);
 
-                let message = Message::assistant(content.clone());
+                let mut message = Message::assistant(content.clone());
+                message.id = Some(id.clone());
                 self.try_output(ctx.clone(), PORT_MESSAGE, message.into())?;
 
                 let out_response = AgentData::from_serialize(&res)?;
@@ -170,7 +172,8 @@ impl AsAgent for SakuraAIChatAgent {
                 .await
                 .map_err(|e| AgentError::IoError(format!("Ollama Error: {}", e)))?;
 
-            let message: Message = res.message.clone().into();
+            let mut message = Message::assistant(res.message.content.clone());
+            message.id = Some(id.clone());
             self.try_output(ctx.clone(), PORT_MESSAGE, message.into())?;
 
             let out_response = AgentData::from_serialize(&res)?;

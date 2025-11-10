@@ -15,6 +15,7 @@ sakura-ai-rs = { version = "0.1.2", features = ["stream"], optional = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio-stream = { version = "0.1.17", optional = true }
+uuid = { version = "1.18.1", features = ["v4"] }
 
 [features]
 default = ["ollama", "openai", "sakura"]

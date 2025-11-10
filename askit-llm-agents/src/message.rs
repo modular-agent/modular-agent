@@ -6,32 +6,29 @@ pub struct Message {
     pub role: String,
 
     pub content: String,
+
+    pub id: Option<String>,
 }
 
 impl Message {
     pub fn new(role: String, content: String) -> Self {
-        Self { role, content }
+        Self {
+            role,
+            content,
+            id: None,
+        }
     }
 
     pub fn assistant(content: String) -> Self {
-        Self {
-            role: "assistant".to_string(),
-            content,
-        }
+        Message::new("assistant".to_string(), content)
     }
 
     pub fn system(content: String) -> Self {
-        Self {
-            role: "system".to_string(),
-            content,
-        }
+        Message::new("system".to_string(), content)
     }
 
     pub fn user(content: String) -> Self {
-        Self {
-            role: "user".to_string(),
-            content,
-        }
+        Message::new("user".to_string(), content)
     }
 }
 
@@ -59,7 +56,10 @@ impl TryFrom<AgentValue> for Message {
                     AgentError::InvalidValue("Message object missing 'content' field".to_string())
                 })?
                 .to_string();
-            Ok(Message::new(role, content))
+            let id = value.get_str("id").map(|s| s.to_string());
+            let mut message = Message::new(role, content);
+            message.id = id;
+            Ok(message)
         } else {
             Err(AgentError::InvalidValue(
                 "Cannot convert AgentValue to Message".to_string(),
@@ -70,26 +70,27 @@ impl TryFrom<AgentValue> for Message {
 
 impl From<Message> for AgentData {
     fn from(msg: Message) -> Self {
-        AgentData::object_with_kind(
-            "message",
-            [
-                ("role".to_string(), AgentValue::string(msg.role)),
-                ("content".to_string(), AgentValue::string(msg.content)),
-            ]
-            .into(),
-        )
+        let mut fields = vec![
+            ("role".to_string(), AgentValue::string(msg.role)),
+            ("content".to_string(), AgentValue::string(msg.content)),
+        ];
+        if let Some(id_str) = msg.id {
+            fields.push(("id".to_string(), AgentValue::string(id_str)));
+        }
+        AgentData::object_with_kind("message", fields.into_iter().collect())
     }
 }
 
 impl From<Message> for AgentValue {
     fn from(msg: Message) -> Self {
-        AgentValue::object(
-            [
-                ("role".to_string(), AgentValue::string(msg.role)),
-                ("content".to_string(), AgentValue::string(msg.content)),
-            ]
-            .into(),
-        )
+        let mut fields = vec![
+            ("role".to_string(), AgentValue::string(msg.role)),
+            ("content".to_string(), AgentValue::string(msg.content)),
+        ];
+        if let Some(id_str) = msg.id {
+            fields.push(("id".to_string(), AgentValue::string(id_str)));
+        }
+        AgentValue::object(fields.into_iter().collect())
     }
 }
 
@@ -155,6 +156,16 @@ impl MessageHistory {
     }
 
     pub fn push(&mut self, message: Message) {
+        // If the message is the same as the last one, update it instead of adding a new one
+        if !self.messages.is_empty() {
+            let last_index = self.messages.len() - 1;
+            let last_message = &mut self.messages[last_index];
+            if last_message.id == message.id {
+                last_message.content = message.content;
+                return;
+            }
+        }
+
         if self.max_size > 0 && self.messages.len() >= self.max_size as usize {
             self.messages.remove(0);
         }
