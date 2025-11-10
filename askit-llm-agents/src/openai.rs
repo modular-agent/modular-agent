@@ -21,7 +21,7 @@ use async_openai::{
 };
 use futures::StreamExt;
 
-use crate::message::{self, Message, MessageHistory};
+use crate::message::Message;
 
 // Shared client management for OpenAI agents
 struct OpenAIManager {
@@ -174,7 +174,6 @@ impl AsAgent for OpenAICompletionAgent {
 pub struct OpenAIChatAgent {
     data: AsAgentData,
     manager: OpenAIManager,
-    history: MessageHistory,
 }
 
 #[async_trait]
@@ -188,7 +187,6 @@ impl AsAgent for OpenAIChatAgent {
         Ok(Self {
             data: AsAgentData::new(askit, id, def_name, config),
             manager: OpenAIManager::new(),
-            history: MessageHistory::default(),
         })
     }
 
@@ -211,38 +209,40 @@ impl AsAgent for OpenAIChatAgent {
             return Ok(());
         }
 
-        let mut messages;
-        {
-            if data.is_array() {
-                let arr = data.as_array().unwrap();
-                messages = Vec::new();
-                for item in arr {
-                    let msg: Message = item.clone().try_into()?;
-                    messages.push(msg);
-                }
-                // Check if the last message is user
-                if let Some(last_msg) = messages.last() {
-                    if last_msg.role != "user" {
-                        return Ok(());
+        let mut messages: Vec<Message> = Vec::new();
+
+        if data.is_string() {
+            let message = data.as_str().unwrap_or("");
+            if message.is_empty() {
+                return Ok(());
+            }
+            messages.push(Message::user(message.to_string()));
+        } else if data.is_object() {
+            let obj = data.as_object().unwrap();
+            if obj.contains_key("role") && obj.contains_key("content") {
+                let msg: Message = data.clone().try_into()?;
+                messages.push(msg);
+            } else {
+                if obj.contains_key("history") {
+                    let history_data = obj.get("history").unwrap();
+                    if history_data.is_array() {
+                        let arr = history_data.as_array().unwrap();
+                        for item in arr {
+                            let msg: Message = item.clone().try_into()?;
+                            messages.push(msg);
+                        }
                     }
                 }
-            } else {
-                let message = data.as_str().unwrap_or("");
-                if message.is_empty() {
-                    return Ok(());
+                if obj.contains_key("message") {
+                    let msg_data = obj.get("message").unwrap();
+                    let msg: Message = msg_data.clone().try_into()?;
+                    messages.push(msg);
                 }
-                messages = vec![Message::user(message.to_string())];
             }
         }
 
-        let history_size = self.configs()?.get_integer_or_default(CONFIG_HISTORY);
-        self.history.set_size(history_size);
-
-        if history_size > 0 {
-            for message in &messages {
-                self.history.push(message.clone());
-            }
-            messages = self.history.messages().clone()
+        if messages.is_empty() {
+            return Ok(());
         }
 
         let messages = messages
@@ -302,10 +302,6 @@ impl AsAgent for OpenAIChatAgent {
                 let out_response = AgentData::from_serialize(&res)?;
                 self.try_output(ctx.clone(), PORT_RESPONSE, out_response)?;
             }
-            if history_size > 0 {
-                self.history.push(Message::assistant(content));
-                self.try_output(ctx, PORT_HISTORY, self.history.clone().into())?;
-            }
         } else {
             let res = client
                 .chat()
@@ -325,11 +321,6 @@ impl AsAgent for OpenAIChatAgent {
 
             let out_response = AgentData::from_serialize(&res)?;
             self.try_output(ctx.clone(), PORT_RESPONSE, out_response)?;
-
-            if history_size > 0 {
-                self.history.push(res_message.into());
-                self.try_output(ctx, PORT_HISTORY, self.history.clone().into())?;
-            }
         }
 
         Ok(())
@@ -425,7 +416,6 @@ impl AsAgent for OpenAIEmbeddingsAgent {
 pub struct OpenAIResponsesAgent {
     data: AsAgentData,
     manager: OpenAIManager,
-    history: MessageHistory,
 }
 
 #[async_trait]
@@ -439,7 +429,6 @@ impl AsAgent for OpenAIResponsesAgent {
         Ok(Self {
             data: AsAgentData::new(askit, id, def_name, config),
             manager: OpenAIManager::new(),
-            history: MessageHistory::default(),
         })
     }
 
@@ -462,32 +451,52 @@ impl AsAgent for OpenAIResponsesAgent {
             return Ok(());
         }
 
-        let message = data.as_str().unwrap_or("");
-        if message.is_empty() {
-            return Ok(());
+        let mut messages: Vec<Message> = Vec::new();
+
+        if data.is_string() {
+            let message = data.as_str().unwrap_or("");
+            if message.is_empty() {
+                return Ok(());
+            }
+            messages.push(Message::user(message.to_string()));
+        } else if data.is_object() {
+            let obj = data.as_object().unwrap();
+            if obj.contains_key("role") && obj.contains_key("content") {
+                let msg: Message = data.clone().try_into()?;
+                messages.push(msg);
+            } else {
+                if obj.contains_key("history") {
+                    let history_data = obj.get("history").unwrap();
+                    if history_data.is_array() {
+                        let arr = history_data.as_array().unwrap();
+                        for item in arr {
+                            let msg: Message = item.clone().try_into()?;
+                            messages.push(msg);
+                        }
+                    }
+                }
+                if obj.contains_key("message") {
+                    let msg_data = obj.get("message").unwrap();
+                    let msg: Message = msg_data.clone().try_into()?;
+                    messages.push(msg);
+                }
+            }
         }
 
-        let history_size = self.configs()?.get_integer_or_default(CONFIG_HISTORY);
-        self.history.set_size(history_size);
-
-        let input = if history_size > 0 {
-            self.history.push(Message::user(message.to_string()));
-            let items = self
-                .history
-                .messages()
-                .iter()
-                .map(|m| m.into())
-                .collect::<Vec<responses::InputItem>>();
-            responses::Input::Items(items)
-        } else {
-            message.into()
-        };
+        if messages.is_empty() {
+            return Ok(());
+        }
 
         let use_stream = self.configs()?.get_bool_or_default(CONFIG_STREAM);
 
         let mut request = CreateResponseArgs::default()
             .model(config_model)
-            .input(input)
+            .input(responses::Input::Items(
+                messages
+                    .iter()
+                    .map(|m| m.into())
+                    .collect::<Vec<responses::InputItem>>(),
+            ))
             .stream(use_stream)
             .build()
             .map_err(|e| AgentError::InvalidValue(format!("Failed to build request: {}", e)))?;
@@ -542,10 +551,6 @@ impl AsAgent for OpenAIResponsesAgent {
                 let out_response = AgentData::from_serialize(&res_event)?;
                 self.try_output(ctx.clone(), PORT_RESPONSE, out_response)?;
             }
-            if history_size > 0 {
-                self.history.push(Message::assistant(content));
-                self.try_output(ctx, PORT_HISTORY, self.history.clone().into())?;
-            }
         } else {
             let res = client
                 .responses()
@@ -558,11 +563,6 @@ impl AsAgent for OpenAIResponsesAgent {
 
             let out_response = AgentData::from_serialize(&res)?;
             self.try_output(ctx.clone(), PORT_RESPONSE, out_response)?;
-
-            if history_size > 0 {
-                self.history.push(res_message.into());
-                self.try_output(ctx, PORT_HISTORY, self.history.clone().into())?;
-            }
         }
 
         Ok(())
@@ -687,7 +687,6 @@ static AGENT_KIND: &str = "agent";
 static CATEGORY: &str = "LLM";
 
 static PORT_EMBEDDINGS: &str = "embeddings";
-static PORT_HISTORY: &str = "history";
 static PORT_INPUT: &str = "input";
 static PORT_MESSAGE: &str = "message";
 static PORT_RESPONSE: &str = "response";
@@ -696,7 +695,6 @@ static CONFIG_MODEL: &str = "model";
 static CONFIG_OPENAI_API_KEY: &str = "openai_api_key";
 static CONFIG_OPTIONS: &str = "options";
 static CONFIG_STREAM: &str = "stream";
-static CONFIG_HISTORY: &str = "history";
 
 const DEFAULT_CONFIG_MODEL: &str = "gpt-5-nano";
 
@@ -734,7 +732,7 @@ pub fn register_agents(askit: &ASKit) {
         .with_title("OpenAI Chat")
         .with_category(CATEGORY)
         .with_inputs(vec![PORT_MESSAGE])
-        .with_outputs(vec![PORT_MESSAGE, PORT_RESPONSE, PORT_HISTORY])
+        .with_outputs(vec![PORT_MESSAGE, PORT_RESPONSE])
         .with_global_configs(vec![(
             CONFIG_OPENAI_API_KEY,
             AgentConfigEntry::new("", "password").with_title("OpenAI API Key"),
@@ -743,10 +741,6 @@ pub fn register_agents(askit: &ASKit) {
             (
                 CONFIG_MODEL,
                 AgentConfigEntry::new(DEFAULT_CONFIG_MODEL, "string").with_title("Model"),
-            ),
-            (
-                CONFIG_HISTORY,
-                AgentConfigEntry::new(0, "integer").with_title("History Size"),
             ),
             (
                 CONFIG_STREAM,
@@ -792,15 +786,11 @@ pub fn register_agents(askit: &ASKit) {
         .with_title("OpenAI Responses")
         .with_category(CATEGORY)
         .with_inputs(vec![PORT_MESSAGE])
-        .with_outputs(vec![PORT_MESSAGE, PORT_RESPONSE, PORT_HISTORY])
+        .with_outputs(vec![PORT_MESSAGE, PORT_RESPONSE])
         .with_default_configs(vec![
             (
                 CONFIG_MODEL,
                 AgentConfigEntry::new(DEFAULT_CONFIG_MODEL, "string").with_title("Model"),
-            ),
-            (
-                CONFIG_HISTORY,
-                AgentConfigEntry::new(0, "integer").with_title("History Size"),
             ),
             (
                 CONFIG_STREAM,
