@@ -103,4 +103,7 @@ pub enum AgentError {
 
     #[error("Pin not found: {0}")]
     PinNotFound(String),
+
+    #[error("Agent error: {0}")]
+    Other(String),
 }

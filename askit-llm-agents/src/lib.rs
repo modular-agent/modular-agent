@@ -3,6 +3,9 @@ use agent_stream_kit::ASKit;
 pub mod common;
 pub mod message;
 
+#[cfg(feature = "mcp")]
+pub mod mcp;
+
 #[cfg(feature = "ollama")]
 pub mod ollama;
 
@@ -14,6 +17,9 @@ pub mod sakura_ai;
 
 pub fn register_agents(askit: &ASKit) {
     common::register_agents(askit);
+
+    #[cfg(feature = "mcp")]
+    mcp::register_agents(askit);
 
     #[cfg(feature = "ollama")]
     ollama::register_agents(askit);
