@@ -137,6 +137,10 @@
       } else if (ty === "string") {
         if (typeof data?.value === "string" && data.value.includes("\n")) {
           ty = "text";
+        } else if (Array.isArray(data?.value)) {
+          if (data.value.some((v: any) => typeof v === "string" && v.includes("\n"))) {
+            ty = "text";
+          }
         }
       }
     }
