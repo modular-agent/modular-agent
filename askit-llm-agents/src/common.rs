@@ -131,19 +131,29 @@ impl AsAgent for UserMessageAgent {
 }
 
 fn add_message(data: AgentData, message: Message) -> AgentData {
-    if data.is_array() {
+    if data.is_array() && data.kind == "message" {
         let mut arr = data.as_array().unwrap_or(&vec![]).to_owned();
         arr.push(message.into());
         return AgentData::array("message", arr);
     }
 
-    let value = data.as_str().unwrap_or("");
-    if !value.is_empty() {
-        let in_message = Message::user(value.to_string());
-        return AgentData::array("message", vec![message.into(), in_message.into()]);
+    if data.is_string() {
+        let value = data.as_str().unwrap_or("");
+        if !value.is_empty() {
+            let in_message = Message::user(value.to_string());
+            return AgentData::array("message", vec![message.into(), in_message.into()]);
+        }
     }
 
-    AgentData::array("message", vec![message.into()])
+    #[cfg(feature = "image")]
+    if let AgentValue::Image(img) = data.value {
+        let message = message.with_image(img);
+        return message.into();
+        // return AgentData::array("message", vec![message.into()]);
+    }
+
+    // AgentData::array("message", vec![message.into()])
+    message.into()
 }
 
 // Message History Agent
@@ -281,7 +291,7 @@ pub fn register_agents(askit: &ASKit) {
         .with_category(CATEGORY)
         .with_inputs(vec![PORT_MESSAGES])
         .with_outputs(vec![PORT_MESSAGES])
-        .with_default_configs(vec![(CONFIG_MESSAGE, AgentConfigEntry::new("", "string"))]),
+        .with_default_configs(vec![(CONFIG_MESSAGE, AgentConfigEntry::new("", "text"))]),
     );
 
     askit.register_agent(
@@ -294,7 +304,7 @@ pub fn register_agents(askit: &ASKit) {
         .with_category(CATEGORY)
         .with_inputs(vec![PORT_MESSAGES])
         .with_outputs(vec![PORT_MESSAGES])
-        .with_default_configs(vec![(CONFIG_MESSAGE, AgentConfigEntry::new("", "string"))]),
+        .with_default_configs(vec![(CONFIG_MESSAGE, AgentConfigEntry::new("", "text"))]),
     );
 
     askit.register_agent(
@@ -307,7 +317,7 @@ pub fn register_agents(askit: &ASKit) {
         .with_category(CATEGORY)
         .with_inputs(vec![PORT_MESSAGES])
         .with_outputs(vec![PORT_MESSAGES])
-        .with_default_configs(vec![(CONFIG_MESSAGE, AgentConfigEntry::new("", "string"))]),
+        .with_default_configs(vec![(CONFIG_MESSAGE, AgentConfigEntry::new("", "text"))]),
     );
 
     askit.register_agent(

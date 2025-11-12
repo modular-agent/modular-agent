@@ -11,6 +11,7 @@ agent-stream-kit = { version = "0.8", path = "../agent-stream-kit" }
 async-openai = { version = "0.30.1", optional = true }
 futures = { version = "0.3.31", optional = true }
 ollama-rs = { version = "0.3.2", default-features = false, features = ["rustls", "stream"], optional = true }
+photon-rs = { version = "0.3.3", optional = true }
 rmcp = { version = "0.8.5", features = ["client", "transport-child-process"], optional = true }
 sakura-ai-rs = { version = "0.1.2", features = ["stream"], optional = true }
 serde = { version = "1", features = ["derive"] }
@@ -20,7 +21,8 @@ tokio-stream = { version = "0.1.17", optional = true }
 uuid = { version = "1.18.1", features = ["v4"] }
 
 [features]
-default = ["mcp", "ollama", "openai", "sakura"]
+default = ["image", "mcp", "ollama", "openai", "sakura"]
+image = ["photon-rs"]
 mcp = ["rmcp", "tokio"]
 ollama = ["ollama-rs", "tokio-stream"]
 openai = ["async-openai", "futures"]

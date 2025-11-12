@@ -1,6 +1,8 @@
 use std::{collections::BTreeMap, sync::Arc};
 
-// use photon_rs::PhotonImage;
+#[cfg(feature = "image")]
+use photon_rs::PhotonImage;
+
 use serde::{
     Deserialize, Deserializer, Serialize, Serializer,
     ser::{SerializeMap, SerializeSeq},
@@ -8,7 +10,7 @@ use serde::{
 
 use super::error::AgentError;
 
-// const IMAGE_BASE64_PREFIX: &str = "data:image/png;base64,";
+const IMAGE_BASE64_PREFIX: &str = "data:image/png;base64,";
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct AgentData {
@@ -52,12 +54,13 @@ impl AgentData {
         }
     }
 
-    // pub fn new_image(value: PhotonImage) -> Self {
-    //     AgentData {
-    //         kind: "image".to_string(),
-    //         value: AgentValue::new_image(value),
-    //     }
-    // }
+    #[cfg(feature = "image")]
+    pub fn image(value: PhotonImage) -> Self {
+        AgentData {
+            kind: "image".to_string(),
+            value: AgentValue::image(value),
+        }
+    }
 
     pub fn object(value: AgentValueMap<String, AgentValue>) -> Self {
         AgentData {
@@ -154,18 +157,19 @@ impl AgentData {
         self.kind == "string"
     }
 
-    // #[allow(unused)]
-    // pub fn is_image(&self) -> bool {
-    //     self.kind == "image"
-    // }
+    #[cfg(feature = "image")]
+    #[allow(unused)]
+    pub fn is_image(&self) -> bool {
+        self.kind == "image"
+    }
 
     #[allow(unused)]
     pub fn is_object(&self) -> bool {
-        !self.is_unit()
-            && !self.is_boolean()
-            && !self.is_integer()
-            && !self.is_number()
-            && !self.is_string()
+        if let AgentValue::Object(_) = &self.value {
+            true
+        } else {
+            false
+        }
     }
 
     #[allow(unused)]
@@ -196,10 +200,11 @@ impl AgentData {
         self.value.as_str()
     }
 
-    // #[allow(unused)]
-    // pub fn as_image(&self) -> Option<&PhotonImage> {
-    //     self.value.as_image()
-    // }
+    #[cfg(feature = "image")]
+    #[allow(unused)]
+    pub fn as_image(&self) -> Option<&PhotonImage> {
+        self.value.as_image()
+    }
 
     pub fn as_object(&self) -> Option<&AgentValueMap<String, AgentValue>> {
         self.value.as_object()
@@ -235,10 +240,11 @@ impl AgentData {
         self.value.get_str(key)
     }
 
-    // #[allow(unused)]
-    // pub fn get_image(&self, key: &str) -> Option<&PhotonImage> {
-    //     self.value.get_image(key)
-    // }
+    #[cfg(feature = "image")]
+    #[allow(unused)]
+    pub fn get_image(&self, key: &str) -> Option<&PhotonImage> {
+        self.value.get_image(key)
+    }
 
     #[allow(unused)]
     pub fn get_object(&self, key: &str) -> Option<&AgentValueMap<String, AgentValue>> {
@@ -282,7 +288,9 @@ pub enum AgentValue {
 
     // Larger data structures use reference counting
     String(Arc<String>),
-    // Image(Arc<PhotonImage>),
+
+    #[cfg(feature = "image")]
+    Image(Arc<PhotonImage>),
 
     // Recursive data structures
     Array(Arc<Vec<AgentValue>>),
@@ -312,9 +320,10 @@ impl AgentValue {
         AgentValue::String(Arc::new(value.into()))
     }
 
-    // pub fn new_image(value: PhotonImage) -> Self {
-    //     AgentValue::Image(Arc::new(value))
-    // }
+    #[cfg(feature = "image")]
+    pub fn image(value: PhotonImage) -> Self {
+        AgentValue::Image(Arc::new(value))
+    }
 
     pub fn object(value: AgentValueMap<String, AgentValue>) -> Self {
         AgentValue::Object(Arc::new(value))
@@ -340,9 +349,10 @@ impl AgentValue {
         AgentValue::String(Arc::new(String::new()))
     }
 
-    // pub fn dfault_image() -> Self {
-    //     AgentValue::Image(Arc::new(PhotonImage::new(vec![0u8, 0u8, 0u8, 0u8], 1, 1)))
-    // }
+    #[cfg(feature = "image")]
+    pub fn image_default() -> Self {
+        AgentValue::Image(Arc::new(PhotonImage::new(vec![0u8, 0u8, 0u8, 0u8], 1, 1)))
+    }
 
     pub fn array_default() -> Self {
         AgentValue::Array(Arc::new(Vec::new()))
@@ -367,13 +377,15 @@ impl AgentValue {
                 }
             }
             serde_json::Value::String(s) => {
-                // if s.starts_with(IMAGE_BASE64_PREFIX) {
-                //     let img =
-                //         PhotonImage::new_from_base64(&s.trim_start_matches(IMAGE_BASE64_PREFIX));
-                //     Ok(AgentValue::Image(Arc::new(img)))
-                // } else {
-                //     Ok(AgentValue::String(Arc::new(s)))
-                // }
+                #[cfg(feature = "image")]
+                if s.starts_with(IMAGE_BASE64_PREFIX) {
+                    let img =
+                        PhotonImage::new_from_base64(&s.trim_start_matches(IMAGE_BASE64_PREFIX));
+                    Ok(AgentValue::Image(Arc::new(img)))
+                } else {
+                    Ok(AgentValue::String(Arc::new(s)))
+                }
+                #[cfg(not(feature = "image"))]
                 Ok(AgentValue::String(Arc::new(s)))
             }
             serde_json::Value::Array(arr) => {
@@ -484,25 +496,26 @@ impl AgentValue {
                 }
                 _ => Err(AgentError::InvalidValue("string".into())),
             },
-            // "image" => match value {
-            //     serde_json::Value::String(s) => Ok(AgentValue::Image(Arc::new(
-            //         PhotonImage::new_from_base64(&s.trim_start_matches(IMAGE_BASE64_PREFIX)),
-            //     ))),
-            //     serde_json::Value::Array(a) => {
-            //         let mut agent_arr = Vec::new();
-            //         for v in a {
-            //             if let serde_json::Value::String(s) = v {
-            //                 agent_arr.push(AgentValue::new_image(PhotonImage::new_from_base64(
-            //                     &s.trim_start_matches(IMAGE_BASE64_PREFIX),
-            //                 )));
-            //             } else {
-            //                 bail!("Invalid image value in array");
-            //             }
-            //         }
-            //         Ok(AgentValue::Array(Arc::new(agent_arr)))
-            //     }
-            //     _ => bail!("Invalid image value"),
-            // },
+            #[cfg(feature = "image")]
+            "image" => match value {
+                serde_json::Value::String(s) => Ok(AgentValue::Image(Arc::new(
+                    PhotonImage::new_from_base64(&s.trim_start_matches(IMAGE_BASE64_PREFIX)),
+                ))),
+                serde_json::Value::Array(a) => {
+                    let mut agent_arr = Vec::new();
+                    for v in a {
+                        if let serde_json::Value::String(s) = v {
+                            agent_arr.push(AgentValue::image(PhotonImage::new_from_base64(
+                                &s.trim_start_matches(IMAGE_BASE64_PREFIX),
+                            )));
+                        } else {
+                            return Err(AgentError::InvalidArrayValue("image".into()));
+                        }
+                    }
+                    Ok(AgentValue::Array(Arc::new(agent_arr)))
+                }
+                _ => Err(AgentError::InvalidValue("image".into())),
+            },
             _ => match value {
                 serde_json::Value::Null => Ok(AgentValue::Null),
                 serde_json::Value::Bool(b) => Ok(AgentValue::Boolean(b)),
@@ -542,7 +555,8 @@ impl AgentValue {
             AgentValue::Integer(i) => (*i).into(),
             AgentValue::Number(n) => (*n).into(),
             AgentValue::String(s) => s.as_str().into(),
-            // AgentValue::Image(img) => img.get_base64().into(),
+            #[cfg(feature = "image")]
+            AgentValue::Image(img) => img.get_base64().into(),
             AgentValue::Object(o) => {
                 let mut map = serde_json::Map::new();
                 for (k, v) in o.iter() {
@@ -596,10 +610,11 @@ impl AgentValue {
         matches!(self, AgentValue::String(_))
     }
 
-    // #[allow(unused)]
-    // pub fn is_image(&self) -> bool {
-    //     matches!(self, AgentValue::Image(_))
-    // }
+    #[cfg(feature = "image")]
+    #[allow(unused)]
+    pub fn is_image(&self) -> bool {
+        matches!(self, AgentValue::Image(_))
+    }
 
     #[allow(unused)]
     pub fn is_array(&self) -> bool {
@@ -641,12 +656,13 @@ impl AgentValue {
         }
     }
 
-    // pub fn as_image(&self) -> Option<&PhotonImage> {
-    //     match self {
-    //         AgentValue::Image(img) => Some(img),
-    //         _ => None,
-    //     }
-    // }
+    #[cfg(feature = "image")]
+    pub fn as_image(&self) -> Option<&PhotonImage> {
+        match self {
+            AgentValue::Image(img) => Some(img),
+            _ => None,
+        }
+    }
 
     pub fn as_object(&self) -> Option<&AgentValueMap<String, AgentValue>> {
         match self {
@@ -687,10 +703,11 @@ impl AgentValue {
         self.get(key).and_then(|v| v.as_str())
     }
 
-    // #[allow(unused)]
-    // pub fn get_image(&self, key: &str) -> Option<&PhotonImage> {
-    //     self.get(key).and_then(|v| v.as_image())
-    // }
+    #[cfg(feature = "image")]
+    #[allow(unused)]
+    pub fn get_image(&self, key: &str) -> Option<&PhotonImage> {
+        self.get(key).and_then(|v| v.as_image())
+    }
 
     #[allow(unused)]
     pub fn get_object(&self, key: &str) -> Option<&AgentValueMap<String, AgentValue>> {
@@ -709,7 +726,8 @@ impl AgentValue {
             AgentValue::Integer(_) => "integer".to_string(),
             AgentValue::Number(_) => "number".to_string(),
             AgentValue::String(_) => "string".to_string(),
-            // AgentValue::Image(_) => "image".to_string(),
+            #[cfg(feature = "image")]
+            AgentValue::Image(_) => "image".to_string(),
             AgentValue::Object(_) => "object".to_string(),
             AgentValue::Array(arr) => {
                 if arr.is_empty() {
@@ -736,11 +754,12 @@ impl PartialEq for AgentValue {
             (AgentValue::Integer(i1), AgentValue::Integer(i2)) => i1 == i2,
             (AgentValue::Number(n1), AgentValue::Number(n2)) => n1 == n2,
             (AgentValue::String(s1), AgentValue::String(s2)) => s1 == s2,
-            // (AgentValue::Image(i1), AgentValue::Image(i2)) => {
-            //     i1.get_width() == i2.get_width()
-            //         && i1.get_height() == i2.get_height()
-            //         && i1.get_raw_pixels() == i2.get_raw_pixels()
-            // }
+            #[cfg(feature = "image")]
+            (AgentValue::Image(i1), AgentValue::Image(i2)) => {
+                i1.get_width() == i2.get_width()
+                    && i1.get_height() == i2.get_height()
+                    && i1.get_raw_pixels() == i2.get_raw_pixels()
+            }
             (AgentValue::Object(o1), AgentValue::Object(o2)) => o1 == o2,
             (AgentValue::Array(a1), AgentValue::Array(a2)) => a1 == a2,
             _ => false,
@@ -759,7 +778,8 @@ impl Serialize for AgentValue {
             AgentValue::Integer(i) => serializer.serialize_i64(*i),
             AgentValue::Number(n) => serializer.serialize_f64(*n),
             AgentValue::String(s) => serializer.serialize_str(s),
-            // AgentValue::Image(img) => serializer.serialize_str(&img.get_base64()),
+            #[cfg(feature = "image")]
+            AgentValue::Image(img) => serializer.serialize_str(&img.get_base64()),
             AgentValue::Object(o) => {
                 let mut map = serializer.serialize_map(Some(o.len()))?;
                 for (k, v) in o.iter() {
@@ -869,15 +889,18 @@ mod tests {
         assert!(matches!(text_data.value, AgentValue::String(_)));
         assert_eq!(text_data.as_str().unwrap(), "multiline\ntext\n\n");
 
-        // let img_data = AgentData::new_image(PhotonImage::new(vec![0u8, 0u8, 0u8, 0u8], 1, 1));
-        // assert_eq!(img_data.kind, "image");
-        // assert!(matches!(img_data.value, AgentValue::Image(_)));
-        // assert_eq!(img_data.as_image().unwrap().get_width(), 1);
-        // assert_eq!(img_data.as_image().unwrap().get_height(), 1);
-        // assert_eq!(
-        //     img_data.as_image().unwrap().get_raw_pixels(),
-        //     vec![0u8, 0u8, 0u8, 0u8]
-        // );
+        #[cfg(feature = "image")]
+        {
+            let img_data = AgentData::image(PhotonImage::new(vec![0u8, 0u8, 0u8, 0u8], 1, 1));
+            assert_eq!(img_data.kind, "image");
+            assert!(matches!(img_data.value, AgentValue::Image(_)));
+            assert_eq!(img_data.as_image().unwrap().get_width(), 1);
+            assert_eq!(img_data.as_image().unwrap().get_height(), 1);
+            assert_eq!(
+                img_data.as_image().unwrap().get_raw_pixels(),
+                vec![0u8, 0u8, 0u8, 0u8]
+            );
+        }
 
         let obj_val = [
             ("key1".to_string(), AgentValue::string("string1")),
@@ -929,16 +952,19 @@ mod tests {
         assert_eq!(text_data.kind, "string");
         assert_eq!(text_data.value, AgentValue::string("hello\nworld\n\n"));
 
-        // let img_data = AgentData::from_json_data("image",
-        // json!("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAEElEQVR4AQEFAPr/AAAAAAAABQABZHiVOAAAAABJRU5ErkJggg==")).unwrap();
-        // assert_eq!(img_data.kind, "image");
-        // assert!(matches!(img_data.value, AgentValue::Image(_)));
-        // assert_eq!(img_data.as_image().unwrap().get_width(), 1);
-        // assert_eq!(img_data.as_image().unwrap().get_height(), 1);
-        // assert_eq!(
-        //     img_data.as_image().unwrap().get_raw_pixels(),
-        //     vec![0u8, 0u8, 0u8, 0u8]
-        // );
+        #[cfg(feature = "image")]
+        {
+            let img_data = AgentData::from_json_with_kind("image",
+        json!("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAEElEQVR4AQEFAPr/AAAAAAAABQABZHiVOAAAAABJRU5ErkJggg==")).unwrap();
+            assert_eq!(img_data.kind, "image");
+            assert!(matches!(img_data.value, AgentValue::Image(_)));
+            assert_eq!(img_data.as_image().unwrap().get_width(), 1);
+            assert_eq!(img_data.as_image().unwrap().get_height(), 1);
+            assert_eq!(
+                img_data.as_image().unwrap().get_raw_pixels(),
+                vec![0u8, 0u8, 0u8, 0u8]
+            );
+        }
 
         let obj_data =
             AgentData::from_json_with_kind("object", json!({"key1": "string1", "key2": 2}))
@@ -1118,18 +1144,21 @@ mod tests {
         assert_eq!(str_data.kind, "string");
         assert_eq!(str_data.value, AgentValue::string("hello\nworld\n\n"));
 
-        // let image_data = AgentData::from_json_value(json!(
-        //     "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAEElEQVR4AQEFAPr/AAAAAAAABQABZHiVOAAAAABJRU5ErkJggg=="
-        // ))
-        // .unwrap();
-        // assert_eq!(image_data.kind, "image");
-        // assert!(matches!(image_data.value, AgentValue::Image(_)));
-        // assert_eq!(image_data.as_image().unwrap().get_width(), 1);
-        // assert_eq!(image_data.as_image().unwrap().get_height(), 1);
-        // assert_eq!(
-        //     image_data.as_image().unwrap().get_raw_pixels(),
-        //     vec![0u8, 0u8, 0u8, 0u8]
-        // );
+        #[cfg(feature = "image")]
+        {
+            let image_data = AgentData::from_json(json!(
+            "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAEElEQVR4AQEFAPr/AAAAAAAABQABZHiVOAAAAABJRU5ErkJggg=="
+        ))
+        .unwrap();
+            assert_eq!(image_data.kind, "image");
+            assert!(matches!(image_data.value, AgentValue::Image(_)));
+            assert_eq!(image_data.as_image().unwrap().get_width(), 1);
+            assert_eq!(image_data.as_image().unwrap().get_height(), 1);
+            assert_eq!(
+                image_data.as_image().unwrap().get_raw_pixels(),
+                vec![0u8, 0u8, 0u8, 0u8]
+            );
+        }
 
         let obj_data = AgentData::from_json(json!({"key1": "string1", "key2": 2})).unwrap();
         assert_eq!(obj_data.kind, "object");
@@ -1300,14 +1329,15 @@ mod tests {
             );
         }
 
-        // // Test Image serialization
-        // {
-        //     let data = AgentData::new_image(PhotonImage::new(vec![0u8, 0u8, 0u8, 0u8], 1, 1));
-        //     assert_eq!(
-        //         serde_json::to_string(&data).unwrap(),
-        //         r#"{"kind":"image","value":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAEElEQVR4AQEFAPr/AAAAAAAABQABZHiVOAAAAABJRU5ErkJggg=="}"#
-        //     );
-        // }
+        // Test Image serialization
+        #[cfg(feature = "image")]
+        {
+            let data = AgentData::image(PhotonImage::new(vec![0u8, 0u8, 0u8, 0u8], 1, 1));
+            assert_eq!(
+                serde_json::to_string(&data).unwrap(),
+                r#"{"kind":"image","value":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAEElEQVR4AQEFAPr/AAAAAAAABQABZHiVOAAAAABJRU5ErkJggg=="}"#
+            );
+        }
 
         // Test Object serialization
         {
@@ -1497,15 +1527,16 @@ mod tests {
             assert_eq!(deserialized, AgentData::string("hello\nworld\n\n"));
         }
 
-        // // Test Image deserialization
-        // {
-        //     let deserialized: AgentData = serde_json::from_str(
-        //         r#"{"kind":"image","value":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAEElEQVR4AQEFAPr/AAAAAAAABQABZHiVOAAAAABJRU5ErkJggg=="}"#,
-        //     )
-        //     .unwrap();
-        //     assert_eq!(deserialized.kind, "image");
-        //     assert!(matches!(deserialized.value, AgentValue::Image(_)));
-        // }
+        // Test Image deserialization
+        #[cfg(feature = "image")]
+        {
+            let deserialized: AgentData = serde_json::from_str(
+                r#"{"kind":"image","value":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAEElEQVR4AQEFAPr/AAAAAAAABQABZHiVOAAAAABJRU5ErkJggg=="}"#,
+            )
+            .unwrap();
+            assert_eq!(deserialized.kind, "image");
+            assert!(matches!(deserialized.value, AgentValue::Image(_)));
+        }
 
         // Test Object deserialization
         {
@@ -2082,14 +2113,15 @@ mod tests {
             assert_eq!(serde_json::to_string(&s).unwrap(), r#""hello\nworld\n\n""#);
         }
 
-        // // Test Image serialization
-        // {
-        //     let img = AgentValue::new_image(PhotonImage::new(vec![0u8; 4], 1, 1));
-        //     assert_eq!(
-        //         serde_json::to_string(&img).unwrap(),
-        //         r#""data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAEElEQVR4AQEFAPr/AAAAAAAABQABZHiVOAAAAABJRU5ErkJggg==""#
-        //     );
-        // }
+        // Test Image serialization
+        #[cfg(feature = "image")]
+        {
+            let img = AgentValue::image(PhotonImage::new(vec![0u8; 4], 1, 1));
+            assert_eq!(
+                serde_json::to_string(&img).unwrap(),
+                r#""data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAEElEQVR4AQEFAPr/AAAAAAAABQABZHiVOAAAAABJRU5ErkJggg==""#
+            );
+        }
 
         // Test Array serialization
         {
@@ -2167,14 +2199,15 @@ mod tests {
             assert_eq!(deserialized, AgentValue::string("hello\nworld\n\n"));
         }
 
-        // // Test Image deserialization
-        // {
-        //     let deserialized: AgentValue = serde_json::from_str(
-        //         r#""data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAEElEQVR4AQEFAPr/AAAAAAAABQABZHiVOAAAAABJRU5ErkJggg==""#,
-        //     )
-        //     .unwrap();
-        //     assert!(matches!(deserialized, AgentValue::Image(_)));
-        // }
+        // Test Image deserialization
+        #[cfg(feature = "image")]
+        {
+            let deserialized: AgentValue = serde_json::from_str(
+                r#""data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAEElEQVR4AQEFAPr/AAAAAAAABQABZHiVOAAAAABJRU5ErkJggg==""#,
+            )
+            .unwrap();
+            assert!(matches!(deserialized, AgentValue::Image(_)));
+        }
 
         // Test Array deserialization
         {

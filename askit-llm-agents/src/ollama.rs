@@ -359,18 +359,30 @@ impl From<ChatMessage> for Message {
             MessageRole::Tool => "tool",
         };
         Message::new(role.to_string(), msg.content)
+        // TODO: handle images
     }
 }
 
 impl From<Message> for ChatMessage {
     fn from(msg: Message) -> Self {
-        match msg.role.as_str() {
+        let mut cmsg = match msg.role.as_str() {
             "user" => ChatMessage::user(msg.content),
             "assistant" => ChatMessage::assistant(msg.content),
             "system" => ChatMessage::system(msg.content),
             "tool" => ChatMessage::tool(msg.content),
             _ => ChatMessage::user(msg.content), // Default to user if unknown role
+        };
+        #[cfg(feature = "image")]
+        {
+            if let Some(img) = msg.image {
+                let img_str = img
+                    .get_base64()
+                    .trim_start_matches("data:image/png;base64,")
+                    .to_string();
+                cmsg = cmsg.add_image(ollama_rs::generation::images::Image::from_base64(img_str));
+            }
         }
+        cmsg
     }
 }
 

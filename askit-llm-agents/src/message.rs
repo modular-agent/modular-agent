@@ -1,5 +1,10 @@
+use std::sync::Arc;
+
 use agent_stream_kit::{AgentData, AgentError, AgentValue};
 use serde::{Deserialize, Serialize};
+
+#[cfg(feature = "image")]
+use photon_rs::PhotonImage;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Message {
@@ -8,6 +13,9 @@ pub struct Message {
     pub content: String,
 
     pub id: Option<String>,
+
+    #[cfg(feature = "image")]
+    pub image: Option<Arc<PhotonImage>>,
 }
 
 impl Message {
@@ -16,6 +24,9 @@ impl Message {
             role,
             content,
             id: None,
+
+            #[cfg(feature = "image")]
+            image: None,
         }
     }
 
@@ -29,6 +40,12 @@ impl Message {
 
     pub fn user(content: String) -> Self {
         Message::new("user".to_string(), content)
+    }
+
+    #[cfg(feature = "image")]
+    pub fn with_image(mut self, image: Arc<PhotonImage>) -> Self {
+        self.image = Some(image);
+        self
     }
 }
 
@@ -45,25 +62,59 @@ impl TryFrom<AgentValue> for Message {
     type Error = AgentError;
 
     fn try_from(value: AgentValue) -> Result<Self, Self::Error> {
-        if value.is_string() {
-            let text = value.as_str().unwrap(); // Safe unwrap
-            Ok(Message::user(text.to_string()))
-        } else if value.is_object() {
-            let role = value.get_str("role").unwrap_or("user").to_string();
-            let content = value
-                .get_str("content")
-                .ok_or_else(|| {
-                    AgentError::InvalidValue("Message object missing 'content' field".to_string())
-                })?
-                .to_string();
-            let id = value.get_str("id").map(|s| s.to_string());
-            let mut message = Message::new(role, content);
-            message.id = id;
-            Ok(message)
-        } else {
-            Err(AgentError::InvalidValue(
+        match value {
+            AgentValue::String(s) => Ok(Message::user(s.to_string())),
+
+            #[cfg(feature = "image")]
+            AgentValue::Image(img) => {
+                let mut message = Message::user("".to_string());
+                message.image = Some(img.clone());
+                Ok(message)
+            }
+            AgentValue::Object(obj) => {
+                let role = obj
+                    .get("role")
+                    .and_then(|r| r.as_str())
+                    .unwrap_or("user")
+                    .to_string();
+                let content = obj
+                    .get("content")
+                    .and_then(|c| c.as_str())
+                    .ok_or_else(|| {
+                        AgentError::InvalidValue(
+                            "Message object missing 'content' field".to_string(),
+                        )
+                    })?
+                    .to_string();
+                let id = obj
+                    .get("id")
+                    .and_then(|i| i.as_str())
+                    .map(|s| s.to_string());
+                let mut message = Message::new(role, content);
+                message.id = id;
+
+                #[cfg(feature = "image")]
+                {
+                    if let Some(image_value) = obj.get("image") {
+                        match image_value {
+                            AgentValue::String(s) => {
+                                message.image = Some(Arc::new(PhotonImage::new_from_base64(
+                                    s.trim_start_matches("data:image/png;base64,"),
+                                )));
+                            }
+                            AgentValue::Image(img) => {
+                                message.image = Some(img.clone());
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+
+                Ok(message)
+            }
+            _ => Err(AgentError::InvalidValue(
                 "Cannot convert AgentValue to Message".to_string(),
-            ))
+            )),
         }
     }
 }
@@ -76,6 +127,12 @@ impl From<Message> for AgentData {
         ];
         if let Some(id_str) = msg.id {
             fields.push(("id".to_string(), AgentValue::string(id_str)));
+        }
+        #[cfg(feature = "image")]
+        {
+            if let Some(img) = msg.image {
+                fields.push(("image".to_string(), AgentValue::image((*img).clone())));
+            }
         }
         AgentData::object_with_kind("message", fields.into_iter().collect())
     }
@@ -90,11 +147,17 @@ impl From<Message> for AgentValue {
         if let Some(id_str) = msg.id {
             fields.push(("id".to_string(), AgentValue::string(id_str)));
         }
+        #[cfg(feature = "image")]
+        {
+            if let Some(img) = msg.image {
+                fields.push(("image".to_string(), AgentValue::image((*img).clone())));
+            }
+        }
         AgentValue::object(fields.into_iter().collect())
     }
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone, Default, Debug)]
 pub struct MessageHistory {
     messages: Vec<Message>,
     max_size: i64,
