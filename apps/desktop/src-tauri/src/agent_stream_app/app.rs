@@ -182,6 +182,7 @@ pub fn init(app: &AppHandle) -> Result<()> {
     askit_llm_agents::register_agents(&askit);
     // askit_rig_agents::register_agents(&askit);
     askit_cozodb_agents::register_agents(&askit);
+    askit_screen::register_agents(&askit);
 
     let asapp = ASApp {
         askit: askit.clone(),
