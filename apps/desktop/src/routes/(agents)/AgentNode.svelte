@@ -68,8 +68,6 @@
       .map((c) => c.targetHandle?.substring(7) ?? ""),
   );
 
-  $inspect(connectedConfigs);
-
   onMount(() => {
     let unsubscribers: Unsubscriber[] = [];
 
