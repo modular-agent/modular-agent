@@ -31,12 +31,12 @@ fn get_db_instance(path: &str) -> Result<DbInstance, AgentError> {
 }
 
 // CozoDB Script
-struct CozoDbScriptgent {
+struct CozoDbScriptAgent {
     data: AsAgentData,
 }
 
 #[async_trait]
-impl AsAgent for CozoDbScriptgent {
+impl AsAgent for CozoDbScriptAgent {
     fn new(
         askit: ASKit,
         id: String,
@@ -102,7 +102,7 @@ pub fn register_agents(askit: &ASKit) {
         AgentDefinition::new(
             AGENT_KIND,
             "cozodb_script",
-            Some(new_agent_boxed::<CozoDbScriptgent>),
+            Some(new_agent_boxed::<CozoDbScriptAgent>),
         )
         .with_title("CozoDB Script")
         .with_category(CATEGORY)
