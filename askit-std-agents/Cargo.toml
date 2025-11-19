@@ -7,7 +7,7 @@ authors.workspace = true
 license.workspace = true
 
 [dependencies]
-agent-stream-kit = { version = "0.8", path = "../agent-stream-kit" }
+agent-stream-kit = { version = "0.9", path = "../agent-stream-kit" }
 chrono = "0.4"
 cron = "0.15"
 handlebars = "6"
