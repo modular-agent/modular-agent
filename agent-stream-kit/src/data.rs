@@ -281,7 +281,7 @@ impl<'de> Deserialize<'de> for AgentData {
 #[derive(Debug, Clone)]
 pub enum AgentValue {
     // Primitive types stored directly
-    Null,
+    Unit,
     Boolean(bool),
     Integer(i64),
     Number(f64),
@@ -301,7 +301,7 @@ pub type AgentValueMap<S, T> = BTreeMap<S, T>;
 
 impl AgentValue {
     pub fn unit() -> Self {
-        AgentValue::Null
+        AgentValue::Unit
     }
 
     pub fn boolean(value: bool) -> Self {
@@ -323,6 +323,11 @@ impl AgentValue {
     #[cfg(feature = "image")]
     pub fn image(value: PhotonImage) -> Self {
         AgentValue::Image(Arc::new(value))
+    }
+
+    #[cfg(feature = "image")]
+    pub fn image_arc(value: Arc<PhotonImage>) -> Self {
+        AgentValue::Image(value)
     }
 
     pub fn object(value: AgentValueMap<String, AgentValue>) -> Self {
@@ -364,7 +369,7 @@ impl AgentValue {
 
     pub fn from_json(value: serde_json::Value) -> Result<Self, AgentError> {
         match value {
-            serde_json::Value::Null => Ok(AgentValue::Null),
+            serde_json::Value::Null => Ok(AgentValue::Unit),
             serde_json::Value::Bool(b) => Ok(AgentValue::Boolean(b)),
             serde_json::Value::Number(n) => {
                 if let Some(i) = n.as_i64() {
@@ -410,10 +415,10 @@ impl AgentValue {
             "unit" => {
                 if let serde_json::Value::Array(a) = value {
                     Ok(AgentValue::Array(Arc::new(
-                        a.into_iter().map(|_| AgentValue::Null).collect(),
+                        a.into_iter().map(|_| AgentValue::Unit).collect(),
                     )))
                 } else {
-                    Ok(AgentValue::Null)
+                    Ok(AgentValue::Unit)
                 }
             }
             "boolean" => match value {
@@ -517,7 +522,7 @@ impl AgentValue {
                 _ => Err(AgentError::InvalidValue("image".into())),
             },
             _ => match value {
-                serde_json::Value::Null => Ok(AgentValue::Null),
+                serde_json::Value::Null => Ok(AgentValue::Unit),
                 serde_json::Value::Bool(b) => Ok(AgentValue::Boolean(b)),
                 serde_json::Value::Number(n) => {
                     if let Some(i) = n.as_i64() {
@@ -550,7 +555,7 @@ impl AgentValue {
 
     pub fn to_json(&self) -> serde_json::Value {
         match self {
-            AgentValue::Null => serde_json::Value::Null,
+            AgentValue::Unit => serde_json::Value::Null,
             AgentValue::Boolean(b) => (*b).into(),
             AgentValue::Integer(i) => (*i).into(),
             AgentValue::Number(n) => (*n).into(),
@@ -587,7 +592,7 @@ impl AgentValue {
 
     #[allow(unused)]
     pub fn is_unit(&self) -> bool {
-        matches!(self, AgentValue::Null)
+        matches!(self, AgentValue::Unit)
     }
 
     #[allow(unused)]
@@ -721,7 +726,7 @@ impl AgentValue {
 
     pub fn kind(&self) -> String {
         match self {
-            AgentValue::Null => "unit".to_string(),
+            AgentValue::Unit => "unit".to_string(),
             AgentValue::Boolean(_) => "boolean".to_string(),
             AgentValue::Integer(_) => "integer".to_string(),
             AgentValue::Number(_) => "number".to_string(),
@@ -742,14 +747,14 @@ impl AgentValue {
 
 impl Default for AgentValue {
     fn default() -> Self {
-        AgentValue::Null
+        AgentValue::Unit
     }
 }
 
 impl PartialEq for AgentValue {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (AgentValue::Null, AgentValue::Null) => true,
+            (AgentValue::Unit, AgentValue::Unit) => true,
             (AgentValue::Boolean(b1), AgentValue::Boolean(b2)) => b1 == b2,
             (AgentValue::Integer(i1), AgentValue::Integer(i2)) => i1 == i2,
             (AgentValue::Number(n1), AgentValue::Number(n2)) => n1 == n2,
@@ -773,7 +778,7 @@ impl Serialize for AgentValue {
         S: Serializer,
     {
         match self {
-            AgentValue::Null => serializer.serialize_none(),
+            AgentValue::Unit => serializer.serialize_none(),
             AgentValue::Boolean(b) => serializer.serialize_bool(*b),
             AgentValue::Integer(i) => serializer.serialize_i64(*i),
             AgentValue::Number(n) => serializer.serialize_f64(*n),
@@ -862,7 +867,7 @@ mod tests {
         // Test all the constructor methods
         let unit_data = AgentData::unit();
         assert_eq!(unit_data.kind, "unit");
-        assert_eq!(unit_data.value, AgentValue::Null);
+        assert_eq!(unit_data.value, AgentValue::Unit);
 
         let bool_data = AgentData::boolean(true);
         assert_eq!(bool_data.kind, "boolean");
@@ -917,7 +922,7 @@ mod tests {
         // Test creating AgentData from kind and JSON value
         let unit_data = AgentData::from_json_with_kind("unit", json!(null)).unwrap();
         assert_eq!(unit_data.kind, "unit");
-        assert_eq!(unit_data.value, AgentValue::Null);
+        assert_eq!(unit_data.value, AgentValue::Unit);
 
         let bool_data = AgentData::from_json_with_kind("boolean", json!(true)).unwrap();
         assert_eq!(bool_data.kind, "boolean");
@@ -1122,7 +1127,7 @@ mod tests {
         // Test automatic kind inference from JSON values
         let unit_data = AgentData::from_json(json!(null)).unwrap();
         assert_eq!(unit_data.kind, "unit");
-        assert_eq!(unit_data.value, AgentValue::Null);
+        assert_eq!(unit_data.value, AgentValue::Unit);
 
         let bool_data = AgentData::from_json(json!(true)).unwrap();
         assert_eq!(bool_data.kind, "boolean");
@@ -1695,7 +1700,7 @@ mod tests {
     fn test_agent_value_constructors() {
         // Test AgentValue constructors
         let unit = AgentValue::unit();
-        assert_eq!(unit, AgentValue::Null);
+        assert_eq!(unit, AgentValue::Unit);
 
         let boolean = AgentValue::boolean(true);
         assert_eq!(boolean, AgentValue::Boolean(true));
@@ -1745,7 +1750,7 @@ mod tests {
     fn test_agent_value_from_json_value() {
         // Test converting from JSON value to AgentValue
         let null = AgentValue::from_json(json!(null)).unwrap();
-        assert_eq!(null, AgentValue::Null);
+        assert_eq!(null, AgentValue::Unit);
 
         let boolean = AgentValue::from_json(json!(true)).unwrap();
         assert_eq!(boolean, AgentValue::Boolean(true));
@@ -1795,7 +1800,7 @@ mod tests {
     fn test_agent_value_from_kind_value() {
         // Test AgentValue::from_kind_value with different kinds and values
         let unit = AgentValue::from_kind_json("unit", json!(null)).unwrap();
-        assert_eq!(unit, AgentValue::Null);
+        assert_eq!(unit, AgentValue::Unit);
 
         let boolean = AgentValue::from_kind_json("boolean", json!(true)).unwrap();
         assert_eq!(boolean, AgentValue::Boolean(true));
@@ -1863,7 +1868,7 @@ mod tests {
         if let AgentValue::Array(arr) = unit_array {
             assert_eq!(arr.len(), 2);
             for val in arr.iter() {
-                assert_eq!(*val, AgentValue::Null);
+                assert_eq!(*val, AgentValue::Unit);
             }
         }
 
@@ -2069,14 +2074,14 @@ mod tests {
 
     #[test]
     fn test_agent_value_default() {
-        assert_eq!(AgentValue::default(), AgentValue::Null);
+        assert_eq!(AgentValue::default(), AgentValue::Unit);
     }
 
     #[test]
     fn test_agent_value_serialization() {
         // Test Null serialization
         {
-            let null = AgentValue::Null;
+            let null = AgentValue::Unit;
             assert_eq!(serde_json::to_string(&null).unwrap(), "null");
         }
 
@@ -2163,7 +2168,7 @@ mod tests {
         // Test Null deserialization
         {
             let deserialized: AgentValue = serde_json::from_str("null").unwrap();
-            assert_eq!(deserialized, AgentValue::Null);
+            assert_eq!(deserialized, AgentValue::Unit);
         }
 
         // Test Boolean deserialization

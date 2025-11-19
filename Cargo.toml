@@ -2,9 +2,10 @@
 resolver = "3"
 members = [
     "askit-cozodb-agents",
-    "agent-stream-kit",
     "askit-llm-agents",
+    "askit-rhai-agents",
     "askit-std-agents",
+    "agent-stream-kit",
 ]
 
 [workspace.package]

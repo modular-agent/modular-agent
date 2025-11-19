@@ -1,0 +1,18 @@
+[package]
+name = "askit-rhai-agents"
+version = "0.1.0"
+description = "Rhai Agents for Agent Stream Kit"
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+agent-stream-kit = { version = "0.8", path = "../agent-stream-kit" }
+photon-rs = { version = "0.3.3", optional = true }
+rhai = { version = "1.23.6", features = ["sync", "serde"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[features]
+default = ["image"]
+image = ["photon-rs"]
