@@ -1,4 +1,4 @@
-use std::sync::{Arc, OnceLock};
+use std::sync::OnceLock;
 use std::vec;
 
 use agent_stream_kit::{
@@ -7,10 +7,7 @@ use agent_stream_kit::{
     new_agent_boxed,
 };
 
-#[cfg(feature = "image")]
-use photon_rs::PhotonImage;
-
-use rhai::{AST, CustomType, Dynamic, Engine, Scope, TypeBuilder};
+use rhai::{AST, Dynamic, Engine, Scope};
 
 static RHAI_ENGINE: OnceLock<Engine> = OnceLock::new();
 
@@ -138,11 +135,9 @@ fn from_value_to_dynamic(value: AgentValue) -> Result<Dynamic, AgentError> {
             }
             Ok(Dynamic::from_map(dyn_map))
         }
-        #[cfg(feature = "image")]
-        AgentValue::Image(img) => {
-            let photon_img = PhotonImageType(img.clone());
-            Ok(Dynamic::from(photon_img))
-        }
+
+        // Just store AgentValue directly
+        _ => Ok(Dynamic::from(value)),
     }
 }
 
@@ -181,12 +176,6 @@ fn from_dynamic_to_value(value: &Dynamic) -> Result<AgentValue, AgentError> {
         return Ok(AgentValue::string(value));
     }
 
-    #[cfg(feature = "image")]
-    if value.is::<PhotonImageType>() {
-        let img = value.clone().cast::<PhotonImageType>();
-        return Ok(AgentValue::image_arc(img.0.clone()));
-    }
-
     if value.is_array() {
         let arr = value
             .as_array_ref()
@@ -198,6 +187,7 @@ fn from_dynamic_to_value(value: &Dynamic) -> Result<AgentValue, AgentError> {
         }
         return Ok(AgentValue::array(value_array));
     }
+
     if value.is_map() {
         let map = value
             .as_map_ref()
@@ -210,21 +200,15 @@ fn from_dynamic_to_value(value: &Dynamic) -> Result<AgentValue, AgentError> {
         return Ok(AgentValue::object(value_map));
     }
 
+    if value.is::<AgentValue>() {
+        let value = value.clone().cast::<AgentValue>();
+        return Ok(value);
+    }
+
     Err(AgentError::InvalidValue(format!(
         "Unsupported Rhai data type: {}",
         value.type_name()
     )))
-}
-
-#[cfg(feature = "image")]
-#[derive(Debug, Clone)]
-struct PhotonImageType(Arc<PhotonImage>);
-
-#[cfg(feature = "image")]
-impl CustomType for PhotonImageType {
-    fn build(mut builder: TypeBuilder<Self>) {
-        builder.with_name("image");
-    }
 }
 
 static AGENT_KIND: &str = "agent";

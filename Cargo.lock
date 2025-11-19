@@ -134,7 +134,6 @@ name = "askit-rhai-agents"
 version = "0.1.0"
 dependencies = [
  "agent-stream-kit",
- "photon-rs",
  "rhai",
  "serde",
  "serde_json",
