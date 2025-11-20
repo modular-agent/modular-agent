@@ -2,9 +2,8 @@ use std::sync::OnceLock;
 use std::vec;
 
 use agent_stream_kit::{
-    ASKit, Agent, AgentConfigEntry, AgentConfigs, AgentContext, AgentData, AgentDefinition,
-    AgentError, AgentOutput, AgentValue, AgentValueMap, AsAgent, AsAgentData, async_trait,
-    new_agent_boxed,
+    ASKit, Agent, AgentConfigs, AgentContext, AgentData, AgentDefinition, AgentError, AgentOutput,
+    AgentValue, AgentValueMap, AsAgent, AsAgentData, async_trait, new_agent_boxed,
 };
 
 use rhai::{AST, Dynamic, Engine, Scope};
@@ -229,9 +228,6 @@ pub fn register_agents(askit: &ASKit) {
         .with_category(CATEGORY)
         .with_inputs(vec![PORT_DATA])
         .with_outputs(vec![PORT_DATA])
-        .with_default_configs(vec![(
-            CONFIG_SCRIPT,
-            AgentConfigEntry::new("", "text").with_title("Script"),
-        )]),
+        .with_text_config_with(CONFIG_SCRIPT, "", |entry| entry.with_title("Script")),
     );
 }

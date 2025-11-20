@@ -4,8 +4,8 @@ use std::sync::{Arc, Mutex};
 use std::vec;
 
 use agent_stream_kit::{
-    ASKit, Agent, AgentConfigEntry, AgentConfigs, AgentContext, AgentData, AgentDefinition,
-    AgentError, AgentOutput, AsAgent, AsAgentData, async_trait, new_agent_boxed,
+    ASKit, Agent, AgentConfigs, AgentContext, AgentData, AgentDefinition, AgentError, AgentOutput,
+    AsAgent, AsAgentData, async_trait, new_agent_boxed,
 };
 
 use ollama_rs::{
@@ -430,24 +430,14 @@ pub fn register_agents(askit: &ASKit) {
         .with_category(CATEGORY)
         .with_inputs(vec![PORT_MESSAGE])
         .with_outputs(vec![PORT_MESSAGE, PORT_RESPONSE])
-        .with_global_configs(vec![(
-            CONFIG_OLLAMA_URL,
-            AgentConfigEntry::new(DEFAULT_OLLAMA_URL, "string").with_title("Ollama URL"),
-        )])
-        .with_default_configs(vec![
-            (
-                CONFIG_MODEL,
-                AgentConfigEntry::new(DEFAULT_CONFIG_MODEL, "string").with_title("Model"),
-            ),
-            (
-                CONFIG_SYSTEM,
-                AgentConfigEntry::new("", "text").with_title("System"),
-            ),
-            (
-                CONFIG_OPTIONS,
-                AgentConfigEntry::new("{}", "text").with_title("Options"),
-            ),
-        ]),
+        .with_string_global_config_with(CONFIG_OLLAMA_URL, DEFAULT_OLLAMA_URL, |entry| {
+            entry.with_title("Ollama URL")
+        })
+        .with_string_config_with(CONFIG_MODEL, DEFAULT_CONFIG_MODEL, |entry| {
+            entry.with_title("Model")
+        })
+        .with_text_config_with(CONFIG_SYSTEM, "", |entry| entry.with_title("System"))
+        .with_text_config_with(CONFIG_OPTIONS, "{}", |entry| entry.with_title("Options")),
     );
 
     askit.register_agent(
@@ -461,20 +451,11 @@ pub fn register_agents(askit: &ASKit) {
         .with_category(CATEGORY)
         .with_inputs(vec![PORT_MESSAGE])
         .with_outputs(vec![PORT_MESSAGE, PORT_RESPONSE])
-        .with_default_configs(vec![
-            (
-                CONFIG_MODEL,
-                AgentConfigEntry::new(DEFAULT_CONFIG_MODEL, "string").with_title("Model"),
-            ),
-            (
-                CONFIG_STREAM,
-                AgentConfigEntry::new(false, "boolean").with_title("Stream"),
-            ),
-            (
-                CONFIG_OPTIONS,
-                AgentConfigEntry::new("{}", "text").with_title("Options"),
-            ),
-        ]),
+        .with_string_config_with(CONFIG_MODEL, DEFAULT_CONFIG_MODEL, |entry| {
+            entry.with_title("Model")
+        })
+        .with_boolean_config_with(CONFIG_STREAM, false, |entry| entry.with_title("Stream"))
+        .with_text_config_with(CONFIG_OPTIONS, "{}", |entry| entry.with_title("Options")),
     );
 
     askit.register_agent(
@@ -488,15 +469,9 @@ pub fn register_agents(askit: &ASKit) {
         .with_category(CATEGORY)
         .with_inputs(vec![PORT_INPUT])
         .with_outputs(vec![PORT_EMBEDDINGS])
-        .with_default_configs(vec![
-            (
-                CONFIG_MODEL,
-                AgentConfigEntry::new(DEFAULT_CONFIG_MODEL, "string").with_title("Model"),
-            ),
-            (
-                CONFIG_OPTIONS,
-                AgentConfigEntry::new("{}", "text").with_title("Options"),
-            ),
-        ]),
+        .with_string_config_with(CONFIG_MODEL, DEFAULT_CONFIG_MODEL, |entry| {
+            entry.with_title("Model")
+        })
+        .with_text_config_with(CONFIG_OPTIONS, "{}", |entry| entry.with_title("Options")),
     );
 }

@@ -6,7 +6,7 @@ use super::askit::ASKit;
 use super::config::AgentConfigs;
 use super::context::AgentContext;
 use super::data::AgentData;
-use super::definition::{AgentConfigEntry, AgentDefinition};
+use super::definition::AgentDefinition;
 use super::error::AgentError;
 
 struct BoardInAgent {
@@ -174,12 +174,11 @@ pub fn register_agents(askit: &ASKit) {
         .with_title("Board In")
         .with_category("Core")
         .with_inputs(vec!["*"])
-        .with_default_configs(vec![(
-            CONFIG_BOARD_NAME,
-            AgentConfigEntry::new("", "string")
+        .with_string_config_with(CONFIG_BOARD_NAME, "", |entry| {
+            entry
                 .with_title("Board Name")
-                .with_description("* = source kind"),
-        )]),
+                .with_description("* = source kind")
+        }),
     );
 
     // BoardOutAgent
@@ -192,9 +191,6 @@ pub fn register_agents(askit: &ASKit) {
         .with_title("Board Out")
         .with_category("Core")
         .with_outputs(vec!["*"])
-        .with_default_configs(vec![(
-            CONFIG_BOARD_NAME,
-            AgentConfigEntry::new("", "string").with_title("Board Name"),
-        )]),
+        .with_string_config_with(CONFIG_BOARD_NAME, "", |entry| entry.with_title("Board Name")),
     );
 }

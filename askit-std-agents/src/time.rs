@@ -4,8 +4,8 @@ use std::time::Duration;
 use std::vec;
 
 use agent_stream_kit::{
-    ASKit, Agent, AgentConfigEntry, AgentConfigs, AgentContext, AgentData, AgentDefinition,
-    AgentError, AgentOutput, AgentStatus, AsAgent, AsAgentData, async_trait, new_agent_boxed,
+    ASKit, Agent, AgentConfigs, AgentContext, AgentData, AgentDefinition, AgentError, AgentOutput,
+    AgentStatus, AsAgent, AsAgentData, async_trait, new_agent_boxed,
 };
 use chrono::{DateTime, Local, Utc};
 use cron::Schedule;
@@ -627,21 +627,16 @@ pub fn register_agents(askit: &ASKit) {
     askit.register_agent(
         AgentDefinition::new(AGENT_KIND, "std_delay", Some(new_agent_boxed::<DelayAgent>))
             .with_title("Delay")
-            .with_description("Delays output by a specified time")
-            .with_category(CATEGORY)
-            .with_inputs(vec!["*"])
-            .with_outputs(vec!["*"])
-            .with_default_configs(vec![
-                (
-                    CONFIG_DELAY,
-                    AgentConfigEntry::new(DELAY_MS_DEFAULT, "integer").with_title("delay (ms)"),
-                ),
-                (
-                    CONFIG_MAX_NUM_DATA,
-                    AgentConfigEntry::new(MAX_NUM_DATA_DEFAULT, "integer")
-                        .with_title("max num data"),
-                ),
-            ]),
+        .with_description("Delays output by a specified time")
+        .with_category(CATEGORY)
+        .with_inputs(vec!["*"])
+        .with_outputs(vec!["*"])
+        .with_integer_config_with(CONFIG_DELAY, DELAY_MS_DEFAULT, |entry| {
+            entry.with_title("delay (ms)")
+        })
+        .with_integer_config_with(CONFIG_MAX_NUM_DATA, MAX_NUM_DATA_DEFAULT, |entry| {
+            entry.with_title("max num data")
+        }),
     );
 
     // Interval Timer Agent
@@ -655,11 +650,9 @@ pub fn register_agents(askit: &ASKit) {
         .with_description("Outputs a unit signal at specified intervals")
         .with_category(CATEGORY)
         .with_outputs(vec![PIN_UNIT])
-        .with_default_configs(vec![(
-            CONFIG_INTERVAL,
-            AgentConfigEntry::new(INTERVAL_DEFAULT, "string")
-                .with_description("(ex. 10s, 5m, 100ms, 1h, 1d)"),
-        )]),
+        .with_string_config_with(CONFIG_INTERVAL, INTERVAL_DEFAULT, |entry| {
+            entry.with_description("(ex. 10s, 5m, 100ms, 1h, 1d)")
+        }),
     );
 
     // OnStart
@@ -672,10 +665,9 @@ pub fn register_agents(askit: &ASKit) {
         .with_title("On Start")
         .with_category(CATEGORY)
         .with_outputs(vec![PIN_UNIT])
-        .with_default_configs(vec![(
-            CONFIG_DELAY,
-            AgentConfigEntry::new(DELAY_MS_DEFAULT, "integer").with_title("delay (ms)"),
-        )]),
+        .with_integer_config_with(CONFIG_DELAY, DELAY_MS_DEFAULT, |entry| {
+            entry.with_title("delay (ms)")
+        }),
     );
 
     // Schedule Timer Agent
@@ -688,11 +680,9 @@ pub fn register_agents(askit: &ASKit) {
         .with_title("Schedule Timer")
         .with_category(CATEGORY)
         .with_outputs(vec![PIN_TIME])
-        .with_default_configs(vec![(
-            CONFIG_SCHEDULE,
-            AgentConfigEntry::new("0 0 * * * *", "string")
-                .with_description("sec min hour day month week year"),
-        )]),
+        .with_string_config_with(CONFIG_SCHEDULE, "0 0 * * * *", |entry| {
+            entry.with_description("sec min hour day month week year")
+        }),
     );
 
     // Throttle Time Agent
@@ -706,18 +696,13 @@ pub fn register_agents(askit: &ASKit) {
         .with_category(CATEGORY)
         .with_inputs(vec!["*"])
         .with_outputs(vec!["*"])
-        .with_default_configs(vec![
-            (
-                CONFIG_TIME,
-                AgentConfigEntry::new(TIME_DEFAULT, "string")
-                    .with_description("(ex. 10s, 5m, 100ms, 1h, 1d)"),
-            ),
-            (
-                CONFIG_MAX_NUM_DATA,
-                AgentConfigEntry::new(0, "integer")
-                    .with_title("max num data")
-                    .with_description("0: no data, -1: all data"),
-            ),
-        ]),
+        .with_string_config_with(CONFIG_TIME, TIME_DEFAULT, |entry| {
+            entry.with_description("(ex. 10s, 5m, 100ms, 1h, 1d)")
+        })
+        .with_integer_config_with(CONFIG_MAX_NUM_DATA, 0, |entry| {
+            entry
+                .with_title("max num data")
+                .with_description("0: no data, -1: all data")
+        }),
     );
 }

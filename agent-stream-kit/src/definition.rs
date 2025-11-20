@@ -149,11 +149,25 @@ impl AgentDefinition {
     }
 
     pub fn with_unit_config(self, key: &str) -> Self {
-        self.with_config_type(key, (), "unit")
+        self.with_unit_config_with(key, |entry| entry)
+    }
+
+    pub fn with_unit_config_with<F>(self, key: &str, f: F) -> Self
+    where
+        F: FnOnce(AgentConfigEntry) -> AgentConfigEntry,
+    {
+        self.with_config_type_with(key, (), "unit", f)
     }
 
     pub fn with_boolean_config(self, key: &str, default: bool) -> Self {
-        self.with_config_type(key, default, "boolean")
+        self.with_boolean_config_with(key, default, |entry| entry)
+    }
+
+    pub fn with_boolean_config_with<F>(self, key: &str, default: bool, f: F) -> Self
+    where
+        F: FnOnce(AgentConfigEntry) -> AgentConfigEntry,
+    {
+        self.with_config_type_with(key, default, "boolean", f)
     }
 
     pub fn with_boolean_config_default(self, key: &str) -> Self {
@@ -161,7 +175,14 @@ impl AgentDefinition {
     }
 
     pub fn with_integer_config(self, key: &str, default: i64) -> Self {
-        self.with_config_type(key, default, "integer")
+        self.with_integer_config_with(key, default, |entry| entry)
+    }
+
+    pub fn with_integer_config_with<F>(self, key: &str, default: i64, f: F) -> Self
+    where
+        F: FnOnce(AgentConfigEntry) -> AgentConfigEntry,
+    {
+        self.with_config_type_with(key, default, "integer", f)
     }
 
     pub fn with_integer_config_default(self, key: &str) -> Self {
@@ -169,7 +190,14 @@ impl AgentDefinition {
     }
 
     pub fn with_number_config(self, key: &str, default: f64) -> Self {
-        self.with_config_type(key, default, "number")
+        self.with_number_config_with(key, default, |entry| entry)
+    }
+
+    pub fn with_number_config_with<F>(self, key: &str, default: f64, f: F) -> Self
+    where
+        F: FnOnce(AgentConfigEntry) -> AgentConfigEntry,
+    {
+        self.with_config_type_with(key, default, "number", f)
     }
 
     pub fn with_number_config_default(self, key: &str) -> Self {
@@ -177,7 +205,20 @@ impl AgentDefinition {
     }
 
     pub fn with_string_config(self, key: &str, default: impl Into<String>) -> Self {
-        self.with_config_type(key, AgentValue::string(default.into()), "string")
+        self.with_string_config_with(key, default, |entry| entry)
+    }
+
+    pub fn with_string_config_with<F>(
+        self,
+        key: &str,
+        default: impl Into<String>,
+        f: F,
+    ) -> Self
+    where
+        F: FnOnce(AgentConfigEntry) -> AgentConfigEntry,
+    {
+        let default = default.into();
+        self.with_config_type_with(key, AgentValue::string(default), "string", f)
     }
 
     pub fn with_string_config_default(self, key: &str) -> Self {
@@ -185,7 +226,20 @@ impl AgentDefinition {
     }
 
     pub fn with_text_config(self, key: &str, default: impl Into<String>) -> Self {
-        self.with_config_type(key, AgentValue::string(default.into()), "text")
+        self.with_text_config_with(key, default, |entry| entry)
+    }
+
+    pub fn with_text_config_with<F>(
+        self,
+        key: &str,
+        default: impl Into<String>,
+        f: F,
+    ) -> Self
+    where
+        F: FnOnce(AgentConfigEntry) -> AgentConfigEntry,
+    {
+        let default = default.into();
+        self.with_config_type_with(key, AgentValue::string(default), "text", f)
     }
 
     pub fn with_text_config_default(self, key: &str) -> Self {
@@ -193,15 +247,54 @@ impl AgentDefinition {
     }
 
     pub fn with_object_config<V: Into<AgentValue>>(self, key: &str, default: V) -> Self {
-        self.with_config_type(key, default, "object")
+        self.with_object_config_with(key, default, |entry| entry)
+    }
+
+    pub fn with_object_config_with<V: Into<AgentValue>, F>(
+        self,
+        key: &str,
+        default: V,
+        f: F,
+    ) -> Self
+    where
+        F: FnOnce(AgentConfigEntry) -> AgentConfigEntry,
+    {
+        self.with_config_type_with(key, default, "object", f)
     }
 
     pub fn with_object_config_default(self, key: &str) -> Self {
         self.with_object_config(key, AgentValue::object_default())
     }
 
-    fn with_config_type<V: Into<AgentValue>>(mut self, key: &str, default: V, type_: &str) -> Self {
-        self.push_default_config_entry(key.into(), AgentConfigEntry::new(default, type_));
+    pub fn with_custom_config_with<V: Into<AgentValue>, F>(
+        self,
+        key: &str,
+        default: V,
+        type_: &str,
+        f: F,
+    ) -> Self
+    where
+        F: FnOnce(AgentConfigEntry) -> AgentConfigEntry,
+    {
+        self.with_config_type_with(key, default, type_, f)
+    }
+
+    fn with_config_type<V: Into<AgentValue>>(self, key: &str, default: V, type_: &str) -> Self {
+        self.with_config_type_with(key, default, type_, |entry| entry)
+    }
+
+    fn with_config_type_with<V: Into<AgentValue>, F>(
+        mut self,
+        key: &str,
+        default: V,
+        type_: &str,
+        f: F,
+    ) -> Self
+    where
+        F: FnOnce(AgentConfigEntry) -> AgentConfigEntry,
+    {
+        let entry = AgentConfigEntry::new(default, type_);
+        self.push_default_config_entry(key.into(), f(entry));
         self
     }
 
@@ -221,40 +314,148 @@ impl AgentDefinition {
     }
 
     pub fn with_unit_global_config(self, key: &str) -> Self {
-        self.with_global_config_type(key, (), "unit")
+        self.with_unit_global_config_with(key, |entry| entry)
+    }
+
+    pub fn with_unit_global_config_with<F>(self, key: &str, f: F) -> Self
+    where
+        F: FnOnce(AgentConfigEntry) -> AgentConfigEntry,
+    {
+        self.with_global_config_type_with(key, (), "unit", f)
     }
 
     pub fn with_boolean_global_config(self, key: &str, default: bool) -> Self {
-        self.with_global_config_type(key, default, "boolean")
+        self.with_boolean_global_config_with(key, default, |entry| entry)
+    }
+
+    pub fn with_boolean_global_config_with<F>(
+        self,
+        key: &str,
+        default: bool,
+        f: F,
+    ) -> Self
+    where
+        F: FnOnce(AgentConfigEntry) -> AgentConfigEntry,
+    {
+        self.with_global_config_type_with(key, default, "boolean", f)
     }
 
     pub fn with_integer_global_config(self, key: &str, default: i64) -> Self {
-        self.with_global_config_type(key, default, "integer")
+        self.with_integer_global_config_with(key, default, |entry| entry)
+    }
+
+    pub fn with_integer_global_config_with<F>(
+        self,
+        key: &str,
+        default: i64,
+        f: F,
+    ) -> Self
+    where
+        F: FnOnce(AgentConfigEntry) -> AgentConfigEntry,
+    {
+        self.with_global_config_type_with(key, default, "integer", f)
     }
 
     pub fn with_number_global_config(self, key: &str, default: f64) -> Self {
-        self.with_global_config_type(key, default, "number")
+        self.with_number_global_config_with(key, default, |entry| entry)
+    }
+
+    pub fn with_number_global_config_with<F>(
+        self,
+        key: &str,
+        default: f64,
+        f: F,
+    ) -> Self
+    where
+        F: FnOnce(AgentConfigEntry) -> AgentConfigEntry,
+    {
+        self.with_global_config_type_with(key, default, "number", f)
     }
 
     pub fn with_string_global_config(self, key: &str, default: impl Into<String>) -> Self {
-        self.with_global_config_type(key, AgentValue::string(default.into()), "string")
+        self.with_string_global_config_with(key, default, |entry| entry)
+    }
+
+    pub fn with_string_global_config_with<F>(
+        self,
+        key: &str,
+        default: impl Into<String>,
+        f: F,
+    ) -> Self
+    where
+        F: FnOnce(AgentConfigEntry) -> AgentConfigEntry,
+    {
+        let default = default.into();
+        self.with_global_config_type_with(key, AgentValue::string(default), "string", f)
     }
 
     pub fn with_text_global_config(self, key: &str, default: impl Into<String>) -> Self {
-        self.with_global_config_type(key, AgentValue::string(default.into()), "text")
+        self.with_text_global_config_with(key, default, |entry| entry)
+    }
+
+    pub fn with_text_global_config_with<F>(
+        self,
+        key: &str,
+        default: impl Into<String>,
+        f: F,
+    ) -> Self
+    where
+        F: FnOnce(AgentConfigEntry) -> AgentConfigEntry,
+    {
+        let default = default.into();
+        self.with_global_config_type_with(key, AgentValue::string(default), "text", f)
     }
 
     pub fn with_object_global_config<V: Into<AgentValue>>(self, key: &str, default: V) -> Self {
-        self.with_global_config_type(key, default, "object")
+        self.with_object_global_config_with(key, default, |entry| entry)
+    }
+
+    pub fn with_object_global_config_with<V: Into<AgentValue>, F>(
+        self,
+        key: &str,
+        default: V,
+        f: F,
+    ) -> Self
+    where
+        F: FnOnce(AgentConfigEntry) -> AgentConfigEntry,
+    {
+        self.with_global_config_type_with(key, default, "object", f)
+    }
+
+    pub fn with_custom_global_config_with<V: Into<AgentValue>, F>(
+        self,
+        key: &str,
+        default: V,
+        type_: &str,
+        f: F,
+    ) -> Self
+    where
+        F: FnOnce(AgentConfigEntry) -> AgentConfigEntry,
+    {
+        self.with_global_config_type_with(key, default, type_, f)
     }
 
     fn with_global_config_type<V: Into<AgentValue>>(
-        mut self,
+        self,
         key: &str,
         default: V,
         type_: &str,
     ) -> Self {
-        self.push_global_config_entry(key.into(), AgentConfigEntry::new(default, type_));
+        self.with_global_config_type_with(key, default, type_, |entry| entry)
+    }
+
+    fn with_global_config_type_with<V: Into<AgentValue>, F>(
+        mut self,
+        key: &str,
+        default: V,
+        type_: &str,
+        f: F,
+    ) -> Self
+    where
+        F: FnOnce(AgentConfigEntry) -> AgentConfigEntry,
+    {
+        let entry = AgentConfigEntry::new(default, type_);
+        self.push_global_config_entry(key.into(), f(entry));
         self
     }
 
@@ -274,35 +475,109 @@ impl AgentDefinition {
     }
 
     pub fn with_unit_display_config(self, key: &str) -> Self {
-        self.with_display_config_type(key, "unit")
+        self.with_unit_display_config_with(key, |entry| entry)
+    }
+
+    pub fn with_unit_display_config_with<F>(self, key: &str, f: F) -> Self
+    where
+        F: FnOnce(AgentDisplayConfigEntry) -> AgentDisplayConfigEntry,
+    {
+        self.with_display_config_type_with(key, "unit", f)
     }
 
     pub fn with_boolean_display_config(self, key: &str) -> Self {
-        self.with_display_config_type(key, "boolean")
+        self.with_boolean_display_config_with(key, |entry| entry)
+    }
+
+    pub fn with_boolean_display_config_with<F>(self, key: &str, f: F) -> Self
+    where
+        F: FnOnce(AgentDisplayConfigEntry) -> AgentDisplayConfigEntry,
+    {
+        self.with_display_config_type_with(key, "boolean", f)
     }
 
     pub fn with_integer_display_config(self, key: &str) -> Self {
-        self.with_display_config_type(key, "integer")
+        self.with_integer_display_config_with(key, |entry| entry)
+    }
+
+    pub fn with_integer_display_config_with<F>(self, key: &str, f: F) -> Self
+    where
+        F: FnOnce(AgentDisplayConfigEntry) -> AgentDisplayConfigEntry,
+    {
+        self.with_display_config_type_with(key, "integer", f)
     }
 
     pub fn with_number_display_config(self, key: &str) -> Self {
-        self.with_display_config_type(key, "number")
+        self.with_number_display_config_with(key, |entry| entry)
+    }
+
+    pub fn with_number_display_config_with<F>(self, key: &str, f: F) -> Self
+    where
+        F: FnOnce(AgentDisplayConfigEntry) -> AgentDisplayConfigEntry,
+    {
+        self.with_display_config_type_with(key, "number", f)
     }
 
     pub fn with_string_display_config(self, key: &str) -> Self {
-        self.with_display_config_type(key, "string")
+        self.with_string_display_config_with(key, |entry| entry)
+    }
+
+    pub fn with_string_display_config_with<F>(self, key: &str, f: F) -> Self
+    where
+        F: FnOnce(AgentDisplayConfigEntry) -> AgentDisplayConfigEntry,
+    {
+        self.with_display_config_type_with(key, "string", f)
     }
 
     pub fn with_text_display_config(self, key: &str) -> Self {
-        self.with_display_config_type(key, "text")
+        self.with_text_display_config_with(key, |entry| entry)
+    }
+
+    pub fn with_text_display_config_with<F>(self, key: &str, f: F) -> Self
+    where
+        F: FnOnce(AgentDisplayConfigEntry) -> AgentDisplayConfigEntry,
+    {
+        self.with_display_config_type_with(key, "text", f)
     }
 
     pub fn with_object_display_config(self, key: &str) -> Self {
-        self.with_display_config_type(key, "object")
+        self.with_object_display_config_with(key, |entry| entry)
     }
 
-    fn with_display_config_type(mut self, key: &str, type_: &str) -> Self {
-        self.push_display_config_entry(key.into(), AgentDisplayConfigEntry::new(type_));
+    pub fn with_object_display_config_with<F>(self, key: &str, f: F) -> Self
+    where
+        F: FnOnce(AgentDisplayConfigEntry) -> AgentDisplayConfigEntry,
+    {
+        self.with_display_config_type_with(key, "object", f)
+    }
+
+    pub fn with_custom_display_config_with<F>(
+        self,
+        key: &str,
+        type_: &str,
+        f: F,
+    ) -> Self
+    where
+        F: FnOnce(AgentDisplayConfigEntry) -> AgentDisplayConfigEntry,
+    {
+        self.with_display_config_type_with(key, type_, f)
+    }
+
+    fn with_display_config_type(self, key: &str, type_: &str) -> Self {
+        self.with_display_config_type_with(key, type_, |entry| entry)
+    }
+
+    fn with_display_config_type_with<F>(
+        mut self,
+        key: &str,
+        type_: &str,
+        f: F,
+    ) -> Self
+    where
+        F: FnOnce(AgentDisplayConfigEntry) -> AgentDisplayConfigEntry,
+    {
+        let entry = AgentDisplayConfigEntry::new(type_);
+        self.push_display_config_entry(key.into(), f(entry));
         self
     }
 
@@ -652,6 +927,46 @@ mod tests {
         for entry in config_map.values() {
             assert!(!entry.hide_title);
         }
+    }
+
+    #[test]
+    fn test_config_helper_customization() {
+        let def = AgentDefinition::new("test", "custom", None)
+            .with_integer_config_with("custom_default", 1, |entry| entry.with_title("Custom"))
+            .with_text_global_config_with("custom_global", "value", |entry| {
+                entry.with_description("Global Desc")
+            })
+            .with_text_display_config_with("custom_display", |entry| entry.with_title("Display"));
+
+        let default_entry = def
+            .default_configs
+            .as_ref()
+            .unwrap()
+            .iter()
+            .find(|(k, _)| k == "custom_default")
+            .map(|(_, v)| v)
+            .unwrap();
+        assert_eq!(default_entry.title.as_deref(), Some("Custom"));
+
+        let global_entry = def
+            .global_configs
+            .as_ref()
+            .unwrap()
+            .iter()
+            .find(|(k, _)| k == "custom_global")
+            .map(|(_, v)| v)
+            .unwrap();
+        assert_eq!(global_entry.description.as_deref(), Some("Global Desc"));
+
+        let display_entry = def
+            .display_configs
+            .as_ref()
+            .unwrap()
+            .iter()
+            .find(|(k, _)| k == "custom_display")
+            .map(|(_, v)| v)
+            .unwrap();
+        assert_eq!(display_entry.title.as_deref(), Some("Display"));
     }
 
     fn echo_agent_definition() -> AgentDefinition {

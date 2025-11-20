@@ -1,7 +1,6 @@
 use agent_stream_kit::{
-    ASKit, Agent, AgentConfigEntry, AgentConfigs, AgentContext, AgentData, AgentDefinition,
-    AgentError, AgentOutput, AgentValue, AgentValueMap, AsAgent, AsAgentData, async_trait,
-    new_agent_boxed,
+    ASKit, Agent, AgentConfigs, AgentContext, AgentData, AgentDefinition, AgentError, AgentOutput,
+    AgentValue, AgentValueMap, AsAgent, AsAgentData, async_trait, new_agent_boxed,
 };
 
 // Zip agent
@@ -145,7 +144,7 @@ pub fn register_agents(askit: &ASKit) {
         .with_category(CATEGORY)
         .with_inputs(vec![PIN_IN1, PIN_IN2])
         .with_outputs(vec![PIN_DATA])
-        .with_default_configs(vec![(CONFIG_N, AgentConfigEntry::new(2, "integer").with_hidden())])
+        .with_integer_config_with(CONFIG_N, 2, |entry| entry.with_hidden())
         .with_string_config_default(CONFIG_KEY1)
         .with_string_config_default(CONFIG_KEY2),
     );
@@ -156,7 +155,7 @@ pub fn register_agents(askit: &ASKit) {
         .with_category(CATEGORY)
         .with_inputs(vec![PIN_IN1, PIN_IN2, PIN_IN3])
         .with_outputs(vec![PIN_DATA])
-        .with_default_configs(vec![(CONFIG_N, AgentConfigEntry::new(3, "integer").with_hidden())])
+        .with_integer_config_with(CONFIG_N, 3, |entry| entry.with_hidden())
         .with_string_config_default(CONFIG_KEY1)
         .with_string_config_default(CONFIG_KEY2)
         .with_string_config_default(CONFIG_KEY3),
@@ -168,7 +167,7 @@ pub fn register_agents(askit: &ASKit) {
         .with_category(CATEGORY)
         .with_inputs(vec![PIN_IN1, PIN_IN2, PIN_IN3, PIN_IN4])
         .with_outputs(vec![PIN_DATA])
-        .with_default_configs(vec![(CONFIG_N, AgentConfigEntry::new(4, "integer").with_hidden())])
+        .with_integer_config_with(CONFIG_N, 4, |entry| entry.with_hidden())
         .with_string_config_default(CONFIG_KEY1)
         .with_string_config_default(CONFIG_KEY2)
         .with_string_config_default(CONFIG_KEY3)

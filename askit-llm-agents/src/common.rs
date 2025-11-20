@@ -4,8 +4,8 @@ use std::{
 };
 
 use agent_stream_kit::{
-    ASKit, Agent, AgentConfigEntry, AgentConfigs, AgentContext, AgentData, AgentDefinition,
-    AgentError, AgentOutput, AgentValue, AsAgent, AsAgentData, async_trait, new_agent_boxed,
+    ASKit, Agent, AgentConfigs, AgentContext, AgentData, AgentDefinition, AgentError, AgentOutput,
+    AgentValue, AsAgent, AsAgentData, async_trait, new_agent_boxed,
 };
 
 use crate::message::{Message, MessageHistory};
@@ -330,10 +330,9 @@ pub fn register_agents(askit: &ASKit) {
         .with_category(CATEGORY)
         .with_inputs(vec![PORT_MESSAGE, PORT_RESET])
         .with_outputs(vec![PORT_MESSAGE_HISTORY, PORT_HISTORY])
-        .with_default_configs(vec![(
-            CONFIG_INCLUDE_SYSTZEM,
-            AgentConfigEntry::new(false, "boolean").with_title("Include System"),
-        )])
+        .with_boolean_config_with(CONFIG_INCLUDE_SYSTZEM, false, |entry| {
+            entry.with_title("Include System")
+        })
         .with_text_config_default(CONFIG_PREAMBLE)
         .with_integer_config_default(CONFIG_HISTORY_SIZE),
     );
