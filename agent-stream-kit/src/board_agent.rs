@@ -171,13 +171,11 @@ pub fn register_agents(askit: &ASKit) {
             "core_board_in",
             Some(new_agent_boxed::<BoardInAgent>),
         )
-        .with_title("Board In")
-        .with_category("Core")
-        .with_inputs(vec!["*"])
-        .with_string_config_with(CONFIG_BOARD_NAME, "", |entry| {
-            entry
-                .with_title("Board Name")
-                .with_description("* = source kind")
+        .title("Board In")
+        .category("Core")
+        .inputs(vec!["*"])
+        .string_config_with(CONFIG_BOARD_NAME, "", |entry| {
+            entry.title("Board Name").description("* = source kind")
         }),
     );
 
@@ -188,9 +186,9 @@ pub fn register_agents(askit: &ASKit) {
             "core_board_out",
             Some(new_agent_boxed::<BoardOutAgent>),
         )
-        .with_title("Board Out")
-        .with_category("Core")
-        .with_outputs(vec!["*"])
-        .with_string_config_with(CONFIG_BOARD_NAME, "", |entry| entry.with_title("Board Name")),
+        .title("Board Out")
+        .category("Core")
+        .outputs(vec!["*"])
+        .string_config_with(CONFIG_BOARD_NAME, "", |entry| entry.title("Board Name")),
     );
 }

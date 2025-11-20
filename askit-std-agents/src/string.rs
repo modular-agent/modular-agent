@@ -332,11 +332,11 @@ pub fn register_agents(askit: &ASKit) {
             "std_string_join",
             Some(new_agent_boxed::<StringJoinAgent>),
         )
-        .with_title("String Join")
-        .with_category(CATEGORY)
-        .with_inputs(vec![PIN_STRINGS])
-        .with_outputs(vec![PIN_STRING])
-        .with_string_config(CONFIG_SEP, "\\n"),
+        .title("String Join")
+        .category(CATEGORY)
+        .inputs(vec![PIN_STRINGS])
+        .outputs(vec![PIN_STRING])
+        .string_config(CONFIG_SEP, "\\n"),
     );
 
     askit.register_agent(
@@ -345,11 +345,11 @@ pub fn register_agents(askit: &ASKit) {
             "std_template_array",
             Some(new_agent_boxed::<TemplateArrayAgent>),
         )
-        .with_title("Template Array")
-        .with_category(CATEGORY)
-        .with_inputs(vec![PIN_DATA])
-        .with_outputs(vec![PIN_STRING])
-        .with_text_config(CONFIG_TEMPLATE, "{{value}}"),
+        .title("Template Array")
+        .category(CATEGORY)
+        .inputs(vec![PIN_DATA])
+        .outputs(vec![PIN_STRING])
+        .text_config(CONFIG_TEMPLATE, "{{value}}"),
     );
 
     askit.register_agent(
@@ -358,11 +358,11 @@ pub fn register_agents(askit: &ASKit) {
             "std_template_string",
             Some(new_agent_boxed::<TemplateStringAgent>),
         )
-        .with_title("Template String")
-        .with_category(CATEGORY)
-        .with_inputs(vec![PIN_DATA])
-        .with_outputs(vec![PIN_STRING])
-        .with_string_config(CONFIG_TEMPLATE, "{{value}}"),
+        .title("Template String")
+        .category(CATEGORY)
+        .inputs(vec![PIN_DATA])
+        .outputs(vec![PIN_STRING])
+        .string_config(CONFIG_TEMPLATE, "{{value}}"),
     );
 
     askit.register_agent(
@@ -371,10 +371,10 @@ pub fn register_agents(askit: &ASKit) {
             "std_template_text",
             Some(new_agent_boxed::<TemplateTextAgent>),
         )
-        .with_title("Template Text")
-        .with_category(CATEGORY)
-        .with_inputs(vec![PIN_DATA])
-        .with_outputs(vec![PIN_STRING])
-        .with_text_config(CONFIG_TEMPLATE, "{{value}}"),
+        .title("Template Text")
+        .category(CATEGORY)
+        .inputs(vec![PIN_DATA])
+        .outputs(vec![PIN_STRING])
+        .text_config(CONFIG_TEMPLATE, "{{value}}"),
     );
 }

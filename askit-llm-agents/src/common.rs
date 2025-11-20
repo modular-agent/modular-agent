@@ -287,11 +287,11 @@ pub fn register_agents(askit: &ASKit) {
             "llm_assistant_message",
             Some(new_agent_boxed::<AssistantMessageAgent>),
         )
-        .with_title("Assistant Message")
-        .with_category(CATEGORY)
-        .with_inputs(vec![PORT_MESSAGES])
-        .with_outputs(vec![PORT_MESSAGES])
-        .with_text_config_default(CONFIG_MESSAGE),
+        .title("Assistant Message")
+        .category(CATEGORY)
+        .inputs(vec![PORT_MESSAGES])
+        .outputs(vec![PORT_MESSAGES])
+        .text_config_default(CONFIG_MESSAGE),
     );
 
     askit.register_agent(
@@ -300,11 +300,11 @@ pub fn register_agents(askit: &ASKit) {
             "llm_system_message",
             Some(new_agent_boxed::<SystemMessageAgent>),
         )
-        .with_title("System Message")
-        .with_category(CATEGORY)
-        .with_inputs(vec![PORT_MESSAGES])
-        .with_outputs(vec![PORT_MESSAGES])
-        .with_text_config_default(CONFIG_MESSAGE),
+        .title("System Message")
+        .category(CATEGORY)
+        .inputs(vec![PORT_MESSAGES])
+        .outputs(vec![PORT_MESSAGES])
+        .text_config_default(CONFIG_MESSAGE),
     );
 
     askit.register_agent(
@@ -313,11 +313,11 @@ pub fn register_agents(askit: &ASKit) {
             "llm_user_message",
             Some(new_agent_boxed::<UserMessageAgent>),
         )
-        .with_title("User Message")
-        .with_category(CATEGORY)
-        .with_inputs(vec![PORT_MESSAGES])
-        .with_outputs(vec![PORT_MESSAGES])
-        .with_text_config_default(CONFIG_MESSAGE),
+        .title("User Message")
+        .category(CATEGORY)
+        .inputs(vec![PORT_MESSAGES])
+        .outputs(vec![PORT_MESSAGES])
+        .text_config_default(CONFIG_MESSAGE),
     );
 
     askit.register_agent(
@@ -326,14 +326,14 @@ pub fn register_agents(askit: &ASKit) {
             "llm_message_history",
             Some(new_agent_boxed::<MessageHistoryAgent>),
         )
-        .with_title("Message History")
-        .with_category(CATEGORY)
-        .with_inputs(vec![PORT_MESSAGE, PORT_RESET])
-        .with_outputs(vec![PORT_MESSAGE_HISTORY, PORT_HISTORY])
-        .with_boolean_config_with(CONFIG_INCLUDE_SYSTZEM, false, |entry| {
-            entry.with_title("Include System")
+        .title("Message History")
+        .category(CATEGORY)
+        .inputs(vec![PORT_MESSAGE, PORT_RESET])
+        .outputs(vec![PORT_MESSAGE_HISTORY, PORT_HISTORY])
+        .boolean_config_with(CONFIG_INCLUDE_SYSTZEM, false, |entry| {
+            entry.title("Include System")
         })
-        .with_text_config_default(CONFIG_PREAMBLE)
-        .with_integer_config_default(CONFIG_HISTORY_SIZE),
+        .text_config_default(CONFIG_PREAMBLE)
+        .integer_config_default(CONFIG_HISTORY_SIZE),
     );
 }

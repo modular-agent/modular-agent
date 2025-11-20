@@ -108,12 +108,12 @@ pub fn register_agents(askit: &ASKit) {
             "std_display_data",
             Some(new_agent_boxed::<DisplayDataAgent>),
         )
-        .with_title("Display Data")
-        .with_category(CATEGORY)
-        .with_inputs(vec!["*"])
-        .with_display_configs(vec![(
+        .title("Display Data")
+        .category(CATEGORY)
+        .inputs(vec!["*"])
+        .display_configs(vec![(
             DISPLAY_DATA,
-            AgentDisplayConfigEntry::new("*").with_hide_title(),
+            AgentDisplayConfigEntry::new("*").hide_title(),
         )]),
     );
 
@@ -124,12 +124,12 @@ pub fn register_agents(askit: &ASKit) {
             "std_debug_data",
             Some(new_agent_boxed::<DebugDataAgent>),
         )
-        .with_title("Debug Data")
-        .with_category(CATEGORY)
-        .with_inputs(vec!["*"])
-        .with_display_configs(vec![(
+        .title("Debug Data")
+        .category(CATEGORY)
+        .inputs(vec!["*"])
+        .display_configs(vec![(
             DISPLAY_DATA,
-            AgentDisplayConfigEntry::new("object").with_hide_title(),
+            AgentDisplayConfigEntry::new("object").hide_title(),
         )]),
     );
 }

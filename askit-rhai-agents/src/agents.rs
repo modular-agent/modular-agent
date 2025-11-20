@@ -224,10 +224,10 @@ pub fn register_agents(askit: &ASKit) {
             "rhai_script",
             Some(new_agent_boxed::<RhaiScriptAgent>),
         )
-        .with_title("Rhai Script")
-        .with_category(CATEGORY)
-        .with_inputs(vec![PORT_DATA])
-        .with_outputs(vec![PORT_DATA])
-        .with_text_config_with(CONFIG_SCRIPT, "", |entry| entry.with_title("Script")),
+        .title("Rhai Script")
+        .category(CATEGORY)
+        .inputs(vec![PORT_DATA])
+        .outputs(vec![PORT_DATA])
+        .text_config_with(CONFIG_SCRIPT, "", |entry| entry.title("Script")),
     );
 }

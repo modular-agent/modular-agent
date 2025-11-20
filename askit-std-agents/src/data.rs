@@ -193,10 +193,10 @@ pub fn register_agents(askit: &ASKit) {
             "std_to_json",
             Some(new_agent_boxed::<ToJsonAgent>),
         )
-        .with_title("To JSON")
-        .with_category(CATEGORY)
-        .with_inputs(vec![PIN_DATA])
-        .with_outputs(vec![PIN_JSON]),
+        .title("To JSON")
+        .category(CATEGORY)
+        .inputs(vec![PIN_DATA])
+        .outputs(vec![PIN_JSON]),
     );
 
     askit.register_agent(
@@ -205,10 +205,10 @@ pub fn register_agents(askit: &ASKit) {
             "std_from_json",
             Some(new_agent_boxed::<FromJsonAgent>),
         )
-        .with_title("From JSON")
-        .with_category(CATEGORY)
-        .with_inputs(vec![PIN_JSON])
-        .with_outputs(vec![PIN_DATA]),
+        .title("From JSON")
+        .category(CATEGORY)
+        .inputs(vec![PIN_JSON])
+        .outputs(vec![PIN_DATA]),
     );
 
     askit.register_agent(
@@ -217,10 +217,10 @@ pub fn register_agents(askit: &ASKit) {
             "std_get_property",
             Some(new_agent_boxed::<GetPropertyAgent>),
         )
-        .with_title("Get Property")
-        .with_category(CATEGORY)
-        .with_inputs(vec![PIN_DATA])
-        .with_outputs(vec![PIN_DATA])
-        .with_string_config_default(CONFIG_PROPERTY),
+        .title("Get Property")
+        .category(CATEGORY)
+        .inputs(vec![PIN_DATA])
+        .outputs(vec![PIN_DATA])
+        .string_config_default(CONFIG_PROPERTY),
     );
 }

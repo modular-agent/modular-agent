@@ -73,14 +73,14 @@ pub fn register_agents(askit: &ASKit) {
             "std_counter",
             Some(new_agent_boxed::<CounterAgent>),
         )
-        .with_title("Counter")
-        // .with_description("Display value on the node")
-        .with_category(CATEGORY)
-        .with_inputs(vec![PIN_IN, PIN_RESET])
-        .with_outputs(vec![PIN_COUNT])
-        .with_display_configs(vec![(
+        .title("Counter")
+        // .description("Display value on the node")
+        .category(CATEGORY)
+        .inputs(vec![PIN_IN, PIN_RESET])
+        .outputs(vec![PIN_COUNT])
+        .display_configs(vec![(
             DISPLAY_COUNT,
-            AgentDisplayConfigEntry::new("integer").with_hide_title(),
+            AgentDisplayConfigEntry::new("integer").hide_title(),
         )]),
     );
 }

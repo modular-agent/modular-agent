@@ -103,10 +103,10 @@ pub fn register_agents(askit: &ASKit) {
             "std_to_yaml",
             Some(new_agent_boxed::<ToYamlAgent>),
         )
-        .with_title("To YAML")
-        .with_category(CATEGORY)
-        .with_inputs(vec![PIN_DATA])
-        .with_outputs(vec![PIN_YAML]),
+        .title("To YAML")
+        .category(CATEGORY)
+        .inputs(vec![PIN_DATA])
+        .outputs(vec![PIN_YAML]),
     );
 
     askit.register_agent(
@@ -115,9 +115,9 @@ pub fn register_agents(askit: &ASKit) {
             "std_from_yaml",
             Some(new_agent_boxed::<FromYamlAgent>),
         )
-        .with_title("From YAML")
-        .with_category(CATEGORY)
-        .with_inputs(vec![PIN_YAML])
-        .with_outputs(vec![PIN_DATA]),
+        .title("From YAML")
+        .category(CATEGORY)
+        .inputs(vec![PIN_YAML])
+        .outputs(vec![PIN_DATA]),
     );
 }

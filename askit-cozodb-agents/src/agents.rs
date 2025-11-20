@@ -104,11 +104,11 @@ pub fn register_agents(askit: &ASKit) {
             "cozodb_script",
             Some(new_agent_boxed::<CozoDbScriptAgent>),
         )
-        .with_title("CozoDB Script")
-        .with_category(CATEGORY)
-        .with_inputs(vec![PORT_PARAMS])
-        .with_outputs(vec![PORT_RESULT])
-        .with_string_config_with(CONFIG_DB, "", |entry| entry.with_title("Database"))
-        .with_text_config_with(CONFIG_SCRIPT, "", |entry| entry.with_title("Script")),
+        .title("CozoDB Script")
+        .category(CATEGORY)
+        .inputs(vec![PORT_PARAMS])
+        .outputs(vec![PORT_RESULT])
+        .string_config_with(CONFIG_DB, "", |entry| entry.title("Database"))
+        .text_config_with(CONFIG_SCRIPT, "", |entry| entry.title("Script")),
     );
 }

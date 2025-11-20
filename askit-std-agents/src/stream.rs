@@ -140,37 +140,37 @@ static CONFIG_N: &str = "n";
 pub fn register_agents(askit: &ASKit) {
     askit.register_agent(
         AgentDefinition::new(AGENT_KIND, "std_zip2", Some(new_agent_boxed::<ZipAgent>))
-            .with_title("Zip2")
-        .with_category(CATEGORY)
-        .with_inputs(vec![PIN_IN1, PIN_IN2])
-        .with_outputs(vec![PIN_DATA])
-        .with_integer_config_with(CONFIG_N, 2, |entry| entry.with_hidden())
-        .with_string_config_default(CONFIG_KEY1)
-        .with_string_config_default(CONFIG_KEY2),
+            .title("Zip2")
+            .category(CATEGORY)
+            .inputs(vec![PIN_IN1, PIN_IN2])
+            .outputs(vec![PIN_DATA])
+            .integer_config_with(CONFIG_N, 2, |entry| entry.hidden())
+            .string_config_default(CONFIG_KEY1)
+            .string_config_default(CONFIG_KEY2),
     );
 
     askit.register_agent(
         AgentDefinition::new(AGENT_KIND, "std_zip3", Some(new_agent_boxed::<ZipAgent>))
-            .with_title("Zip3")
-        .with_category(CATEGORY)
-        .with_inputs(vec![PIN_IN1, PIN_IN2, PIN_IN3])
-        .with_outputs(vec![PIN_DATA])
-        .with_integer_config_with(CONFIG_N, 3, |entry| entry.with_hidden())
-        .with_string_config_default(CONFIG_KEY1)
-        .with_string_config_default(CONFIG_KEY2)
-        .with_string_config_default(CONFIG_KEY3),
+            .title("Zip3")
+            .category(CATEGORY)
+            .inputs(vec![PIN_IN1, PIN_IN2, PIN_IN3])
+            .outputs(vec![PIN_DATA])
+            .integer_config_with(CONFIG_N, 3, |entry| entry.hidden())
+            .string_config_default(CONFIG_KEY1)
+            .string_config_default(CONFIG_KEY2)
+            .string_config_default(CONFIG_KEY3),
     );
 
     askit.register_agent(
         AgentDefinition::new(AGENT_KIND, "std_zip4", Some(new_agent_boxed::<ZipAgent>))
-            .with_title("Zip4")
-        .with_category(CATEGORY)
-        .with_inputs(vec![PIN_IN1, PIN_IN2, PIN_IN3, PIN_IN4])
-        .with_outputs(vec![PIN_DATA])
-        .with_integer_config_with(CONFIG_N, 4, |entry| entry.with_hidden())
-        .with_string_config_default(CONFIG_KEY1)
-        .with_string_config_default(CONFIG_KEY2)
-        .with_string_config_default(CONFIG_KEY3)
-        .with_string_config_default(CONFIG_KEY4),
+            .title("Zip4")
+            .category(CATEGORY)
+            .inputs(vec![PIN_IN1, PIN_IN2, PIN_IN3, PIN_IN4])
+            .outputs(vec![PIN_DATA])
+            .integer_config_with(CONFIG_N, 4, |entry| entry.hidden())
+            .string_config_default(CONFIG_KEY1)
+            .string_config_default(CONFIG_KEY2)
+            .string_config_default(CONFIG_KEY3)
+            .string_config_default(CONFIG_KEY4),
     );
 }

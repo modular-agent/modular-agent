@@ -291,10 +291,10 @@ pub fn register_agents(askit: &ASKit) {
             "std_unit_input",
             Some(new_agent_boxed::<UnitInputAgent>),
         )
-        .with_title("Unit Input")
-        .with_category(CATEGORY)
-        .with_outputs(vec![CONFIG_UNIT])
-        .with_unit_config(CONFIG_UNIT),
+        .title("Unit Input")
+        .category(CATEGORY)
+        .outputs(vec![CONFIG_UNIT])
+        .unit_config(CONFIG_UNIT),
     );
 
     // Boolean Input
@@ -304,10 +304,10 @@ pub fn register_agents(askit: &ASKit) {
             "std_boolean_input",
             Some(new_agent_boxed::<BooleanInputAgent>),
         )
-        .with_title("Boolean Input")
-        .with_category(CATEGORY)
-        .with_outputs(vec![CONFIG_BOOLEAN])
-        .with_boolean_config_default(CONFIG_BOOLEAN),
+        .title("Boolean Input")
+        .category(CATEGORY)
+        .outputs(vec![CONFIG_BOOLEAN])
+        .boolean_config_default(CONFIG_BOOLEAN),
     );
 
     // Integer Input
@@ -317,10 +317,10 @@ pub fn register_agents(askit: &ASKit) {
             "std_integer_input",
             Some(new_agent_boxed::<IntegerInputAgent>),
         )
-        .with_title("Integer Input")
-        .with_category(CATEGORY)
-        .with_outputs(vec![CONFIG_INTEGER])
-        .with_integer_config_default(CONFIG_INTEGER),
+        .title("Integer Input")
+        .category(CATEGORY)
+        .outputs(vec![CONFIG_INTEGER])
+        .integer_config_default(CONFIG_INTEGER),
     );
 
     // Number Input
@@ -330,10 +330,10 @@ pub fn register_agents(askit: &ASKit) {
             "std_number_input",
             Some(new_agent_boxed::<NumberInputAgent>),
         )
-        .with_title("Number Input")
-        .with_category(CATEGORY)
-        .with_outputs(vec![CONFIG_NUMBER])
-        .with_number_config_default(CONFIG_NUMBER),
+        .title("Number Input")
+        .category(CATEGORY)
+        .outputs(vec![CONFIG_NUMBER])
+        .number_config_default(CONFIG_NUMBER),
     );
 
     // String Input
@@ -343,10 +343,10 @@ pub fn register_agents(askit: &ASKit) {
             "std_string_input",
             Some(new_agent_boxed::<StringInputAgent>),
         )
-        .with_title("String Input")
-        .with_category(CATEGORY)
-        .with_outputs(vec![CONFIG_STRING])
-        .with_string_config_default(CONFIG_STRING),
+        .title("String Input")
+        .category(CATEGORY)
+        .outputs(vec![CONFIG_STRING])
+        .string_config_default(CONFIG_STRING),
     );
 
     // Text Input
@@ -356,10 +356,10 @@ pub fn register_agents(askit: &ASKit) {
             "std_text_input",
             Some(new_agent_boxed::<TextInputAgent>),
         )
-        .with_title("Text Input")
-        .with_category(CATEGORY)
-        .with_outputs(vec![CONFIG_TEXT])
-        .with_text_config_default(CONFIG_TEXT),
+        .title("Text Input")
+        .category(CATEGORY)
+        .outputs(vec![CONFIG_TEXT])
+        .text_config_default(CONFIG_TEXT),
     );
 
     // Object Input
@@ -369,9 +369,9 @@ pub fn register_agents(askit: &ASKit) {
             "std_object_input",
             Some(new_agent_boxed::<ObjectInputAgent>),
         )
-        .with_title("Object Input")
-        .with_category(CATEGORY)
-        .with_outputs(vec![CONFIG_OBJECT])
-        .with_object_config_default(CONFIG_OBJECT),
+        .title("Object Input")
+        .category(CATEGORY)
+        .outputs(vec![CONFIG_OBJECT])
+        .object_config_default(CONFIG_OBJECT),
     );
 }

@@ -426,18 +426,18 @@ pub fn register_agents(askit: &ASKit) {
             Some(new_agent_boxed::<OllamaCompletionAgent>),
         )
         // .use_native_thread()
-        .with_title("Ollama Completion")
-        .with_category(CATEGORY)
-        .with_inputs(vec![PORT_MESSAGE])
-        .with_outputs(vec![PORT_MESSAGE, PORT_RESPONSE])
-        .with_string_global_config_with(CONFIG_OLLAMA_URL, DEFAULT_OLLAMA_URL, |entry| {
-            entry.with_title("Ollama URL")
+        .title("Ollama Completion")
+        .category(CATEGORY)
+        .inputs(vec![PORT_MESSAGE])
+        .outputs(vec![PORT_MESSAGE, PORT_RESPONSE])
+        .string_global_config_with(CONFIG_OLLAMA_URL, DEFAULT_OLLAMA_URL, |entry| {
+            entry.title("Ollama URL")
         })
-        .with_string_config_with(CONFIG_MODEL, DEFAULT_CONFIG_MODEL, |entry| {
-            entry.with_title("Model")
+        .string_config_with(CONFIG_MODEL, DEFAULT_CONFIG_MODEL, |entry| {
+            entry.title("Model")
         })
-        .with_text_config_with(CONFIG_SYSTEM, "", |entry| entry.with_title("System"))
-        .with_text_config_with(CONFIG_OPTIONS, "{}", |entry| entry.with_title("Options")),
+        .text_config_with(CONFIG_SYSTEM, "", |entry| entry.title("System"))
+        .text_config_with(CONFIG_OPTIONS, "{}", |entry| entry.title("Options")),
     );
 
     askit.register_agent(
@@ -447,15 +447,15 @@ pub fn register_agents(askit: &ASKit) {
             Some(new_agent_boxed::<OllamaChatAgent>),
         )
         // .use_native_thread()
-        .with_title("Ollama Chat")
-        .with_category(CATEGORY)
-        .with_inputs(vec![PORT_MESSAGE])
-        .with_outputs(vec![PORT_MESSAGE, PORT_RESPONSE])
-        .with_string_config_with(CONFIG_MODEL, DEFAULT_CONFIG_MODEL, |entry| {
-            entry.with_title("Model")
+        .title("Ollama Chat")
+        .category(CATEGORY)
+        .inputs(vec![PORT_MESSAGE])
+        .outputs(vec![PORT_MESSAGE, PORT_RESPONSE])
+        .string_config_with(CONFIG_MODEL, DEFAULT_CONFIG_MODEL, |entry| {
+            entry.title("Model")
         })
-        .with_boolean_config_with(CONFIG_STREAM, false, |entry| entry.with_title("Stream"))
-        .with_text_config_with(CONFIG_OPTIONS, "{}", |entry| entry.with_title("Options")),
+        .boolean_config_with(CONFIG_STREAM, false, |entry| entry.title("Stream"))
+        .text_config_with(CONFIG_OPTIONS, "{}", |entry| entry.title("Options")),
     );
 
     askit.register_agent(
@@ -465,13 +465,13 @@ pub fn register_agents(askit: &ASKit) {
             Some(new_agent_boxed::<OllamaEmbeddingsAgent>),
         )
         // .use_native_thread()
-        .with_title("Ollama Embeddings")
-        .with_category(CATEGORY)
-        .with_inputs(vec![PORT_INPUT])
-        .with_outputs(vec![PORT_EMBEDDINGS])
-        .with_string_config_with(CONFIG_MODEL, DEFAULT_CONFIG_MODEL, |entry| {
-            entry.with_title("Model")
+        .title("Ollama Embeddings")
+        .category(CATEGORY)
+        .inputs(vec![PORT_INPUT])
+        .outputs(vec![PORT_EMBEDDINGS])
+        .string_config_with(CONFIG_MODEL, DEFAULT_CONFIG_MODEL, |entry| {
+            entry.title("Model")
         })
-        .with_text_config_with(CONFIG_OPTIONS, "{}", |entry| entry.with_title("Options")),
+        .text_config_with(CONFIG_OPTIONS, "{}", |entry| entry.title("Options")),
     );
 }

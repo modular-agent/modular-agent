@@ -148,12 +148,12 @@ pub fn register_agents(askit: &ASKit) {
             Some(new_agent_boxed::<MCPCallAgent>),
         )
         // .use_native_thread()
-        .with_title("MCP Call")
-        .with_category(CATEGORY)
-        .with_inputs(vec![PORT_OBJECT])
-        .with_outputs(vec![PORT_OBJECT, PORT_RESPONSE])
-        .with_string_config_default(CONFIG_COMMAND)
-        .with_string_config_default(CONFIG_ARGS)
-        .with_string_config_default(CONFIG_TOOL),
+        .title("MCP Call")
+        .category(CATEGORY)
+        .inputs(vec![PORT_OBJECT])
+        .outputs(vec![PORT_OBJECT, PORT_RESPONSE])
+        .string_config_default(CONFIG_COMMAND)
+        .string_config_default(CONFIG_ARGS)
+        .string_config_default(CONFIG_TOOL),
     );
 }

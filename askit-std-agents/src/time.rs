@@ -626,16 +626,16 @@ pub fn register_agents(askit: &ASKit) {
     // Delay Agent
     askit.register_agent(
         AgentDefinition::new(AGENT_KIND, "std_delay", Some(new_agent_boxed::<DelayAgent>))
-            .with_title("Delay")
-        .with_description("Delays output by a specified time")
-        .with_category(CATEGORY)
-        .with_inputs(vec!["*"])
-        .with_outputs(vec!["*"])
-        .with_integer_config_with(CONFIG_DELAY, DELAY_MS_DEFAULT, |entry| {
-            entry.with_title("delay (ms)")
+            .title("Delay")
+            .description("Delays output by a specified time")
+            .category(CATEGORY)
+            .inputs(vec!["*"])
+            .outputs(vec!["*"])
+        .integer_config_with(CONFIG_DELAY, DELAY_MS_DEFAULT, |entry| {
+            entry.title("delay (ms)")
         })
-        .with_integer_config_with(CONFIG_MAX_NUM_DATA, MAX_NUM_DATA_DEFAULT, |entry| {
-            entry.with_title("max num data")
+        .integer_config_with(CONFIG_MAX_NUM_DATA, MAX_NUM_DATA_DEFAULT, |entry| {
+            entry.title("max num data")
         }),
     );
 
@@ -646,12 +646,12 @@ pub fn register_agents(askit: &ASKit) {
             "std_interval_timer",
             Some(new_agent_boxed::<IntervalTimerAgent>),
         )
-        .with_title("Interval Timer")
-        .with_description("Outputs a unit signal at specified intervals")
-        .with_category(CATEGORY)
-        .with_outputs(vec![PIN_UNIT])
-        .with_string_config_with(CONFIG_INTERVAL, INTERVAL_DEFAULT, |entry| {
-            entry.with_description("(ex. 10s, 5m, 100ms, 1h, 1d)")
+        .title("Interval Timer")
+        .description("Outputs a unit signal at specified intervals")
+        .category(CATEGORY)
+        .outputs(vec![PIN_UNIT])
+        .string_config_with(CONFIG_INTERVAL, INTERVAL_DEFAULT, |entry| {
+            entry.description("(ex. 10s, 5m, 100ms, 1h, 1d)")
         }),
     );
 
@@ -662,11 +662,11 @@ pub fn register_agents(askit: &ASKit) {
             "std_on_start",
             Some(new_agent_boxed::<OnStartAgent>),
         )
-        .with_title("On Start")
-        .with_category(CATEGORY)
-        .with_outputs(vec![PIN_UNIT])
-        .with_integer_config_with(CONFIG_DELAY, DELAY_MS_DEFAULT, |entry| {
-            entry.with_title("delay (ms)")
+        .title("On Start")
+        .category(CATEGORY)
+        .outputs(vec![PIN_UNIT])
+        .integer_config_with(CONFIG_DELAY, DELAY_MS_DEFAULT, |entry| {
+            entry.title("delay (ms)")
         }),
     );
 
@@ -677,11 +677,11 @@ pub fn register_agents(askit: &ASKit) {
             "std_schedule_timer",
             Some(new_agent_boxed::<ScheduleTimerAgent>),
         )
-        .with_title("Schedule Timer")
-        .with_category(CATEGORY)
-        .with_outputs(vec![PIN_TIME])
-        .with_string_config_with(CONFIG_SCHEDULE, "0 0 * * * *", |entry| {
-            entry.with_description("sec min hour day month week year")
+        .title("Schedule Timer")
+        .category(CATEGORY)
+        .outputs(vec![PIN_TIME])
+        .string_config_with(CONFIG_SCHEDULE, "0 0 * * * *", |entry| {
+            entry.description("sec min hour day month week year")
         }),
     );
 
@@ -692,17 +692,17 @@ pub fn register_agents(askit: &ASKit) {
             "std_throttle_time",
             Some(new_agent_boxed::<ThrottleTimeAgent>),
         )
-        .with_title("Throttle Time")
-        .with_category(CATEGORY)
-        .with_inputs(vec!["*"])
-        .with_outputs(vec!["*"])
-        .with_string_config_with(CONFIG_TIME, TIME_DEFAULT, |entry| {
-            entry.with_description("(ex. 10s, 5m, 100ms, 1h, 1d)")
+        .title("Throttle Time")
+        .category(CATEGORY)
+        .inputs(vec!["*"])
+        .outputs(vec!["*"])
+        .string_config_with(CONFIG_TIME, TIME_DEFAULT, |entry| {
+            entry.description("(ex. 10s, 5m, 100ms, 1h, 1d)")
         })
-        .with_integer_config_with(CONFIG_MAX_NUM_DATA, 0, |entry| {
+        .integer_config_with(CONFIG_MAX_NUM_DATA, 0, |entry| {
             entry
-                .with_title("max num data")
-                .with_description("0: no data, -1: all data")
+                .title("max num data")
+                .description("0: no data, -1: all data")
         }),
     );
 }

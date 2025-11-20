@@ -205,20 +205,20 @@ pub fn register_agents(askit: &ASKit) {
             Some(new_agent_boxed::<SakuraAIChatAgent>),
         )
         // .use_native_thread()
-        .with_title("SakuraAI Chat")
-        .with_category(CATEGORY)
-        .with_inputs(vec![PORT_MESSAGE])
-        .with_outputs(vec![PORT_MESSAGE, PORT_RESPONSE])
-        .with_custom_global_config_with(
+        .title("SakuraAI Chat")
+        .category(CATEGORY)
+        .inputs(vec![PORT_MESSAGE])
+        .outputs(vec![PORT_MESSAGE, PORT_RESPONSE])
+        .custom_global_config_with(
             CONFIG_SAKURA_AI_API_KEY,
             "",
             "password",
-            |entry| entry.with_title("Sakura AI API Key"),
+            |entry| entry.title("Sakura AI API Key"),
         )
-        .with_string_config_with(CONFIG_MODEL, DEFAULT_CONFIG_MODEL, |entry| {
-            entry.with_title("Model")
+        .string_config_with(CONFIG_MODEL, DEFAULT_CONFIG_MODEL, |entry| {
+            entry.title("Model")
         })
-        .with_boolean_config_with(CONFIG_STREAM, false, |entry| entry.with_title("Stream"))
-        .with_text_config_with(CONFIG_OPTIONS, "{}", |entry| entry.with_title("Options")),
+        .boolean_config_with(CONFIG_STREAM, false, |entry| entry.title("Stream"))
+        .text_config_with(CONFIG_OPTIONS, "{}", |entry| entry.title("Options")),
     );
 }

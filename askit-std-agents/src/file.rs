@@ -221,10 +221,10 @@ pub fn register_agents(askit: &ASKit) {
             "std_list_files",
             Some(new_agent_boxed::<ListFilesAgent>),
         )
-        .with_title("List Files")
-        .with_category(CATEGORY)
-        .with_inputs(vec![PIN_PATH])
-        .with_outputs(vec![PIN_FILES]),
+        .title("List Files")
+        .category(CATEGORY)
+        .inputs(vec![PIN_PATH])
+        .outputs(vec![PIN_FILES]),
     );
 
     // Read Text File Agent
@@ -234,10 +234,10 @@ pub fn register_agents(askit: &ASKit) {
             "std_read_text_file",
             Some(new_agent_boxed::<ReadTextFileAgent>),
         )
-        .with_title("Read Text File")
-        .with_category(CATEGORY)
-        .with_inputs(vec![PIN_PATH])
-        .with_outputs(vec![PIN_TEXT]),
+        .title("Read Text File")
+        .category(CATEGORY)
+        .inputs(vec![PIN_PATH])
+        .outputs(vec![PIN_TEXT]),
     );
 
     // Write Text File Agent
@@ -247,9 +247,9 @@ pub fn register_agents(askit: &ASKit) {
             "std_write_text_file",
             Some(new_agent_boxed::<WriteTextFileAgent>),
         )
-        .with_title("Write Text File")
-        .with_category(CATEGORY)
-        .with_inputs(vec![PIN_DATA])
-        .with_outputs(vec![PIN_DATA]),
+        .title("Write Text File")
+        .category(CATEGORY)
+        .inputs(vec![PIN_DATA])
+        .outputs(vec![PIN_DATA]),
     );
 }

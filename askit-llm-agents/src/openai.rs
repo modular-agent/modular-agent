@@ -705,14 +705,14 @@ pub fn register_agents(askit: &ASKit) {
             Some(new_agent_boxed::<OpenAICompletionAgent>),
         )
         // .use_native_thread()
-        .with_title("OpenAI Completion")
-        .with_category(CATEGORY)
-        .with_inputs(vec![PORT_MESSAGE])
-        .with_outputs(vec![PORT_MESSAGE, PORT_RESPONSE])
-        .with_string_config_with(CONFIG_MODEL, "gpt-3.5-turbo-instruct", |entry| {
-            entry.with_title("Model")
+        .title("OpenAI Completion")
+        .category(CATEGORY)
+        .inputs(vec![PORT_MESSAGE])
+        .outputs(vec![PORT_MESSAGE, PORT_RESPONSE])
+        .string_config_with(CONFIG_MODEL, "gpt-3.5-turbo-instruct", |entry| {
+            entry.title("Model")
         })
-        .with_text_config_with(CONFIG_OPTIONS, "{}", |entry| entry.with_title("Options")),
+        .text_config_with(CONFIG_OPTIONS, "{}", |entry| entry.title("Options")),
     );
 
     askit.register_agent(
@@ -722,21 +722,21 @@ pub fn register_agents(askit: &ASKit) {
             Some(new_agent_boxed::<OpenAIChatAgent>),
         )
         // .use_native_thread()
-        .with_title("OpenAI Chat")
-        .with_category(CATEGORY)
-        .with_inputs(vec![PORT_MESSAGE])
-        .with_outputs(vec![PORT_MESSAGE, PORT_RESPONSE])
-        .with_custom_global_config_with(
+        .title("OpenAI Chat")
+        .category(CATEGORY)
+        .inputs(vec![PORT_MESSAGE])
+        .outputs(vec![PORT_MESSAGE, PORT_RESPONSE])
+        .custom_global_config_with(
             CONFIG_OPENAI_API_KEY,
             "",
             "password",
-            |entry| entry.with_title("OpenAI API Key"),
+            |entry| entry.title("OpenAI API Key"),
         )
-        .with_string_config_with(CONFIG_MODEL, DEFAULT_CONFIG_MODEL, |entry| {
-            entry.with_title("Model")
+        .string_config_with(CONFIG_MODEL, DEFAULT_CONFIG_MODEL, |entry| {
+            entry.title("Model")
         })
-        .with_boolean_config_with(CONFIG_STREAM, false, |entry| entry.with_title("Stream"))
-        .with_text_config_with(CONFIG_OPTIONS, "{}", |entry| entry.with_title("Options")),
+        .boolean_config_with(CONFIG_STREAM, false, |entry| entry.title("Stream"))
+        .text_config_with(CONFIG_OPTIONS, "{}", |entry| entry.title("Options")),
     );
 
     askit.register_agent(
@@ -746,14 +746,14 @@ pub fn register_agents(askit: &ASKit) {
             Some(new_agent_boxed::<OpenAIEmbeddingsAgent>),
         )
         // .use_native_thread()
-        .with_title("OpenAI Embeddings")
-        .with_category(CATEGORY)
-        .with_inputs(vec![PORT_INPUT])
-        .with_outputs(vec![PORT_EMBEDDINGS])
-        .with_string_config_with(CONFIG_MODEL, "text-embedding-3-small", |entry| {
-            entry.with_title("Model")
+        .title("OpenAI Embeddings")
+        .category(CATEGORY)
+        .inputs(vec![PORT_INPUT])
+        .outputs(vec![PORT_EMBEDDINGS])
+        .string_config_with(CONFIG_MODEL, "text-embedding-3-small", |entry| {
+            entry.title("Model")
         })
-        .with_text_config_with(CONFIG_OPTIONS, "{}", |entry| entry.with_title("Options")),
+        .text_config_with(CONFIG_OPTIONS, "{}", |entry| entry.title("Options")),
     );
 
     askit.register_agent(
@@ -763,14 +763,14 @@ pub fn register_agents(askit: &ASKit) {
             Some(new_agent_boxed::<OpenAIResponsesAgent>),
         )
         // .use_native_thread()
-        .with_title("OpenAI Responses")
-        .with_category(CATEGORY)
-        .with_inputs(vec![PORT_MESSAGE])
-        .with_outputs(vec![PORT_MESSAGE, PORT_RESPONSE])
-        .with_string_config_with(CONFIG_MODEL, DEFAULT_CONFIG_MODEL, |entry| {
-            entry.with_title("Model")
+        .title("OpenAI Responses")
+        .category(CATEGORY)
+        .inputs(vec![PORT_MESSAGE])
+        .outputs(vec![PORT_MESSAGE, PORT_RESPONSE])
+        .string_config_with(CONFIG_MODEL, DEFAULT_CONFIG_MODEL, |entry| {
+            entry.title("Model")
         })
-        .with_boolean_config_with(CONFIG_STREAM, false, |entry| entry.with_title("Stream"))
-        .with_text_config_with(CONFIG_OPTIONS, "{}", |entry| entry.with_title("Options")),
+        .boolean_config_with(CONFIG_STREAM, false, |entry| entry.title("Stream"))
+        .text_config_with(CONFIG_OPTIONS, "{}", |entry| entry.title("Options")),
     );
 }
