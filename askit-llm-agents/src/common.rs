@@ -291,7 +291,7 @@ pub fn register_agents(askit: &ASKit) {
         .with_category(CATEGORY)
         .with_inputs(vec![PORT_MESSAGES])
         .with_outputs(vec![PORT_MESSAGES])
-        .with_default_configs(vec![(CONFIG_MESSAGE, AgentConfigEntry::new("", "text"))]),
+        .with_text_config_default(CONFIG_MESSAGE),
     );
 
     askit.register_agent(
@@ -304,7 +304,7 @@ pub fn register_agents(askit: &ASKit) {
         .with_category(CATEGORY)
         .with_inputs(vec![PORT_MESSAGES])
         .with_outputs(vec![PORT_MESSAGES])
-        .with_default_configs(vec![(CONFIG_MESSAGE, AgentConfigEntry::new("", "text"))]),
+        .with_text_config_default(CONFIG_MESSAGE),
     );
 
     askit.register_agent(
@@ -317,7 +317,7 @@ pub fn register_agents(askit: &ASKit) {
         .with_category(CATEGORY)
         .with_inputs(vec![PORT_MESSAGES])
         .with_outputs(vec![PORT_MESSAGES])
-        .with_default_configs(vec![(CONFIG_MESSAGE, AgentConfigEntry::new("", "text"))]),
+        .with_text_config_default(CONFIG_MESSAGE),
     );
 
     askit.register_agent(
@@ -330,13 +330,11 @@ pub fn register_agents(askit: &ASKit) {
         .with_category(CATEGORY)
         .with_inputs(vec![PORT_MESSAGE, PORT_RESET])
         .with_outputs(vec![PORT_MESSAGE_HISTORY, PORT_HISTORY])
-        .with_default_configs(vec![
-            (CONFIG_PREAMBLE, AgentConfigEntry::new("", "text")),
-            (CONFIG_HISTORY_SIZE, AgentConfigEntry::new(0, "integer")),
-            (
-                CONFIG_INCLUDE_SYSTZEM,
-                AgentConfigEntry::new(false, "boolean").with_title("Include System"),
-            ),
-        ]),
+        .with_default_configs(vec![(
+            CONFIG_INCLUDE_SYSTZEM,
+            AgentConfigEntry::new(false, "boolean").with_title("Include System"),
+        )])
+        .with_text_config_default(CONFIG_PREAMBLE)
+        .with_integer_config_default(CONFIG_HISTORY_SIZE),
     );
 }

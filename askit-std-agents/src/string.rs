@@ -1,6 +1,6 @@
 use agent_stream_kit::{
-    ASKit, Agent, AgentConfigs, AgentConfigEntry, AgentContext, AgentData, AgentDefinition,
-    AgentError, AgentOutput, AsAgent, AsAgentData, async_trait, new_agent_boxed,
+    ASKit, Agent, AgentConfigs, AgentContext, AgentData, AgentDefinition, AgentError, AgentOutput,
+    AsAgent, AsAgentData, async_trait, new_agent_boxed,
 };
 use handlebars::Handlebars;
 
@@ -336,7 +336,7 @@ pub fn register_agents(askit: &ASKit) {
         .with_category(CATEGORY)
         .with_inputs(vec![PIN_STRINGS])
         .with_outputs(vec![PIN_STRING])
-        .with_default_configs(vec![(CONFIG_SEP, AgentConfigEntry::new("\\n", "string"))]),
+        .with_string_config(CONFIG_SEP, "\\n"),
     );
 
     askit.register_agent(
@@ -349,10 +349,7 @@ pub fn register_agents(askit: &ASKit) {
         .with_category(CATEGORY)
         .with_inputs(vec![PIN_DATA])
         .with_outputs(vec![PIN_STRING])
-        .with_default_configs(vec![(
-            CONFIG_TEMPLATE,
-            AgentConfigEntry::new("{{value}}", "text"),
-        )]),
+        .with_text_config(CONFIG_TEMPLATE, "{{value}}"),
     );
 
     askit.register_agent(
@@ -365,10 +362,7 @@ pub fn register_agents(askit: &ASKit) {
         .with_category(CATEGORY)
         .with_inputs(vec![PIN_DATA])
         .with_outputs(vec![PIN_STRING])
-        .with_default_configs(vec![(
-            CONFIG_TEMPLATE,
-            AgentConfigEntry::new("{{value}}", "string"),
-        )]),
+        .with_string_config(CONFIG_TEMPLATE, "{{value}}"),
     );
 
     askit.register_agent(
@@ -381,9 +375,6 @@ pub fn register_agents(askit: &ASKit) {
         .with_category(CATEGORY)
         .with_inputs(vec![PIN_DATA])
         .with_outputs(vec![PIN_STRING])
-        .with_default_configs(vec![(
-            CONFIG_TEMPLATE,
-            AgentConfigEntry::new("{{value}}", "text"),
-        )]),
+        .with_text_config(CONFIG_TEMPLATE, "{{value}}"),
     );
 }

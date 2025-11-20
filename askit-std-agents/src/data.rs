@@ -1,8 +1,8 @@
 use std::vec;
 
 use agent_stream_kit::{
-    ASKit, Agent, AgentConfigEntry, AgentConfigs, AgentContext, AgentData, AgentDefinition,
-    AgentError, AgentOutput, AgentValue, AsAgent, AsAgentData, async_trait, new_agent_boxed,
+    ASKit, Agent, AgentConfigs, AgentContext, AgentData, AgentDefinition, AgentError, AgentOutput,
+    AgentValue, AsAgent, AsAgentData, async_trait, new_agent_boxed,
 };
 
 // To JSON
@@ -221,6 +221,6 @@ pub fn register_agents(askit: &ASKit) {
         .with_category(CATEGORY)
         .with_inputs(vec![PIN_DATA])
         .with_outputs(vec![PIN_DATA])
-        .with_default_configs(vec![(CONFIG_PROPERTY, AgentConfigEntry::new("", "string"))]),
+        .with_string_config_default(CONFIG_PROPERTY),
     );
 }

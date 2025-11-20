@@ -3,8 +3,8 @@
 use std::vec;
 
 use agent_stream_kit::{
-    ASKit, Agent, AgentConfigEntry, AgentConfigs, AgentContext, AgentData, AgentDefinition,
-    AgentError, AgentOutput, AgentValue, AsAgent, AsAgentData, async_trait, new_agent_boxed,
+    ASKit, Agent, AgentConfigs, AgentContext, AgentData, AgentDefinition, AgentError, AgentOutput,
+    AgentValue, AsAgent, AsAgentData, async_trait, new_agent_boxed,
 };
 use rmcp::{
     model::{CallToolRequestParam, CallToolResult},
@@ -152,10 +152,8 @@ pub fn register_agents(askit: &ASKit) {
         .with_category(CATEGORY)
         .with_inputs(vec![PORT_OBJECT])
         .with_outputs(vec![PORT_OBJECT, PORT_RESPONSE])
-        .with_default_configs(vec![
-            (CONFIG_COMMAND, AgentConfigEntry::new("", "string")),
-            (CONFIG_ARGS, AgentConfigEntry::new("", "string")),
-            (CONFIG_TOOL, AgentConfigEntry::new("", "string")),
-        ]),
+        .with_string_config_default(CONFIG_COMMAND)
+        .with_string_config_default(CONFIG_ARGS)
+        .with_string_config_default(CONFIG_TOOL),
     );
 }

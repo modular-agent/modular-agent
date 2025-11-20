@@ -141,20 +141,177 @@ impl AgentDefinition {
         self
     }
 
+    // Default Configs
+
     pub fn with_default_configs(mut self, configs: Vec<(&str, AgentConfigEntry)>) -> Self {
         self.default_configs = Some(configs.into_iter().map(|(k, v)| (k.into(), v)).collect());
         self
     }
 
-    #[allow(unused)]
+    pub fn with_unit_config(self, key: &str) -> Self {
+        self.with_config_type(key, (), "unit")
+    }
+
+    pub fn with_boolean_config(self, key: &str, default: bool) -> Self {
+        self.with_config_type(key, default, "boolean")
+    }
+
+    pub fn with_boolean_config_default(self, key: &str) -> Self {
+        self.with_boolean_config(key, false)
+    }
+
+    pub fn with_integer_config(self, key: &str, default: i64) -> Self {
+        self.with_config_type(key, default, "integer")
+    }
+
+    pub fn with_integer_config_default(self, key: &str) -> Self {
+        self.with_integer_config(key, 0)
+    }
+
+    pub fn with_number_config(self, key: &str, default: f64) -> Self {
+        self.with_config_type(key, default, "number")
+    }
+
+    pub fn with_number_config_default(self, key: &str) -> Self {
+        self.with_number_config(key, 0.0)
+    }
+
+    pub fn with_string_config(self, key: &str, default: impl Into<String>) -> Self {
+        self.with_config_type(key, AgentValue::string(default.into()), "string")
+    }
+
+    pub fn with_string_config_default(self, key: &str) -> Self {
+        self.with_string_config(key, "")
+    }
+
+    pub fn with_text_config(self, key: &str, default: impl Into<String>) -> Self {
+        self.with_config_type(key, AgentValue::string(default.into()), "text")
+    }
+
+    pub fn with_text_config_default(self, key: &str) -> Self {
+        self.with_text_config(key, "")
+    }
+
+    pub fn with_object_config<V: Into<AgentValue>>(self, key: &str, default: V) -> Self {
+        self.with_config_type(key, default, "object")
+    }
+
+    pub fn with_object_config_default(self, key: &str) -> Self {
+        self.with_object_config(key, AgentValue::object_default())
+    }
+
+    fn with_config_type<V: Into<AgentValue>>(mut self, key: &str, default: V, type_: &str) -> Self {
+        self.push_default_config_entry(key.into(), AgentConfigEntry::new(default, type_));
+        self
+    }
+
+    fn push_default_config_entry(&mut self, key: String, entry: AgentConfigEntry) {
+        if let Some(configs) = self.default_configs.as_mut() {
+            configs.push((key, entry));
+        } else {
+            self.default_configs = Some(vec![(key, entry)]);
+        }
+    }
+
+    // Global Configs
+
     pub fn with_global_configs(mut self, configs: Vec<(&str, AgentConfigEntry)>) -> Self {
         self.global_configs = Some(configs.into_iter().map(|(k, v)| (k.into(), v)).collect());
         self
     }
 
+    pub fn with_unit_global_config(self, key: &str) -> Self {
+        self.with_global_config_type(key, (), "unit")
+    }
+
+    pub fn with_boolean_global_config(self, key: &str, default: bool) -> Self {
+        self.with_global_config_type(key, default, "boolean")
+    }
+
+    pub fn with_integer_global_config(self, key: &str, default: i64) -> Self {
+        self.with_global_config_type(key, default, "integer")
+    }
+
+    pub fn with_number_global_config(self, key: &str, default: f64) -> Self {
+        self.with_global_config_type(key, default, "number")
+    }
+
+    pub fn with_string_global_config(self, key: &str, default: impl Into<String>) -> Self {
+        self.with_global_config_type(key, AgentValue::string(default.into()), "string")
+    }
+
+    pub fn with_text_global_config(self, key: &str, default: impl Into<String>) -> Self {
+        self.with_global_config_type(key, AgentValue::string(default.into()), "text")
+    }
+
+    pub fn with_object_global_config<V: Into<AgentValue>>(self, key: &str, default: V) -> Self {
+        self.with_global_config_type(key, default, "object")
+    }
+
+    fn with_global_config_type<V: Into<AgentValue>>(
+        mut self,
+        key: &str,
+        default: V,
+        type_: &str,
+    ) -> Self {
+        self.push_global_config_entry(key.into(), AgentConfigEntry::new(default, type_));
+        self
+    }
+
+    fn push_global_config_entry(&mut self, key: String, entry: AgentConfigEntry) {
+        if let Some(configs) = self.global_configs.as_mut() {
+            configs.push((key, entry));
+        } else {
+            self.global_configs = Some(vec![(key, entry)]);
+        }
+    }
+
+    // Display Configs
+
     pub fn with_display_configs(mut self, configs: Vec<(&str, AgentDisplayConfigEntry)>) -> Self {
         self.display_configs = Some(configs.into_iter().map(|(k, v)| (k.into(), v)).collect());
         self
+    }
+
+    pub fn with_unit_display_config(self, key: &str) -> Self {
+        self.with_display_config_type(key, "unit")
+    }
+
+    pub fn with_boolean_display_config(self, key: &str) -> Self {
+        self.with_display_config_type(key, "boolean")
+    }
+
+    pub fn with_integer_display_config(self, key: &str) -> Self {
+        self.with_display_config_type(key, "integer")
+    }
+
+    pub fn with_number_display_config(self, key: &str) -> Self {
+        self.with_display_config_type(key, "number")
+    }
+
+    pub fn with_string_display_config(self, key: &str) -> Self {
+        self.with_display_config_type(key, "string")
+    }
+
+    pub fn with_text_display_config(self, key: &str) -> Self {
+        self.with_display_config_type(key, "text")
+    }
+
+    pub fn with_object_display_config(self, key: &str) -> Self {
+        self.with_display_config_type(key, "object")
+    }
+
+    fn with_display_config_type(mut self, key: &str, type_: &str) -> Self {
+        self.push_display_config_entry(key.into(), AgentDisplayConfigEntry::new(type_));
+        self
+    }
+
+    fn push_display_config_entry(&mut self, key: String, entry: AgentDisplayConfigEntry) {
+        if let Some(configs) = self.display_configs.as_mut() {
+            configs.push((key, entry));
+        } else {
+            self.display_configs = Some(vec![(key, entry)]);
+        }
     }
 
     pub fn use_native_thread(mut self) -> Self {
@@ -317,6 +474,184 @@ mod tests {
         assert_eq!(entry.1.title, None);
         assert_eq!(entry.1.description, None);
         assert_eq!(entry.1.hide_title, true);
+    }
+
+    #[test]
+    fn test_default_config_helpers() {
+        let custom_object_value = AgentValue::object(
+            [("key".to_string(), AgentValue::string("value"))].into(),
+        );
+
+        let def = AgentDefinition::new("test", "helpers", None)
+            .with_unit_config("unit_value")
+            .with_boolean_config_default("boolean_value")
+            .with_boolean_config("boolean_custom", true)
+            .with_integer_config_default("integer_value")
+            .with_integer_config("integer_custom", 42)
+            .with_number_config_default("number_value")
+            .with_number_config("number_custom", 1.5)
+            .with_string_config_default("string_default")
+            .with_string_config("string_value", "value")
+            .with_text_config_default("text_value")
+            .with_text_config("text_custom", "custom")
+            .with_object_config_default("object_value")
+            .with_object_config("object_custom", custom_object_value.clone());
+
+        let configs = def
+            .default_configs
+            .clone()
+            .expect("default configs should exist");
+        assert_eq!(configs.len(), 13);
+        let config_map: std::collections::HashMap<_, _> = configs.into_iter().collect();
+
+        let unit_entry = config_map.get("unit_value").unwrap();
+        assert_eq!(unit_entry.type_.as_deref(), Some("unit"));
+        assert_eq!(unit_entry.value, AgentValue::unit());
+
+        let boolean_entry = config_map.get("boolean_value").unwrap();
+        assert_eq!(boolean_entry.type_.as_deref(), Some("boolean"));
+        assert_eq!(boolean_entry.value, AgentValue::boolean(false));
+
+        let boolean_custom_entry = config_map.get("boolean_custom").unwrap();
+        assert_eq!(boolean_custom_entry.type_.as_deref(), Some("boolean"));
+        assert_eq!(boolean_custom_entry.value, AgentValue::boolean(true));
+
+        let integer_entry = config_map.get("integer_value").unwrap();
+        assert_eq!(integer_entry.type_.as_deref(), Some("integer"));
+        assert_eq!(integer_entry.value, AgentValue::integer(0));
+
+        let integer_custom_entry = config_map.get("integer_custom").unwrap();
+        assert_eq!(integer_custom_entry.type_.as_deref(), Some("integer"));
+        assert_eq!(integer_custom_entry.value, AgentValue::integer(42));
+
+        let number_entry = config_map.get("number_value").unwrap();
+        assert_eq!(number_entry.type_.as_deref(), Some("number"));
+        assert_eq!(number_entry.value, AgentValue::number(0.0));
+
+        let number_custom_entry = config_map.get("number_custom").unwrap();
+        assert_eq!(number_custom_entry.type_.as_deref(), Some("number"));
+        assert_eq!(number_custom_entry.value, AgentValue::number(1.5));
+
+        let string_default_entry = config_map.get("string_default").unwrap();
+        assert_eq!(string_default_entry.type_.as_deref(), Some("string"));
+        assert_eq!(string_default_entry.value, AgentValue::string(""));
+
+        let string_entry = config_map.get("string_value").unwrap();
+        assert_eq!(string_entry.type_.as_deref(), Some("string"));
+        assert_eq!(string_entry.value, AgentValue::string("value"));
+
+        let text_entry = config_map.get("text_value").unwrap();
+        assert_eq!(text_entry.type_.as_deref(), Some("text"));
+        assert_eq!(text_entry.value, AgentValue::string(""));
+
+        let text_custom_entry = config_map.get("text_custom").unwrap();
+        assert_eq!(text_custom_entry.type_.as_deref(), Some("text"));
+        assert_eq!(text_custom_entry.value, AgentValue::string("custom"));
+
+        let object_entry = config_map.get("object_value").unwrap();
+        assert_eq!(object_entry.type_.as_deref(), Some("object"));
+        assert_eq!(object_entry.value, AgentValue::object_default());
+
+        let object_custom_entry = config_map.get("object_custom").unwrap();
+        assert_eq!(object_custom_entry.type_.as_deref(), Some("object"));
+        assert_eq!(object_custom_entry.value, custom_object_value);
+    }
+
+    #[test]
+    fn test_global_config_helpers() {
+        let custom_object_value = AgentValue::object(
+            [("key".to_string(), AgentValue::string("value"))].into(),
+        );
+
+        let def = AgentDefinition::new("test", "helpers", None)
+            .with_unit_global_config("global_unit")
+            .with_boolean_global_config("global_boolean", true)
+            .with_integer_global_config("global_integer", 42)
+            .with_number_global_config("global_number", 1.5)
+            .with_string_global_config("global_string", "value")
+            .with_text_global_config("global_text", "global")
+            .with_object_global_config("global_object", custom_object_value.clone());
+
+        let global_configs = def.global_configs.expect("global configs should exist");
+        assert_eq!(global_configs.len(), 7);
+        let config_map: std::collections::HashMap<_, _> = global_configs.into_iter().collect();
+
+        let entry = config_map.get("global_unit").unwrap();
+        assert_eq!(entry.type_.as_deref(), Some("unit"));
+        assert_eq!(entry.value, AgentValue::unit());
+
+        let entry = config_map.get("global_boolean").unwrap();
+        assert_eq!(entry.type_.as_deref(), Some("boolean"));
+        assert_eq!(entry.value, AgentValue::boolean(true));
+
+        let entry = config_map.get("global_integer").unwrap();
+        assert_eq!(entry.type_.as_deref(), Some("integer"));
+        assert_eq!(entry.value, AgentValue::integer(42));
+
+        let entry = config_map.get("global_number").unwrap();
+        assert_eq!(entry.type_.as_deref(), Some("number"));
+        assert_eq!(entry.value, AgentValue::number(1.5));
+
+        let entry = config_map.get("global_string").unwrap();
+        assert_eq!(entry.type_.as_deref(), Some("string"));
+        assert_eq!(entry.value, AgentValue::string("value"));
+
+        let entry = config_map.get("global_text").unwrap();
+        assert_eq!(entry.type_.as_deref(), Some("text"));
+        assert_eq!(entry.value, AgentValue::string("global"));
+
+        let entry = config_map.get("global_object").unwrap();
+        assert_eq!(entry.type_.as_deref(), Some("object"));
+        assert_eq!(entry.value, custom_object_value);
+    }
+
+    #[test]
+    fn test_display_config_helpers() {
+        let def = AgentDefinition::new("test", "helpers", None)
+            .with_unit_display_config("display_unit")
+            .with_boolean_display_config("display_boolean")
+            .with_integer_display_config("display_integer")
+            .with_number_display_config("display_number")
+            .with_string_display_config("display_string")
+            .with_text_display_config("display_text")
+            .with_object_display_config("display_object");
+
+        let display_configs = def.display_configs.expect("display configs should exist");
+        assert_eq!(display_configs.len(), 7);
+        let config_map: std::collections::HashMap<_, _> = display_configs.into_iter().collect();
+
+        assert_eq!(
+            config_map.get("display_unit").unwrap().type_.as_deref(),
+            Some("unit")
+        );
+        assert_eq!(
+            config_map.get("display_boolean").unwrap().type_.as_deref(),
+            Some("boolean")
+        );
+        assert_eq!(
+            config_map.get("display_integer").unwrap().type_.as_deref(),
+            Some("integer")
+        );
+        assert_eq!(
+            config_map.get("display_number").unwrap().type_.as_deref(),
+            Some("number")
+        );
+        assert_eq!(
+            config_map.get("display_string").unwrap().type_.as_deref(),
+            Some("string")
+        );
+        assert_eq!(
+            config_map.get("display_text").unwrap().type_.as_deref(),
+            Some("text")
+        );
+        assert_eq!(
+            config_map.get("display_object").unwrap().type_.as_deref(),
+            Some("object")
+        );
+
+        for entry in config_map.values() {
+            assert!(!entry.hide_title);
+        }
     }
 
     fn echo_agent_definition() -> AgentDefinition {

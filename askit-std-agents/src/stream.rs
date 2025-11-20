@@ -142,42 +142,36 @@ pub fn register_agents(askit: &ASKit) {
     askit.register_agent(
         AgentDefinition::new(AGENT_KIND, "std_zip2", Some(new_agent_boxed::<ZipAgent>))
             .with_title("Zip2")
-            .with_category(CATEGORY)
-            .with_inputs(vec![PIN_IN1, PIN_IN2])
-            .with_outputs(vec![PIN_DATA])
-            .with_default_configs(vec![
-                (CONFIG_N, AgentConfigEntry::new(2, "integer").with_hidden()),
-                (CONFIG_KEY1, AgentConfigEntry::new("", "string")),
-                (CONFIG_KEY2, AgentConfigEntry::new("", "string")),
-            ]),
+        .with_category(CATEGORY)
+        .with_inputs(vec![PIN_IN1, PIN_IN2])
+        .with_outputs(vec![PIN_DATA])
+        .with_default_configs(vec![(CONFIG_N, AgentConfigEntry::new(2, "integer").with_hidden())])
+        .with_string_config_default(CONFIG_KEY1)
+        .with_string_config_default(CONFIG_KEY2),
     );
 
     askit.register_agent(
         AgentDefinition::new(AGENT_KIND, "std_zip3", Some(new_agent_boxed::<ZipAgent>))
             .with_title("Zip3")
-            .with_category(CATEGORY)
-            .with_inputs(vec![PIN_IN1, PIN_IN2, PIN_IN3])
-            .with_outputs(vec![PIN_DATA])
-            .with_default_configs(vec![
-                (CONFIG_N, AgentConfigEntry::new(3, "integer").with_hidden()),
-                (CONFIG_KEY1, AgentConfigEntry::new("", "string")),
-                (CONFIG_KEY2, AgentConfigEntry::new("", "string")),
-                (CONFIG_KEY3, AgentConfigEntry::new("", "string")),
-            ]),
+        .with_category(CATEGORY)
+        .with_inputs(vec![PIN_IN1, PIN_IN2, PIN_IN3])
+        .with_outputs(vec![PIN_DATA])
+        .with_default_configs(vec![(CONFIG_N, AgentConfigEntry::new(3, "integer").with_hidden())])
+        .with_string_config_default(CONFIG_KEY1)
+        .with_string_config_default(CONFIG_KEY2)
+        .with_string_config_default(CONFIG_KEY3),
     );
 
     askit.register_agent(
         AgentDefinition::new(AGENT_KIND, "std_zip4", Some(new_agent_boxed::<ZipAgent>))
             .with_title("Zip4")
-            .with_category(CATEGORY)
-            .with_inputs(vec![PIN_IN1, PIN_IN2, PIN_IN3, PIN_IN4])
-            .with_outputs(vec![PIN_DATA])
-            .with_default_configs(vec![
-                (CONFIG_N, AgentConfigEntry::new(4, "integer").with_hidden()),
-                (CONFIG_KEY1, AgentConfigEntry::new("", "string")),
-                (CONFIG_KEY2, AgentConfigEntry::new("", "string")),
-                (CONFIG_KEY3, AgentConfigEntry::new("", "string")),
-                (CONFIG_KEY4, AgentConfigEntry::new("", "string")),
-            ]),
+        .with_category(CATEGORY)
+        .with_inputs(vec![PIN_IN1, PIN_IN2, PIN_IN3, PIN_IN4])
+        .with_outputs(vec![PIN_DATA])
+        .with_default_configs(vec![(CONFIG_N, AgentConfigEntry::new(4, "integer").with_hidden())])
+        .with_string_config_default(CONFIG_KEY1)
+        .with_string_config_default(CONFIG_KEY2)
+        .with_string_config_default(CONFIG_KEY3)
+        .with_string_config_default(CONFIG_KEY4),
     );
 }
