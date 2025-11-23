@@ -17,6 +17,3 @@ agent-stream-kit = "0.10.0"
 
 [build-dependencies]
 tauri-plugin = { version = "2.4.0", features = ["build"] }
-
-[patch.crates-io]
-agent-stream-kit = { path = "../agent-stream-kit/agent-stream-kit" }
