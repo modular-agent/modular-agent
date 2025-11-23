@@ -1,6 +1,6 @@
 [package]
 name = "agent-stream-app"
-version = "0.2.0"
+version = "0.2.1"
 description = "Agent Stream App"
 authors = ["Akira Ishino <akira@lumilab.jp>"]
 edition = "2021"
@@ -24,11 +24,12 @@ anyhow = "1"
 ctrlc = "3.4.5"
 dirs = "6.0"
 log = "0.4.25"
-agent-stream-kit = "0.8"
+agent-stream-kit = "0.10"
 askit-cozodb-agents = "0.1"
+askit-rhai-agents = "0.1"
 askit-std-agents = "0.3"
-askit-llm-agents = "0.4"
-askit-screen = "0.1"
+askit-lifelog = { version = "0.1", path = "../../askit-lifelog" }
+askit-llm-agents = "0.5"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri = { version = "2", features = ["tray-icon"] }
@@ -45,9 +46,11 @@ tauri-plugin-global-shortcut = "2"
 tauri-plugin-single-instance = "2.3"
 tauri-plugin-window-state = "2"
 
-#[patch.crates-io]
-#agent-stream-kit = { path = "../../agent-stream-kit/agent-stream-kit" }
-#askit-cozodb-agents = { path = "../../agent-stream-kit/askit-cozodb-agents" }
-#askit-llm-agents = { path = "../../agent-stream-kit/askit-llm-agents" }
-#askit-std-agents = { path = "../../agent-stream-kit/askit-std-agents" }
-#tauri-plugin-askit = { path = "../../tauri-plugin-askit" }
+# [patch.crates-io]
+# agent-stream-kit = { path = "../../agent-stream-kit/agent-stream-kit" }
+# askit-cozodb-agents = { path = "../../agent-stream-kit/askit-cozodb-agents" }
+# askit-rhai-agents = { path = "../../agent-stream-kit/askit-rhai-agents" }
+# askit-std-agents = { path = "../../agent-stream-kit/askit-std-agents" }
+# askit-lifelog = { path = "../../askit-lifelog" }
+# askit-llm-agents = { path = "../../agent-stream-kit/askit-llm-agents" }
+# tauri-plugin-askit = { path = "../../tauri-plugin-askit" }

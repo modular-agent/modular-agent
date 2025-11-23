@@ -179,10 +179,10 @@ impl ASApp {
 pub fn init(app: &AppHandle) -> Result<()> {
     let askit = app.askit();
     askit_std_agents::register_agents(&askit);
-    askit_llm_agents::register_agents(&askit);
-    // askit_rig_agents::register_agents(&askit);
+    askit_rhai_agents::register_agents(&askit);
     askit_cozodb_agents::register_agents(&askit);
-    askit_screen::register_agents(&askit);
+    askit_lifelog::register_agents(&askit);
+    askit_llm_agents::register_agents(&askit);
 
     let asapp = ASApp {
         askit: askit.clone(),
