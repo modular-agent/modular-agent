@@ -17,7 +17,7 @@ mod message;
 mod output;
 mod runtime;
 
-pub use agent::{Agent, AgentStatus, AsAgent, AsAgentData, new_agent_boxed};
+pub use agent::{Agent, AgentStatus, AsAgent, AsAgentData, agent_new, new_agent_boxed};
 pub use askit::{ASKit, ASKitEvent, ASKitObserver};
 pub use config::{AgentConfigs, AgentConfigsMap};
 pub use context::AgentContext;
