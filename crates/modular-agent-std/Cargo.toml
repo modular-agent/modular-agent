@@ -1,0 +1,25 @@
+[package]
+name = "askit-std-agents"
+version = "0.3.9"
+description = "Standard Agents of Agent Stream Kit"
+authors = ["Akira Ishino <akira@lumilab.jp>"]
+edition = "2024"
+license = "Apache-2.0 OR MIT"
+
+[dependencies]
+agent-stream-kit = "0.10"
+chrono = "0.4"
+cron = "0.15"
+handlebars = "6"
+log = "0.4"
+photon-rs = { version = "0.3.3", optional = true }
+regex = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml_ng = { version = "0.10.0", optional = true }
+tokio = { version = "1", features = ["time"] }
+
+[features]
+default = ["image", "yaml"]
+image = ["photon-rs"]
+yaml = ["serde_yaml_ng"]
