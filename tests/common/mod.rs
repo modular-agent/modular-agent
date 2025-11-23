@@ -3,8 +3,8 @@ extern crate agent_stream_kit as askit;
 use async_trait::async_trait;
 
 use askit::{
-    ASKit, AgentConfig, AgentContext, AgentData, AgentDefinition, AgentDisplayConfigEntry,
-    AgentError, AgentOutput, AsAgent, AsAgentData, new_boxed,
+    ASKit, AgentConfigs, AgentContext, AgentData, AgentDefinition, AgentError, AgentOutput,
+    AsAgent, AsAgentData, new_agent_boxed,
 };
 use std::vec;
 
@@ -20,7 +20,7 @@ impl AsAgent for CounterAgent {
         askit: ASKit,
         id: String,
         def_name: String,
-        config: Option<AgentConfig>,
+        config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
             data: AsAgentData::new(askit, id, def_name, config),
@@ -42,14 +42,18 @@ impl AsAgent for CounterAgent {
         Ok(())
     }
 
-    async fn process(&mut self, ctx: AgentContext, _data: AgentData) -> Result<(), AgentError> {
-        let ch = ctx.ch();
-        if ch == CH_RESET {
+    async fn process(
+        &mut self,
+        ctx: AgentContext,
+        pin: String,
+        _data: AgentData,
+    ) -> Result<(), AgentError> {
+        if pin == PIN_RESET {
             self.count = 0;
-        } else if ch == CH_IN {
+        } else if pin == PIN_IN {
             self.count += 1;
         }
-        self.try_output(ctx, CH_COUNT, AgentData::new_integer(self.count))?;
+        self.try_output(ctx, PIN_COUNT, AgentData::integer(self.count))?;
         // self.emit_display(DISPLAY_COUNT, AgentData::new_integer(self.count))?;
 
         Ok(())
@@ -58,9 +62,9 @@ impl AsAgent for CounterAgent {
 
 static CATEGORY: &str = "Core/Utils";
 
-static CH_IN: &str = "in";
-static CH_RESET: &str = "reset";
-static CH_COUNT: &str = "count";
+static PIN_IN: &str = "in";
+static PIN_RESET: &str = "reset";
+static PIN_COUNT: &str = "count";
 
 static DISPLAY_COUNT: &str = "count";
 
@@ -69,14 +73,14 @@ pub fn register_agents(askit: &ASKit) {
     askit.register_agent(
         AgentDefinition::new(
             "Agent", // AGENT_KIND_BUILTIN,
-            "$counter",
-            Some(new_boxed::<CounterAgent>),
+            "test_counter",
+            Some(new_agent_boxed::<CounterAgent>),
         )
         .title("Counter")
-        // .description("Display value on the node")
+        .description("Display value on the node")
         .category(CATEGORY)
-        .inputs(vec![CH_IN, CH_RESET])
-        .outputs(vec![CH_COUNT])
+        .inputs(vec![PIN_IN, PIN_RESET])
+        .outputs(vec![PIN_COUNT])
         .integer_display_config_with(DISPLAY_COUNT, |entry| entry.hide_title()),
     );
 }

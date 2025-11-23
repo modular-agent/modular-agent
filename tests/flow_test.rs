@@ -12,15 +12,15 @@ fn test_agent_flow_node_new() {
     let askit = ASKit::init().unwrap();
     register_agents(&askit);
 
-    let def = askit.get_agent_definition("$counter").unwrap();
+    let def = askit.get_agent_definition("test_counter").unwrap();
 
     let node = AgentFlowNode::new(&def).unwrap();
 
-    assert_eq!(node.def_name, "$counter");
+    assert_eq!(node.def_name, "test_counter");
     assert!(!node.enabled);
 
     let node2 = AgentFlowNode::new(&def).unwrap();
-    assert_eq!(node2.def_name, "$counter");
+    assert_eq!(node2.def_name, "test_counter");
     assert!(node.id != node2.id);
     assert!(!node2.enabled);
 }
@@ -50,7 +50,7 @@ fn test_agent_flow_add_agent() {
     let mut flow = AgentFlow::new("test_flow".into());
     assert_eq!(flow.nodes().len(), 0);
 
-    let def = askit.get_agent_definition("$counter").unwrap();
+    let def = askit.get_agent_definition("test_counter").unwrap();
     let node = AgentFlowNode::new(&def).unwrap();
 
     flow.add_node(node);
@@ -66,7 +66,7 @@ fn test_agent_flow_remove_agent() {
     let mut flow = AgentFlow::new("test_flow".into());
     assert_eq!(flow.nodes().len(), 0);
 
-    let def = askit.get_agent_definition("$counter").unwrap();
+    let def = askit.get_agent_definition("test_counter").unwrap();
     let node = AgentFlowNode::new(&def).unwrap();
 
     let node_id = node.id.clone();
