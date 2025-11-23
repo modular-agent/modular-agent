@@ -28,7 +28,7 @@ agent-stream-kit = "0.10"
 askit-cozodb-agents = "0.1"
 askit-rhai-agents = "0.1"
 askit-std-agents = "0.3"
-askit-lifelog = { version = "0.1", path = "../../askit-lifelog" }
+askit-lifelog-agents = { version = "0.1", path = "../askit-lifelog-agents" }
 askit-llm-agents = "0.5"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -47,10 +47,9 @@ tauri-plugin-single-instance = "2.3"
 tauri-plugin-window-state = "2"
 
 # [patch.crates-io]
-# agent-stream-kit = { path = "../../agent-stream-kit/agent-stream-kit" }
-# askit-cozodb-agents = { path = "../../agent-stream-kit/askit-cozodb-agents" }
-# askit-rhai-agents = { path = "../../agent-stream-kit/askit-rhai-agents" }
-# askit-std-agents = { path = "../../agent-stream-kit/askit-std-agents" }
-# askit-lifelog = { path = "../../askit-lifelog" }
-# askit-llm-agents = { path = "../../agent-stream-kit/askit-llm-agents" }
-# tauri-plugin-askit = { path = "../../tauri-plugin-askit" }
+# agent-stream-kit = { path = "../agent-stream-kit" }
+# askit-cozodb-agents = { path = "../askit-cozodb-agents" }
+# askit-rhai-agents = { path = "../askit-rhai-agents" }
+# askit-std-agents = { path = "../askit-std-agents" }
+# askit-llm-agents = { path = "../askit-llm-agents" }
+# tauri-plugin-askit = { path = "../tauri-plugin-askit" }
