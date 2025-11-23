@@ -1,24 +1,26 @@
-[workspace]
-resolver = "3"
-members = [
-    "askit-cozodb-agents",
-    "askit-llm-agents",
-    "askit-rhai-agents",
-    "askit-std-agents",
-    "agent-stream-kit",
-]
-
-[workspace.package]
+[package]
+name = "agent-stream-kit"
+version = "0.10.1"
+description = "Agent Stream Kit"
 edition = "2024"
 authors = ["Akira Ishino <akira@lumilab.jp>"]
 license = "Apache-2.0 OR MIT"
 
-[workspace.dependencies]
-agent-stream-kit = { version = "0.10", path = "agent-stream-kit" }
+[dependencies]
 async-trait = "0.1"
 log = "0.4"
-photon-rs = "0.3.3"
-serde = "1"
-serde_json = "1"
-thiserror = "2"
-tokio = "1"
+photon-rs = { version = "0.3.3", optional = true }
+serde = { version = "1", features = ["derive", "rc"] }
+serde_json = { version = "1" }
+thiserror = { version = "2" }
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "sync"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros"] }
+
+[features]
+default = ["image"]
+image = ["photon-rs"]
+
+[[example]]
+name = "board"
