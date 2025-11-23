@@ -181,7 +181,7 @@ pub fn init(app: &AppHandle) -> Result<()> {
     askit_std_agents::register_agents(&askit);
     askit_rhai_agents::register_agents(&askit);
     askit_cozodb_agents::register_agents(&askit);
-    askit_lifelog::register_agents(&askit);
+    askit_lifelog_agents::register_agents(&askit);
     askit_llm_agents::register_agents(&askit);
 
     let asapp = ASApp {
