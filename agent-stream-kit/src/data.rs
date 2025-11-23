@@ -202,7 +202,7 @@ impl AgentData {
 
     #[cfg(feature = "image")]
     #[allow(unused)]
-    pub fn as_image(&self) -> Option<&PhotonImage> {
+    pub fn as_image(&self) -> Option<Arc<PhotonImage>> {
         self.value.as_image()
     }
 
@@ -242,7 +242,7 @@ impl AgentData {
 
     #[cfg(feature = "image")]
     #[allow(unused)]
-    pub fn get_image(&self, key: &str) -> Option<&PhotonImage> {
+    pub fn get_image(&self, key: &str) -> Option<Arc<PhotonImage>> {
         self.value.get_image(key)
     }
 
@@ -662,9 +662,9 @@ impl AgentValue {
     }
 
     #[cfg(feature = "image")]
-    pub fn as_image(&self) -> Option<&PhotonImage> {
+    pub fn as_image(&self) -> Option<Arc<PhotonImage>> {
         match self {
-            AgentValue::Image(img) => Some(img),
+            AgentValue::Image(img) => Some(img.clone()),
             _ => None,
         }
     }
@@ -710,7 +710,7 @@ impl AgentValue {
 
     #[cfg(feature = "image")]
     #[allow(unused)]
-    pub fn get_image(&self, key: &str) -> Option<&PhotonImage> {
+    pub fn get_image(&self, key: &str) -> Option<Arc<PhotonImage>> {
         self.get(key).and_then(|v| v.as_image())
     }
 
