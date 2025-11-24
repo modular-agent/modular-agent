@@ -210,6 +210,10 @@ impl AgentData {
         self.value.as_object()
     }
 
+    pub fn as_object_mut(&mut self) -> Option<&mut AgentValueMap<String, AgentValue>> {
+        self.value.as_object_mut()
+    }
+
     #[allow(unused)]
     pub fn as_array(&self) -> Option<&Vec<AgentValue>> {
         self.value.as_array()
@@ -672,6 +676,13 @@ impl AgentValue {
     pub fn as_object(&self) -> Option<&AgentValueMap<String, AgentValue>> {
         match self {
             AgentValue::Object(o) => Some(o),
+            _ => None,
+        }
+    }
+
+    pub fn as_object_mut(&mut self) -> Option<&mut AgentValueMap<String, AgentValue>> {
+        match self {
+            AgentValue::Object(o) => Arc::get_mut(o),
             _ => None,
         }
     }
