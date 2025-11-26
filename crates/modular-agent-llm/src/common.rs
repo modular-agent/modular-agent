@@ -1,7 +1,4 @@
-use std::{
-    sync::{Arc, Mutex},
-    vec,
-};
+use std::vec;
 
 use agent_stream_kit::{
     ASKit, Agent, AgentConfigs, AgentContext, AgentData, AgentDefinition, AgentError, AgentOutput,
@@ -159,7 +156,7 @@ fn add_message(data: AgentData, message: Message) -> AgentData {
 // Message History Agent
 pub struct MessageHistoryAgent {
     data: AsAgentData,
-    history: Arc<Mutex<MessageHistory>>,
+    history: MessageHistory,
     first_run: bool,
 }
 
@@ -173,7 +170,7 @@ impl AsAgent for MessageHistoryAgent {
     ) -> Result<Self, AgentError> {
         Ok(Self {
             data: AsAgentData::new(askit, id, def_name, config),
-            history: Arc::new(Mutex::new(MessageHistory::new(vec![], 0))),
+            history: MessageHistory::new(vec![], 0),
             first_run: true,
         })
     }
@@ -194,15 +191,13 @@ impl AsAgent for MessageHistoryAgent {
     ) -> Result<(), AgentError> {
         if pin == PORT_RESET {
             self.first_run = true;
-            let mut history = self.history.lock().unwrap();
-            history.reset();
+            self.history.reset();
             return Ok(());
         }
 
         let history_size = self.configs()?.get_integer_or_default(CONFIG_HISTORY_SIZE);
 
-        let mut history = self.history.lock().unwrap();
-        history.set_size(history_size);
+        self.history.set_size(history_size);
 
         if self.first_run {
             // On first run, load preamble messages if any
@@ -212,7 +207,7 @@ impl AsAgent for MessageHistoryAgent {
                 let preamble_history = MessageHistory::parse(&preamble_str).map_err(|e| {
                     AgentError::InvalidValue(format!("Failed to parse preamble messages: {}", e))
                 })?;
-                *history = preamble_history;
+                self.history = preamble_history;
             }
         }
 
@@ -220,8 +215,8 @@ impl AsAgent for MessageHistoryAgent {
             AgentError::InvalidValue(format!("Failed to convert data to Message: {}", e))
         })?;
 
-        history.push(message.clone());
-        self.try_output(ctx.clone(), PORT_HISTORY, history.clone().into())?;
+        self.history.push(message.clone());
+        self.try_output(ctx.clone(), PORT_HISTORY, self.history.clone().into())?;
 
         if message.role != "user" {
             return Ok(());
@@ -233,7 +228,7 @@ impl AsAgent for MessageHistoryAgent {
                 (
                     "history".to_string(),
                     AgentValue::array(
-                        history
+                        self.history
                             .messages()
                             .iter()
                             .cloned()
