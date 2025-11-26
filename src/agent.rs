@@ -73,9 +73,9 @@ pub trait Agent {
 
     fn set_flow_name(&mut self, flow_name: String);
 
-    fn start(&mut self) -> Result<(), AgentError>;
+    async fn start(&mut self) -> Result<(), AgentError>;
 
-    fn stop(&mut self) -> Result<(), AgentError>;
+    async fn stop(&mut self) -> Result<(), AgentError>;
 
     async fn process(
         &mut self,
@@ -133,11 +133,11 @@ pub trait AsAgent {
         Ok(())
     }
 
-    fn start(&mut self) -> Result<(), AgentError> {
+    async fn start(&mut self) -> Result<(), AgentError> {
         Ok(())
     }
 
-    fn stop(&mut self) -> Result<(), AgentError> {
+    async fn stop(&mut self) -> Result<(), AgentError> {
         Ok(())
     }
 
@@ -222,10 +222,10 @@ impl<T: AsAgent + Send + Sync> Agent for T {
         self.mut_data().flow_name = flow_name.clone();
     }
 
-    fn start(&mut self) -> Result<(), AgentError> {
+    async fn start(&mut self) -> Result<(), AgentError> {
         self.mut_data().status = AgentStatus::Start;
 
-        if let Err(e) = self.start() {
+        if let Err(e) = self.start().await {
             self.askit()
                 .emit_agent_error(self.id().to_string(), e.to_string());
             return Err(e);
@@ -234,9 +234,9 @@ impl<T: AsAgent + Send + Sync> Agent for T {
         Ok(())
     }
 
-    fn stop(&mut self) -> Result<(), AgentError> {
+    async fn stop(&mut self) -> Result<(), AgentError> {
         self.mut_data().status = AgentStatus::Stop;
-        self.stop()?;
+        self.stop().await?;
         self.mut_data().status = AgentStatus::Init;
         Ok(())
     }

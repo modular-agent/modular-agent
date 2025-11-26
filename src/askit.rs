@@ -513,7 +513,7 @@ impl ASKit {
 
                 let agent_id = agent_id.to_string();
                 std::thread::spawn(async move || {
-                    if let Err(e) = agent.lock().await.start() {
+                    if let Err(e) = agent.lock().await.start().await {
                         log::error!("Failed to start agent {}: {}", agent_id, e);
                     }
 
@@ -552,7 +552,7 @@ impl ASKit {
                 tokio::spawn(async move {
                     {
                         let mut agent_guard = agent.lock().await;
-                        if let Err(e) = agent_guard.start() {
+                        if let Err(e) = agent_guard.start().await {
                             log::error!("Failed to start agent {}: {}", agent_id, e);
                         }
                     }
@@ -628,7 +628,7 @@ impl ASKit {
                 }
             }
 
-            agent.lock().await.stop()?;
+            agent.lock().await.stop().await?;
         }
 
         Ok(())

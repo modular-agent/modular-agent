@@ -26,14 +26,14 @@ fn test_agent_new() {
     assert_eq!(agent.status(), &askit::AgentStatus::Init);
 }
 
-#[test]
-fn test_agent_start() {
+#[tokio::test]
+async fn test_agent_start() {
     let askit = ASKit::init().unwrap();
     common::register_agents(&askit);
 
     let mut agent =
         askit::agent_new(askit.clone(), "agent_1".into(), "test_counter", None).unwrap();
-    agent.start().unwrap();
+    agent.start().await.unwrap();
 
     assert_eq!(agent.status(), &askit::AgentStatus::Start);
 }
@@ -47,7 +47,7 @@ async fn test_agent_process() {
 
     let mut agent =
         askit::agent_new(askit.clone(), "agent_1".into(), "test_counter", None).unwrap();
-    agent.start().unwrap();
+    agent.start().await.unwrap();
 
     assert!(agent.out_pin("count").is_none());
 
@@ -83,7 +83,7 @@ async fn test_agent_stop() {
 
     let mut agent =
         askit::agent_new(askit.clone(), "agent_1".into(), "test_counter", None).unwrap();
-    agent.start().unwrap();
+    agent.start().await.unwrap();
 
     let ctx = askit::AgentContext::new();
     agent
@@ -91,6 +91,6 @@ async fn test_agent_stop() {
         .await
         .unwrap();
 
-    agent.stop().unwrap();
+    agent.stop().await.unwrap();
     assert_eq!(agent.status(), &askit::AgentStatus::Init);
 }

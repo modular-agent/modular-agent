@@ -47,7 +47,7 @@ impl AsAgent for BoardInAgent {
         Ok(())
     }
 
-    fn start(&mut self) -> Result<(), AgentError> {
+    async fn start(&mut self) -> Result<(), AgentError> {
         Ok(())
     }
 
@@ -85,6 +85,7 @@ struct BoardOutAgent {
     board_name: Option<String>,
 }
 
+#[async_trait]
 impl AsAgent for BoardOutAgent {
     fn new(
         askit: ASKit,
@@ -109,7 +110,7 @@ impl AsAgent for BoardOutAgent {
         &mut self.data
     }
 
-    fn start(&mut self) -> Result<(), AgentError> {
+    async fn start(&mut self) -> Result<(), AgentError> {
         if let Some(board_name) = &self.board_name {
             let askit = self.askit();
             let mut board_out_agents = askit.board_out_agents.lock().unwrap();
@@ -122,7 +123,7 @@ impl AsAgent for BoardOutAgent {
         Ok(())
     }
 
-    fn stop(&mut self) -> Result<(), AgentError> {
+    async fn stop(&mut self) -> Result<(), AgentError> {
         if let Some(board_name) = &self.board_name {
             let askit = self.askit();
             let mut board_out_agents = askit.board_out_agents.lock().unwrap();
