@@ -279,6 +279,10 @@ impl AgentData {
     pub fn get_array_mut(&mut self, key: &str) -> Option<&mut Vec<AgentValue>> {
         self.value.get_array_mut(key)
     }
+
+    pub fn set(&mut self, key: String, value: AgentValue) -> Result<(), AgentError> {
+        self.value.set(key, value)
+    }
 }
 
 impl<'de> Deserialize<'de> for AgentData {
@@ -775,6 +779,17 @@ impl AgentValue {
     #[allow(unused)]
     pub fn get_array_mut(&mut self, key: &str) -> Option<&mut Vec<AgentValue>> {
         self.get_mut(key).and_then(|v| v.as_array_mut())
+    }
+
+    pub fn set(&mut self, key: String, value: AgentValue) -> Result<(), AgentError> {
+        if let Some(obj) = self.as_object_mut() {
+            obj.insert(key, value);
+            Ok(())
+        } else {
+            Err(AgentError::InvalidValue(
+                "set can only be called on Object AgentValue".into(),
+            ))
+        }
     }
 
     pub fn kind(&self) -> String {
