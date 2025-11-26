@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use async_trait::async_trait;
 
 use crate::AgentValue;
@@ -29,6 +31,11 @@ pub enum AgentMessage {
     Stop,
 }
 
+pub struct Pin {
+    pub name: String,
+    pub data: AgentData,
+}
+
 #[async_trait]
 pub trait Agent {
     fn new(
@@ -47,6 +54,10 @@ pub trait Agent {
     fn status(&self) -> &AgentStatus;
 
     fn def_name(&self) -> &str;
+
+    fn out_pin(&self, name: &str) -> Option<&Pin>;
+
+    fn set_out_pin(&mut self, name: String, data: AgentData);
 
     fn configs(&self) -> Result<&AgentConfigs, AgentError>;
 
@@ -85,6 +96,7 @@ pub struct AsAgentData {
     pub status: AgentStatus,
     pub def_name: String,
     pub flow_name: String,
+    pub out_pins: Option<BTreeMap<String, Pin>>,
     pub configs: Option<AgentConfigs>,
 }
 
@@ -96,6 +108,7 @@ impl AsAgentData {
             status: AgentStatus::Init,
             def_name,
             flow_name: String::new(),
+            out_pins: None,
             configs,
         }
     }
@@ -165,6 +178,23 @@ impl<T: AsAgent + Send + Sync> Agent for T {
 
     fn def_name(&self) -> &str {
         self.data().def_name.as_str()
+    }
+
+    fn out_pin(&self, name: &str) -> Option<&Pin> {
+        if let Some(out_pins) = &self.data().out_pins {
+            return out_pins.get(name);
+        }
+        None
+    }
+
+    fn set_out_pin(&mut self, name: String, data: AgentData) {
+        if let Some(out_pins) = &mut self.mut_data().out_pins {
+            out_pins.insert(name.clone(), Pin { name, data });
+        } else {
+            let mut out_pins = BTreeMap::new();
+            out_pins.insert(name.clone(), Pin { name, data });
+            self.mut_data().out_pins = Some(out_pins);
+        }
     }
 
     fn configs(&self) -> Result<&AgentConfigs, AgentError> {

@@ -1,14 +1,12 @@
 extern crate agent_stream_kit as askit;
+use askit::ASKit;
 
 mod common;
-
-use askit::ASKit;
-use common::register_agents;
 
 #[test]
 fn test_register_agents() {
     let askit = ASKit::init().unwrap();
-    register_agents(&askit);
+    common::register_agents(&askit);
 
     // Check the properties of the counter agent
     let counter_def = askit.get_agent_definition("test_counter").unwrap();
@@ -20,7 +18,7 @@ fn test_register_agents() {
 #[test]
 fn test_agent_new() {
     let askit = ASKit::init().unwrap();
-    register_agents(&askit);
+    common::register_agents(&askit);
 
     let agent = askit::agent_new(askit.clone(), "agent_1".into(), "test_counter", None).unwrap();
     assert_eq!(agent.def_name(), "test_counter");
@@ -31,7 +29,7 @@ fn test_agent_new() {
 #[test]
 fn test_agent_start() {
     let askit = ASKit::init().unwrap();
-    register_agents(&askit);
+    common::register_agents(&askit);
 
     let mut agent =
         askit::agent_new(askit.clone(), "agent_1".into(), "test_counter", None).unwrap();
@@ -43,7 +41,7 @@ fn test_agent_start() {
 #[tokio::test]
 async fn test_agent_process() {
     let askit = ASKit::init().unwrap();
-    register_agents(&askit);
+    common::register_agents(&askit);
 
     askit.ready().await.unwrap();
 
@@ -51,17 +49,35 @@ async fn test_agent_process() {
         askit::agent_new(askit.clone(), "agent_1".into(), "test_counter", None).unwrap();
     agent.start().unwrap();
 
+    assert!(agent.out_pin("count").is_none());
+
     let ctx = askit::AgentContext::new();
     agent
         .process(ctx, "in".into(), askit::AgentData::unit())
         .await
         .unwrap();
+
+    assert_eq!(
+        agent.out_pin("count").unwrap().data,
+        askit::AgentData::integer(1)
+    );
+
+    let ctx = askit::AgentContext::new();
+    agent
+        .process(ctx, "in".into(), askit::AgentData::unit())
+        .await
+        .unwrap();
+
+    assert_eq!(
+        agent.out_pin("count").unwrap().data,
+        askit::AgentData::integer(2)
+    );
 }
 
 #[tokio::test]
 async fn test_agent_stop() {
     let askit = ASKit::init().unwrap();
-    register_agents(&askit);
+    common::register_agents(&askit);
 
     askit.ready().await.unwrap();
 

@@ -220,8 +220,18 @@ impl AgentData {
     }
 
     #[allow(unused)]
+    pub fn as_array_mut(&mut self) -> Option<&mut Vec<AgentValue>> {
+        self.value.as_array_mut()
+    }
+
+    #[allow(unused)]
     pub fn get(&self, key: &str) -> Option<&AgentValue> {
         self.value.get(key)
+    }
+
+    #[allow(unused)]
+    pub fn get_mut(&mut self, key: &str) -> Option<&mut AgentValue> {
+        self.value.get_mut(key)
     }
 
     #[allow(unused)]
@@ -256,8 +266,18 @@ impl AgentData {
     }
 
     #[allow(unused)]
+    pub fn get_object_mut(&mut self, key: &str) -> Option<&mut AgentValueMap<String, AgentValue>> {
+        self.value.get_object_mut(key)
+    }
+
+    #[allow(unused)]
     pub fn get_array(&self, key: &str) -> Option<&Vec<AgentValue>> {
         self.value.get_array(key)
+    }
+
+    #[allow(unused)]
+    pub fn get_array_mut(&mut self, key: &str) -> Option<&mut Vec<AgentValue>> {
+        self.value.get_array_mut(key)
     }
 }
 
@@ -682,7 +702,7 @@ impl AgentValue {
 
     pub fn as_object_mut(&mut self) -> Option<&mut AgentValueMap<String, AgentValue>> {
         match self {
-            AgentValue::Object(o) => Arc::get_mut(o),
+            AgentValue::Object(o) => Some(Arc::make_mut(o)),
             _ => None,
         }
     }
@@ -694,9 +714,21 @@ impl AgentValue {
         }
     }
 
+    pub fn as_array_mut(&mut self) -> Option<&mut Vec<AgentValue>> {
+        match self {
+            AgentValue::Array(a) => Some(Arc::make_mut(a)),
+            _ => None,
+        }
+    }
+
     #[allow(unused)]
     pub fn get(&self, key: &str) -> Option<&AgentValue> {
         self.as_object().and_then(|o| o.get(key))
+    }
+
+    #[allow(unused)]
+    pub fn get_mut(&mut self, key: &str) -> Option<&mut AgentValue> {
+        self.as_object_mut().and_then(|o| o.get_mut(key))
     }
 
     #[allow(unused)]
@@ -731,8 +763,18 @@ impl AgentValue {
     }
 
     #[allow(unused)]
+    pub fn get_object_mut(&mut self, key: &str) -> Option<&mut AgentValueMap<String, AgentValue>> {
+        self.get_mut(key).and_then(|v| v.as_object_mut())
+    }
+
+    #[allow(unused)]
     pub fn get_array(&self, key: &str) -> Option<&Vec<AgentValue>> {
         self.get(key).and_then(|v| v.as_array())
+    }
+
+    #[allow(unused)]
+    pub fn get_array_mut(&mut self, key: &str) -> Option<&mut Vec<AgentValue>> {
+        self.get_mut(key).and_then(|v| v.as_array_mut())
     }
 
     pub fn kind(&self) -> String {

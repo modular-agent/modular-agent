@@ -6,14 +6,14 @@ use super::data::AgentData;
 
 pub trait AgentOutput {
     fn try_output_raw(
-        &self,
+        &mut self,
         ctx: AgentContext,
         pin: String,
         data: AgentData,
     ) -> Result<(), AgentError>;
 
     fn try_output<S: Into<String>>(
-        &self,
+        &mut self,
         ctx: AgentContext,
         pin: S,
         data: AgentData,
@@ -37,11 +37,12 @@ pub trait AgentOutput {
 
 impl<T: Agent> AgentOutput for T {
     fn try_output_raw(
-        &self,
+        &mut self,
         ctx: AgentContext,
         pin: String,
         data: AgentData,
     ) -> Result<(), AgentError> {
+        self.set_out_pin(pin.clone(), data.clone());
         self.askit()
             .try_send_agent_out(self.id().into(), ctx, pin, data)
     }
