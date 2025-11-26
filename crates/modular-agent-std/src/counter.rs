@@ -33,7 +33,7 @@ impl AsAgent for CounterAgent {
         &mut self.data
     }
 
-    fn start(&mut self) -> Result<(), AgentError> {
+    async fn start(&mut self) -> Result<(), AgentError> {
         self.count = 0;
         self.emit_display(DISPLAY_COUNT, AgentData::integer(0));
         Ok(())

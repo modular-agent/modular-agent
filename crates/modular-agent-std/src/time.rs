@@ -129,6 +129,7 @@ impl IntervalTimerAgent {
     }
 }
 
+#[async_trait]
 impl AsAgent for IntervalTimerAgent {
     fn new(
         askit: ASKit,
@@ -157,11 +158,11 @@ impl AsAgent for IntervalTimerAgent {
         &mut self.data
     }
 
-    fn start(&mut self) -> Result<(), AgentError> {
+    async fn start(&mut self) -> Result<(), AgentError> {
         self.start_timer()
     }
 
-    fn stop(&mut self) -> Result<(), AgentError> {
+    async fn stop(&mut self) -> Result<(), AgentError> {
         self.stop_timer()
     }
 
@@ -186,6 +187,7 @@ struct OnStartAgent {
     data: AsAgentData,
 }
 
+#[async_trait]
 impl AsAgent for OnStartAgent {
     fn new(
         askit: ASKit,
@@ -206,7 +208,7 @@ impl AsAgent for OnStartAgent {
         &mut self.data
     }
 
-    fn start(&mut self) -> Result<(), AgentError> {
+    async fn start(&mut self) -> Result<(), AgentError> {
         let config = self.configs()?;
         let delay_ms = config.get_integer_or(CONFIG_DELAY, DELAY_MS_DEFAULT);
 
@@ -336,6 +338,7 @@ impl ScheduleTimerAgent {
     }
 }
 
+#[async_trait]
 impl AsAgent for ScheduleTimerAgent {
     fn new(
         askit: ASKit,
@@ -367,14 +370,14 @@ impl AsAgent for ScheduleTimerAgent {
         &mut self.data
     }
 
-    fn start(&mut self) -> Result<(), AgentError> {
+    async fn start(&mut self) -> Result<(), AgentError> {
         if self.cron_schedule.is_some() {
             self.start_timer()?;
         }
         Ok(())
     }
 
-    fn stop(&mut self) -> Result<(), AgentError> {
+    async fn stop(&mut self) -> Result<(), AgentError> {
         self.stop_timer()
     }
 
@@ -498,7 +501,7 @@ impl AsAgent for ThrottleTimeAgent {
         &mut self.data
     }
 
-    fn stop(&mut self) -> Result<(), AgentError> {
+    async fn stop(&mut self) -> Result<(), AgentError> {
         self.stop_timer()
     }
 
@@ -631,12 +634,12 @@ pub fn register_agents(askit: &ASKit) {
             .category(CATEGORY)
             .inputs(vec!["*"])
             .outputs(vec!["*"])
-        .integer_config_with(CONFIG_DELAY, DELAY_MS_DEFAULT, |entry| {
-            entry.title("delay (ms)")
-        })
-        .integer_config_with(CONFIG_MAX_NUM_DATA, MAX_NUM_DATA_DEFAULT, |entry| {
-            entry.title("max num data")
-        }),
+            .integer_config_with(CONFIG_DELAY, DELAY_MS_DEFAULT, |entry| {
+                entry.title("delay (ms)")
+            })
+            .integer_config_with(CONFIG_MAX_NUM_DATA, MAX_NUM_DATA_DEFAULT, |entry| {
+                entry.title("max num data")
+            }),
     );
 
     // Interval Timer Agent

@@ -431,8 +431,7 @@ mod tests {
         assert_eq!(result_root, Some(&root));
     }
 
-    /// Test 1: Verify if a deeply nested structure (a.b.c) can be auto-generated from an empty state.
-    /// This confirms the fix for the previous bug (failure to traverse down levels).
+    // Verify if a deeply nested structure (a.b.c) can be auto-generated from an empty state.
     #[test]
     fn test_create_deeply_nested_structure() {
         let mut root = AgentValue::object_default();
@@ -453,7 +452,7 @@ mod tests {
         panic!("Nested structure was not created correctly: {:?}", root);
     }
 
-    /// Test 2: Verify if a new key can be added without breaking existing structures.
+    // Verify if a new key can be added without breaking existing structures.
     #[test]
     fn test_add_to_existing_structure() {
         let mut root = AgentValue::object_default();
@@ -472,7 +471,7 @@ mod tests {
         assert_eq!(*timeout, AgentValue::string("30s"));
     }
 
-    /// Test 3: Verify if an existing value can be overwritten.
+    // Verify if an existing value can be overwritten.
     #[test]
     fn test_overwrite_existing_value() {
         let mut root = AgentValue::object_default();
@@ -493,8 +492,7 @@ mod tests {
         assert_eq!(*version, AgentValue::string("v2"));
     }
 
-    /// Test 4: Verify if the operation stops safely when an intermediate path is not an object.
-    /// Example: Try setting ["tags", "new_key"] against { "tags": "immutable_string" }
+    // Verify if the operation stops safely when an intermediate path is not an object.
     #[test]
     fn test_stop_if_path_is_not_object() {
         let mut root = AgentValue::object_default();

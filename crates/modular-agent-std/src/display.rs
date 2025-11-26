@@ -31,7 +31,7 @@ impl AsAgent for DisplayDataAgent {
         &mut self.data
     }
 
-    fn start(&mut self) -> Result<(), AgentError> {
+    async fn start(&mut self) -> Result<(), AgentError> {
         Ok(())
     }
 
