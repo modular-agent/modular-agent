@@ -1,8 +1,18 @@
 use agent_stream_kit::{
-    ASKit, Agent, AgentConfigs, AgentContext, AgentDefinition, AgentError, AgentOutput, AgentValue,
-    AsAgent, AsAgentData, async_trait, new_agent_boxed,
+    ASKit, Agent, AgentConfigs, AgentContext, AgentError, AgentOutput, AgentValue, AsAgent,
+    AsAgentData, async_trait,
 };
+use askit_macros::askit_agent;
 use handlebars::Handlebars;
+
+static CATEGORY: &str = "Std/String";
+
+static PIN_DATA: &str = "data";
+static PIN_STRING: &str = "string";
+static PIN_STRINGS: &str = "strings";
+
+static CONFIG_SEP: &str = "sep";
+static CONFIG_TEMPLATE: &str = "template";
 
 /// The `StringJoinAgent` is responsible for joining an array of strings into a single string
 /// using a specified separator. It processes input value, applies transformations to handle
@@ -19,6 +29,13 @@ use handlebars::Handlebars;
 ///
 /// # Example
 /// Given the input `["Hello", "World"]` and `CONFIG_SEP` set to `" "`, the output will be `"Hello World"`.
+#[askit_agent(
+    title = "String Join",
+    category = CATEGORY,
+    inputs = [PIN_STRINGS],
+    outputs = [PIN_STRING],
+    string_config(name = CONFIG_SEP, default = "\\n")
+)]
 struct StringJoinAgent {
     data: AsAgentData,
 }
@@ -76,6 +93,13 @@ impl AsAgent for StringJoinAgent {
 }
 
 // Template String Agent
+#[askit_agent(
+    title = "Template String",
+    category = CATEGORY,
+    inputs = [PIN_DATA],
+    outputs = [PIN_STRING],
+    string_config(name = CONFIG_TEMPLATE, default = "{{value}}")
+)]
 struct TemplateStringAgent {
     data: AsAgentData,
 }
@@ -139,6 +163,13 @@ impl AsAgent for TemplateStringAgent {
 }
 
 // Template Text Agent
+#[askit_agent(
+    title = "Template Text",
+    category = CATEGORY,
+    inputs = [PIN_DATA],
+    outputs = [PIN_STRING],
+    text_config(name = CONFIG_TEMPLATE, default = "{{value}}")
+)]
 struct TemplateTextAgent {
     data: AsAgentData,
 }
@@ -202,6 +233,13 @@ impl AsAgent for TemplateTextAgent {
 }
 
 // Template Array Agent
+#[askit_agent(
+    title = "Template Array",
+    category = CATEGORY,
+    inputs = [PIN_DATA],
+    outputs = [PIN_STRING],
+    text_config(name = CONFIG_TEMPLATE, default = "{{value}}")
+)]
 struct TemplateArrayAgent {
     data: AsAgentData,
 }
@@ -300,70 +338,4 @@ fn to_yaml_helper(
         out.write(&yaml_str)?;
     }
     Ok(())
-}
-
-// Agent Definitions
-
-static AGENT_KIND: &str = "agent";
-static CATEGORY: &str = "Core/String";
-
-static PIN_DATA: &str = "data";
-static PIN_STRING: &str = "string";
-static PIN_STRINGS: &str = "strings";
-
-static CONFIG_SEP: &str = "sep";
-static CONFIG_TEMPLATE: &str = "template";
-
-pub fn register_agents(askit: &ASKit) {
-    askit.register_agent(
-        AgentDefinition::new(
-            AGENT_KIND,
-            "std_string_join",
-            Some(new_agent_boxed::<StringJoinAgent>),
-        )
-        .title("String Join")
-        .category(CATEGORY)
-        .inputs(vec![PIN_STRINGS])
-        .outputs(vec![PIN_STRING])
-        .string_config(CONFIG_SEP, "\\n"),
-    );
-
-    askit.register_agent(
-        AgentDefinition::new(
-            AGENT_KIND,
-            "std_template_array",
-            Some(new_agent_boxed::<TemplateArrayAgent>),
-        )
-        .title("Template Array")
-        .category(CATEGORY)
-        .inputs(vec![PIN_DATA])
-        .outputs(vec![PIN_STRING])
-        .text_config(CONFIG_TEMPLATE, "{{value}}"),
-    );
-
-    askit.register_agent(
-        AgentDefinition::new(
-            AGENT_KIND,
-            "std_template_string",
-            Some(new_agent_boxed::<TemplateStringAgent>),
-        )
-        .title("Template String")
-        .category(CATEGORY)
-        .inputs(vec![PIN_DATA])
-        .outputs(vec![PIN_STRING])
-        .string_config(CONFIG_TEMPLATE, "{{value}}"),
-    );
-
-    askit.register_agent(
-        AgentDefinition::new(
-            AGENT_KIND,
-            "std_template_text",
-            Some(new_agent_boxed::<TemplateTextAgent>),
-        )
-        .title("Template Text")
-        .category(CATEGORY)
-        .inputs(vec![PIN_DATA])
-        .outputs(vec![PIN_STRING])
-        .text_config(CONFIG_TEMPLATE, "{{value}}"),
-    );
 }

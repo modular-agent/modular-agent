@@ -1,11 +1,28 @@
 use std::vec;
 
 use agent_stream_kit::{
-    ASKit, Agent, AgentConfigs, AgentContext, AgentDefinition, AgentError, AgentOutput,
-    AgentStatus, AgentValue, AsAgent, AsAgentData, new_agent_boxed,
+    ASKit, Agent, AgentConfigs, AgentContext, AgentError, AgentOutput, AgentStatus, AgentValue,
+    AsAgent, AsAgentData,
 };
+use askit_macros::askit_agent;
+
+static CATEGORY: &str = "Std/Input";
+
+static UNIT: &str = "unit";
+static BOOLEAN: &str = "boolean";
+static INTEGER: &str = "integer";
+static NUMBER: &str = "number";
+static STRING: &str = "string";
+static TEXT: &str = "text";
+static OBJECT: &str = "object";
 
 /// Unit Input
+#[askit_agent(
+    title = "Unit Input",
+    category = CATEGORY,
+    outputs = [UNIT],
+    unit_config(name = UNIT)
+)]
 struct UnitInputAgent {
     data: AsAgentData,
 }
@@ -34,7 +51,7 @@ impl AsAgent for UnitInputAgent {
         // Since set_config is called even when the agent is not running,
         // we need to check the status before outputting the value.
         if *self.status() == AgentStatus::Start {
-            self.try_output(AgentContext::new(), CONFIG_UNIT, AgentValue::unit())?;
+            self.try_output(AgentContext::new(), UNIT, AgentValue::unit())?;
         }
 
         Ok(())
@@ -42,6 +59,12 @@ impl AsAgent for UnitInputAgent {
 }
 
 // Boolean Input
+#[askit_agent(
+    title = "Boolean Input",
+    category = CATEGORY,
+    outputs = [BOOLEAN],
+    boolean_config(name = BOOLEAN)
+)]
 struct BooleanInputAgent {
     data: AsAgentData,
 }
@@ -68,18 +91,20 @@ impl AsAgent for BooleanInputAgent {
 
     fn configs_changed(&mut self) -> Result<(), AgentError> {
         if *self.status() == AgentStatus::Start {
-            let value = self.configs()?.get_bool(CONFIG_BOOLEAN)?;
-            self.try_output(
-                AgentContext::new(),
-                CONFIG_BOOLEAN,
-                AgentValue::boolean(value),
-            )?;
+            let value = self.configs()?.get_bool(BOOLEAN)?;
+            self.try_output(AgentContext::new(), BOOLEAN, AgentValue::boolean(value))?;
         }
         Ok(())
     }
 }
 
 // Integer Input
+#[askit_agent(
+    title = "Integer Input",
+    category = CATEGORY,
+    outputs = [INTEGER],
+    integer_config(name = INTEGER)
+)]
 struct IntegerInputAgent {
     data: AsAgentData,
 }
@@ -106,18 +131,20 @@ impl AsAgent for IntegerInputAgent {
 
     fn configs_changed(&mut self) -> Result<(), AgentError> {
         if *self.status() == AgentStatus::Start {
-            let value = self.configs()?.get_integer(CONFIG_INTEGER)?;
-            self.try_output(
-                AgentContext::new(),
-                CONFIG_INTEGER,
-                AgentValue::integer(value),
-            )?;
+            let value = self.configs()?.get_integer(INTEGER)?;
+            self.try_output(AgentContext::new(), INTEGER, AgentValue::integer(value))?;
         }
         Ok(())
     }
 }
 
 // Number Input
+#[askit_agent(
+    title = "Number Input",
+    category = CATEGORY,
+    outputs = [NUMBER],
+    number_config(name = NUMBER)
+)]
 struct NumberInputAgent {
     data: AsAgentData,
 }
@@ -144,18 +171,20 @@ impl AsAgent for NumberInputAgent {
 
     fn configs_changed(&mut self) -> Result<(), AgentError> {
         if *self.status() == AgentStatus::Start {
-            let value = self.configs()?.get_number(CONFIG_NUMBER)?;
-            self.try_output(
-                AgentContext::new(),
-                CONFIG_NUMBER,
-                AgentValue::number(value),
-            )?;
+            let value = self.configs()?.get_number(NUMBER)?;
+            self.try_output(AgentContext::new(), NUMBER, AgentValue::number(value))?;
         }
         Ok(())
     }
 }
 
 // String Input
+#[askit_agent(
+    title = "String Input",
+    category = CATEGORY,
+    outputs = [STRING],
+    string_config(name = STRING)
+)]
 struct StringInputAgent {
     data: AsAgentData,
 }
@@ -182,18 +211,20 @@ impl AsAgent for StringInputAgent {
 
     fn configs_changed(&mut self) -> Result<(), AgentError> {
         if *self.status() == AgentStatus::Start {
-            let value = self.configs()?.get_string(CONFIG_STRING)?;
-            self.try_output(
-                AgentContext::new(),
-                CONFIG_STRING,
-                AgentValue::string(value),
-            )?;
+            let value = self.configs()?.get_string(STRING)?;
+            self.try_output(AgentContext::new(), STRING, AgentValue::string(value))?;
         }
         Ok(())
     }
 }
 
 // Text Input
+#[askit_agent(
+    title = "Text Input",
+    category = CATEGORY,
+    outputs = [TEXT],
+    text_config(name = TEXT)
+)]
 struct TextInputAgent {
     data: AsAgentData,
 }
@@ -220,14 +251,20 @@ impl AsAgent for TextInputAgent {
 
     fn configs_changed(&mut self) -> Result<(), AgentError> {
         if *self.status() == AgentStatus::Start {
-            let value = self.configs()?.get_string(CONFIG_TEXT)?;
-            self.try_output(AgentContext::new(), CONFIG_TEXT, AgentValue::string(value))?;
+            let value = self.configs()?.get_string(TEXT)?;
+            self.try_output(AgentContext::new(), TEXT, AgentValue::string(value))?;
         }
         Ok(())
     }
 }
 
 // Object Input
+#[askit_agent(
+    title = "Object Input",
+    category = CATEGORY,
+    outputs = [OBJECT],
+    object_config(name = OBJECT)
+)]
 struct ObjectInputAgent {
     data: AsAgentData,
 }
@@ -254,132 +291,18 @@ impl AsAgent for ObjectInputAgent {
 
     fn configs_changed(&mut self) -> Result<(), AgentError> {
         if *self.status() == AgentStatus::Start {
-            let value = self.configs()?.get(CONFIG_OBJECT)?;
+            let value = self.configs()?.get(OBJECT)?;
             if let Some(obj) = value.as_object() {
-                self.try_output(
-                    AgentContext::new(),
-                    CONFIG_OBJECT,
-                    AgentValue::object(obj.clone()),
-                )?;
+                self.try_output(AgentContext::new(), OBJECT, AgentValue::object(obj.clone()))?;
             } else if let Some(arr) = value.as_array() {
-                self.try_output(
-                    AgentContext::new(),
-                    CONFIG_OBJECT,
-                    AgentValue::array(arr.clone()),
-                )?;
+                self.try_output(AgentContext::new(), OBJECT, AgentValue::array(arr.clone()))?;
             } else {
                 return Err(AgentError::InvalidConfig(format!(
                     "Invalid object value for config '{}'",
-                    CONFIG_OBJECT
+                    OBJECT
                 )));
             }
         }
         Ok(())
     }
-}
-
-// Register Agents
-
-static KIND: &str = "agent";
-static CATEGORY: &str = "Core/Input";
-
-static CONFIG_UNIT: &str = "unit";
-static CONFIG_BOOLEAN: &str = "boolean";
-static CONFIG_INTEGER: &str = "integer";
-static CONFIG_NUMBER: &str = "number";
-static CONFIG_STRING: &str = "string";
-static CONFIG_TEXT: &str = "text";
-static CONFIG_OBJECT: &str = "object";
-
-pub fn register_agents(askit: &ASKit) {
-    // Unit Input Agent
-    askit.register_agent(
-        AgentDefinition::new(
-            KIND,
-            "std_unit_input",
-            Some(new_agent_boxed::<UnitInputAgent>),
-        )
-        .title("Unit Input")
-        .category(CATEGORY)
-        .outputs(vec![CONFIG_UNIT])
-        .unit_config(CONFIG_UNIT),
-    );
-
-    // Boolean Input
-    askit.register_agent(
-        AgentDefinition::new(
-            KIND,
-            "std_boolean_input",
-            Some(new_agent_boxed::<BooleanInputAgent>),
-        )
-        .title("Boolean Input")
-        .category(CATEGORY)
-        .outputs(vec![CONFIG_BOOLEAN])
-        .boolean_config_default(CONFIG_BOOLEAN),
-    );
-
-    // Integer Input
-    askit.register_agent(
-        AgentDefinition::new(
-            KIND,
-            "std_integer_input",
-            Some(new_agent_boxed::<IntegerInputAgent>),
-        )
-        .title("Integer Input")
-        .category(CATEGORY)
-        .outputs(vec![CONFIG_INTEGER])
-        .integer_config_default(CONFIG_INTEGER),
-    );
-
-    // Number Input
-    askit.register_agent(
-        AgentDefinition::new(
-            KIND,
-            "std_number_input",
-            Some(new_agent_boxed::<NumberInputAgent>),
-        )
-        .title("Number Input")
-        .category(CATEGORY)
-        .outputs(vec![CONFIG_NUMBER])
-        .number_config_default(CONFIG_NUMBER),
-    );
-
-    // String Input
-    askit.register_agent(
-        AgentDefinition::new(
-            KIND,
-            "std_string_input",
-            Some(new_agent_boxed::<StringInputAgent>),
-        )
-        .title("String Input")
-        .category(CATEGORY)
-        .outputs(vec![CONFIG_STRING])
-        .string_config_default(CONFIG_STRING),
-    );
-
-    // Text Input
-    askit.register_agent(
-        AgentDefinition::new(
-            KIND,
-            "std_text_input",
-            Some(new_agent_boxed::<TextInputAgent>),
-        )
-        .title("Text Input")
-        .category(CATEGORY)
-        .outputs(vec![CONFIG_TEXT])
-        .text_config_default(CONFIG_TEXT),
-    );
-
-    // Object Input
-    askit.register_agent(
-        AgentDefinition::new(
-            KIND,
-            "std_object_input",
-            Some(new_agent_boxed::<ObjectInputAgent>),
-        )
-        .title("Object Input")
-        .category(CATEGORY)
-        .outputs(vec![CONFIG_OBJECT])
-        .object_config_default(CONFIG_OBJECT),
-    );
 }

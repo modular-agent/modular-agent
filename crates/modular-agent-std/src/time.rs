@@ -4,16 +4,42 @@ use std::time::Duration;
 use std::vec;
 
 use agent_stream_kit::{
-    ASKit, Agent, AgentConfigs, AgentContext, AgentDefinition, AgentError, AgentOutput,
-    AgentStatus, AgentValue, AsAgent, AsAgentData, async_trait, new_agent_boxed,
+    ASKit, Agent, AgentConfigs, AgentContext, AgentError, AgentOutput, AgentStatus, AgentValue,
+    AsAgent, AsAgentData, async_trait,
 };
+use askit_macros::askit_agent;
 use chrono::{DateTime, Local, Utc};
 use cron::Schedule;
 use log;
 use regex::Regex;
 use tokio::task::JoinHandle;
 
+static CATEGORY: &str = "Std/Time";
+
+static PIN_TIME: &str = "time";
+static PIN_UNIT: &str = "unit";
+
+static CONFIG_DELAY: &str = "delay";
+static CONFIG_MAX_NUM_DATA: &str = "max_num_data";
+static CONFIG_INTERVAL: &str = "interval";
+static CONFIG_SCHEDULE: &str = "schedule";
+static CONFIG_TIME: &str = "time";
+
+const DELAY_MS_DEFAULT: i64 = 1000; // 1 second in milliseconds
+const MAX_NUM_DATA_DEFAULT: i64 = 10;
+static INTERVAL_DEFAULT: &str = "10s";
+static TIME_DEFAULT: &str = "1s";
+
 // Delay Agent
+#[askit_agent(
+    title = "Delay",
+    description = "Delays output by a specified time",
+    category = CATEGORY,
+    inputs = ["*"],
+    outputs = ["*"],
+    integer_config(name = CONFIG_DELAY, default = DELAY_MS_DEFAULT, title = "delay (ms)"),
+    integer_config(name = CONFIG_MAX_NUM_DATA, default = MAX_NUM_DATA_DEFAULT, title = "max num data")
+)]
 struct DelayAgent {
     data: AsAgentData,
     num_waiting_data: Arc<Mutex<i64>>,
@@ -73,6 +99,13 @@ impl AsAgent for DelayAgent {
 }
 
 // Interval Timer Agent
+#[askit_agent(
+    title = "Interval Timer",
+    description = "Outputs a unit signal at specified intervals",
+    category = CATEGORY,
+    outputs = [PIN_UNIT],
+    string_config(name = CONFIG_INTERVAL, default = INTERVAL_DEFAULT, description = "(ex. 10s, 5m, 100ms, 1h, 1d)")
+)]
 struct IntervalTimerAgent {
     data: AsAgentData,
     timer_handle: Arc<Mutex<Option<JoinHandle<()>>>>,
@@ -183,6 +216,12 @@ impl AsAgent for IntervalTimerAgent {
 }
 
 // OnStart
+#[askit_agent(
+    title = "On Start",
+    category = CATEGORY,
+    outputs = [PIN_UNIT],
+    integer_config(name = CONFIG_DELAY, default = DELAY_MS_DEFAULT, title = "delay (ms)")
+)]
 struct OnStartAgent {
     data: AsAgentData,
 }
@@ -233,6 +272,12 @@ impl AsAgent for OnStartAgent {
 }
 
 // Schedule Timer Agent
+#[askit_agent(
+    title = "Schedule Timer",
+    category = CATEGORY,
+    outputs = [PIN_TIME],
+    string_config(name = CONFIG_SCHEDULE, default = "0 0 * * * *", description = "sec min hour day month week year")
+)]
 struct ScheduleTimerAgent {
     data: AsAgentData,
     cron_schedule: Option<Schedule>,
@@ -398,6 +443,14 @@ impl AsAgent for ScheduleTimerAgent {
 }
 
 // Throttle agent
+#[askit_agent(
+    title = "Throttle Time",
+    category = CATEGORY,
+    inputs = ["*"],
+    outputs = ["*"],
+    string_config(name = CONFIG_TIME, default = TIME_DEFAULT, description = "(ex. 10s, 5m, 100ms, 1h, 1d)"),
+    integer_config(name = CONFIG_MAX_NUM_DATA, title = "max num data", description = "0: no data, -1: all data")
+)]
 struct ThrottleTimeAgent {
     data: AsAgentData,
     timer_handle: Arc<Mutex<Option<JoinHandle<()>>>>,
@@ -606,106 +659,4 @@ fn parse_duration_to_ms(duration_str: &str) -> Result<u64, AgentError> {
         })?;
         Ok(std::cmp::max(value * 1000, MIN_DURATION)) // Convert to ms
     }
-}
-
-static AGENT_KIND: &str = "Agent";
-static CATEGORY: &str = "Core/Time";
-
-static PIN_TIME: &str = "time";
-static PIN_UNIT: &str = "unit";
-
-static CONFIG_DELAY: &str = "delay";
-static CONFIG_MAX_NUM_DATA: &str = "max_num_data";
-static CONFIG_INTERVAL: &str = "interval";
-static CONFIG_SCHEDULE: &str = "schedule";
-static CONFIG_TIME: &str = "time";
-
-const DELAY_MS_DEFAULT: i64 = 1000; // 1 second in milliseconds
-const MAX_NUM_DATA_DEFAULT: i64 = 10;
-static INTERVAL_DEFAULT: &str = "10s";
-static TIME_DEFAULT: &str = "1s";
-
-pub fn register_agents(askit: &ASKit) {
-    // Delay Agent
-    askit.register_agent(
-        AgentDefinition::new(AGENT_KIND, "std_delay", Some(new_agent_boxed::<DelayAgent>))
-            .title("Delay")
-            .description("Delays output by a specified time")
-            .category(CATEGORY)
-            .inputs(vec!["*"])
-            .outputs(vec!["*"])
-            .integer_config_with(CONFIG_DELAY, DELAY_MS_DEFAULT, |entry| {
-                entry.title("delay (ms)")
-            })
-            .integer_config_with(CONFIG_MAX_NUM_DATA, MAX_NUM_DATA_DEFAULT, |entry| {
-                entry.title("max num data")
-            }),
-    );
-
-    // Interval Timer Agent
-    askit.register_agent(
-        AgentDefinition::new(
-            AGENT_KIND,
-            "std_interval_timer",
-            Some(new_agent_boxed::<IntervalTimerAgent>),
-        )
-        .title("Interval Timer")
-        .description("Outputs a unit signal at specified intervals")
-        .category(CATEGORY)
-        .outputs(vec![PIN_UNIT])
-        .string_config_with(CONFIG_INTERVAL, INTERVAL_DEFAULT, |entry| {
-            entry.description("(ex. 10s, 5m, 100ms, 1h, 1d)")
-        }),
-    );
-
-    // OnStart
-    askit.register_agent(
-        AgentDefinition::new(
-            AGENT_KIND,
-            "std_on_start",
-            Some(new_agent_boxed::<OnStartAgent>),
-        )
-        .title("On Start")
-        .category(CATEGORY)
-        .outputs(vec![PIN_UNIT])
-        .integer_config_with(CONFIG_DELAY, DELAY_MS_DEFAULT, |entry| {
-            entry.title("delay (ms)")
-        }),
-    );
-
-    // Schedule Timer Agent
-    askit.register_agent(
-        AgentDefinition::new(
-            AGENT_KIND,
-            "std_schedule_timer",
-            Some(new_agent_boxed::<ScheduleTimerAgent>),
-        )
-        .title("Schedule Timer")
-        .category(CATEGORY)
-        .outputs(vec![PIN_TIME])
-        .string_config_with(CONFIG_SCHEDULE, "0 0 * * * *", |entry| {
-            entry.description("sec min hour day month week year")
-        }),
-    );
-
-    // Throttle Time Agent
-    askit.register_agent(
-        AgentDefinition::new(
-            AGENT_KIND,
-            "std_throttle_time",
-            Some(new_agent_boxed::<ThrottleTimeAgent>),
-        )
-        .title("Throttle Time")
-        .category(CATEGORY)
-        .inputs(vec!["*"])
-        .outputs(vec!["*"])
-        .string_config_with(CONFIG_TIME, TIME_DEFAULT, |entry| {
-            entry.description("(ex. 10s, 5m, 100ms, 1h, 1d)")
-        })
-        .integer_config_with(CONFIG_MAX_NUM_DATA, 0, |entry| {
-            entry
-                .title("max num data")
-                .description("0: no data, -1: all data")
-        }),
-    );
 }

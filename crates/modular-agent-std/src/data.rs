@@ -1,11 +1,27 @@
 use std::vec;
 
 use agent_stream_kit::{
-    ASKit, Agent, AgentConfigs, AgentContext, AgentDefinition, AgentError, AgentOutput, AgentValue,
-    AsAgent, AsAgentData, async_trait, new_agent_boxed,
+    ASKit, Agent, AgentConfigs, AgentContext, AgentError, AgentOutput, AgentValue, AsAgent,
+    AsAgentData, async_trait,
 };
+use askit_macros::askit_agent;
+
+static CATEGORY: &str = "Std/Data";
+
+static PIN_DATA: &str = "data";
+static PIN_JSON: &str = "json";
+static PIN_VALUE: &str = "value";
+
+static CONFIG_KEY: &str = "key";
 
 // Get Value
+#[askit_agent(
+    title = "Get Value",
+    category = CATEGORY,
+    inputs = [PIN_DATA],
+    outputs = [PIN_VALUE],
+    string_config(name = CONFIG_KEY)
+)]
 struct GetValueAgent {
     data: AsAgentData,
 }
@@ -70,6 +86,13 @@ impl AsAgent for GetValueAgent {
 }
 
 // Set Value
+#[askit_agent(
+    title = "Set Value",
+    category = CATEGORY,
+    inputs = [PIN_DATA, PIN_VALUE],
+    outputs = [PIN_DATA],
+    string_config(name = CONFIG_KEY)
+)]
 struct SetValueAgent {
     data: AsAgentData,
     input_data: Option<AgentValue>,
@@ -146,6 +169,13 @@ impl AsAgent for SetValueAgent {
 }
 
 // To Object
+#[askit_agent(
+    title = "To Object",
+    category = CATEGORY,
+    inputs = [PIN_DATA],
+    outputs = [PIN_DATA],
+    string_config(name = CONFIG_KEY)
+)]
 struct ToObjectAgent {
     data: AsAgentData,
 }
@@ -192,6 +222,12 @@ impl AsAgent for ToObjectAgent {
 }
 
 // To JSON
+#[askit_agent(
+    title = "To JSON",
+    category = CATEGORY,
+    inputs = [PIN_DATA],
+    outputs = [PIN_JSON]
+)]
 struct ToJsonAgent {
     data: AsAgentData,
 }
@@ -231,6 +267,12 @@ impl AsAgent for ToJsonAgent {
 }
 
 // From JSON
+#[askit_agent(
+    title = "From JSON",
+    category = CATEGORY,
+    inputs = [PIN_JSON],
+    outputs = [PIN_DATA]
+)]
 struct FromJsonAgent {
     data: AsAgentData,
 }
@@ -310,80 +352,6 @@ fn set_nested_value<'a>(value: &'a mut AgentValue, keys: Vec<&str>, new_value: A
     if let Some(obj) = current_value.as_object_mut() {
         obj.insert((*last_key).to_string(), new_value);
     }
-}
-
-static AGENT_KIND: &str = "agent";
-static CATEGORY: &str = "Core/Data";
-
-static PIN_DATA: &str = "data";
-static PIN_JSON: &str = "json";
-static PIN_VALUE: &str = "value";
-
-static CONFIG_KEY: &str = "key";
-
-pub fn register_agents(askit: &ASKit) {
-    askit.register_agent(
-        AgentDefinition::new(
-            AGENT_KIND,
-            "std_data_get_value",
-            Some(new_agent_boxed::<GetValueAgent>),
-        )
-        .title("Get Value")
-        .category(CATEGORY)
-        .inputs(vec![PIN_DATA])
-        .outputs(vec![PIN_VALUE])
-        .string_config_default(CONFIG_KEY),
-    );
-
-    askit.register_agent(
-        AgentDefinition::new(
-            AGENT_KIND,
-            "std_data_set_value",
-            Some(new_agent_boxed::<SetValueAgent>),
-        )
-        .title("Set Value")
-        .category(CATEGORY)
-        .inputs(vec![PIN_DATA, PIN_VALUE])
-        .outputs(vec![PIN_DATA])
-        .string_config_default(CONFIG_KEY),
-    );
-
-    askit.register_agent(
-        AgentDefinition::new(
-            AGENT_KIND,
-            "std_data_to_object",
-            Some(new_agent_boxed::<ToObjectAgent>),
-        )
-        .title("To Object")
-        .category(CATEGORY)
-        .inputs(vec![PIN_DATA])
-        .outputs(vec![PIN_DATA])
-        .string_config_default(CONFIG_KEY),
-    );
-
-    askit.register_agent(
-        AgentDefinition::new(
-            AGENT_KIND,
-            "std_data_to_json",
-            Some(new_agent_boxed::<ToJsonAgent>),
-        )
-        .title("To JSON")
-        .category(CATEGORY)
-        .inputs(vec![PIN_DATA])
-        .outputs(vec![PIN_JSON]),
-    );
-
-    askit.register_agent(
-        AgentDefinition::new(
-            AGENT_KIND,
-            "std_data_from_json",
-            Some(new_agent_boxed::<FromJsonAgent>),
-        )
-        .title("From JSON")
-        .category(CATEGORY)
-        .inputs(vec![PIN_JSON])
-        .outputs(vec![PIN_DATA]),
-    );
 }
 
 #[cfg(test)]

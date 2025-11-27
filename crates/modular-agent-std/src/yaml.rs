@@ -3,11 +3,23 @@
 use std::vec;
 
 use agent_stream_kit::{
-    ASKit, AgentConfigs, AgentContext, AgentDefinition, AgentError, AgentOutput, AgentValue,
-    AsAgent, AsAgentData, async_trait, new_agent_boxed,
+    ASKit, AgentConfigs, AgentContext, AgentError, AgentOutput, AgentValue, AsAgent, AsAgentData,
+    async_trait,
 };
+use askit_macros::askit_agent;
+
+static CATEGORY: &str = "Std/Yaml";
+
+static PIN_DATA: &str = "data";
+static PIN_YAML: &str = "yaml";
 
 // To YAML
+#[askit_agent(
+    title = "To YAML",
+    category = CATEGORY,
+    inputs = [PIN_DATA],
+    outputs = [PIN_YAML]
+)]
 struct ToYamlAgent {
     data: AsAgentData,
 }
@@ -47,6 +59,12 @@ impl AsAgent for ToYamlAgent {
 }
 
 // From YAML
+#[askit_agent(
+    title = "From YAML",
+    category = CATEGORY,
+    inputs = [PIN_YAML],
+    outputs = [PIN_DATA]
+)]
 struct FromYamlAgent {
     data: AsAgentData,
 }
@@ -87,36 +105,4 @@ impl AsAgent for FromYamlAgent {
         self.try_output(ctx, PIN_DATA, value)?;
         Ok(())
     }
-}
-
-static AGENT_KIND: &str = "agent";
-static CATEGORY: &str = "Core/Data";
-
-static PIN_DATA: &str = "data";
-static PIN_YAML: &str = "yaml";
-
-pub fn register_agents(askit: &ASKit) {
-    askit.register_agent(
-        AgentDefinition::new(
-            AGENT_KIND,
-            "std_to_yaml",
-            Some(new_agent_boxed::<ToYamlAgent>),
-        )
-        .title("To YAML")
-        .category(CATEGORY)
-        .inputs(vec![PIN_DATA])
-        .outputs(vec![PIN_YAML]),
-    );
-
-    askit.register_agent(
-        AgentDefinition::new(
-            AGENT_KIND,
-            "std_from_yaml",
-            Some(new_agent_boxed::<FromYamlAgent>),
-        )
-        .title("From YAML")
-        .category(CATEGORY)
-        .inputs(vec![PIN_YAML])
-        .outputs(vec![PIN_DATA]),
-    );
 }

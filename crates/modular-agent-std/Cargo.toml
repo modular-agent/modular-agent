@@ -7,7 +7,8 @@ edition = "2024"
 license = "Apache-2.0 OR MIT"
 
 [dependencies]
-agent-stream-kit = "0.10"
+agent-stream-kit = "0.11"
+askit-macros = "0.11"
 chrono = "0.4"
 cron = "0.15"
 handlebars = "6"
@@ -23,3 +24,7 @@ tokio = { version = "1", features = ["time"] }
 default = ["image", "yaml"]
 image = ["photon-rs"]
 yaml = ["serde_yaml_ng"]
+
+# [patch.crates-io]
+# agent-stream-kit = { path = "../agent-stream-kit/agent-stream-kit" }
+# askit-macros = { path = "../agent-stream-kit/askit-macros" }

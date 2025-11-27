@@ -2,11 +2,25 @@ use std::fs;
 use std::path::Path;
 
 use agent_stream_kit::{
-    ASKit, AgentConfigs, AgentContext, AgentDefinition, AgentError, AgentOutput, AgentValue,
-    AsAgent, AsAgentData, async_trait, new_agent_boxed,
+    ASKit, AgentConfigs, AgentContext, AgentError, AgentOutput, AgentValue, AsAgent, AsAgentData,
+    async_trait,
 };
+use askit_macros::askit_agent;
+
+static CATEGORY: &str = "Std/File";
+
+static PIN_PATH: &str = "path";
+static PIN_FILES: &str = "files";
+static PIN_TEXT: &str = "text";
+static PIN_DATA: &str = "data";
 
 // List Files Agent
+#[askit_agent(
+    title = "List Files",
+    category = CATEGORY,
+    inputs = [PIN_PATH],
+    outputs = [PIN_FILES]
+)]
 struct ListFilesAgent {
     data: AsAgentData,
 }
@@ -80,6 +94,12 @@ impl AsAgent for ListFilesAgent {
 }
 
 // Read Text File Agent
+#[askit_agent(
+    title = "Read Text File",
+    category = CATEGORY,
+    inputs = [PIN_PATH],
+    outputs = [PIN_TEXT]
+)]
 struct ReadTextFileAgent {
     data: AsAgentData,
 }
@@ -139,6 +159,12 @@ impl AsAgent for ReadTextFileAgent {
 }
 
 // Write Text File Agent
+#[askit_agent(
+    title = "Write Text File",
+    category = CATEGORY,
+    inputs = [PIN_DATA],
+    outputs = [PIN_DATA]
+)]
 struct WriteTextFileAgent {
     data: AsAgentData,
 }
@@ -203,53 +229,4 @@ impl AsAgent for WriteTextFileAgent {
 
         self.try_output(ctx, PIN_DATA, value)
     }
-}
-
-static AGENT_KIND: &str = "agent";
-static CATEGORY: &str = "Core/File";
-
-static PIN_PATH: &str = "path";
-static PIN_FILES: &str = "files";
-static PIN_TEXT: &str = "text";
-static PIN_DATA: &str = "data";
-
-pub fn register_agents(askit: &ASKit) {
-    // List Files Agent
-    askit.register_agent(
-        AgentDefinition::new(
-            AGENT_KIND,
-            "std_list_files",
-            Some(new_agent_boxed::<ListFilesAgent>),
-        )
-        .title("List Files")
-        .category(CATEGORY)
-        .inputs(vec![PIN_PATH])
-        .outputs(vec![PIN_FILES]),
-    );
-
-    // Read Text File Agent
-    askit.register_agent(
-        AgentDefinition::new(
-            AGENT_KIND,
-            "std_read_text_file",
-            Some(new_agent_boxed::<ReadTextFileAgent>),
-        )
-        .title("Read Text File")
-        .category(CATEGORY)
-        .inputs(vec![PIN_PATH])
-        .outputs(vec![PIN_TEXT]),
-    );
-
-    // Write Text File Agent
-    askit.register_agent(
-        AgentDefinition::new(
-            AGENT_KIND,
-            "std_write_text_file",
-            Some(new_agent_boxed::<WriteTextFileAgent>),
-        )
-        .title("Write Text File")
-        .category(CATEGORY)
-        .inputs(vec![PIN_DATA])
-        .outputs(vec![PIN_DATA]),
-    );
 }

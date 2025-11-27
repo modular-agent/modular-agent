@@ -1,14 +1,41 @@
 use std::sync::Arc;
 
 use agent_stream_kit::{
-    ASKit, Agent, AgentConfigs, AgentContext, AgentDefinition, AgentError, AgentOutput, AgentValue,
-    AsAgent, AsAgentData, async_trait, new_agent_boxed,
+    ASKit, Agent, AgentConfigs, AgentContext, AgentError, AgentOutput, AgentValue, AsAgent,
+    AsAgentData, async_trait,
 };
+use askit_macros::askit_agent;
 
 #[cfg(feature = "image")]
 use photon_rs::PhotonImage;
 
+static CATEGORY: &str = "Std/Image";
+
+static PIN_FILENAME: &str = "filename";
+static PIN_IMAGE: &str = "image";
+static PIN_IMAGE_FILENAME: &str = "image_filename";
+static PIN_BLANK: &str = "blank";
+static PIN_NON_BLANK: &str = "non_blank";
+static PIN_CHANGED: &str = "changed";
+static PIN_UNCHANGED: &str = "unchanged";
+static PIN_RESULT: &str = "result";
+
+static CONFIG_ALMOST_BLACK_THRESHOLD: &str = "almost_black_threshold";
+static CONFIG_BLANK_THRESHOLD: &str = "blank_threshold";
+static CONFIG_SCALE: &str = "scale";
+static CONFIG_HEIGHT: &str = "height";
+static CONFIG_WIDTH: &str = "width";
+static CONFIG_THRESHOLD: &str = "threshold";
+
 // IsBlankImageAgent
+#[askit_agent(
+    title = "isBlank",
+    category = CATEGORY,
+    inputs = [PIN_IMAGE],
+    outputs = [PIN_BLANK, PIN_NON_BLANK],
+    integer_config(name = CONFIG_ALMOST_BLACK_THRESHOLD, default = 20),
+    integer_config(name = CONFIG_BLANK_THRESHOLD, default = 400)
+)]
 struct IsBlankImageAgent {
     data: AsAgentData,
 }
@@ -87,6 +114,14 @@ impl AsAgent for IsBlankImageAgent {
 
 // ResampleImageAgent
 
+#[askit_agent(
+    title = "Resize Image",
+    category = CATEGORY,
+    inputs = [PIN_IMAGE],
+    outputs = [PIN_IMAGE],
+    integer_config(name = CONFIG_WIDTH, default = 512),
+    integer_config(name = CONFIG_HEIGHT, default = 512)
+)]
 struct ResampleImageAgent {
     data: AsAgentData,
 }
@@ -140,6 +175,14 @@ impl AsAgent for ResampleImageAgent {
 
 // ResizeImageAgent
 
+#[askit_agent(
+    title = "Resize Image",
+    category = CATEGORY,
+    inputs = [PIN_IMAGE],
+    outputs = [PIN_IMAGE],
+    integer_config(name = CONFIG_WIDTH, default = 512),
+    integer_config(name = CONFIG_HEIGHT, default = 512)
+)]
 struct ResizeImageAgent {
     data: AsAgentData,
 }
@@ -198,6 +241,13 @@ impl AsAgent for ResizeImageAgent {
 
 // ScaleImageAgent
 
+#[askit_agent(
+    title = "Scale Image",
+    category = CATEGORY,
+    inputs = [PIN_IMAGE],
+    outputs = [PIN_IMAGE],
+    number_config(name = CONFIG_SCALE, default = 1.0)
+)]
 struct ScaleImageAgent {
     data: AsAgentData,
 }
@@ -275,6 +325,13 @@ impl AsAgent for ScaleImageAgent {
 }
 
 // IsChangedImageAgent
+#[askit_agent(
+    title = "isChanged",
+    category = CATEGORY,
+    inputs = [PIN_IMAGE],
+    outputs = [PIN_CHANGED, PIN_UNCHANGED],
+    number_config(name = CONFIG_THRESHOLD, default = 0.01)
+)]
 struct IsChangedImageAgent {
     data: AsAgentData,
     last_image: Option<Arc<PhotonImage>>,
@@ -363,6 +420,12 @@ impl AsAgent for IsChangedImageAgent {
 
 // native
 
+#[askit_agent(
+    title = "Open Image",
+    category = CATEGORY,
+    inputs = [PIN_FILENAME],
+    outputs = [PIN_IMAGE]
+)]
 struct OpenImageAgent {
     data: AsAgentData,
 }
@@ -407,6 +470,12 @@ impl AsAgent for OpenImageAgent {
     }
 }
 
+#[askit_agent(
+    title = "Save Image",
+    category = CATEGORY,
+    inputs = [PIN_IMAGE_FILENAME],
+    outputs = [PIN_RESULT]
+)]
 struct SaveImageAgent {
     data: AsAgentData,
 }
@@ -456,119 +525,4 @@ impl AsAgent for SaveImageAgent {
 
         self.try_output(ctx, PIN_RESULT, AgentValue::unit())
     }
-}
-
-// Agent Definitions
-
-static AGENT_KIND: &str = "agent";
-static CATEGORY: &str = "Core/Image";
-
-static PIN_FILENAME: &str = "filename";
-static PIN_IMAGE: &str = "image";
-static PIN_IMAGE_FILENAME: &str = "image_filename";
-static PIN_BLANK: &str = "blank";
-static PIN_NON_BLANK: &str = "non_blank";
-static PIN_CHANGED: &str = "changed";
-static PIN_UNCHANGED: &str = "unchanged";
-static PIN_RESULT: &str = "result";
-
-static CONFIG_ALMOST_BLACK_THRESHOLD: &str = "almost_black_threshold";
-static CONFIG_BLANK_THRESHOLD: &str = "blank_threshold";
-static CONFIG_SCALE: &str = "scale";
-static CONFIG_HEIGHT: &str = "height";
-static CONFIG_WIDTH: &str = "width";
-static CONFIG_THRESHOLD: &str = "threshold";
-
-pub fn register_agents(askit: &ASKit) {
-    askit.register_agent(
-        AgentDefinition::new(
-            AGENT_KIND,
-            "std_image_is_changed",
-            Some(new_agent_boxed::<IsChangedImageAgent>),
-        )
-        .title("isChanged")
-        .category(CATEGORY)
-        .inputs(vec![PIN_IMAGE])
-        .outputs(vec![PIN_CHANGED, PIN_UNCHANGED])
-        .number_config(CONFIG_THRESHOLD, 0.01),
-    );
-
-    askit.register_agent(
-        AgentDefinition::new(
-            AGENT_KIND,
-            "std_image_is_blank",
-            Some(new_agent_boxed::<IsBlankImageAgent>),
-        )
-        .title("isBlank")
-        .category(CATEGORY)
-        .inputs(vec![PIN_IMAGE])
-        .outputs(vec![PIN_BLANK, PIN_NON_BLANK])
-        .integer_config(CONFIG_ALMOST_BLACK_THRESHOLD, 20)
-        .integer_config(CONFIG_BLANK_THRESHOLD, 400),
-    );
-
-    askit.register_agent(
-        AgentDefinition::new(
-            AGENT_KIND,
-            "std_image_resample",
-            Some(new_agent_boxed::<ResampleImageAgent>),
-        )
-        .title("Resize Image")
-        .category(CATEGORY)
-        .inputs(vec![PIN_IMAGE])
-        .outputs(vec![PIN_IMAGE])
-        .integer_config(CONFIG_WIDTH, 512)
-        .integer_config(CONFIG_HEIGHT, 512),
-    );
-
-    askit.register_agent(
-        AgentDefinition::new(
-            AGENT_KIND,
-            "std_image_resize",
-            Some(new_agent_boxed::<ResizeImageAgent>),
-        )
-        .title("Resize Image")
-        .category(CATEGORY)
-        .inputs(vec![PIN_IMAGE])
-        .outputs(vec![PIN_IMAGE])
-        .integer_config(CONFIG_WIDTH, 512)
-        .integer_config(CONFIG_HEIGHT, 512),
-    );
-
-    askit.register_agent(
-        AgentDefinition::new(
-            AGENT_KIND,
-            "std_image_scale",
-            Some(new_agent_boxed::<ScaleImageAgent>),
-        )
-        .title("Scale Image")
-        .category(CATEGORY)
-        .inputs(vec![PIN_IMAGE])
-        .outputs(vec![PIN_IMAGE])
-        .number_config(CONFIG_SCALE, 1.0),
-    );
-
-    askit.register_agent(
-        AgentDefinition::new(
-            AGENT_KIND,
-            "std_image_open",
-            Some(new_agent_boxed::<OpenImageAgent>),
-        )
-        .title("Open Image")
-        .category(CATEGORY)
-        .inputs(vec![PIN_FILENAME])
-        .outputs(vec![PIN_IMAGE]),
-    );
-
-    askit.register_agent(
-        AgentDefinition::new(
-            AGENT_KIND,
-            "std_image_save",
-            Some(new_agent_boxed::<SaveImageAgent>),
-        )
-        .title("Save Image")
-        .category(CATEGORY)
-        .inputs(vec![PIN_IMAGE_FILENAME])
-        .outputs(vec![PIN_RESULT]),
-    );
 }

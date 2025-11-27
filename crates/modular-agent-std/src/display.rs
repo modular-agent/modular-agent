@@ -1,11 +1,21 @@
 use std::vec;
 
 use agent_stream_kit::{
-    ASKit, AgentConfigs, AgentContext, AgentDefinition, AgentDisplayConfigEntry, AgentError,
-    AgentOutput, AgentValue, AsAgent, AsAgentData, async_trait, new_agent_boxed,
+    ASKit, AgentConfigs, AgentContext, AgentError, AgentOutput, AgentValue, AsAgent, AsAgentData,
+    async_trait,
 };
+use askit_macros::askit_agent;
+
+static CATEGORY: &str = "Std/Display";
+static DISPLAY_DATA: &str = "data";
 
 // Display Data
+#[askit_agent(
+    title = "Display Data",
+    category = CATEGORY,
+    inputs = ["*"],
+    any_display(name = DISPLAY_DATA, hide_title)
+)]
 struct DisplayDataAgent {
     data: AsAgentData,
 }
@@ -47,6 +57,12 @@ impl AsAgent for DisplayDataAgent {
 }
 
 // Debug Data
+#[askit_agent(
+    title = "Debug Data",
+    category = CATEGORY,
+    inputs = ["*"],
+    object_display(name = DISPLAY_DATA, hide_title)
+)]
 struct DebugDataAgent {
     data: AsAgentData,
 }
@@ -87,43 +103,4 @@ impl AsAgent for DebugDataAgent {
         self.emit_display(DISPLAY_DATA, debug_value);
         Ok(())
     }
-}
-
-static KIND: &str = "agent";
-static CATEGORY: &str = "Core/Display";
-
-static DISPLAY_DATA: &str = "data";
-
-pub fn register_agents(askit: &ASKit) {
-    // Display Data Agent
-    askit.register_agent(
-        AgentDefinition::new(
-            KIND,
-            "std_display_data",
-            Some(new_agent_boxed::<DisplayDataAgent>),
-        )
-        .title("Display Data")
-        .category(CATEGORY)
-        .inputs(vec!["*"])
-        .display_configs(vec![(
-            DISPLAY_DATA,
-            AgentDisplayConfigEntry::new("*").hide_title(),
-        )]),
-    );
-
-    // Debug Data Agent
-    askit.register_agent(
-        AgentDefinition::new(
-            KIND,
-            "std_debug_data",
-            Some(new_agent_boxed::<DebugDataAgent>),
-        )
-        .title("Debug Data")
-        .category(CATEGORY)
-        .inputs(vec!["*"])
-        .display_configs(vec![(
-            DISPLAY_DATA,
-            AgentDisplayConfigEntry::new("object").hide_title(),
-        )]),
-    );
 }
