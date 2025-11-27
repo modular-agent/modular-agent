@@ -72,7 +72,7 @@ let unlistenInput: UnlistenFn | null = null;
 
 $effect.root(() => {
   listen<DisplayMessage>("askit:display", (event) => {
-    const { agent_id, key, data } = event.payload;
+    const { agent_id, key, value } = event.payload;
     let store = displayMessageStore.get(agent_id);
     if (!store) {
       return;
@@ -81,7 +81,7 @@ $effect.root(() => {
     if (!v) {
       return;
     }
-    v.set(data);
+    v.set(value);
   }).then((unlistenFn) => {
     unlistenDisplay = unlistenFn;
   });

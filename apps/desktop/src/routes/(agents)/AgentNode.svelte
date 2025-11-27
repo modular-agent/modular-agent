@@ -126,21 +126,48 @@
 
   const uid = $props.id();
 
-  function inferTypeForDisplay(config: AgentDisplayConfigEntry, data: any): string {
-    let ty = config.type;
+  function inferTypeForDisplay(config: AgentDisplayConfigEntry, value: any): string {
+    let ty = config?.type;
     if (ty === null || ty === "*") {
-      ty = data?.kind;
-      if (ty === null) {
+      if (value === null || value === undefined) {
         return "object";
-      } else if (ty === "string") {
-        if (typeof data?.value === "string" && data.value.includes("\n")) {
-          ty = "text";
-        } else if (Array.isArray(data?.value)) {
-          if (data.value.some((v: any) => typeof v === "string" && v.includes("\n"))) {
-            ty = "text";
-          }
+      } else if (typeof value === "boolean") {
+        return "boolean";
+      } else if (Number.isInteger(value)) {
+        return "integer";
+      } else if (typeof value === "number") {
+        return "number";
+      } else if (typeof value === "string") {
+        if (value.startsWith("data:image/")) {
+          return "image";
+        } else if (value.includes("\n")) {
+          return "text";
+        } else {
+          return "string";
+        }
+      } else if (Array.isArray(value)) {
+        let tys = new Set<string>();
+        for (const v of value) {
+          tys.add(inferTypeForDisplay({} as AgentDisplayConfigEntry, v));
+        }
+        if (tys.size === 1) {
+          return tys.values().next().value;
+        }
+        if ("message" in tys) {
+          return "messages";
+        }
+        if ("text" in tys) {
+          return "text";
+        }
+        return tys.values().next().value;
+      } else if (typeof value === "object") {
+        if (value?.content !== undefined) {
+          return "message";
+        } else {
+          return "object";
         }
       }
+      return "object";
     }
     return ty;
   }
@@ -256,17 +283,12 @@
   {/if}
 {/snippet}
 
-{#snippet display(
-  key: string,
-  data: { kind: string; value: any },
-  display_config: AgentDisplayConfigEntry,
-)}
+{#snippet display(key: string, value: any, display_config: AgentDisplayConfigEntry)}
   {#if display_config?.hideTitle === true}
     <h3 class="flex-none">{display_config?.title || key}</h3>
     <p class="flex-none text-xs text-gray-500">{display_config?.description}</p>
   {/if}
-  {@const ty = inferTypeForDisplay(display_config, data)}
-  {@const value = data?.value}
+  {@const ty = inferTypeForDisplay(display_config, value)}
   {#if value instanceof Array && ty !== "object" && ty !== "message"}
     <div class="flex-none flex flex-col gap-2">
       {#each value as v}

@@ -1,4 +1,4 @@
-use agent_stream_kit::{ASKitEvent, ASKitObserver, AgentData};
+use agent_stream_kit::{ASKitEvent, ASKitObserver, AgentValue};
 use anyhow::{Context as _, Result};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
@@ -13,12 +13,12 @@ pub struct ASAppObserver {
 }
 
 impl ASAppObserver {
-    fn emit_display(&self, agent_id: String, key: String, data: AgentData) -> Result<()> {
+    fn emit_display(&self, agent_id: String, key: String, value: AgentValue) -> Result<()> {
         #[derive(Clone, Serialize)]
         struct DisplayMessage {
             agent_id: String,
             key: String,
-            data: AgentData,
+            value: AgentValue,
         }
 
         self.app
@@ -27,7 +27,7 @@ impl ASAppObserver {
                 DisplayMessage {
                     agent_id,
                     key,
-                    data,
+                    value,
                 },
             )
             .context("Failed to emit display message")?;
@@ -67,8 +67,8 @@ impl ASAppObserver {
 impl ASKitObserver for ASAppObserver {
     fn notify(&self, event: &ASKitEvent) {
         match event {
-            ASKitEvent::AgentDisplay(agent_id, key, data) => {
-                self.emit_display(agent_id.to_string(), key.to_string(), data.clone())
+            ASKitEvent::AgentDisplay(agent_id, key, value) => {
+                self.emit_display(agent_id.to_string(), key.to_string(), value.clone())
                     .unwrap_or_else(|e| {
                         log::error!("Failed to emit display message: {}", e);
                     });
