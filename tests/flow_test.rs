@@ -3,24 +3,24 @@ extern crate agent_stream_kit as askit;
 mod common;
 
 use askit::{ASKit, AgentFlow, AgentFlowNode};
-use common::register_agents;
+
+const COUNTER_DEF: &str = concat!(module_path!(), "::common::CounterAgent");
 
 // AgentFlowNode
 
 #[test]
 fn test_agent_flow_node_new() {
     let askit = ASKit::init().unwrap();
-    register_agents(&askit);
 
-    let def = askit.get_agent_definition("test_counter").unwrap();
+    let def = askit.get_agent_definition(COUNTER_DEF).unwrap();
 
     let node = AgentFlowNode::new(&def).unwrap();
 
-    assert_eq!(node.def_name, "test_counter");
+    assert_eq!(node.def_name, COUNTER_DEF);
     assert!(!node.enabled);
 
     let node2 = AgentFlowNode::new(&def).unwrap();
-    assert_eq!(node2.def_name, "test_counter");
+    assert_eq!(node2.def_name, COUNTER_DEF);
     assert!(node.id != node2.id);
     assert!(!node2.enabled);
 }
@@ -45,12 +45,11 @@ fn test_agent_flow_rename() {
 #[test]
 fn test_agent_flow_add_agent() {
     let askit = ASKit::init().unwrap();
-    register_agents(&askit);
 
     let mut flow = AgentFlow::new("test_flow".into());
     assert_eq!(flow.nodes().len(), 0);
 
-    let def = askit.get_agent_definition("test_counter").unwrap();
+    let def = askit.get_agent_definition(COUNTER_DEF).unwrap();
     let node = AgentFlowNode::new(&def).unwrap();
 
     flow.add_node(node);
@@ -61,12 +60,11 @@ fn test_agent_flow_add_agent() {
 #[test]
 fn test_agent_flow_remove_agent() {
     let askit = ASKit::init().unwrap();
-    register_agents(&askit);
 
     let mut flow = AgentFlow::new("test_flow".into());
     assert_eq!(flow.nodes().len(), 0);
 
-    let def = askit.get_agent_definition("test_counter").unwrap();
+    let def = askit.get_agent_definition(COUNTER_DEF).unwrap();
     let node = AgentFlowNode::new(&def).unwrap();
 
     let node_id = node.id.clone();

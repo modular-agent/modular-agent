@@ -1,14 +1,28 @@
+use askit_macros::askit_agent;
 use async_trait::async_trait;
 use std::vec;
 
-use super::agent::{Agent, AsAgent, AsAgentData, new_agent_boxed};
+use super::agent::{Agent, AsAgent, AsAgentData};
 use super::askit::ASKit;
 use super::config::AgentConfigs;
 use super::context::AgentContext;
-use super::definition::AgentDefinition;
 use super::error::AgentError;
 use super::value::AgentValue;
 
+static CONFIG_BOARD_NAME: &str = "$board";
+
+#[askit_agent(
+    kind = "Board",
+    title = "Board In",
+    category = "Core",
+    inputs = ["*"],
+    string_config(
+        name = CONFIG_BOARD_NAME,
+        default = "",
+        title = "Board Name",
+        description = "* = source kind"
+    )
+)]
 struct BoardInAgent {
     data: AsAgentData,
     board_name: Option<String>,
@@ -80,6 +94,17 @@ impl AsAgent for BoardInAgent {
     }
 }
 
+#[askit_agent(
+    kind = "Board",
+    title = "Board Out",
+    category = "Core",
+    outputs = ["*"],
+    string_config(
+        name = CONFIG_BOARD_NAME,
+        default = "",
+        title = "Board Name"
+    )
+)]
 struct BoardOutAgent {
     data: AsAgentData,
     board_name: Option<String>,
@@ -160,36 +185,4 @@ impl AsAgent for BoardOutAgent {
         }
         Ok(())
     }
-}
-
-static CONFIG_BOARD_NAME: &str = "$board";
-
-pub fn register_agents(askit: &ASKit) {
-    // BoardInAgent
-    askit.register_agent(
-        AgentDefinition::new(
-            "Board",
-            "core_board_in",
-            Some(new_agent_boxed::<BoardInAgent>),
-        )
-        .title("Board In")
-        .category("Core")
-        .inputs(vec!["*"])
-        .string_config_with(CONFIG_BOARD_NAME, "", |entry| {
-            entry.title("Board Name").description("* = source kind")
-        }),
-    );
-
-    // BoardOutAgent
-    askit.register_agent(
-        AgentDefinition::new(
-            "Board",
-            "core_board_out",
-            Some(new_agent_boxed::<BoardOutAgent>),
-        )
-        .title("Board Out")
-        .category("Core")
-        .outputs(vec!["*"])
-        .string_config_with(CONFIG_BOARD_NAME, "", |entry| entry.title("Board Name")),
-    );
 }

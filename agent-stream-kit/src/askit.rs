@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 use tokio::sync::{Mutex as AsyncMutex, mpsc};
 
 use crate::agent::{Agent, AgentMessage, AgentStatus, agent_new};
-use crate::board_agent;
+use crate::registry;
 use crate::config::{AgentConfigs, AgentConfigsMap};
 use crate::context::AgentContext;
 use crate::definition::{AgentDefaultConfigs, AgentDefinition, AgentDefinitions};
@@ -79,7 +79,7 @@ impl ASKit {
     }
 
     fn register_agents(&self) {
-        board_agent::register_agents(self);
+        registry::register_inventory_agents(self);
     }
 
     pub async fn ready(&self) -> Result<(), AgentError> {

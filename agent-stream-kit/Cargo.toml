@@ -1,0 +1,37 @@
+[package]
+name = "agent-stream-kit"
+version.workspace = true
+description.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+async-trait = "0.1"
+log = "0.4"
+photon-rs = { version = "0.3.3", optional = true }
+serde = { version = "1", features = ["derive", "rc"] }
+serde_json = { version = "1" }
+thiserror = "2"
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "sync"] }
+askit-macros = { path = "../askit-macros" }
+inventory = "0.3"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros"] }
+
+[features]
+default = ["image"]
+image = ["photon-rs"]
+
+[[example]]
+name = "board"
+path = "../examples/board.rs"
+
+[[test]]
+name = "counter_test"
+path = "../tests/counter_test.rs"
+
+[[test]]
+name = "flow_test"
+path = "../tests/flow_test.rs"

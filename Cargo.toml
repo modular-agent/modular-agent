@@ -1,26 +1,10 @@
-[package]
-name = "agent-stream-kit"
+[workspace]
+members = ["agent-stream-kit", "askit-macros"]
+resolver = "2"
+
+[workspace.package]
+edition = "2024"
 version = "0.10.1"
 description = "Agent Stream Kit"
-edition = "2024"
 authors = ["Akira Ishino <akira@lumilab.jp>"]
 license = "Apache-2.0 OR MIT"
-
-[dependencies]
-async-trait = "0.1"
-log = "0.4"
-photon-rs = { version = "0.3.3", optional = true }
-serde = { version = "1", features = ["derive", "rc"] }
-serde_json = { version = "1" }
-thiserror = { version = "2" }
-tokio = { version = "1", features = ["rt", "rt-multi-thread", "sync"] }
-
-[dev-dependencies]
-tokio = { version = "1", features = ["macros"] }
-
-[features]
-default = ["image"]
-image = ["photon-rs"]
-
-[[example]]
-name = "board"

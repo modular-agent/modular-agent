@@ -1,14 +1,26 @@
 extern crate agent_stream_kit as askit;
 
-use async_trait::async_trait;
-
 use askit::{
-    ASKit, AgentConfigs, AgentContext, AgentDefinition, AgentError, AgentOutput, AgentValue,
-    AsAgent, AsAgentData, new_agent_boxed,
+    ASKit, AgentConfigs, AgentContext, AgentError, AgentOutput, AgentValue, AsAgent, AsAgentData,
 };
+use askit_macros::askit_agent;
+use async_trait::async_trait;
 use std::vec;
 
+static CATEGORY: &str = "Core/Utils";
+
+static PIN_IN: &str = "in";
+static PIN_RESET: &str = "reset";
+static PIN_COUNT: &str = "count";
+
 /// Counter
+#[askit_agent(
+    kind = "Agent",
+    title = "Counter",
+    category = CATEGORY,
+    inputs = [PIN_IN, PIN_RESET],
+    outputs = [PIN_COUNT]
+)]
 pub struct CounterAgent {
     data: AsAgentData,
     count: i64,
@@ -57,29 +69,4 @@ impl AsAgent for CounterAgent {
         // self.emit_display(DISPLAY_COUNT, AgentValue::integer(self.count))?;
         Ok(())
     }
-}
-
-static CATEGORY: &str = "Core/Utils";
-
-static PIN_IN: &str = "in";
-static PIN_RESET: &str = "reset";
-static PIN_COUNT: &str = "count";
-
-static DISPLAY_COUNT: &str = "count";
-
-pub fn register_agents(askit: &ASKit) {
-    // Counter Agent
-    askit.register_agent(
-        AgentDefinition::new(
-            "Agent", // AGENT_KIND_BUILTIN,
-            "test_counter",
-            Some(new_agent_boxed::<CounterAgent>),
-        )
-        .title("Counter")
-        .description("Display value on the node")
-        .category(CATEGORY)
-        .inputs(vec![PIN_IN, PIN_RESET])
-        .outputs(vec![PIN_COUNT])
-        .integer_display_config_with(DISPLAY_COUNT, |entry| entry.hide_title()),
-    );
 }
