@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use std::vec;
 
 use agent_stream_kit::{
-    ASKit, Agent, AgentConfigs, AgentContext, AgentData, AgentDefinition, AgentError, AgentOutput,
+    ASKit, Agent, AgentConfigs, AgentContext, AgentDefinition, AgentError, AgentOutput, AgentValue,
     AsAgent, AsAgentData, async_trait, new_agent_boxed,
 };
 
@@ -99,14 +99,14 @@ impl AsAgent for OllamaCompletionAgent {
         &mut self,
         ctx: AgentContext,
         _pin: String,
-        data: AgentData,
+        value: AgentValue,
     ) -> Result<(), AgentError> {
         let config_model = &self.configs()?.get_string_or_default(CONFIG_MODEL);
         if config_model.is_empty() {
             return Ok(());
         }
 
-        let message = data.as_str().unwrap_or("");
+        let message = value.as_str().unwrap_or("");
         if message.is_empty() {
             return Ok(());
         }
@@ -138,7 +138,7 @@ impl AsAgent for OllamaCompletionAgent {
         let message = Message::assistant(res.response.clone());
         self.try_output(ctx.clone(), PORT_MESSAGE, message.into())?;
 
-        let out_response = AgentData::from_serialize(&res)?;
+        let out_response = AgentValue::from_serialize(&res)?;
         self.try_output(ctx, PORT_RESPONSE, out_response)?;
 
         Ok(())
@@ -177,7 +177,7 @@ impl AsAgent for OllamaChatAgent {
         &mut self,
         ctx: AgentContext,
         _pin: String,
-        data: AgentData,
+        value: AgentValue,
     ) -> Result<(), AgentError> {
         let config_model = &self.configs()?.get_string_or_default(CONFIG_MODEL);
         if config_model.is_empty() {
@@ -186,16 +186,16 @@ impl AsAgent for OllamaChatAgent {
 
         let mut messages: Vec<Message> = Vec::new();
 
-        if data.is_string() {
-            let message = data.as_str().unwrap_or("");
+        if value.is_string() {
+            let message = value.as_str().unwrap_or("");
             if message.is_empty() {
                 return Ok(());
             }
             messages.push(Message::user(message.to_string()));
-        } else if data.is_object() {
-            let obj = data.as_object().unwrap();
+        } else if value.is_object() {
+            let obj = value.as_object().unwrap();
             if obj.contains_key("role") && obj.contains_key("content") {
-                let msg: Message = data.clone().try_into()?;
+                let msg: Message = value.clone().try_into()?;
                 messages.push(msg);
             } else {
                 if obj.contains_key("history") {
@@ -255,7 +255,7 @@ impl AsAgent for OllamaChatAgent {
                 message.id = Some(id.clone());
                 self.try_output(ctx.clone(), PORT_MESSAGE, message.into())?;
 
-                let out_response = AgentData::from_serialize(&res)?;
+                let out_response = AgentValue::from_serialize(&res)?;
                 self.try_output(ctx.clone(), PORT_RESPONSE, out_response)?;
 
                 if res.done {
@@ -272,7 +272,7 @@ impl AsAgent for OllamaChatAgent {
             message.id = Some(id.clone());
             self.try_output(ctx.clone(), PORT_MESSAGE, message.into())?;
 
-            let out_response = AgentData::from_serialize(&res)?;
+            let out_response = AgentValue::from_serialize(&res)?;
             self.try_output(ctx.clone(), PORT_RESPONSE, out_response)?;
         }
 
@@ -312,14 +312,14 @@ impl AsAgent for OllamaEmbeddingsAgent {
         &mut self,
         ctx: AgentContext,
         _pin: String,
-        data: AgentData,
+        value: AgentValue,
     ) -> Result<(), AgentError> {
         let config_model = &self.configs()?.get_string_or_default(CONFIG_MODEL);
         if config_model.is_empty() {
             return Ok(());
         }
 
-        let input = data.as_str().unwrap_or(""); // TODO: other types
+        let input = value.as_str().unwrap_or(""); // TODO: other types
         if input.is_empty() {
             return Ok(());
         }
@@ -343,7 +343,7 @@ impl AsAgent for OllamaEmbeddingsAgent {
             .await
             .map_err(|e| AgentError::IoError(format!("Ollama Error: {}", e)))?;
 
-        let embeddings = AgentData::from_serialize(&res.embeddings)?;
+        let embeddings = AgentValue::from_serialize(&res.embeddings)?;
         self.try_output(ctx.clone(), PORT_EMBEDDINGS, embeddings)?;
 
         Ok(())

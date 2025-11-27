@@ -3,8 +3,8 @@
 use std::vec;
 
 use agent_stream_kit::{
-    ASKit, Agent, AgentConfigs, AgentContext, AgentData, AgentDefinition, AgentError, AgentOutput,
-    AgentValue, AsAgent, AsAgentData, async_trait, new_agent_boxed,
+    ASKit, Agent, AgentConfigs, AgentContext, AgentDefinition, AgentError, AgentOutput, AgentValue,
+    AsAgent, AsAgentData, async_trait, new_agent_boxed,
 };
 use rmcp::{
     model::{CallToolRequestParam, CallToolResult},
@@ -43,7 +43,7 @@ impl AsAgent for MCPCallAgent {
         &mut self,
         ctx: AgentContext,
         _pin: String,
-        data: AgentData,
+        value: AgentValue,
     ) -> Result<(), AgentError> {
         let command = self.configs()?.get_string_or_default(CONFIG_COMMAND);
         let args_str = self.configs()?.get_string_or_default(CONFIG_ARGS);
@@ -67,7 +67,7 @@ impl AsAgent for MCPCallAgent {
             return Ok(());
         }
 
-        let arguments = data.as_object().map(|obj| {
+        let arguments = value.as_object().map(|obj| {
             obj.iter()
                 .map(|(k, v)| {
                     (
@@ -102,13 +102,13 @@ impl AsAgent for MCPCallAgent {
                 "Failed to serialize tool result content to JSON: {e}"
             ))
         })?;
-        self.try_output(ctx, PORT_RESPONSE, AgentData::string(response))?;
+        self.try_output(ctx, PORT_RESPONSE, AgentValue::string(response))?;
 
         Ok(())
     }
 }
 
-fn call_tool_result_to_agent_data(result: CallToolResult) -> Result<AgentData, AgentError> {
+fn call_tool_result_to_agent_data(result: CallToolResult) -> Result<AgentValue, AgentError> {
     let mut contents = Vec::new();
     for c in result.content.iter() {
         match &c.raw {
@@ -120,11 +120,10 @@ fn call_tool_result_to_agent_data(result: CallToolResult) -> Result<AgentData, A
             }
         }
     }
-    let data = AgentData::array("string", contents);
+    let data = AgentValue::array(contents);
     if result.is_error == Some(true) {
         return Err(AgentError::Other(
-            serde_json::to_string(&data.value)
-                .map_err(|e| AgentError::InvalidValue(e.to_string()))?,
+            serde_json::to_string(&data).map_err(|e| AgentError::InvalidValue(e.to_string()))?,
         ));
     }
     Ok(data)

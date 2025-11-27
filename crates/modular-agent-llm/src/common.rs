@@ -1,8 +1,8 @@
 use std::vec;
 
 use agent_stream_kit::{
-    ASKit, Agent, AgentConfigs, AgentContext, AgentData, AgentDefinition, AgentError, AgentOutput,
-    AgentValue, AsAgent, AsAgentData, async_trait, new_agent_boxed,
+    ASKit, Agent, AgentConfigs, AgentContext, AgentDefinition, AgentError, AgentOutput, AgentValue,
+    AsAgent, AsAgentData, async_trait, new_agent_boxed,
 };
 
 use crate::message::{Message, MessageHistory};
@@ -37,11 +37,11 @@ impl AsAgent for AssistantMessageAgent {
         &mut self,
         ctx: AgentContext,
         _pin: String,
-        data: AgentData,
+        value: AgentValue,
     ) -> Result<(), AgentError> {
-        let value = self.configs()?.get_string(CONFIG_MESSAGE)?;
-        let message = Message::assistant(value);
-        let messages = add_message(data, message);
+        let message = self.configs()?.get_string(CONFIG_MESSAGE)?;
+        let message = Message::assistant(message);
+        let messages = add_message(value, message);
         self.try_output(ctx, PORT_MESSAGES, messages)?;
         Ok(())
     }
@@ -77,11 +77,11 @@ impl AsAgent for SystemMessageAgent {
         &mut self,
         ctx: AgentContext,
         _pin: String,
-        data: AgentData,
+        value: AgentValue,
     ) -> Result<(), AgentError> {
-        let value = self.configs()?.get_string(CONFIG_MESSAGE)?;
-        let message = Message::system(value);
-        let messages = add_message(data, message);
+        let message = self.configs()?.get_string(CONFIG_MESSAGE)?;
+        let message = Message::system(message);
+        let messages = add_message(value, message);
         self.try_output(ctx, PORT_MESSAGES, messages)?;
         Ok(())
     }
@@ -117,39 +117,37 @@ impl AsAgent for UserMessageAgent {
         &mut self,
         ctx: AgentContext,
         _pin: String,
-        data: AgentData,
+        value: AgentValue,
     ) -> Result<(), AgentError> {
-        let value = self.configs()?.get_string(CONFIG_MESSAGE)?;
-        let message = Message::user(value);
-        let messages = add_message(data, message);
+        let message = self.configs()?.get_string(CONFIG_MESSAGE)?;
+        let message = Message::user(message);
+        let messages = add_message(value, message);
         self.try_output(ctx, PORT_MESSAGES, messages)?;
         Ok(())
     }
 }
 
-fn add_message(data: AgentData, message: Message) -> AgentData {
-    if data.is_array() && data.kind == "message" {
-        let mut arr = data.as_array().unwrap_or(&vec![]).to_owned();
+fn add_message(value: AgentValue, message: Message) -> AgentValue {
+    if value.is_array() {
+        let mut arr = value.as_array().unwrap_or(&vec![]).to_owned();
         arr.push(message.into());
-        return AgentData::array("message", arr);
+        return AgentValue::array(arr);
     }
 
-    if data.is_string() {
-        let value = data.as_str().unwrap_or("");
+    if value.is_string() {
+        let value = value.as_str().unwrap_or("");
         if !value.is_empty() {
             let in_message = Message::user(value.to_string());
-            return AgentData::array("message", vec![message.into(), in_message.into()]);
+            return AgentValue::array(vec![message.into(), in_message.into()]);
         }
     }
 
     #[cfg(feature = "image")]
-    if let AgentValue::Image(img) = data.value {
+    if let AgentValue::Image(img) = value {
         let message = message.with_image(img);
         return message.into();
-        // return AgentData::array("message", vec![message.into()]);
     }
 
-    // AgentData::array("message", vec![message.into()])
     message.into()
 }
 
@@ -187,7 +185,7 @@ impl AsAgent for MessageHistoryAgent {
         &mut self,
         ctx: AgentContext,
         pin: String,
-        data: AgentData,
+        value: AgentValue,
     ) -> Result<(), AgentError> {
         if pin == PORT_RESET {
             self.first_run = true;
@@ -211,7 +209,7 @@ impl AsAgent for MessageHistoryAgent {
             }
         }
 
-        let message: Message = data.try_into().map_err(|e| {
+        let message: Message = value.try_into().map_err(|e| {
             AgentError::InvalidValue(format!("Failed to convert data to Message: {}", e))
         })?;
 
@@ -222,7 +220,7 @@ impl AsAgent for MessageHistoryAgent {
             return Ok(());
         }
 
-        let messages: AgentData = AgentData::object(
+        let messages: AgentValue = AgentValue::object(
             [
                 ("message".to_string(), message.into()),
                 (
@@ -245,17 +243,17 @@ impl AsAgent for MessageHistoryAgent {
     }
 }
 
-pub fn is_message(data: &AgentData) -> bool {
-    if data.is_object() {
-        let obj = data.as_object().unwrap();
+pub fn is_message(value: &AgentValue) -> bool {
+    if value.is_object() {
+        let obj = value.as_object().unwrap();
         return obj.contains_key("role") && obj.contains_key("content");
     }
     false
 }
 
-pub fn is_message_history(data: &AgentData) -> bool {
-    if data.is_object() {
-        let obj = data.as_object().unwrap();
+pub fn is_message_history(value: &AgentValue) -> bool {
+    if value.is_object() {
+        let obj = value.as_object().unwrap();
         return obj.contains_key("message") && obj.contains_key("history");
     }
     false

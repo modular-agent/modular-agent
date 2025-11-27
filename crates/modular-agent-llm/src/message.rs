@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use agent_stream_kit::{AgentData, AgentError, AgentValue};
+use agent_stream_kit::{AgentError, AgentValue};
 use serde::{Deserialize, Serialize};
 
 #[cfg(feature = "image")]
@@ -46,15 +46,6 @@ impl Message {
     pub fn with_image(mut self, image: Arc<PhotonImage>) -> Self {
         self.image = Some(image);
         self
-    }
-}
-
-impl TryFrom<AgentData> for Message {
-    type Error = AgentError;
-
-    fn try_from(data: AgentData) -> Result<Self, Self::Error> {
-        let message = data.value.try_into()?;
-        Ok(message)
     }
 }
 
@@ -116,25 +107,6 @@ impl TryFrom<AgentValue> for Message {
                 "Cannot convert AgentValue to Message".to_string(),
             )),
         }
-    }
-}
-
-impl From<Message> for AgentData {
-    fn from(msg: Message) -> Self {
-        let mut fields = vec![
-            ("role".to_string(), AgentValue::string(msg.role)),
-            ("content".to_string(), AgentValue::string(msg.content)),
-        ];
-        if let Some(id_str) = msg.id {
-            fields.push(("id".to_string(), AgentValue::string(id_str)));
-        }
-        #[cfg(feature = "image")]
-        {
-            if let Some(img) = msg.image {
-                fields.push(("image".to_string(), AgentValue::image((*img).clone())));
-            }
-        }
-        AgentData::object_with_kind("message", fields.into_iter().collect())
     }
 }
 
@@ -267,12 +239,9 @@ impl MessageHistory {
     }
 }
 
-impl From<MessageHistory> for AgentData {
+impl From<MessageHistory> for AgentValue {
     fn from(history: MessageHistory) -> Self {
-        AgentData::array(
-            "message",
-            history.messages().into_iter().map(|m| m.into()).collect(),
-        )
+        AgentValue::array(history.messages().into_iter().map(|m| m.into()).collect())
     }
 }
 
@@ -280,15 +249,6 @@ impl From<MessageHistory> for AgentData {
 mod tests {
 
     use super::*;
-
-    #[test]
-    fn test_message_to_from_agent_data() {
-        let msg = Message::assistant("Hello, how can I help you?".to_string());
-        let data: AgentData = msg.clone().into();
-        let msg_converted: Message = data.try_into().unwrap();
-        assert_eq!(msg.role, msg_converted.role);
-        assert_eq!(msg.content, msg_converted.content);
-    }
 
     #[test]
     fn test_message_to_from_agent_value() {

@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use std::vec;
 
 use agent_stream_kit::{
-    ASKit, Agent, AgentConfigs, AgentContext, AgentData, AgentDefinition, AgentError, AgentOutput,
+    ASKit, Agent, AgentConfigs, AgentContext, AgentDefinition, AgentError, AgentOutput, AgentValue,
     AsAgent, AsAgentData, async_trait, new_agent_boxed,
 };
 use async_openai::{
@@ -91,7 +91,7 @@ impl AsAgent for OpenAICompletionAgent {
         &mut self,
         ctx: AgentContext,
         _pin: String,
-        data: AgentData,
+        value: AgentValue,
     ) -> Result<(), AgentError> {
         let config_model = &self.configs()?.get_string_or_default(CONFIG_MODEL);
         if config_model.is_empty() {
@@ -100,8 +100,8 @@ impl AsAgent for OpenAICompletionAgent {
 
         let mut messages;
         {
-            if data.is_array() {
-                let arr = data.as_array().unwrap();
+            if value.is_array() {
+                let arr = value.as_array().unwrap();
                 messages = Vec::new();
                 for item in arr {
                     let msg: Message = item.clone().try_into()?;
@@ -114,7 +114,7 @@ impl AsAgent for OpenAICompletionAgent {
                     }
                 }
             } else {
-                let message = data.as_str().unwrap_or("");
+                let message = value.as_str().unwrap_or("");
                 if message.is_empty() {
                     return Ok(());
                 }
@@ -163,7 +163,7 @@ impl AsAgent for OpenAICompletionAgent {
         let message = Message::assistant(res.choices[0].text.clone());
         self.try_output(ctx.clone(), PORT_MESSAGE, message.into())?;
 
-        let out_response = AgentData::from_serialize(&res)?;
+        let out_response = AgentValue::from_serialize(&res)?;
         self.try_output(ctx, PORT_RESPONSE, out_response)?;
 
         Ok(())
@@ -202,7 +202,7 @@ impl AsAgent for OpenAIChatAgent {
         &mut self,
         ctx: AgentContext,
         _pin: String,
-        data: AgentData,
+        value: AgentValue,
     ) -> Result<(), AgentError> {
         let config_model = &self.configs()?.get_string_or_default(CONFIG_MODEL);
         if config_model.is_empty() {
@@ -211,16 +211,16 @@ impl AsAgent for OpenAIChatAgent {
 
         let mut messages: Vec<Message> = Vec::new();
 
-        if data.is_string() {
-            let message = data.as_str().unwrap_or("");
+        if value.is_string() {
+            let message = value.as_str().unwrap_or("");
             if message.is_empty() {
                 return Ok(());
             }
             messages.push(Message::user(message.to_string()));
-        } else if data.is_object() {
-            let obj = data.as_object().unwrap();
+        } else if value.is_object() {
+            let obj = value.as_object().unwrap();
             if obj.contains_key("role") && obj.contains_key("content") {
-                let msg: Message = data.clone().try_into()?;
+                let msg: Message = value.clone().try_into()?;
                 messages.push(msg);
             } else {
                 if obj.contains_key("history") {
@@ -300,7 +300,7 @@ impl AsAgent for OpenAIChatAgent {
                 message.id = Some(res.id.clone());
                 self.try_output(ctx.clone(), PORT_MESSAGE, message.into())?;
 
-                let out_response = AgentData::from_serialize(&res)?;
+                let out_response = AgentValue::from_serialize(&res)?;
                 self.try_output(ctx.clone(), PORT_RESPONSE, out_response)?;
             }
         } else {
@@ -321,7 +321,7 @@ impl AsAgent for OpenAIChatAgent {
             res_message.id = Some(res.id.clone());
             self.try_output(ctx.clone(), PORT_MESSAGE, res_message.clone().into())?;
 
-            let out_response = AgentData::from_serialize(&res)?;
+            let out_response = AgentValue::from_serialize(&res)?;
             self.try_output(ctx.clone(), PORT_RESPONSE, out_response)?;
         }
 
@@ -361,14 +361,14 @@ impl AsAgent for OpenAIEmbeddingsAgent {
         &mut self,
         ctx: AgentContext,
         _pin: String,
-        data: AgentData,
+        value: AgentValue,
     ) -> Result<(), AgentError> {
         let config_model = &self.configs()?.get_string_or_default(CONFIG_MODEL);
         if config_model.is_empty() {
             return Ok(());
         }
 
-        let input = data.as_str().unwrap_or(""); // TODO: other types
+        let input = value.as_str().unwrap_or(""); // TODO: other types
         if input.is_empty() {
             return Ok(());
         }
@@ -406,8 +406,8 @@ impl AsAgent for OpenAIEmbeddingsAgent {
             .await
             .map_err(|e| AgentError::IoError(format!("OpenAI Error: {}", e)))?;
 
-        let data = AgentData::from_serialize(&res.data)?;
-        self.try_output(ctx.clone(), PORT_EMBEDDINGS, data)?;
+        let value = AgentValue::from_serialize(&res.data)?;
+        self.try_output(ctx.clone(), PORT_EMBEDDINGS, value)?;
 
         Ok(())
     }
@@ -446,7 +446,7 @@ impl AsAgent for OpenAIResponsesAgent {
         &mut self,
         ctx: AgentContext,
         _pin: String,
-        data: AgentData,
+        value: AgentValue,
     ) -> Result<(), AgentError> {
         let config_model = &self.configs()?.get_string_or_default(CONFIG_MODEL);
         if config_model.is_empty() {
@@ -455,16 +455,16 @@ impl AsAgent for OpenAIResponsesAgent {
 
         let mut messages: Vec<Message> = Vec::new();
 
-        if data.is_string() {
-            let message = data.as_str().unwrap_or("");
+        if value.is_string() {
+            let message = value.as_str().unwrap_or("");
             if message.is_empty() {
                 return Ok(());
             }
             messages.push(Message::user(message.to_string()));
-        } else if data.is_object() {
-            let obj = data.as_object().unwrap();
+        } else if value.is_object() {
+            let obj = value.as_object().unwrap();
             if obj.contains_key("role") && obj.contains_key("content") {
-                let msg: Message = data.clone().try_into()?;
+                let msg: Message = value.clone().try_into()?;
                 messages.push(msg);
             } else {
                 if obj.contains_key("history") {
@@ -542,7 +542,7 @@ impl AsAgent for OpenAIResponsesAgent {
                         content.push_str(&delta.delta);
                     }
                     responses::ResponseEvent::ResponseCompleted(_) => {
-                        let out_response = AgentData::from_serialize(&res_event)?;
+                        let out_response = AgentValue::from_serialize(&res_event)?;
                         self.try_output(ctx.clone(), PORT_RESPONSE, out_response)?;
                         break;
                     }
@@ -553,7 +553,7 @@ impl AsAgent for OpenAIResponsesAgent {
                 message.id = id.clone();
                 self.try_output(ctx.clone(), PORT_MESSAGE, message.into())?;
 
-                let out_response = AgentData::from_serialize(&res_event)?;
+                let out_response = AgentValue::from_serialize(&res_event)?;
                 self.try_output(ctx.clone(), PORT_RESPONSE, out_response)?;
             }
         } else {
@@ -567,7 +567,7 @@ impl AsAgent for OpenAIResponsesAgent {
             res_message.id = Some(res.id.clone());
             self.try_output(ctx.clone(), PORT_MESSAGE, res_message.clone().into())?;
 
-            let out_response = AgentData::from_serialize(&res)?;
+            let out_response = AgentValue::from_serialize(&res)?;
             self.try_output(ctx.clone(), PORT_RESPONSE, out_response)?;
         }
 
@@ -726,12 +726,9 @@ pub fn register_agents(askit: &ASKit) {
         .category(CATEGORY)
         .inputs(vec![PORT_MESSAGE])
         .outputs(vec![PORT_MESSAGE, PORT_RESPONSE])
-        .custom_global_config_with(
-            CONFIG_OPENAI_API_KEY,
-            "",
-            "password",
-            |entry| entry.title("OpenAI API Key"),
-        )
+        .custom_global_config_with(CONFIG_OPENAI_API_KEY, "", "password", |entry| {
+            entry.title("OpenAI API Key")
+        })
         .string_config_with(CONFIG_MODEL, DEFAULT_CONFIG_MODEL, |entry| {
             entry.title("Model")
         })
