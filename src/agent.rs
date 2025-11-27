@@ -2,14 +2,12 @@ use std::collections::BTreeMap;
 
 use async_trait::async_trait;
 
-use crate::AgentValue;
-
 use super::askit::ASKit;
 use super::config::AgentConfigs;
 use super::context::AgentContext;
-use super::data::AgentData;
 use super::error::AgentError;
 use super::runtime::runtime;
+use super::value::AgentValue;
 
 #[derive(Debug, Default, Clone, PartialEq)]
 pub enum AgentStatus {
@@ -23,7 +21,7 @@ pub enum AgentMessage {
     Input {
         ctx: AgentContext,
         pin: String,
-        data: AgentData,
+        value: AgentValue,
     },
     Config {
         configs: AgentConfigs,
@@ -33,7 +31,7 @@ pub enum AgentMessage {
 
 pub struct Pin {
     pub name: String,
-    pub data: AgentData,
+    pub value: AgentValue,
 }
 
 #[async_trait]
@@ -57,7 +55,7 @@ pub trait Agent {
 
     fn out_pin(&self, name: &str) -> Option<&Pin>;
 
-    fn set_out_pin(&mut self, name: String, data: AgentData);
+    fn set_out_pin(&mut self, name: String, value: AgentValue);
 
     fn configs(&self) -> Result<&AgentConfigs, AgentError>;
 
@@ -81,7 +79,7 @@ pub trait Agent {
         &mut self,
         ctx: AgentContext,
         pin: String,
-        data: AgentData,
+        value: AgentValue,
     ) -> Result<(), AgentError>;
 
     fn runtime(&self) -> &tokio::runtime::Runtime {
@@ -145,7 +143,7 @@ pub trait AsAgent {
         &mut self,
         _ctx: AgentContext,
         _pin: String,
-        _data: AgentData,
+        _value: AgentValue,
     ) -> Result<(), AgentError> {
         Ok(())
     }
@@ -187,12 +185,12 @@ impl<T: AsAgent + Send + Sync> Agent for T {
         None
     }
 
-    fn set_out_pin(&mut self, name: String, data: AgentData) {
+    fn set_out_pin(&mut self, name: String, value: AgentValue) {
         if let Some(out_pins) = &mut self.mut_data().out_pins {
-            out_pins.insert(name.clone(), Pin { name, data });
+            out_pins.insert(name.clone(), Pin { name, value });
         } else {
             let mut out_pins = BTreeMap::new();
-            out_pins.insert(name.clone(), Pin { name, data });
+            out_pins.insert(name.clone(), Pin { name, value });
             self.mut_data().out_pins = Some(out_pins);
         }
     }
@@ -245,9 +243,9 @@ impl<T: AsAgent + Send + Sync> Agent for T {
         &mut self,
         ctx: AgentContext,
         pin: String,
-        data: AgentData,
+        value: AgentValue,
     ) -> Result<(), AgentError> {
-        if let Err(e) = self.process(ctx, pin, data).await {
+        if let Err(e) = self.process(ctx, pin, value).await {
             self.askit()
                 .emit_agent_error(self.id().to_string(), e.to_string());
             return Err(e);

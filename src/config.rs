@@ -2,8 +2,8 @@ use std::collections::{BTreeMap, HashMap};
 
 use serde::{Deserialize, Serialize};
 
-use crate::data::AgentValue;
 use crate::error::AgentError;
+use crate::value::AgentValue;
 
 pub type AgentConfigsMap = HashMap<String, AgentConfigs>;
 

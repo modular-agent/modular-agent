@@ -8,11 +8,11 @@ use crate::agent::{Agent, AgentMessage, AgentStatus, agent_new};
 use crate::board_agent;
 use crate::config::{AgentConfigs, AgentConfigsMap};
 use crate::context::AgentContext;
-use crate::data::AgentData;
 use crate::definition::{AgentDefaultConfigs, AgentDefinition, AgentDefinitions};
 use crate::error::AgentError;
 use crate::flow::{self, AgentFlow, AgentFlowEdge, AgentFlowNode, AgentFlows};
 use crate::message::{self, AgentEventMessage};
+use crate::value::AgentValue;
 
 #[derive(Clone)]
 pub struct ASKit {
@@ -26,8 +26,8 @@ pub struct ASKit {
     // board name -> [board out agent id]
     pub(crate) board_out_agents: Arc<Mutex<HashMap<String, Vec<String>>>>,
 
-    // board name -> data
-    pub(crate) board_data: Arc<Mutex<HashMap<String, AgentData>>>,
+    // board name -> value
+    pub(crate) board_value: Arc<Mutex<HashMap<String, AgentValue>>>,
 
     // sourece agent id -> [target agent id / source handle / target handle]
     pub(crate) edges: Arc<Mutex<HashMap<String, Vec<(String, String, String)>>>>,
@@ -54,7 +54,7 @@ impl ASKit {
             agents: Default::default(),
             agent_txs: Default::default(),
             board_out_agents: Default::default(),
-            board_data: Default::default(),
+            board_value: Default::default(),
             edges: Default::default(),
             defs: Default::default(),
             flows: Default::default(),
@@ -519,11 +519,11 @@ impl ASKit {
 
                     while let Ok(message) = rx.recv() {
                         match message {
-                            AgentMessage::Input { ctx, pin, data } => {
+                            AgentMessage::Input { ctx, pin, value } => {
                                 agent
                                     .lock()
                                     .await
-                                    .process(ctx, pin, data)
+                                    .process(ctx, pin, value)
                                     .await
                                     .unwrap_or_else(|e| {
                                         log::error!("Process Error {}: {}", agent_id, e);
@@ -559,11 +559,11 @@ impl ASKit {
 
                     while let Some(message) = rx.recv().await {
                         match message {
-                            AgentMessage::Input { ctx, pin, data } => {
+                            AgentMessage::Input { ctx, pin, value } => {
                                 agent
                                     .lock()
                                     .await
-                                    .process(ctx, pin, data)
+                                    .process(ctx, pin, value)
                                     .await
                                     .unwrap_or_else(|e| {
                                         log::error!("Process Error {}: {}", agent_id, e);
@@ -712,7 +712,7 @@ impl ASKit {
         agent_id: String,
         ctx: AgentContext,
         pin: String,
-        data: AgentData,
+        value: AgentValue,
     ) -> Result<(), AgentError> {
         let agent: Arc<AsyncMutex<Box<dyn Agent + Send + Sync>>> = {
             let agents = self.agents.lock().unwrap();
@@ -733,14 +733,14 @@ impl ASKit {
         if pin.starts_with("config:") {
             let config_key = pin[7..].to_string();
             let mut agent = agent.lock().await;
-            agent.set_config(config_key.clone(), data.value.clone())?;
+            agent.set_config(config_key.clone(), value.clone())?;
             return Ok(());
         }
 
         let message = AgentMessage::Input {
             ctx,
             pin: pin.clone(),
-            data,
+            value,
         };
 
         let tx = {
@@ -772,9 +772,9 @@ impl ASKit {
         agent_id: String,
         ctx: AgentContext,
         pin: String,
-        data: AgentData,
+        value: AgentValue,
     ) -> Result<(), AgentError> {
-        message::send_agent_out(self, agent_id, ctx, pin, data).await
+        message::send_agent_out(self, agent_id, ctx, pin, value).await
     }
 
     pub fn try_send_agent_out(
@@ -782,22 +782,22 @@ impl ASKit {
         agent_id: String,
         ctx: AgentContext,
         pin: String,
-        data: AgentData,
+        value: AgentValue,
     ) -> Result<(), AgentError> {
-        message::try_send_agent_out(self, agent_id, ctx, pin, data)
+        message::try_send_agent_out(self, agent_id, ctx, pin, value)
     }
 
-    pub fn write_board_data(&self, name: String, data: AgentData) -> Result<(), AgentError> {
-        self.try_send_board_out(name, AgentContext::new(), data)
+    pub fn write_board_value(&self, name: String, value: AgentValue) -> Result<(), AgentError> {
+        self.try_send_board_out(name, AgentContext::new(), value)
     }
 
     pub(crate) fn try_send_board_out(
         &self,
         name: String,
         ctx: AgentContext,
-        data: AgentData,
+        value: AgentValue,
     ) -> Result<(), AgentError> {
-        message::try_send_board_out(self, name, ctx, data)
+        message::try_send_board_out(self, name, ctx, value)
     }
 
     fn spawn_message_loop(&self) -> Result<(), AgentError> {
@@ -819,12 +819,12 @@ impl ASKit {
                         agent,
                         ctx,
                         pin,
-                        data,
+                        value,
                     } => {
-                        message::agent_out(&askit, agent, ctx, pin, data).await;
+                        message::agent_out(&askit, agent, ctx, pin, value).await;
                     }
-                    BoardOut { name, ctx, data } => {
-                        message::board_out(&askit, name, ctx, data).await;
+                    BoardOut { name, ctx, value } => {
+                        message::board_out(&askit, name, ctx, value).await;
                     }
                 }
             }
@@ -859,8 +859,8 @@ impl ASKit {
         observers.remove(&observer_id);
     }
 
-    pub(crate) fn emit_agent_display(&self, agent_id: String, key: String, data: AgentData) {
-        self.notify_observers(ASKitEvent::AgentDisplay(agent_id, key, data));
+    pub(crate) fn emit_agent_display(&self, agent_id: String, key: String, value: AgentValue) {
+        self.notify_observers(ASKitEvent::AgentDisplay(agent_id, key, value));
     }
 
     pub(crate) fn emit_agent_error(&self, agent_id: String, message: String) {
@@ -871,8 +871,8 @@ impl ASKit {
         self.notify_observers(ASKitEvent::AgentIn(agent_id, pin));
     }
 
-    pub(crate) fn emit_board(&self, name: String, data: AgentData) {
-        self.notify_observers(ASKitEvent::Board(name, data));
+    pub(crate) fn emit_board(&self, name: String, value: AgentValue) {
+        self.notify_observers(ASKitEvent::Board(name, value));
     }
 
     fn notify_observers(&self, event: ASKitEvent) {
@@ -885,10 +885,10 @@ impl ASKit {
 
 #[derive(Clone, Debug)]
 pub enum ASKitEvent {
-    AgentDisplay(String, String, AgentData), // (agent_id, key, data)
-    AgentError(String, String),              // (agent_id, message)
-    AgentIn(String, String),                 // (agent_id, pin)
-    Board(String, AgentData),                // (board name, data)
+    AgentDisplay(String, String, AgentValue), // (agent_id, key, value)
+    AgentError(String, String),               // (agent_id, message)
+    AgentIn(String, String),                  // (agent_id, pin)
+    Board(String, AgentValue),                // (board name, value)
 }
 
 pub trait ASKitObserver {

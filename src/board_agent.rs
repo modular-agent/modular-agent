@@ -5,9 +5,9 @@ use super::agent::{Agent, AsAgent, AsAgentData, new_agent_boxed};
 use super::askit::ASKit;
 use super::config::AgentConfigs;
 use super::context::AgentContext;
-use super::data::AgentData;
 use super::definition::AgentDefinition;
 use super::error::AgentError;
+use super::value::AgentValue;
 
 struct BoardInAgent {
     data: AsAgentData,
@@ -55,7 +55,7 @@ impl AsAgent for BoardInAgent {
         &mut self,
         ctx: AgentContext,
         pin: String,
-        data: AgentData,
+        value: AgentValue,
     ) -> Result<(), AgentError> {
         let mut board_name = self.board_name.clone().unwrap_or_default();
         if board_name.is_empty() {
@@ -71,10 +71,10 @@ impl AsAgent for BoardInAgent {
         }
         let askit = self.askit();
         {
-            let mut board_data = askit.board_data.lock().unwrap();
-            board_data.insert(board_name.clone(), data.clone());
+            let mut board_value = askit.board_value.lock().unwrap();
+            board_value.insert(board_name.clone(), value.clone());
         }
-        askit.try_send_board_out(board_name.clone(), ctx, data.clone())?;
+        askit.try_send_board_out(board_name.clone(), ctx, value.clone())?;
 
         Ok(())
     }

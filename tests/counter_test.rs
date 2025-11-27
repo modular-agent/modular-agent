@@ -53,24 +53,24 @@ async fn test_agent_process() {
 
     let ctx = askit::AgentContext::new();
     agent
-        .process(ctx, "in".into(), askit::AgentData::unit())
+        .process(ctx, "in".into(), askit::AgentValue::unit())
         .await
         .unwrap();
 
     assert_eq!(
-        agent.out_pin("count").unwrap().data,
-        askit::AgentData::integer(1)
+        agent.out_pin("count").unwrap().value,
+        askit::AgentValue::integer(1)
     );
 
     let ctx = askit::AgentContext::new();
     agent
-        .process(ctx, "in".into(), askit::AgentData::unit())
+        .process(ctx, "in".into(), askit::AgentValue::unit())
         .await
         .unwrap();
 
     assert_eq!(
-        agent.out_pin("count").unwrap().data,
-        askit::AgentData::integer(2)
+        agent.out_pin("count").unwrap().value,
+        askit::AgentValue::integer(2)
     );
 }
 
@@ -87,7 +87,7 @@ async fn test_agent_stop() {
 
     let ctx = askit::AgentContext::new();
     agent
-        .process(ctx, "in".into(), askit::AgentData::unit())
+        .process(ctx, "in".into(), askit::AgentValue::unit())
         .await
         .unwrap();
 

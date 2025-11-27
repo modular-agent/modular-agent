@@ -3,7 +3,7 @@ extern crate agent_stream_kit as askit;
 use async_trait::async_trait;
 
 use askit::{
-    ASKit, AgentConfigs, AgentContext, AgentData, AgentDefinition, AgentError, AgentOutput,
+    ASKit, AgentConfigs, AgentContext, AgentDefinition, AgentError, AgentOutput, AgentValue,
     AsAgent, AsAgentData, new_agent_boxed,
 };
 use std::vec;
@@ -46,16 +46,15 @@ impl AsAgent for CounterAgent {
         &mut self,
         ctx: AgentContext,
         pin: String,
-        _data: AgentData,
+        _value: AgentValue,
     ) -> Result<(), AgentError> {
         if pin == PIN_RESET {
             self.count = 0;
         } else if pin == PIN_IN {
             self.count += 1;
         }
-        self.try_output(ctx, PIN_COUNT, AgentData::integer(self.count))?;
-        // self.emit_display(DISPLAY_COUNT, AgentData::new_integer(self.count))?;
-
+        self.try_output(ctx, PIN_COUNT, AgentValue::integer(self.count))?;
+        // self.emit_display(DISPLAY_COUNT, AgentValue::integer(self.count))?;
         Ok(())
     }
 }

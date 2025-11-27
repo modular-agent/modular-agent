@@ -1,6 +1,6 @@
 use std::{io::stdin, path::PathBuf};
 
-use agent_stream_kit::{ASKit, ASKitEvent, ASKitObserver, AgentData, AgentFlow};
+use agent_stream_kit::{ASKit, ASKitEvent, ASKitObserver, AgentFlow, AgentValue};
 
 #[tokio::main]
 async fn main() {
@@ -32,7 +32,7 @@ async fn main() {
         }
 
         askit
-            .write_board_data("user input".to_string(), AgentData::string(input.trim()))
+            .write_board_value("user input".to_string(), AgentValue::string(input.trim()))
             .unwrap();
     }
 
@@ -45,8 +45,8 @@ struct BoardObserver;
 impl ASKitObserver for BoardObserver {
     fn notify(&self, event: &ASKitEvent) {
         match event {
-            ASKitEvent::Board(name, data) => {
-                println!("Board: {}: {:?}", name, data);
+            ASKitEvent::Board(name, value) => {
+                println!("Board: {}: {:?}", name, value);
             }
             _ => {
                 dbg!(event);

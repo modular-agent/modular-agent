@@ -9,19 +9,18 @@ mod askit;
 mod board_agent;
 mod config;
 mod context;
-mod data;
 mod definition;
 mod error;
 mod flow;
 mod message;
 mod output;
 mod runtime;
+mod value;
 
 pub use agent::{Agent, AgentStatus, AsAgent, AsAgentData, agent_new, new_agent_boxed};
 pub use askit::{ASKit, ASKitEvent, ASKitObserver};
 pub use config::{AgentConfigs, AgentConfigsMap};
 pub use context::AgentContext;
-pub use data::{AgentData, AgentValue, AgentValueMap};
 pub use definition::{
     AgentConfigEntry, AgentDefaultConfigs, AgentDefinition, AgentDefinitions,
     AgentDisplayConfigEntry,
@@ -29,6 +28,7 @@ pub use definition::{
 pub use error::AgentError;
 pub use flow::{AgentFlow, AgentFlowEdge, AgentFlowNode, AgentFlows};
 pub use output::AgentOutput;
+pub use value::{AgentValue, AgentValueMap};
 
 // re-export async_trait
 pub use async_trait::async_trait;

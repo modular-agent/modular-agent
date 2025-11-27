@@ -6,8 +6,8 @@ use serde::{Deserialize, Serialize};
 use super::agent::Agent;
 use super::askit::ASKit;
 use super::config::AgentConfigs;
-use super::data::AgentValue;
 use super::error::AgentError;
+use super::value::AgentValue;
 
 pub type AgentDefinitions = HashMap<String, AgentDefinition>;
 

@@ -8,7 +8,7 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 
-use super::data::AgentValue;
+use super::value::AgentValue;
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct AgentContext {

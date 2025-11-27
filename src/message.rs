@@ -1,7 +1,7 @@
 use super::askit::ASKit;
 use super::context::AgentContext;
-use super::data::AgentData;
 use super::error::AgentError;
+use super::value::AgentValue;
 
 #[derive(Clone, Debug)]
 pub enum AgentEventMessage {
@@ -9,12 +9,12 @@ pub enum AgentEventMessage {
         agent: String,
         ctx: AgentContext,
         pin: String,
-        data: AgentData,
+        value: AgentValue,
     },
     BoardOut {
         name: String,
         ctx: AgentContext,
-        data: AgentData,
+        value: AgentValue,
     },
 }
 
@@ -23,7 +23,7 @@ pub async fn send_agent_out(
     agent: String,
     ctx: AgentContext,
     pin: String,
-    data: AgentData,
+    value: AgentValue,
 ) -> Result<(), AgentError> {
     askit
         .tx()?
@@ -31,7 +31,7 @@ pub async fn send_agent_out(
             agent,
             ctx,
             pin,
-            data,
+            value,
         })
         .await
         .map_err(|_| AgentError::SendMessageFailed("Failed to send AgentOut message".to_string()))
@@ -42,7 +42,7 @@ pub fn try_send_agent_out(
     agent: String,
     ctx: AgentContext,
     pin: String,
-    data: AgentData,
+    value: AgentValue,
 ) -> Result<(), AgentError> {
     askit
         .tx()?
@@ -50,7 +50,7 @@ pub fn try_send_agent_out(
             agent,
             ctx,
             pin,
-            data,
+            value,
         })
         .map_err(|_| {
             AgentError::SendMessageFailed("Failed to try_send AgentOut message".to_string())
@@ -61,11 +61,11 @@ pub fn try_send_board_out(
     askit: &ASKit,
     name: String,
     ctx: AgentContext,
-    data: AgentData,
+    value: AgentValue,
 ) -> Result<(), AgentError> {
     askit
         .tx()?
-        .try_send(AgentEventMessage::BoardOut { name, ctx, data })
+        .try_send(AgentEventMessage::BoardOut { name, ctx, value })
         .map_err(|_| {
             AgentError::SendMessageFailed("Failed to try_send BoardOut message".to_string())
         })
@@ -77,7 +77,7 @@ pub async fn agent_out(
     source_agent: String,
     ctx: AgentContext,
     pin: String,
-    data: AgentData,
+    value: AgentValue,
 ) {
     let targets;
     {
@@ -112,7 +112,7 @@ pub async fn agent_out(
             target_pin.clone()
         };
 
-        env.agent_input(target_agent.clone(), ctx.clone(), target_pin, data.clone())
+        env.agent_input(target_agent.clone(), ctx.clone(), target_pin, value.clone())
             .await
             .unwrap_or_else(|e| {
                 log::error!("Failed to send message to {}: {}", target_agent, e);
@@ -120,7 +120,7 @@ pub async fn agent_out(
     }
 }
 
-pub async fn board_out(env: &ASKit, name: String, ctx: AgentContext, data: AgentData) {
+pub async fn board_out(env: &ASKit, name: String, ctx: AgentContext, value: AgentValue) {
     let board_nodes;
     {
         let env_board_nodes = env.board_out_agents.lock().unwrap();
@@ -146,7 +146,7 @@ pub async fn board_out(env: &ASKit, name: String, ctx: AgentContext, data: Agent
                 } else {
                     target_handle.clone()
                 };
-                env.agent_input(target_agent.clone(), ctx.clone(), target_pin, data.clone())
+                env.agent_input(target_agent.clone(), ctx.clone(), target_pin, value.clone())
                     .await
                     .unwrap_or_else(|e| {
                         log::error!("Failed to send message to {}: {}", target_agent, e);
@@ -155,5 +155,5 @@ pub async fn board_out(env: &ASKit, name: String, ctx: AgentContext, data: Agent
         }
     }
 
-    env.emit_board(name, data);
+    env.emit_board(name, value);
 }
