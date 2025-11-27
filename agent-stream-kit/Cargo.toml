@@ -24,14 +24,10 @@ tokio = { version = "1", features = ["macros"] }
 default = ["image"]
 image = ["photon-rs"]
 
-[[example]]
-name = "board"
-path = "../examples/board.rs"
-
 [[test]]
 name = "counter_test"
-path = "../tests/counter_test.rs"
+path = "tests/counter_test.rs"
 
 [[test]]
 name = "flow_test"
-path = "../tests/flow_test.rs"
+path = "tests/flow_test.rs"
