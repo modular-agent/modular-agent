@@ -1,8 +1,8 @@
 use std::vec;
 
 use agent_stream_kit::{
-    ASKit, AgentConfigs, AgentContext, AgentData, AgentDefinition, AgentDisplayConfigEntry,
-    AgentError, AgentOutput, AsAgent, AsAgentData, async_trait, new_agent_boxed,
+    ASKit, AgentConfigs, AgentContext, AgentDefinition, AgentDisplayConfigEntry, AgentError,
+    AgentOutput, AgentValue, AsAgent, AsAgentData, async_trait, new_agent_boxed,
 };
 
 /// Counter
@@ -35,7 +35,7 @@ impl AsAgent for CounterAgent {
 
     async fn start(&mut self) -> Result<(), AgentError> {
         self.count = 0;
-        self.emit_display(DISPLAY_COUNT, AgentData::integer(0));
+        self.emit_display(DISPLAY_COUNT, AgentValue::integer(0));
         Ok(())
     }
 
@@ -43,15 +43,15 @@ impl AsAgent for CounterAgent {
         &mut self,
         ctx: AgentContext,
         pin: String,
-        _data: AgentData,
+        _value: AgentValue,
     ) -> Result<(), AgentError> {
         if pin == PIN_RESET {
             self.count = 0;
         } else if pin == PIN_IN {
             self.count += 1;
         }
-        self.try_output(ctx, PIN_COUNT, AgentData::integer(self.count))?;
-        self.emit_display(DISPLAY_COUNT, AgentData::integer(self.count));
+        self.try_output(ctx, PIN_COUNT, AgentValue::integer(self.count))?;
+        self.emit_display(DISPLAY_COUNT, AgentValue::integer(self.count));
 
         Ok(())
     }

@@ -1,18 +1,18 @@
 use agent_stream_kit::{
-    ASKit, Agent, AgentConfigs, AgentContext, AgentData, AgentDefinition, AgentError, AgentOutput,
+    ASKit, Agent, AgentConfigs, AgentContext, AgentDefinition, AgentError, AgentOutput, AgentValue,
     AsAgent, AsAgentData, async_trait, new_agent_boxed,
 };
 use handlebars::Handlebars;
 
 /// The `StringJoinAgent` is responsible for joining an array of strings into a single string
-/// using a specified separator. It processes input data, applies transformations to handle
+/// using a specified separator. It processes input value, applies transformations to handle
 /// escape sequences (e.g., `\n`, `\t`), and outputs the resulting string.
 ///
 /// # Configuration
 /// - `CONFIG_SEP`: Specifies the separator to use when joining strings. Defaults to an empty string.
 ///
 /// # Input
-/// - Expects an array of strings as input data.
+/// - Expects an array of strings as input value.
 ///
 /// # Output
 /// - Produces a single joined string as output.
@@ -48,15 +48,15 @@ impl AsAgent for StringJoinAgent {
         &mut self,
         ctx: AgentContext,
         _pin: String,
-        data: AgentData,
+        value: AgentValue,
     ) -> Result<(), AgentError> {
         let config = self.configs()?;
 
         let sep = config.get_string_or_default(CONFIG_SEP);
 
-        if data.is_array() {
+        if value.is_array() {
             let mut out = Vec::new();
-            for v in data
+            for v in value
                 .as_array()
                 .ok_or_else(|| AgentError::InvalidArrayValue("Expected array".into()))?
             {
@@ -67,10 +67,10 @@ impl AsAgent for StringJoinAgent {
             out = out.replace("\\t", "\t");
             out = out.replace("\\r", "\r");
             out = out.replace("\\\\", "\\");
-            let out_data = AgentData::string(out);
-            self.try_output(ctx, PIN_STRING, out_data)
+            let out_value = AgentValue::string(out);
+            self.try_output(ctx, PIN_STRING, out_value)
         } else {
-            self.try_output(ctx, PIN_STRING, data)
+            self.try_output(ctx, PIN_STRING, value)
         }
     }
 }
@@ -105,7 +105,7 @@ impl AsAgent for TemplateStringAgent {
         &mut self,
         ctx: AgentContext,
         _pin: String,
-        data: AgentData,
+        value: AgentValue,
     ) -> Result<(), AgentError> {
         let config = self.configs()?;
 
@@ -116,29 +116,24 @@ impl AsAgent for TemplateStringAgent {
 
         let reg = handlebars_new();
 
-        if data.is_array() {
-            let kind = &data.kind;
+        if value.is_array() {
             let mut out_arr = Vec::new();
-            for v in data
+            for v in value
                 .as_array()
                 .ok_or_else(|| AgentError::InvalidArrayValue("Expected array".into()))?
             {
-                let d = AgentData {
-                    kind: kind.clone(),
-                    value: v.clone(),
-                };
-                let rendered_string = reg.render_template(&template, &d).map_err(|e| {
+                let rendered_string = reg.render_template(&template, v).map_err(|e| {
                     AgentError::InvalidValue(format!("Failed to render template: {}", e))
                 })?;
                 out_arr.push(rendered_string.into());
             }
-            self.try_output(ctx, PIN_STRING, AgentData::array("string", out_arr))
+            self.try_output(ctx, PIN_STRING, AgentValue::array(out_arr))
         } else {
-            let rendered_string = reg.render_template(&template, &data).map_err(|e| {
+            let rendered_string = reg.render_template(&template, &value).map_err(|e| {
                 AgentError::InvalidValue(format!("Failed to render template: {}", e))
             })?;
-            let out_data = AgentData::string(rendered_string);
-            self.try_output(ctx, PIN_STRING, out_data)
+            let out_value = AgentValue::string(rendered_string);
+            self.try_output(ctx, PIN_STRING, out_value)
         }
     }
 }
@@ -173,7 +168,7 @@ impl AsAgent for TemplateTextAgent {
         &mut self,
         ctx: AgentContext,
         _pin: String,
-        data: AgentData,
+        value: AgentValue,
     ) -> Result<(), AgentError> {
         let config = self.configs()?;
 
@@ -184,29 +179,24 @@ impl AsAgent for TemplateTextAgent {
 
         let reg = handlebars_new();
 
-        if data.is_array() {
-            let kind = &data.kind;
+        if value.is_array() {
             let mut out_arr = Vec::new();
-            for v in data
+            for v in value
                 .as_array()
                 .ok_or_else(|| AgentError::InvalidArrayValue("Expected array".into()))?
             {
-                let d = AgentData {
-                    kind: kind.clone(),
-                    value: v.clone(),
-                };
-                let rendered_string = reg.render_template(&template, &d).map_err(|e| {
+                let rendered_string = reg.render_template(&template, v).map_err(|e| {
                     AgentError::InvalidValue(format!("Failed to render template: {}", e))
                 })?;
                 out_arr.push(rendered_string.into());
             }
-            self.try_output(ctx, PIN_STRING, AgentData::array("string", out_arr))
+            self.try_output(ctx, PIN_STRING, AgentValue::array(out_arr))
         } else {
-            let rendered_string = reg.render_template(&template, &data).map_err(|e| {
+            let rendered_string = reg.render_template(&template, &value).map_err(|e| {
                 AgentError::InvalidValue(format!("Failed to render template: {}", e))
             })?;
-            let out_data = AgentData::string(rendered_string);
-            self.try_output(ctx, PIN_STRING, out_data)
+            let out_value = AgentValue::string(rendered_string);
+            self.try_output(ctx, PIN_STRING, out_value)
         }
     }
 }
@@ -241,7 +231,7 @@ impl AsAgent for TemplateArrayAgent {
         &mut self,
         ctx: AgentContext,
         _pin: String,
-        data: AgentData,
+        value: AgentValue,
     ) -> Result<(), AgentError> {
         let config = self.configs()?;
 
@@ -252,19 +242,18 @@ impl AsAgent for TemplateArrayAgent {
 
         let reg = handlebars_new();
 
-        if data.is_array() {
-            let rendered_string = reg.render_template(&template, &data).map_err(|e| {
+        if value.is_array() {
+            let rendered_string = reg.render_template(&template, &value).map_err(|e| {
                 AgentError::InvalidValue(format!("Failed to render template: {}", e))
             })?;
-            self.try_output(ctx, PIN_STRING, AgentData::string(rendered_string))
+            self.try_output(ctx, PIN_STRING, AgentValue::string(rendered_string))
         } else {
-            let kind = &data.kind;
-            let d = AgentData::array(kind, vec![data.value.clone()]);
+            let d = AgentValue::array(vec![value.clone()]);
             let rendered_string = reg.render_template(&template, &d).map_err(|e| {
                 AgentError::InvalidValue(format!("Failed to render template: {}", e))
             })?;
-            let out_data = AgentData::string(rendered_string);
-            self.try_output(ctx, PIN_STRING, out_data)
+            let out_value = AgentValue::string(rendered_string);
+            self.try_output(ctx, PIN_STRING, out_value)
         }
     }
 }

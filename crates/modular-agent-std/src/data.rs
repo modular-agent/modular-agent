@@ -1,8 +1,8 @@
 use std::vec;
 
 use agent_stream_kit::{
-    ASKit, Agent, AgentConfigs, AgentContext, AgentData, AgentDefinition, AgentError, AgentOutput,
-    AgentValue, AsAgent, AsAgentData, async_trait, new_agent_boxed,
+    ASKit, Agent, AgentConfigs, AgentContext, AgentDefinition, AgentError, AgentOutput, AgentValue,
+    AsAgent, AsAgentData, async_trait, new_agent_boxed,
 };
 
 // Get Value
@@ -35,7 +35,7 @@ impl AsAgent for GetValueAgent {
         &mut self,
         ctx: AgentContext,
         _pin: String,
-        data: AgentData,
+        value: AgentValue,
     ) -> Result<(), AgentError> {
         let key = self.configs()?.get_string(CONFIG_KEY)?;
         if key.is_empty() {
@@ -43,31 +43,26 @@ impl AsAgent for GetValueAgent {
         }
         let keys = key.split('.').collect::<Vec<_>>();
 
-        if data.is_object() {
-            if let Some(value) = get_nested_value(&data.value, &keys) {
-                self.try_output(ctx, PIN_VALUE, AgentData::from_value(value.to_owned()))?;
+        if value.is_object() {
+            if let Some(value) = get_nested_value(&value, &keys) {
+                self.try_output(ctx, PIN_VALUE, value.to_owned())?;
             } else {
-                self.try_output(ctx, PIN_VALUE, AgentData::unit())?;
+                self.try_output(ctx, PIN_VALUE, AgentValue::unit())?;
             }
-        } else if data.is_array() {
+        } else if value.is_array() {
             let mut out_arr = Vec::new();
-            for v in data
+            for v in value
                 .as_array()
                 .ok_or_else(|| AgentError::InvalidValue("failed as_array".to_string()))?
             {
                 let value = get_nested_value(v, &keys);
                 if let Some(v) = value {
-                    out_arr.push(v.clone());
+                    out_arr.push(v.to_owned());
                 } else {
                     out_arr.push(AgentValue::unit());
                 }
             }
-            let kind = if out_arr.is_empty() {
-                "unit"
-            } else {
-                &out_arr[0].kind()
-            };
-            self.try_output(ctx, PIN_VALUE, AgentData::array(kind.to_string(), out_arr))?;
+            self.try_output(ctx, PIN_VALUE, AgentValue::array(out_arr))?;
         }
 
         Ok(())
@@ -77,7 +72,7 @@ impl AsAgent for GetValueAgent {
 // Set Value
 struct SetValueAgent {
     data: AsAgentData,
-    input_data: Option<AgentData>,
+    input_data: Option<AgentValue>,
     input_value: Option<AgentValue>,
     current_id: usize,
 }
@@ -110,7 +105,7 @@ impl AsAgent for SetValueAgent {
         &mut self,
         ctx: AgentContext,
         pin: String,
-        data: AgentData,
+        value: AgentValue,
     ) -> Result<(), AgentError> {
         // Reset input values if context ID changes
         let ctx_id = ctx.id();
@@ -122,11 +117,11 @@ impl AsAgent for SetValueAgent {
 
         // Store input data or value
         if pin == PIN_DATA {
-            if data.is_object() {
-                self.input_data = Some(data);
+            if value.is_object() {
+                self.input_data = Some(value);
             }
         } else if pin == PIN_VALUE {
-            self.input_value = Some(data.value);
+            self.input_value = Some(value);
         }
         if self.input_data.is_none() || self.input_value.is_none() {
             return Ok(());
@@ -141,10 +136,10 @@ impl AsAgent for SetValueAgent {
 
         // set value
         let new_value = self.input_value.take().unwrap();
-        let mut value = self.input_data.take().unwrap().value;
+        let mut value = self.input_data.take().unwrap();
         set_nested_value(&mut value, keys, new_value);
 
-        self.try_output(ctx, PIN_DATA, AgentData::from_value(value))?;
+        self.try_output(ctx, PIN_DATA, value)?;
 
         Ok(())
     }
@@ -180,7 +175,7 @@ impl AsAgent for ToObjectAgent {
         &mut self,
         ctx: AgentContext,
         _pin: String,
-        data: AgentData,
+        value: AgentValue,
     ) -> Result<(), AgentError> {
         let key = self.configs()?.get_string(CONFIG_KEY)?;
         if key.is_empty() {
@@ -188,10 +183,10 @@ impl AsAgent for ToObjectAgent {
         }
 
         let keys = key.split('.').collect::<Vec<_>>();
-        let mut value = AgentValue::object_default();
-        set_nested_value(&mut value, keys, data.value);
+        let mut new_value = AgentValue::object_default();
+        set_nested_value(&mut new_value, keys, value);
 
-        self.try_output(ctx, PIN_DATA, AgentData::from_value(value))?;
+        self.try_output(ctx, PIN_DATA, new_value)?;
         Ok(())
     }
 }
@@ -226,11 +221,11 @@ impl AsAgent for ToJsonAgent {
         &mut self,
         ctx: AgentContext,
         _pin: String,
-        data: AgentData,
+        value: AgentValue,
     ) -> Result<(), AgentError> {
-        let json = serde_json::to_string_pretty(&data.value)
+        let json = serde_json::to_string_pretty(&value)
             .map_err(|e| AgentError::InvalidValue(e.to_string()))?;
-        self.try_output(ctx, PIN_JSON, AgentData::string(json))?;
+        self.try_output(ctx, PIN_JSON, AgentValue::string(json))?;
         Ok(())
     }
 }
@@ -265,16 +260,15 @@ impl AsAgent for FromJsonAgent {
         &mut self,
         ctx: AgentContext,
         _pin: String,
-        data: AgentData,
+        value: AgentValue,
     ) -> Result<(), AgentError> {
-        let s = data
-            .value
+        let s = value
             .as_str()
             .ok_or_else(|| AgentError::InvalidValue("not a string".to_string()))?;
         let json_value: serde_json::Value =
             serde_json::from_str(s).map_err(|e| AgentError::InvalidValue(e.to_string()))?;
-        let data = AgentData::from_json(json_value)?;
-        self.try_output(ctx, PIN_DATA, data)?;
+        let value = AgentValue::from_json(json_value)?;
+        self.try_output(ctx, PIN_DATA, value)?;
         Ok(())
     }
 }
@@ -431,7 +425,8 @@ mod tests {
         assert_eq!(result_root, Some(&root));
     }
 
-    // Verify if a deeply nested structure (a.b.c) can be auto-generated from an empty state.
+    /// Test 1: Verify if a deeply nested structure (a.b.c) can be auto-generated from an empty state.
+    /// This confirms the fix for the previous bug (failure to traverse down levels).
     #[test]
     fn test_create_deeply_nested_structure() {
         let mut root = AgentValue::object_default();
@@ -452,7 +447,7 @@ mod tests {
         panic!("Nested structure was not created correctly: {:?}", root);
     }
 
-    // Verify if a new key can be added without breaking existing structures.
+    /// Test 2: Verify if a new key can be added without breaking existing structures.
     #[test]
     fn test_add_to_existing_structure() {
         let mut root = AgentValue::object_default();
@@ -471,7 +466,7 @@ mod tests {
         assert_eq!(*timeout, AgentValue::string("30s"));
     }
 
-    // Verify if an existing value can be overwritten.
+    /// Test 3: Verify if an existing value can be overwritten.
     #[test]
     fn test_overwrite_existing_value() {
         let mut root = AgentValue::object_default();
@@ -492,7 +487,8 @@ mod tests {
         assert_eq!(*version, AgentValue::string("v2"));
     }
 
-    // Verify if the operation stops safely when an intermediate path is not an object.
+    /// Test 4: Verify if the operation stops safely when an intermediate path is not an object.
+    /// Example: Try setting ["tags", "new_key"] against { "tags": "immutable_string" }
     #[test]
     fn test_stop_if_path_is_not_object() {
         let mut root = AgentValue::object_default();

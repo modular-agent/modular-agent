@@ -2,8 +2,8 @@ use std::fs;
 use std::path::Path;
 
 use agent_stream_kit::{
-    ASKit, AgentConfigs, AgentContext, AgentData, AgentDefinition, AgentError, AgentOutput, AsAgent,
-    AsAgentData, async_trait, new_agent_boxed,
+    ASKit, AgentConfigs, AgentContext, AgentDefinition, AgentError, AgentOutput, AgentValue,
+    AsAgent, AsAgentData, async_trait, new_agent_boxed,
 };
 
 // List Files Agent
@@ -36,9 +36,9 @@ impl AsAgent for ListFilesAgent {
         &mut self,
         ctx: AgentContext,
         _pin: String,
-        data: AgentData,
+        value: AgentValue,
     ) -> Result<(), AgentError> {
-        let path = data
+        let path = value
             .as_str()
             .ok_or_else(|| AgentError::InvalidValue("path is not a string".to_string()))?;
         let path = Path::new(path);
@@ -74,8 +74,8 @@ impl AsAgent for ListFilesAgent {
             files.push(file_name.into());
         }
 
-        let out_data = AgentData::array("string", files);
-        self.try_output(ctx, PIN_FILES, out_data)
+        let out_value = AgentValue::array(files);
+        self.try_output(ctx, PIN_FILES, out_value)
     }
 }
 
@@ -109,9 +109,9 @@ impl AsAgent for ReadTextFileAgent {
         &mut self,
         ctx: AgentContext,
         _pin: String,
-        data: AgentData,
+        value: AgentValue,
     ) -> Result<(), AgentError> {
-        let path = data
+        let path = value
             .as_str()
             .ok_or_else(|| AgentError::InvalidValue("path is not a string".into()))?;
         let path = Path::new(path);
@@ -133,8 +133,8 @@ impl AsAgent for ReadTextFileAgent {
         let content = fs::read_to_string(path).map_err(|e| {
             AgentError::InvalidValue(format!("Failed to read file {}: {}", path.display(), e))
         })?;
-        let out_data = AgentData::string(content);
-        self.try_output(ctx, PIN_TEXT, out_data)
+        let out_value = AgentValue::string(content);
+        self.try_output(ctx, PIN_TEXT, out_value)
     }
 }
 
@@ -168,9 +168,9 @@ impl AsAgent for WriteTextFileAgent {
         &mut self,
         ctx: AgentContext,
         _pin: String,
-        data: AgentData,
+        value: AgentValue,
     ) -> Result<(), AgentError> {
-        let input = data
+        let input = value
             .as_object()
             .ok_or_else(|| AgentError::InvalidValue("Input is not an object".into()))?;
 
@@ -201,7 +201,7 @@ impl AsAgent for WriteTextFileAgent {
             AgentError::InvalidValue(format!("Failed to write file {}: {}", path.display(), e))
         })?;
 
-        self.try_output(ctx, PIN_DATA, data)
+        self.try_output(ctx, PIN_DATA, value)
     }
 }
 

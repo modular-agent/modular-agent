@@ -1,8 +1,8 @@
 use std::vec;
 
 use agent_stream_kit::{
-    ASKit, AgentConfigs, AgentContext, AgentData, AgentDefinition, AgentDisplayConfigEntry,
-    AgentError, AgentOutput, AgentValue, AsAgent, AsAgentData, async_trait, new_agent_boxed,
+    ASKit, AgentConfigs, AgentContext, AgentDefinition, AgentDisplayConfigEntry, AgentError,
+    AgentOutput, AgentValue, AsAgent, AsAgentData, async_trait, new_agent_boxed,
 };
 
 // Display Data
@@ -39,9 +39,9 @@ impl AsAgent for DisplayDataAgent {
         &mut self,
         _ctx: AgentContext,
         _pin: String,
-        data: AgentData,
+        value: AgentValue,
     ) -> Result<(), AgentError> {
-        self.emit_display(DISPLAY_DATA, data);
+        self.emit_display(DISPLAY_DATA, value);
         Ok(())
     }
 }
@@ -76,21 +76,15 @@ impl AsAgent for DebugDataAgent {
         &mut self,
         ctx: AgentContext,
         _pin: String,
-        data: AgentData,
+        value: AgentValue,
     ) -> Result<(), AgentError> {
-        let value = AgentValue::object(
-            [
-                ("kind".to_string(), data.kind.into()),
-                ("value".to_string(), data.value),
-            ]
-            .into(),
-        );
+        let value = AgentValue::object([("value".to_string(), value)].into());
         let ctx_json =
             serde_json::to_value(&ctx).map_err(|e| AgentError::InvalidValue(e.to_string()))?;
         let ctx = AgentValue::from_json(ctx_json)?;
-        let debug_data =
-            AgentData::object([("ctx".to_string(), ctx), ("data".to_string(), value)].into());
-        self.emit_display(DISPLAY_DATA, debug_data);
+        let debug_value =
+            AgentValue::object([("ctx".to_string(), ctx), ("value".to_string(), value)].into());
+        self.emit_display(DISPLAY_DATA, debug_value);
         Ok(())
     }
 }

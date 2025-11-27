@@ -4,8 +4,8 @@ use std::time::Duration;
 use std::vec;
 
 use agent_stream_kit::{
-    ASKit, Agent, AgentConfigs, AgentContext, AgentData, AgentDefinition, AgentError, AgentOutput,
-    AgentStatus, AsAgent, AsAgentData, async_trait, new_agent_boxed,
+    ASKit, Agent, AgentConfigs, AgentContext, AgentDefinition, AgentError, AgentOutput,
+    AgentStatus, AgentValue, AsAgent, AsAgentData, async_trait, new_agent_boxed,
 };
 use chrono::{DateTime, Local, Utc};
 use cron::Schedule;
@@ -45,7 +45,7 @@ impl AsAgent for DelayAgent {
         &mut self,
         ctx: AgentContext,
         pin: String,
-        data: AgentData,
+        value: AgentValue,
     ) -> Result<(), AgentError> {
         let config = self.configs()?;
         let delay_ms = config.get_integer_or(CONFIG_DELAY, DELAY_MS_DEFAULT);
@@ -63,7 +63,7 @@ impl AsAgent for DelayAgent {
 
         tokio::time::sleep(Duration::from_millis(delay_ms as u64)).await;
 
-        self.try_output(ctx.clone(), pin, data.clone())?;
+        self.try_output(ctx.clone(), pin, value.clone())?;
 
         let mut num_waiting_data = self.num_waiting_data.lock().unwrap();
         *num_waiting_data -= 1;
@@ -103,7 +103,7 @@ impl IntervalTimerAgent {
                     agent_id.clone(),
                     AgentContext::new(),
                     PIN_UNIT.to_string(),
-                    AgentData::unit(),
+                    AgentValue::unit(),
                 ) {
                     log::error!("Failed to send interval timer output: {}", e);
                 }
@@ -222,7 +222,7 @@ impl AsAgent for OnStartAgent {
                 agent_id,
                 AgentContext::new(),
                 PIN_UNIT.to_string(),
-                AgentData::unit(),
+                AgentValue::unit(),
             ) {
                 log::error!("Failed to send delayed output: {}", e);
             }
@@ -299,7 +299,7 @@ impl ScheduleTimerAgent {
                     agent_id.clone(),
                     AgentContext::new(),
                     PIN_TIME.to_string(),
-                    AgentData::integer(current_local_time),
+                    AgentValue::integer(current_local_time),
                 ) {
                     log::error!("Failed to send schedule timer output: {}", e);
                 }
@@ -403,7 +403,7 @@ struct ThrottleTimeAgent {
     timer_handle: Arc<Mutex<Option<JoinHandle<()>>>>,
     time_ms: u64,
     max_num_data: i64,
-    waiting_data: Arc<Mutex<Vec<(AgentContext, String, AgentData)>>>,
+    waiting_data: Arc<Mutex<Vec<(AgentContext, String, AgentValue)>>>,
 }
 
 impl ThrottleTimeAgent {
@@ -531,7 +531,7 @@ impl AsAgent for ThrottleTimeAgent {
         &mut self,
         ctx: AgentContext,
         pin: String,
-        data: AgentData,
+        value: AgentValue,
     ) -> Result<(), AgentError> {
         if self.timer_handle.lock().unwrap().is_some() {
             // If the timer is running, we just add the data to the waiting list
@@ -542,7 +542,7 @@ impl AsAgent for ThrottleTimeAgent {
                 return Ok(());
             }
 
-            wd.push((ctx, pin, data));
+            wd.push((ctx, pin, value));
             if self.max_num_data > 0 && wd.len() > self.max_num_data as usize {
                 // If we have reached the max data to keep, we drop the oldest one
                 wd.remove(0);
@@ -555,7 +555,7 @@ impl AsAgent for ThrottleTimeAgent {
         self.start_timer()?;
 
         // Output the data
-        self.try_output(ctx, pin, data)?;
+        self.try_output(ctx, pin, value)?;
 
         Ok(())
     }

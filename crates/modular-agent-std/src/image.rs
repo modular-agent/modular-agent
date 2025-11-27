@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use agent_stream_kit::{
-    ASKit, Agent, AgentConfigs, AgentContext, AgentData, AgentDefinition, AgentError, AgentOutput,
+    ASKit, Agent, AgentConfigs, AgentContext, AgentDefinition, AgentError, AgentOutput, AgentValue,
     AsAgent, AsAgentData, async_trait, new_agent_boxed,
 };
 
@@ -58,14 +58,14 @@ impl AsAgent for IsBlankImageAgent {
         &mut self,
         ctx: AgentContext,
         _pin: String,
-        data: AgentData,
+        value: AgentValue,
     ) -> Result<(), AgentError> {
         let config = self.configs()?;
 
-        if data.is_image() {
-            let image = data
+        if value.is_image() {
+            let image = value
                 .as_image()
-                .ok_or_else(|| AgentError::InvalidValue("Expected image data".into()))?;
+                .ok_or_else(|| AgentError::InvalidValue("Expected image value".into()))?;
 
             let almost_black_threshold =
                 config.get_integer_or_default(CONFIG_ALMOST_BLACK_THRESHOLD) as u8;
@@ -73,13 +73,13 @@ impl AsAgent for IsBlankImageAgent {
 
             let is_blank = self.is_blank(&image, almost_black_threshold, blank_threshold);
             if is_blank {
-                self.try_output(ctx, PIN_BLANK, data)
+                self.try_output(ctx, PIN_BLANK, value)
             } else {
-                self.try_output(ctx, PIN_NON_BLANK, data)
+                self.try_output(ctx, PIN_NON_BLANK, value)
             }
         } else {
             Err(AgentError::InvalidValue(
-                "Input data is not an image".into(),
+                "Input value is not an image".into(),
             ))
         }
     }
@@ -116,24 +116,24 @@ impl AsAgent for ResampleImageAgent {
         &mut self,
         ctx: AgentContext,
         _pin: String,
-        data: AgentData,
+        value: AgentValue,
     ) -> Result<(), AgentError> {
         let config = self.configs()?;
 
-        if data.is_image() {
-            let image = data
+        if value.is_image() {
+            let image = value
                 .as_image()
-                .ok_or_else(|| AgentError::InvalidValue("Expected image data".into()))?;
+                .ok_or_else(|| AgentError::InvalidValue("Expected image value".into()))?;
 
             let width = config.get_integer_or_default(CONFIG_WIDTH) as usize;
             let height = config.get_integer_or_default(CONFIG_HEIGHT) as usize;
 
             let resampled_image = photon_rs::transform::resample(&*image, width, height);
 
-            self.try_output(ctx, PIN_IMAGE, AgentData::image(resampled_image))
+            self.try_output(ctx, PIN_IMAGE, AgentValue::image(resampled_image))
         } else {
-            // Pass through non-image data
-            self.try_output(ctx, PIN_IMAGE, data)
+            // Pass through non-image value
+            self.try_output(ctx, PIN_IMAGE, value)
         }
     }
 }
@@ -169,14 +169,14 @@ impl AsAgent for ResizeImageAgent {
         &mut self,
         ctx: AgentContext,
         _pin: String,
-        data: AgentData,
+        value: AgentValue,
     ) -> Result<(), AgentError> {
         let config = self.configs()?;
 
-        if data.is_image() {
-            let image = data
+        if value.is_image() {
+            let image = value
                 .as_image()
-                .ok_or_else(|| AgentError::InvalidValue("Expected image data".into()))?;
+                .ok_or_else(|| AgentError::InvalidValue("Expected image value".into()))?;
 
             let width = config.get_integer_or_default(CONFIG_WIDTH) as u32;
             let height = config.get_integer_or_default(CONFIG_HEIGHT) as u32;
@@ -188,10 +188,10 @@ impl AsAgent for ResizeImageAgent {
                 photon_rs::transform::SamplingFilter::Nearest,
             );
 
-            self.try_output(ctx, PIN_IMAGE, AgentData::image(resized_image))
+            self.try_output(ctx, PIN_IMAGE, AgentValue::image(resized_image))
         } else {
-            // Pass through non-image data
-            self.try_output(ctx, PIN_IMAGE, data)
+            // Pass through non-image value
+            self.try_output(ctx, PIN_IMAGE, value)
         }
     }
 }
@@ -227,14 +227,14 @@ impl AsAgent for ScaleImageAgent {
         &mut self,
         ctx: AgentContext,
         _pin: String,
-        data: AgentData,
+        value: AgentValue,
     ) -> Result<(), AgentError> {
         let config = self.configs()?;
 
-        if data.is_image() {
-            let image = data
+        if value.is_image() {
+            let image = value
                 .as_image()
-                .ok_or_else(|| AgentError::InvalidValue("Expected image data".into()))?;
+                .ok_or_else(|| AgentError::InvalidValue("Expected image value".into()))?;
 
             let scale = config.get_number_or_default(CONFIG_SCALE);
 
@@ -246,7 +246,7 @@ impl AsAgent for ScaleImageAgent {
 
             if scale == 1.0 {
                 // No scaling needed, pass through the original image
-                return self.try_output(ctx, PIN_IMAGE, data);
+                return self.try_output(ctx, PIN_IMAGE, value);
             }
 
             if scale < 1.0 {
@@ -259,17 +259,17 @@ impl AsAgent for ScaleImageAgent {
                     height,
                     photon_rs::transform::SamplingFilter::Nearest,
                 );
-                self.try_output(ctx, PIN_IMAGE, AgentData::image(resized_image))
+                self.try_output(ctx, PIN_IMAGE, AgentValue::image(resized_image))
             } else {
                 // scale > 1.0
                 let width = ((image.get_width() as f64) * scale) as usize;
                 let height = ((image.get_height() as f64) * scale) as usize;
                 let resampled_image = photon_rs::transform::resample(&*image, width, height);
-                self.try_output(ctx, PIN_IMAGE, AgentData::image(resampled_image))
+                self.try_output(ctx, PIN_IMAGE, AgentValue::image(resampled_image))
             }
         } else {
-            // Pass through non-image data
-            self.try_output(ctx, PIN_IMAGE, data)
+            // Pass through non-image value
+            self.try_output(ctx, PIN_IMAGE, value)
         }
     }
 }
@@ -330,14 +330,14 @@ impl AsAgent for IsChangedImageAgent {
         &mut self,
         ctx: AgentContext,
         _pin: String,
-        data: AgentData,
+        value: AgentValue,
     ) -> Result<(), AgentError> {
         let config = self.configs()?;
 
-        if data.is_image() {
-            let image = data
+        if value.is_image() {
+            let image = value
                 .as_image()
-                .ok_or_else(|| AgentError::InvalidValue("Expected image data".into()))?;
+                .ok_or_else(|| AgentError::InvalidValue("Expected image value".into()))?;
 
             let threshold = config.get_number_or_default(CONFIG_THRESHOLD) as f32;
 
@@ -349,13 +349,13 @@ impl AsAgent for IsChangedImageAgent {
 
             if is_changed {
                 self.last_image = Some(image.clone());
-                self.try_output(ctx, PIN_CHANGED, data)
+                self.try_output(ctx, PIN_CHANGED, value)
             } else {
-                self.try_output(ctx, PIN_UNCHANGED, data)
+                self.try_output(ctx, PIN_UNCHANGED, value)
             }
         } else {
             Err(AgentError::InvalidValue(
-                "Input data is not an image".into(),
+                "Input value is not an image".into(),
             ))
         }
     }
@@ -392,9 +392,9 @@ impl AsAgent for OpenImageAgent {
         &mut self,
         ctx: AgentContext,
         _pin: String,
-        data: AgentData,
+        value: AgentValue,
     ) -> Result<(), AgentError> {
-        let filename = data
+        let filename = value
             .as_str()
             .ok_or_else(|| AgentError::InvalidValue("Expected filename string".into()))?;
         let img_path = std::path::Path::new(filename);
@@ -403,7 +403,7 @@ impl AsAgent for OpenImageAgent {
             AgentError::InvalidValue(format!("Failed to open image {}: {}", filename, e))
         })?;
 
-        self.try_output(ctx, PIN_IMAGE, AgentData::image(image))
+        self.try_output(ctx, PIN_IMAGE, AgentValue::image(image))
     }
 }
 
@@ -436,15 +436,15 @@ impl AsAgent for SaveImageAgent {
         &mut self,
         ctx: AgentContext,
         _pin: String,
-        data: AgentData,
+        value: AgentValue,
     ) -> Result<(), AgentError> {
-        let Some(image) = data.get_image("image") else {
+        let Some(image) = value.get_image("image") else {
             return Err(AgentError::InvalidValue(
-                "Expected image data under 'image' key".into(),
+                "Expected image value under 'image' key".into(),
             ));
         };
 
-        let Some(filename) = data.get_str("filename") else {
+        let Some(filename) = value.get_str("filename") else {
             return Err(AgentError::InvalidValue(
                 "Expected filename string under 'filename' key".into(),
             ));
@@ -454,7 +454,7 @@ impl AsAgent for SaveImageAgent {
             |e| AgentError::InvalidValue(format!("Failed to save image {}: {}", filename, e)),
         )?;
 
-        self.try_output(ctx, PIN_RESULT, AgentData::unit())
+        self.try_output(ctx, PIN_RESULT, AgentValue::unit())
     }
 }
 

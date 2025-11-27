@@ -1,6 +1,6 @@
 use agent_stream_kit::{
-    ASKit, Agent, AgentConfigs, AgentContext, AgentData, AgentDefinition, AgentError, AgentOutput,
-    AgentValue, AgentValueMap, AsAgent, AsAgentData, async_trait, new_agent_boxed,
+    ASKit, Agent, AgentConfigs, AgentContext, AgentDefinition, AgentError, AgentOutput, AgentValue,
+    AgentValueMap, AsAgent, AsAgentData, async_trait, new_agent_boxed,
 };
 
 // Zip agent
@@ -73,7 +73,7 @@ impl AsAgent for ZipAgent {
         &mut self,
         ctx: AgentContext,
         pin: String,
-        data: AgentData,
+        value: AgentValue,
     ) -> Result<(), AgentError> {
         for i in 0..self.n {
             if self.keys[i].is_empty() {
@@ -96,7 +96,7 @@ impl AsAgent for ZipAgent {
         // Store the input value
         for i in 0..self.n {
             if pin == self.in_ports[i] {
-                self.input_value[i] = Some(data.value.clone());
+                self.input_value[i] = Some(value.clone());
             }
         }
 
@@ -114,9 +114,9 @@ impl AsAgent for ZipAgent {
             let value = self.input_value[i].take().unwrap();
             map.insert(key, value);
         }
-        let out_data = AgentData::object(map);
+        let out_value = AgentValue::object(map);
 
-        self.try_output(ctx, PIN_DATA, out_data)?;
+        self.try_output(ctx, PIN_DATA, out_value)?;
 
         Ok(())
     }

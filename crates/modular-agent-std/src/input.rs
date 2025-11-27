@@ -1,8 +1,8 @@
 use std::vec;
 
 use agent_stream_kit::{
-    ASKit, Agent, AgentConfigs, AgentContext, AgentData, AgentDefinition, AgentError, AgentOutput,
-    AgentStatus, AsAgent, AsAgentData, new_agent_boxed,
+    ASKit, Agent, AgentConfigs, AgentContext, AgentDefinition, AgentError, AgentOutput,
+    AgentStatus, AgentValue, AsAgent, AsAgentData, new_agent_boxed,
 };
 
 /// Unit Input
@@ -34,7 +34,7 @@ impl AsAgent for UnitInputAgent {
         // Since set_config is called even when the agent is not running,
         // we need to check the status before outputting the value.
         if *self.status() == AgentStatus::Start {
-            self.try_output(AgentContext::new(), CONFIG_UNIT, AgentData::unit())?;
+            self.try_output(AgentContext::new(), CONFIG_UNIT, AgentValue::unit())?;
         }
 
         Ok(())
@@ -72,7 +72,7 @@ impl AsAgent for BooleanInputAgent {
             self.try_output(
                 AgentContext::new(),
                 CONFIG_BOOLEAN,
-                AgentData::boolean(value),
+                AgentValue::boolean(value),
             )?;
         }
         Ok(())
@@ -110,7 +110,7 @@ impl AsAgent for IntegerInputAgent {
             self.try_output(
                 AgentContext::new(),
                 CONFIG_INTEGER,
-                AgentData::integer(value),
+                AgentValue::integer(value),
             )?;
         }
         Ok(())
@@ -145,7 +145,11 @@ impl AsAgent for NumberInputAgent {
     fn configs_changed(&mut self) -> Result<(), AgentError> {
         if *self.status() == AgentStatus::Start {
             let value = self.configs()?.get_number(CONFIG_NUMBER)?;
-            self.try_output(AgentContext::new(), CONFIG_NUMBER, AgentData::number(value))?;
+            self.try_output(
+                AgentContext::new(),
+                CONFIG_NUMBER,
+                AgentValue::number(value),
+            )?;
         }
         Ok(())
     }
@@ -179,7 +183,11 @@ impl AsAgent for StringInputAgent {
     fn configs_changed(&mut self) -> Result<(), AgentError> {
         if *self.status() == AgentStatus::Start {
             let value = self.configs()?.get_string(CONFIG_STRING)?;
-            self.try_output(AgentContext::new(), CONFIG_STRING, AgentData::string(value))?;
+            self.try_output(
+                AgentContext::new(),
+                CONFIG_STRING,
+                AgentValue::string(value),
+            )?;
         }
         Ok(())
     }
@@ -213,7 +221,7 @@ impl AsAgent for TextInputAgent {
     fn configs_changed(&mut self) -> Result<(), AgentError> {
         if *self.status() == AgentStatus::Start {
             let value = self.configs()?.get_string(CONFIG_TEXT)?;
-            self.try_output(AgentContext::new(), CONFIG_TEXT, AgentData::string(value))?;
+            self.try_output(AgentContext::new(), CONFIG_TEXT, AgentValue::string(value))?;
         }
         Ok(())
     }
@@ -251,13 +259,13 @@ impl AsAgent for ObjectInputAgent {
                 self.try_output(
                     AgentContext::new(),
                     CONFIG_OBJECT,
-                    AgentData::object(obj.clone()),
+                    AgentValue::object(obj.clone()),
                 )?;
             } else if let Some(arr) = value.as_array() {
                 self.try_output(
                     AgentContext::new(),
                     CONFIG_OBJECT,
-                    AgentData::array("object", arr.clone()),
+                    AgentValue::array(arr.clone()),
                 )?;
             } else {
                 return Err(AgentError::InvalidConfig(format!(

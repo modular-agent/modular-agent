@@ -3,8 +3,8 @@
 use std::vec;
 
 use agent_stream_kit::{
-    ASKit, AgentConfigs, AgentContext, AgentData, AgentDefinition, AgentError, AgentOutput, AsAgent,
-    AsAgentData, async_trait, new_agent_boxed,
+    ASKit, AgentConfigs, AgentContext, AgentDefinition, AgentError, AgentOutput, AgentValue,
+    AsAgent, AsAgentData, async_trait, new_agent_boxed,
 };
 
 // To YAML
@@ -37,11 +37,11 @@ impl AsAgent for ToYamlAgent {
         &mut self,
         ctx: AgentContext,
         _pin: String,
-        data: AgentData,
+        value: AgentValue,
     ) -> Result<(), AgentError> {
-        let yaml = serde_yaml_ng::to_string(&data.value)
+        let yaml = serde_yaml_ng::to_string(&value)
             .map_err(|e| AgentError::InvalidValue(e.to_string()))?;
-        self.try_output(ctx, PIN_YAML, AgentData::string(yaml))?;
+        self.try_output(ctx, PIN_YAML, AgentValue::string(yaml))?;
         Ok(())
     }
 }
@@ -76,16 +76,15 @@ impl AsAgent for FromYamlAgent {
         &mut self,
         ctx: AgentContext,
         _pin: String,
-        data: AgentData,
+        value: AgentValue,
     ) -> Result<(), AgentError> {
-        let s = data
-            .value
+        let s = value
             .as_str()
             .ok_or_else(|| AgentError::InvalidValue("not a string".to_string()))?;
-        let value: serde_json::Value =
+        let v: serde_json::Value =
             serde_yaml_ng::from_str(s).map_err(|e| AgentError::InvalidValue(e.to_string()))?;
-        let data = AgentData::from_json(value)?;
-        self.try_output(ctx, PIN_DATA, data)?;
+        let value = AgentValue::from_json(v)?;
+        self.try_output(ctx, PIN_DATA, value)?;
         Ok(())
     }
 }
