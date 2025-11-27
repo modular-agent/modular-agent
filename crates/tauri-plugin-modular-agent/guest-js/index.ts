@@ -113,13 +113,13 @@ export type Settings = {
 export type ConfigMessage = {
   agent_id: string;
   key: string;
-  data: any;
+  value: any;
 };
 
 export type DisplayMessage = {
   agent_id: string;
   key: string;
-  data: any;
+  value: any;
 };
 
 export type ErrorMessage = {

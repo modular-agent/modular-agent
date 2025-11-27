@@ -10,13 +10,13 @@ pub(crate) struct BoardObserver<R: Runtime> {
 impl<R: Runtime> ASKitObserver for BoardObserver<R> {
     fn notify(&self, event: &ASKitEvent) {
         match event {
-            ASKitEvent::Board(name, data) => {
+            ASKitEvent::Board(name, value) => {
                 self.app
                     .emit(
                         "notify_board",
                         BoardMessage {
                             name: name.to_string(),
-                            data: data.clone(),
+                            value: value.clone(),
                         },
                     ).unwrap_or_else(|e| {
                         eprintln!("Failed to emit board event: {}", e);

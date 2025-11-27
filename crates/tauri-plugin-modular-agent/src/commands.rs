@@ -1,5 +1,5 @@
 use agent_stream_kit::{
-    AgentConfigs, AgentConfigsMap, AgentData, AgentDefaultConfigs, AgentDefinition, AgentDefinitions,
+    AgentConfigs, AgentConfigsMap, AgentValue, AgentDefaultConfigs, AgentDefinition, AgentDefinitions,
     AgentFlow, AgentFlowEdge, AgentFlowNode, AgentFlows,
 };
 use tauri::{AppHandle, Runtime};
@@ -190,7 +190,7 @@ pub(crate) fn write_board<R: Runtime>(
     message: String,
 ) -> Result<()> {
     app.askit()
-        .write_board_data(board, AgentData::string(message))
+        .write_board_value(board, AgentValue::string(message))
         .map_err(Into::into)
 }
 
