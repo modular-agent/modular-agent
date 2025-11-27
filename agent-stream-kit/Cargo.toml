@@ -7,15 +7,15 @@ authors.workspace = true
 license.workspace = true
 
 [dependencies]
+askit-macros = { workspace = true }
 async-trait = "0.1"
+inventory = "0.3"
 log = "0.4"
 photon-rs = { version = "0.3.3", optional = true }
 serde = { version = "1", features = ["derive", "rc"] }
 serde_json = { version = "1" }
 thiserror = "2"
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "sync"] }
-askit-macros = { path = "../askit-macros" }
-inventory = "0.3"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros"] }

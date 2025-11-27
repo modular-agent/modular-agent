@@ -8,3 +8,6 @@ version = "0.11.0"
 description = "Agent Stream Kit"
 authors = ["Akira Ishino <akira@lumilab.jp>"]
 license = "Apache-2.0 OR MIT"
+
+[workspace.dependencies]
+askit-macros = { version = "0.11.0", path = "askit-macros" }
