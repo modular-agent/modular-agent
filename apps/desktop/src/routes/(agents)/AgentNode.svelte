@@ -151,7 +151,7 @@
           tys.add(inferTypeForDisplay({} as AgentDisplayConfigEntry, v));
         }
         if (tys.size === 1) {
-          return tys.values().next().value;
+          return tys.values().next().value ?? "object";
         }
         if ("message" in tys) {
           return "messages";
@@ -159,7 +159,7 @@
         if ("text" in tys) {
           return "text";
         }
-        return tys.values().next().value;
+        return tys.values().next().value ?? "object";
       } else if (typeof value === "object") {
         if (value?.content !== undefined) {
           return "message";
