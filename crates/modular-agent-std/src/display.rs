@@ -7,21 +7,21 @@ use agent_stream_kit::{
 use askit_macros::askit_agent;
 
 static CATEGORY: &str = "Std/Display";
-static DISPLAY_DATA: &str = "data";
+static DISPLAY_VALUE: &str = "value";
 
-// Display Data
+// Display Value
 #[askit_agent(
-    title = "Display Data",
+    title = "Display Value",
     category = CATEGORY,
     inputs = ["*"],
-    any_display(name = DISPLAY_DATA, hide_title)
+    any_display(name = DISPLAY_VALUE, hide_title)
 )]
-struct DisplayDataAgent {
+struct DisplayValueAgent {
     data: AsAgentData,
 }
 
 #[async_trait]
-impl AsAgent for DisplayDataAgent {
+impl AsAgent for DisplayValueAgent {
     fn new(
         askit: ASKit,
         id: String,
@@ -43,24 +43,24 @@ impl AsAgent for DisplayDataAgent {
         _pin: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
-        self.emit_display(DISPLAY_DATA, value);
+        self.emit_display(DISPLAY_VALUE, value);
         Ok(())
     }
 }
 
-// Debug Data
+// Debug Value
 #[askit_agent(
-    title = "Debug Data",
+    title = "Debug Value",
     category = CATEGORY,
     inputs = ["*"],
-    object_display(name = DISPLAY_DATA, hide_title)
+    object_display(name = DISPLAY_VALUE, hide_title)
 )]
-struct DebugDataAgent {
+struct DebugValueAgent {
     data: AsAgentData,
 }
 
 #[async_trait]
-impl AsAgent for DebugDataAgent {
+impl AsAgent for DebugValueAgent {
     fn new(
         askit: ASKit,
         id: String,
@@ -84,7 +84,7 @@ impl AsAgent for DebugDataAgent {
         let ctx = AgentValue::from_json(ctx_json)?;
         let debug_value =
             AgentValue::object([("ctx".to_string(), ctx), ("value".to_string(), value)].into());
-        self.emit_display(DISPLAY_DATA, debug_value);
+        self.emit_display(DISPLAY_VALUE, debug_value);
         Ok(())
     }
 }
