@@ -10,6 +10,13 @@ const NUMBER_KEY: &str = "number";
 const STRING_KEY: &str = "string";
 const TEXT_KEY: &str = "text";
 const OBJECT_KEY: &str = "object";
+const GLOBAL_UNIT_KEY: &str = "global_unit";
+const GLOBAL_BOOLEAN_KEY: &str = "global_boolean";
+const GLOBAL_INTEGER_KEY: &str = "global_integer";
+const GLOBAL_NUMBER_KEY: &str = "global_number";
+const GLOBAL_STRING_KEY: &str = "global_string";
+const GLOBAL_TEXT_KEY: &str = "global_text";
+const GLOBAL_OBJECT_KEY: &str = "global_object";
 
 #[askit_agent(
     kind = "Test",
@@ -26,6 +33,18 @@ const OBJECT_KEY: &str = "object";
         default = AgentValue::object_default(),
         title = "Obj",
         description = "Obj desc"
+    ),
+    unit_global_config(name = GLOBAL_UNIT_KEY),
+    boolean_global_config(name = GLOBAL_BOOLEAN_KEY, title = "Global Bool"),
+    integer_global_config(name = GLOBAL_INTEGER_KEY, default = -1),
+    number_global_config(name = GLOBAL_NUMBER_KEY, default = 2.71, description = "e"),
+    string_global_config(name = GLOBAL_STRING_KEY, default = "gs"),
+    text_global_config(name = GLOBAL_TEXT_KEY, default = "gt"),
+    object_global_config(
+        name = GLOBAL_OBJECT_KEY,
+        default = AgentValue::object_default(),
+        title = "GObj",
+        description = "Global obj"
     )
 )]
 struct ConfigAgent {
@@ -89,4 +108,31 @@ fn config_entries_are_generated() {
     assert_eq!(obj_entry.type_.as_deref(), Some("object"));
     assert_eq!(obj_entry.title.as_deref(), Some("Obj"));
     assert_eq!(obj_entry.description.as_deref(), Some("Obj desc"));
+}
+
+#[test]
+fn global_config_entries_are_generated() {
+    let def = ConfigAgent::agent_definition();
+    let configs: HashMap<_, _> = def
+        .global_configs
+        .expect("global configs")
+        .into_iter()
+        .collect();
+
+    assert_eq!(configs[GLOBAL_UNIT_KEY].type_.as_deref(), Some("unit"));
+
+    let bool_entry = &configs[GLOBAL_BOOLEAN_KEY];
+    assert_eq!(bool_entry.type_.as_deref(), Some("boolean"));
+    assert_eq!(bool_entry.value, AgentValue::boolean(false));
+    assert_eq!(bool_entry.title.as_deref(), Some("Global Bool"));
+
+    assert_eq!(configs[GLOBAL_INTEGER_KEY].value, AgentValue::integer(-1));
+    assert_eq!(configs[GLOBAL_NUMBER_KEY].description.as_deref(), Some("e"));
+    assert_eq!(configs[GLOBAL_STRING_KEY].value, AgentValue::string("gs"));
+    assert_eq!(configs[GLOBAL_TEXT_KEY].value, AgentValue::string("gt"));
+
+    let obj_entry = &configs[GLOBAL_OBJECT_KEY];
+    assert_eq!(obj_entry.type_.as_deref(), Some("object"));
+    assert_eq!(obj_entry.title.as_deref(), Some("GObj"));
+    assert_eq!(obj_entry.description.as_deref(), Some("Global obj"));
 }

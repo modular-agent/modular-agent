@@ -56,6 +56,7 @@ struct AgentArgs {
     inputs: Vec<Expr>,
     outputs: Vec<Expr>,
     configs: Vec<ConfigSpec>,
+    global_configs: Vec<ConfigSpec>,
     displays: Vec<DisplaySpec>,
 }
 
@@ -109,6 +110,7 @@ fn expand_askit_agent(
         inputs: Vec::new(),
         outputs: Vec::new(),
         configs: Vec::new(),
+        global_configs: Vec::new(),
         displays: Vec::new(),
     };
 
@@ -161,6 +163,27 @@ fn expand_askit_agent(
             }
             Meta::List(ml) if ml.path.is_ident("unit_config") => {
                 parsed.configs.push(ConfigSpec::Unit(parse_common_config(ml)?));
+            }
+            Meta::List(ml) if ml.path.is_ident("string_global_config") => {
+                parsed.global_configs.push(ConfigSpec::String(parse_common_config(ml)?));
+            }
+            Meta::List(ml) if ml.path.is_ident("text_global_config") => {
+                parsed.global_configs.push(ConfigSpec::Text(parse_common_config(ml)?));
+            }
+            Meta::List(ml) if ml.path.is_ident("boolean_global_config") => {
+                parsed.global_configs.push(ConfigSpec::Boolean(parse_common_config(ml)?));
+            }
+            Meta::List(ml) if ml.path.is_ident("integer_global_config") => {
+                parsed.global_configs.push(ConfigSpec::Integer(parse_common_config(ml)?));
+            }
+            Meta::List(ml) if ml.path.is_ident("number_global_config") => {
+                parsed.global_configs.push(ConfigSpec::Number(parse_common_config(ml)?));
+            }
+            Meta::List(ml) if ml.path.is_ident("object_global_config") => {
+                parsed.global_configs.push(ConfigSpec::Object(parse_common_config(ml)?));
+            }
+            Meta::List(ml) if ml.path.is_ident("unit_global_config") => {
+                parsed.global_configs.push(ConfigSpec::Unit(parse_common_config(ml)?));
             }
             Meta::List(ml) if ml.path.is_ident("unit_display") => {
                 parsed.displays.push(DisplaySpec::Unit(parse_common_display(ml)?));
@@ -362,6 +385,140 @@ fn expand_askit_agent(
         })
         .collect::<syn::Result<Vec<_>>>()?;
 
+    let global_config_calls = parsed
+        .global_configs
+        .into_iter()
+        .map(|cfg| match cfg {
+            ConfigSpec::Unit(c) => {
+                let name = c.name.ok_or_else(|| {
+                    syn::Error::new(Span::call_site(), "unit_global_config missing `name`")
+                })?;
+                let title = c.title.map(|t| quote! { let entry = entry.title(#t); });
+                let description = c
+                    .description
+                    .map(|d| quote! { let entry = entry.description(#d); });
+                Ok(quote! {
+                    .unit_global_config_with(#name, |entry| {
+                        let entry = entry;
+                        #title
+                        #description
+                        entry
+                    })
+                })
+            }
+            ConfigSpec::Boolean(c) => {
+                let name = c.name.ok_or_else(|| {
+                    syn::Error::new(Span::call_site(), "boolean_global_config missing `name`")
+                })?;
+                let default = c.default.unwrap_or_else(|| parse_quote! { false });
+                let title = c.title.map(|t| quote! { let entry = entry.title(#t); });
+                let description = c
+                    .description
+                    .map(|d| quote! { let entry = entry.description(#d); });
+                Ok(quote! {
+                    .boolean_global_config_with(#name, #default, |entry| {
+                        let entry = entry;
+                        #title
+                        #description
+                        entry
+                    })
+                })
+            }
+            ConfigSpec::Integer(c) => {
+                let name = c.name.ok_or_else(|| {
+                    syn::Error::new(Span::call_site(), "integer_global_config missing `name`")
+                })?;
+                let default = c.default.unwrap_or_else(|| parse_quote! { 0i64 });
+                let title = c.title.map(|t| quote! { let entry = entry.title(#t); });
+                let description = c
+                    .description
+                    .map(|d| quote! { let entry = entry.description(#d); });
+                Ok(quote! {
+                    .integer_global_config_with(#name, #default, |entry| {
+                        let entry = entry;
+                        #title
+                        #description
+                        entry
+                    })
+                })
+            }
+            ConfigSpec::Number(c) => {
+                let name = c.name.ok_or_else(|| {
+                    syn::Error::new(Span::call_site(), "number_global_config missing `name`")
+                })?;
+                let default = c.default.unwrap_or_else(|| parse_quote! { 0.0f64 });
+                let title = c.title.map(|t| quote! { let entry = entry.title(#t); });
+                let description = c
+                    .description
+                    .map(|d| quote! { let entry = entry.description(#d); });
+                Ok(quote! {
+                    .number_global_config_with(#name, #default, |entry| {
+                        let entry = entry;
+                        #title
+                        #description
+                        entry
+                    })
+                })
+            }
+            ConfigSpec::String(c) => {
+                let name = c.name.ok_or_else(|| {
+                    syn::Error::new(Span::call_site(), "string_global_config missing `name`")
+                })?;
+                let default = c.default.unwrap_or_else(|| parse_quote! { "" });
+                let title = c.title.map(|t| quote! { let entry = entry.title(#t); });
+                let description = c
+                    .description
+                    .map(|d| quote! { let entry = entry.description(#d); });
+                Ok(quote! {
+                    .string_global_config_with(#name, #default, |entry| {
+                        let entry = entry;
+                        #title
+                        #description
+                        entry
+                    })
+                })
+            }
+            ConfigSpec::Text(c) => {
+                let name = c.name.ok_or_else(|| {
+                    syn::Error::new(Span::call_site(), "text_global_config missing `name`")
+                })?;
+                let default = c.default.unwrap_or_else(|| parse_quote! { "" });
+                let title = c.title.map(|t| quote! { let entry = entry.title(#t); });
+                let description = c
+                    .description
+                    .map(|d| quote! { let entry = entry.description(#d); });
+                Ok(quote! {
+                    .text_global_config_with(#name, #default, |entry| {
+                        let entry = entry;
+                        #title
+                        #description
+                        entry
+                    })
+                })
+            }
+            ConfigSpec::Object(c) => {
+                let name = c.name.ok_or_else(|| {
+                    syn::Error::new(Span::call_site(), "object_global_config missing `name`")
+                })?;
+                let default = c.default.unwrap_or_else(|| {
+                    parse_quote! { ::agent_stream_kit::AgentValue::object_default() }
+                });
+                let title = c.title.map(|t| quote! { let entry = entry.title(#t); });
+                let description = c
+                    .description
+                    .map(|d| quote! { let entry = entry.description(#d); });
+                Ok(quote! {
+                    .object_global_config_with(#name, #default, |entry| {
+                        let entry = entry;
+                        #title
+                        #description
+                        entry
+                    })
+                })
+            }
+        })
+        .collect::<syn::Result<Vec<_>>>()?;
+
     let display_calls = parsed
         .displays
         .into_iter()
@@ -389,6 +546,7 @@ fn expand_askit_agent(
         #inputs
         #outputs
         #(#config_calls)*
+        #(#global_config_calls)*
         #(#display_calls)*
     };
 
