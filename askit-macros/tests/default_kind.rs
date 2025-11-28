@@ -20,14 +20,6 @@ impl AsAgent for NoKindAgent {
         })
     }
 
-    fn data(&self) -> &AsAgentData {
-        &self.data
-    }
-
-    fn mut_data(&mut self) -> &mut AsAgentData {
-        &mut self.data
-    }
-
     async fn process(
         &mut self,
         _ctx: AgentContext,

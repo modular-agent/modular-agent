@@ -10,7 +10,7 @@ use syn::{
     spanned::Spanned,
     parse_macro_input, parse_quote,
     punctuated::Punctuated,
-    Expr, ItemStruct, Lit, Meta, MetaList, token::Comma,
+    Expr, ItemStruct, Lit, Meta, MetaList, Type, token::Comma,
 };
 
 #[proc_macro_attribute]
@@ -101,6 +101,24 @@ fn expand_askit_agent(
     args: Punctuated<Meta, Comma>,
     item: ItemStruct,
 ) -> syn::Result<proc_macro2::TokenStream> {
+    let has_data_field = item.fields.iter().any(|f| match (&f.ident, &f.ty) {
+        (Some(ident), Type::Path(tp)) if ident == "data" => {
+            tp.path
+                .segments
+                .last()
+                .map(|seg| seg.ident == "AsAgentData")
+                .unwrap_or(false)
+        }
+        _ => false,
+    });
+
+    if !has_data_field {
+        return Err(syn::Error::new(
+            item.span(),
+            "#[askit_agent] expects the struct to have a `data: AsAgentData` field",
+        ));
+    }
+
     let mut parsed = AgentArgs {
         kind: None,
         name: None,
@@ -221,6 +239,17 @@ fn expand_askit_agent(
     let ident = &item.ident;
     let generics = item.generics.clone();
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+    let data_impl = quote! {
+        impl #impl_generics ::agent_stream_kit::HasAgentData for #ident #ty_generics #where_clause {
+            fn data(&self) -> &::agent_stream_kit::AsAgentData {
+                &self.data
+            }
+
+            fn mut_data(&mut self) -> &mut ::agent_stream_kit::AsAgentData {
+                &mut self.data
+            }
+        }
+    };
 
     let kind = parsed.kind.unwrap_or_else(|| parse_quote! { "Agent" });
     let name_tokens = parsed.name.map(|n| quote! { #n }).unwrap_or_else(|| {
@@ -552,6 +581,8 @@ fn expand_askit_agent(
 
     let expanded = quote! {
         #item
+
+        #data_impl
 
         impl #impl_generics #ident #ty_generics #where_clause {
             pub fn agent_definition() -> ::agent_stream_kit::AgentDefinition {

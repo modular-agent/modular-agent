@@ -112,8 +112,14 @@ impl AsAgentData {
     }
 }
 
+pub trait HasAgentData {
+    fn data(&self) -> &AsAgentData;
+
+    fn mut_data(&mut self) -> &mut AsAgentData;
+}
+
 #[async_trait]
-pub trait AsAgent {
+pub trait AsAgent: HasAgentData {
     fn new(
         askit: ASKit,
         id: String,
@@ -122,10 +128,6 @@ pub trait AsAgent {
     ) -> Result<Self, AgentError>
     where
         Self: Sized + Send + Sync;
-
-    fn data(&self) -> &AsAgentData;
-
-    fn mut_data(&mut self) -> &mut AsAgentData;
 
     fn configs_changed(&mut self) -> Result<(), AgentError> {
         Ok(())

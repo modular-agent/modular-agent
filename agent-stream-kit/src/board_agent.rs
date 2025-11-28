@@ -45,14 +45,6 @@ impl AsAgent for BoardInAgent {
         })
     }
 
-    fn data(&self) -> &AsAgentData {
-        &self.data
-    }
-
-    fn mut_data(&mut self) -> &mut AsAgentData {
-        &mut self.data
-    }
-
     fn configs_changed(&mut self) -> Result<(), AgentError> {
         self.board_name = self
             .configs()
@@ -125,14 +117,6 @@ impl AsAgent for BoardOutAgent {
             data: AsAgentData::new(askit, id, def_name, config),
             board_name,
         })
-    }
-
-    fn data(&self) -> &AsAgentData {
-        &self.data
-    }
-
-    fn mut_data(&mut self) -> &mut AsAgentData {
-        &mut self.data
     }
 
     async fn start(&mut self) -> Result<(), AgentError> {

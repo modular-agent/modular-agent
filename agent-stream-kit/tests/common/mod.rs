@@ -15,7 +15,6 @@ static PIN_COUNT: &str = "count";
 
 /// Counter
 #[askit_agent(
-    kind = "Agent",
     title = "Counter",
     category = CATEGORY,
     inputs = [PIN_IN, PIN_RESET],
@@ -38,14 +37,6 @@ impl AsAgent for CounterAgent {
             data: AsAgentData::new(askit, id, def_name, config),
             count: 0,
         })
-    }
-
-    fn data(&self) -> &AsAgentData {
-        &self.data
-    }
-
-    fn mut_data(&mut self) -> &mut AsAgentData {
-        &mut self.data
     }
 
     async fn start(&mut self) -> Result<(), AgentError> {

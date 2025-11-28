@@ -22,14 +22,6 @@ impl AsAgent for MyAgent {
         })
     }
 
-    fn data(&self) -> &AsAgentData {
-        &self.data
-    }
-
-    fn mut_data(&mut self) -> &mut AsAgentData {
-        &mut self.data
-    }
-
     async fn process(
         &mut self,
         _ctx: AgentContext,
@@ -75,14 +67,6 @@ impl AsAgent for MyAgentExplicit {
         Ok(Self {
             data: AsAgentData::new(askit, id, def_name, configs),
         })
-    }
-
-    fn data(&self) -> &AsAgentData {
-        &self.data
-    }
-
-    fn mut_data(&mut self) -> &mut AsAgentData {
-        &mut self.data
     }
 
     async fn process(

@@ -38,14 +38,6 @@ impl AsAgent for DisplayAgent {
             data: AsAgentData::new(askit, id, def_name, configs),
         })
     }
-
-    fn data(&self) -> &AsAgentData {
-        &self.data
-    }
-
-    fn mut_data(&mut self) -> &mut AsAgentData {
-        &mut self.data
-    }
 }
 
 #[test]
