@@ -4,9 +4,10 @@ use std::sync::{Arc, Mutex};
 use std::vec;
 
 use agent_stream_kit::{
-    ASKit, Agent, AgentConfigs, AgentContext, AgentDefinition, AgentError, AgentOutput, AgentValue,
-    AsAgent, AsAgentData, async_trait, new_agent_boxed,
+    ASKit, Agent, AgentConfigs, AgentContext, AgentError, AgentOutput, AgentValue, AsAgent,
+    AsAgentData, async_trait,
 };
+use askit_macros::askit_agent;
 
 use ollama_rs::{
     Ollama,
@@ -21,6 +22,22 @@ use ollama_rs::{
 use tokio_stream::StreamExt;
 
 use crate::message::{Message, MessageHistory};
+
+static CATEGORY: &str = "LLM";
+
+static PORT_EMBEDDINGS: &str = "embeddings";
+static PORT_INPUT: &str = "input";
+static PORT_MESSAGE: &str = "message";
+static PORT_RESPONSE: &str = "response";
+
+static CONFIG_MODEL: &str = "model";
+static CONFIG_OLLAMA_URL: &str = "ollama_url";
+static CONFIG_OPTIONS: &str = "options";
+static CONFIG_STREAM: &str = "stream";
+static CONFIG_SYSTEM: &str = "system";
+
+const DEFAULT_CONFIG_MODEL: &str = "gemma3:4b";
+const DEFAULT_OLLAMA_URL: &str = "http://localhost:11434";
 
 // Shared client management for Ollama agents
 struct OllamaManager {
@@ -68,6 +85,16 @@ impl OllamaManager {
 }
 
 // Ollama Completion Agent
+#[askit_agent(
+    title="Ollama Completion",
+    category=CATEGORY,
+    inputs=[PORT_MESSAGE],
+    outputs=[PORT_MESSAGE, PORT_RESPONSE],
+    string_config(name=CONFIG_MODEL, default=DEFAULT_CONFIG_MODEL),
+    text_config(name=CONFIG_SYSTEM, default=""),
+    text_config(name=CONFIG_OPTIONS, default="{}"),
+    string_global_config(name=CONFIG_OLLAMA_URL, default=DEFAULT_OLLAMA_URL, title="Ollama URL"),
+)]
 pub struct OllamaCompletionAgent {
     data: AsAgentData,
     manager: OllamaManager,
@@ -146,6 +173,15 @@ impl AsAgent for OllamaCompletionAgent {
 }
 
 // Ollama Chat Agent
+#[askit_agent(
+    title="Ollama Chat",
+    category=CATEGORY,
+    inputs=[PORT_MESSAGE],
+    outputs=[PORT_MESSAGE, PORT_RESPONSE],
+    string_config(name=CONFIG_MODEL, default=DEFAULT_CONFIG_MODEL),
+    boolean_config(name=CONFIG_STREAM, title="Stream"),
+    text_config(name=CONFIG_OPTIONS, default="{}")
+)]
 pub struct OllamaChatAgent {
     data: AsAgentData,
     manager: OllamaManager,
@@ -281,6 +317,14 @@ impl AsAgent for OllamaChatAgent {
 }
 
 // Ollama Embeddings Agent
+#[askit_agent(
+    title="Ollama Embeddings",
+    category=CATEGORY,
+    inputs=[PORT_INPUT],
+    outputs=[PORT_EMBEDDINGS],
+    string_config(name=CONFIG_MODEL, default=DEFAULT_CONFIG_MODEL),
+    text_config(name=CONFIG_OPTIONS, default="{}")
+)]
 pub struct OllamaEmbeddingsAgent {
     data: AsAgentData,
     manager: OllamaManager,
@@ -399,79 +443,4 @@ impl ChatHistory for MessageHistory {
             .collect();
         std::borrow::Cow::Owned(messages)
     }
-}
-
-static AGENT_KIND: &str = "agent";
-static CATEGORY: &str = "LLM";
-
-static PORT_EMBEDDINGS: &str = "embeddings";
-static PORT_INPUT: &str = "input";
-static PORT_MESSAGE: &str = "message";
-static PORT_RESPONSE: &str = "response";
-
-static CONFIG_MODEL: &str = "model";
-static CONFIG_OLLAMA_URL: &str = "ollama_url";
-static CONFIG_OPTIONS: &str = "options";
-static CONFIG_STREAM: &str = "stream";
-static CONFIG_SYSTEM: &str = "system";
-
-const DEFAULT_CONFIG_MODEL: &str = "gemma3:4b";
-const DEFAULT_OLLAMA_URL: &str = "http://localhost:11434";
-
-pub fn register_agents(askit: &ASKit) {
-    askit.register_agent(
-        AgentDefinition::new(
-            AGENT_KIND,
-            "ollama_completion",
-            Some(new_agent_boxed::<OllamaCompletionAgent>),
-        )
-        // .use_native_thread()
-        .title("Ollama Completion")
-        .category(CATEGORY)
-        .inputs(vec![PORT_MESSAGE])
-        .outputs(vec![PORT_MESSAGE, PORT_RESPONSE])
-        .string_global_config_with(CONFIG_OLLAMA_URL, DEFAULT_OLLAMA_URL, |entry| {
-            entry.title("Ollama URL")
-        })
-        .string_config_with(CONFIG_MODEL, DEFAULT_CONFIG_MODEL, |entry| {
-            entry.title("Model")
-        })
-        .text_config_with(CONFIG_SYSTEM, "", |entry| entry.title("System"))
-        .text_config_with(CONFIG_OPTIONS, "{}", |entry| entry.title("Options")),
-    );
-
-    askit.register_agent(
-        AgentDefinition::new(
-            AGENT_KIND,
-            "ollama_chat",
-            Some(new_agent_boxed::<OllamaChatAgent>),
-        )
-        // .use_native_thread()
-        .title("Ollama Chat")
-        .category(CATEGORY)
-        .inputs(vec![PORT_MESSAGE])
-        .outputs(vec![PORT_MESSAGE, PORT_RESPONSE])
-        .string_config_with(CONFIG_MODEL, DEFAULT_CONFIG_MODEL, |entry| {
-            entry.title("Model")
-        })
-        .boolean_config_with(CONFIG_STREAM, false, |entry| entry.title("Stream"))
-        .text_config_with(CONFIG_OPTIONS, "{}", |entry| entry.title("Options")),
-    );
-
-    askit.register_agent(
-        AgentDefinition::new(
-            AGENT_KIND,
-            "ollama_embeddings",
-            Some(new_agent_boxed::<OllamaEmbeddingsAgent>),
-        )
-        // .use_native_thread()
-        .title("Ollama Embeddings")
-        .category(CATEGORY)
-        .inputs(vec![PORT_INPUT])
-        .outputs(vec![PORT_EMBEDDINGS])
-        .string_config_with(CONFIG_MODEL, DEFAULT_CONFIG_MODEL, |entry| {
-            entry.title("Model")
-        })
-        .text_config_with(CONFIG_OPTIONS, "{}", |entry| entry.title("Options")),
-    );
 }

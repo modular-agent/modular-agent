@@ -4,9 +4,10 @@ use std::sync::{Arc, Mutex};
 use std::vec;
 
 use agent_stream_kit::{
-    ASKit, Agent, AgentConfigs, AgentContext, AgentDefinition, AgentError, AgentOutput, AgentValue,
-    AsAgent, AsAgentData, async_trait, new_agent_boxed,
+    ASKit, Agent, AgentConfigs, AgentContext, AgentError, AgentOutput, AgentValue, AsAgent,
+    AsAgentData, async_trait,
 };
+use askit_macros::askit_agent;
 use async_openai::{
     Client,
     config::OpenAIConfig,
@@ -22,6 +23,20 @@ use async_openai::{
 use futures::StreamExt;
 
 use crate::message::Message;
+
+static CATEGORY: &str = "LLM";
+
+static PORT_EMBEDDINGS: &str = "embeddings";
+static PORT_INPUT: &str = "input";
+static PORT_MESSAGE: &str = "message";
+static PORT_RESPONSE: &str = "response";
+
+static CONFIG_MODEL: &str = "model";
+static CONFIG_OPENAI_API_KEY: &str = "openai_api_key";
+static CONFIG_OPTIONS: &str = "options";
+static CONFIG_STREAM: &str = "stream";
+
+const DEFAULT_CONFIG_MODEL: &str = "gpt-5-nano";
 
 // Shared client management for OpenAI agents
 struct OpenAIManager {
@@ -60,6 +75,15 @@ impl OpenAIManager {
 }
 
 // OpenAI Completion Agent
+#[askit_agent(
+    title="OpenAI Completion",
+    category=CATEGORY,
+    inputs=[PORT_MESSAGE],
+    outputs=[PORT_MESSAGE, PORT_RESPONSE],
+    string_config(name=CONFIG_MODEL, default="gpt-3.5-turbo-instruct"),
+    text_config(name=CONFIG_OPTIONS, default="{}"),
+    string_global_config(name=CONFIG_OPENAI_API_KEY, title="OpenAI API Key")
+)]
 pub struct OpenAICompletionAgent {
     data: AsAgentData,
     manager: OpenAIManager,
@@ -171,6 +195,15 @@ impl AsAgent for OpenAICompletionAgent {
 }
 
 // OpenAI Chat Agent
+#[askit_agent(
+    title="OpenAI Chat",
+    category=CATEGORY,
+    inputs=[PORT_MESSAGE],
+    outputs=[PORT_MESSAGE, PORT_RESPONSE],
+    string_config(name=CONFIG_MODEL, default=DEFAULT_CONFIG_MODEL),
+    boolean_config(name=CONFIG_STREAM, title="Stream"),
+    text_config(name=CONFIG_OPTIONS, default="{}")
+)]
 pub struct OpenAIChatAgent {
     data: AsAgentData,
     manager: OpenAIManager,
@@ -330,6 +363,14 @@ impl AsAgent for OpenAIChatAgent {
 }
 
 // OpenAI Embeddings Agent
+#[askit_agent(
+    title="OpenAI Embeddings",
+    category=CATEGORY,
+    inputs=[PORT_INPUT],
+    outputs=[PORT_EMBEDDINGS],
+    string_config(name=CONFIG_MODEL, default="text-embedding-3-small"),
+    text_config(name=CONFIG_OPTIONS, default="{}")
+)]
 pub struct OpenAIEmbeddingsAgent {
     data: AsAgentData,
     manager: OpenAIManager,
@@ -415,6 +456,15 @@ impl AsAgent for OpenAIEmbeddingsAgent {
 
 // OpenAI Responses Agent
 // https://platform.openai.com/docs/api-reference/responses
+#[askit_agent(
+    title="OpenAI Responses",
+    category=CATEGORY,
+    inputs=[PORT_MESSAGE],
+    outputs=[PORT_MESSAGE, PORT_RESPONSE],
+    string_config(name=CONFIG_MODEL, default=DEFAULT_CONFIG_MODEL),
+    boolean_config(name=CONFIG_STREAM, title="Stream"),
+    text_config(name=CONFIG_OPTIONS, default="{}"),
+)]
 pub struct OpenAIResponsesAgent {
     data: AsAgentData,
     manager: OpenAIManager,
@@ -680,94 +730,4 @@ impl From<OutputMessage> for Message {
         message.id = Some(msg.id);
         message
     }
-}
-
-static AGENT_KIND: &str = "agent";
-static CATEGORY: &str = "LLM";
-
-static PORT_EMBEDDINGS: &str = "embeddings";
-static PORT_INPUT: &str = "input";
-static PORT_MESSAGE: &str = "message";
-static PORT_RESPONSE: &str = "response";
-
-static CONFIG_MODEL: &str = "model";
-static CONFIG_OPENAI_API_KEY: &str = "openai_api_key";
-static CONFIG_OPTIONS: &str = "options";
-static CONFIG_STREAM: &str = "stream";
-
-const DEFAULT_CONFIG_MODEL: &str = "gpt-5-nano";
-
-pub fn register_agents(askit: &ASKit) {
-    askit.register_agent(
-        AgentDefinition::new(
-            AGENT_KIND,
-            "openai_completion",
-            Some(new_agent_boxed::<OpenAICompletionAgent>),
-        )
-        // .use_native_thread()
-        .title("OpenAI Completion")
-        .category(CATEGORY)
-        .inputs(vec![PORT_MESSAGE])
-        .outputs(vec![PORT_MESSAGE, PORT_RESPONSE])
-        .string_config_with(CONFIG_MODEL, "gpt-3.5-turbo-instruct", |entry| {
-            entry.title("Model")
-        })
-        .text_config_with(CONFIG_OPTIONS, "{}", |entry| entry.title("Options")),
-    );
-
-    askit.register_agent(
-        AgentDefinition::new(
-            AGENT_KIND,
-            "openai_chat",
-            Some(new_agent_boxed::<OpenAIChatAgent>),
-        )
-        // .use_native_thread()
-        .title("OpenAI Chat")
-        .category(CATEGORY)
-        .inputs(vec![PORT_MESSAGE])
-        .outputs(vec![PORT_MESSAGE, PORT_RESPONSE])
-        .custom_global_config_with(CONFIG_OPENAI_API_KEY, "", "password", |entry| {
-            entry.title("OpenAI API Key")
-        })
-        .string_config_with(CONFIG_MODEL, DEFAULT_CONFIG_MODEL, |entry| {
-            entry.title("Model")
-        })
-        .boolean_config_with(CONFIG_STREAM, false, |entry| entry.title("Stream"))
-        .text_config_with(CONFIG_OPTIONS, "{}", |entry| entry.title("Options")),
-    );
-
-    askit.register_agent(
-        AgentDefinition::new(
-            AGENT_KIND,
-            "openai_embeddings",
-            Some(new_agent_boxed::<OpenAIEmbeddingsAgent>),
-        )
-        // .use_native_thread()
-        .title("OpenAI Embeddings")
-        .category(CATEGORY)
-        .inputs(vec![PORT_INPUT])
-        .outputs(vec![PORT_EMBEDDINGS])
-        .string_config_with(CONFIG_MODEL, "text-embedding-3-small", |entry| {
-            entry.title("Model")
-        })
-        .text_config_with(CONFIG_OPTIONS, "{}", |entry| entry.title("Options")),
-    );
-
-    askit.register_agent(
-        AgentDefinition::new(
-            AGENT_KIND,
-            "openai_responses",
-            Some(new_agent_boxed::<OpenAIResponsesAgent>),
-        )
-        // .use_native_thread()
-        .title("OpenAI Responses")
-        .category(CATEGORY)
-        .inputs(vec![PORT_MESSAGE])
-        .outputs(vec![PORT_MESSAGE, PORT_RESPONSE])
-        .string_config_with(CONFIG_MODEL, DEFAULT_CONFIG_MODEL, |entry| {
-            entry.title("Model")
-        })
-        .boolean_config_with(CONFIG_STREAM, false, |entry| entry.title("Stream"))
-        .text_config_with(CONFIG_OPTIONS, "{}", |entry| entry.title("Options")),
-    );
 }

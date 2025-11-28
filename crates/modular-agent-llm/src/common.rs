@@ -1,13 +1,32 @@
-use std::vec;
-
 use agent_stream_kit::{
-    ASKit, Agent, AgentConfigs, AgentContext, AgentDefinition, AgentError, AgentOutput, AgentValue,
-    AsAgent, AsAgentData, async_trait, new_agent_boxed,
+    ASKit, Agent, AgentConfigs, AgentContext, AgentError, AgentOutput, AgentValue, AsAgent,
+    AsAgentData, async_trait,
 };
+use askit_macros::askit_agent;
 
 use crate::message::{Message, MessageHistory};
 
+static CATEGORY: &str = "LLM";
+
+static PORT_MESSAGE: &str = "message";
+static PORT_MESSAGES: &str = "messages";
+static PORT_MESSAGE_HISTORY: &str = "message_history";
+static PORT_HISTORY: &str = "history";
+static PORT_RESET: &str = "reset";
+
+static CONFIG_HISTORY_SIZE: &str = "history_size";
+static CONFIG_MESSAGE: &str = "message";
+static CONFIG_PREAMBLE: &str = "preamble";
+static CONFIG_INCLUDE_SYSTZEM: &str = "include_system";
+
 // Assistant Message Agent
+#[askit_agent(
+    title="Assistant Message",
+    category=CATEGORY,
+    inputs=[PORT_MESSAGES],
+    outputs=[PORT_MESSAGES],
+    text_config(name=CONFIG_MESSAGE)
+)]
 pub struct AssistantMessageAgent {
     data: AsAgentData,
 }
@@ -48,6 +67,13 @@ impl AsAgent for AssistantMessageAgent {
 }
 
 // System Message Agent
+#[askit_agent(
+    title="System Message",
+    category=CATEGORY,
+    inputs=[PORT_MESSAGES],
+    outputs=[PORT_MESSAGES],
+    text_config(name=CONFIG_MESSAGE)
+)]
 pub struct SystemMessageAgent {
     data: AsAgentData,
 }
@@ -88,6 +114,13 @@ impl AsAgent for SystemMessageAgent {
 }
 
 // User Message Agent
+#[askit_agent(
+    title="User Message",
+    category=CATEGORY,
+    inputs=[PORT_MESSAGES],
+    outputs=[PORT_MESSAGES],
+    text_config(name=CONFIG_MESSAGE)
+)]
 pub struct UserMessageAgent {
     data: AsAgentData,
 }
@@ -152,6 +185,18 @@ fn add_message(value: AgentValue, message: Message) -> AgentValue {
 }
 
 // Message History Agent
+#[askit_agent(
+    title="Message History",
+    category=CATEGORY,
+    inputs=[PORT_MESSAGE, PORT_RESET],
+    outputs=[PORT_MESSAGE_HISTORY, PORT_HISTORY],
+    boolean_config(
+        name=CONFIG_INCLUDE_SYSTZEM,
+        title="Include System"
+    ),
+    text_config(name=CONFIG_PREAMBLE),
+    integer_config(name=CONFIG_HISTORY_SIZE)
+)]
 pub struct MessageHistoryAgent {
     data: AsAgentData,
     history: MessageHistory,
@@ -257,76 +302,4 @@ pub fn is_message_history(value: &AgentValue) -> bool {
         return obj.contains_key("message") && obj.contains_key("history");
     }
     false
-}
-
-static AGENT_KIND: &str = "agent";
-static CATEGORY: &str = "LLM";
-
-static PORT_MESSAGE: &str = "message";
-static PORT_MESSAGES: &str = "messages";
-static PORT_MESSAGE_HISTORY: &str = "message_history";
-static PORT_HISTORY: &str = "history";
-static PORT_RESET: &str = "reset";
-
-static CONFIG_HISTORY_SIZE: &str = "history_size";
-static CONFIG_MESSAGE: &str = "message";
-static CONFIG_PREAMBLE: &str = "preamble";
-static CONFIG_INCLUDE_SYSTZEM: &str = "include_system";
-
-pub fn register_agents(askit: &ASKit) {
-    askit.register_agent(
-        AgentDefinition::new(
-            AGENT_KIND,
-            "llm_assistant_message",
-            Some(new_agent_boxed::<AssistantMessageAgent>),
-        )
-        .title("Assistant Message")
-        .category(CATEGORY)
-        .inputs(vec![PORT_MESSAGES])
-        .outputs(vec![PORT_MESSAGES])
-        .text_config_default(CONFIG_MESSAGE),
-    );
-
-    askit.register_agent(
-        AgentDefinition::new(
-            AGENT_KIND,
-            "llm_system_message",
-            Some(new_agent_boxed::<SystemMessageAgent>),
-        )
-        .title("System Message")
-        .category(CATEGORY)
-        .inputs(vec![PORT_MESSAGES])
-        .outputs(vec![PORT_MESSAGES])
-        .text_config_default(CONFIG_MESSAGE),
-    );
-
-    askit.register_agent(
-        AgentDefinition::new(
-            AGENT_KIND,
-            "llm_user_message",
-            Some(new_agent_boxed::<UserMessageAgent>),
-        )
-        .title("User Message")
-        .category(CATEGORY)
-        .inputs(vec![PORT_MESSAGES])
-        .outputs(vec![PORT_MESSAGES])
-        .text_config_default(CONFIG_MESSAGE),
-    );
-
-    askit.register_agent(
-        AgentDefinition::new(
-            AGENT_KIND,
-            "llm_message_history",
-            Some(new_agent_boxed::<MessageHistoryAgent>),
-        )
-        .title("Message History")
-        .category(CATEGORY)
-        .inputs(vec![PORT_MESSAGE, PORT_RESET])
-        .outputs(vec![PORT_MESSAGE_HISTORY, PORT_HISTORY])
-        .boolean_config_with(CONFIG_INCLUDE_SYSTZEM, false, |entry| {
-            entry.title("Include System")
-        })
-        .text_config_default(CONFIG_PREAMBLE)
-        .integer_config_default(CONFIG_HISTORY_SIZE),
-    );
 }

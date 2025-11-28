@@ -4,15 +4,28 @@ use std::sync::{Arc, Mutex};
 use std::vec;
 
 use agent_stream_kit::{
-    ASKit, Agent, AgentConfigs, AgentContext, AgentDefinition, AgentError, AgentOutput, AgentValue,
-    AsAgent, AsAgentData, async_trait, new_agent_boxed,
+    ASKit, Agent, AgentConfigs, AgentContext, AgentError, AgentOutput, AgentValue, AsAgent,
+    AsAgentData, async_trait,
 };
+use askit_macros::askit_agent;
 
 use ollama_rs::{generation::chat::request::ChatMessageRequest, models::ModelOptions};
 use sakura_ai_rs::SakuraAI;
 use tokio_stream::StreamExt;
 
 use crate::message::Message;
+
+static CATEGORY: &str = "LLM";
+
+static PORT_MESSAGE: &str = "message";
+static PORT_RESPONSE: &str = "response";
+
+static CONFIG_SAKURA_AI_API_KEY: &str = "sakura_ai_api_key";
+static CONFIG_STREAM: &str = "stream";
+static CONFIG_MODEL: &str = "model";
+static CONFIG_OPTIONS: &str = "options";
+
+const DEFAULT_CONFIG_MODEL: &str = "gpt-oss-120b";
 
 // Shared client management for SakuraAI agents
 struct SakuraAIManager {
@@ -50,6 +63,16 @@ impl SakuraAIManager {
 }
 
 // SakuraAI Chat Agent
+#[askit_agent(
+    title="SakuraAI Chat",
+    category=CATEGORY,
+    inputs=[PORT_MESSAGE],
+    outputs=[PORT_MESSAGE, PORT_RESPONSE],
+    string_config(name=CONFIG_MODEL, default=DEFAULT_CONFIG_MODEL),
+    boolean_config(name=CONFIG_STREAM, title="Stream"),
+    text_config(name=CONFIG_OPTIONS, default="{}"),
+    string_global_config(name=CONFIG_SAKURA_AI_API_KEY, title="Sakura AI API Key"),
+)]
 pub struct SakuraAIChatAgent {
     data: AsAgentData,
     manager: SakuraAIManager,
@@ -182,40 +205,4 @@ impl AsAgent for SakuraAIChatAgent {
 
         Ok(())
     }
-}
-
-static AGENT_KIND: &str = "agent";
-static CATEGORY: &str = "LLM";
-
-static PORT_MESSAGE: &str = "message";
-static PORT_RESPONSE: &str = "response";
-
-static CONFIG_SAKURA_AI_API_KEY: &str = "sakura_ai_api_key";
-static CONFIG_STREAM: &str = "stream";
-static CONFIG_MODEL: &str = "model";
-static CONFIG_OPTIONS: &str = "options";
-
-const DEFAULT_CONFIG_MODEL: &str = "gpt-oss-120b";
-
-pub fn register_agents(askit: &ASKit) {
-    askit.register_agent(
-        AgentDefinition::new(
-            AGENT_KIND,
-            "sakura_ai_chat",
-            Some(new_agent_boxed::<SakuraAIChatAgent>),
-        )
-        // .use_native_thread()
-        .title("SakuraAI Chat")
-        .category(CATEGORY)
-        .inputs(vec![PORT_MESSAGE])
-        .outputs(vec![PORT_MESSAGE, PORT_RESPONSE])
-        .custom_global_config_with(CONFIG_SAKURA_AI_API_KEY, "", "password", |entry| {
-            entry.title("Sakura AI API Key")
-        })
-        .string_config_with(CONFIG_MODEL, DEFAULT_CONFIG_MODEL, |entry| {
-            entry.title("Model")
-        })
-        .boolean_config_with(CONFIG_STREAM, false, |entry| entry.title("Stream"))
-        .text_config_with(CONFIG_OPTIONS, "{}", |entry| entry.title("Options")),
-    );
 }

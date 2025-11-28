@@ -3,9 +3,10 @@
 use std::vec;
 
 use agent_stream_kit::{
-    ASKit, Agent, AgentConfigs, AgentContext, AgentDefinition, AgentError, AgentOutput, AgentValue,
-    AsAgent, AsAgentData, async_trait, new_agent_boxed,
+    ASKit, Agent, AgentConfigs, AgentContext, AgentError, AgentOutput, AgentValue, AsAgent,
+    AsAgentData, async_trait,
 };
+use askit_macros::askit_agent;
 use rmcp::{
     model::{CallToolRequestParam, CallToolResult},
     service::ServiceExt,
@@ -13,7 +14,25 @@ use rmcp::{
 };
 use tokio::process::Command;
 
+static CATEGORY: &str = "LLM";
+
+static PORT_OBJECT: &str = "object";
+static PORT_RESPONSE: &str = "response";
+
+static CONFIG_COMMAND: &str = "command";
+static CONFIG_ARGS: &str = "args";
+static CONFIG_TOOL: &str = "tool";
+
 // MCP Agent
+#[askit_agent(
+    title="MCP Call",
+    category=CATEGORY,
+    inputs=[PORT_OBJECT],
+    outputs=[PORT_OBJECT, PORT_RESPONSE],
+    string_config(name=CONFIG_COMMAND),
+    string_config(name=CONFIG_ARGS),
+    string_config(name=CONFIG_TOOL),
+)]
 pub struct MCPCallAgent {
     data: AsAgentData,
 }
@@ -127,32 +146,4 @@ fn call_tool_result_to_agent_data(result: CallToolResult) -> Result<AgentValue, 
         ));
     }
     Ok(data)
-}
-
-static AGENT_KIND: &str = "agent";
-static CATEGORY: &str = "LLM";
-
-static PORT_OBJECT: &str = "object";
-static PORT_RESPONSE: &str = "response";
-
-static CONFIG_COMMAND: &str = "command";
-static CONFIG_ARGS: &str = "args";
-static CONFIG_TOOL: &str = "tool";
-
-pub fn register_agents(askit: &ASKit) {
-    askit.register_agent(
-        AgentDefinition::new(
-            AGENT_KIND,
-            "llm_mcp_call",
-            Some(new_agent_boxed::<MCPCallAgent>),
-        )
-        // .use_native_thread()
-        .title("MCP Call")
-        .category(CATEGORY)
-        .inputs(vec![PORT_OBJECT])
-        .outputs(vec![PORT_OBJECT, PORT_RESPONSE])
-        .string_config_default(CONFIG_COMMAND)
-        .string_config_default(CONFIG_ARGS)
-        .string_config_default(CONFIG_TOOL),
-    );
 }
