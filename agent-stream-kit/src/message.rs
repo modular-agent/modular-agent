@@ -73,7 +73,7 @@ pub fn try_send_board_out(
 
 // Processing AgentOut message
 pub async fn agent_out(
-    env: &ASKit,
+    askit: &ASKit,
     source_agent: String,
     ctx: AgentContext,
     pin: String,
@@ -81,7 +81,7 @@ pub async fn agent_out(
 ) {
     let targets;
     {
-        let env_edges = env.edges.lock().unwrap();
+        let env_edges = askit.edges.lock().unwrap();
         targets = env_edges.get(&source_agent).cloned();
     }
 
@@ -99,7 +99,7 @@ pub async fn agent_out(
         }
 
         {
-            let env_agents = env.agents.lock().unwrap();
+            let env_agents = askit.agents.lock().unwrap();
             if !env_agents.contains_key(&target_agent) {
                 continue;
             }
@@ -112,7 +112,8 @@ pub async fn agent_out(
             target_pin.clone()
         };
 
-        env.agent_input(target_agent.clone(), ctx.clone(), target_pin, value.clone())
+        askit
+            .agent_input(target_agent.clone(), ctx.clone(), target_pin, value.clone())
             .await
             .unwrap_or_else(|e| {
                 log::error!("Failed to send message to {}: {}", target_agent, e);
@@ -120,10 +121,14 @@ pub async fn agent_out(
     }
 }
 
-pub async fn board_out(env: &ASKit, name: String, ctx: AgentContext, value: AgentValue) {
+pub async fn board_out(askit: &ASKit, name: String, ctx: AgentContext, value: AgentValue) {
+    {
+        let mut board_value = askit.board_value.lock().unwrap();
+        board_value.insert(name.clone(), value.clone());
+    }
     let board_nodes;
     {
-        let env_board_nodes = env.board_out_agents.lock().unwrap();
+        let env_board_nodes = askit.board_out_agents.lock().unwrap();
         board_nodes = env_board_nodes.get(&name).cloned();
     }
     if let Some(board_nodes) = board_nodes {
@@ -132,7 +137,7 @@ pub async fn board_out(env: &ASKit, name: String, ctx: AgentContext, value: Agen
 
             let edges;
             {
-                let env_edges = env.edges.lock().unwrap();
+                let env_edges = askit.edges.lock().unwrap();
                 edges = env_edges.get(&node).cloned();
             }
             let Some(edges) = edges else {
@@ -146,7 +151,8 @@ pub async fn board_out(env: &ASKit, name: String, ctx: AgentContext, value: Agen
                 } else {
                     target_handle.clone()
                 };
-                env.agent_input(target_agent.clone(), ctx.clone(), target_pin, value.clone())
+                askit
+                    .agent_input(target_agent.clone(), ctx.clone(), target_pin, value.clone())
                     .await
                     .unwrap_or_else(|e| {
                         log::error!("Failed to send message to {}: {}", target_agent, e);
@@ -155,5 +161,5 @@ pub async fn board_out(env: &ASKit, name: String, ctx: AgentContext, value: Agen
         }
     }
 
-    env.emit_board(name, value);
+    askit.emit_board(name, value);
 }

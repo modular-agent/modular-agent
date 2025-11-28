@@ -5,13 +5,13 @@ use std::sync::{Arc, Mutex};
 use tokio::sync::{Mutex as AsyncMutex, mpsc};
 
 use crate::agent::{Agent, AgentMessage, AgentStatus, agent_new};
-use crate::registry;
 use crate::config::{AgentConfigs, AgentConfigsMap};
 use crate::context::AgentContext;
 use crate::definition::{AgentDefaultConfigs, AgentDefinition, AgentDefinitions};
 use crate::error::AgentError;
 use crate::flow::{self, AgentFlow, AgentFlowEdge, AgentFlowNode, AgentFlows};
 use crate::message::{self, AgentEventMessage};
+use crate::registry;
 use crate::value::AgentValue;
 
 #[derive(Clone)]
@@ -29,13 +29,14 @@ pub struct ASKit {
     // board name -> value
     pub(crate) board_value: Arc<Mutex<HashMap<String, AgentValue>>>,
 
-    // sourece agent id -> [target agent id / source handle / target handle]
+    // source agent id -> [target agent id / source handle / target handle]
     pub(crate) edges: Arc<Mutex<HashMap<String, Vec<(String, String, String)>>>>,
 
     // agent def name -> agent definition
     pub(crate) defs: Arc<Mutex<AgentDefinitions>>,
 
-    // agent flows
+    // agent flows (name -> flow)
+    // TODO: use id as key
     pub(crate) flows: Arc<Mutex<AgentFlows>>,
 
     // agent def name -> config
@@ -872,6 +873,10 @@ impl ASKit {
     }
 
     pub(crate) fn emit_board(&self, name: String, value: AgentValue) {
+        // ignore variables
+        if name.starts_with('%') {
+            return;
+        }
         self.notify_observers(ASKitEvent::Board(name, value));
     }
 
