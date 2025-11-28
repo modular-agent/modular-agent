@@ -2,7 +2,7 @@ use std::vec;
 
 use agent_stream_kit::{
     ASKit, Agent, AgentConfigs, AgentContext, AgentError, AgentOutput, AgentStatus, AgentValue,
-    AsAgent, AsAgentData,
+    AsAgent, AsAgentData, async_trait,
 };
 use askit_macros::askit_agent;
 
@@ -54,13 +54,15 @@ impl AsAgent for UnitInputAgent {
 #[askit_agent(
     title = "Boolean Input",
     category = CATEGORY,
+    inputs = [UNIT],
     outputs = [BOOLEAN],
-    boolean_config(name = BOOLEAN)
+    boolean_config(name = BOOLEAN),
 )]
 struct BooleanInputAgent {
     data: AsAgentData,
 }
 
+#[async_trait]
 impl AsAgent for BooleanInputAgent {
     fn new(
         askit: ASKit,
@@ -75,10 +77,20 @@ impl AsAgent for BooleanInputAgent {
 
     fn configs_changed(&mut self) -> Result<(), AgentError> {
         if *self.status() == AgentStatus::Start {
-            let value = self.configs()?.get_bool(BOOLEAN)?;
-            self.try_output(AgentContext::new(), BOOLEAN, AgentValue::boolean(value))?;
+            let value = self.configs()?.get(BOOLEAN)?;
+            self.try_output(AgentContext::new(), BOOLEAN, value.clone())?;
         }
         Ok(())
+    }
+
+    async fn process(
+        &mut self,
+        ctx: AgentContext,
+        _pin: String,
+        _value: AgentValue,
+    ) -> Result<(), AgentError> {
+        let value = self.configs()?.get(BOOLEAN)?;
+        self.try_output(ctx, BOOLEAN, value.clone())
     }
 }
 
@@ -86,6 +98,7 @@ impl AsAgent for BooleanInputAgent {
 #[askit_agent(
     title = "Integer Input",
     category = CATEGORY,
+    inputs = [UNIT],
     outputs = [INTEGER],
     integer_config(name = INTEGER)
 )]
@@ -93,6 +106,7 @@ struct IntegerInputAgent {
     data: AsAgentData,
 }
 
+#[async_trait]
 impl AsAgent for IntegerInputAgent {
     fn new(
         askit: ASKit,
@@ -107,10 +121,20 @@ impl AsAgent for IntegerInputAgent {
 
     fn configs_changed(&mut self) -> Result<(), AgentError> {
         if *self.status() == AgentStatus::Start {
-            let value = self.configs()?.get_integer(INTEGER)?;
-            self.try_output(AgentContext::new(), INTEGER, AgentValue::integer(value))?;
+            let value = self.configs()?.get(INTEGER)?;
+            self.try_output(AgentContext::new(), INTEGER, value.clone())?;
         }
         Ok(())
+    }
+
+    async fn process(
+        &mut self,
+        ctx: AgentContext,
+        _pin: String,
+        _value: AgentValue,
+    ) -> Result<(), AgentError> {
+        let value = self.configs()?.get(INTEGER)?;
+        self.try_output(ctx, INTEGER, value.clone())
     }
 }
 
@@ -118,6 +142,7 @@ impl AsAgent for IntegerInputAgent {
 #[askit_agent(
     title = "Number Input",
     category = CATEGORY,
+    inputs = [UNIT],
     outputs = [NUMBER],
     number_config(name = NUMBER)
 )]
@@ -125,6 +150,7 @@ struct NumberInputAgent {
     data: AsAgentData,
 }
 
+#[async_trait]
 impl AsAgent for NumberInputAgent {
     fn new(
         askit: ASKit,
@@ -139,10 +165,20 @@ impl AsAgent for NumberInputAgent {
 
     fn configs_changed(&mut self) -> Result<(), AgentError> {
         if *self.status() == AgentStatus::Start {
-            let value = self.configs()?.get_number(NUMBER)?;
-            self.try_output(AgentContext::new(), NUMBER, AgentValue::number(value))?;
+            let value = self.configs()?.get(NUMBER)?;
+            self.try_output(AgentContext::new(), NUMBER, value.clone())?;
         }
         Ok(())
+    }
+
+    async fn process(
+        &mut self,
+        ctx: AgentContext,
+        _pin: String,
+        _value: AgentValue,
+    ) -> Result<(), AgentError> {
+        let value = self.configs()?.get(NUMBER)?;
+        self.try_output(ctx, NUMBER, value.clone())
     }
 }
 
@@ -150,6 +186,7 @@ impl AsAgent for NumberInputAgent {
 #[askit_agent(
     title = "String Input",
     category = CATEGORY,
+    inputs = [UNIT],
     outputs = [STRING],
     string_config(name = STRING)
 )]
@@ -157,6 +194,7 @@ struct StringInputAgent {
     data: AsAgentData,
 }
 
+#[async_trait]
 impl AsAgent for StringInputAgent {
     fn new(
         askit: ASKit,
@@ -171,10 +209,20 @@ impl AsAgent for StringInputAgent {
 
     fn configs_changed(&mut self) -> Result<(), AgentError> {
         if *self.status() == AgentStatus::Start {
-            let value = self.configs()?.get_string(STRING)?;
-            self.try_output(AgentContext::new(), STRING, AgentValue::string(value))?;
+            let value = self.configs()?.get(STRING)?;
+            self.try_output(AgentContext::new(), STRING, value.clone())?;
         }
         Ok(())
+    }
+
+    async fn process(
+        &mut self,
+        ctx: AgentContext,
+        _pin: String,
+        _value: AgentValue,
+    ) -> Result<(), AgentError> {
+        let value = self.configs()?.get(STRING)?;
+        self.try_output(ctx, STRING, value.clone())
     }
 }
 
@@ -182,6 +230,7 @@ impl AsAgent for StringInputAgent {
 #[askit_agent(
     title = "Text Input",
     category = CATEGORY,
+    inputs = [UNIT],
     outputs = [TEXT],
     text_config(name = TEXT)
 )]
@@ -189,6 +238,7 @@ struct TextInputAgent {
     data: AsAgentData,
 }
 
+#[async_trait]
 impl AsAgent for TextInputAgent {
     fn new(
         askit: ASKit,
@@ -203,10 +253,20 @@ impl AsAgent for TextInputAgent {
 
     fn configs_changed(&mut self) -> Result<(), AgentError> {
         if *self.status() == AgentStatus::Start {
-            let value = self.configs()?.get_string(TEXT)?;
-            self.try_output(AgentContext::new(), TEXT, AgentValue::string(value))?;
+            let value = self.configs()?.get(TEXT)?;
+            self.try_output(AgentContext::new(), TEXT, value.clone())?;
         }
         Ok(())
+    }
+
+    async fn process(
+        &mut self,
+        ctx: AgentContext,
+        _pin: String,
+        _value: AgentValue,
+    ) -> Result<(), AgentError> {
+        let value = self.configs()?.get(TEXT)?;
+        self.try_output(ctx, TEXT, value.clone())
     }
 }
 
@@ -214,6 +274,7 @@ impl AsAgent for TextInputAgent {
 #[askit_agent(
     title = "Object Input",
     category = CATEGORY,
+    inputs = [UNIT],
     outputs = [OBJECT],
     object_config(name = OBJECT)
 )]
@@ -221,6 +282,7 @@ struct ObjectInputAgent {
     data: AsAgentData,
 }
 
+#[async_trait]
 impl AsAgent for ObjectInputAgent {
     fn new(
         askit: ASKit,
@@ -236,17 +298,18 @@ impl AsAgent for ObjectInputAgent {
     fn configs_changed(&mut self) -> Result<(), AgentError> {
         if *self.status() == AgentStatus::Start {
             let value = self.configs()?.get(OBJECT)?;
-            if let Some(obj) = value.as_object() {
-                self.try_output(AgentContext::new(), OBJECT, AgentValue::object(obj.clone()))?;
-            } else if let Some(arr) = value.as_array() {
-                self.try_output(AgentContext::new(), OBJECT, AgentValue::array(arr.clone()))?;
-            } else {
-                return Err(AgentError::InvalidConfig(format!(
-                    "Invalid object value for config '{}'",
-                    OBJECT
-                )));
-            }
+            self.try_output(AgentContext::new(), OBJECT, value.clone())?;
         }
         Ok(())
+    }
+
+    async fn process(
+        &mut self,
+        ctx: AgentContext,
+        _pin: String,
+        _value: AgentValue,
+    ) -> Result<(), AgentError> {
+        let value = self.configs()?.get(OBJECT)?;
+        self.try_output(ctx, OBJECT, value.clone())
     }
 }
