@@ -5,7 +5,6 @@ use agent_stream_kit::{
 use askit_macros::askit_agent;
 
 struct ZipAgent {
-    data: AsAgentData,
     n: usize,
     in_ports: Vec<String>,
     keys: Vec<String>,
@@ -14,34 +13,25 @@ struct ZipAgent {
 }
 
 impl ZipAgent {
-    fn new_with_n(
-        askit: ASKit,
-        id: String,
-        def_name: String,
-        config: Option<AgentConfigs>,
-        n: usize,
-    ) -> Result<Self, AgentError> {
+    fn new_with_n(n: usize, configs: Option<&AgentConfigs>) -> Self {
         let mut agent = Self {
-            data: AsAgentData::new(askit, id, def_name, config),
             n,
             in_ports: Vec::new(),
             keys: Vec::new(),
             input_value: Vec::new(),
             current_id: 0,
         };
-        agent.reset_ports_and_keys();
-        Ok(agent)
+        agent.reset_ports_and_keys(configs);
+        agent
     }
 
-    fn reset_ports_and_keys(&mut self) {
+    fn reset_ports_and_keys(&mut self, configs: Option<&AgentConfigs>) {
         self.in_ports = (0..self.n).map(|i| format!("in{}", i + 1)).collect();
         self.keys = (0..self.n)
             .map(|i| {
-                self.data
-                    .configs
-                    .as_ref()
+                configs
                     .map(|c| c.get_string_or_default(&format!("key{}", i + 1)))
-                    .unwrap_or_default()
+                    .unwrap_or_else(String::new)
             })
             .collect();
         self.input_value = vec![None; self.n];
@@ -126,6 +116,7 @@ static CONFIG_KEY4: &str = "key4";
     string_config(name = CONFIG_KEY2)
 )]
 struct Zip2Agent {
+    data: AsAgentData,
     inner: ZipAgent,
 }
 
@@ -137,17 +128,9 @@ impl AsAgent for Zip2Agent {
         def_name: String,
         config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
-        Ok(Self {
-            inner: ZipAgent::new_with_n(askit, id, def_name, config, 2)?,
-        })
-    }
-
-    fn data(&self) -> &AsAgentData {
-        &self.inner.data
-    }
-
-    fn mut_data(&mut self) -> &mut AsAgentData {
-        &mut self.inner.data
+        let data = AsAgentData::new(askit, id, def_name, config);
+        let inner = ZipAgent::new_with_n(2, data.configs.as_ref());
+        Ok(Self { data, inner })
     }
 
     fn configs_changed(&mut self) -> Result<(), AgentError> {
@@ -178,6 +161,7 @@ impl AsAgent for Zip2Agent {
     string_config(name = CONFIG_KEY3)
 )]
 struct Zip3Agent {
+    data: AsAgentData,
     inner: ZipAgent,
 }
 
@@ -189,17 +173,9 @@ impl AsAgent for Zip3Agent {
         def_name: String,
         config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
-        Ok(Self {
-            inner: ZipAgent::new_with_n(askit, id, def_name, config, 3)?,
-        })
-    }
-
-    fn data(&self) -> &AsAgentData {
-        &self.inner.data
-    }
-
-    fn mut_data(&mut self) -> &mut AsAgentData {
-        &mut self.inner.data
+        let data = AsAgentData::new(askit, id, def_name, config);
+        let inner = ZipAgent::new_with_n(3, data.configs.as_ref());
+        Ok(Self { data, inner })
     }
 
     fn configs_changed(&mut self) -> Result<(), AgentError> {
@@ -231,6 +207,7 @@ impl AsAgent for Zip3Agent {
     string_config(name = CONFIG_KEY4)
 )]
 struct Zip4Agent {
+    data: AsAgentData,
     inner: ZipAgent,
 }
 
@@ -242,17 +219,9 @@ impl AsAgent for Zip4Agent {
         def_name: String,
         config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
-        Ok(Self {
-            inner: ZipAgent::new_with_n(askit, id, def_name, config, 4)?,
-        })
-    }
-
-    fn data(&self) -> &AsAgentData {
-        &self.inner.data
-    }
-
-    fn mut_data(&mut self) -> &mut AsAgentData {
-        &mut self.inner.data
+        let data = AsAgentData::new(askit, id, def_name, config);
+        let inner = ZipAgent::new_with_n(4, data.configs.as_ref());
+        Ok(Self { data, inner })
     }
 
     fn configs_changed(&mut self) -> Result<(), AgentError> {

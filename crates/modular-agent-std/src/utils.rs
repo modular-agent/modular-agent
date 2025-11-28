@@ -41,14 +41,6 @@ impl AsAgent for CounterAgent {
         })
     }
 
-    fn data(&self) -> &AsAgentData {
-        &self.data
-    }
-
-    fn mut_data(&mut self) -> &mut AsAgentData {
-        &mut self.data
-    }
-
     async fn start(&mut self) -> Result<(), AgentError> {
         self.count = 0;
         self.emit_display(DISPLAY_COUNT, AgentValue::integer(0));

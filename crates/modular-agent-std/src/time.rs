@@ -59,14 +59,6 @@ impl AsAgent for DelayAgent {
         })
     }
 
-    fn data(&self) -> &AsAgentData {
-        &self.data
-    }
-
-    fn mut_data(&mut self) -> &mut AsAgentData {
-        &mut self.data
-    }
-
     async fn process(
         &mut self,
         ctx: AgentContext,
@@ -183,14 +175,6 @@ impl AsAgent for IntervalTimerAgent {
         })
     }
 
-    fn data(&self) -> &AsAgentData {
-        &self.data
-    }
-
-    fn mut_data(&mut self) -> &mut AsAgentData {
-        &mut self.data
-    }
-
     async fn start(&mut self) -> Result<(), AgentError> {
         self.start_timer()
     }
@@ -237,14 +221,6 @@ impl AsAgent for OnStartAgent {
         Ok(Self {
             data: AsAgentData::new(askit, id, def_name, config),
         })
-    }
-
-    fn data(&self) -> &AsAgentData {
-        &self.data
-    }
-
-    fn mut_data(&mut self) -> &mut AsAgentData {
-        &mut self.data
     }
 
     async fn start(&mut self) -> Result<(), AgentError> {
@@ -407,14 +383,6 @@ impl AsAgent for ScheduleTimerAgent {
         Ok(agent)
     }
 
-    fn data(&self) -> &AsAgentData {
-        &self.data
-    }
-
-    fn mut_data(&mut self) -> &mut AsAgentData {
-        &mut self.data
-    }
-
     async fn start(&mut self) -> Result<(), AgentError> {
         if self.cron_schedule.is_some() {
             self.start_timer()?;
@@ -544,14 +512,6 @@ impl AsAgent for ThrottleTimeAgent {
             max_num_data,
             waiting_data: Arc::new(Mutex::new(vec![])),
         })
-    }
-
-    fn data(&self) -> &AsAgentData {
-        &self.data
-    }
-
-    fn mut_data(&mut self) -> &mut AsAgentData {
-        &mut self.data
     }
 
     async fn stop(&mut self) -> Result<(), AgentError> {

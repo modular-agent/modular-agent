@@ -39,14 +39,6 @@ impl AsAgent for UnitInputAgent {
         })
     }
 
-    fn data(&self) -> &AsAgentData {
-        &self.data
-    }
-
-    fn mut_data(&mut self) -> &mut AsAgentData {
-        &mut self.data
-    }
-
     fn configs_changed(&mut self) -> Result<(), AgentError> {
         // Since set_config is called even when the agent is not running,
         // we need to check the status before outputting the value.
@@ -81,14 +73,6 @@ impl AsAgent for BooleanInputAgent {
         })
     }
 
-    fn data(&self) -> &AsAgentData {
-        &self.data
-    }
-
-    fn mut_data(&mut self) -> &mut AsAgentData {
-        &mut self.data
-    }
-
     fn configs_changed(&mut self) -> Result<(), AgentError> {
         if *self.status() == AgentStatus::Start {
             let value = self.configs()?.get_bool(BOOLEAN)?;
@@ -119,14 +103,6 @@ impl AsAgent for IntegerInputAgent {
         Ok(Self {
             data: AsAgentData::new(askit, id, def_name, configs),
         })
-    }
-
-    fn data(&self) -> &AsAgentData {
-        &self.data
-    }
-
-    fn mut_data(&mut self) -> &mut AsAgentData {
-        &mut self.data
     }
 
     fn configs_changed(&mut self) -> Result<(), AgentError> {
@@ -161,14 +137,6 @@ impl AsAgent for NumberInputAgent {
         })
     }
 
-    fn data(&self) -> &AsAgentData {
-        &self.data
-    }
-
-    fn mut_data(&mut self) -> &mut AsAgentData {
-        &mut self.data
-    }
-
     fn configs_changed(&mut self) -> Result<(), AgentError> {
         if *self.status() == AgentStatus::Start {
             let value = self.configs()?.get_number(NUMBER)?;
@@ -199,14 +167,6 @@ impl AsAgent for StringInputAgent {
         Ok(Self {
             data: AsAgentData::new(askit, id, def_name, configs),
         })
-    }
-
-    fn data(&self) -> &AsAgentData {
-        &self.data
-    }
-
-    fn mut_data(&mut self) -> &mut AsAgentData {
-        &mut self.data
     }
 
     fn configs_changed(&mut self) -> Result<(), AgentError> {
@@ -241,14 +201,6 @@ impl AsAgent for TextInputAgent {
         })
     }
 
-    fn data(&self) -> &AsAgentData {
-        &self.data
-    }
-
-    fn mut_data(&mut self) -> &mut AsAgentData {
-        &mut self.data
-    }
-
     fn configs_changed(&mut self) -> Result<(), AgentError> {
         if *self.status() == AgentStatus::Start {
             let value = self.configs()?.get_string(TEXT)?;
@@ -279,14 +231,6 @@ impl AsAgent for ObjectInputAgent {
         Ok(Self {
             data: AsAgentData::new(askit, id, def_name, configs),
         })
-    }
-
-    fn data(&self) -> &AsAgentData {
-        &self.data
-    }
-
-    fn mut_data(&mut self) -> &mut AsAgentData {
-        &mut self.data
     }
 
     fn configs_changed(&mut self) -> Result<(), AgentError> {

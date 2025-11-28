@@ -73,14 +73,6 @@ impl AsAgent for IsBlankImageAgent {
         })
     }
 
-    fn data(&self) -> &AsAgentData {
-        &self.data
-    }
-
-    fn mut_data(&mut self) -> &mut AsAgentData {
-        &mut self.data
-    }
-
     async fn process(
         &mut self,
         ctx: AgentContext,
@@ -139,14 +131,6 @@ impl AsAgent for ResampleImageAgent {
         })
     }
 
-    fn data(&self) -> &AsAgentData {
-        &self.data
-    }
-
-    fn mut_data(&mut self) -> &mut AsAgentData {
-        &mut self.data
-    }
-
     async fn process(
         &mut self,
         ctx: AgentContext,
@@ -198,14 +182,6 @@ impl AsAgent for ResizeImageAgent {
         Ok(Self {
             data: AsAgentData::new(askit, id, def_name, config),
         })
-    }
-
-    fn data(&self) -> &AsAgentData {
-        &self.data
-    }
-
-    fn mut_data(&mut self) -> &mut AsAgentData {
-        &mut self.data
     }
 
     async fn process(
@@ -263,14 +239,6 @@ impl AsAgent for ScaleImageAgent {
         Ok(Self {
             data: AsAgentData::new(askit, id, def_name, config),
         })
-    }
-
-    fn data(&self) -> &AsAgentData {
-        &self.data
-    }
-
-    fn mut_data(&mut self) -> &mut AsAgentData {
-        &mut self.data
     }
 
     async fn process(
@@ -375,14 +343,6 @@ impl AsAgent for IsChangedImageAgent {
         })
     }
 
-    fn data(&self) -> &AsAgentData {
-        &self.data
-    }
-
-    fn mut_data(&mut self) -> &mut AsAgentData {
-        &mut self.data
-    }
-
     async fn process(
         &mut self,
         ctx: AgentContext,
@@ -443,14 +403,6 @@ impl AsAgent for OpenImageAgent {
         })
     }
 
-    fn data(&self) -> &AsAgentData {
-        &self.data
-    }
-
-    fn mut_data(&mut self) -> &mut AsAgentData {
-        &mut self.data
-    }
-
     async fn process(
         &mut self,
         ctx: AgentContext,
@@ -491,14 +443,6 @@ impl AsAgent for SaveImageAgent {
         Ok(Self {
             data: AsAgentData::new(askit, id, def_name, config),
         })
-    }
-
-    fn data(&self) -> &AsAgentData {
-        &self.data
-    }
-
-    fn mut_data(&mut self) -> &mut AsAgentData {
-        &mut self.data
     }
 
     async fn process(

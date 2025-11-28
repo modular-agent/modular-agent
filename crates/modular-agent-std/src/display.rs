@@ -33,14 +33,6 @@ impl AsAgent for DisplayDataAgent {
         })
     }
 
-    fn data(&self) -> &AsAgentData {
-        &self.data
-    }
-
-    fn mut_data(&mut self) -> &mut AsAgentData {
-        &mut self.data
-    }
-
     async fn start(&mut self) -> Result<(), AgentError> {
         Ok(())
     }
@@ -78,14 +70,6 @@ impl AsAgent for DebugDataAgent {
         Ok(Self {
             data: AsAgentData::new(askit, id, def_name, config),
         })
-    }
-
-    fn data(&self) -> &AsAgentData {
-        &self.data
-    }
-
-    fn mut_data(&mut self) -> &mut AsAgentData {
-        &mut self.data
     }
 
     async fn process(

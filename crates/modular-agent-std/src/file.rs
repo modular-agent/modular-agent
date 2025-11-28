@@ -38,14 +38,6 @@ impl AsAgent for ListFilesAgent {
         })
     }
 
-    fn data(&self) -> &AsAgentData {
-        &self.data
-    }
-
-    fn mut_data(&mut self) -> &mut AsAgentData {
-        &mut self.data
-    }
-
     async fn process(
         &mut self,
         ctx: AgentContext,
@@ -117,14 +109,6 @@ impl AsAgent for ReadTextFileAgent {
         })
     }
 
-    fn data(&self) -> &AsAgentData {
-        &self.data
-    }
-
-    fn mut_data(&mut self) -> &mut AsAgentData {
-        &mut self.data
-    }
-
     async fn process(
         &mut self,
         ctx: AgentContext,
@@ -180,14 +164,6 @@ impl AsAgent for WriteTextFileAgent {
         Ok(Self {
             data: AsAgentData::new(askit, id, def_name, config),
         })
-    }
-
-    fn data(&self) -> &AsAgentData {
-        &self.data
-    }
-
-    fn mut_data(&mut self) -> &mut AsAgentData {
-        &mut self.data
     }
 
     async fn process(
