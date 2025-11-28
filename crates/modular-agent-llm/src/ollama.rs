@@ -114,14 +114,6 @@ impl AsAgent for OllamaCompletionAgent {
         })
     }
 
-    fn data(&self) -> &AsAgentData {
-        &self.data
-    }
-
-    fn mut_data(&mut self) -> &mut AsAgentData {
-        &mut self.data
-    }
-
     async fn process(
         &mut self,
         ctx: AgentContext,
@@ -199,14 +191,6 @@ impl AsAgent for OllamaChatAgent {
             data: AsAgentData::new(askit, id, def_name, config),
             manager: OllamaManager::new(),
         })
-    }
-
-    fn data(&self) -> &AsAgentData {
-        &self.data
-    }
-
-    fn mut_data(&mut self) -> &mut AsAgentData {
-        &mut self.data
     }
 
     async fn process(
@@ -342,14 +326,6 @@ impl AsAgent for OllamaEmbeddingsAgent {
             data: AsAgentData::new(askit, id, def_name, config),
             manager: OllamaManager::new(),
         })
-    }
-
-    fn data(&self) -> &AsAgentData {
-        &self.data
-    }
-
-    fn mut_data(&mut self) -> &mut AsAgentData {
-        &mut self.data
     }
 
     async fn process(

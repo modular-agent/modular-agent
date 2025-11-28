@@ -103,14 +103,6 @@ impl AsAgent for OpenAICompletionAgent {
         })
     }
 
-    fn data(&self) -> &AsAgentData {
-        &self.data
-    }
-
-    fn mut_data(&mut self) -> &mut AsAgentData {
-        &mut self.data
-    }
-
     async fn process(
         &mut self,
         ctx: AgentContext,
@@ -221,14 +213,6 @@ impl AsAgent for OpenAIChatAgent {
             data: AsAgentData::new(askit, id, def_name, config),
             manager: OpenAIManager::new(),
         })
-    }
-
-    fn data(&self) -> &AsAgentData {
-        &self.data
-    }
-
-    fn mut_data(&mut self) -> &mut AsAgentData {
-        &mut self.data
     }
 
     async fn process(
@@ -390,14 +374,6 @@ impl AsAgent for OpenAIEmbeddingsAgent {
         })
     }
 
-    fn data(&self) -> &AsAgentData {
-        &self.data
-    }
-
-    fn mut_data(&mut self) -> &mut AsAgentData {
-        &mut self.data
-    }
-
     async fn process(
         &mut self,
         ctx: AgentContext,
@@ -482,14 +458,6 @@ impl AsAgent for OpenAIResponsesAgent {
             data: AsAgentData::new(askit, id, def_name, config),
             manager: OpenAIManager::new(),
         })
-    }
-
-    fn data(&self) -> &AsAgentData {
-        &self.data
-    }
-
-    fn mut_data(&mut self) -> &mut AsAgentData {
-        &mut self.data
     }
 
     async fn process(
