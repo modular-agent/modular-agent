@@ -74,14 +74,14 @@
     <div>
       {#each inputs as input}
         <div class="text-left ml-2">
-          {input}
+          {input === "unit" ? "▸" : input}
         </div>
       {/each}
     </div>
     <div>
       {#each outputs as output}
         <div class="text-right mr-2">
-          {output}
+          {output === "unit" ? "▸" : output}
         </div>
       {/each}
     </div>
