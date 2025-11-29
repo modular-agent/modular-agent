@@ -1,10 +1,10 @@
-use agent_stream_kit::{async_trait, AgentConfigs, AgentError, AgentValue, AsAgent, AsAgentData};
+use agent_stream_kit::{async_trait, AgentConfigs, AgentError, AgentValue, AsAgent, AgentData};
 use agent_stream_kit::AgentContext;
 use askit_macros::askit_agent;
 
 #[askit_agent(title = "No Kind", category = "Tests")]
 struct NoKindAgent {
-    data: AsAgentData,
+    data: AgentData,
 }
 
 #[async_trait]
@@ -16,7 +16,7 @@ impl AsAgent for NoKindAgent {
         configs: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AsAgentData::new(askit, id, def_name, configs),
+            data: AgentData::new(askit, id, def_name, configs),
         })
     }
 

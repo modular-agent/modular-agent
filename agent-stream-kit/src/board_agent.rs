@@ -2,7 +2,7 @@ use askit_macros::askit_agent;
 use async_trait::async_trait;
 use std::vec;
 
-use super::agent::{Agent, AsAgent, AsAgentData};
+use super::agent::{Agent, AgentData, AsAgent};
 use super::askit::ASKit;
 use super::config::AgentConfigs;
 use super::context::AgentContext;
@@ -23,7 +23,7 @@ static CONFIG_VAR_NAME: &str = "var";
     )
 )]
 struct BoardInAgent {
-    data: AsAgentData,
+    data: AgentData,
     board_name: Option<String>,
 }
 
@@ -39,7 +39,7 @@ impl AsAgent for BoardInAgent {
             .as_ref()
             .and_then(|c| c.get_string(CONFIG_BOARD_NAME).ok());
         Ok(Self {
-            data: AsAgentData::new(askit, id, def_name, config),
+            data: AgentData::new(askit, id, def_name, config),
             board_name,
         })
     }
@@ -78,7 +78,7 @@ impl AsAgent for BoardInAgent {
     )
 )]
 struct BoardOutAgent {
-    data: AsAgentData,
+    data: AgentData,
     board_name: Option<String>,
 }
 
@@ -94,7 +94,7 @@ impl AsAgent for BoardOutAgent {
             .as_ref()
             .and_then(|c| c.get_string(CONFIG_BOARD_NAME).ok());
         Ok(Self {
-            data: AsAgentData::new(askit, id, def_name, config),
+            data: AgentData::new(askit, id, def_name, config),
             board_name,
         })
     }
@@ -159,7 +159,7 @@ impl AsAgent for BoardOutAgent {
     )
 )]
 struct VarInAgent {
-    data: AsAgentData,
+    data: AgentData,
     var_name: Option<String>,
 }
 
@@ -175,7 +175,7 @@ impl AsAgent for VarInAgent {
             .as_ref()
             .and_then(|c| c.get_string(CONFIG_VAR_NAME).ok());
         Ok(Self {
-            data: AsAgentData::new(askit, id, def_name, config),
+            data: AgentData::new(askit, id, def_name, config),
             var_name,
         })
     }
@@ -215,7 +215,7 @@ impl AsAgent for VarInAgent {
     )
 )]
 struct VarOutAgent {
-    data: AsAgentData,
+    data: AgentData,
     var_name: Option<String>,
 }
 
@@ -231,7 +231,7 @@ impl AsAgent for VarOutAgent {
             .as_ref()
             .and_then(|c| c.get_string(CONFIG_VAR_NAME).ok());
         Ok(Self {
-            data: AsAgentData::new(askit, id, def_name, config),
+            data: AgentData::new(askit, id, def_name, config),
             var_name,
         })
     }

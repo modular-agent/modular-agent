@@ -1,5 +1,5 @@
 use agent_stream_kit::AgentContext;
-use agent_stream_kit::{AgentConfigs, AgentError, AgentValue, AsAgent, AsAgentData, async_trait};
+use agent_stream_kit::{AgentConfigs, AgentError, AgentValue, AsAgent, AgentData, async_trait};
 use askit_macros::askit_agent;
 use std::collections::HashMap;
 
@@ -48,7 +48,7 @@ const GLOBAL_OBJECT_KEY: &str = "global_object";
     )
 )]
 struct ConfigAgent {
-    data: AsAgentData,
+    data: AgentData,
 }
 
 #[async_trait]
@@ -60,7 +60,7 @@ impl AsAgent for ConfigAgent {
         configs: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AsAgentData::new(askit, id, def_name, configs),
+            data: AgentData::new(askit, id, def_name, configs),
         })
     }
 

@@ -87,7 +87,7 @@ pub trait Agent {
     }
 }
 
-pub struct AsAgentData {
+pub struct AgentData {
     pub askit: ASKit,
 
     pub id: String,
@@ -98,7 +98,7 @@ pub struct AsAgentData {
     pub configs: Option<AgentConfigs>,
 }
 
-impl AsAgentData {
+impl AgentData {
     pub fn new(askit: ASKit, id: String, def_name: String, configs: Option<AgentConfigs>) -> Self {
         Self {
             askit,
@@ -113,9 +113,9 @@ impl AsAgentData {
 }
 
 pub trait HasAgentData {
-    fn data(&self) -> &AsAgentData;
+    fn data(&self) -> &AgentData;
 
-    fn mut_data(&mut self) -> &mut AsAgentData;
+    fn mut_data(&mut self) -> &mut AgentData;
 }
 
 #[async_trait]

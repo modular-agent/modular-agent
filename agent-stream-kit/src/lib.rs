@@ -22,9 +22,7 @@ mod value;
 pub extern crate self as agent_stream_kit;
 pub use inventory;
 
-pub use agent::{
-    Agent, AgentStatus, AsAgent, AsAgentData, HasAgentData, agent_new, new_agent_boxed,
-};
+pub use agent::{Agent, AgentData, AgentStatus, AsAgent, HasAgentData, agent_new, new_agent_boxed};
 pub use askit::{ASKit, ASKitEvent, ASKitObserver};
 pub use config::{AgentConfigs, AgentConfigsMap};
 pub use context::AgentContext;

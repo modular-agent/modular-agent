@@ -7,10 +7,8 @@ use proc_macro::TokenStream;
 use proc_macro2::Span;
 use quote::quote;
 use syn::{
-    spanned::Spanned,
-    parse_macro_input, parse_quote,
-    punctuated::Punctuated,
-    Expr, ItemStruct, Lit, Meta, MetaList, Type, token::Comma,
+    Expr, ItemStruct, Lit, Meta, MetaList, Type, parse_macro_input, parse_quote,
+    punctuated::Punctuated, spanned::Spanned, token::Comma,
 };
 
 #[proc_macro_attribute]
@@ -23,18 +21,16 @@ pub fn askit(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// Example:
 /// ```rust,ignore
 /// #[askit_agent(
-///     kind = "Board",
-///     title = "Board In",
-///     category = "Core",
-///     inputs = ["*"],
-///     string_config(
-///         name = CONFIG_BOARD_NAME,
-///         default = "",
-///         title = "Board Name",
-///         description = "* = source kind"
+///     title = "Add Int",
+///     category = "Utils",
+///     inputs = ["int"],
+///     outputs = ["int"],
+///     integer_config(
+///         name = "n",
+///         default = 1,
 ///     )
 /// )]
-/// struct BoardInAgent { /* ... */ }
+/// struct AdderAgent { /* ... */ }
 /// ```
 #[proc_macro_attribute]
 pub fn askit_agent(attr: TokenStream, item: TokenStream) -> TokenStream {
@@ -102,20 +98,19 @@ fn expand_askit_agent(
     item: ItemStruct,
 ) -> syn::Result<proc_macro2::TokenStream> {
     let has_data_field = item.fields.iter().any(|f| match (&f.ident, &f.ty) {
-        (Some(ident), Type::Path(tp)) if ident == "data" => {
-            tp.path
-                .segments
-                .last()
-                .map(|seg| seg.ident == "AsAgentData")
-                .unwrap_or(false)
-        }
+        (Some(ident), Type::Path(tp)) if ident == "data" => tp
+            .path
+            .segments
+            .last()
+            .map(|seg| seg.ident == "AgentData")
+            .unwrap_or(false),
         _ => false,
     });
 
     if !has_data_field {
         return Err(syn::Error::new(
             item.span(),
-            "#[askit_agent] expects the struct to have a `data: AsAgentData` field",
+            "#[askit_agent] expects the struct to have a `data: AgentData` field",
         ));
     }
 
@@ -162,70 +157,114 @@ fn expand_askit_agent(
                 parsed.outputs = collect_exprs(ml)?;
             }
             Meta::List(ml) if ml.path.is_ident("string_config") => {
-                parsed.configs.push(ConfigSpec::String(parse_common_config(ml)?));
+                parsed
+                    .configs
+                    .push(ConfigSpec::String(parse_common_config(ml)?));
             }
             Meta::List(ml) if ml.path.is_ident("text_config") => {
-                parsed.configs.push(ConfigSpec::Text(parse_common_config(ml)?));
+                parsed
+                    .configs
+                    .push(ConfigSpec::Text(parse_common_config(ml)?));
             }
             Meta::List(ml) if ml.path.is_ident("boolean_config") => {
-                parsed.configs.push(ConfigSpec::Boolean(parse_common_config(ml)?));
+                parsed
+                    .configs
+                    .push(ConfigSpec::Boolean(parse_common_config(ml)?));
             }
             Meta::List(ml) if ml.path.is_ident("integer_config") => {
-                parsed.configs.push(ConfigSpec::Integer(parse_common_config(ml)?));
+                parsed
+                    .configs
+                    .push(ConfigSpec::Integer(parse_common_config(ml)?));
             }
             Meta::List(ml) if ml.path.is_ident("number_config") => {
-                parsed.configs.push(ConfigSpec::Number(parse_common_config(ml)?));
+                parsed
+                    .configs
+                    .push(ConfigSpec::Number(parse_common_config(ml)?));
             }
             Meta::List(ml) if ml.path.is_ident("object_config") => {
-                parsed.configs.push(ConfigSpec::Object(parse_common_config(ml)?));
+                parsed
+                    .configs
+                    .push(ConfigSpec::Object(parse_common_config(ml)?));
             }
             Meta::List(ml) if ml.path.is_ident("unit_config") => {
-                parsed.configs.push(ConfigSpec::Unit(parse_common_config(ml)?));
+                parsed
+                    .configs
+                    .push(ConfigSpec::Unit(parse_common_config(ml)?));
             }
             Meta::List(ml) if ml.path.is_ident("string_global_config") => {
-                parsed.global_configs.push(ConfigSpec::String(parse_common_config(ml)?));
+                parsed
+                    .global_configs
+                    .push(ConfigSpec::String(parse_common_config(ml)?));
             }
             Meta::List(ml) if ml.path.is_ident("text_global_config") => {
-                parsed.global_configs.push(ConfigSpec::Text(parse_common_config(ml)?));
+                parsed
+                    .global_configs
+                    .push(ConfigSpec::Text(parse_common_config(ml)?));
             }
             Meta::List(ml) if ml.path.is_ident("boolean_global_config") => {
-                parsed.global_configs.push(ConfigSpec::Boolean(parse_common_config(ml)?));
+                parsed
+                    .global_configs
+                    .push(ConfigSpec::Boolean(parse_common_config(ml)?));
             }
             Meta::List(ml) if ml.path.is_ident("integer_global_config") => {
-                parsed.global_configs.push(ConfigSpec::Integer(parse_common_config(ml)?));
+                parsed
+                    .global_configs
+                    .push(ConfigSpec::Integer(parse_common_config(ml)?));
             }
             Meta::List(ml) if ml.path.is_ident("number_global_config") => {
-                parsed.global_configs.push(ConfigSpec::Number(parse_common_config(ml)?));
+                parsed
+                    .global_configs
+                    .push(ConfigSpec::Number(parse_common_config(ml)?));
             }
             Meta::List(ml) if ml.path.is_ident("object_global_config") => {
-                parsed.global_configs.push(ConfigSpec::Object(parse_common_config(ml)?));
+                parsed
+                    .global_configs
+                    .push(ConfigSpec::Object(parse_common_config(ml)?));
             }
             Meta::List(ml) if ml.path.is_ident("unit_global_config") => {
-                parsed.global_configs.push(ConfigSpec::Unit(parse_common_config(ml)?));
+                parsed
+                    .global_configs
+                    .push(ConfigSpec::Unit(parse_common_config(ml)?));
             }
             Meta::List(ml) if ml.path.is_ident("unit_display") => {
-                parsed.displays.push(DisplaySpec::Unit(parse_common_display(ml)?));
+                parsed
+                    .displays
+                    .push(DisplaySpec::Unit(parse_common_display(ml)?));
             }
             Meta::List(ml) if ml.path.is_ident("boolean_display") => {
-                parsed.displays.push(DisplaySpec::Boolean(parse_common_display(ml)?));
+                parsed
+                    .displays
+                    .push(DisplaySpec::Boolean(parse_common_display(ml)?));
             }
             Meta::List(ml) if ml.path.is_ident("integer_display") => {
-                parsed.displays.push(DisplaySpec::Integer(parse_common_display(ml)?));
+                parsed
+                    .displays
+                    .push(DisplaySpec::Integer(parse_common_display(ml)?));
             }
             Meta::List(ml) if ml.path.is_ident("number_display") => {
-                parsed.displays.push(DisplaySpec::Number(parse_common_display(ml)?));
+                parsed
+                    .displays
+                    .push(DisplaySpec::Number(parse_common_display(ml)?));
             }
             Meta::List(ml) if ml.path.is_ident("string_display") => {
-                parsed.displays.push(DisplaySpec::String(parse_common_display(ml)?));
+                parsed
+                    .displays
+                    .push(DisplaySpec::String(parse_common_display(ml)?));
             }
             Meta::List(ml) if ml.path.is_ident("text_display") => {
-                parsed.displays.push(DisplaySpec::Text(parse_common_display(ml)?));
+                parsed
+                    .displays
+                    .push(DisplaySpec::Text(parse_common_display(ml)?));
             }
             Meta::List(ml) if ml.path.is_ident("object_display") => {
-                parsed.displays.push(DisplaySpec::Object(parse_common_display(ml)?));
+                parsed
+                    .displays
+                    .push(DisplaySpec::Object(parse_common_display(ml)?));
             }
             Meta::List(ml) if ml.path.is_ident("any_display") => {
-                parsed.displays.push(DisplaySpec::Any(parse_common_display(ml)?));
+                parsed
+                    .displays
+                    .push(DisplaySpec::Any(parse_common_display(ml)?));
             }
             other => {
                 return Err(syn::Error::new_spanned(
@@ -241,11 +280,11 @@ fn expand_askit_agent(
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
     let data_impl = quote! {
         impl #impl_generics ::agent_stream_kit::HasAgentData for #ident #ty_generics #where_clause {
-            fn data(&self) -> &::agent_stream_kit::AsAgentData {
+            fn data(&self) -> &::agent_stream_kit::AgentData {
                 &self.data
             }
 
-            fn mut_data(&mut self) -> &mut ::agent_stream_kit::AsAgentData {
+            fn mut_data(&mut self) -> &mut ::agent_stream_kit::AgentData {
                 &mut self.data
             }
         }
@@ -654,10 +693,7 @@ fn parse_common_config(list: MetaList) -> syn::Result<CommonConfig> {
     }
 
     if cfg.name.is_none() {
-        return Err(syn::Error::new(
-            list.span(),
-            "config missing `name`",
-        ));
+        return Err(syn::Error::new(list.span(), "config missing `name`"));
     }
     Ok(cfg)
 }

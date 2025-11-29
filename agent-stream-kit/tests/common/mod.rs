@@ -1,7 +1,7 @@
 extern crate agent_stream_kit as askit;
 
 use askit::{
-    ASKit, AgentConfigs, AgentContext, AgentError, AgentOutput, AgentValue, AsAgent, AsAgentData,
+    ASKit, AgentConfigs, AgentContext, AgentData, AgentError, AgentOutput, AgentValue, AsAgent,
 };
 use askit_macros::askit_agent;
 use async_trait::async_trait;
@@ -21,7 +21,7 @@ static PIN_COUNT: &str = "count";
     outputs = [PIN_COUNT]
 )]
 pub struct CounterAgent {
-    data: AsAgentData,
+    data: AgentData,
     count: i64,
 }
 
@@ -34,7 +34,7 @@ impl AsAgent for CounterAgent {
         config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AsAgentData::new(askit, id, def_name, config),
+            data: AgentData::new(askit, id, def_name, config),
             count: 0,
         })
     }
