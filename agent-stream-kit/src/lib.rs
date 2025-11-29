@@ -18,6 +18,13 @@ mod registry;
 mod runtime;
 mod value;
 
+// re-export async_trait
+pub use async_trait::async_trait;
+
+// re-export photon_rs
+#[cfg(feature = "image")]
+pub use photon_rs::{self, PhotonImage};
+
 // Re-export the crate under its canonical name for proc-macros.
 pub extern crate self as agent_stream_kit;
 pub use inventory;
@@ -35,6 +42,3 @@ pub use flow::{AgentFlow, AgentFlowEdge, AgentFlowNode, AgentFlows};
 pub use output::AgentOutput;
 pub use registry::AgentRegistration;
 pub use value::{AgentValue, AgentValueMap};
-
-// re-export async_trait
-pub use async_trait::async_trait;
