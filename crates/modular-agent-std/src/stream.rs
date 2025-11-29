@@ -1,48 +1,38 @@
 use agent_stream_kit::{
-    ASKit, Agent, AgentConfigs, AgentContext, AgentError, AgentOutput, AgentValue, AgentValueMap,
-    AsAgent, AgentData, async_trait,
+    ASKit, AgentConfigs, AgentContext, AgentData, AgentError, AgentOutput, AgentValue, AsAgent,
+    async_trait,
 };
 use askit_macros::askit_agent;
 
-struct ZipAgent {
+static CATEGORY: &str = "Std/Stream";
+
+static PIN_IN1: &str = "in1";
+static PIN_IN2: &str = "in2";
+static PIN_IN3: &str = "in3";
+static PIN_IN4: &str = "in4";
+static PIN_OUT1: &str = "out1";
+static PIN_OUT2: &str = "out2";
+static PIN_OUT3: &str = "out3";
+static PIN_OUT4: &str = "out4";
+
+/// Receives inputs in any order and, once all are present, emits them sequentially.
+struct SyncAgent {
     n: usize,
     in_ports: Vec<String>,
-    keys: Vec<String>,
-    input_value: Vec<Option<AgentValue>>,
+    input_values: Vec<Option<AgentValue>>,
     current_id: usize,
 }
 
-impl ZipAgent {
-    fn new_with_n(n: usize, configs: Option<&AgentConfigs>) -> Self {
-        let mut agent = Self {
+impl SyncAgent {
+    fn new_with_n(n: usize) -> Self {
+        let in_ports = (0..n).map(|i| format!("in{}", i + 1)).collect();
+        let input_values = vec![None; n];
+        Self {
             n,
-            in_ports: Vec::new(),
-            keys: Vec::new(),
-            input_value: Vec::new(),
+            in_ports,
+            input_values,
             current_id: 0,
-        };
-        agent.reset_ports_and_keys(configs);
-        agent
-    }
-
-    fn reset_ports_and_keys(&mut self, configs: Option<&AgentConfigs>) {
-        self.in_ports = (0..self.n).map(|i| format!("in{}", i + 1)).collect();
-        self.keys = (0..self.n)
-            .map(|i| {
-                configs
-                    .map(|c| c.get_string_or_default(&format!("key{}", i + 1)))
-                    .unwrap_or_else(String::new)
-            })
-            .collect();
-        self.input_value = vec![None; self.n];
-        self.current_id = 0;
-    }
-
-    fn configs_changed_impl(&mut self, configs: &AgentConfigs) -> Result<(), AgentError> {
-        for (i, key_slot) in self.keys.iter_mut().enumerate() {
-            *key_slot = configs.get_string_or_default(&format!("key{}", i + 1));
         }
-        Ok(())
     }
 
     async fn process_impl(
@@ -50,21 +40,12 @@ impl ZipAgent {
         ctx: AgentContext,
         pin: String,
         value: AgentValue,
-    ) -> Result<Option<AgentValue>, AgentError> {
-        for i in 0..self.n {
-            if self.keys[i].is_empty() {
-                return Err(AgentError::InvalidConfig(format!(
-                    "key{} is not set",
-                    i + 1
-                )));
-            }
-        }
-
+    ) -> Result<Vec<AgentValue>, AgentError> {
         // Reset input values if context ID changes
         let ctx_id = ctx.id();
         if ctx_id != self.current_id {
             self.current_id = ctx_id;
-            for slot in &mut self.input_value {
+            for slot in &mut self.input_values {
                 *slot = None;
             }
         }
@@ -72,56 +53,39 @@ impl ZipAgent {
         // Store the input value
         for i in 0..self.n {
             if pin == self.in_ports[i] {
-                self.input_value[i] = Some(value.clone());
+                self.input_values[i] = Some(value.clone());
             }
         }
 
         // Check if all inputs are present
-        if self.input_value.iter().any(|v| v.is_none()) {
-            return Ok(None);
+        if self.input_values.iter().any(|v| v.is_none()) {
+            return Ok(Vec::new());
         }
 
-        // All inputs are present, create the output
-        let mut map = AgentValueMap::new();
+        // All inputs are present, output in order
+        let mut outputs = Vec::new();
         for i in 0..self.n {
-            let key = self.keys[i].clone();
-            let value = self.input_value[i].take().unwrap();
-            map.insert(key, value);
+            let out_value = self.input_values[i].take().unwrap();
+            outputs.push(out_value);
         }
-        let out_value = AgentValue::object(map);
 
-        Ok(Some(out_value))
+        Ok(outputs)
     }
 }
 
-static CATEGORY: &str = "Std/Stream";
-
-static PIN_DATA: &str = "data";
-static PIN_IN1: &str = "in1";
-static PIN_IN2: &str = "in2";
-static PIN_IN3: &str = "in3";
-static PIN_IN4: &str = "in4";
-
-static CONFIG_KEY1: &str = "key1";
-static CONFIG_KEY2: &str = "key2";
-static CONFIG_KEY3: &str = "key3";
-static CONFIG_KEY4: &str = "key4";
-
 #[askit_agent(
-    title = "Zip2",
+    title = "Sync2",
     category = CATEGORY,
     inputs = [PIN_IN1, PIN_IN2],
-    outputs = [PIN_DATA],
-    string_config(name = CONFIG_KEY1),
-    string_config(name = CONFIG_KEY2)
+    outputs = [PIN_OUT1, PIN_OUT2],
 )]
-struct Zip2Agent {
+struct Sync2Agent {
     data: AgentData,
-    inner: ZipAgent,
+    inner: SyncAgent,
 }
 
 #[async_trait]
-impl AsAgent for Zip2Agent {
+impl AsAgent for Sync2Agent {
     fn new(
         askit: ASKit,
         id: String,
@@ -129,13 +93,8 @@ impl AsAgent for Zip2Agent {
         config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         let data = AgentData::new(askit, id, def_name, config);
-        let inner = ZipAgent::new_with_n(2, data.configs.as_ref());
+        let inner = SyncAgent::new_with_n(2);
         Ok(Self { data, inner })
-    }
-
-    fn configs_changed(&mut self) -> Result<(), AgentError> {
-        let configs = self.configs()?.clone();
-        self.inner.configs_changed_impl(&configs)
     }
 
     async fn process(
@@ -144,29 +103,30 @@ impl AsAgent for Zip2Agent {
         pin: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
-        if let Some(out) = self.inner.process_impl(ctx.clone(), pin, value).await? {
-            self.try_output(ctx, PIN_DATA, out)?;
+        let out = self.inner.process_impl(ctx.clone(), pin, value).await?;
+        if out.len() != 2 {
+            return Ok(());
         }
+        self.try_output(ctx.clone(), PIN_OUT1, out[0].clone())?;
+        self.try_output(ctx, PIN_OUT2, out[1].clone())?;
+
         Ok(())
     }
 }
 
 #[askit_agent(
-    title = "Zip3",
+    title = "Sync3",
     category = CATEGORY,
     inputs = [PIN_IN1, PIN_IN2, PIN_IN3],
-    outputs = [PIN_DATA],
-    string_config(name = CONFIG_KEY1),
-    string_config(name = CONFIG_KEY2),
-    string_config(name = CONFIG_KEY3)
+    outputs = [PIN_OUT1, PIN_OUT2, PIN_OUT3],
 )]
-struct Zip3Agent {
+struct Sync3Agent {
     data: AgentData,
-    inner: ZipAgent,
+    inner: SyncAgent,
 }
 
 #[async_trait]
-impl AsAgent for Zip3Agent {
+impl AsAgent for Sync3Agent {
     fn new(
         askit: ASKit,
         id: String,
@@ -174,13 +134,8 @@ impl AsAgent for Zip3Agent {
         config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         let data = AgentData::new(askit, id, def_name, config);
-        let inner = ZipAgent::new_with_n(3, data.configs.as_ref());
+        let inner = SyncAgent::new_with_n(3);
         Ok(Self { data, inner })
-    }
-
-    fn configs_changed(&mut self) -> Result<(), AgentError> {
-        let configs = self.configs()?.clone();
-        self.inner.configs_changed_impl(&configs)
     }
 
     async fn process(
@@ -189,30 +144,31 @@ impl AsAgent for Zip3Agent {
         pin: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
-        if let Some(out) = self.inner.process_impl(ctx.clone(), pin, value).await? {
-            self.try_output(ctx, PIN_DATA, out)?;
+        let out = self.inner.process_impl(ctx.clone(), pin, value).await?;
+        if out.len() != 3 {
+            return Ok(());
         }
+        self.try_output(ctx.clone(), PIN_OUT1, out[0].clone())?;
+        self.try_output(ctx.clone(), PIN_OUT2, out[1].clone())?;
+        self.try_output(ctx, PIN_OUT3, out[2].clone())?;
+
         Ok(())
     }
 }
 
 #[askit_agent(
-    title = "Zip4",
+    title = "Sync4",
     category = CATEGORY,
     inputs = [PIN_IN1, PIN_IN2, PIN_IN3, PIN_IN4],
-    outputs = [PIN_DATA],
-    string_config(name = CONFIG_KEY1),
-    string_config(name = CONFIG_KEY2),
-    string_config(name = CONFIG_KEY3),
-    string_config(name = CONFIG_KEY4)
+    outputs = [PIN_OUT1, PIN_OUT2, PIN_OUT3, PIN_OUT4],
 )]
-struct Zip4Agent {
+struct Sync4Agent {
     data: AgentData,
-    inner: ZipAgent,
+    inner: SyncAgent,
 }
 
 #[async_trait]
-impl AsAgent for Zip4Agent {
+impl AsAgent for Sync4Agent {
     fn new(
         askit: ASKit,
         id: String,
@@ -220,13 +176,8 @@ impl AsAgent for Zip4Agent {
         config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         let data = AgentData::new(askit, id, def_name, config);
-        let inner = ZipAgent::new_with_n(4, data.configs.as_ref());
+        let inner = SyncAgent::new_with_n(3);
         Ok(Self { data, inner })
-    }
-
-    fn configs_changed(&mut self) -> Result<(), AgentError> {
-        let configs = self.configs()?.clone();
-        self.inner.configs_changed_impl(&configs)
     }
 
     async fn process(
@@ -235,9 +186,15 @@ impl AsAgent for Zip4Agent {
         pin: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
-        if let Some(out) = self.inner.process_impl(ctx.clone(), pin, value).await? {
-            self.try_output(ctx, PIN_DATA, out)?;
+        let out = self.inner.process_impl(ctx.clone(), pin, value).await?;
+        if out.len() != 4 {
+            return Ok(());
         }
+        self.try_output(ctx.clone(), PIN_OUT1, out[0].clone())?;
+        self.try_output(ctx.clone(), PIN_OUT2, out[1].clone())?;
+        self.try_output(ctx.clone(), PIN_OUT3, out[2].clone())?;
+        self.try_output(ctx, PIN_OUT4, out[3].clone())?;
+
         Ok(())
     }
 }
