@@ -1,8 +1,8 @@
 use std::vec;
 
 use agent_stream_kit::{
-    ASKit, Agent, AgentConfigs, AgentContext, AgentError, AgentOutput, AgentValue, AsAgent,
-    AsAgentData, async_trait,
+    ASKit, Agent, AgentConfigs, AgentContext, AgentData, AgentError, AgentOutput, AgentValue,
+    AsAgent, async_trait,
 };
 use askit_macros::askit_agent;
 
@@ -23,7 +23,7 @@ static CONFIG_VALUE: &str = "value";
     string_config(name = CONFIG_KEY)
 )]
 struct GetValueAgent {
-    data: AsAgentData,
+    data: AgentData,
 }
 
 #[async_trait]
@@ -35,7 +35,7 @@ impl AsAgent for GetValueAgent {
         config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AsAgentData::new(askit, id, def_name, config),
+            data: AgentData::new(askit, id, def_name, config),
         })
     }
 
@@ -87,7 +87,7 @@ impl AsAgent for GetValueAgent {
     object_config(name = CONFIG_VALUE),
 )]
 struct SetValueAgent {
-    data: AsAgentData,
+    data: AgentData,
 }
 
 #[async_trait]
@@ -99,7 +99,7 @@ impl AsAgent for SetValueAgent {
         config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AsAgentData::new(askit, id, def_name, config),
+            data: AgentData::new(askit, id, def_name, config),
         })
     }
 
@@ -135,7 +135,7 @@ impl AsAgent for SetValueAgent {
     string_config(name = CONFIG_KEY)
 )]
 struct ToObjectAgent {
-    data: AsAgentData,
+    data: AgentData,
 }
 
 #[async_trait]
@@ -147,7 +147,7 @@ impl AsAgent for ToObjectAgent {
         config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AsAgentData::new(askit, id, def_name, config),
+            data: AgentData::new(askit, id, def_name, config),
         })
     }
 
@@ -179,7 +179,7 @@ impl AsAgent for ToObjectAgent {
     outputs = [PIN_JSON]
 )]
 struct ToJsonAgent {
-    data: AsAgentData,
+    data: AgentData,
 }
 
 #[async_trait]
@@ -191,7 +191,7 @@ impl AsAgent for ToJsonAgent {
         config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AsAgentData::new(askit, id, def_name, config),
+            data: AgentData::new(askit, id, def_name, config),
         })
     }
 
@@ -216,7 +216,7 @@ impl AsAgent for ToJsonAgent {
     outputs = [PIN_VALUE]
 )]
 struct FromJsonAgent {
-    data: AsAgentData,
+    data: AgentData,
 }
 
 #[async_trait]
@@ -228,7 +228,7 @@ impl AsAgent for FromJsonAgent {
         config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AsAgentData::new(askit, id, def_name, config),
+            data: AgentData::new(askit, id, def_name, config),
         })
     }
 

@@ -3,7 +3,7 @@
 use std::vec;
 
 use agent_stream_kit::{
-    ASKit, AgentConfigs, AgentContext, AgentError, AgentOutput, AgentValue, AsAgent, AsAgentData,
+    ASKit, AgentConfigs, AgentContext, AgentError, AgentOutput, AgentValue, AsAgent, AgentData,
     async_trait,
 };
 use askit_macros::askit_agent;
@@ -21,7 +21,7 @@ static PIN_YAML: &str = "yaml";
     outputs = [PIN_YAML]
 )]
 struct ToYamlAgent {
-    data: AsAgentData,
+    data: AgentData,
 }
 
 #[async_trait]
@@ -33,7 +33,7 @@ impl AsAgent for ToYamlAgent {
         config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AsAgentData::new(askit, id, def_name, config),
+            data: AgentData::new(askit, id, def_name, config),
         })
     }
 
@@ -58,7 +58,7 @@ impl AsAgent for ToYamlAgent {
     outputs = [PIN_DATA]
 )]
 struct FromYamlAgent {
-    data: AsAgentData,
+    data: AgentData,
 }
 
 #[async_trait]
@@ -70,7 +70,7 @@ impl AsAgent for FromYamlAgent {
         config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AsAgentData::new(askit, id, def_name, config),
+            data: AgentData::new(askit, id, def_name, config),
         })
     }
 

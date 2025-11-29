@@ -1,7 +1,7 @@
 use std::vec;
 
 use agent_stream_kit::{
-    ASKit, AgentConfigs, AgentContext, AgentError, AgentOutput, AgentValue, AsAgent, AsAgentData,
+    ASKit, AgentConfigs, AgentContext, AgentError, AgentOutput, AgentValue, AsAgent, AgentData,
     async_trait,
 };
 use askit_macros::askit_agent;
@@ -23,7 +23,7 @@ static DISPLAY_COUNT: &str = "count";
     integer_display(name = DISPLAY_COUNT, hide_title)
 )]
 struct CounterAgent {
-    data: AsAgentData,
+    data: AgentData,
     count: i64,
 }
 
@@ -36,7 +36,7 @@ impl AsAgent for CounterAgent {
         config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AsAgentData::new(askit, id, def_name, config),
+            data: AgentData::new(askit, id, def_name, config),
             count: 0,
         })
     }

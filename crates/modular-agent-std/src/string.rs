@@ -1,6 +1,6 @@
 use agent_stream_kit::{
     ASKit, Agent, AgentConfigs, AgentContext, AgentError, AgentOutput, AgentValue, AsAgent,
-    AsAgentData, async_trait,
+    AgentData, async_trait,
 };
 use askit_macros::askit_agent;
 use handlebars::Handlebars;
@@ -37,7 +37,7 @@ static CONFIG_TEMPLATE: &str = "template";
     string_config(name = CONFIG_SEP, default = "\\n")
 )]
 struct StringJoinAgent {
-    data: AsAgentData,
+    data: AgentData,
 }
 
 #[async_trait]
@@ -49,7 +49,7 @@ impl AsAgent for StringJoinAgent {
         config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AsAgentData::new(askit, id, def_name, config),
+            data: AgentData::new(askit, id, def_name, config),
         })
     }
 
@@ -93,7 +93,7 @@ impl AsAgent for StringJoinAgent {
     string_config(name = CONFIG_TEMPLATE, default = "{{value}}")
 )]
 struct TemplateStringAgent {
-    data: AsAgentData,
+    data: AgentData,
 }
 
 #[async_trait]
@@ -105,7 +105,7 @@ impl AsAgent for TemplateStringAgent {
         config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AsAgentData::new(askit, id, def_name, config),
+            data: AgentData::new(askit, id, def_name, config),
         })
     }
 
@@ -155,7 +155,7 @@ impl AsAgent for TemplateStringAgent {
     text_config(name = CONFIG_TEMPLATE, default = "{{value}}")
 )]
 struct TemplateTextAgent {
-    data: AsAgentData,
+    data: AgentData,
 }
 
 #[async_trait]
@@ -167,7 +167,7 @@ impl AsAgent for TemplateTextAgent {
         config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AsAgentData::new(askit, id, def_name, config),
+            data: AgentData::new(askit, id, def_name, config),
         })
     }
 
@@ -217,7 +217,7 @@ impl AsAgent for TemplateTextAgent {
     text_config(name = CONFIG_TEMPLATE, default = "{{value}}")
 )]
 struct TemplateArrayAgent {
-    data: AsAgentData,
+    data: AgentData,
 }
 
 #[async_trait]
@@ -229,7 +229,7 @@ impl AsAgent for TemplateArrayAgent {
         config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AsAgentData::new(askit, id, def_name, config),
+            data: AgentData::new(askit, id, def_name, config),
         })
     }
 

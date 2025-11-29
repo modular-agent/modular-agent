@@ -5,7 +5,7 @@ use std::vec;
 
 use agent_stream_kit::{
     ASKit, Agent, AgentConfigs, AgentContext, AgentError, AgentOutput, AgentStatus, AgentValue,
-    AsAgent, AsAgentData, async_trait,
+    AsAgent, AgentData, async_trait,
 };
 use askit_macros::askit_agent;
 use chrono::{DateTime, Local, Utc};
@@ -41,7 +41,7 @@ static TIME_DEFAULT: &str = "1s";
     integer_config(name = CONFIG_MAX_NUM_DATA, default = MAX_NUM_DATA_DEFAULT, title = "max num data")
 )]
 struct DelayAgent {
-    data: AsAgentData,
+    data: AgentData,
     num_waiting_data: Arc<Mutex<i64>>,
 }
 
@@ -54,7 +54,7 @@ impl AsAgent for DelayAgent {
         config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AsAgentData::new(askit, id, def_name, config),
+            data: AgentData::new(askit, id, def_name, config),
             num_waiting_data: Arc::new(Mutex::new(0)),
         })
     }
@@ -99,7 +99,7 @@ impl AsAgent for DelayAgent {
     string_config(name = CONFIG_INTERVAL, default = INTERVAL_DEFAULT, description = "(ex. 10s, 5m, 100ms, 1h, 1d)")
 )]
 struct IntervalTimerAgent {
-    data: AsAgentData,
+    data: AgentData,
     timer_handle: Arc<Mutex<Option<JoinHandle<()>>>>,
     interval_ms: u64,
 }
@@ -169,7 +169,7 @@ impl AsAgent for IntervalTimerAgent {
         let interval_ms = parse_duration_to_ms(&interval)?;
 
         Ok(Self {
-            data: AsAgentData::new(askit, id, def_name, config),
+            data: AgentData::new(askit, id, def_name, config),
             timer_handle: Default::default(),
             interval_ms,
         })
@@ -207,7 +207,7 @@ impl AsAgent for IntervalTimerAgent {
     integer_config(name = CONFIG_DELAY, default = DELAY_MS_DEFAULT, title = "delay (ms)")
 )]
 struct OnStartAgent {
-    data: AsAgentData,
+    data: AgentData,
 }
 
 #[async_trait]
@@ -219,7 +219,7 @@ impl AsAgent for OnStartAgent {
         config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AsAgentData::new(askit, id, def_name, config),
+            data: AgentData::new(askit, id, def_name, config),
         })
     }
 
@@ -255,7 +255,7 @@ impl AsAgent for OnStartAgent {
     string_config(name = CONFIG_SCHEDULE, default = "0 0 * * * *", description = "sec min hour day month week year")
 )]
 struct ScheduleTimerAgent {
-    data: AsAgentData,
+    data: AgentData,
     cron_schedule: Option<Schedule>,
     timer_handle: Arc<Mutex<Option<JoinHandle<()>>>>,
 }
@@ -368,7 +368,7 @@ impl AsAgent for ScheduleTimerAgent {
         config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         let mut agent = Self {
-            data: AsAgentData::new(askit, id, def_name, config.clone()),
+            data: AgentData::new(askit, id, def_name, config.clone()),
             cron_schedule: None,
             timer_handle: Default::default(),
         };
@@ -420,7 +420,7 @@ impl AsAgent for ScheduleTimerAgent {
     integer_config(name = CONFIG_MAX_NUM_DATA, title = "max num data", description = "0: no data, -1: all data")
 )]
 struct ThrottleTimeAgent {
-    data: AsAgentData,
+    data: AgentData,
     timer_handle: Arc<Mutex<Option<JoinHandle<()>>>>,
     time_ms: u64,
     max_num_data: i64,
@@ -506,7 +506,7 @@ impl AsAgent for ThrottleTimeAgent {
             .get_integer_or(CONFIG_MAX_NUM_DATA, 0);
 
         Ok(Self {
-            data: AsAgentData::new(askit, id, def_name, config),
+            data: AgentData::new(askit, id, def_name, config),
             timer_handle: Default::default(),
             time_ms,
             max_num_data,

@@ -2,7 +2,7 @@ use std::fs;
 use std::path::Path;
 
 use agent_stream_kit::{
-    ASKit, AgentConfigs, AgentContext, AgentError, AgentOutput, AgentValue, AsAgent, AsAgentData,
+    ASKit, AgentConfigs, AgentContext, AgentError, AgentOutput, AgentValue, AsAgent, AgentData,
     async_trait,
 };
 use askit_macros::askit_agent;
@@ -22,7 +22,7 @@ static PIN_DATA: &str = "data";
     outputs = [PIN_FILES]
 )]
 struct ListFilesAgent {
-    data: AsAgentData,
+    data: AgentData,
 }
 
 #[async_trait]
@@ -34,7 +34,7 @@ impl AsAgent for ListFilesAgent {
         config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AsAgentData::new(askit, id, def_name, config),
+            data: AgentData::new(askit, id, def_name, config),
         })
     }
 
@@ -93,7 +93,7 @@ impl AsAgent for ListFilesAgent {
     outputs = [PIN_TEXT]
 )]
 struct ReadTextFileAgent {
-    data: AsAgentData,
+    data: AgentData,
 }
 
 #[async_trait]
@@ -105,7 +105,7 @@ impl AsAgent for ReadTextFileAgent {
         config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AsAgentData::new(askit, id, def_name, config),
+            data: AgentData::new(askit, id, def_name, config),
         })
     }
 
@@ -150,7 +150,7 @@ impl AsAgent for ReadTextFileAgent {
     outputs = [PIN_DATA]
 )]
 struct WriteTextFileAgent {
-    data: AsAgentData,
+    data: AgentData,
 }
 
 #[async_trait]
@@ -162,7 +162,7 @@ impl AsAgent for WriteTextFileAgent {
         config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AsAgentData::new(askit, id, def_name, config),
+            data: AgentData::new(askit, id, def_name, config),
         })
     }
 

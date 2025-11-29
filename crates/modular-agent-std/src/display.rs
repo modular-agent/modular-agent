@@ -1,7 +1,7 @@
 use std::vec;
 
 use agent_stream_kit::{
-    ASKit, AgentConfigs, AgentContext, AgentError, AgentOutput, AgentValue, AsAgent, AsAgentData,
+    ASKit, AgentConfigs, AgentContext, AgentError, AgentOutput, AgentValue, AsAgent, AgentData,
     async_trait,
 };
 use askit_macros::askit_agent;
@@ -17,7 +17,7 @@ static DISPLAY_VALUE: &str = "value";
     any_display(name = DISPLAY_VALUE, hide_title)
 )]
 struct DisplayValueAgent {
-    data: AsAgentData,
+    data: AgentData,
 }
 
 #[async_trait]
@@ -29,7 +29,7 @@ impl AsAgent for DisplayValueAgent {
         config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AsAgentData::new(askit, id, def_name, config),
+            data: AgentData::new(askit, id, def_name, config),
         })
     }
 
@@ -56,7 +56,7 @@ impl AsAgent for DisplayValueAgent {
     object_display(name = DISPLAY_VALUE, hide_title)
 )]
 struct DebugValueAgent {
-    data: AsAgentData,
+    data: AgentData,
 }
 
 #[async_trait]
@@ -68,7 +68,7 @@ impl AsAgent for DebugValueAgent {
         config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AsAgentData::new(askit, id, def_name, config),
+            data: AgentData::new(askit, id, def_name, config),
         })
     }
 

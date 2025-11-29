@@ -1,8 +1,8 @@
 use std::vec;
 
 use agent_stream_kit::{
-    ASKit, Agent, AgentConfigs, AgentContext, AgentError, AgentOutput, AgentStatus, AgentValue,
-    AsAgent, AsAgentData, async_trait,
+    ASKit, Agent, AgentConfigs, AgentContext, AgentData, AgentError, AgentOutput, AgentStatus,
+    AgentValue, AsAgent, async_trait,
 };
 use askit_macros::askit_agent;
 
@@ -24,7 +24,7 @@ static OBJECT: &str = "object";
     unit_config(name = UNIT)
 )]
 struct UnitInputAgent {
-    data: AsAgentData,
+    data: AgentData,
 }
 
 impl AsAgent for UnitInputAgent {
@@ -35,7 +35,7 @@ impl AsAgent for UnitInputAgent {
         configs: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AsAgentData::new(askit, id, def_name, configs),
+            data: AgentData::new(askit, id, def_name, configs),
         })
     }
 
@@ -59,7 +59,7 @@ impl AsAgent for UnitInputAgent {
     boolean_config(name = BOOLEAN),
 )]
 struct BooleanInputAgent {
-    data: AsAgentData,
+    data: AgentData,
 }
 
 #[async_trait]
@@ -71,7 +71,7 @@ impl AsAgent for BooleanInputAgent {
         configs: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AsAgentData::new(askit, id, def_name, configs),
+            data: AgentData::new(askit, id, def_name, configs),
         })
     }
 
@@ -103,7 +103,7 @@ impl AsAgent for BooleanInputAgent {
     integer_config(name = INTEGER)
 )]
 struct IntegerInputAgent {
-    data: AsAgentData,
+    data: AgentData,
 }
 
 #[async_trait]
@@ -115,7 +115,7 @@ impl AsAgent for IntegerInputAgent {
         configs: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AsAgentData::new(askit, id, def_name, configs),
+            data: AgentData::new(askit, id, def_name, configs),
         })
     }
 
@@ -147,7 +147,7 @@ impl AsAgent for IntegerInputAgent {
     number_config(name = NUMBER)
 )]
 struct NumberInputAgent {
-    data: AsAgentData,
+    data: AgentData,
 }
 
 #[async_trait]
@@ -159,7 +159,7 @@ impl AsAgent for NumberInputAgent {
         configs: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AsAgentData::new(askit, id, def_name, configs),
+            data: AgentData::new(askit, id, def_name, configs),
         })
     }
 
@@ -191,7 +191,7 @@ impl AsAgent for NumberInputAgent {
     string_config(name = STRING)
 )]
 struct StringInputAgent {
-    data: AsAgentData,
+    data: AgentData,
 }
 
 #[async_trait]
@@ -203,7 +203,7 @@ impl AsAgent for StringInputAgent {
         configs: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AsAgentData::new(askit, id, def_name, configs),
+            data: AgentData::new(askit, id, def_name, configs),
         })
     }
 
@@ -235,7 +235,7 @@ impl AsAgent for StringInputAgent {
     text_config(name = TEXT)
 )]
 struct TextInputAgent {
-    data: AsAgentData,
+    data: AgentData,
 }
 
 #[async_trait]
@@ -247,7 +247,7 @@ impl AsAgent for TextInputAgent {
         configs: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AsAgentData::new(askit, id, def_name, configs),
+            data: AgentData::new(askit, id, def_name, configs),
         })
     }
 
@@ -279,7 +279,7 @@ impl AsAgent for TextInputAgent {
     object_config(name = OBJECT)
 )]
 struct ObjectInputAgent {
-    data: AsAgentData,
+    data: AgentData,
 }
 
 #[async_trait]
@@ -291,7 +291,7 @@ impl AsAgent for ObjectInputAgent {
         configs: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AsAgentData::new(askit, id, def_name, configs),
+            data: AgentData::new(askit, id, def_name, configs),
         })
     }
 

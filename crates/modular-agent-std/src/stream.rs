@@ -1,6 +1,6 @@
 use agent_stream_kit::{
     ASKit, Agent, AgentConfigs, AgentContext, AgentError, AgentOutput, AgentValue, AgentValueMap,
-    AsAgent, AsAgentData, async_trait,
+    AsAgent, AgentData, async_trait,
 };
 use askit_macros::askit_agent;
 
@@ -116,7 +116,7 @@ static CONFIG_KEY4: &str = "key4";
     string_config(name = CONFIG_KEY2)
 )]
 struct Zip2Agent {
-    data: AsAgentData,
+    data: AgentData,
     inner: ZipAgent,
 }
 
@@ -128,7 +128,7 @@ impl AsAgent for Zip2Agent {
         def_name: String,
         config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
-        let data = AsAgentData::new(askit, id, def_name, config);
+        let data = AgentData::new(askit, id, def_name, config);
         let inner = ZipAgent::new_with_n(2, data.configs.as_ref());
         Ok(Self { data, inner })
     }
@@ -161,7 +161,7 @@ impl AsAgent for Zip2Agent {
     string_config(name = CONFIG_KEY3)
 )]
 struct Zip3Agent {
-    data: AsAgentData,
+    data: AgentData,
     inner: ZipAgent,
 }
 
@@ -173,7 +173,7 @@ impl AsAgent for Zip3Agent {
         def_name: String,
         config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
-        let data = AsAgentData::new(askit, id, def_name, config);
+        let data = AgentData::new(askit, id, def_name, config);
         let inner = ZipAgent::new_with_n(3, data.configs.as_ref());
         Ok(Self { data, inner })
     }
@@ -207,7 +207,7 @@ impl AsAgent for Zip3Agent {
     string_config(name = CONFIG_KEY4)
 )]
 struct Zip4Agent {
-    data: AsAgentData,
+    data: AgentData,
     inner: ZipAgent,
 }
 
@@ -219,7 +219,7 @@ impl AsAgent for Zip4Agent {
         def_name: String,
         config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
-        let data = AsAgentData::new(askit, id, def_name, config);
+        let data = AgentData::new(askit, id, def_name, config);
         let inner = ZipAgent::new_with_n(4, data.configs.as_ref());
         Ok(Self { data, inner })
     }

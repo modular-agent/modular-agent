@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use agent_stream_kit::{
     ASKit, Agent, AgentConfigs, AgentContext, AgentError, AgentOutput, AgentValue, AsAgent,
-    AsAgentData, async_trait,
+    AgentData, async_trait,
 };
 use askit_macros::askit_agent;
 
@@ -37,7 +37,7 @@ static CONFIG_THRESHOLD: &str = "threshold";
     integer_config(name = CONFIG_BLANK_THRESHOLD, default = 400)
 )]
 struct IsBlankImageAgent {
-    data: AsAgentData,
+    data: AgentData,
 }
 
 impl IsBlankImageAgent {
@@ -69,7 +69,7 @@ impl AsAgent for IsBlankImageAgent {
         config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AsAgentData::new(askit, id, def_name, config),
+            data: AgentData::new(askit, id, def_name, config),
         })
     }
 
@@ -115,7 +115,7 @@ impl AsAgent for IsBlankImageAgent {
     integer_config(name = CONFIG_HEIGHT, default = 512)
 )]
 struct ResampleImageAgent {
-    data: AsAgentData,
+    data: AgentData,
 }
 
 #[async_trait]
@@ -127,7 +127,7 @@ impl AsAgent for ResampleImageAgent {
         config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AsAgentData::new(askit, id, def_name, config),
+            data: AgentData::new(askit, id, def_name, config),
         })
     }
 
@@ -168,7 +168,7 @@ impl AsAgent for ResampleImageAgent {
     integer_config(name = CONFIG_HEIGHT, default = 512)
 )]
 struct ResizeImageAgent {
-    data: AsAgentData,
+    data: AgentData,
 }
 
 #[async_trait]
@@ -180,7 +180,7 @@ impl AsAgent for ResizeImageAgent {
         config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AsAgentData::new(askit, id, def_name, config),
+            data: AgentData::new(askit, id, def_name, config),
         })
     }
 
@@ -225,7 +225,7 @@ impl AsAgent for ResizeImageAgent {
     number_config(name = CONFIG_SCALE, default = 1.0)
 )]
 struct ScaleImageAgent {
-    data: AsAgentData,
+    data: AgentData,
 }
 
 #[async_trait]
@@ -237,7 +237,7 @@ impl AsAgent for ScaleImageAgent {
         config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AsAgentData::new(askit, id, def_name, config),
+            data: AgentData::new(askit, id, def_name, config),
         })
     }
 
@@ -301,7 +301,7 @@ impl AsAgent for ScaleImageAgent {
     number_config(name = CONFIG_THRESHOLD, default = 0.01)
 )]
 struct IsChangedImageAgent {
-    data: AsAgentData,
+    data: AgentData,
     last_image: Option<Arc<PhotonImage>>,
 }
 
@@ -338,7 +338,7 @@ impl AsAgent for IsChangedImageAgent {
         config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AsAgentData::new(askit, id, def_name, config),
+            data: AgentData::new(askit, id, def_name, config),
             last_image: None,
         })
     }
@@ -387,7 +387,7 @@ impl AsAgent for IsChangedImageAgent {
     outputs = [PIN_IMAGE]
 )]
 struct OpenImageAgent {
-    data: AsAgentData,
+    data: AgentData,
 }
 
 #[async_trait]
@@ -399,7 +399,7 @@ impl AsAgent for OpenImageAgent {
         config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AsAgentData::new(askit, id, def_name, config),
+            data: AgentData::new(askit, id, def_name, config),
         })
     }
 
@@ -429,7 +429,7 @@ impl AsAgent for OpenImageAgent {
     outputs = [PIN_RESULT]
 )]
 struct SaveImageAgent {
-    data: AsAgentData,
+    data: AgentData,
 }
 
 #[async_trait]
@@ -441,7 +441,7 @@ impl AsAgent for SaveImageAgent {
         config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AsAgentData::new(askit, id, def_name, config),
+            data: AgentData::new(askit, id, def_name, config),
         })
     }
 
