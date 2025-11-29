@@ -8,17 +8,17 @@ use askit_macros::askit_agent;
 
 static CATEGORY: &str = "Std/Data";
 
-static PIN_DATA: &str = "data";
 static PIN_JSON: &str = "json";
 static PIN_VALUE: &str = "value";
 
 static CONFIG_KEY: &str = "key";
+static CONFIG_VALUE: &str = "value";
 
 // Get Value
 #[askit_agent(
     title = "Get Value",
     category = CATEGORY,
-    inputs = [PIN_DATA],
+    inputs = [PIN_VALUE],
     outputs = [PIN_VALUE],
     string_config(name = CONFIG_KEY)
 )]
@@ -81,15 +81,13 @@ impl AsAgent for GetValueAgent {
 #[askit_agent(
     title = "Set Value",
     category = CATEGORY,
-    inputs = [PIN_DATA, PIN_VALUE],
-    outputs = [PIN_DATA],
-    string_config(name = CONFIG_KEY)
+    inputs = [PIN_VALUE],
+    outputs = [PIN_VALUE],
+    string_config(name = CONFIG_KEY),
+    object_config(name = CONFIG_VALUE),
 )]
 struct SetValueAgent {
     data: AsAgentData,
-    input_data: Option<AgentValue>,
-    input_value: Option<AgentValue>,
-    current_id: usize,
 }
 
 #[async_trait]
@@ -102,38 +100,15 @@ impl AsAgent for SetValueAgent {
     ) -> Result<Self, AgentError> {
         Ok(Self {
             data: AsAgentData::new(askit, id, def_name, config),
-            input_data: None,
-            input_value: None,
-            current_id: 0,
         })
     }
 
     async fn process(
         &mut self,
         ctx: AgentContext,
-        pin: String,
+        _pin: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
-        // Reset input values if context ID changes
-        let ctx_id = ctx.id();
-        if ctx_id != self.current_id {
-            self.current_id = ctx_id;
-            self.input_data = None;
-            self.input_value = None;
-        }
-
-        // Store input data or value
-        if pin == PIN_DATA {
-            if value.is_object() {
-                self.input_data = Some(value);
-            }
-        } else if pin == PIN_VALUE {
-            self.input_value = Some(value);
-        }
-        if self.input_data.is_none() || self.input_value.is_none() {
-            return Ok(());
-        }
-
         // parse key
         let key = self.configs()?.get_string(CONFIG_KEY)?;
         if key.is_empty() {
@@ -141,12 +116,11 @@ impl AsAgent for SetValueAgent {
         }
         let keys = key.split('.').collect::<Vec<_>>();
 
-        // set value
-        let new_value = self.input_value.take().unwrap();
-        let mut value = self.input_data.take().unwrap();
-        set_nested_value(&mut value, keys, new_value);
+        let v = self.configs()?.get(CONFIG_VALUE)?;
+        let mut value = value;
+        set_nested_value(&mut value, keys, v.clone());
 
-        self.try_output(ctx, PIN_DATA, value)?;
+        self.try_output(ctx, PIN_VALUE, value)?;
 
         Ok(())
     }
@@ -156,8 +130,8 @@ impl AsAgent for SetValueAgent {
 #[askit_agent(
     title = "To Object",
     category = CATEGORY,
-    inputs = [PIN_DATA],
-    outputs = [PIN_DATA],
+    inputs = [PIN_VALUE],
+    outputs = [PIN_VALUE],
     string_config(name = CONFIG_KEY)
 )]
 struct ToObjectAgent {
@@ -192,7 +166,7 @@ impl AsAgent for ToObjectAgent {
         let mut new_value = AgentValue::object_default();
         set_nested_value(&mut new_value, keys, value);
 
-        self.try_output(ctx, PIN_DATA, new_value)?;
+        self.try_output(ctx, PIN_VALUE, new_value)?;
         Ok(())
     }
 }
@@ -201,7 +175,7 @@ impl AsAgent for ToObjectAgent {
 #[askit_agent(
     title = "To JSON",
     category = CATEGORY,
-    inputs = [PIN_DATA],
+    inputs = [PIN_VALUE],
     outputs = [PIN_JSON]
 )]
 struct ToJsonAgent {
@@ -239,7 +213,7 @@ impl AsAgent for ToJsonAgent {
     title = "From JSON",
     category = CATEGORY,
     inputs = [PIN_JSON],
-    outputs = [PIN_DATA]
+    outputs = [PIN_VALUE]
 )]
 struct FromJsonAgent {
     data: AsAgentData,
@@ -270,7 +244,7 @@ impl AsAgent for FromJsonAgent {
         let json_value: serde_json::Value =
             serde_json::from_str(s).map_err(|e| AgentError::InvalidValue(e.to_string()))?;
         let value = AgentValue::from_json(json_value)?;
-        self.try_output(ctx, PIN_DATA, value)?;
+        self.try_output(ctx, PIN_VALUE, value)?;
         Ok(())
     }
 }
