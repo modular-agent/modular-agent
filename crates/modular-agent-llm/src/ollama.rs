@@ -5,7 +5,7 @@ use std::vec;
 
 use agent_stream_kit::{
     ASKit, Agent, AgentConfigs, AgentContext, AgentError, AgentOutput, AgentValue, AsAgent,
-    AsAgentData, async_trait,
+    AgentData, async_trait,
 };
 use askit_macros::askit_agent;
 
@@ -96,7 +96,7 @@ impl OllamaManager {
     string_global_config(name=CONFIG_OLLAMA_URL, default=DEFAULT_OLLAMA_URL, title="Ollama URL"),
 )]
 pub struct OllamaCompletionAgent {
-    data: AsAgentData,
+    data: AgentData,
     manager: OllamaManager,
 }
 
@@ -109,7 +109,7 @@ impl AsAgent for OllamaCompletionAgent {
         config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AsAgentData::new(askit, id, def_name, config),
+            data: AgentData::new(askit, id, def_name, config),
             manager: OllamaManager::new(),
         })
     }
@@ -175,7 +175,7 @@ impl AsAgent for OllamaCompletionAgent {
     text_config(name=CONFIG_OPTIONS, default="{}")
 )]
 pub struct OllamaChatAgent {
-    data: AsAgentData,
+    data: AgentData,
     manager: OllamaManager,
 }
 
@@ -188,7 +188,7 @@ impl AsAgent for OllamaChatAgent {
         config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AsAgentData::new(askit, id, def_name, config),
+            data: AgentData::new(askit, id, def_name, config),
             manager: OllamaManager::new(),
         })
     }
@@ -310,7 +310,7 @@ impl AsAgent for OllamaChatAgent {
     text_config(name=CONFIG_OPTIONS, default="{}")
 )]
 pub struct OllamaEmbeddingsAgent {
-    data: AsAgentData,
+    data: AgentData,
     manager: OllamaManager,
 }
 
@@ -323,7 +323,7 @@ impl AsAgent for OllamaEmbeddingsAgent {
         config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AsAgentData::new(askit, id, def_name, config),
+            data: AgentData::new(askit, id, def_name, config),
             manager: OllamaManager::new(),
         })
     }

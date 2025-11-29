@@ -4,7 +4,7 @@ use std::vec;
 
 use agent_stream_kit::{
     ASKit, Agent, AgentConfigs, AgentContext, AgentError, AgentOutput, AgentValue, AsAgent,
-    AsAgentData, async_trait,
+    AgentData, async_trait,
 };
 use askit_macros::askit_agent;
 use rmcp::{
@@ -34,7 +34,7 @@ static CONFIG_TOOL: &str = "tool";
     string_config(name=CONFIG_TOOL),
 )]
 pub struct MCPCallAgent {
-    data: AsAgentData,
+    data: AgentData,
 }
 
 #[async_trait]
@@ -46,7 +46,7 @@ impl AsAgent for MCPCallAgent {
         config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AsAgentData::new(askit, id, def_name, config),
+            data: AgentData::new(askit, id, def_name, config),
         })
     }
 

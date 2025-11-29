@@ -1,6 +1,6 @@
 use agent_stream_kit::{
     ASKit, Agent, AgentConfigs, AgentContext, AgentError, AgentOutput, AgentValue, AsAgent,
-    AsAgentData, async_trait,
+    AgentData, async_trait,
 };
 use askit_macros::askit_agent;
 
@@ -28,7 +28,7 @@ static CONFIG_INCLUDE_SYSTZEM: &str = "include_system";
     text_config(name=CONFIG_MESSAGE)
 )]
 pub struct AssistantMessageAgent {
-    data: AsAgentData,
+    data: AgentData,
 }
 
 #[async_trait]
@@ -40,7 +40,7 @@ impl AsAgent for AssistantMessageAgent {
         config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AsAgentData::new(askit, id, def_name, config),
+            data: AgentData::new(askit, id, def_name, config),
         })
     }
 
@@ -67,7 +67,7 @@ impl AsAgent for AssistantMessageAgent {
     text_config(name=CONFIG_MESSAGE)
 )]
 pub struct SystemMessageAgent {
-    data: AsAgentData,
+    data: AgentData,
 }
 
 #[async_trait]
@@ -79,7 +79,7 @@ impl AsAgent for SystemMessageAgent {
         config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AsAgentData::new(askit, id, def_name, config),
+            data: AgentData::new(askit, id, def_name, config),
         })
     }
 
@@ -106,7 +106,7 @@ impl AsAgent for SystemMessageAgent {
     text_config(name=CONFIG_MESSAGE)
 )]
 pub struct UserMessageAgent {
-    data: AsAgentData,
+    data: AgentData,
 }
 
 #[async_trait]
@@ -118,7 +118,7 @@ impl AsAgent for UserMessageAgent {
         config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AsAgentData::new(askit, id, def_name, config),
+            data: AgentData::new(askit, id, def_name, config),
         })
     }
 
@@ -174,7 +174,7 @@ fn add_message(value: AgentValue, message: Message) -> AgentValue {
     integer_config(name=CONFIG_HISTORY_SIZE)
 )]
 pub struct MessageHistoryAgent {
-    data: AsAgentData,
+    data: AgentData,
     history: MessageHistory,
     first_run: bool,
 }
@@ -188,7 +188,7 @@ impl AsAgent for MessageHistoryAgent {
         config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AsAgentData::new(askit, id, def_name, config),
+            data: AgentData::new(askit, id, def_name, config),
             history: MessageHistory::new(vec![], 0),
             first_run: true,
         })

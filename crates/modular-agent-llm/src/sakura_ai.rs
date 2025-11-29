@@ -4,8 +4,8 @@ use std::sync::{Arc, Mutex};
 use std::vec;
 
 use agent_stream_kit::{
-    ASKit, Agent, AgentConfigs, AgentContext, AgentError, AgentOutput, AgentValue, AsAgent,
-    AsAgentData, async_trait,
+    ASKit, Agent, AgentConfigs, AgentContext, AgentData, AgentError, AgentOutput, AgentValue,
+    AsAgent, async_trait,
 };
 use askit_macros::askit_agent;
 
@@ -74,7 +74,7 @@ impl SakuraAIManager {
     string_global_config(name=CONFIG_SAKURA_AI_API_KEY, title="Sakura AI API Key"),
 )]
 pub struct SakuraAIChatAgent {
-    data: AsAgentData,
+    data: AgentData,
     manager: SakuraAIManager,
 }
 
@@ -87,7 +87,7 @@ impl AsAgent for SakuraAIChatAgent {
         config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AsAgentData::new(askit, id, def_name, config),
+            data: AgentData::new(askit, id, def_name, config),
             manager: SakuraAIManager::new(),
         })
     }

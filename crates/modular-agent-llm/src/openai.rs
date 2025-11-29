@@ -4,8 +4,8 @@ use std::sync::{Arc, Mutex};
 use std::vec;
 
 use agent_stream_kit::{
-    ASKit, Agent, AgentConfigs, AgentContext, AgentError, AgentOutput, AgentValue, AsAgent,
-    AsAgentData, async_trait,
+    ASKit, Agent, AgentConfigs, AgentContext, AgentData, AgentError, AgentOutput, AgentValue,
+    AsAgent, async_trait,
 };
 use askit_macros::askit_agent;
 use async_openai::{
@@ -85,7 +85,7 @@ impl OpenAIManager {
     string_global_config(name=CONFIG_OPENAI_API_KEY, title="OpenAI API Key")
 )]
 pub struct OpenAICompletionAgent {
-    data: AsAgentData,
+    data: AgentData,
     manager: OpenAIManager,
 }
 
@@ -98,7 +98,7 @@ impl AsAgent for OpenAICompletionAgent {
         config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AsAgentData::new(askit, id, def_name, config),
+            data: AgentData::new(askit, id, def_name, config),
             manager: OpenAIManager::new(),
         })
     }
@@ -197,7 +197,7 @@ impl AsAgent for OpenAICompletionAgent {
     text_config(name=CONFIG_OPTIONS, default="{}")
 )]
 pub struct OpenAIChatAgent {
-    data: AsAgentData,
+    data: AgentData,
     manager: OpenAIManager,
 }
 
@@ -210,7 +210,7 @@ impl AsAgent for OpenAIChatAgent {
         config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AsAgentData::new(askit, id, def_name, config),
+            data: AgentData::new(askit, id, def_name, config),
             manager: OpenAIManager::new(),
         })
     }
@@ -356,7 +356,7 @@ impl AsAgent for OpenAIChatAgent {
     text_config(name=CONFIG_OPTIONS, default="{}")
 )]
 pub struct OpenAIEmbeddingsAgent {
-    data: AsAgentData,
+    data: AgentData,
     manager: OpenAIManager,
 }
 
@@ -369,7 +369,7 @@ impl AsAgent for OpenAIEmbeddingsAgent {
         config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AsAgentData::new(askit, id, def_name, config),
+            data: AgentData::new(askit, id, def_name, config),
             manager: OpenAIManager::new(),
         })
     }
@@ -442,7 +442,7 @@ impl AsAgent for OpenAIEmbeddingsAgent {
     text_config(name=CONFIG_OPTIONS, default="{}"),
 )]
 pub struct OpenAIResponsesAgent {
-    data: AsAgentData,
+    data: AgentData,
     manager: OpenAIManager,
 }
 
@@ -455,7 +455,7 @@ impl AsAgent for OpenAIResponsesAgent {
         config: Option<AgentConfigs>,
     ) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AsAgentData::new(askit, id, def_name, config),
+            data: AgentData::new(askit, id, def_name, config),
             manager: OpenAIManager::new(),
         })
     }
