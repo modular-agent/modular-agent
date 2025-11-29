@@ -1,13 +1,13 @@
+#![cfg(feature = "image")]
+
 use std::sync::Arc;
 
+use agent_stream_kit::photon_rs::{self, PhotonImage};
 use agent_stream_kit::{
-    ASKit, Agent, AgentConfigs, AgentContext, AgentError, AgentOutput, AgentValue, AsAgent,
-    AgentData, async_trait,
+    ASKit, Agent, AgentConfigs, AgentContext, AgentData, AgentError, AgentOutput, AgentValue,
+    AsAgent, async_trait,
 };
 use askit_macros::askit_agent;
-
-#[cfg(feature = "image")]
-use photon_rs::PhotonImage;
 
 static CATEGORY: &str = "Std/Image";
 
