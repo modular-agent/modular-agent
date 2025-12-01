@@ -16,9 +16,9 @@ checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 
 [[package]]
 name = "agent-stream-kit"
-version = "0.12.0"
+version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "39b6109ab111a21fe8c51e6ba4ef28549941faf3fc79cd31853906a9d6fd8767"
+checksum = "aff26290c3d274d0eae055c8135c71c00a5ebfbfaa498a7c49b509076f8d8c52"
 dependencies = [
  "askit-macros",
  "async-trait",
@@ -60,9 +60,9 @@ dependencies = [
 
 [[package]]
 name = "askit-macros"
-version = "0.12.0"
+version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e60072e50c612eb7b535879df2e00507214b40c29c4a563b221ff574d9826120"
+checksum = "8fbaf0ddab8e606b077c5cbcd28872b0e4c479ce2fef4fe619b591a5da8f496a"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -71,7 +71,7 @@ dependencies = [
 
 [[package]]
 name = "askit-std-agents"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "agent-stream-kit",
  "askit-macros",
@@ -79,7 +79,6 @@ dependencies = [
  "cron",
  "handlebars",
  "log",
- "photon-rs",
  "regex",
  "serde",
  "serde_json",
