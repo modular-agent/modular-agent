@@ -1,6 +1,17 @@
 use tauri::AppHandle;
 use tauri_plugin_window_state::{AppHandleExt, StateFlags};
 
+#[allow(unused_imports)]
+use askit_cozodb_agents;
+#[allow(unused_imports)]
+use askit_lifelog_agents;
+#[allow(unused_imports)]
+use askit_llm_agents;
+#[allow(unused_imports)]
+use askit_rhai_agents;
+#[allow(unused_imports)]
+use askit_std_agents;
+
 mod agent_stream_app;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

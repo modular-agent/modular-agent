@@ -5,7 +5,6 @@ use dirs;
 use tauri::{AppHandle, Manager, State};
 
 use agent_stream_kit::{ASKit, AgentFlow};
-use askit_std_agents;
 use tauri_plugin_askit::ASKitExt;
 
 use super::observer::ASAppObserver;
@@ -19,10 +18,18 @@ pub struct ASApp {
 impl ASApp {
     // AgentFlow
 
-    pub async fn remove_agent_flow(&self, name: &str) -> Result<()> {
-        self.askit.remove_agent_flow(name).await?;
+    pub async fn remove_agent_flow(&self, flow_id: &str) -> Result<()> {
+        let name = {
+            if let Some(flow) = self.askit.get_agent_flows().get(flow_id) {
+                flow.name().to_string()
+            } else {
+                bail!("Agent flow not found: {}", flow_id);
+            }
+        };
 
-        let flow_path = self.agent_flow_path(name)?;
+        self.askit.remove_agent_flow(flow_id).await?;
+
+        let flow_path = self.agent_flow_path(&name)?;
         if flow_path.exists() {
             std::fs::remove_file(flow_path).with_context(|| "Failed to remove agent flow file")?;
         }
@@ -30,15 +37,23 @@ impl ASApp {
         Ok(())
     }
 
-    pub fn rename_agent_flow(&self, old_name: &str, new_name: &str) -> Result<String> {
+    pub fn rename_agent_flow(&self, flow_id: &str, new_name: &str) -> Result<String> {
+        let old_name = {
+            if let Some(flow) = self.askit.get_agent_flows().get(flow_id) {
+                flow.name().to_string()
+            } else {
+                bail!("Agent flow not found: {}", flow_id);
+            }
+        };
+
         let new_flow_path = self.agent_flow_path(new_name)?;
         if new_flow_path.exists() {
             bail!("Agent flow file already exists: {:?}", new_flow_path);
         }
 
-        self.askit.rename_agent_flow(old_name, new_name)?;
+        self.askit.rename_agent_flow(flow_id, new_name)?;
 
-        let old_flow_path = self.agent_flow_path(old_name)?;
+        let old_flow_path = self.agent_flow_path(&old_name)?;
         if old_flow_path.exists() {
             std::fs::rename(old_flow_path, new_flow_path)
                 .with_context(|| "Failed to rename old agent flow file")?;
@@ -178,11 +193,6 @@ impl ASApp {
 
 pub fn init(app: &AppHandle) -> Result<()> {
     let askit = app.askit();
-    askit_std_agents::register_agents(&askit);
-    askit_rhai_agents::register_agents(&askit);
-    askit_cozodb_agents::register_agents(&askit);
-    askit_lifelog_agents::register_agents(&askit);
-    askit_llm_agents::register_agents(&askit);
 
     let asapp = ASApp {
         askit: askit.clone(),
@@ -221,18 +231,18 @@ fn agent_flows_dir() -> Result<PathBuf> {
 #[tauri::command]
 pub fn rename_agent_flow_cmd(
     asapp: State<'_, ASApp>,
-    old_name: String,
+    flow_id: String,
     new_name: String,
 ) -> Result<String, String> {
     asapp
-        .rename_agent_flow(&old_name, &new_name)
+        .rename_agent_flow(&flow_id, &new_name)
         .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub async fn remove_agent_flow_cmd(asapp: State<'_, ASApp>, name: String) -> Result<(), String> {
+pub async fn remove_agent_flow_cmd(asapp: State<'_, ASApp>, flow_id: String) -> Result<(), String> {
     asapp
-        .remove_agent_flow(&name)
+        .remove_agent_flow(&flow_id)
         .await
         .map_err(|e| e.to_string())
 }

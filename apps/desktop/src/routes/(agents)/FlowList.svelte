@@ -4,13 +4,13 @@
   import FlowListItems from "./FlowListItems.svelte";
 
   interface Props {
-    flowNames: string[];
-    currentFlowName: string;
+    flowNames: { id: string; name: string }[];
+    currentFlow: string;
     flowActivities: Record<string, any>;
-    changeFlowName: (flowName: string) => void;
+    changeFlow: (flowId: string) => void;
   }
 
-  let { flowNames, currentFlowName, flowActivities, changeFlowName }: Props = $props();
+  let { flowNames, currentFlow, flowActivities, changeFlow }: Props = $props();
 
   const directories = $derived.by(() => {
     const result: Record<string, any> = {
@@ -19,13 +19,13 @@
 
     // Process each flow name
     for (const flowName of flowNames) {
-      if (!flowName.includes("/")) {
+      if (!flowName.name.includes("/")) {
         // Top-level flow, no directory
         result["."].push(flowName);
         continue;
       }
 
-      const parts = flowName.split("/");
+      const parts = flowName.name.split("/");
       const dir = parts[0];
 
       if (parts.length === 2) {
@@ -74,14 +74,14 @@
       <button
         type="button"
         class="w-full text-left p-1 pl-3 text-gray-400 hover:text-black hover:bg-gray-200 dark:hover:bg-gray-400 flex items-center"
-        onclick={() => changeFlowName(flowName)}
+        onclick={() => changeFlow(flowName.id)}
       >
-        {#if flowName === currentFlowName}
-          <span class="text-semibold text-gray-900 dark:text-white">{flowName}</span>
+        {#if flowName.id === currentFlow}
+          <span class="text-semibold text-gray-900 dark:text-white">{flowName.name}</span>
         {:else}
-          <span>{flowName}</span>
+          <span>{flowName.name}</span>
         {/if}
-        {#if flowActivities[flowName]}
+        {#if flowActivities[flowName.id]}
           <span
             class="flex-none inline-block w-2 h-2 ml-1 bg-green-500 rounded-full mr-2"
             title="active"
@@ -103,9 +103,9 @@
         <Accordion flush>
           <FlowListItems
             directories={directories[dir]}
-            {currentFlowName}
+            {currentFlow}
             {flowActivities}
-            {changeFlowName}
+            {changeFlow}
           />
         </Accordion>
       </AccordionItem>

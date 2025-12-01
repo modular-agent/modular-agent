@@ -5,12 +5,12 @@
 
   interface Props {
     directories: Record<string, any>;
-    currentFlowName: string;
+    currentFlow: string;
     flowActivities: Record<string, any>;
-    changeFlowName: (flowName: string) => void;
+    changeFlow: (flowId: string) => void;
   }
 
-  let { directories, currentFlowName, flowActivities, changeFlowName }: Props = $props();
+  let { directories, currentFlow, flowActivities, changeFlow }: Props = $props();
 
   const dirKeys = Object.keys(directories).sort();
 
@@ -28,16 +28,17 @@
       <button
         type="button"
         class="w-full text-left p-1 pl-3 text-gray-400 hover:text-black hover:bg-gray-200 dark:hover:bg-gray-400 flex items-center"
-        onclick={() => changeFlowName(flowName)}
+        onclick={() => changeFlow(flowName.id)}
       >
-        {#if flowName === currentFlowName}
-          <span class="text-semibold text-gray-900 dark:text-white">{getDisplayName(flowName)}</span
+        {#if flowName.id === currentFlow}
+          <span class="text-semibold text-gray-900 dark:text-white"
+            >{getDisplayName(flowName.name)}</span
           >
         {:else}
-          <span>{getDisplayName(flowName)}</span>
+          <span>{getDisplayName(flowName.name)}</span>
         {/if}
 
-        {#if flowActivities[flowName]}
+        {#if flowActivities[flowName.id]}
           <span
             class="flex-none inline-block w-2 h-2 ml-1 bg-green-500 rounded-full mr-2"
             title="active"
@@ -54,12 +55,7 @@
         {key}
       </div>
       <Accordion flush>
-        <FlowListItems
-          directories={directories[key]}
-          {currentFlowName}
-          {flowActivities}
-          {changeFlowName}
-        />
+        <FlowListItems directories={directories[key]} {currentFlow} {flowActivities} {changeFlow} />
       </Accordion>
     </AccordionItem>
   {/if}

@@ -120,4 +120,4 @@ $effect.root(() => {
 
 // Agent Flow
 
-export const flowNameState = $state({ name: "main" });
+export const flowState = $state({ id: "", name: "main" });

@@ -2,9 +2,10 @@ import type { Edge, Node } from "@xyflow/svelte";
 import type { Viewport } from "tauri-plugin-askit-api";
 
 export type TAgentFlow = {
+  id: string;
+  name: string;
   nodes: TAgentFlowNode[];
   edges: TAgentFlowEdge[];
-  name: string;
   viewport: Viewport | null;
 };
 

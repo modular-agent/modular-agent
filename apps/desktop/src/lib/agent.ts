@@ -25,12 +25,12 @@ export async function importAgentFlow(path: string): Promise<AgentFlow> {
   return await invoke("import_agent_flow_cmd", { path });
 }
 
-export async function renameAgentFlow(oldName: string, newName: string): Promise<string> {
-  return await invoke("rename_agent_flow_cmd", { oldName, newName });
+export async function renameAgentFlow(flowId: string, newName: string): Promise<string> {
+  return await invoke("rename_agent_flow_cmd", { flowId, newName });
 }
 
-export async function removeAgentFlow(name: string): Promise<void> {
-  await invoke("remove_agent_flow_cmd", { name });
+export async function removeAgentFlow(flowId: string): Promise<void> {
+  await invoke("remove_agent_flow_cmd", { flowId });
 }
 
 export async function saveAgentFlow(agentFlow: AgentFlow): Promise<void> {
@@ -91,9 +91,10 @@ export function deserializeAgentFlow(
   });
 
   return {
+    id: flow.id,
+    name: flow.name,
     nodes: nodes,
     edges: validEdges.map((edge) => deserializeAgentFlowEdge(edge)),
-    name: flow.name,
     viewport: flow.viewport,
   };
 }
@@ -192,16 +193,18 @@ export function deserializeAgentFlowEdge(edge: AgentFlowEdge): TAgentFlowEdge {
 // serialize: AgentFlow -> SAgentFlow
 
 export function serializeAgentFlow(
+  id: string,
+  name: string,
   nodes: TAgentFlowNode[],
   edges: TAgentFlowEdge[],
-  name: string,
   agent_defs: AgentDefinitions,
   viewport: Viewport,
 ): AgentFlow {
   return {
+    id,
+    name,
     nodes: nodes.map((node) => serializeAgentFlowNode(node, agent_defs)),
     edges: edges.map((edge) => serializeAgentFlowEdge(edge)),
-    name,
     viewport,
   };
 }
