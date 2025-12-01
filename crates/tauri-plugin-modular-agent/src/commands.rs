@@ -40,11 +40,11 @@ pub(crate) fn new_agent_flow<R: Runtime>(
 #[tauri::command]
 pub(crate) fn rename_agent_flow<R: Runtime>(
     app: AppHandle<R>,
-    old_name: String,
+    id: String,
     new_name: String,
 ) -> Result<String> {
     app.askit()
-        .rename_agent_flow(&old_name, &new_name)
+        .rename_agent_flow(&id, &new_name)
         .map_err(Into::into)
 }
 
@@ -61,10 +61,10 @@ pub(crate) fn add_agent_flow<R: Runtime>(app: AppHandle<R>, agent_flow: AgentFlo
 #[tauri::command]
 pub(crate) async fn remove_agent_flow<R: Runtime>(
     app: tauri::AppHandle<R>,
-    flow_name: String,
+    id: String,
 ) -> Result<()> {
     app.askit()
-        .remove_agent_flow(&flow_name)
+        .remove_agent_flow(&id)
         .await
         .map_err(Into::into)
 }
@@ -91,10 +91,10 @@ pub(crate) fn copy_sub_flow<R: Runtime>(
 #[tauri::command]
 pub(crate) async fn start_agent_flow<R: Runtime>(
     app: AppHandle<R>,
-    flow_name: String,
+    id: String,
 ) -> Result<()> {
     app.askit()
-        .start_agent_flow(&flow_name)
+        .start_agent_flow(&id)
         .await
         .map_err(Into::into)
 }
@@ -102,10 +102,10 @@ pub(crate) async fn start_agent_flow<R: Runtime>(
 #[tauri::command]
 pub(crate) async fn stop_agent_flow<R: Runtime>(
     app: AppHandle<R>,
-    flow_name: String,
+    id: String,
 ) -> Result<()> {
     app.askit()
-        .stop_agent_flow(&flow_name)
+        .stop_agent_flow(&id)
         .await
         .map_err(Into::into)
 }
@@ -125,22 +125,22 @@ pub fn new_agent_flow_node<R: Runtime>(
 #[tauri::command]
 pub(crate) fn add_agent_flow_node<R: Runtime>(
     app: AppHandle<R>,
-    flow_name: String,
+    flow_id: String,
     node: AgentFlowNode,
 ) -> Result<()> {
     app.askit()
-        .add_agent_flow_node(&flow_name, &node)
+        .add_agent_flow_node(&flow_id, &node)
         .map_err(Into::into)
 }
 
 #[tauri::command]
 pub(crate) async fn remove_agent_flow_node<R: Runtime>(
     app: AppHandle<R>,
-    flow_name: String,
+    flow_id: String,
     node_id: String,
 ) -> Result<()> {
     app.askit()
-        .remove_agent_flow_node(&flow_name, &node_id)
+        .remove_agent_flow_node(&flow_id, &node_id)
         .await
         .map_err(Into::into)
 }
@@ -150,22 +150,22 @@ pub(crate) async fn remove_agent_flow_node<R: Runtime>(
 #[tauri::command]
 pub(crate) fn add_agent_flow_edge<R: Runtime>(
     app: AppHandle<R>,
-    flow_name: String,
+    flow_id: String,
     edge: AgentFlowEdge,
 ) -> Result<()> {
     app.askit()
-        .add_agent_flow_edge(&flow_name, &edge)
+        .add_agent_flow_edge(&flow_id, &edge)
         .map_err(Into::into)
 }
 
 #[tauri::command]
 pub(crate) fn remove_agent_flow_edge<R: Runtime>(
     app: AppHandle<R>,
-    flow_name: String,
+    flow_id: String,
     edge_id: String,
 ) -> Result<()> {
     app.askit()
-        .remove_agent_flow_edge(&flow_name, &edge_id)
+        .remove_agent_flow_edge(&flow_id, &edge_id)
         .map_err(Into::into)
 }
 

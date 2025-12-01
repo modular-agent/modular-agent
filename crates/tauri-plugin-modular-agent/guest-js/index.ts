@@ -60,9 +60,10 @@ export type AgentDisplayConfigType =
 export type AgentFlows = Record<string, AgentFlow>;
 
 export type AgentFlow = {
+  id: string;
+  name: string;
   nodes: AgentFlowNode[];
   edges: AgentFlowEdge[];
-  name: string;
   viewport: Viewport | null;
 };
 
@@ -152,8 +153,8 @@ export async function newAgentFlow(flowName: string): Promise<AgentFlow> {
   return await invoke<any>('plugin:askit|new_agent_flow', { flowName })
 }
 
-export async function renameAgentFlow(oldName: string, newName: string): Promise<string> {
-  return await invoke<any>('plugin:askit|rename_agent_flow', { oldName, newName })
+export async function renameAgentFlow(flowId: string, newName: string): Promise<string> {
+  return await invoke<any>('plugin:askit|rename_agent_flow', { flowId, newName })
 }
 
 export async function uniqueFlowName(name: string): Promise<string> {
@@ -164,8 +165,8 @@ export async function addAgentFlow(agentFlow: AgentFlow): Promise<void> {
   await invoke<void>('plugin:askit|add_agent_flow', { agentFlow })
 }
 
-export async function removeAgentFlow(flowName: string): Promise<void> {
-  await invoke<void>('plugin:askit|remove_agent_flow', { flowName })
+export async function removeAgentFlow(id: string): Promise<void> {
+  await invoke<void>('plugin:askit|remove_agent_flow', { id })
 }
 
 export async function insertAgentFlow(agentFlow: AgentFlow): Promise<void> {
@@ -176,12 +177,12 @@ export async function copySubFlow(nodes: AgentFlowNode[], edges: AgentFlowEdge[]
   return await invoke<any>('plugin:askit|copy_sub_flow', { nodes, edges })
 }
 
-export async function startAgentFlow(flowName: string): Promise<void> {
-  await invoke<void>('plugin:askit|start_agent_flow', { flowName })
+export async function startAgentFlow(id: string): Promise<void> {
+  await invoke<void>('plugin:askit|start_agent_flow', { id })
 }
 
-export async function stopAgentFlow(flowName: string): Promise<void> {
-  await invoke<void>('plugin:askit|stop_agent_flow', { flowName })
+export async function stopAgentFlow(id: string): Promise<void> {
+  await invoke<void>('plugin:askit|stop_agent_flow', { id })
 }
 
 // nodes
@@ -193,33 +194,33 @@ export async function newAgentFlowNode(
 }
 
 export async function addAgentFlowNode(
-  flowName: string,
+  flowId: string,
   node: AgentFlowNode
 ): Promise<void> {
-  await invoke<void>('plugin:askit|add_agent_flow_node', { flowName, node })
+  await invoke<void>('plugin:askit|add_agent_flow_node', { flowId, node })
 }
 
 export async function removeAgentFlowNode(
-  flowName: string,
+  flowId: string,
   nodeId: string
 ): Promise<void> {
-  await invoke<void>('plugin:askit|remove_agent_flow_node', { flowName, nodeId })
+  await invoke<void>('plugin:askit|remove_agent_flow_node', { flowId, nodeId })
 }
 
 // edge
 
 export async function addAgentFlowEdge(
-  flowName: string,
+  flowId: string,
   edge: AgentFlowEdge
 ): Promise<void> {
-  await invoke<void>('plugin:askit|add_agent_flow_edge', { flowName, edge })
+  await invoke<void>('plugin:askit|add_agent_flow_edge', { flowId, edge })
 }
 
 export async function removeAgentFlowEdge(
-  flowName: string,
+  flowId: string,
   edgeId: string
 ): Promise<void> {
-  await invoke<void>('plugin:askit|remove_agent_flow_edge', { flowName, edgeId })
+  await invoke<void>('plugin:askit|remove_agent_flow_edge', { flowId, edgeId })
 }
 
 // agent
