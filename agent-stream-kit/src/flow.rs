@@ -13,6 +13,8 @@ pub type AgentFlows = HashMap<String, AgentFlow>;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AgentFlow {
+    id: String,
+
     name: String,
 
     nodes: Vec<AgentFlowNode>,
@@ -26,6 +28,7 @@ pub struct AgentFlow {
 impl AgentFlow {
     pub fn new(name: String) -> Self {
         Self {
+            id: new_id(),
             name,
             nodes: Vec::new(),
             edges: Vec::new(),
@@ -33,12 +36,8 @@ impl AgentFlow {
         }
     }
 
-    pub fn nodes(&self) -> &Vec<AgentFlowNode> {
-        &self.nodes
-    }
-
-    pub fn edges(&self) -> &Vec<AgentFlowEdge> {
-        &self.edges
+    pub fn id(&self) -> &str {
+        &self.id
     }
 
     pub fn name(&self) -> &str {
@@ -47,6 +46,10 @@ impl AgentFlow {
 
     pub fn set_name(&mut self, new_name: String) {
         self.name = new_name;
+    }
+
+    pub fn nodes(&self) -> &Vec<AgentFlowNode> {
+        &self.nodes
     }
 
     pub fn add_node(&mut self, node: AgentFlowNode) {
@@ -59,6 +62,10 @@ impl AgentFlow {
 
     pub fn set_nodes(&mut self, nodes: Vec<AgentFlowNode>) {
         self.nodes = nodes;
+    }
+
+    pub fn edges(&self) -> &Vec<AgentFlowEdge> {
+        &self.edges
     }
 
     pub fn add_edge(&mut self, edge: AgentFlowEdge) {
@@ -115,8 +122,9 @@ impl AgentFlow {
     }
 
     pub fn from_json(json_str: &str) -> Result<Self, AgentError> {
-        let flow: AgentFlow = serde_json::from_str(json_str)
+        let mut flow: AgentFlow = serde_json::from_str(json_str)
             .map_err(|e| AgentError::SerializationError(e.to_string()))?;
+        flow.id = new_id();
         Ok(flow)
     }
 }

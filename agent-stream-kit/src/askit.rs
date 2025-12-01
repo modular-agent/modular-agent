@@ -35,8 +35,7 @@ pub struct ASKit {
     // agent def name -> agent definition
     pub(crate) defs: Arc<Mutex<AgentDefinitions>>,
 
-    // agent flows (name -> flow)
-    // TODO: use id as key
+    // agent flows (flow id -> flow)
     pub(crate) flows: Arc<Mutex<AgentFlows>>,
 
     // agent def name -> config
@@ -129,7 +128,7 @@ impl ASKit {
         def.default_configs.clone()
     }
 
-    // // flow
+    // flows
 
     pub fn get_agent_flows(&self) -> AgentFlows {
         let flows = self.flows.lock().unwrap();
@@ -144,11 +143,11 @@ impl ASKit {
         let new_name = self.unique_flow_name(name);
         let mut flows = self.flows.lock().unwrap();
         let flow = AgentFlow::new(new_name.clone());
-        flows.insert(new_name, flow.clone());
+        flows.insert(flow.id().to_string(), flow.clone());
         Ok(flow)
     }
 
-    pub fn rename_agent_flow(&self, old_name: &str, new_name: &str) -> Result<String, AgentError> {
+    pub fn rename_agent_flow(&self, id: &str, new_name: &str) -> Result<String, AgentError> {
         if !Self::is_valid_flow_name(new_name) {
             return Err(AgentError::InvalidFlowName(new_name.into()));
         }
@@ -159,13 +158,13 @@ impl ASKit {
         let mut flows = self.flows.lock().unwrap();
 
         // remove the original flow
-        let Some(mut flow) = flows.remove(old_name) else {
-            return Err(AgentError::RenameFlowFailed(old_name.into()));
+        let Some(mut flow) = flows.remove(id) else {
+            return Err(AgentError::RenameFlowFailed(id.into()));
         };
 
         // insert renamed flow
         flow.set_name(new_name.clone());
-        flows.insert(new_name.clone(), flow);
+        flows.insert(flow.id().to_string(), flow);
         Ok(new_name)
     }
 
@@ -205,7 +204,7 @@ impl ASKit {
         let mut new_name = name.trim().to_string();
         let mut i = 2;
         let flows = self.flows.lock().unwrap();
-        while flows.contains_key(&new_name) {
+        while flows.values().any(|flow| flow.name() == new_name) {
             new_name = format!("{}{}", name, i);
             i += 1;
         }
@@ -213,20 +212,20 @@ impl ASKit {
     }
 
     pub fn add_agent_flow(&self, agent_flow: &AgentFlow) -> Result<(), AgentError> {
-        let name = agent_flow.name();
+        let id = agent_flow.id();
 
         // add the given flow into flows
         {
             let mut flows = self.flows.lock().unwrap();
-            if flows.contains_key(name) {
-                return Err(AgentError::DuplicateFlowName(name.into()));
+            if flows.contains_key(id) {
+                return Err(AgentError::DuplicateId(id.into()));
             }
-            flows.insert(name.into(), agent_flow.clone());
+            flows.insert(id.to_string(), agent_flow.clone());
         }
 
         // add nodes into agents
         for node in agent_flow.nodes().iter() {
-            self.add_agent(name, node).unwrap_or_else(|e| {
+            self.add_agent(id, node).unwrap_or_else(|e| {
                 log::error!("Failed to add_agent_node {}: {}", node.id, e);
             });
         }
@@ -241,11 +240,11 @@ impl ASKit {
         Ok(())
     }
 
-    pub async fn remove_agent_flow(&self, flow_name: &str) -> Result<(), AgentError> {
+    pub async fn remove_agent_flow(&self, id: &str) -> Result<(), AgentError> {
         let flow = {
             let mut flows = self.flows.lock().unwrap();
-            let Some(flow) = flows.remove(flow_name) else {
-                return Err(AgentError::FlowNotFound(flow_name.to_string()));
+            let Some(flow) = flows.remove(id) else {
+                return Err(AgentError::FlowNotFound(id.to_string()));
             };
             flow.clone()
         };
@@ -264,10 +263,10 @@ impl ASKit {
     }
 
     pub fn insert_agent_flow(&self, flow: AgentFlow) -> Result<(), AgentError> {
-        let flow_name = flow.name();
+        let flow_id = flow.id();
 
         let mut flows = self.flows.lock().unwrap();
-        flows.insert(flow_name.to_string(), flow);
+        flows.insert(flow_id.to_string(), flow);
         Ok(())
     }
 
@@ -280,23 +279,19 @@ impl ASKit {
 
     pub fn add_agent_flow_node(
         &self,
-        flow_name: &str,
+        flow_id: &str,
         node: &AgentFlowNode,
     ) -> Result<(), AgentError> {
         let mut flows = self.flows.lock().unwrap();
-        let Some(flow) = flows.get_mut(flow_name) else {
-            return Err(AgentError::FlowNotFound(flow_name.to_string()));
+        let Some(flow) = flows.get_mut(flow_id) else {
+            return Err(AgentError::FlowNotFound(flow_id.to_string()));
         };
         flow.add_node(node.clone());
-        self.add_agent(flow_name, node)?;
+        self.add_agent(flow_id, node)?;
         Ok(())
     }
 
-    pub(crate) fn add_agent(
-        &self,
-        flow_name: &str,
-        node: &AgentFlowNode,
-    ) -> Result<(), AgentError> {
+    pub(crate) fn add_agent(&self, flow_id: &str, node: &AgentFlowNode) -> Result<(), AgentError> {
         let mut agents = self.agents.lock().unwrap();
         if agents.contains_key(&node.id) {
             return Err(AgentError::AgentAlreadyExists(node.id.to_string()));
@@ -307,7 +302,7 @@ impl ASKit {
             &node.def_name,
             node.configs.clone(),
         ) {
-            agent.set_flow_name(flow_name.to_string());
+            agent.set_flow_id(flow_id.to_string());
             agents.insert(node.id.clone(), Arc::new(AsyncMutex::new(agent)));
         } else {
             return Err(AgentError::AgentCreationFailed(node.id.to_string()));
@@ -317,12 +312,12 @@ impl ASKit {
 
     pub fn add_agent_flow_edge(
         &self,
-        flow_name: &str,
+        flow_id: &str,
         edge: &AgentFlowEdge,
     ) -> Result<(), AgentError> {
         let mut flows = self.flows.lock().unwrap();
-        let Some(flow) = flows.get_mut(flow_name) else {
-            return Err(AgentError::FlowNotFound(flow_name.to_string()));
+        let Some(flow) = flows.get_mut(flow_id) else {
+            return Err(AgentError::FlowNotFound(flow_id.to_string()));
         };
         flow.add_edge(edge.clone());
         self.add_edge(edge)?;
@@ -378,13 +373,13 @@ impl ASKit {
 
     pub async fn remove_agent_flow_node(
         &self,
-        flow_name: &str,
+        flow_id: &str,
         node_id: &str,
     ) -> Result<(), AgentError> {
         {
             let mut flows = self.flows.lock().unwrap();
-            let Some(flow) = flows.get_mut(flow_name) else {
-                return Err(AgentError::FlowNotFound(flow_name.to_string()));
+            let Some(flow) = flows.get_mut(flow_id) else {
+                return Err(AgentError::FlowNotFound(flow_id.to_string()));
             };
             flow.remove_node(node_id);
         }
@@ -420,10 +415,10 @@ impl ASKit {
         Ok(())
     }
 
-    pub fn remove_agent_flow_edge(&self, flow_name: &str, edge_id: &str) -> Result<(), AgentError> {
+    pub fn remove_agent_flow_edge(&self, flow_id: &str, edge_id: &str) -> Result<(), AgentError> {
         let mut flows = self.flows.lock().unwrap();
-        let Some(flow) = flows.get_mut(flow_name) else {
-            return Err(AgentError::FlowNotFound(flow_name.to_string()));
+        let Some(flow) = flows.get_mut(flow_id) else {
+            return Err(AgentError::FlowNotFound(flow_id.to_string()));
         };
         let Some(edge) = flow.remove_edge(edge_id) else {
             return Err(AgentError::EdgeNotFound(edge_id.to_string()));
@@ -454,11 +449,11 @@ impl ASKit {
         flow::copy_sub_flow(nodes, edges)
     }
 
-    pub async fn start_agent_flow(&self, name: &str) -> Result<(), AgentError> {
+    pub async fn start_agent_flow(&self, id: &str) -> Result<(), AgentError> {
         let flow = {
             let flows = self.flows.lock().unwrap();
-            let Some(flow) = flows.get(name) else {
-                return Err(AgentError::FlowNotFound(name.to_string()));
+            let Some(flow) = flows.get(id) else {
+                return Err(AgentError::FlowNotFound(id.to_string()));
             };
             flow.clone()
         };
@@ -466,11 +461,11 @@ impl ASKit {
         Ok(())
     }
 
-    pub async fn stop_agent_flow(&self, name: &str) -> Result<(), AgentError> {
+    pub async fn stop_agent_flow(&self, id: &str) -> Result<(), AgentError> {
         let flow = {
             let flows = self.flows.lock().unwrap();
-            let Some(flow) = flows.get(name) else {
-                return Err(AgentError::FlowNotFound(name.to_string()));
+            let Some(flow) = flows.get(id) else {
+                return Err(AgentError::FlowNotFound(id.to_string()));
             };
             flow.clone()
         };
@@ -835,13 +830,13 @@ impl ASKit {
     }
 
     async fn start_agent_flows(&self) -> Result<(), AgentError> {
-        let agent_flow_names;
+        let agent_flow_ids;
         {
             let agent_flows = self.flows.lock().unwrap();
-            agent_flow_names = agent_flows.keys().cloned().collect::<Vec<_>>();
+            agent_flow_ids = agent_flows.keys().cloned().collect::<Vec<_>>();
         }
-        for name in agent_flow_names {
-            self.start_agent_flow(&name).await.unwrap_or_else(|e| {
+        for id in agent_flow_ids {
+            self.start_agent_flow(&id).await.unwrap_or_else(|e| {
                 log::error!("Failed to start agent flow: {}", e);
             });
         }

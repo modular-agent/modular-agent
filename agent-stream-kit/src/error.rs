@@ -44,6 +44,9 @@ pub enum AgentError {
     #[error("Source agent {0} not found")]
     SourceAgentNotFound(String),
 
+    #[error("Duplicate id: {0}")]
+    DuplicateId(String),
+
     #[error("Source handle is empty")]
     EmptySourceHandle,
 

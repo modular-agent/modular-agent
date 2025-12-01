@@ -67,9 +67,9 @@ pub trait Agent {
         self.askit().get_global_configs(self.def_name())
     }
 
-    fn flow_name(&self) -> &str;
+    fn flow_id(&self) -> &str;
 
-    fn set_flow_name(&mut self, flow_name: String);
+    fn set_flow_id(&mut self, flow_id: String);
 
     async fn start(&mut self) -> Result<(), AgentError>;
 
@@ -93,7 +93,7 @@ pub struct AgentData {
     pub id: String,
     pub status: AgentStatus,
     pub def_name: String,
-    pub flow_name: String,
+    pub flow_id: String,
     pub out_pins: Option<BTreeMap<String, Pin>>,
     pub configs: Option<AgentConfigs>,
 }
@@ -105,7 +105,7 @@ impl AgentData {
             id,
             status: AgentStatus::Init,
             def_name,
-            flow_name: String::new(),
+            flow_id: String::new(),
             out_pins: None,
             configs,
         }
@@ -214,12 +214,12 @@ impl<T: AsAgent + Send + Sync> Agent for T {
         self.configs_changed()
     }
 
-    fn flow_name(&self) -> &str {
-        &self.data().flow_name
+    fn flow_id(&self) -> &str {
+        &self.data().flow_id
     }
 
-    fn set_flow_name(&mut self, flow_name: String) {
-        self.mut_data().flow_name = flow_name.clone();
+    fn set_flow_id(&mut self, flow_id: String) {
+        self.mut_data().flow_id = flow_id.clone();
     }
 
     async fn start(&mut self) -> Result<(), AgentError> {
