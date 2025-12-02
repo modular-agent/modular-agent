@@ -42,7 +42,6 @@ impl<T: Agent> AgentOutput for T {
         pin: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
-        self.set_out_pin(pin.clone(), value.clone());
         self.askit()
             .try_send_agent_out(self.id().into(), ctx, pin, value)
     }
