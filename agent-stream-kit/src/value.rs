@@ -113,8 +113,9 @@ impl AgentValue {
                 } else if let Some(f) = n.as_f64() {
                     Ok(AgentValue::Number(f))
                 } else {
-                    // This case should not happen, but handle it gracefully
-                    Ok(AgentValue::Integer(0))
+                    Err(AgentError::InvalidValue(
+                        "Invalid numeric value for AgentValue".into(),
+                    ))
                 }
             }
             serde_json::Value::String(s) => {
@@ -143,149 +144,6 @@ impl AgentValue {
                 }
                 Ok(AgentValue::object(map))
             }
-        }
-    }
-
-    pub fn from_kind_json(kind: &str, value: serde_json::Value) -> Result<Self, AgentError> {
-        match kind {
-            "unit" => {
-                if let serde_json::Value::Array(a) = value {
-                    Ok(AgentValue::Array(Arc::new(
-                        a.into_iter().map(|_| AgentValue::Unit).collect(),
-                    )))
-                } else {
-                    Ok(AgentValue::Unit)
-                }
-            }
-            "boolean" => match value {
-                serde_json::Value::Bool(b) => Ok(AgentValue::Boolean(b)),
-                serde_json::Value::Array(a) => {
-                    let mut agent_arr = Vec::new();
-                    for v in a {
-                        if let serde_json::Value::Bool(b) = v {
-                            agent_arr.push(AgentValue::Boolean(b));
-                        } else {
-                            return Err(AgentError::InvalidArrayValue("boolean".into()));
-                        }
-                    }
-                    Ok(AgentValue::Array(Arc::new(agent_arr)))
-                }
-                _ => Err(AgentError::InvalidValue("boolean".into())),
-            },
-            "integer" => match value {
-                serde_json::Value::Number(n) => {
-                    if let Some(i) = n.as_i64() {
-                        Ok(AgentValue::Integer(i))
-                    } else if let Some(f) = n.as_f64() {
-                        Ok(AgentValue::Integer(f as i64))
-                    } else {
-                        Err(AgentError::InvalidValue("integer".into()))
-                    }
-                }
-                serde_json::Value::Array(a) => {
-                    let mut agent_arr = Vec::new();
-                    for n in a {
-                        if let Some(i) = n.as_i64() {
-                            agent_arr.push(AgentValue::Integer(i));
-                        } else if let Some(f) = n.as_f64() {
-                            agent_arr.push(AgentValue::Integer(f as i64));
-                        } else {
-                            return Err(AgentError::InvalidArrayValue("integer".into()));
-                        }
-                    }
-                    Ok(AgentValue::Array(Arc::new(agent_arr)))
-                }
-                _ => Err(AgentError::InvalidValue("integer".into())),
-            },
-            "number" => match value {
-                serde_json::Value::Number(n) => {
-                    if let Some(f) = n.as_f64() {
-                        Ok(AgentValue::Number(f))
-                    } else if let Some(i) = n.as_i64() {
-                        Ok(AgentValue::Number(i as f64))
-                    } else {
-                        Err(AgentError::InvalidValue("number".into()))
-                    }
-                }
-                serde_json::Value::Array(a) => {
-                    let mut agent_arr = Vec::new();
-                    for n in a {
-                        if let Some(f) = n.as_f64() {
-                            agent_arr.push(AgentValue::Number(f));
-                        } else if let Some(i) = n.as_i64() {
-                            agent_arr.push(AgentValue::Number(i as f64));
-                        } else {
-                            return Err(AgentError::InvalidArrayValue("number".into()));
-                        }
-                    }
-                    Ok(AgentValue::Array(Arc::new(agent_arr)))
-                }
-                _ => Err(AgentError::InvalidValue("number".into())),
-            },
-            "string" => match value {
-                serde_json::Value::String(s) => Ok(AgentValue::string(s)),
-                serde_json::Value::Array(a) => {
-                    let mut agent_arr = Vec::new();
-                    for v in a {
-                        if let serde_json::Value::String(s) = v {
-                            agent_arr.push(AgentValue::string(s));
-                        } else {
-                            return Err(AgentError::InvalidArrayValue("string".into()));
-                        }
-                    }
-                    Ok(AgentValue::Array(Arc::new(agent_arr)))
-                }
-                _ => Err(AgentError::InvalidValue("string".into())),
-            },
-            #[cfg(feature = "image")]
-            "image" => match value {
-                serde_json::Value::String(s) => Ok(AgentValue::Image(Arc::new(
-                    PhotonImage::new_from_base64(&s.trim_start_matches(IMAGE_BASE64_PREFIX)),
-                ))),
-                serde_json::Value::Array(a) => {
-                    let mut agent_arr = Vec::new();
-                    for v in a {
-                        if let serde_json::Value::String(s) = v {
-                            agent_arr.push(AgentValue::image(PhotonImage::new_from_base64(
-                                &s.trim_start_matches(IMAGE_BASE64_PREFIX),
-                            )));
-                        } else {
-                            return Err(AgentError::InvalidArrayValue("image".into()));
-                        }
-                    }
-                    Ok(AgentValue::Array(Arc::new(agent_arr)))
-                }
-                _ => Err(AgentError::InvalidValue("image".into())),
-            },
-            _ => match value {
-                serde_json::Value::Null => Ok(AgentValue::Unit),
-                serde_json::Value::Bool(b) => Ok(AgentValue::Boolean(b)),
-                serde_json::Value::Number(n) => {
-                    if let Some(i) = n.as_i64() {
-                        Ok(AgentValue::Integer(i))
-                    } else if let Some(f) = n.as_f64() {
-                        Ok(AgentValue::Number(f))
-                    } else {
-                        Err(AgentError::InvalidValue("number".into()))
-                    }
-                }
-                serde_json::Value::String(s) => Ok(AgentValue::string(s)),
-                serde_json::Value::Array(a) => {
-                    let mut agent_arr = Vec::new();
-                    for v in a {
-                        let agent_v = AgentValue::from_kind_json(kind, v)?;
-                        agent_arr.push(agent_v);
-                    }
-                    Ok(AgentValue::Array(Arc::new(agent_arr)))
-                }
-                serde_json::Value::Object(obj) => {
-                    let mut map = AgentValueMap::new();
-                    for (k, v) in obj {
-                        map.insert(k.clone(), AgentValue::from_json(v)?);
-                    }
-                    Ok(AgentValue::object(map))
-                }
-            },
         }
     }
 
@@ -326,43 +184,35 @@ impl AgentValue {
             .map_err(|e| AgentError::InvalidValue(format!("Failed to deserialize: {}", e)))
     }
 
-    #[allow(unused)]
     pub fn is_unit(&self) -> bool {
         matches!(self, AgentValue::Unit)
     }
 
-    #[allow(unused)]
     pub fn is_boolean(&self) -> bool {
         matches!(self, AgentValue::Boolean(_))
     }
 
-    #[allow(unused)]
     pub fn is_integer(&self) -> bool {
         matches!(self, AgentValue::Integer(_))
     }
 
-    #[allow(unused)]
     pub fn is_number(&self) -> bool {
         matches!(self, AgentValue::Number(_))
     }
 
-    #[allow(unused)]
     pub fn is_string(&self) -> bool {
         matches!(self, AgentValue::String(_))
     }
 
     #[cfg(feature = "image")]
-    #[allow(unused)]
     pub fn is_image(&self) -> bool {
         matches!(self, AgentValue::Image(_))
     }
 
-    #[allow(unused)]
     pub fn is_array(&self) -> bool {
         matches!(self, AgentValue::Array(_))
     }
 
-    #[allow(unused)]
     pub fn is_object(&self) -> bool {
         matches!(self, AgentValue::Object(_))
     }
@@ -433,58 +283,47 @@ impl AgentValue {
         }
     }
 
-    #[allow(unused)]
     pub fn get(&self, key: &str) -> Option<&AgentValue> {
         self.as_object().and_then(|o| o.get(key))
     }
 
-    #[allow(unused)]
     pub fn get_mut(&mut self, key: &str) -> Option<&mut AgentValue> {
         self.as_object_mut().and_then(|o| o.get_mut(key))
     }
 
-    #[allow(unused)]
     pub fn get_bool(&self, key: &str) -> Option<bool> {
         self.get(key).and_then(|v| v.as_bool())
     }
 
-    #[allow(unused)]
     pub fn get_i64(&self, key: &str) -> Option<i64> {
         self.get(key).and_then(|v| v.as_i64())
     }
 
-    #[allow(unused)]
     pub fn get_f64(&self, key: &str) -> Option<f64> {
         self.get(key).and_then(|v| v.as_f64())
     }
 
-    #[allow(unused)]
     pub fn get_str(&self, key: &str) -> Option<&str> {
         self.get(key).and_then(|v| v.as_str())
     }
 
     #[cfg(feature = "image")]
-    #[allow(unused)]
     pub fn get_image(&self, key: &str) -> Option<Arc<PhotonImage>> {
         self.get(key).and_then(|v| v.as_image())
     }
 
-    #[allow(unused)]
     pub fn get_object(&self, key: &str) -> Option<&AgentValueMap<String, AgentValue>> {
         self.get(key).and_then(|v| v.as_object())
     }
 
-    #[allow(unused)]
     pub fn get_object_mut(&mut self, key: &str) -> Option<&mut AgentValueMap<String, AgentValue>> {
         self.get_mut(key).and_then(|v| v.as_object_mut())
     }
 
-    #[allow(unused)]
     pub fn get_array(&self, key: &str) -> Option<&Vec<AgentValue>> {
         self.get(key).and_then(|v| v.as_array())
     }
 
-    #[allow(unused)]
     pub fn get_array_mut(&mut self, key: &str) -> Option<&mut Vec<AgentValue>> {
         self.get_mut(key).and_then(|v| v.as_array_mut())
     }
@@ -619,6 +458,71 @@ mod tests {
     use serde_json::json;
 
     #[test]
+    fn test_partial_eq() {
+        // Test PartialEq implementation
+        let unit1 = AgentValue::unit();
+        let unit2 = AgentValue::unit();
+        assert_eq!(unit1, unit2);
+
+        let boolean1 = AgentValue::boolean(true);
+        let boolean2 = AgentValue::boolean(true);
+        assert_eq!(boolean1, boolean2);
+
+        let integer1 = AgentValue::integer(42);
+        let integer2 = AgentValue::integer(42);
+        assert_eq!(integer1, integer2);
+        let different = AgentValue::integer(100);
+        assert_ne!(integer1, different);
+
+        let number1 = AgentValue::number(3.14);
+        let number2 = AgentValue::number(3.14);
+        assert_eq!(number1, number2);
+
+        let string1 = AgentValue::string("hello");
+        let string2 = AgentValue::string("hello");
+        assert_eq!(string1, string2);
+
+        #[cfg(feature = "image")]
+        {
+            let image1 = AgentValue::image(PhotonImage::new(vec![0u8; 4], 1, 1));
+            let image2 = AgentValue::image(PhotonImage::new(vec![0u8; 4], 1, 1));
+            assert_eq!(image1, image2);
+        }
+
+        let obj1 = AgentValue::object(
+            [
+                ("key1".to_string(), AgentValue::string("value1")),
+                ("key2".to_string(), AgentValue::integer(2)),
+            ]
+            .into(),
+        );
+        let obj2 = AgentValue::object(
+            [
+                ("key1".to_string(), AgentValue::string("value1")),
+                ("key2".to_string(), AgentValue::integer(2)),
+            ]
+            .into(),
+        );
+        assert_eq!(obj1, obj2);
+
+        let arr1 = AgentValue::array(vec![
+            AgentValue::integer(1),
+            AgentValue::string("two"),
+            AgentValue::boolean(true),
+        ]);
+        let arr2 = AgentValue::array(vec![
+            AgentValue::integer(1),
+            AgentValue::string("two"),
+            AgentValue::boolean(true),
+        ]);
+        assert_eq!(arr1, arr2);
+
+        let mixed_types_1 = AgentValue::boolean(true);
+        let mixed_types_2 = AgentValue::integer(1);
+        assert_ne!(mixed_types_1, mixed_types_2);
+    }
+
+    #[test]
     fn test_agent_value_constructors() {
         // Test AgentValue constructors
         let unit = AgentValue::unit();
@@ -719,142 +623,6 @@ mod tests {
     }
 
     #[test]
-    fn test_agent_value_from_kind_value() {
-        // Test AgentValue::from_kind_value with different kinds and values
-        let unit = AgentValue::from_kind_json("unit", json!(null)).unwrap();
-        assert_eq!(unit, AgentValue::Unit);
-
-        let boolean = AgentValue::from_kind_json("boolean", json!(true)).unwrap();
-        assert_eq!(boolean, AgentValue::Boolean(true));
-
-        let integer = AgentValue::from_kind_json("integer", json!(42)).unwrap();
-        assert_eq!(integer, AgentValue::Integer(42));
-
-        let integer = AgentValue::from_kind_json("integer", json!(42.0)).unwrap();
-        assert_eq!(integer, AgentValue::Integer(42));
-
-        let number = AgentValue::from_kind_json("number", json!(3.14)).unwrap();
-        assert!(matches!(number, AgentValue::Number(_)));
-        if let AgentValue::Number(num) = number {
-            assert!((num - 3.14).abs() < f64::EPSILON);
-        }
-
-        let number = AgentValue::from_kind_json("number", json!(3)).unwrap();
-        assert!(matches!(number, AgentValue::Number(_)));
-        if let AgentValue::Number(num) = number {
-            assert!((num - 3.0).abs() < f64::EPSILON);
-        }
-
-        let string = AgentValue::from_kind_json("string", json!("hello")).unwrap();
-        assert!(matches!(string, AgentValue::String(_)));
-        if let AgentValue::String(s) = string {
-            assert_eq!(*s, "hello");
-        } else {
-            panic!("Expected string value");
-        }
-
-        let text = AgentValue::from_kind_json("string", json!("multiline\ntext")).unwrap();
-        assert!(matches!(text, AgentValue::String(_)));
-        if let AgentValue::String(t) = text {
-            assert_eq!(*t, "multiline\ntext");
-        } else {
-            panic!("Expected text value");
-        }
-
-        let array = AgentValue::from_kind_json("array", json!([1, "test", true])).unwrap();
-        assert!(matches!(array, AgentValue::Array(_)));
-        if let AgentValue::Array(arr) = array {
-            assert_eq!(arr.len(), 3);
-            assert_eq!(arr[0], AgentValue::Integer(1));
-            assert!(matches!(&arr[1], AgentValue::String(_)));
-            if let AgentValue::String(s) = &arr[1] {
-                assert_eq!(**s, "test");
-            } else {
-                panic!("Expected string value");
-            }
-            assert_eq!(arr[2], AgentValue::Boolean(true));
-        }
-
-        let obj = AgentValue::from_kind_json("object", json!({"key1": "test", "key2": 2})).unwrap();
-        assert!(matches!(obj, AgentValue::Object(_)));
-        if let AgentValue::Object(obj) = obj {
-            assert_eq!(obj.get("key1").and_then(|v| v.as_str()), Some("test"));
-            assert_eq!(obj.get("key2").and_then(|v| v.as_i64()), Some(2));
-        } else {
-            panic!("Object was not deserialized correctly");
-        }
-
-        // Test arrays
-        let unit_array = AgentValue::from_kind_json("unit", json!([null, null])).unwrap();
-        assert!(matches!(unit_array, AgentValue::Array(_)));
-        if let AgentValue::Array(arr) = unit_array {
-            assert_eq!(arr.len(), 2);
-            for val in arr.iter() {
-                assert_eq!(*val, AgentValue::Unit);
-            }
-        }
-
-        let bool_array = AgentValue::from_kind_json("boolean", json!([true, false])).unwrap();
-        assert!(matches!(bool_array, AgentValue::Array(_)));
-        if let AgentValue::Array(arr) = bool_array {
-            assert_eq!(arr.len(), 2);
-            assert_eq!(arr[0], AgentValue::Boolean(true));
-            assert_eq!(arr[1], AgentValue::Boolean(false));
-        }
-
-        let int_array = AgentValue::from_kind_json("integer", json!([1, 2, 3])).unwrap();
-        assert!(matches!(int_array, AgentValue::Array(_)));
-        if let AgentValue::Array(arr) = int_array {
-            assert_eq!(arr.len(), 3);
-            assert_eq!(arr[0], AgentValue::Integer(1));
-            assert_eq!(arr[1], AgentValue::Integer(2));
-            assert_eq!(arr[2], AgentValue::Integer(3));
-        }
-
-        let num_array = AgentValue::from_kind_json("number", json!([1.1, 2.2, 3.3])).unwrap();
-        assert!(matches!(num_array, AgentValue::Array(_)));
-        if let AgentValue::Array(arr) = num_array {
-            assert_eq!(arr.len(), 3);
-            assert_eq!(arr[0], AgentValue::Number(1.1));
-            assert_eq!(arr[1], AgentValue::Number(2.2));
-            assert_eq!(arr[2], AgentValue::Number(3.3));
-        }
-
-        let string_array = AgentValue::from_kind_json("string", json!(["hello", "world"])).unwrap();
-        assert!(matches!(string_array, AgentValue::Array(_)));
-        if let AgentValue::Array(arr) = string_array {
-            assert_eq!(arr.len(), 2);
-            assert!(matches!(&arr[0], AgentValue::String(_)));
-            if let AgentValue::String(s) = &arr[0] {
-                assert_eq!(**s, "hello".to_string());
-            }
-            assert!(matches!(&arr[1], AgentValue::String(_)));
-            if let AgentValue::String(s) = &arr[1] {
-                assert_eq!(**s, "world".to_string());
-            }
-        }
-
-        let text_array =
-            AgentValue::from_kind_json("string", json!(["hello", "world!\n"])).unwrap();
-        assert!(matches!(text_array, AgentValue::Array(_)));
-        if let AgentValue::Array(arr) = text_array {
-            assert_eq!(arr.len(), 2);
-            assert!(matches!(&arr[0], AgentValue::String(_)));
-            if let AgentValue::String(s) = &arr[0] {
-                assert_eq!(**s, "hello".to_string());
-            }
-            assert!(matches!(&arr[1], AgentValue::String(_)));
-            if let AgentValue::String(s) = &arr[1] {
-                assert_eq!(**s, "world!\n".to_string());
-            }
-        }
-
-        // array_array
-
-        // object_array
-    }
-
-    #[test]
     fn test_agent_value_test_methods() {
         // Test test methods on AgentValue
         let unit = AgentValue::unit();
@@ -865,6 +633,8 @@ mod tests {
         assert_eq!(unit.is_string(), false);
         assert_eq!(unit.is_array(), false);
         assert_eq!(unit.is_object(), false);
+        #[cfg(feature = "image")]
+        assert_eq!(unit.is_image(), false);
 
         let boolean = AgentValue::boolean(true);
         assert_eq!(boolean.is_unit(), false);
@@ -874,6 +644,8 @@ mod tests {
         assert_eq!(boolean.is_string(), false);
         assert_eq!(boolean.is_array(), false);
         assert_eq!(boolean.is_object(), false);
+        #[cfg(feature = "image")]
+        assert_eq!(boolean.is_image(), false);
 
         let integer = AgentValue::integer(42);
         assert_eq!(integer.is_unit(), false);
@@ -883,6 +655,8 @@ mod tests {
         assert_eq!(integer.is_string(), false);
         assert_eq!(integer.is_array(), false);
         assert_eq!(integer.is_object(), false);
+        #[cfg(feature = "image")]
+        assert_eq!(integer.is_image(), false);
 
         let number = AgentValue::number(3.14);
         assert_eq!(number.is_unit(), false);
@@ -892,6 +666,8 @@ mod tests {
         assert_eq!(number.is_string(), false);
         assert_eq!(number.is_array(), false);
         assert_eq!(number.is_object(), false);
+        #[cfg(feature = "image")]
+        assert_eq!(number.is_image(), false);
 
         let string = AgentValue::string("hello");
         assert_eq!(string.is_unit(), false);
@@ -901,6 +677,8 @@ mod tests {
         assert_eq!(string.is_string(), true);
         assert_eq!(string.is_array(), false);
         assert_eq!(string.is_object(), false);
+        #[cfg(feature = "image")]
+        assert_eq!(string.is_image(), false);
 
         let array = AgentValue::array(vec![AgentValue::integer(1), AgentValue::integer(2)]);
         assert_eq!(array.is_unit(), false);
@@ -910,6 +688,8 @@ mod tests {
         assert_eq!(array.is_string(), false);
         assert_eq!(array.is_array(), true);
         assert_eq!(array.is_object(), false);
+        #[cfg(feature = "image")]
+        assert_eq!(array.is_image(), false);
 
         let obj = AgentValue::object(
             [
@@ -925,10 +705,25 @@ mod tests {
         assert_eq!(obj.is_string(), false);
         assert_eq!(obj.is_array(), false);
         assert_eq!(obj.is_object(), true);
+        #[cfg(feature = "image")]
+        assert_eq!(obj.is_image(), false);
+
+        #[cfg(feature = "image")]
+        {
+            let img = AgentValue::image(PhotonImage::new(vec![0u8; 4], 1, 1));
+            assert_eq!(img.is_unit(), false);
+            assert_eq!(img.is_boolean(), false);
+            assert_eq!(img.is_integer(), false);
+            assert_eq!(img.is_number(), false);
+            assert_eq!(img.is_string(), false);
+            assert_eq!(img.is_array(), false);
+            assert_eq!(img.is_object(), false);
+            assert_eq!(img.is_image(), true);
+        }
     }
 
     #[test]
-    fn test_agent_value_accessor_methods() {
+    fn test_agent_value_as_methods() {
         // Test accessor methods on AgentValue
         let boolean = AgentValue::boolean(true);
         assert_eq!(boolean.as_bool(), Some(true));
@@ -937,6 +732,8 @@ mod tests {
         assert_eq!(boolean.as_str(), None);
         assert!(boolean.as_array().is_none());
         assert_eq!(boolean.as_object(), None);
+        #[cfg(feature = "image")]
+        assert!(boolean.as_image().is_none());
 
         let integer = AgentValue::integer(42);
         assert_eq!(integer.as_bool(), None);
@@ -945,6 +742,8 @@ mod tests {
         assert_eq!(integer.as_str(), None);
         assert!(integer.as_array().is_none());
         assert_eq!(integer.as_object(), None);
+        #[cfg(feature = "image")]
+        assert!(integer.as_image().is_none());
 
         let number = AgentValue::number(3.14);
         assert_eq!(number.as_bool(), None);
@@ -953,6 +752,8 @@ mod tests {
         assert_eq!(number.as_str(), None);
         assert!(number.as_array().is_none());
         assert_eq!(number.as_object(), None);
+        #[cfg(feature = "image")]
+        assert!(number.as_image().is_none());
 
         let string = AgentValue::string("hello");
         assert_eq!(string.as_bool(), None);
@@ -961,6 +762,8 @@ mod tests {
         assert_eq!(string.as_str(), Some("hello"));
         assert!(string.as_array().is_none());
         assert_eq!(string.as_object(), None);
+        #[cfg(feature = "image")]
+        assert!(string.as_image().is_none());
 
         let array = AgentValue::array(vec![AgentValue::integer(1), AgentValue::integer(2)]);
         assert_eq!(array.as_bool(), None);
@@ -974,6 +777,13 @@ mod tests {
             assert_eq!(arr[1].as_i64().unwrap(), 2);
         }
         assert_eq!(array.as_object(), None);
+        #[cfg(feature = "image")]
+        assert!(array.as_image().is_none());
+
+        let mut array = AgentValue::array(vec![AgentValue::integer(1), AgentValue::integer(2)]);
+        if let Some(arr) = array.as_array_mut() {
+            arr.push(AgentValue::integer(3));
+        }
 
         let obj = AgentValue::object(
             [
@@ -992,11 +802,183 @@ mod tests {
             assert_eq!(value.get("key1").and_then(|v| v.as_str()), Some("string1"));
             assert_eq!(value.get("key2").and_then(|v| v.as_i64()), Some(2));
         }
+        #[cfg(feature = "image")]
+        assert!(obj.as_image().is_none());
+
+        let mut obj = AgentValue::object(
+            [
+                ("key1".to_string(), AgentValue::string("string1")),
+                ("key2".to_string(), AgentValue::integer(2)),
+            ]
+            .into(),
+        );
+        if let Some(value) = obj.as_object_mut() {
+            value.insert("key3".to_string(), AgentValue::boolean(true));
+        }
+
+        #[cfg(feature = "image")]
+        {
+            let img = AgentValue::image(PhotonImage::new(vec![0u8; 4], 1, 1));
+            assert_eq!(img.as_bool(), None);
+            assert_eq!(img.as_i64(), None);
+            assert_eq!(img.as_f64(), None);
+            assert_eq!(img.as_str(), None);
+            assert!(img.as_array().is_none());
+            assert_eq!(img.as_object(), None);
+            assert!(img.as_image().is_some());
+        }
+    }
+
+    #[test]
+    fn test_agent_value_get_methods() {
+        // Test get methods on AgentValue
+        const KEY: &str = "key";
+
+        let boolean = AgentValue::boolean(true);
+        assert_eq!(boolean.get(KEY), None);
+
+        let integer = AgentValue::integer(42);
+        assert_eq!(integer.get(KEY), None);
+
+        let number = AgentValue::number(3.14);
+        assert_eq!(number.get(KEY), None);
+
+        let string = AgentValue::string("hello");
+        assert_eq!(string.get(KEY), None);
+
+        let array = AgentValue::array(vec![AgentValue::integer(1), AgentValue::integer(2)]);
+        assert_eq!(array.get(KEY), None);
+
+        let mut array = AgentValue::array(vec![AgentValue::integer(1), AgentValue::integer(2)]);
+        assert_eq!(array.get_mut(KEY), None);
+
+        let mut obj = AgentValue::object(
+            [
+                ("k_boolean".to_string(), AgentValue::boolean(true)),
+                ("k_integer".to_string(), AgentValue::integer(42)),
+                ("k_number".to_string(), AgentValue::number(3.14)),
+                ("k_string".to_string(), AgentValue::string("string1")),
+                (
+                    "k_array".to_string(),
+                    AgentValue::array(vec![AgentValue::integer(1)]),
+                ),
+                (
+                    "k_object".to_string(),
+                    AgentValue::object(
+                        [("inner_key".to_string(), AgentValue::integer(100))].into(),
+                    ),
+                ),
+                #[cfg(feature = "image")]
+                (
+                    "k_image".to_string(),
+                    AgentValue::image(PhotonImage::new(vec![0u8; 4], 1, 1)),
+                ),
+            ]
+            .into(),
+        );
+        assert_eq!(obj.get(KEY), None);
+        assert_eq!(obj.get_bool("k_boolean"), Some(true));
+        assert_eq!(obj.get_i64("k_integer"), Some(42));
+        assert_eq!(obj.get_f64("k_number"), Some(3.14));
+        assert_eq!(obj.get_str("k_string"), Some("string1"));
+        assert!(obj.get_array("k_array").is_some());
+        assert!(obj.get_array_mut("k_array").is_some());
+        assert!(obj.get_object("k_object").is_some());
+        assert!(obj.get_object_mut("k_object").is_some());
+        #[cfg(feature = "image")]
+        assert!(obj.get_image("k_image").is_some());
+
+        #[cfg(feature = "image")]
+        {
+            let img = AgentValue::image(PhotonImage::new(vec![0u8; 4], 1, 1));
+            assert_eq!(img.get(KEY), None);
+        }
+    }
+
+    #[test]
+    fn test_agent_value_set() {
+        // Test set method on AgentValue
+        let mut obj = AgentValue::object(AgentValueMap::new());
+        assert!(obj.set("key1".to_string(), AgentValue::integer(42)).is_ok());
+        assert_eq!(obj.get_i64("key1"), Some(42));
+
+        let mut not_obj = AgentValue::integer(10);
+        assert!(
+            not_obj
+                .set("key1".to_string(), AgentValue::integer(42))
+                .is_err()
+        );
     }
 
     #[test]
     fn test_agent_value_default() {
         assert_eq!(AgentValue::default(), AgentValue::Unit);
+
+        assert_eq!(AgentValue::boolean_default(), AgentValue::Boolean(false));
+        assert_eq!(AgentValue::integer_default(), AgentValue::Integer(0));
+        assert_eq!(AgentValue::number_default(), AgentValue::Number(0.0));
+        assert_eq!(
+            AgentValue::string_default(),
+            AgentValue::String(Arc::new(String::new()))
+        );
+        assert_eq!(
+            AgentValue::array_default(),
+            AgentValue::Array(Arc::new(Vec::new()))
+        );
+        assert_eq!(
+            AgentValue::object_default(),
+            AgentValue::Object(Arc::new(AgentValueMap::new()))
+        );
+
+        #[cfg(feature = "image")]
+        {
+            assert_eq!(
+                AgentValue::image_default(),
+                AgentValue::image(PhotonImage::new(vec![0u8; 4], 1, 1))
+            );
+        }
+    }
+
+    #[test]
+    fn test_to_json() {
+        // Test to_json
+        let unit = AgentValue::unit();
+        assert_eq!(unit.to_json(), json!(null));
+
+        let boolean = AgentValue::boolean(true);
+        assert_eq!(boolean.to_json(), json!(true));
+
+        let integer = AgentValue::integer(42);
+        assert_eq!(integer.to_json(), json!(42));
+
+        let number = AgentValue::number(3.14);
+        assert_eq!(number.to_json(), json!(3.14));
+
+        let string = AgentValue::string("hello");
+        assert_eq!(string.to_json(), json!("hello"));
+
+        let array = AgentValue::array(vec![AgentValue::integer(1), AgentValue::string("test")]);
+        assert_eq!(array.to_json(), json!([1, "test"]));
+
+        let obj = AgentValue::object(
+            [
+                ("key1".to_string(), AgentValue::string("string1")),
+                ("key2".to_string(), AgentValue::integer(2)),
+            ]
+            .into(),
+        );
+        assert_eq!(obj.to_json(), json!({"key1": "string1", "key2": 2}));
+
+        #[cfg(feature = "image")]
+        {
+            let img = AgentValue::image(PhotonImage::new(vec![0u8; 4], 1, 1));
+            assert_eq!(
+                img.to_json(),
+                json!(
+                    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAEElEQVR4AQEFAPr/AAAAAAAABQABZHiVOAAAAABJRU5ErkJggg=="
+                )
+            );
+        }
     }
 
     #[test]
@@ -1044,6 +1026,16 @@ mod tests {
         #[cfg(feature = "image")]
         {
             let img = AgentValue::image(PhotonImage::new(vec![0u8; 4], 1, 1));
+            assert_eq!(
+                serde_json::to_string(&img).unwrap(),
+                r#""data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAEElEQVR4AQEFAPr/AAAAAAAABQABZHiVOAAAAABJRU5ErkJggg==""#
+            );
+        }
+
+        // Test Arc Image serialization
+        #[cfg(feature = "image")]
+        {
+            let img = AgentValue::image_arc(Arc::new(PhotonImage::new(vec![0u8; 4], 1, 1)));
             assert_eq!(
                 serde_json::to_string(&img).unwrap(),
                 r#""data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAEElEQVR4AQEFAPr/AAAAAAAABQABZHiVOAAAAABJRU5ErkJggg==""#
@@ -1173,6 +1165,34 @@ mod tests {
                 )
             );
         }
+    }
+
+    #[test]
+    fn test_agent_value_into() {
+        // Test From implementations for AgentValue
+        let from_unit: AgentValue = ().into();
+        assert_eq!(from_unit, AgentValue::Unit);
+
+        let from_bool: AgentValue = true.into();
+        assert_eq!(from_bool, AgentValue::Boolean(true));
+
+        let from_i32: AgentValue = 42i32.into();
+        assert_eq!(from_i32, AgentValue::Integer(42));
+
+        let from_i64: AgentValue = 100i64.into();
+        assert_eq!(from_i64, AgentValue::Integer(100));
+
+        let from_f64: AgentValue = 3.14f64.into();
+        assert_eq!(from_f64, AgentValue::Number(3.14));
+
+        let from_string: AgentValue = "hello".to_string().into();
+        assert_eq!(
+            from_string,
+            AgentValue::String(Arc::new("hello".to_string()))
+        );
+
+        let from_str: AgentValue = "world".into();
+        assert_eq!(from_str, AgentValue::String(Arc::new("world".to_string())));
     }
 
     #[test]
