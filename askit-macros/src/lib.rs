@@ -7,7 +7,7 @@ use proc_macro::TokenStream;
 use proc_macro2::Span;
 use quote::quote;
 use syn::{
-    Expr, ItemStruct, Lit, Meta, MetaList, Type, parse_macro_input, parse_quote,
+    Expr, ItemStruct, Meta, MetaList, Type, parse_macro_input, parse_quote,
     punctuated::Punctuated, spanned::Spanned, token::Comma,
 };
 
@@ -670,13 +670,7 @@ fn parse_common_config(list: MetaList) -> syn::Result<CommonConfig> {
     for meta in nested {
         match meta {
             Meta::NameValue(nv) if nv.path.is_ident("name") => {
-                cfg.name = Some(match &nv.value {
-                    Expr::Lit(expr_lit) => match &expr_lit.lit {
-                        Lit::Str(s) => syn::parse_str::<Expr>(&s.value())?,
-                        _ => nv.value.clone(),
-                    },
-                    _ => nv.value.clone(),
-                });
+                cfg.name = Some(nv.value.clone());
             }
             Meta::NameValue(nv) if nv.path.is_ident("default") => {
                 cfg.default = Some(nv.value.clone());
@@ -709,13 +703,7 @@ fn parse_common_display(list: MetaList) -> syn::Result<CommonDisplay> {
     for meta in nested {
         match meta {
             Meta::NameValue(nv) if nv.path.is_ident("name") => {
-                cfg.name = Some(match &nv.value {
-                    Expr::Lit(expr_lit) => match &expr_lit.lit {
-                        Lit::Str(s) => syn::parse_str::<Expr>(&s.value())?,
-                        _ => nv.value.clone(),
-                    },
-                    _ => nv.value.clone(),
-                });
+                cfg.name = Some(nv.value.clone());
             }
             Meta::NameValue(nv) if nv.path.is_ident("title") => {
                 cfg.title = Some(nv.value.clone());

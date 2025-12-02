@@ -695,15 +695,15 @@ impl ASKit {
         }
     }
 
+    pub fn get_global_configs_map(&self) -> AgentConfigsMap {
+        let global_configs_map = self.global_configs_map.lock().unwrap();
+        global_configs_map.clone()
+    }
+
     pub fn set_global_configs_map(&self, new_configs_map: AgentConfigsMap) {
         for (agent_name, new_configs) in new_configs_map {
             self.set_global_configs(agent_name, new_configs);
         }
-    }
-
-    pub fn get_global_configs_map(&self) -> AgentConfigsMap {
-        let global_configs_map = self.global_configs_map.lock().unwrap();
-        global_configs_map.clone()
     }
 
     pub async fn agent_input(

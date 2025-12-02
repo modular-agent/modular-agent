@@ -12,13 +12,17 @@ static CATEGORY: &str = "Core/Utils";
 static PIN_IN: &str = "in";
 static PIN_RESET: &str = "reset";
 static PIN_COUNT: &str = "count";
+static CONFIG_INITIAL_COUNT: &str = "initial_count";
+static GLOBAL_STRING: &str = "global_string";
 
 /// Counter
 #[askit_agent(
     title = "Counter",
     category = CATEGORY,
     inputs = [PIN_IN, PIN_RESET],
-    outputs = [PIN_COUNT]
+    outputs = [PIN_COUNT],
+    integer_config(name = CONFIG_INITIAL_COUNT, default = 1),
+    string_global_config(name = GLOBAL_STRING, default = "gs"),
 )]
 pub struct CounterAgent {
     data: AgentData,
