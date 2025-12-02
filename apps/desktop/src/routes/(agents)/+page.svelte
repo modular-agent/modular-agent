@@ -11,6 +11,7 @@
     MiniMap,
     SvelteFlow,
     type Edge,
+    type NodeTypes,
   } from "@xyflow/svelte";
   // 👇 this is important! You need to import the styles for Svelte Flow to work
   import "@xyflow/svelte/dist/style.css";
@@ -27,7 +28,6 @@
     stopAgent,
     newAgentFlow,
     copySubFlow,
-    insertAgentFlow,
   } from "tauri-plugin-askit-api";
   import type { AgentFlowNode, AgentFlowEdge } from "tauri-plugin-askit-api";
 
@@ -77,7 +77,6 @@
   function updateNodesAndEdges() {
     nodes = [...flows()[flowState.id].nodes];
     edges = [...flows()[flowState.id].edges];
-    console.log(nodes);
     const viewport = flows()[flowState.id].viewport;
     if (viewport) {
       setViewport(viewport);

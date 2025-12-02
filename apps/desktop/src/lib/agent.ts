@@ -7,6 +7,7 @@ import type {
   AgentDefaultConfigs,
   AgentDefinitions,
   AgentDisplayConfigs,
+  AgentDisplayConfigEntry,
   AgentFlow,
   AgentFlowEdge,
   AgentFlowNode,
@@ -278,4 +279,52 @@ export function serializeAgentFlowEdge(edge: TAgentFlowEdge): AgentFlowEdge {
     target: edge.target,
     target_handle: edge.targetHandle ?? null,
   };
+}
+
+// display
+
+export function inferTypeForDisplay(config: AgentDisplayConfigEntry, value: any): string {
+  let ty = config?.type;
+  if (ty === undefined || ty === null || ty === "*") {
+    if (value === null || value === undefined) {
+      return "object";
+    } else if (typeof value === "boolean") {
+      return "boolean";
+    } else if (Number.isInteger(value)) {
+      return "integer";
+    } else if (typeof value === "number") {
+      return "number";
+    } else if (typeof value === "string") {
+      if (value.startsWith("data:image/")) {
+        return "image";
+      } else if (value.includes("\n")) {
+        return "text";
+      } else {
+        return "string";
+      }
+    } else if (Array.isArray(value)) {
+      let tys = new Set<string>();
+      for (const v of value) {
+        tys.add(inferTypeForDisplay({} as AgentDisplayConfigEntry, v));
+      }
+      if (tys.size === 1) {
+        return tys.values().next().value ?? "object";
+      }
+      if (tys.has("message")) {
+        return "messages";
+      }
+      if (tys.has("text")) {
+        return "text";
+      }
+      return tys.values().next().value ?? "object";
+    } else if (typeof value === "object") {
+      if (value?.content !== undefined) {
+        return "message";
+      } else {
+        return "object";
+      }
+    }
+    return "object";
+  }
+  return ty;
 }

@@ -29,7 +29,11 @@
   import type { AgentConfigEntry, AgentDisplayConfigEntry } from "tauri-plugin-askit-api";
 
   import Messages from "@/components/Messages.svelte";
-  import { getAgentDefinitionsContext, serializeAgentFlowNodeConfigs } from "@/lib/agent";
+  import {
+    getAgentDefinitionsContext,
+    inferTypeForDisplay,
+    serializeAgentFlowNodeConfigs,
+  } from "@/lib/agent";
   import {
     subscribeDisplayMessage,
     subscribeErrorMessage,
@@ -125,52 +129,6 @@
   let titleColor = $derived(titleColorMap[agentDef?.kind ?? "default"] ?? titleColorMap.default);
 
   const uid = $props.id();
-
-  function inferTypeForDisplay(config: AgentDisplayConfigEntry, value: any): string {
-    let ty = config?.type;
-    if (ty === null || ty === "*") {
-      if (value === null || value === undefined) {
-        return "object";
-      } else if (typeof value === "boolean") {
-        return "boolean";
-      } else if (Number.isInteger(value)) {
-        return "integer";
-      } else if (typeof value === "number") {
-        return "number";
-      } else if (typeof value === "string") {
-        if (value.startsWith("data:image/")) {
-          return "image";
-        } else if (value.includes("\n")) {
-          return "text";
-        } else {
-          return "string";
-        }
-      } else if (Array.isArray(value)) {
-        let tys = new Set<string>();
-        for (const v of value) {
-          tys.add(inferTypeForDisplay({} as AgentDisplayConfigEntry, v));
-        }
-        if (tys.size === 1) {
-          return tys.values().next().value ?? "object";
-        }
-        if ("message" in tys) {
-          return "messages";
-        }
-        if ("text" in tys) {
-          return "text";
-        }
-        return tys.values().next().value ?? "object";
-      } else if (typeof value === "object") {
-        if (value?.content !== undefined) {
-          return "message";
-        } else {
-          return "object";
-        }
-      }
-      return "object";
-    }
-    return ty;
-  }
 </script>
 
 {#snippet title()}
