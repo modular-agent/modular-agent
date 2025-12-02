@@ -15,7 +15,7 @@ photon-rs = { version = "0.3.3", optional = true }
 serde = { version = "1", features = ["derive", "rc"] }
 serde_json = { version = "1" }
 thiserror = "2"
-tokio = { version = "1", features = ["rt", "rt-multi-thread", "sync"] }
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "sync", "time"] }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros"] }
@@ -23,6 +23,7 @@ tokio = { version = "1", features = ["macros"] }
 [features]
 default = ["image"]
 image = ["photon-rs"]
+test-utils = []
 
 [[test]]
 name = "counter_test"

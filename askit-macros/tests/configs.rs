@@ -1,5 +1,5 @@
 use agent_stream_kit::AgentContext;
-use agent_stream_kit::{AgentConfigs, AgentError, AgentValue, AsAgent, AgentData, async_trait};
+use agent_stream_kit::{AgentConfigs, AgentData, AgentError, AgentValue, AsAgent, async_trait};
 use askit_macros::askit_agent;
 use std::collections::HashMap;
 
@@ -72,6 +72,12 @@ impl AsAgent for ConfigAgent {
     ) -> Result<(), AgentError> {
         Ok(())
     }
+}
+
+#[test]
+fn def_name_is_generated() {
+    assert_eq!(ConfigAgent::DEF_NAME, "configs::ConfigAgent");
+    assert_eq!(ConfigAgent::def_name(), "configs::ConfigAgent");
 }
 
 #[test]

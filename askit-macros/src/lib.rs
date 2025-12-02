@@ -624,6 +624,10 @@ fn expand_askit_agent(
         #data_impl
 
         impl #impl_generics #ident #ty_generics #where_clause {
+            pub const DEF_NAME: &'static str = #name_tokens;
+
+            pub fn def_name() -> &'static str { Self::DEF_NAME }
+
             pub fn agent_definition() -> ::agent_stream_kit::AgentDefinition {
                 #definition_builder
             }

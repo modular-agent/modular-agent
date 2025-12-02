@@ -14,6 +14,8 @@ use crate::message::{self, AgentEventMessage};
 use crate::registry;
 use crate::value::AgentValue;
 
+const MESSAGE_LIMIT: usize = 1024;
+
 #[derive(Clone)]
 pub struct ASKit {
     // agent id -> agent
@@ -83,7 +85,7 @@ impl ASKit {
     }
 
     pub async fn ready(&self) -> Result<(), AgentError> {
-        self.spawn_message_loop()?;
+        self.spawn_message_loop().await?;
         self.start_agent_flows().await?;
         Ok(())
     }
@@ -225,9 +227,9 @@ impl ASKit {
 
         // add nodes into agents
         for node in agent_flow.nodes().iter() {
-            self.add_agent(id, node).unwrap_or_else(|e| {
+            if let Err(e) = self.add_agent(id, node) {
                 log::error!("Failed to add_agent_node {}: {}", node.id, e);
-            });
+            }
         }
 
         // add edges into edges
@@ -287,8 +289,7 @@ impl ASKit {
             return Err(AgentError::FlowNotFound(flow_id.to_string()));
         };
         flow.add_node(node.clone());
-        self.add_agent(flow_id, node)?;
-        Ok(())
+        self.add_agent(flow_id, node)
     }
 
     pub(crate) fn add_agent(&self, flow_id: &str, node: &AgentFlowNode) -> Result<(), AgentError> {
@@ -296,18 +297,23 @@ impl ASKit {
         if agents.contains_key(&node.id) {
             return Err(AgentError::AgentAlreadyExists(node.id.to_string()));
         }
-        if let Ok(mut agent) = agent_new(
+        let mut agent = agent_new(
             self.clone(),
             node.id.clone(),
             &node.def_name,
             node.configs.clone(),
-        ) {
-            agent.set_flow_id(flow_id.to_string());
-            agents.insert(node.id.clone(), Arc::new(AsyncMutex::new(agent)));
-        } else {
-            return Err(AgentError::AgentCreationFailed(node.id.to_string()));
-        }
+        )?;
+        agent.set_flow_id(flow_id.to_string());
+        agents.insert(node.id.clone(), Arc::new(AsyncMutex::new(agent)));
         Ok(())
+    }
+
+    pub fn get_agent(
+        &self,
+        agent_id: &str,
+    ) -> Option<Arc<AsyncMutex<Box<dyn Agent + Send + Sync>>>> {
+        let agents = self.agents.lock().unwrap();
+        agents.get(agent_id).cloned()
     }
 
     pub fn add_agent_flow_edge(
@@ -537,7 +543,7 @@ impl ASKit {
                     }
                 });
             } else {
-                let (tx, mut rx) = mpsc::channel(32);
+                let (tx, mut rx) = mpsc::channel(MESSAGE_LIMIT);
 
                 {
                     let mut agent_txs = self.agent_txs.lock().unwrap();
@@ -577,6 +583,7 @@ impl ASKit {
                         }
                     }
                 });
+                tokio::task::yield_now().await;
             }
         }
         Ok(())
@@ -703,7 +710,7 @@ impl ASKit {
         global_configs_map.clone()
     }
 
-    pub(crate) async fn agent_input(
+    pub async fn agent_input(
         &self,
         agent_id: String,
         ctx: AgentContext,
@@ -758,6 +765,7 @@ impl ASKit {
                 })?;
             }
         }
+
         self.emit_agent_input(agent_id.to_string(), pin);
 
         Ok(())
@@ -796,7 +804,7 @@ impl ASKit {
         message::try_send_board_out(self, name, ctx, value)
     }
 
-    fn spawn_message_loop(&self) -> Result<(), AgentError> {
+    async fn spawn_message_loop(&self) -> Result<(), AgentError> {
         // TODO: settings for the channel size
         let (tx, mut rx) = mpsc::channel(4096);
         {
@@ -825,6 +833,8 @@ impl ASKit {
                 }
             }
         });
+
+        tokio::task::yield_now().await;
 
         Ok(())
     }

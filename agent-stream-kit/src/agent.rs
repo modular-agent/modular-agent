@@ -1,3 +1,4 @@
+use std::any::Any;
 use std::collections::BTreeMap;
 
 use async_trait::async_trait;
@@ -85,6 +86,8 @@ pub trait Agent {
     fn runtime(&self) -> &tokio::runtime::Runtime {
         runtime()
     }
+
+    fn as_any(&self) -> &dyn Any;
 }
 
 pub struct AgentData {
@@ -258,6 +261,14 @@ impl<T: AsAgent + Send + Sync> Agent for T {
     fn get_global_configs(&self) -> Option<AgentConfigs> {
         self.askit().get_global_configs(self.def_name())
     }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
+pub fn downcast_agent_ref<T: Any>(agent: &dyn Agent) -> Option<&T> {
+    agent.as_any().downcast_ref::<T>()
 }
 
 pub fn new_agent_boxed<T: Agent + Send + Sync + 'static>(
