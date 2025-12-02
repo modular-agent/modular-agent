@@ -36,7 +36,7 @@ pub struct Pin {
 }
 
 #[async_trait]
-pub trait Agent {
+pub trait Agent: Send + Sync + 'static {
     fn new(
         askit: ASKit,
         id: String,
@@ -90,6 +90,12 @@ pub trait Agent {
     fn as_any(&self) -> &dyn Any;
 }
 
+impl dyn Agent {
+    pub fn as_agent<T: Agent>(&self) -> Option<&T> {
+        self.as_any().downcast_ref::<T>()
+    }
+}
+
 pub struct AgentData {
     pub askit: ASKit,
 
@@ -122,7 +128,7 @@ pub trait HasAgentData {
 }
 
 #[async_trait]
-pub trait AsAgent: HasAgentData {
+pub trait AsAgent: HasAgentData + Send + Sync + 'static {
     fn new(
         askit: ASKit,
         id: String,
@@ -130,7 +136,7 @@ pub trait AsAgent: HasAgentData {
         configs: Option<AgentConfigs>,
     ) -> Result<Self, AgentError>
     where
-        Self: Sized + Send + Sync;
+        Self: Sized;
 
     fn configs_changed(&mut self) -> Result<(), AgentError> {
         Ok(())
@@ -155,7 +161,7 @@ pub trait AsAgent: HasAgentData {
 }
 
 #[async_trait]
-impl<T: AsAgent + Send + Sync> Agent for T {
+impl<T: AsAgent> Agent for T {
     fn new(
         askit: ASKit,
         id: String,
@@ -267,16 +273,12 @@ impl<T: AsAgent + Send + Sync> Agent for T {
     }
 }
 
-pub fn downcast_agent_ref<T: Any>(agent: &dyn Agent) -> Option<&T> {
-    agent.as_any().downcast_ref::<T>()
-}
-
-pub fn new_agent_boxed<T: Agent + Send + Sync + 'static>(
+pub fn new_agent_boxed<T: Agent>(
     askit: ASKit,
     id: String,
     def_name: String,
     configs: Option<AgentConfigs>,
-) -> Result<Box<dyn Agent + Send + Sync>, AgentError> {
+) -> Result<Box<dyn Agent>, AgentError> {
     Ok(Box::new(T::new(askit, id, def_name, configs)?))
 }
 
@@ -285,7 +287,7 @@ pub fn agent_new(
     agent_id: String,
     def_name: &str,
     configs: Option<AgentConfigs>,
-) -> Result<Box<dyn Agent + Send + Sync>, AgentError> {
+) -> Result<Box<dyn Agent>, AgentError> {
     let def;
     {
         let defs = askit.defs.lock().unwrap();

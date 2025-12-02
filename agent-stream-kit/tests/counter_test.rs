@@ -2,7 +2,7 @@ extern crate agent_stream_kit as askit;
 
 use askit::{
     ASKit, AgentContext, AgentFlow, AgentFlowEdge, AgentFlowNode, AgentStatus, AgentValue,
-    test_utils::{TestProbeAgent, probe_receiver, recv_probe},
+    test_utils::{TestProbeAgent, probe_receiver},
 };
 
 mod common;

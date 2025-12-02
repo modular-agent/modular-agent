@@ -100,7 +100,7 @@ pub type AgentNewBoxedFn = fn(
     id: String,
     def_name: String,
     configs: Option<AgentConfigs>,
-) -> Result<Box<dyn Agent + Send + Sync>, AgentError>;
+) -> Result<Box<dyn Agent>, AgentError>;
 
 impl AgentDefinition {
     pub fn new(

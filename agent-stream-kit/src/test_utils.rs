@@ -1,7 +1,4 @@
-use crate::{
-    ASKit, AgentConfigs, AgentContext, AgentData, AgentError, AgentValue, AsAgent,
-    downcast_agent_ref,
-};
+use crate::{ASKit, AgentConfigs, AgentContext, AgentData, AgentError, AgentValue, AsAgent};
 use askit_macros::askit_agent;
 use async_trait::async_trait;
 use std::sync::Arc;
@@ -57,26 +54,27 @@ impl TestProbeAgent {
 
 /// Helper to fetch the probe receiver for a TestProbeAgent by id.
 pub async fn probe_receiver(askit: &ASKit, agent_id: &str) -> Result<ProbeReceiver, AgentError> {
-    let probe_agent = askit
+    let probe = askit
         .get_agent(agent_id)
         .ok_or_else(|| AgentError::AgentNotFound(agent_id.to_string()))?;
-    let probe_guard = probe_agent.lock().await;
-    let probe = downcast_agent_ref::<TestProbeAgent>(probe_guard.as_ref())
+    let probe_guard = probe.lock().await;
+    let probe_agent = probe_guard
+        .as_agent::<TestProbeAgent>()
         .ok_or_else(|| AgentError::AgentNotFound(agent_id.to_string()))?;
-    Ok(probe.probe_receiver())
+    Ok(probe_agent.probe_receiver())
 }
 
 /// Await one probe event with timeout on the given receiver.
 pub async fn recv_probe_with_timeout(
-    probe_rx: &ProbeReceiver,
+    probe_rec: &ProbeReceiver,
     duration: Duration,
 ) -> Result<ProbeEvent, AgentError> {
-    probe_rx.recv_with_timeout(duration).await
+    probe_rec.recv_with_timeout(duration).await
 }
 
 /// Receive one probe event with the default timeout.
-pub async fn recv_probe(probe_rx: &ProbeReceiver) -> Result<ProbeEvent, AgentError> {
-    probe_rx.recv().await
+pub async fn recv_probe(probe_rec: &ProbeReceiver) -> Result<ProbeEvent, AgentError> {
+    probe_rec.recv().await
 }
 
 #[async_trait]

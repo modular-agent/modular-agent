@@ -19,8 +19,7 @@ const MESSAGE_LIMIT: usize = 1024;
 #[derive(Clone)]
 pub struct ASKit {
     // agent id -> agent
-    pub(crate) agents:
-        Arc<Mutex<HashMap<String, Arc<AsyncMutex<Box<dyn Agent + Send + Sync + 'static>>>>>>,
+    pub(crate) agents: Arc<Mutex<HashMap<String, Arc<AsyncMutex<Box<dyn Agent>>>>>>,
 
     // agent id -> sender
     pub(crate) agent_txs: Arc<Mutex<HashMap<String, AgentMessageSender>>>,
@@ -308,10 +307,7 @@ impl ASKit {
         Ok(())
     }
 
-    pub fn get_agent(
-        &self,
-        agent_id: &str,
-    ) -> Option<Arc<AsyncMutex<Box<dyn Agent + Send + Sync>>>> {
+    pub fn get_agent(&self, agent_id: &str) -> Option<Arc<AsyncMutex<Box<dyn Agent>>>> {
         let agents = self.agents.lock().unwrap();
         agents.get(agent_id).cloned()
     }
@@ -717,7 +713,7 @@ impl ASKit {
         pin: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
-        let agent: Arc<AsyncMutex<Box<dyn Agent + Send + Sync>>> = {
+        let agent: Arc<AsyncMutex<Box<dyn Agent>>> = {
             let agents = self.agents.lock().unwrap();
             let Some(a) = agents.get(&agent_id) else {
                 return Err(AgentError::AgentNotFound(agent_id.to_string()));
