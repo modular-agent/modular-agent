@@ -30,6 +30,9 @@ pub use photon_rs::{self, PhotonImage};
 pub extern crate self as agent_stream_kit;
 pub use inventory;
 
+// Re-exports askit_macros
+pub use askit_macros::askit_agent;
+
 pub use agent::{Agent, AgentData, AgentStatus, AsAgent, HasAgentData, agent_new, new_agent_boxed};
 pub use askit::{ASKit, ASKitEvent, ASKitObserver};
 pub use config::{AgentConfigs, AgentConfigsMap};
