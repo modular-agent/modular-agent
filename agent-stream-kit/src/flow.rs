@@ -13,6 +13,7 @@ pub type AgentFlows = HashMap<String, AgentFlow>;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AgentFlow {
+    #[serde(skip_serializing_if = "String::is_empty")]
     id: String,
 
     name: String,
