@@ -78,11 +78,17 @@ pub trait Agent: Send + Sync + 'static {
     }
 
     fn as_any(&self) -> &dyn Any;
+
+    fn as_any_mut(&mut self) -> &mut dyn Any;
 }
 
 impl dyn Agent {
     pub fn as_agent<T: Agent>(&self) -> Option<&T> {
         self.as_any().downcast_ref::<T>()
+    }
+
+    pub fn as_agent_mut<T: Agent>(&mut self) -> Option<&mut T> {
+        self.as_any_mut().downcast_mut::<T>()
     }
 }
 
@@ -240,6 +246,10 @@ impl<T: AsAgent> Agent for T {
     }
 
     fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
         self
     }
 }
