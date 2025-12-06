@@ -3,6 +3,9 @@
     type?: string;
     role?: string;
     content?: string | string[];
+    thinking?: string;
+    tool_calls?: any[];
+    tool_name?: string;
     data?: {
       content: string | string[];
     };
@@ -18,6 +21,8 @@
   import { Avatar, Card } from "flowbite-svelte";
   import { marked } from "marked";
 
+  import { truncate } from "$lib/utils";
+
   let { messages }: Props = $props();
 
   let msgs = $derived.by(() => {
@@ -27,25 +32,25 @@
       if (role === "assistant") {
         role = "ai";
       }
+      let html = "";
       let content = msg.data?.content || msg.content;
       if (role === "ai") {
         if (typeof content === "string") {
-          let html = marked.parse(DOMPurify.sanitize(content));
-          return { role, html };
+          html = marked.parse(DOMPurify.sanitize(content)) as string;
         } else if (Array.isArray(content)) {
-          let html = marked.parse(DOMPurify.sanitize(content.join("\n\n")));
-          return { role, html };
+          html = marked.parse(DOMPurify.sanitize(content.join("\n\n"))) as string;
         }
       } else {
         if (typeof content === "string") {
-          let html = content;
-          return { role, html };
+          html = content;
         } else if (Array.isArray(content)) {
-          let html = content.join("\n\n");
-          return { role, html };
+          html = content.join("\n\n");
         }
       }
-      return { role, html: "" };
+      if (msg.thinking) {
+        html += `<p><details><summary>${truncate(msg.thinking, 30)}</summary><p>${msg.thinking}</p></details></p>`;
+      }
+      return { role, html };
     });
   });
 </script>

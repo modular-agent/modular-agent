@@ -19,3 +19,12 @@ export async function getCoreSettings(): Promise<CoreSettings> {
 export async function setCoreSettings(newSettings: Partial<CoreSettings>): Promise<void> {
   await invoke("set_core_settings_cmd", { newSettings });
 }
+
+// utilities
+
+export function truncate(str: string, maxLength: number, suffix: string = "..."): string {
+  if (str.length <= maxLength) {
+    return str;
+  }
+  return str.slice(0, maxLength) + suffix;
+}
