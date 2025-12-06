@@ -6,14 +6,14 @@ use super::value::AgentValue;
 
 pub trait AgentOutput {
     fn try_output_raw(
-        &mut self,
+        &self,
         ctx: AgentContext,
         pin: String,
         value: AgentValue,
     ) -> Result<(), AgentError>;
 
     fn try_output<S: Into<String>>(
-        &mut self,
+        &self,
         ctx: AgentContext,
         pin: S,
         value: AgentValue,
@@ -37,7 +37,7 @@ pub trait AgentOutput {
 
 impl<T: Agent> AgentOutput for T {
     fn try_output_raw(
-        &mut self,
+        &self,
         ctx: AgentContext,
         pin: String,
         value: AgentValue,
