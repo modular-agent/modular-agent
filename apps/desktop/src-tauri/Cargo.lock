@@ -45,14 +45,13 @@ checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 
 [[package]]
 name = "agent-stream-app"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "agent-stream-kit",
  "anyhow",
  "askit-cozodb-agents",
  "askit-lifelog-agents",
  "askit-llm-agents",
- "askit-macros",
  "askit-rhai-agents",
  "askit-std-agents",
  "ctrlc",
@@ -77,9 +76,9 @@ dependencies = [
 
 [[package]]
 name = "agent-stream-kit"
-version = "0.13.0"
+version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aff26290c3d274d0eae055c8135c71c00a5ebfbfaa498a7c49b509076f8d8c52"
+checksum = "6b2249ef35ee97751452be8440bb40b0d5787e2b379b95a41ae778e2b38f9390"
 dependencies = [
  "askit-macros",
  "async-trait",
@@ -231,9 +230,9 @@ dependencies = [
 
 [[package]]
 name = "askit-cozodb-agents"
-version = "0.2.2"
+version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9690ce6f5edf68ec58db0a91be832eb8abadeee2ca468237ec89f1b71b010f14"
+checksum = "ad0c5ac2056cf93e64102343015a0c38804cc8097e6d9bb872209eb0bcec740a"
 dependencies = [
  "agent-stream-kit",
  "askit-macros",
@@ -245,9 +244,9 @@ dependencies = [
 
 [[package]]
 name = "askit-lifelog-agents"
-version = "0.2.2"
+version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1b61594fe490c6890db49e35b6a76854d26466065f5f9181119f244c597a9bb2"
+checksum = "8da2ba70622eec2cfbc58faedcc12ce98bb185b9bc88d9ad311aa84a23e5bdf5"
 dependencies = [
  "active-win-pos-rs",
  "agent-stream-kit",
@@ -264,18 +263,21 @@ dependencies = [
 
 [[package]]
 name = "askit-llm-agents"
-version = "0.6.2"
+version = "0.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8bab9ef7d28ae28204288c81296d2436aa8965b22a5eaac7e64f404b128fe74b"
+checksum = "bd977c82326234f0d65c835e89f61d3be7ccfdc63018ea545ba8a12242465495"
 dependencies = [
  "agent-stream-kit",
  "askit-macros",
  "async-openai",
+ "async-trait",
  "futures",
  "ollama-rs",
  "photon-rs",
+ "regex",
  "rmcp",
  "sakura-ai-rs",
+ "schemars 1.1.0",
  "serde",
  "serde_json",
  "tokio",
@@ -285,9 +287,9 @@ dependencies = [
 
 [[package]]
 name = "askit-macros"
-version = "0.13.0"
+version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8fbaf0ddab8e606b077c5cbcd28872b0e4c479ce2fef4fe619b591a5da8f496a"
+checksum = "740633f2b7f516b9e27a3117d0984f0af070c2df9e255f09179b1571f5ffe704"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -296,9 +298,9 @@ dependencies = [
 
 [[package]]
 name = "askit-rhai-agents"
-version = "0.2.2"
+version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "901ca77c38c62c07640e2b3be3f69de3970e713c16b708dcbf5d01e40f3218d5"
+checksum = "6559d41b7dcd38031f14c34a21f7f9cad4cb4ce6d155699ec5aa49f6002af11f"
 dependencies = [
  "agent-stream-kit",
  "askit-macros",
@@ -309,9 +311,9 @@ dependencies = [
 
 [[package]]
 name = "askit-std-agents"
-version = "0.4.2"
+version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7ac9dc907eb703b66f9067b0112d85ff7ef2524d1f01119cd6185fce289621fd"
+checksum = "6f5ad39e99d3958bad40977df08bbf46da3ee8ad2b2eebbeca55e732af632d06"
 dependencies = [
  "agent-stream-kit",
  "askit-macros",
@@ -983,9 +985,9 @@ dependencies = [
 
 [[package]]
 name = "cc"
-version = "1.2.48"
+version = "1.2.49"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c481bdbf0ed3b892f6f806287d72acd515b352a4ec27a208489b8c1bc839633a"
+checksum = "90583009037521a116abf44494efecd645ba48b6622457080f080b85544e2215"
 dependencies = [
  "find-msvc-tools",
  "shlex",
@@ -1774,9 +1776,9 @@ dependencies = [
 
 [[package]]
 name = "dlopen2"
-version = "0.8.1"
+version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8d65cde5fb0c42a3d5882d99807698b459f5928de035fa7f547c784fb7b34219"
+checksum = "5e2c5bd4158e66d1e215c49b837e11d62f3267b30c92f1d171c4d3105e3dc4d4"
 dependencies = [
  "dlopen2_derive",
  "libc",
@@ -1786,9 +1788,9 @@ dependencies = [
 
 [[package]]
 name = "dlopen2_derive"
-version = "0.4.2"
+version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "95f4a04e1bfbfa4835a6073177aafb95ead4de0722dbb339195fdc7e0a09599b"
+checksum = "0fbbb781877580993a8707ec48672673ec7b81eeba04cfd2310bd28c08e47c8f"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2909,9 +2911,9 @@ dependencies = [
 
 [[package]]
 name = "hyper-util"
-version = "0.1.18"
+version = "0.1.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "52e9a2a24dc5c6821e71a7030e1e14b7b632acac55c40e9d2e082c621261bb56"
+checksum = "727805d60e7938b76b826a6ef209eb70eaa1812794f9424d4a4e2d740662df5f"
 dependencies = [
  "base64 0.22.1",
  "bytes",
@@ -3429,9 +3431,9 @@ dependencies = [
 
 [[package]]
 name = "libc"
-version = "0.2.177"
+version = "0.2.178"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2874a2af47a2325c2001a6e6fad9b16a53b802102b528163885171cf92b15976"
+checksum = "37c93d8daa9d8a012fd8ab92f088405fb202ea0b6ab73ee2482ae66af4f42091"
 
 [[package]]
 name = "libloading"
@@ -3562,9 +3564,9 @@ dependencies = [
 
 [[package]]
 name = "log"
-version = "0.4.28"
+version = "0.4.29"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "34080505efa8e45a4b816c349525ebe327ceaa8559756f0356cba97ef3bf7432"
+checksum = "5e5032e24019045c762d3c0f28f5b6b8bbf38563a65908389bf7978758920897"
 dependencies = [
  "value-bag",
 ]
@@ -3759,9 +3761,9 @@ dependencies = [
 
 [[package]]
 name = "mio"
-version = "1.1.0"
+version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "69d83b0086dc8ecf3ce9ae2874b2d1290252e2a30720bea58a5c6639b0092873"
+checksum = "a69bcab0ad47271a0234d9422b131806bf3968021e5dc9328caf2d4cd58557fc"
 dependencies = [
  "libc",
  "wasi 0.11.1+wasi-snapshot-preview1",
@@ -4501,6 +4503,7 @@ checksum = "db28711700d24a94bf78ce6a9df3bf55dc07c1bf68376574706ce2653ee3f5fc"
 dependencies = [
  "async-stream",
  "log",
+ "ollama-rs-macros",
  "reqwest",
  "schemars 1.1.0",
  "serde",
@@ -4510,6 +4513,17 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "url",
+]
+
+[[package]]
+name = "ollama-rs-macros"
+version = "0.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d1620745a12a9530ad256b53d728eaa638ca362b8dad47dd62d57667eb44a9c3"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.111",
 ]
 
 [[package]]
@@ -5157,7 +5171,7 @@ version = "3.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "219cb19e96be00ab2e37d6e299658a0cfa83e52429179969b0f0121b4ac46983"
 dependencies = [
- "toml_edit 0.23.7",
+ "toml_edit 0.23.9",
 ]
 
 [[package]]
@@ -5287,9 +5301,9 @@ dependencies = [
 
 [[package]]
 name = "pxfm"
-version = "0.1.26"
+version = "0.1.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b3502d6155304a4173a5f2c34b52b7ed0dd085890326cb50fd625fdf39e86b3b"
+checksum = "7186d3822593aa4393561d186d1393b3923e9d6163d3fbfd6e825e3e6cf3e6a8"
 dependencies = [
  "num-traits",
 ]
@@ -7021,9 +7035,9 @@ dependencies = [
 
 [[package]]
 name = "tauri-plugin-askit"
-version = "0.5.0"
+version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "715783017b42b4b24291d4b67e84a7d89d2c7e2aaaab0d1c1d50b798389e3df4"
+checksum = "db13fa6dee97a22966ea4feb726b79538d0db37112652d02a8a210f630d534cb"
 dependencies = [
  "agent-stream-kit",
  "serde",
@@ -7626,9 +7640,9 @@ dependencies = [
 
 [[package]]
 name = "toml_edit"
-version = "0.23.7"
+version = "0.23.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6485ef6d0d9b5d0ec17244ff7eb05310113c3f316f2d14200d4de56b3cb98f8d"
+checksum = "5d7cbc3b4b49633d57a0509303158ca50de80ae32c265093b24c414705807832"
 dependencies = [
  "indexmap 2.12.1",
  "toml_datetime 0.7.3",
@@ -7951,14 +7965,14 @@ checksum = "b6c140620e7ffbb22c2dee59cafe6084a59b5ffc27a8859a5f0d494b5d52b6be"
 
 [[package]]
 name = "uuid"
-version = "1.18.1"
+version = "1.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2f87b8aa10b915a06587d0dec516c282ff295b475d94abf425d62b57710070a2"
+checksum = "e2e054861b4bd027cd373e18e8d8d8e6548085000e41290d95ce0c373a654b4a"
 dependencies = [
  "atomic 0.6.1",
  "getrandom 0.3.4",
  "js-sys",
- "serde",
+ "serde_core",
  "wasm-bindgen",
 ]
 
