@@ -15,10 +15,10 @@ use tokio_stream::StreamExt;
 
 use crate::message::Message;
 
-static CATEGORY: &str = "LLM";
+static CATEGORY: &str = "LLM/Sakura";
 
-static PORT_MESSAGE: &str = "message";
-static PORT_RESPONSE: &str = "response";
+static PIN_MESSAGE: &str = "message";
+static PIN_RESPONSE: &str = "response";
 
 static CONFIG_SAKURA_AI_API_KEY: &str = "sakura_ai_api_key";
 static CONFIG_STREAM: &str = "stream";
@@ -66,8 +66,8 @@ impl SakuraAIManager {
 #[askit_agent(
     title="SakuraAI Chat",
     category=CATEGORY,
-    inputs=[PORT_MESSAGE],
-    outputs=[PORT_MESSAGE, PORT_RESPONSE],
+    inputs=[PIN_MESSAGE],
+    outputs=[PIN_MESSAGE, PIN_RESPONSE],
     string_config(name=CONFIG_MODEL, default=DEFAULT_CONFIG_MODEL),
     boolean_config(name=CONFIG_STREAM, title="Stream"),
     text_config(name=CONFIG_OPTIONS, default="{}"),
@@ -172,10 +172,10 @@ impl AsAgent for SakuraAIChatAgent {
 
                 let mut message = Message::assistant(content.clone());
                 message.id = Some(id.clone());
-                self.try_output(ctx.clone(), PORT_MESSAGE, message.into())?;
+                self.try_output(ctx.clone(), PIN_MESSAGE, message.into())?;
 
                 let out_response = AgentValue::from_serialize(&res)?;
-                self.try_output(ctx.clone(), PORT_RESPONSE, out_response)?;
+                self.try_output(ctx.clone(), PIN_RESPONSE, out_response)?;
 
                 if res.done {
                     break;
@@ -189,10 +189,10 @@ impl AsAgent for SakuraAIChatAgent {
 
             let mut message = Message::assistant(res.message.content.clone());
             message.id = Some(id.clone());
-            self.try_output(ctx.clone(), PORT_MESSAGE, message.into())?;
+            self.try_output(ctx.clone(), PIN_MESSAGE, message.into())?;
 
             let out_response = AgentValue::from_serialize(&res)?;
-            self.try_output(ctx.clone(), PORT_RESPONSE, out_response)?;
+            self.try_output(ctx.clone(), PIN_RESPONSE, out_response)?;
         }
 
         Ok(())

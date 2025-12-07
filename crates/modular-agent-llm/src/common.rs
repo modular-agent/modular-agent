@@ -1,6 +1,6 @@
 use agent_stream_kit::{
-    ASKit, Agent, AgentConfigs, AgentContext, AgentError, AgentOutput, AgentValue, AsAgent,
-    AgentData, async_trait,
+    ASKit, Agent, AgentConfigs, AgentContext, AgentData, AgentError, AgentOutput, AgentValue,
+    AsAgent, async_trait,
 };
 use askit_macros::askit_agent;
 
@@ -8,11 +8,11 @@ use crate::message::{Message, MessageHistory};
 
 static CATEGORY: &str = "LLM";
 
-static PORT_MESSAGE: &str = "message";
-static PORT_MESSAGES: &str = "messages";
-static PORT_MESSAGE_HISTORY: &str = "message_history";
-static PORT_HISTORY: &str = "history";
-static PORT_RESET: &str = "reset";
+static PIN_MESSAGE: &str = "message";
+static PIN_MESSAGES: &str = "messages";
+static PIN_MESSAGE_HISTORY: &str = "message_history";
+static PIN_HISTORY: &str = "history";
+static PIN_RESET: &str = "reset";
 
 static CONFIG_HISTORY_SIZE: &str = "history_size";
 static CONFIG_MESSAGE: &str = "message";
@@ -23,8 +23,8 @@ static CONFIG_INCLUDE_SYSTZEM: &str = "include_system";
 #[askit_agent(
     title="Assistant Message",
     category=CATEGORY,
-    inputs=[PORT_MESSAGES],
-    outputs=[PORT_MESSAGES],
+    inputs=[PIN_MESSAGES],
+    outputs=[PIN_MESSAGES],
     text_config(name=CONFIG_MESSAGE)
 )]
 pub struct AssistantMessageAgent {
@@ -53,7 +53,7 @@ impl AsAgent for AssistantMessageAgent {
         let message = self.configs()?.get_string(CONFIG_MESSAGE)?;
         let message = Message::assistant(message);
         let messages = add_message(value, message);
-        self.try_output(ctx, PORT_MESSAGES, messages)?;
+        self.try_output(ctx, PIN_MESSAGES, messages)?;
         Ok(())
     }
 }
@@ -62,8 +62,8 @@ impl AsAgent for AssistantMessageAgent {
 #[askit_agent(
     title="System Message",
     category=CATEGORY,
-    inputs=[PORT_MESSAGES],
-    outputs=[PORT_MESSAGES],
+    inputs=[PIN_MESSAGES],
+    outputs=[PIN_MESSAGES],
     text_config(name=CONFIG_MESSAGE)
 )]
 pub struct SystemMessageAgent {
@@ -92,7 +92,7 @@ impl AsAgent for SystemMessageAgent {
         let message = self.configs()?.get_string(CONFIG_MESSAGE)?;
         let message = Message::system(message);
         let messages = add_message(value, message);
-        self.try_output(ctx, PORT_MESSAGES, messages)?;
+        self.try_output(ctx, PIN_MESSAGES, messages)?;
         Ok(())
     }
 }
@@ -101,8 +101,8 @@ impl AsAgent for SystemMessageAgent {
 #[askit_agent(
     title="User Message",
     category=CATEGORY,
-    inputs=[PORT_MESSAGES],
-    outputs=[PORT_MESSAGES],
+    inputs=[PIN_MESSAGES],
+    outputs=[PIN_MESSAGES],
     text_config(name=CONFIG_MESSAGE)
 )]
 pub struct UserMessageAgent {
@@ -131,23 +131,17 @@ impl AsAgent for UserMessageAgent {
         let message = self.configs()?.get_string(CONFIG_MESSAGE)?;
         let message = Message::user(message);
         let messages = add_message(value, message);
-        self.try_output(ctx, PORT_MESSAGES, messages)?;
+        self.try_output(ctx, PIN_MESSAGES, messages)?;
         Ok(())
     }
 }
 
 fn add_message(value: AgentValue, message: Message) -> AgentValue {
-    if value.is_array() {
-        let mut arr = value.as_array().unwrap_or(&vec![]).to_owned();
-        arr.push(message.into());
-        return AgentValue::array(arr);
-    }
-
     if value.is_string() {
         let value = value.as_str().unwrap_or("");
         if !value.is_empty() {
             let in_message = Message::user(value.to_string());
-            return AgentValue::array(vec![message.into(), in_message.into()]);
+            return AgentValue::array(vec![in_message.into(), message.into()]);
         }
     }
 
@@ -157,6 +151,20 @@ fn add_message(value: AgentValue, message: Message) -> AgentValue {
         return message.into();
     }
 
+    if value.is_object() {
+        // Append the object without checking whether it is a message
+        let mut arr = vec![value];
+        arr.push(message.into());
+        return AgentValue::array(arr);
+    }
+
+    if value.is_array() {
+        // Append without verifying the array items are messages
+        let mut arr = value.as_array().unwrap_or(&vec![]).to_owned();
+        arr.push(message.into());
+        return AgentValue::array(arr);
+    }
+
     message.into()
 }
 
@@ -164,8 +172,8 @@ fn add_message(value: AgentValue, message: Message) -> AgentValue {
 #[askit_agent(
     title="Message History",
     category=CATEGORY,
-    inputs=[PORT_MESSAGE, PORT_RESET],
-    outputs=[PORT_MESSAGE_HISTORY, PORT_HISTORY],
+    inputs=[PIN_MESSAGE, PIN_RESET],
+    outputs=[PIN_MESSAGE_HISTORY, PIN_HISTORY],
     boolean_config(
         name=CONFIG_INCLUDE_SYSTZEM,
         title="Include System"
@@ -176,7 +184,7 @@ fn add_message(value: AgentValue, message: Message) -> AgentValue {
 pub struct MessageHistoryAgent {
     data: AgentData,
     history: MessageHistory,
-    first_run: bool,
+    preamble_included: bool,
 }
 
 #[async_trait]
@@ -190,7 +198,7 @@ impl AsAgent for MessageHistoryAgent {
         Ok(Self {
             data: AgentData::new(askit, id, def_name, config),
             history: MessageHistory::new(vec![], 0),
-            first_run: true,
+            preamble_included: false,
         })
     }
 
@@ -200,25 +208,23 @@ impl AsAgent for MessageHistoryAgent {
         pin: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
-        if pin == PORT_RESET {
-            self.first_run = true;
-            self.history.reset();
+        if pin == PIN_RESET {
+            self.history = MessageHistory::new(vec![], 0);
+            self.preamble_included = false;
             return Ok(());
         }
 
-        let history_size = self.configs()?.get_integer_or_default(CONFIG_HISTORY_SIZE);
+        let history_size = self.configs()?.get_integer_or_default(CONFIG_HISTORY_SIZE) as usize;
+        self.history.set_max_size(history_size);
 
-        self.history.set_size(history_size);
-
-        if self.first_run {
-            // On first run, load preamble messages if any
-            self.first_run = false;
+        if !self.preamble_included {
+            self.preamble_included = true;
             let preamble_str = self.configs()?.get_string_or_default(CONFIG_PREAMBLE);
             if !preamble_str.is_empty() {
                 let preamble_history = MessageHistory::parse(&preamble_str).map_err(|e| {
                     AgentError::InvalidValue(format!("Failed to parse preamble messages: {}", e))
                 })?;
-                self.history = preamble_history;
+                self.history.set_preamble(preamble_history.messages());
             }
         }
 
@@ -227,7 +233,7 @@ impl AsAgent for MessageHistoryAgent {
         })?;
 
         self.history.push(message.clone());
-        self.try_output(ctx.clone(), PORT_HISTORY, self.history.clone().into())?;
+        self.try_output(ctx.clone(), PIN_HISTORY, self.history.clone().into())?;
 
         if message.role != "user" {
             return Ok(());
@@ -250,7 +256,7 @@ impl AsAgent for MessageHistoryAgent {
             ]
             .into(),
         );
-        self.try_output(ctx, PORT_MESSAGE_HISTORY, messages)?;
+        self.try_output(ctx, PIN_MESSAGE_HISTORY, messages)?;
 
         Ok(())
     }
@@ -270,4 +276,95 @@ pub fn is_message_history(value: &AgentValue) -> bool {
         return obj.contains_key("message") && obj.contains_key("history");
     }
     false
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_add_message() {
+        // () + user
+        // result should be the user message
+        let value = AgentValue::unit();
+        let msg = Message::user("Hello".to_string());
+        let result = add_message(value, msg);
+        assert!(result.is_object());
+        assert_eq!(result.get_str("role").unwrap(), "user");
+        assert_eq!(result.get_str("content").unwrap(), "Hello");
+
+        // string + assistant
+        // result should be an array with user and assistant messages
+        let value = AgentValue::string("How are you?");
+        let msg = Message::assistant("Hello".to_string());
+        let result = add_message(value, msg);
+        assert!(result.is_array());
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr.len(), 2);
+        assert_eq!(arr[0].get_str("role").unwrap(), "user");
+        assert_eq!(arr[0].get_str("content").unwrap(), "How are you?");
+        assert_eq!(arr[1].get_str("role").unwrap(), "assistant");
+        assert_eq!(arr[1].get_str("content").unwrap(), "Hello");
+
+        // object + user
+        // result should be an array with the original object and the new user message
+        let value = AgentValue::object(
+            [
+                ("role".to_string(), AgentValue::string("system")),
+                ("content".to_string(), AgentValue::string("I am fine.")),
+            ]
+            .into(),
+        );
+        let msg = Message::user("Hello".to_string());
+        let result = add_message(value, msg);
+        assert!(result.is_array());
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr.len(), 2);
+        assert_eq!(arr[0].get_str("role").unwrap(), "system");
+        assert_eq!(arr[0].get_str("content").unwrap(), "I am fine.");
+        assert_eq!(arr[1].get_str("role").unwrap(), "user");
+        assert_eq!(arr[1].get_str("content").unwrap(), "Hello");
+
+        // array + user
+        // result should be the original array with the new user message appended
+        let value = AgentValue::array(vec![
+            AgentValue::object(
+                [
+                    ("role".to_string(), AgentValue::string("system")),
+                    ("content".to_string(), AgentValue::string("Welcome!")),
+                ]
+                .into(),
+            ),
+            AgentValue::object(
+                [
+                    ("role".to_string(), AgentValue::string("assistant")),
+                    ("content".to_string(), AgentValue::string("Hello!")),
+                ]
+                .into(),
+            ),
+        ]);
+        let msg = Message::user("How are you?".to_string());
+        let result = add_message(value, msg);
+        assert!(result.is_array());
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr.len(), 3);
+        assert_eq!(arr[0].get_str("role").unwrap(), "system");
+        assert_eq!(arr[0].get_str("content").unwrap(), "Welcome!");
+        assert_eq!(arr[1].get_str("role").unwrap(), "assistant");
+        assert_eq!(arr[1].get_str("content").unwrap(), "Hello!");
+        assert_eq!(arr[2].get_str("role").unwrap(), "user");
+        assert_eq!(arr[2].get_str("content").unwrap(), "How are you?");
+
+        // image + user
+        #[cfg(feature = "image")]
+        let img = AgentValue::image(agent_stream_kit::PhotonImage::new(vec![0u8; 4], 1, 1));
+        {
+            let msg = Message::user("Check this image".to_string());
+            let result = add_message(img, msg);
+            assert!(result.is_object());
+            assert_eq!(result.get_str("role").unwrap(), "user");
+            assert_eq!(result.get_str("content").unwrap(), "Check this image");
+            assert!(result.get_image("image").is_some());
+        }
+    }
 }
