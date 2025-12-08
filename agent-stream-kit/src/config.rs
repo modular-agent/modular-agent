@@ -168,3 +168,23 @@ impl<'a> IntoIterator for &'a AgentConfigs {
         self.0.iter()
     }
 }
+
+impl FromIterator<(String, AgentValue)> for AgentConfigs {
+    fn from_iter<T: IntoIterator<Item = (String, AgentValue)>>(iter: T) -> Self {
+        let mut configs = AgentConfigs::new();
+        for (key, value) in iter {
+            configs.set(key, value);
+        }
+        configs
+    }
+}
+
+impl<'a> FromIterator<(&'a String, &'a AgentValue)> for AgentConfigs {
+    fn from_iter<T: IntoIterator<Item = (&'a String, &'a AgentValue)>>(iter: T) -> Self {
+        let mut configs = AgentConfigs::new();
+        for (key, value) in iter {
+            configs.set(key.clone(), value.clone());
+        }
+        configs
+    }
+}

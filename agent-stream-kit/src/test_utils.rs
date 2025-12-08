@@ -1,4 +1,4 @@
-use crate::{ASKit, AgentConfigs, AgentContext, AgentData, AgentError, AgentValue, AsAgent};
+use crate::{ASKit, AgentContext, AgentData, AgentError, AgentSpec, AgentValue, AsAgent};
 use askit_macros::askit_agent;
 use async_trait::async_trait;
 use std::sync::Arc;
@@ -79,17 +79,12 @@ pub async fn recv_probe(probe_rec: &ProbeReceiver) -> Result<ProbeEvent, AgentEr
 
 #[async_trait]
 impl AsAgent for TestProbeAgent {
-    fn new(
-        askit: crate::ASKit,
-        id: String,
-        def_name: String,
-        config: Option<AgentConfigs>,
-    ) -> Result<Self, AgentError> {
+    fn new(askit: crate::ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         let (tx, rx) = mpsc::unbounded_channel();
         let rx = ProbeReceiver(Arc::new(AsyncMutex::new(rx)));
 
         Ok(Self {
-            data: AgentData::new(askit, id, def_name, config),
+            data: AgentData::new(askit, id, spec),
             tx,
             rx,
         })
@@ -118,13 +113,8 @@ mod tests {
     #[tokio::test]
     async fn probe_receives_in_order() {
         let askit = ASKit::new();
-        let mut probe = TestProbeAgent::new(
-            askit,
-            "p1".into(),
-            TestProbeAgent::DEF_NAME.to_string(),
-            None,
-        )
-        .unwrap();
+        let def = TestProbeAgent::agent_definition();
+        let mut probe = TestProbeAgent::new(askit, "p1".into(), def.to_spec()).unwrap();
 
         probe
             .process(AgentContext::new(), "in".into(), AgentValue::integer(1))
@@ -144,13 +134,8 @@ mod tests {
     #[tokio::test]
     async fn probe_times_out() {
         let askit = ASKit::new();
-        let probe = TestProbeAgent::new(
-            askit,
-            "p1".into(),
-            TestProbeAgent::DEF_NAME.to_string(),
-            None,
-        )
-        .unwrap();
+        let def = TestProbeAgent::agent_definition();
+        let probe = TestProbeAgent::new(askit, "p1".into(), def.to_spec()).unwrap();
         let err = probe
             .recv_with_timeout(Duration::from_millis(10))
             .await
@@ -161,13 +146,8 @@ mod tests {
     #[tokio::test]
     async fn probe_receiver_clone_works() {
         let askit = ASKit::new();
-        let mut probe = TestProbeAgent::new(
-            askit,
-            "p1".into(),
-            TestProbeAgent::DEF_NAME.to_string(),
-            None,
-        )
-        .unwrap();
+        let def = TestProbeAgent::agent_definition();
+        let mut probe = TestProbeAgent::new(askit, "p1".into(), def.to_spec()).unwrap();
         let rx1 = probe.probe_receiver();
         let rx2 = probe.probe_receiver();
 

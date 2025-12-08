@@ -26,8 +26,9 @@ fn test_register_agents() {
 #[test]
 fn test_agent_new() {
     let askit = ASKit::init().unwrap();
+    let def = askit.get_agent_definition(COUNTER_DEF).unwrap();
 
-    let agent = askit::agent_new(askit.clone(), "agent_1".into(), COUNTER_DEF, None).unwrap();
+    let agent = askit::agent_new(askit.clone(), "agent_1".into(), def.to_spec()).unwrap();
     assert_eq!(agent.def_name(), COUNTER_DEF);
     assert_eq!(agent.id(), "agent_1");
     assert_eq!(agent.status(), &AgentStatus::Init);
@@ -38,8 +39,9 @@ fn test_agent_new() {
 #[tokio::test]
 async fn test_agent_start() {
     let askit = ASKit::init().unwrap();
+    let def = askit.get_agent_definition(COUNTER_DEF).unwrap();
 
-    let mut agent = askit::agent_new(askit.clone(), "agent_1".into(), COUNTER_DEF, None).unwrap();
+    let mut agent = askit::agent_new(askit.clone(), "agent_1".into(), def.to_spec()).unwrap();
     agent.start().await.unwrap();
 
     assert_eq!(agent.status(), &AgentStatus::Start);
@@ -53,7 +55,9 @@ async fn test_agent_stop() {
 
     askit.ready().await.unwrap();
 
-    let mut agent = askit::agent_new(askit.clone(), "agent_1".into(), COUNTER_DEF, None).unwrap();
+    let def = askit.get_agent_definition(COUNTER_DEF).unwrap();
+
+    let mut agent = askit::agent_new(askit.clone(), "agent_1".into(), def.to_spec()).unwrap();
     agent.start().await.unwrap();
 
     let ctx = AgentContext::new();

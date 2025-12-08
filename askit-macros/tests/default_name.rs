@@ -1,5 +1,5 @@
 use agent_stream_kit::AgentContext;
-use agent_stream_kit::{AgentConfigs, AgentError, AgentValue, AsAgent, AgentData, async_trait};
+use agent_stream_kit::{AgentData, AgentError, AgentSpec, AgentValue, AsAgent, async_trait};
 use askit_macros::askit_agent;
 
 static CONFIG_KEY: &str = "config_key";
@@ -14,11 +14,10 @@ impl AsAgent for MyAgent {
     fn new(
         askit: agent_stream_kit::ASKit,
         id: String,
-        def_name: String,
-        configs: Option<AgentConfigs>,
+        spec: AgentSpec,
     ) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(askit, id, def_name, configs),
+            data: AgentData::new(askit, id, spec),
         })
     }
 
@@ -61,11 +60,10 @@ impl AsAgent for MyAgentExplicit {
     fn new(
         askit: agent_stream_kit::ASKit,
         id: String,
-        def_name: String,
-        configs: Option<AgentConfigs>,
+        spec: AgentSpec,
     ) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(askit, id, def_name, configs),
+            data: AgentData::new(askit, id, spec),
         })
     }
 

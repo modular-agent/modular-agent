@@ -1,7 +1,7 @@
 extern crate agent_stream_kit as askit;
 
 use askit::{
-    ASKit, AgentConfigs, AgentContext, AgentData, AgentError, AgentOutput, AgentValue, AsAgent,
+    ASKit, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
 };
 use askit_macros::askit_agent;
 use async_trait::async_trait;
@@ -31,14 +31,9 @@ pub struct CounterAgent {
 
 #[async_trait]
 impl AsAgent for CounterAgent {
-    fn new(
-        askit: ASKit,
-        id: String,
-        def_name: String,
-        config: Option<AgentConfigs>,
-    ) -> Result<Self, AgentError> {
+    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(askit, id, def_name, config),
+            data: AgentData::new(askit, id, spec),
             count: 0,
         })
     }

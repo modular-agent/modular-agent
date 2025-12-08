@@ -3,9 +3,8 @@ use std::ops::Not;
 
 use serde::{Deserialize, Serialize};
 
-use super::agent::Agent;
+use super::agent::{Agent, AgentSpec};
 use super::askit::ASKit;
-use super::config::AgentConfigs;
 use super::error::AgentError;
 use super::value::AgentValue;
 
@@ -87,20 +86,8 @@ pub struct AgentDisplayConfigEntry {
     pub hide_title: bool,
 }
 
-// #[derive(Debug, Default, Serialize, Deserialize, Clone)]
-// pub struct CommandConfig {
-//     pub cmd: String,
-//     pub args: Option<Vec<String>>,
-
-//     pub dir: Option<String>,
-// }
-
-pub type AgentNewBoxedFn = fn(
-    askit: ASKit,
-    id: String,
-    def_name: String,
-    configs: Option<AgentConfigs>,
-) -> Result<Box<dyn Agent>, AgentError>;
+pub type AgentNewBoxedFn =
+    fn(askit: ASKit, id: String, spec: AgentSpec) -> Result<Box<dyn Agent>, AgentError>;
 
 impl AgentDefinition {
     pub fn new(
@@ -526,6 +513,20 @@ impl AgentDefinition {
         self.native_thread = true;
         self
     }
+
+    pub fn to_spec(&self) -> AgentSpec {
+        AgentSpec {
+            def_name: self.name.clone(),
+            inputs: self.inputs.clone().unwrap_or_default(),
+            outputs: self.outputs.clone().unwrap_or_default(),
+            configs: self.default_configs.as_ref().map(|cfgs| {
+                cfgs.iter()
+                    .map(|(k, v)| (k.clone(), v.value.clone()))
+                    .collect()
+            }),
+            display_configs: self.display_configs.clone(),
+        }
+    }
 }
 
 impl AgentConfigEntry {
@@ -594,9 +595,7 @@ mod tests {
         let def = AgentDefinition::new(
             "test",
             "echo",
-            Some(|_app, _id, _def_name, _configs| {
-                Err(AgentError::NotImplemented("Echo agent".into()))
-            }),
+            Some(|_app, _id, _spec| Err(AgentError::NotImplemented("Echo agent".into()))),
         );
 
         assert_eq!(def.kind, "test");
@@ -639,9 +638,7 @@ mod tests {
         let def = AgentDefinition::new(
             "test",
             "echo",
-            Some(|_app, _id, _def_name, _configs| {
-                Err(AgentError::NotImplemented("Echo agent".into()))
-            }),
+            Some(|_app, _id, _spec| Err(AgentError::NotImplemented("Echo agent".into()))),
         );
         let json = serde_json::to_string(&def).unwrap();
         assert_eq!(json, r#"{"kind":"test","name":"echo"}"#);
@@ -904,9 +901,7 @@ mod tests {
         AgentDefinition::new(
             "test",
             "echo",
-            Some(|_app, _id, _def_name, _configs| {
-                Err(AgentError::NotImplemented("Echo agent".into()))
-            }),
+            Some(|_app, _id, _spec| Err(AgentError::NotImplemented("Echo agent".into()))),
         )
         .title("Echo")
         .category("Test")

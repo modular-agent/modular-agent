@@ -16,11 +16,11 @@ fn test_agent_flow_node_new() {
 
     let node = AgentFlowNode::new(&def).unwrap();
 
-    assert_eq!(node.def_name, COUNTER_DEF);
+    assert_eq!(node.spec.def_name, COUNTER_DEF);
     assert!(!node.enabled);
 
     let node2 = AgentFlowNode::new(&def).unwrap();
-    assert_eq!(node2.def_name, COUNTER_DEF);
+    assert_eq!(node2.spec.def_name, COUNTER_DEF);
     assert!(node.id != node2.id);
     assert!(!node2.enabled);
 }

@@ -2,9 +2,8 @@ use askit_macros::askit_agent;
 use async_trait::async_trait;
 use std::vec;
 
-use super::agent::{Agent, AgentData, AsAgent};
+use super::agent::{Agent, AgentData, AgentSpec, AsAgent};
 use super::askit::ASKit;
-use super::config::AgentConfigs;
 use super::context::AgentContext;
 use super::error::AgentError;
 use super::value::AgentValue;
@@ -29,17 +28,13 @@ struct BoardInAgent {
 
 #[async_trait]
 impl AsAgent for BoardInAgent {
-    fn new(
-        askit: ASKit,
-        id: String,
-        def_name: String,
-        config: Option<AgentConfigs>,
-    ) -> Result<Self, AgentError> {
-        let board_name = config
+    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+        let board_name = spec
+            .configs
             .as_ref()
             .and_then(|c| c.get_string(CONFIG_BOARD_NAME).ok());
         Ok(Self {
-            data: AgentData::new(askit, id, def_name, config),
+            data: AgentData::new(askit, id, spec),
             board_name,
         })
     }
@@ -84,17 +79,13 @@ struct BoardOutAgent {
 
 #[async_trait]
 impl AsAgent for BoardOutAgent {
-    fn new(
-        askit: ASKit,
-        id: String,
-        def_name: String,
-        config: Option<AgentConfigs>,
-    ) -> Result<Self, AgentError> {
-        let board_name = config
+    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+        let board_name = spec
+            .configs
             .as_ref()
             .and_then(|c| c.get_string(CONFIG_BOARD_NAME).ok());
         Ok(Self {
-            data: AgentData::new(askit, id, def_name, config),
+            data: AgentData::new(askit, id, spec),
             board_name,
         })
     }
@@ -165,17 +156,13 @@ struct VarInAgent {
 
 #[async_trait]
 impl AsAgent for VarInAgent {
-    fn new(
-        askit: ASKit,
-        id: String,
-        def_name: String,
-        config: Option<AgentConfigs>,
-    ) -> Result<Self, AgentError> {
-        let var_name = config
+    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+        let var_name = spec
+            .configs
             .as_ref()
             .and_then(|c| c.get_string(CONFIG_VAR_NAME).ok());
         Ok(Self {
-            data: AgentData::new(askit, id, def_name, config),
+            data: AgentData::new(askit, id, spec),
             var_name,
         })
     }
@@ -221,17 +208,13 @@ struct VarOutAgent {
 
 #[async_trait]
 impl AsAgent for VarOutAgent {
-    fn new(
-        askit: ASKit,
-        id: String,
-        def_name: String,
-        config: Option<AgentConfigs>,
-    ) -> Result<Self, AgentError> {
-        let var_name = config
+    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+        let var_name = spec
+            .configs
             .as_ref()
             .and_then(|c| c.get_string(CONFIG_VAR_NAME).ok());
         Ok(Self {
-            data: AgentData::new(askit, id, def_name, config),
+            data: AgentData::new(askit, id, spec),
             var_name,
         })
     }

@@ -1,4 +1,4 @@
-use agent_stream_kit::{AgentConfigs, AgentError, AsAgent, AgentData, async_trait};
+use agent_stream_kit::{AgentData, AgentError, AgentSpec, AsAgent, async_trait};
 use askit_macros::askit_agent;
 
 const UNIT_KEY: &str = "unit_disp";
@@ -39,11 +39,10 @@ impl AsAgent for DisplayAgent {
     fn new(
         askit: agent_stream_kit::ASKit,
         id: String,
-        def_name: String,
-        configs: Option<AgentConfigs>,
+        spec: AgentSpec,
     ) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(askit, id, def_name, configs),
+            data: AgentData::new(askit, id, spec),
         })
     }
 }

@@ -1,5 +1,5 @@
 use agent_stream_kit::{
-    AgentConfigs, AgentContext, AgentData, AgentError, AgentValue, AsAgent, async_trait,
+    AgentContext, AgentData, AgentError, AgentSpec, AgentValue, AsAgent, async_trait,
 };
 use askit_macros::askit_agent;
 
@@ -8,7 +8,7 @@ use askit_macros::askit_agent;
     category = "Tests",
     string_config(name = "literal_config", default = "val"),
     string_global_config(name = "literal_global", default = "global_val"),
-    string_display(name = "literal_display", title = "Literal Title"),
+    string_display(name = "literal_display", title = "Literal Title")
 )]
 struct LiteralNameAgent {
     data: AgentData,
@@ -19,11 +19,10 @@ impl AsAgent for LiteralNameAgent {
     fn new(
         askit: agent_stream_kit::ASKit,
         id: String,
-        def_name: String,
-        configs: Option<AgentConfigs>,
+        spec: AgentSpec,
     ) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(askit, id, def_name, configs),
+            data: AgentData::new(askit, id, spec),
         })
     }
 
