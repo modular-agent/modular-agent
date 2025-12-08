@@ -4,8 +4,8 @@ use std::time::Duration;
 use std::vec;
 
 use agent_stream_kit::{
-    ASKit, Agent, AgentConfigs, AgentContext, AgentError, AgentOutput, AgentStatus, AgentValue,
-    AsAgent, AgentData, async_trait,
+    ASKit, Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentStatus,
+    AgentValue, AsAgent, async_trait,
 };
 use askit_macros::askit_agent;
 use chrono::{DateTime, Local, Utc};
@@ -47,14 +47,9 @@ struct DelayAgent {
 
 #[async_trait]
 impl AsAgent for DelayAgent {
-    fn new(
-        askit: ASKit,
-        id: String,
-        def_name: String,
-        config: Option<AgentConfigs>,
-    ) -> Result<Self, AgentError> {
+    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(askit, id, def_name, config),
+            data: AgentData::new(askit, id, spec),
             num_waiting_data: Arc::new(Mutex::new(0)),
         })
     }
@@ -156,20 +151,16 @@ impl IntervalTimerAgent {
 
 #[async_trait]
 impl AsAgent for IntervalTimerAgent {
-    fn new(
-        askit: ASKit,
-        id: String,
-        def_name: String,
-        config: Option<AgentConfigs>,
-    ) -> Result<Self, AgentError> {
-        let interval = config
+    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+        let interval = spec
+            .configs
             .as_ref()
             .ok_or(AgentError::NoConfig)?
             .get_string_or(CONFIG_INTERVAL, INTERVAL_DEFAULT);
         let interval_ms = parse_duration_to_ms(&interval)?;
 
         Ok(Self {
-            data: AgentData::new(askit, id, def_name, config),
+            data: AgentData::new(askit, id, spec),
             timer_handle: Default::default(),
             interval_ms,
         })
@@ -212,14 +203,9 @@ struct OnStartAgent {
 
 #[async_trait]
 impl AsAgent for OnStartAgent {
-    fn new(
-        askit: ASKit,
-        id: String,
-        def_name: String,
-        config: Option<AgentConfigs>,
-    ) -> Result<Self, AgentError> {
+    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(askit, id, def_name, config),
+            data: AgentData::new(askit, id, spec),
         })
     }
 
@@ -361,20 +347,20 @@ impl ScheduleTimerAgent {
 
 #[async_trait]
 impl AsAgent for ScheduleTimerAgent {
-    fn new(
-        askit: ASKit,
-        id: String,
-        def_name: String,
-        config: Option<AgentConfigs>,
-    ) -> Result<Self, AgentError> {
+    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+        let schedule_str = spec
+            .configs
+            .as_ref()
+            .map(|cfg| cfg.get_string(CONFIG_SCHEDULE))
+            .transpose()?;
+
         let mut agent = Self {
-            data: AgentData::new(askit, id, def_name, config.clone()),
+            data: AgentData::new(askit, id, spec),
             cron_schedule: None,
             timer_handle: Default::default(),
         };
 
-        if let Some(config) = config {
-            let schedule_str = config.get_string(CONFIG_SCHEDULE)?;
+        if let Some(schedule_str) = schedule_str {
             if !schedule_str.is_empty() {
                 agent.parse_schedule(&schedule_str)?;
             }
@@ -488,25 +474,22 @@ impl ThrottleTimeAgent {
 
 #[async_trait]
 impl AsAgent for ThrottleTimeAgent {
-    fn new(
-        askit: ASKit,
-        id: String,
-        def_name: String,
-        config: Option<AgentConfigs>,
-    ) -> Result<Self, AgentError> {
-        let time = config
+    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+        let time = spec
+            .configs
             .as_ref()
             .ok_or(AgentError::NoConfig)?
             .get_string_or(CONFIG_TIME, TIME_DEFAULT);
         let time_ms = parse_duration_to_ms(&time)?;
 
-        let max_num_data = config
+        let max_num_data = spec
+            .configs
             .as_ref()
             .ok_or(AgentError::NoConfig)?
             .get_integer_or(CONFIG_MAX_NUM_DATA, 0);
 
         Ok(Self {
-            data: AgentData::new(askit, id, def_name, config),
+            data: AgentData::new(askit, id, spec),
             timer_handle: Default::default(),
             time_ms,
             max_num_data,

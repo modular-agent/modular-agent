@@ -1,11 +1,12 @@
 use agent_stream_kit::{
-    ASKit, AgentConfigs, AgentContext, AgentData, AgentError, AgentOutput, AgentValue, AsAgent,
+    ASKit, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
     async_trait,
 };
 use askit_macros::askit_agent;
 
 static CATEGORY: &str = "Std/Stream";
 
+static PIN_IN: &str = "in";
 static PIN_IN1: &str = "in1";
 static PIN_IN2: &str = "in2";
 static PIN_IN3: &str = "in3";
@@ -14,6 +15,44 @@ static PIN_OUT1: &str = "out1";
 static PIN_OUT2: &str = "out2";
 static PIN_OUT3: &str = "out3";
 static PIN_OUT4: &str = "out4";
+
+#[askit_agent(
+    title = "Sequence",
+    category = CATEGORY,
+    inputs = [PIN_IN],
+    outputs = [PIN_OUT1],
+    integer_config(name = "n", default = 2),
+)]
+struct SequenceAgent {
+    data: AgentData,
+    n: usize,
+}
+
+#[async_trait]
+impl AsAgent for SequenceAgent {
+    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+        let n = spec
+            .configs
+            .as_ref()
+            .map(|cfg| cfg.get_integer_or("n", 2))
+            .unwrap_or(2) as usize;
+        let data = AgentData::new(askit, id, spec);
+        Ok(Self { data, n })
+    }
+
+    async fn process(
+        &mut self,
+        ctx: AgentContext,
+        _pin: String,
+        value: AgentValue,
+    ) -> Result<(), AgentError> {
+        for i in 0..self.n {
+            let out_pin = format!("out{}", i + 1);
+            self.try_output(ctx.clone(), out_pin, value.clone())?;
+        }
+        Ok(())
+    }
+}
 
 /// Receives inputs in any order and, once all are present, emits them sequentially.
 struct SyncAgent {
@@ -86,13 +125,8 @@ struct Sync2Agent {
 
 #[async_trait]
 impl AsAgent for Sync2Agent {
-    fn new(
-        askit: ASKit,
-        id: String,
-        def_name: String,
-        config: Option<AgentConfigs>,
-    ) -> Result<Self, AgentError> {
-        let data = AgentData::new(askit, id, def_name, config);
+    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+        let data = AgentData::new(askit, id, spec);
         let inner = SyncAgent::new_with_n(2);
         Ok(Self { data, inner })
     }
@@ -127,13 +161,8 @@ struct Sync3Agent {
 
 #[async_trait]
 impl AsAgent for Sync3Agent {
-    fn new(
-        askit: ASKit,
-        id: String,
-        def_name: String,
-        config: Option<AgentConfigs>,
-    ) -> Result<Self, AgentError> {
-        let data = AgentData::new(askit, id, def_name, config);
+    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+        let data = AgentData::new(askit, id, spec);
         let inner = SyncAgent::new_with_n(3);
         Ok(Self { data, inner })
     }
@@ -169,13 +198,8 @@ struct Sync4Agent {
 
 #[async_trait]
 impl AsAgent for Sync4Agent {
-    fn new(
-        askit: ASKit,
-        id: String,
-        def_name: String,
-        config: Option<AgentConfigs>,
-    ) -> Result<Self, AgentError> {
-        let data = AgentData::new(askit, id, def_name, config);
+    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+        let data = AgentData::new(askit, id, spec);
         let inner = SyncAgent::new_with_n(3);
         Ok(Self { data, inner })
     }
