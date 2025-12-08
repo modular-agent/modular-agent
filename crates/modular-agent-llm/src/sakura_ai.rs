@@ -4,8 +4,8 @@ use std::sync::{Arc, Mutex};
 use std::vec;
 
 use agent_stream_kit::{
-    ASKit, Agent, AgentConfigs, AgentContext, AgentData, AgentError, AgentOutput, AgentValue,
-    AsAgent, async_trait,
+    ASKit, Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
+    async_trait,
 };
 use askit_macros::askit_agent;
 
@@ -80,14 +80,9 @@ pub struct SakuraAIChatAgent {
 
 #[async_trait]
 impl AsAgent for SakuraAIChatAgent {
-    fn new(
-        askit: ASKit,
-        id: String,
-        def_name: String,
-        config: Option<AgentConfigs>,
-    ) -> Result<Self, AgentError> {
+    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(askit, id, def_name, config),
+            data: AgentData::new(askit, id, spec),
             manager: SakuraAIManager::new(),
         })
     }

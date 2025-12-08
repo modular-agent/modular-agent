@@ -4,8 +4,8 @@ use std::sync::{Arc, Mutex};
 use std::vec;
 
 use agent_stream_kit::{
-    ASKit, Agent, AgentConfigs, AgentContext, AgentData, AgentError, AgentOutput, AgentValue,
-    AsAgent, askit_agent, async_trait,
+    ASKit, Agent, AgentConfigs, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec,
+    AgentValue, AsAgent, askit_agent, async_trait,
 };
 
 use ollama_rs::{
@@ -110,14 +110,9 @@ pub struct OllamaCompletionAgent {
 
 #[async_trait]
 impl AsAgent for OllamaCompletionAgent {
-    fn new(
-        askit: ASKit,
-        id: String,
-        def_name: String,
-        config: Option<AgentConfigs>,
-    ) -> Result<Self, AgentError> {
+    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(askit, id, def_name, config),
+            data: AgentData::new(askit, id, spec),
             manager: OllamaManager::new(),
         })
     }
@@ -203,14 +198,9 @@ impl OllamaChatAgent {
 
 #[async_trait]
 impl AsAgent for OllamaChatAgent {
-    fn new(
-        askit: ASKit,
-        id: String,
-        def_name: String,
-        config: Option<AgentConfigs>,
-    ) -> Result<Self, AgentError> {
+    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(askit, id, def_name, config),
+            data: AgentData::new(askit, id, spec),
             manager: OllamaManager::new(),
             history: Default::default(),
         })
@@ -408,14 +398,9 @@ pub struct OllamaEmbeddingsAgent {
 
 #[async_trait]
 impl AsAgent for OllamaEmbeddingsAgent {
-    fn new(
-        askit: ASKit,
-        id: String,
-        def_name: String,
-        config: Option<AgentConfigs>,
-    ) -> Result<Self, AgentError> {
+    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(askit, id, def_name, config),
+            data: AgentData::new(askit, id, spec),
             manager: OllamaManager::new(),
         })
     }
@@ -476,14 +461,9 @@ pub struct OllamaListLocalModelsAgent {
 
 #[async_trait]
 impl AsAgent for OllamaListLocalModelsAgent {
-    fn new(
-        askit: ASKit,
-        id: String,
-        def_name: String,
-        config: Option<AgentConfigs>,
-    ) -> Result<Self, AgentError> {
+    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(askit, id, def_name, config),
+            data: AgentData::new(askit, id, spec),
             manager: OllamaManager::new(),
         })
     }
@@ -520,14 +500,9 @@ pub struct OllamaShowModelInfoAgent {
 
 #[async_trait]
 impl AsAgent for OllamaShowModelInfoAgent {
-    fn new(
-        askit: ASKit,
-        id: String,
-        def_name: String,
-        config: Option<AgentConfigs>,
-    ) -> Result<Self, AgentError> {
+    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(askit, id, def_name, config),
+            data: AgentData::new(askit, id, spec),
             manager: OllamaManager::new(),
         })
     }

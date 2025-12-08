@@ -5,8 +5,8 @@ use std::{
 };
 
 use agent_stream_kit::{
-    ASKit, Agent, AgentConfigs, AgentContext, AgentData, AgentError, AgentOutput, AgentValue,
-    AsAgent, askit_agent, async_trait,
+    ASKit, Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
+    askit_agent, async_trait,
 };
 use regex::Regex;
 use tokio::sync::{Mutex as AsyncMutex, oneshot};
@@ -209,14 +209,9 @@ pub struct ListToolsAgent {
 
 #[async_trait]
 impl AsAgent for ListToolsAgent {
-    fn new(
-        askit: ASKit,
-        id: String,
-        def_name: String,
-        config: Option<AgentConfigs>,
-    ) -> Result<Self, AgentError> {
+    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(askit, id, def_name, config),
+            data: AgentData::new(askit, id, spec),
         })
     }
 
@@ -285,26 +280,23 @@ impl FlowToolAgent {
 
 #[async_trait]
 impl AsAgent for FlowToolAgent {
-    fn new(
-        askit: ASKit,
-        id: String,
-        def_name: String,
-        config: Option<AgentConfigs>,
-    ) -> Result<Self, AgentError> {
-        let name = config
+    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+        let def_name = spec.def_name.clone();
+        let configs = spec.configs.clone();
+        let name = configs
             .as_ref()
             .and_then(|c| c.get_string(CONFIG_TOOL_NAME).ok())
             .unwrap_or_else(|| def_name.clone());
-        let description = config
+        let description = configs
             .as_ref()
             .and_then(|c| c.get_string(CONFIG_TOOL_DESCRIPTION).ok())
             .unwrap_or_default();
-        let parameters = config
+        let parameters = configs
             .as_ref()
             .and_then(|c| c.get(CONFIG_TOOL_PARAMETERS).ok())
             .and_then(|v| serde_json::to_value(v).ok());
         Ok(Self {
-            data: AgentData::new(askit, id, def_name, config),
+            data: AgentData::new(askit, id, spec),
             name,
             description,
             parameters,
