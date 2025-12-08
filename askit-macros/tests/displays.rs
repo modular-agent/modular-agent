@@ -9,6 +9,7 @@ const STRING_KEY: &str = "string_disp";
 const TEXT_KEY: &str = "text_disp";
 const OBJECT_KEY: &str = "object_disp";
 const ANY_KEY: &str = "any";
+const CUSTOM_KEY: &str = "custom_disp";
 
 #[askit_agent(
     title = "Display Agent",
@@ -20,7 +21,14 @@ const ANY_KEY: &str = "any";
     string_display(name = STRING_KEY, title = "String Title"),
     text_display(name = TEXT_KEY),
     object_display(name = OBJECT_KEY),
-    any_display(name = ANY_KEY, hide_title)
+    any_display(name = ANY_KEY, hide_title),
+    custom_display_config(
+        name = CUSTOM_KEY,
+        type_ = "custom_type",
+        title = "Custom Title",
+        description = "Custom Desc",
+        hide_title
+    )
 )]
 struct DisplayAgent {
     data: AgentData,
@@ -44,7 +52,7 @@ impl AsAgent for DisplayAgent {
 fn display_entries_are_generated() {
     let def = DisplayAgent::agent_definition();
     let displays = def.display_configs.expect("display configs");
-    assert_eq!(displays.len(), 8);
+    assert_eq!(displays.len(), 9);
 
     let mut map = std::collections::HashMap::new();
     for (k, v) in displays {
@@ -84,4 +92,10 @@ fn display_entries_are_generated() {
         map.get(OBJECT_KEY).unwrap().type_.as_deref(),
         Some("object")
     );
+
+    let custom = map.get(CUSTOM_KEY).unwrap();
+    assert_eq!(custom.type_.as_deref(), Some("custom_type"));
+    assert_eq!(custom.title.as_deref(), Some("Custom Title"));
+    assert_eq!(custom.description.as_deref(), Some("Custom Desc"));
+    assert!(custom.hide_title);
 }

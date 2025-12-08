@@ -10,6 +10,7 @@ const NUMBER_KEY: &str = "number";
 const STRING_KEY: &str = "string";
 const TEXT_KEY: &str = "text";
 const OBJECT_KEY: &str = "object";
+const CUSTOM_KEY: &str = "custom";
 const GLOBAL_UNIT_KEY: &str = "global_unit";
 const GLOBAL_BOOLEAN_KEY: &str = "global_boolean";
 const GLOBAL_INTEGER_KEY: &str = "global_integer";
@@ -17,6 +18,7 @@ const GLOBAL_NUMBER_KEY: &str = "global_number";
 const GLOBAL_STRING_KEY: &str = "global_string";
 const GLOBAL_TEXT_KEY: &str = "global_text";
 const GLOBAL_OBJECT_KEY: &str = "global_object";
+const GLOBAL_CUSTOM_KEY: &str = "global_custom";
 
 #[askit_agent(
     kind = "Test",
@@ -34,6 +36,13 @@ const GLOBAL_OBJECT_KEY: &str = "global_object";
         title = "Obj",
         description = "Obj desc"
     ),
+    custom_config(
+        name = CUSTOM_KEY,
+        type_ = "custom",
+        default = AgentValue::string("c"),
+        title = "Custom",
+        description = "Custom desc"
+    ),
     unit_global_config(name = GLOBAL_UNIT_KEY),
     boolean_global_config(name = GLOBAL_BOOLEAN_KEY, title = "Global Bool"),
     integer_global_config(name = GLOBAL_INTEGER_KEY, default = -1),
@@ -45,6 +54,13 @@ const GLOBAL_OBJECT_KEY: &str = "global_object";
         default = AgentValue::object_default(),
         title = "GObj",
         description = "Global obj"
+    ),
+    custom_global_config(
+        name = GLOBAL_CUSTOM_KEY,
+        type_ = "gcustom",
+        default = AgentValue::string("gc"),
+        title = "GCustom",
+        description = "Global custom desc"
     )
 )]
 struct ConfigAgent {
@@ -106,6 +122,12 @@ fn config_entries_are_generated() {
     assert_eq!(obj_entry.type_.as_deref(), Some("object"));
     assert_eq!(obj_entry.title.as_deref(), Some("Obj"));
     assert_eq!(obj_entry.description.as_deref(), Some("Obj desc"));
+
+    let custom_entry = &configs[CUSTOM_KEY];
+    assert_eq!(custom_entry.type_.as_deref(), Some("custom"));
+    assert_eq!(custom_entry.value, AgentValue::string("c"));
+    assert_eq!(custom_entry.title.as_deref(), Some("Custom"));
+    assert_eq!(custom_entry.description.as_deref(), Some("Custom desc"));
 }
 
 #[test]
@@ -133,4 +155,13 @@ fn global_config_entries_are_generated() {
     assert_eq!(obj_entry.type_.as_deref(), Some("object"));
     assert_eq!(obj_entry.title.as_deref(), Some("GObj"));
     assert_eq!(obj_entry.description.as_deref(), Some("Global obj"));
+
+    let custom_entry = &configs[GLOBAL_CUSTOM_KEY];
+    assert_eq!(custom_entry.type_.as_deref(), Some("gcustom"));
+    assert_eq!(custom_entry.value, AgentValue::string("gc"));
+    assert_eq!(custom_entry.title.as_deref(), Some("GCustom"));
+    assert_eq!(
+        custom_entry.description.as_deref(),
+        Some("Global custom desc")
+    );
 }
