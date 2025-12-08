@@ -11,6 +11,7 @@ import type {
   AgentFlow,
   AgentFlowEdge,
   AgentFlowNode,
+  AgentSpec,
   Viewport,
 } from "tauri-plugin-askit-api";
 
@@ -64,15 +65,13 @@ export function deserializeAgentFlow(
 
   nodes.forEach((node) => {
     const def = agent_settings[node.data.name];
-    if (def) {
-      nodeHandles.set(node.id, {
-        inputs: def.inputs || [],
-        outputs: def.outputs || [],
-        configs: (def.default_configs || [])
-          .filter(([_, entry]) => entry.hidden !== true)
-          .map(([key, _]) => key),
-      });
-    }
+    const inputs = def?.inputs ?? node.spec.inputs ?? [];
+    const outputs = def?.outputs ?? node.spec.outputs ?? [];
+    const configs =
+      def?.default_configs?.filter(([_, entry]) => entry.hidden !== true).map(([key, _]) => key) ??
+      Object.keys(node.spec.configs ?? {});
+
+    nodeHandles.set(node.id, { inputs, outputs, configs });
   });
 
   // Filter only valid edges
@@ -104,25 +103,40 @@ export function deserializeAgentFlowNode(
   node: AgentFlowNode,
   agentDefs: AgentDefinitions,
 ): TAgentFlowNode {
-  const agentDef = agentDefs[node.def_name];
-  const default_configs = agentDef?.default_configs;
-  const display_configs = agentDef?.display_configs;
+  const { id, enabled, spec: incomingSpec, ...rest } = node as AgentFlowNode & Record<string, any>;
+
+  const defName = incomingSpec?.def_name ?? rest.def_name;
+  const agentDef = defName ? agentDefs[defName] : undefined;
+
+  const spec: AgentSpec = incomingSpec ?? {
+    def_name: defName ?? "",
+    inputs: agentDef?.inputs ?? [],
+    outputs: agentDef?.outputs ?? [],
+    configs: (rest.configs as AgentConfigs) ?? null,
+    display_configs: agentDef?.display_configs ?? null,
+  };
+
+  const { title = null, x = 0, y = 0, width, height, ...extensions } = rest as Record<string, any>;
+  const default_configs = agentDef?.default_configs ?? null;
+  const display_configs = spec.display_configs ?? agentDef?.display_configs ?? null;
   return {
-    id: node.id,
+    id,
     type: "agent",
     data: {
-      name: node.def_name,
-      enabled: agentDef !== undefined && node.enabled,
-      title: node.title,
-      configs: deserializeAgentConfigs(node.configs, default_configs),
+      name: spec.def_name,
+      enabled: agentDef !== undefined && enabled,
+      title,
+      configs: deserializeAgentConfigs(spec.configs ?? null, default_configs),
       displays: deserializeAgentDisplayConfigs(display_configs),
     },
     position: {
-      x: node.x,
-      y: node.y,
+      x,
+      y,
     },
-    width: node.width,
-    height: node.height,
+    width,
+    height,
+    spec,
+    extensions,
   };
 }
 
@@ -214,19 +228,28 @@ export function serializeAgentFlowNode(
   node: TAgentFlowNode,
   agent_defs: AgentDefinitions,
 ): AgentFlowNode {
+  const agentDef = agent_defs[node.data.name];
+  const inputs = node.spec?.inputs ?? agentDef?.inputs ?? [];
+  const outputs = node.spec?.outputs ?? agentDef?.outputs ?? [];
+  const displayConfigs = node.spec?.display_configs ?? agentDef?.display_configs ?? null;
+  const spec: AgentSpec = {
+    def_name: node.data.name,
+    inputs: inputs ?? [],
+    outputs: outputs ?? [],
+    configs: serializeAgentFlowNodeConfigs(node.data.configs, agentDef?.default_configs ?? null),
+    display_configs: displayConfigs ?? null,
+  };
+
   return {
     id: node.id,
-    def_name: node.data.name,
     enabled: node.data.enabled,
-    configs: serializeAgentFlowNodeConfigs(
-      node.data.configs,
-      agent_defs[node.data.name]?.default_configs,
-    ),
+    spec,
     title: node.data.title,
     x: node.position.x,
     y: node.position.y,
     width: node.width,
     height: node.height,
+    ...(node.extensions ?? {}),
   };
 }
 

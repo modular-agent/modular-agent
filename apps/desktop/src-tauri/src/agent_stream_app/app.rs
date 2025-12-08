@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 use anyhow::{bail, Context as _, Result};
 use dirs;
+use serde::de;
 use tauri::{AppHandle, Manager, State};
 
 use agent_stream_kit::{ASKit, AgentFlow};
@@ -168,7 +169,10 @@ impl ASApp {
         }
 
         let content = std::fs::read_to_string(&path)?;
-        let mut flow = AgentFlow::from_json(&content)?;
+        // let mut flow = AgentFlow::from_json(&content)?;
+
+        let defs = self.askit.get_agent_definitions();
+        let mut flow = AgentFlow::from_json_with_defs(&content, &defs)?;
 
         // Get the base name from the file name
         let base_name = path
