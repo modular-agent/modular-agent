@@ -70,16 +70,20 @@ export type AgentFlow = {
 export type AgentConfigsMap = Record<string, AgentConfigs>;
 export type AgentConfigs = Record<string, any>;
 
-export type AgentFlowNode = {
-  id: string;
+export type AgentSpec = {
   def_name: string;
+  inputs: string[];
+  outputs: string[];
+  configs?: AgentConfigs | null;
+  display_configs?: AgentDisplayConfigs | null;
+};
+
+export type AgentFlowNodeExtensions = Record<string, any>;
+
+export type AgentFlowNode = AgentFlowNodeExtensions & {
+  id: string;
   enabled: boolean;
-  configs: AgentConfigs | null;
-  title: string | null;
-  x: number;
-  y: number;
-  width?: number;
-  height?: number;
+  spec: AgentSpec;
 };
 
 export type AgentFlowEdge = {
