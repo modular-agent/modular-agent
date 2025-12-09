@@ -27,6 +27,12 @@ pub trait AgentOutput {
         self.emit_display_raw(key.into(), value);
     }
 
+    fn emit_agent_spec_updated_raw(&self);
+
+    fn emit_agent_spec_updated(&self) {
+        self.emit_agent_spec_updated_raw();
+    }
+
     fn emit_error_raw(&self, message: String);
 
     #[allow(unused)]
@@ -49,6 +55,10 @@ impl<T: Agent> AgentOutput for T {
     fn emit_display_raw(&self, key: String, value: AgentValue) {
         self.askit()
             .emit_agent_display(self.id().to_string(), key, value);
+    }
+
+    fn emit_agent_spec_updated_raw(&self) {
+        self.askit().emit_agent_spec_updated(self.id().to_string());
     }
 
     fn emit_error_raw(&self, message: String) {

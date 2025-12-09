@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 
 use tokio::sync::{Mutex as AsyncMutex, mpsc};
 
-use crate::agent::{Agent, AgentMessage, AgentStatus, agent_new};
+use crate::agent::{Agent, AgentMessage, AgentSpec, AgentStatus, agent_new};
 use crate::config::{AgentConfigs, AgentConfigsMap};
 use crate::context::AgentContext;
 use crate::definition::{AgentDefaultConfigs, AgentDefinition, AgentDefinitions};
@@ -127,6 +127,15 @@ impl ASKit {
             return None;
         };
         def.default_configs.clone()
+    }
+
+    pub fn get_agent_spec(&self, agent_id: &str) -> Option<AgentSpec> {
+        let agents = self.agents.lock().unwrap();
+        let Some(agent) = agents.get(agent_id) else {
+            return None;
+        };
+        let agent = agent.blocking_lock();
+        Some(agent.spec().clone())
     }
 
     // flows
@@ -868,6 +877,10 @@ impl ASKit {
         self.notify_observers(ASKitEvent::AgentIn(agent_id, pin));
     }
 
+    pub(crate) fn emit_agent_spec_updated(&self, agent_id: String) {
+        self.notify_observers(ASKitEvent::AgentSpecUpdated(agent_id));
+    }
+
     pub(crate) fn emit_board(&self, name: String, value: AgentValue) {
         // ignore variables
         if name.starts_with('%') {
@@ -889,6 +902,7 @@ pub enum ASKitEvent {
     AgentDisplay(String, String, AgentValue), // (agent_id, key, value)
     AgentError(String, String),               // (agent_id, message)
     AgentIn(String, String),                  // (agent_id, pin)
+    AgentSpecUpdated(String),                 // (agent_id)
     Board(String, AgentValue),                // (board name, value)
 }
 
