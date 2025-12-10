@@ -87,6 +87,7 @@ pub fn run() {
             agent_stream_app::app::save_agent_flow_cmd,
             agent_stream_app::settings::get_core_settings_cmd,
             agent_stream_app::settings::set_core_settings_cmd,
+            agent_stream_app::settings::set_global_configs_cmd,
         ])
         .on_window_event(|window, event| match event {
             tauri::WindowEvent::CloseRequested { api, .. } => {

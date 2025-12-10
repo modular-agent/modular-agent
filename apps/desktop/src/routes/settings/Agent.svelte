@@ -1,13 +1,9 @@
 <script lang="ts">
-  import { message } from "@tauri-apps/plugin-dialog";
-
   import { Button, Input, NumberInput, Textarea, Toggle } from "flowbite-svelte";
-  import { setGlobalConfigs } from "tauri-plugin-askit-api";
   import type { AgentConfigs, AgentDefinition } from "tauri-plugin-askit-api";
 
   import Card from "@/components/Card.svelte";
-  import { deserializeAgentConfigs, serializeAgentFlowNodeConfigs } from "@/lib/agent";
-  import { exitApp } from "@/lib/utils";
+  import { setGlobalConfigs } from "@/lib/utils";
 
   interface Props {
     agentName: string;
@@ -17,17 +13,17 @@
 
   const { agentName, agentConfigs, agentDef }: Props = $props();
 
-  const configs = $state(deserializeAgentConfigs(agentConfigs, agentDef?.global_configs ?? null));
+  let configs = $derived.by(() => {
+    let ac = agentConfigs;
+    return ac;
+  });
+  let ad = $derived.by(() => {
+    let ad = agentDef;
+    return ad;
+  });
 
   async function saveConfigs() {
-    let sconfigs = serializeAgentFlowNodeConfigs(configs, agentDef?.global_configs ?? null);
-    if (sconfigs) {
-      setGlobalConfigs(agentName, sconfigs);
-    }
-
-    // confirm restart
-    await message("Mnemnk will quit to apply changes.\n\nPlease restart.");
-    await exitApp();
+    setGlobalConfigs(agentName, configs);
   }
 </script>
 
@@ -40,10 +36,10 @@
     <p class="text-sm text-gray-500">This agent has no global config.</p>
   </Card>
 {:else}
-  <Card title={agentDef.title ?? agentName} subtitle={agentDef.description}>
-    {#if agentDef.global_configs}
+  <Card title={ad?.title ?? agentName} subtitle={ad?.description}>
+    {#if ad?.global_configs}
       <form>
-        {#each agentDef.global_configs as [key, globalConfig]}
+        {#each Object.entries(ad.global_configs) as [key, globalConfig]}
           {@const ty = globalConfig.type}
           <label class="block mb-3 text-sm font-medium text-gray-900 dark:text-white">
             {globalConfig?.title || key}

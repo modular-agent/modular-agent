@@ -1,4 +1,4 @@
-use agent_stream_kit::AgentValue;
+use agent_stream_kit::{AgentConfigs, AgentValue};
 use anyhow::{Context as _, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -160,6 +160,19 @@ pub fn set_core_settings_cmd(
     } else {
         return Err("Invalid settings format".to_string());
     }
+
+    save(&app).map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+#[tauri::command]
+pub(crate) fn set_global_configs_cmd(
+    app: AppHandle,
+    def_name: String,
+    configs: AgentConfigs,
+) -> Result<(), String> {
+    app.askit().set_global_configs(def_name, configs);
 
     save(&app).map_err(|e| e.to_string())?;
 

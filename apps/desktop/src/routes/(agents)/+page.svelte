@@ -57,7 +57,10 @@
 
   const { getViewport, screenToFlowPosition, setViewport, updateEdge, updateNode, updateNodeData } =
     $derived(useSvelteFlow());
-  setAgentDefinitionsContext(data.agentDefs);
+
+  $effect.pre(() => {
+    setAgentDefinitionsContext(data.agentDefs);
+  });
 
   const nodeTypes: NodeTypes = {
     agent: AgentNode,

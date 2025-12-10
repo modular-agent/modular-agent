@@ -12,8 +12,14 @@
 
   const { settings }: Props = $props();
 
-  let autostart = $state(settings["autostart"]);
-  let shortcut_keys = $state(settings["shortcut_keys"]);
+  let autostart = $derived.by(() => {
+    let a = settings["autostart"];
+    return a;
+  });
+  let shortcut_keys = $derived.by(() => {
+    let sk = settings["shortcut_keys"];
+    return sk;
+  });
 
   async function saveSettings() {
     await setCoreSettings({
@@ -37,12 +43,12 @@
     <Label class="col-span-2 space-y-2">
       <span>Global Shortcut</span>
     </Label>
-    <Input class="col-span-4" type="text" bind:value={shortcut_keys["global_shortcut"]} />
+    <Input class="col-span-4" type="text" bind:value={shortcut_keys.global_shortcut} />
 
     <Label class="col-span-2 space-y-2">
       <span>Fullscreen</span>
     </Label>
-    <Input class="col-span-4" type="text" bind:value={shortcut_keys["fullscreen"]} />
+    <Input class="col-span-4" type="text" bind:value={shortcut_keys.fullscreen} />
 
     <Button onclick={saveSettings} class="w-fit" outline>Save</Button>
   </form>

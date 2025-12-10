@@ -12,7 +12,7 @@
 
   let { directories, currentFlow, flowActivities, changeFlow }: Props = $props();
 
-  const dirKeys = Object.keys(directories).sort();
+  const dirKeys = $derived(Object.keys(directories).sort());
 
   // Helper function to get display name (last part after slash)
   function getDisplayName(fullPath: string): string {

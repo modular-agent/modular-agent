@@ -13,7 +13,7 @@
 
   const { children, data }: LayoutProps = $props();
 
-  setContext("coreSettings", data.coreSettings);
+  setContext("coreSettings", () => data.coreSettings);
   setContext("agentFlows", () => data.agentFlows);
 
   const key_close = "Escape";

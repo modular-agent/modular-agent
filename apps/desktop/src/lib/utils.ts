@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 
-import type { CoreSettings } from "tauri-plugin-askit-api";
+import type { AgentConfigs, CoreSettings } from "tauri-plugin-askit-api";
 
 const isEdge = typeof navigator !== "undefined" && navigator.userAgent?.includes("Edg");
 
@@ -18,6 +18,10 @@ export async function getCoreSettings(): Promise<CoreSettings> {
 
 export async function setCoreSettings(newSettings: Partial<CoreSettings>): Promise<void> {
   await invoke("set_core_settings_cmd", { newSettings });
+}
+
+export async function setGlobalConfigs(defName: string, configs: AgentConfigs): Promise<void> {
+  await invoke("set_global_configs_cmd", { defName, configs });
 }
 
 // utilities

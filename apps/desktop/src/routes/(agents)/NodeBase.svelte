@@ -38,14 +38,14 @@
 
   let bgColor = $derived(bgColors[agentDef ? (data.enabled ? 1 : 0) : 2]);
 
-  let ht = $state(height);
+  let ht = $derived(height);
 
   function onResize(_ev: ResizeDragEvent, params: ResizeParams) {
     ht = params.height;
   }
 
   let highlightCount = $derived(inputCount);
-  let lastHighlightCount = $state(inputCount);
+  let lastHighlightCount = $derived(inputCount);
 
   let highlight = new Spring(0, {
     stiffness: 0.03,

@@ -46,9 +46,7 @@
 
   let { id, data, ...props }: Props = $props();
 
-  console.log("AgentNode data:", data);
-
-  const agentDef = $derived(getAgentDefinitionsContext()?.[data.name]);
+  const agentDef = $derived.by(() => getAgentDefinitionsContext()?.[data.name]);
   const description = $derived(agentDef?.description);
 
   const agentConfigs = $derived(data.spec.configs ?? null);

@@ -11,26 +11,28 @@
 
   let { agentDefs, onAddAgent }: Props = $props();
 
-  const categories = Object.keys(agentDefs).reduce(
-    (acc, key) => {
-      const categoryPath = (agentDefs[key].category ?? "_unknown_").split("/");
-      let currentLevel = acc;
+  const categories = $derived(
+    Object.keys(agentDefs).reduce(
+      (acc, key) => {
+        const categoryPath = (agentDefs[key].category ?? "_unknown_").split("/");
+        let currentLevel = acc;
 
-      for (const part of categoryPath) {
-        if (!currentLevel[part]) {
-          currentLevel[part] = {};
+        for (const part of categoryPath) {
+          if (!currentLevel[part]) {
+            currentLevel[part] = {};
+          }
+          currentLevel = currentLevel[part];
         }
-        currentLevel = currentLevel[part];
-      }
 
-      if (!currentLevel["00agents"]) {
-        currentLevel["00agents"] = [];
-      }
-      currentLevel["00agents"].push(key);
+        if (!currentLevel["00agents"]) {
+          currentLevel["00agents"] = [];
+        }
+        currentLevel["00agents"].push(key);
 
-      return acc;
-    },
-    {} as Record<string, any>,
+        return acc;
+      },
+      {} as Record<string, any>,
+    ),
   );
 </script>
 

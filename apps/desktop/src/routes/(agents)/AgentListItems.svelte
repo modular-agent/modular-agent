@@ -12,7 +12,7 @@
 
   let { categories, agentDefs, onAddAgent }: Props = $props();
 
-  const categoryKeys = Object.keys(categories).sort();
+  const categoryKeys = $derived(Object.keys(categories).sort());
 </script>
 
 {#each categoryKeys as key}

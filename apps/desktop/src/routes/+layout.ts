@@ -22,7 +22,6 @@ export async function load() {
   );
 
   return {
-    // dailyStats,
     coreSettings,
     agentDefs,
     agentGlobalConfigsMap,
