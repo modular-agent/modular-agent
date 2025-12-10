@@ -58,9 +58,9 @@ pub trait Agent: Send + Sync + 'static {
         self.askit().get_global_configs(self.def_name())
     }
 
-    fn flow_id(&self) -> &str;
+    fn stream_id(&self) -> &str;
 
-    fn set_flow_id(&mut self, flow_id: String);
+    fn set_stream_id(&mut self, stream_id: String);
 
     async fn start(&mut self) -> Result<(), AgentError>;
 
@@ -103,9 +103,9 @@ pub struct AgentData {
     /// The specification of the agent.
     pub spec: AgentSpec,
 
-    /// The flow identifier for the agent.
-    /// Empty string when the agent does not belong to any flow.
-    pub flow_id: String,
+    /// The stream identifier for the agent.
+    /// Empty string when the agent does not belong to any stream.
+    pub stream_id: String,
 
     /// The current status of the agent.
     pub status: AgentStatus,
@@ -117,7 +117,7 @@ impl AgentData {
             askit,
             id,
             spec,
-            flow_id: String::new(),
+            stream_id: String::new(),
             status: AgentStatus::Init,
         }
     }
@@ -233,12 +233,12 @@ impl<T: AsAgent> Agent for T {
         self.configs_changed()
     }
 
-    fn flow_id(&self) -> &str {
-        &self.data().flow_id
+    fn stream_id(&self) -> &str {
+        &self.data().stream_id
     }
 
-    fn set_flow_id(&mut self, flow_id: String) {
-        self.mut_data().flow_id = flow_id.clone();
+    fn set_stream_id(&mut self, stream_id: String) {
+        self.mut_data().stream_id = stream_id.clone();
     }
 
     async fn start(&mut self) -> Result<(), AgentError> {

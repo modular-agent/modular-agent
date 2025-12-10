@@ -2,8 +2,8 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum AgentError {
-    #[error("Agent flow {0} already exists")]
-    DuplicateFlowName(String),
+    #[error("Agent stream {0} already exists")]
+    DuplicateStreamName(String),
 
     #[error("Invalid {0} value in array")]
     InvalidArrayValue(String),
@@ -11,8 +11,8 @@ pub enum AgentError {
     #[error("{0}: Agent definition \"{1}\" is invalid")]
     InvalidDefinition(String, String),
 
-    #[error("Invalid agent flow name: {0}")]
-    InvalidFlowName(String),
+    #[error("Invalid agent stream name: {0}")]
+    InvalidStreamName(String),
 
     #[error("Invalid {0} value")]
     InvalidValue(String),
@@ -20,8 +20,8 @@ pub enum AgentError {
     #[error("{0}: Agent definition \"{1}\" is missing")]
     MissingDefinition(String, String),
 
-    #[error("Failed to rename agent flow: {0}")]
-    RenameFlowFailed(String),
+    #[error("Failed to rename agent stream: {0}")]
+    RenameStreamFailed(String),
 
     #[error("Unknown agent def kind: {0}")]
     UnknownDefKind(String),
@@ -59,8 +59,8 @@ pub enum AgentError {
     #[error("Edge {0} not found")]
     EdgeNotFound(String),
 
-    #[error("Agent flow {0} not found")]
-    FlowNotFound(String),
+    #[error("Agent stream {0} not found")]
+    StreamNotFound(String),
 
     #[error("Agent {0} definition not found")]
     AgentDefinitionNotFound(String),

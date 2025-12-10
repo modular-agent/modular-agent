@@ -11,7 +11,7 @@ mod config;
 mod context;
 mod definition;
 mod error;
-mod flow;
+mod stream;
 mod message;
 mod output;
 mod registry;
@@ -49,7 +49,7 @@ pub use definition::{
     AgentConfigSpec, AgentConfigSpecs, AgentDefinition, AgentDefinitions, AgentDisplayConfigSpec,
 };
 pub use error::AgentError;
-pub use flow::{AgentFlow, AgentFlowEdge, AgentFlowNode, AgentFlows};
+pub use stream::{AgentStream, AgentStreamEdge, AgentStreamNode, AgentStreams};
 pub use output::AgentOutput;
 pub use registry::AgentRegistration;
 pub use value::{AgentValue, AgentValueMap};

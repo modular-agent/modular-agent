@@ -185,7 +185,7 @@ impl AsAgent for VarInAgent {
             // if var_name is not set, stop processing
             return Ok(());
         }
-        let board_name = board_name_for_var(self.flow_id(), &var_name);
+        let board_name = board_name_for_var(self.stream_id(), &var_name);
         let askit = self.askit();
         askit.try_send_board_out(board_name.clone(), ctx, value.clone())?;
 
@@ -223,7 +223,7 @@ impl AsAgent for VarOutAgent {
 
     async fn start(&mut self) -> Result<(), AgentError> {
         if let Some(var_name) = &self.var_name {
-            let board_name = board_name_for_var(self.flow_id(), var_name);
+            let board_name = board_name_for_var(self.stream_id(), var_name);
             let askit = self.askit();
             let mut board_out_agents = askit.board_out_agents.lock().unwrap();
             if let Some(nodes) = board_out_agents.get_mut(&board_name) {
@@ -237,7 +237,7 @@ impl AsAgent for VarOutAgent {
 
     async fn stop(&mut self) -> Result<(), AgentError> {
         if let Some(var_name) = &self.var_name {
-            let board_name = board_name_for_var(self.flow_id(), var_name);
+            let board_name = board_name_for_var(self.stream_id(), var_name);
             let askit = self.askit();
             let mut board_out_agents = askit.board_out_agents.lock().unwrap();
             if let Some(nodes) = board_out_agents.get_mut(&board_name) {
@@ -251,7 +251,7 @@ impl AsAgent for VarOutAgent {
         let new_var_name = self.configs()?.get_string(CONFIG_VAR_NAME).ok();
         if self.var_name != new_var_name {
             if let Some(var_name) = &self.var_name {
-                let board_name = board_name_for_var(self.flow_id(), var_name);
+                let board_name = board_name_for_var(self.stream_id(), var_name);
                 let askit = self.askit();
                 let mut board_out_agents = askit.board_out_agents.lock().unwrap();
                 if let Some(nodes) = board_out_agents.get_mut(&board_name) {
@@ -259,7 +259,7 @@ impl AsAgent for VarOutAgent {
                 }
             }
             if let Some(var_name) = &new_var_name {
-                let board_name = board_name_for_var(self.flow_id(), var_name);
+                let board_name = board_name_for_var(self.stream_id(), var_name);
                 let askit = self.askit();
                 let mut board_out_agents = askit.board_out_agents.lock().unwrap();
                 if let Some(nodes) = board_out_agents.get_mut(&board_name) {

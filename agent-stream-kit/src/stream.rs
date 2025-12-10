@@ -9,24 +9,24 @@ use crate::askit::ASKit;
 use crate::definition::{AgentDefinition, AgentDefinitions};
 use crate::error::AgentError;
 
-pub type AgentFlows = FnvIndexMap<String, AgentFlow>;
+pub type AgentStreams = FnvIndexMap<String, AgentStream>;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct AgentFlow {
+pub struct AgentStream {
     #[serde(skip_serializing_if = "String::is_empty")]
     id: String,
 
     name: String,
 
-    nodes: Vec<AgentFlowNode>,
+    nodes: Vec<AgentStreamNode>,
 
-    edges: Vec<AgentFlowEdge>,
+    edges: Vec<AgentStreamEdge>,
 
     #[serde(flatten)]
     pub extensions: FnvIndexMap<String, Value>,
 }
 
-impl AgentFlow {
+impl AgentStream {
     pub fn new(name: String) -> Self {
         Self {
             id: new_id(),
@@ -49,11 +49,11 @@ impl AgentFlow {
         self.name = new_name;
     }
 
-    pub fn nodes(&self) -> &Vec<AgentFlowNode> {
+    pub fn nodes(&self) -> &Vec<AgentStreamNode> {
         &self.nodes
     }
 
-    pub fn add_node(&mut self, node: AgentFlowNode) {
+    pub fn add_node(&mut self, node: AgentStreamNode) {
         self.nodes.push(node);
     }
 
@@ -61,19 +61,19 @@ impl AgentFlow {
         self.nodes.retain(|node| node.id != node_id);
     }
 
-    pub fn set_nodes(&mut self, nodes: Vec<AgentFlowNode>) {
+    pub fn set_nodes(&mut self, nodes: Vec<AgentStreamNode>) {
         self.nodes = nodes;
     }
 
-    pub fn edges(&self) -> &Vec<AgentFlowEdge> {
+    pub fn edges(&self) -> &Vec<AgentStreamEdge> {
         &self.edges
     }
 
-    pub fn add_edge(&mut self, edge: AgentFlowEdge) {
+    pub fn add_edge(&mut self, edge: AgentStreamEdge) {
         self.edges.push(edge);
     }
 
-    pub fn remove_edge(&mut self, edge_id: &str) -> Option<AgentFlowEdge> {
+    pub fn remove_edge(&mut self, edge_id: &str) -> Option<AgentStreamEdge> {
         if let Some(edge) = self.edges.iter().find(|edge| edge.id == edge_id).cloned() {
             self.edges.retain(|e| e.id != edge_id);
             Some(edge)
@@ -82,7 +82,7 @@ impl AgentFlow {
         }
     }
 
-    pub fn set_edges(&mut self, edges: Vec<AgentFlowEdge>) {
+    pub fn set_edges(&mut self, edges: Vec<AgentStreamEdge>) {
         self.edges = edges;
     }
 
@@ -123,52 +123,52 @@ impl AgentFlow {
     }
 
     pub fn from_json(json_str: &str) -> Result<Self, AgentError> {
-        let mut flow: AgentFlow = serde_json::from_str(json_str)
+        let mut stream: AgentStream = serde_json::from_str(json_str)
             .map_err(|e| AgentError::SerializationError(e.to_string()))?;
-        flow.id = new_id();
-        Ok(flow)
+        stream.id = new_id();
+        Ok(stream)
     }
 
-    /// Deserialize a flow with a compatibility layer for legacy node formats.
+    /// Deserialize a stream with a compatibility layer for legacy node formats.
     /// Falls back to parsing the old shape and populates spec.inputs/outputs from AgentDefinitions.
     pub fn from_json_with_defs(
         json_str: &str,
         defs: &AgentDefinitions,
     ) -> Result<Self, AgentError> {
-        match serde_json::from_str::<AgentFlow>(json_str) {
-            Ok(mut flow) => {
-                flow.id = new_id();
-                Ok(flow)
+        match serde_json::from_str::<AgentStream>(json_str) {
+            Ok(mut stream) => {
+                stream.id = new_id();
+                Ok(stream)
             }
             Err(deserialize_err) => {
                 let legacy_json: Value = serde_json::from_str(json_str).map_err(|e| {
-                    AgentError::SerializationError(format!("Failed to parse AgentFlow json: {}", e))
+                    AgentError::SerializationError(format!("Failed to parse AgentStream json: {}", e))
                 })?;
 
-                let converted_json = convert_legacy_flow(legacy_json, defs).map_err(|e| {
+                let converted_json = convert_legacy_stream(legacy_json, defs).map_err(|e| {
                     AgentError::SerializationError(format!(
-                        "Failed to deserialize AgentFlow ({}); legacy format conversion failed: {}",
+                        "Failed to deserialize AgentStream ({}); legacy format conversion failed: {}",
                         deserialize_err, e
                     ))
                 })?;
 
-                let mut flow: AgentFlow = serde_json::from_value(converted_json).map_err(|e| {
+                let mut stream: AgentStream = serde_json::from_value(converted_json).map_err(|e| {
                     AgentError::SerializationError(format!(
-                        "Failed to deserialize converted AgentFlow: {}",
+                        "Failed to deserialize converted AgentStream: {}",
                         e
                     ))
                 })?;
-                flow.id = new_id();
-                Ok(flow)
+                stream.id = new_id();
+                Ok(stream)
             }
         }
     }
 }
 
-pub fn copy_sub_flow(
-    nodes: &Vec<AgentFlowNode>,
-    edges: &Vec<AgentFlowEdge>,
-) -> (Vec<AgentFlowNode>, Vec<AgentFlowEdge>) {
+pub fn copy_sub_stream(
+    nodes: &Vec<AgentStreamNode>,
+    edges: &Vec<AgentStreamEdge>,
+) -> (Vec<AgentStreamNode>, Vec<AgentStreamEdge>) {
     let mut new_nodes = Vec::new();
     let mut node_id_map = FnvIndexMap::default();
     for node in nodes {
@@ -197,10 +197,10 @@ pub fn copy_sub_flow(
     (new_nodes, new_edges)
 }
 
-// AgentFlowNode
+// AgentStreamNode
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct AgentFlowNode {
+pub struct AgentStreamNode {
     pub id: String,
 
     pub enabled: bool,
@@ -211,7 +211,7 @@ pub struct AgentFlowNode {
     pub extensions: FnvIndexMap<String, Value>,
 }
 
-impl AgentFlowNode {
+impl AgentStreamNode {
     pub fn new(def: &AgentDefinition) -> Result<Self, AgentError> {
         let spec = def.to_spec();
 
@@ -232,25 +232,25 @@ fn new_id() -> String {
         .to_string();
 }
 
-fn convert_legacy_flow(
+fn convert_legacy_stream(
     mut legacy_json: Value,
     defs: &AgentDefinitions,
 ) -> Result<Value, AgentError> {
     let Some(obj) = legacy_json.as_object_mut() else {
         return Err(AgentError::SerializationError(
-            "AgentFlow json is not an object".to_string(),
+            "AgentStream json is not an object".to_string(),
         ));
     };
 
     let Some(nodes_val) = obj.get_mut("nodes") else {
         return Err(AgentError::SerializationError(
-            "AgentFlow json missing nodes".to_string(),
+            "AgentStream json missing nodes".to_string(),
         ));
     };
 
     let Some(nodes) = nodes_val.as_array_mut() else {
         return Err(AgentError::SerializationError(
-            "AgentFlow nodes is not an array".to_string(),
+            "AgentStream nodes is not an array".to_string(),
         ));
     };
 
@@ -264,7 +264,7 @@ fn convert_legacy_flow(
 fn convert_legacy_node(node_val: &mut Value, defs: &AgentDefinitions) -> Result<(), AgentError> {
     let Some(node_obj) = node_val.as_object_mut() else {
         return Err(AgentError::SerializationError(
-            "AgentFlow node is not an object".to_string(),
+            "AgentStream node is not an object".to_string(),
         ));
     };
 
@@ -333,10 +333,10 @@ fn convert_legacy_node(node_val: &mut Value, defs: &AgentDefinitions) -> Result<
     Ok(())
 }
 
-// AgentFlowEdge
+// AgentStreamEdge
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
-pub struct AgentFlowEdge {
+pub struct AgentStreamEdge {
     pub id: String,
     pub source: String,
     pub source_handle: String,

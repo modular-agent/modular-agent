@@ -1,7 +1,7 @@
 extern crate agent_stream_kit as askit;
 
 use askit::{
-    ASKit, AgentContext, AgentFlow, AgentFlowEdge, AgentFlowNode, AgentStatus, AgentValue,
+    ASKit, AgentContext, AgentStream, AgentStreamEdge, AgentStreamNode, AgentStatus, AgentValue,
     test_utils::{TestProbeAgent, probe_receiver},
 };
 
@@ -78,20 +78,20 @@ async fn test_agent_process() {
 
     // build a flow: Counter -> TestProbe
     let counter_def = askit.get_agent_definition(COUNTER_DEF).unwrap();
-    let mut counter_node = AgentFlowNode::new(&counter_def).unwrap();
+    let mut counter_node = AgentStreamNode::new(&counter_def).unwrap();
     counter_node.enabled = true;
 
     let probe_def = askit.get_agent_definition(PROBE_DEF).unwrap();
-    let mut probe_node = AgentFlowNode::new(&probe_def).unwrap();
+    let mut probe_node = AgentStreamNode::new(&probe_def).unwrap();
     probe_node.enabled = true;
 
     let counter_id = counter_node.id.clone();
     let probe_id = probe_node.id.clone();
 
-    let mut flow = AgentFlow::new("counter_probe_flow".into());
+    let mut flow = AgentStream::new("counter_probe_flow".into());
     flow.add_node(counter_node);
     flow.add_node(probe_node);
-    flow.add_edge(AgentFlowEdge {
+    flow.add_edge(AgentStreamEdge {
         id: "edge_counter_probe".into(),
         source: counter_id.clone(),
         source_handle: "count".into(),
@@ -99,7 +99,7 @@ async fn test_agent_process() {
         target_handle: "in".into(),
     });
 
-    askit.add_agent_flow(&flow).unwrap();
+    askit.add_agent_stream(&flow).unwrap();
     askit.ready().await.unwrap();
 
     askit
