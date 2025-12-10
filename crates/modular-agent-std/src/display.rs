@@ -68,7 +68,6 @@ impl AsAgent for DebugValueAgent {
         _pin: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
-        let value = AgentValue::object([("value".to_string(), value)].into());
         let ctx_json =
             serde_json::to_value(&ctx).map_err(|e| AgentError::InvalidValue(e.to_string()))?;
         let ctx = AgentValue::from_json(ctx_json)?;
