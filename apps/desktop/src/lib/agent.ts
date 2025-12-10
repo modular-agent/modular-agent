@@ -163,7 +163,7 @@ export function serializeAgentStreamEdge(edge: TAgentStreamEdge): AgentStreamEdg
 
 export function inferTypeForDisplay(spec: AgentDisplayConfigSpec | undefined, value: any): string {
   let ty = spec?.type;
-  if (ty !== undefined && ty !== null && ty === "*") {
+  if (ty !== undefined && ty !== null && ty !== "*") {
     return ty;
   }
 
