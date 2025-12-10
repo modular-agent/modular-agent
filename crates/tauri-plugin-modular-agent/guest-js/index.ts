@@ -6,15 +6,15 @@ export type AgentGlobalConfigsMap = Record<string, AgentConfigs>;
 export type AgentDefinition = {
   kind: string;
   name: string;
-  title: string | null;
-  description: string | null;
-  category: string | null;
-  path: string;
-  inputs: string[] | null;
-  outputs: string[] | null;
-  default_configs: AgentConfigSpecs | null;
-  global_configs: AgentGlobalConfigSpecs | null;
-  display_configs: AgentDisplayConfigSpecs | null;
+  title?: string | null;
+  description?: string | null;
+  category?: string | null;
+  inputs?: string[] | null;
+  outputs?: string[] | null;
+  default_configs?: AgentConfigSpecs | null;
+  global_configs?: AgentGlobalConfigSpecs | null;
+  display_configs?: AgentDisplayConfigSpecs | null;
+  native_thread?: boolean | null;
 };
 
 export type AgentConfigSpecs = Record<string, AgentConfigSpec>;
