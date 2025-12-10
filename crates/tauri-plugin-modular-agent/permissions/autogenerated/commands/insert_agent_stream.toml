@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-insert-agent-stream"
+description = "Enables the insert_agent_stream command without any pre-configured scope."
+commands.allow = ["insert_agent_stream"]
+
+[[permission]]
+identifier = "deny-insert-agent-stream"
+description = "Denies the insert_agent_stream command without any pre-configured scope."
+commands.deny = ["insert_agent_stream"]

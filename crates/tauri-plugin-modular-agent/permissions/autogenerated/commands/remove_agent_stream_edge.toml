@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-remove-agent-stream-edge"
+description = "Enables the remove_agent_stream_edge command without any pre-configured scope."
+commands.allow = ["remove_agent_stream_edge"]
+
+[[permission]]
+identifier = "deny-remove-agent-stream-edge"
+description = "Denies the remove_agent_stream_edge command without any pre-configured scope."
+commands.deny = ["remove_agent_stream_edge"]

@@ -1,6 +1,6 @@
 use agent_stream_kit::{
-    AgentConfigSpecs, AgentConfigs, AgentConfigsMap, AgentDefinition, AgentDefinitions, AgentFlow,
-    AgentFlowEdge, AgentFlowNode, AgentFlows, AgentSpec, AgentValue,
+    AgentConfigSpecs, AgentConfigs, AgentConfigsMap, AgentDefinition, AgentDefinitions, AgentSpec,
+    AgentStream, AgentStreamEdge, AgentStreamNode, AgentStreams, AgentValue,
 };
 use tauri::{AppHandle, Runtime};
 
@@ -29,110 +29,123 @@ pub(crate) fn get_agent_spec<R: Runtime>(app: AppHandle<R>, agent_id: String) ->
     app.askit().get_agent_spec(&agent_id)
 }
 
-// flow
+// stream
 
 #[tauri::command]
-pub(crate) fn get_agent_flows<R: Runtime>(app: AppHandle<R>) -> AgentFlows {
-    app.askit().get_agent_flows()
+pub(crate) fn get_agent_streams<R: Runtime>(app: AppHandle<R>) -> AgentStreams {
+    app.askit().get_agent_streams()
 }
 
 #[tauri::command]
-pub(crate) fn new_agent_flow<R: Runtime>(
+pub(crate) fn new_agent_stream<R: Runtime>(
     app: AppHandle<R>,
-    flow_name: String,
-) -> Result<AgentFlow> {
-    app.askit().new_agent_flow(&flow_name).map_err(Into::into)
+    stream_name: String,
+) -> Result<AgentStream> {
+    app.askit()
+        .new_agent_stream(&stream_name)
+        .map_err(Into::into)
 }
 
 #[tauri::command]
-pub(crate) fn rename_agent_flow<R: Runtime>(
+pub(crate) fn rename_agent_stream<R: Runtime>(
     app: AppHandle<R>,
     id: String,
     new_name: String,
 ) -> Result<String> {
     app.askit()
-        .rename_agent_flow(&id, &new_name)
+        .rename_agent_stream(&id, &new_name)
         .map_err(Into::into)
 }
 
 #[tauri::command]
-pub(crate) fn unique_flow_name<R: Runtime>(app: tauri::AppHandle<R>, name: String) -> String {
-    app.askit().unique_flow_name(&name)
+pub(crate) fn unique_stream_name<R: Runtime>(app: tauri::AppHandle<R>, name: String) -> String {
+    app.askit().unique_stream_name(&name)
 }
 
 #[tauri::command]
-pub(crate) fn add_agent_flow<R: Runtime>(app: AppHandle<R>, agent_flow: AgentFlow) -> Result<()> {
-    app.askit().add_agent_flow(&agent_flow).map_err(Into::into)
+pub(crate) fn add_agent_stream<R: Runtime>(
+    app: AppHandle<R>,
+    agent_stream: AgentStream,
+) -> Result<()> {
+    app.askit()
+        .add_agent_stream(&agent_stream)
+        .map_err(Into::into)
 }
 
 #[tauri::command]
-pub(crate) async fn remove_agent_flow<R: Runtime>(
+pub(crate) async fn remove_agent_stream<R: Runtime>(
     app: tauri::AppHandle<R>,
     id: String,
 ) -> Result<()> {
-    app.askit().remove_agent_flow(&id).await.map_err(Into::into)
-}
-
-#[tauri::command]
-pub(crate) fn insert_agent_flow<R: Runtime>(
-    app: AppHandle<R>,
-    agent_flow: AgentFlow,
-) -> Result<()> {
     app.askit()
-        .insert_agent_flow(agent_flow)
+        .remove_agent_stream(&id)
+        .await
         .map_err(Into::into)
 }
 
 #[tauri::command]
-pub(crate) fn copy_sub_flow<R: Runtime>(
+pub(crate) fn insert_agent_stream<R: Runtime>(
     app: AppHandle<R>,
-    nodes: Vec<AgentFlowNode>,
-    edges: Vec<AgentFlowEdge>,
-) -> (Vec<AgentFlowNode>, Vec<AgentFlowEdge>) {
-    app.askit().copy_sub_flow(&nodes, &edges)
+    agent_stream: AgentStream,
+) -> Result<()> {
+    app.askit()
+        .insert_agent_stream(agent_stream)
+        .map_err(Into::into)
 }
 
 #[tauri::command]
-pub(crate) async fn start_agent_flow<R: Runtime>(app: AppHandle<R>, id: String) -> Result<()> {
-    app.askit().start_agent_flow(&id).await.map_err(Into::into)
+pub(crate) fn copy_sub_stream<R: Runtime>(
+    app: AppHandle<R>,
+    nodes: Vec<AgentStreamNode>,
+    edges: Vec<AgentStreamEdge>,
+) -> (Vec<AgentStreamNode>, Vec<AgentStreamEdge>) {
+    app.askit().copy_sub_stream(&nodes, &edges)
 }
 
 #[tauri::command]
-pub(crate) async fn stop_agent_flow<R: Runtime>(app: AppHandle<R>, id: String) -> Result<()> {
-    app.askit().stop_agent_flow(&id).await.map_err(Into::into)
+pub(crate) async fn start_agent_stream<R: Runtime>(app: AppHandle<R>, id: String) -> Result<()> {
+    app.askit()
+        .start_agent_stream(&id)
+        .await
+        .map_err(Into::into)
+}
+
+#[tauri::command]
+pub(crate) async fn stop_agent_stream<R: Runtime>(app: AppHandle<R>, id: String) -> Result<()> {
+    app.askit().stop_agent_stream(&id).await.map_err(Into::into)
 }
 
 // node
 
 #[tauri::command]
-pub fn new_agent_flow_node<R: Runtime>(
+pub fn new_agent_stream_node<R: Runtime>(
     app: AppHandle<R>,
     def_name: String,
-) -> Result<AgentFlowNode> {
+) -> Result<AgentStreamNode> {
     app.askit()
-        .new_agent_flow_node(&def_name)
+        .new_agent_stream_node(&def_name)
         .map_err(Into::into)
 }
 
 #[tauri::command]
-pub(crate) fn add_agent_flow_node<R: Runtime>(
+pub(crate) fn add_agent_stream_node<R: Runtime>(
     app: AppHandle<R>,
-    flow_id: String,
-    node: AgentFlowNode,
+    stream_id: String,
+    node: AgentStreamNode,
 ) -> Result<()> {
     app.askit()
-        .add_agent_flow_node(&flow_id, &node)
+        .add_agent_stream_node(&stream_id, &node)
         .map_err(Into::into)
 }
 
 #[tauri::command]
-pub(crate) async fn remove_agent_flow_node<R: Runtime>(
+pub(crate) async fn remove_agent_stream_node<R: Runtime>(
     app: AppHandle<R>,
-    flow_id: String,
+    stream_id: String,
     node_id: String,
 ) -> Result<()> {
     app.askit()
-        .remove_agent_flow_node(&flow_id, &node_id)
+        .remove_agent_stream_node(&stream_id, &node_id)
         .await
         .map_err(Into::into)
 }
@@ -140,24 +153,24 @@ pub(crate) async fn remove_agent_flow_node<R: Runtime>(
 // edge
 
 #[tauri::command]
-pub(crate) fn add_agent_flow_edge<R: Runtime>(
+pub(crate) fn add_agent_stream_edge<R: Runtime>(
     app: AppHandle<R>,
-    flow_id: String,
-    edge: AgentFlowEdge,
+    stream_id: String,
+    edge: AgentStreamEdge,
 ) -> Result<()> {
     app.askit()
-        .add_agent_flow_edge(&flow_id, &edge)
+        .add_agent_stream_edge(&stream_id, &edge)
         .map_err(Into::into)
 }
 
 #[tauri::command]
-pub(crate) fn remove_agent_flow_edge<R: Runtime>(
+pub(crate) fn remove_agent_stream_edge<R: Runtime>(
     app: AppHandle<R>,
-    flow_id: String,
+    stream_id: String,
     edge_id: String,
 ) -> Result<()> {
     app.askit()
-        .remove_agent_flow_edge(&flow_id, &edge_id)
+        .remove_agent_stream_edge(&stream_id, &edge_id)
         .map_err(Into::into)
 }
 

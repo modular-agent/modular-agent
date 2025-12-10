@@ -295,52 +295,52 @@
       "type": "string",
       "oneOf": [
         {
-          "description": "Enables the add_agent_flow command without any pre-configured scope.",
+          "description": "Enables the add_agent_stream command without any pre-configured scope.",
           "type": "string",
-          "const": "allow-add-agent-flow",
-          "markdownDescription": "Enables the add_agent_flow command without any pre-configured scope."
+          "const": "allow-add-agent-stream",
+          "markdownDescription": "Enables the add_agent_stream command without any pre-configured scope."
         },
         {
-          "description": "Denies the add_agent_flow command without any pre-configured scope.",
+          "description": "Denies the add_agent_stream command without any pre-configured scope.",
           "type": "string",
-          "const": "deny-add-agent-flow",
-          "markdownDescription": "Denies the add_agent_flow command without any pre-configured scope."
+          "const": "deny-add-agent-stream",
+          "markdownDescription": "Denies the add_agent_stream command without any pre-configured scope."
         },
         {
-          "description": "Enables the add_agent_flow_edge command without any pre-configured scope.",
+          "description": "Enables the add_agent_stream_edge command without any pre-configured scope.",
           "type": "string",
-          "const": "allow-add-agent-flow-edge",
-          "markdownDescription": "Enables the add_agent_flow_edge command without any pre-configured scope."
+          "const": "allow-add-agent-stream-edge",
+          "markdownDescription": "Enables the add_agent_stream_edge command without any pre-configured scope."
         },
         {
-          "description": "Denies the add_agent_flow_edge command without any pre-configured scope.",
+          "description": "Denies the add_agent_stream_edge command without any pre-configured scope.",
           "type": "string",
-          "const": "deny-add-agent-flow-edge",
-          "markdownDescription": "Denies the add_agent_flow_edge command without any pre-configured scope."
+          "const": "deny-add-agent-stream-edge",
+          "markdownDescription": "Denies the add_agent_stream_edge command without any pre-configured scope."
         },
         {
-          "description": "Enables the add_agent_flow_node command without any pre-configured scope.",
+          "description": "Enables the add_agent_stream_node command without any pre-configured scope.",
           "type": "string",
-          "const": "allow-add-agent-flow-node",
-          "markdownDescription": "Enables the add_agent_flow_node command without any pre-configured scope."
+          "const": "allow-add-agent-stream-node",
+          "markdownDescription": "Enables the add_agent_stream_node command without any pre-configured scope."
         },
         {
-          "description": "Denies the add_agent_flow_node command without any pre-configured scope.",
+          "description": "Denies the add_agent_stream_node command without any pre-configured scope.",
           "type": "string",
-          "const": "deny-add-agent-flow-node",
-          "markdownDescription": "Denies the add_agent_flow_node command without any pre-configured scope."
+          "const": "deny-add-agent-stream-node",
+          "markdownDescription": "Denies the add_agent_stream_node command without any pre-configured scope."
         },
         {
-          "description": "Enables the copy_sub_flow command without any pre-configured scope.",
+          "description": "Enables the copy_sub_stream command without any pre-configured scope.",
           "type": "string",
-          "const": "allow-copy-sub-flow",
-          "markdownDescription": "Enables the copy_sub_flow command without any pre-configured scope."
+          "const": "allow-copy-sub-stream",
+          "markdownDescription": "Enables the copy_sub_stream command without any pre-configured scope."
         },
         {
-          "description": "Denies the copy_sub_flow command without any pre-configured scope.",
+          "description": "Denies the copy_sub_stream command without any pre-configured scope.",
           "type": "string",
-          "const": "deny-copy-sub-flow",
-          "markdownDescription": "Denies the copy_sub_flow command without any pre-configured scope."
+          "const": "deny-copy-sub-stream",
+          "markdownDescription": "Denies the copy_sub_stream command without any pre-configured scope."
         },
         {
           "description": "Enables the get_agent_default_configs command without any pre-configured scope.",
@@ -379,18 +379,6 @@
           "markdownDescription": "Denies the get_agent_definitions command without any pre-configured scope."
         },
         {
-          "description": "Enables the get_agent_flows command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-get-agent-flows",
-          "markdownDescription": "Enables the get_agent_flows command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the get_agent_flows command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-get-agent-flows",
-          "markdownDescription": "Denies the get_agent_flows command without any pre-configured scope."
-        },
-        {
           "description": "Enables the get_agent_spec command without any pre-configured scope.",
           "type": "string",
           "const": "allow-get-agent-spec",
@@ -401,6 +389,18 @@
           "type": "string",
           "const": "deny-get-agent-spec",
           "markdownDescription": "Denies the get_agent_spec command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the get_agent_streams command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-agent-streams",
+          "markdownDescription": "Enables the get_agent_streams command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_agent_streams command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-agent-streams",
+          "markdownDescription": "Denies the get_agent_streams command without any pre-configured scope."
         },
         {
           "description": "Enables the get_global_configs command without any pre-configured scope.",
@@ -427,88 +427,88 @@
           "markdownDescription": "Denies the get_global_configs_map command without any pre-configured scope."
         },
         {
-          "description": "Enables the insert_agent_flow command without any pre-configured scope.",
+          "description": "Enables the insert_agent_stream command without any pre-configured scope.",
           "type": "string",
-          "const": "allow-insert-agent-flow",
-          "markdownDescription": "Enables the insert_agent_flow command without any pre-configured scope."
+          "const": "allow-insert-agent-stream",
+          "markdownDescription": "Enables the insert_agent_stream command without any pre-configured scope."
         },
         {
-          "description": "Denies the insert_agent_flow command without any pre-configured scope.",
+          "description": "Denies the insert_agent_stream command without any pre-configured scope.",
           "type": "string",
-          "const": "deny-insert-agent-flow",
-          "markdownDescription": "Denies the insert_agent_flow command without any pre-configured scope."
+          "const": "deny-insert-agent-stream",
+          "markdownDescription": "Denies the insert_agent_stream command without any pre-configured scope."
         },
         {
-          "description": "Enables the new_agent_flow command without any pre-configured scope.",
+          "description": "Enables the new_agent_stream command without any pre-configured scope.",
           "type": "string",
-          "const": "allow-new-agent-flow",
-          "markdownDescription": "Enables the new_agent_flow command without any pre-configured scope."
+          "const": "allow-new-agent-stream",
+          "markdownDescription": "Enables the new_agent_stream command without any pre-configured scope."
         },
         {
-          "description": "Denies the new_agent_flow command without any pre-configured scope.",
+          "description": "Denies the new_agent_stream command without any pre-configured scope.",
           "type": "string",
-          "const": "deny-new-agent-flow",
-          "markdownDescription": "Denies the new_agent_flow command without any pre-configured scope."
+          "const": "deny-new-agent-stream",
+          "markdownDescription": "Denies the new_agent_stream command without any pre-configured scope."
         },
         {
-          "description": "Enables the new_agent_flow_node command without any pre-configured scope.",
+          "description": "Enables the new_agent_stream_node command without any pre-configured scope.",
           "type": "string",
-          "const": "allow-new-agent-flow-node",
-          "markdownDescription": "Enables the new_agent_flow_node command without any pre-configured scope."
+          "const": "allow-new-agent-stream-node",
+          "markdownDescription": "Enables the new_agent_stream_node command without any pre-configured scope."
         },
         {
-          "description": "Denies the new_agent_flow_node command without any pre-configured scope.",
+          "description": "Denies the new_agent_stream_node command without any pre-configured scope.",
           "type": "string",
-          "const": "deny-new-agent-flow-node",
-          "markdownDescription": "Denies the new_agent_flow_node command without any pre-configured scope."
+          "const": "deny-new-agent-stream-node",
+          "markdownDescription": "Denies the new_agent_stream_node command without any pre-configured scope."
         },
         {
-          "description": "Enables the remove_agent_flow command without any pre-configured scope.",
+          "description": "Enables the remove_agent_stream command without any pre-configured scope.",
           "type": "string",
-          "const": "allow-remove-agent-flow",
-          "markdownDescription": "Enables the remove_agent_flow command without any pre-configured scope."
+          "const": "allow-remove-agent-stream",
+          "markdownDescription": "Enables the remove_agent_stream command without any pre-configured scope."
         },
         {
-          "description": "Denies the remove_agent_flow command without any pre-configured scope.",
+          "description": "Denies the remove_agent_stream command without any pre-configured scope.",
           "type": "string",
-          "const": "deny-remove-agent-flow",
-          "markdownDescription": "Denies the remove_agent_flow command without any pre-configured scope."
+          "const": "deny-remove-agent-stream",
+          "markdownDescription": "Denies the remove_agent_stream command without any pre-configured scope."
         },
         {
-          "description": "Enables the remove_agent_flow_edge command without any pre-configured scope.",
+          "description": "Enables the remove_agent_stream_edge command without any pre-configured scope.",
           "type": "string",
-          "const": "allow-remove-agent-flow-edge",
-          "markdownDescription": "Enables the remove_agent_flow_edge command without any pre-configured scope."
+          "const": "allow-remove-agent-stream-edge",
+          "markdownDescription": "Enables the remove_agent_stream_edge command without any pre-configured scope."
         },
         {
-          "description": "Denies the remove_agent_flow_edge command without any pre-configured scope.",
+          "description": "Denies the remove_agent_stream_edge command without any pre-configured scope.",
           "type": "string",
-          "const": "deny-remove-agent-flow-edge",
-          "markdownDescription": "Denies the remove_agent_flow_edge command without any pre-configured scope."
+          "const": "deny-remove-agent-stream-edge",
+          "markdownDescription": "Denies the remove_agent_stream_edge command without any pre-configured scope."
         },
         {
-          "description": "Enables the remove_agent_flow_node command without any pre-configured scope.",
+          "description": "Enables the remove_agent_stream_node command without any pre-configured scope.",
           "type": "string",
-          "const": "allow-remove-agent-flow-node",
-          "markdownDescription": "Enables the remove_agent_flow_node command without any pre-configured scope."
+          "const": "allow-remove-agent-stream-node",
+          "markdownDescription": "Enables the remove_agent_stream_node command without any pre-configured scope."
         },
         {
-          "description": "Denies the remove_agent_flow_node command without any pre-configured scope.",
+          "description": "Denies the remove_agent_stream_node command without any pre-configured scope.",
           "type": "string",
-          "const": "deny-remove-agent-flow-node",
-          "markdownDescription": "Denies the remove_agent_flow_node command without any pre-configured scope."
+          "const": "deny-remove-agent-stream-node",
+          "markdownDescription": "Denies the remove_agent_stream_node command without any pre-configured scope."
         },
         {
-          "description": "Enables the rename_agent_flow command without any pre-configured scope.",
+          "description": "Enables the rename_agent_stream command without any pre-configured scope.",
           "type": "string",
-          "const": "allow-rename-agent-flow",
-          "markdownDescription": "Enables the rename_agent_flow command without any pre-configured scope."
+          "const": "allow-rename-agent-stream",
+          "markdownDescription": "Enables the rename_agent_stream command without any pre-configured scope."
         },
         {
-          "description": "Denies the rename_agent_flow command without any pre-configured scope.",
+          "description": "Denies the rename_agent_stream command without any pre-configured scope.",
           "type": "string",
-          "const": "deny-rename-agent-flow",
-          "markdownDescription": "Denies the rename_agent_flow command without any pre-configured scope."
+          "const": "deny-rename-agent-stream",
+          "markdownDescription": "Denies the rename_agent_stream command without any pre-configured scope."
         },
         {
           "description": "Enables the set_agent_configs command without any pre-configured scope.",
@@ -559,16 +559,16 @@
           "markdownDescription": "Denies the start_agent command without any pre-configured scope."
         },
         {
-          "description": "Enables the start_agent_flow command without any pre-configured scope.",
+          "description": "Enables the start_agent_stream command without any pre-configured scope.",
           "type": "string",
-          "const": "allow-start-agent-flow",
-          "markdownDescription": "Enables the start_agent_flow command without any pre-configured scope."
+          "const": "allow-start-agent-stream",
+          "markdownDescription": "Enables the start_agent_stream command without any pre-configured scope."
         },
         {
-          "description": "Denies the start_agent_flow command without any pre-configured scope.",
+          "description": "Denies the start_agent_stream command without any pre-configured scope.",
           "type": "string",
-          "const": "deny-start-agent-flow",
-          "markdownDescription": "Denies the start_agent_flow command without any pre-configured scope."
+          "const": "deny-start-agent-stream",
+          "markdownDescription": "Denies the start_agent_stream command without any pre-configured scope."
         },
         {
           "description": "Enables the stop_agent command without any pre-configured scope.",
@@ -583,28 +583,28 @@
           "markdownDescription": "Denies the stop_agent command without any pre-configured scope."
         },
         {
-          "description": "Enables the stop_agent_flow command without any pre-configured scope.",
+          "description": "Enables the stop_agent_stream command without any pre-configured scope.",
           "type": "string",
-          "const": "allow-stop-agent-flow",
-          "markdownDescription": "Enables the stop_agent_flow command without any pre-configured scope."
+          "const": "allow-stop-agent-stream",
+          "markdownDescription": "Enables the stop_agent_stream command without any pre-configured scope."
         },
         {
-          "description": "Denies the stop_agent_flow command without any pre-configured scope.",
+          "description": "Denies the stop_agent_stream command without any pre-configured scope.",
           "type": "string",
-          "const": "deny-stop-agent-flow",
-          "markdownDescription": "Denies the stop_agent_flow command without any pre-configured scope."
+          "const": "deny-stop-agent-stream",
+          "markdownDescription": "Denies the stop_agent_stream command without any pre-configured scope."
         },
         {
-          "description": "Enables the unique_flow_name command without any pre-configured scope.",
+          "description": "Enables the unique_stream_name command without any pre-configured scope.",
           "type": "string",
-          "const": "allow-unique-flow-name",
-          "markdownDescription": "Enables the unique_flow_name command without any pre-configured scope."
+          "const": "allow-unique-stream-name",
+          "markdownDescription": "Enables the unique_stream_name command without any pre-configured scope."
         },
         {
-          "description": "Denies the unique_flow_name command without any pre-configured scope.",
+          "description": "Denies the unique_stream_name command without any pre-configured scope.",
           "type": "string",
-          "const": "deny-unique-flow-name",
-          "markdownDescription": "Denies the unique_flow_name command without any pre-configured scope."
+          "const": "deny-unique-stream-name",
+          "markdownDescription": "Denies the unique_stream_name command without any pre-configured scope."
         },
         {
           "description": "Enables the write_board command without any pre-configured scope.",
@@ -619,10 +619,10 @@
           "markdownDescription": "Denies the write_board command without any pre-configured scope."
         },
         {
-          "description": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-get-agent-definition`\n- `allow-get-agent-definitions`\n- `allow-get-agent-flows`\n- `allow-get-agent-spec`\n- `allow-new-agent-flow`\n- `allow-rename-agent-flow`\n- `allow-unique-flow-name`\n- `allow-add-agent-flow`\n- `allow-remove-agent-flow`\n- `allow-insert-agent-flow`\n- `allow-copy-sub-flow`\n- `allow-start-agent-flow`\n- `allow-stop-agent-flow`\n- `allow-new-agent-flow-node`\n- `allow-add-agent-flow-node`\n- `allow-remove-agent-flow-node`\n- `allow-add-agent-flow-edge`\n- `allow-remove-agent-flow-edge`\n- `allow-start-agent`\n- `allow-stop-agent`\n- `allow-write-board`\n- `allow-set-agent-configs`\n- `allow-get-global-configs`\n- `allow-get-global-configs-map`\n- `allow-set-global-configs`\n- `allow-set-global-configs-map`\n- `allow-get-agent-default-configs`",
+          "description": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-get-agent-definition`\n- `allow-get-agent-definitions`\n- `allow-get-agent-streams`\n- `allow-get-agent-spec`\n- `allow-new-agent-stream`\n- `allow-rename-agent-stream`\n- `allow-unique-stream-name`\n- `allow-add-agent-stream`\n- `allow-remove-agent-stream`\n- `allow-insert-agent-stream`\n- `allow-copy-sub-stream`\n- `allow-start-agent-stream`\n- `allow-stop-agent-stream`\n- `allow-new-agent-stream-node`\n- `allow-add-agent-stream-node`\n- `allow-remove-agent-stream-node`\n- `allow-add-agent-stream-edge`\n- `allow-remove-agent-stream-edge`\n- `allow-start-agent`\n- `allow-stop-agent`\n- `allow-write-board`\n- `allow-set-agent-configs`\n- `allow-get-global-configs`\n- `allow-get-global-configs-map`\n- `allow-set-global-configs`\n- `allow-set-global-configs-map`\n- `allow-get-agent-default-configs`",
           "type": "string",
           "const": "default",
-          "markdownDescription": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-get-agent-definition`\n- `allow-get-agent-definitions`\n- `allow-get-agent-flows`\n- `allow-get-agent-spec`\n- `allow-new-agent-flow`\n- `allow-rename-agent-flow`\n- `allow-unique-flow-name`\n- `allow-add-agent-flow`\n- `allow-remove-agent-flow`\n- `allow-insert-agent-flow`\n- `allow-copy-sub-flow`\n- `allow-start-agent-flow`\n- `allow-stop-agent-flow`\n- `allow-new-agent-flow-node`\n- `allow-add-agent-flow-node`\n- `allow-remove-agent-flow-node`\n- `allow-add-agent-flow-edge`\n- `allow-remove-agent-flow-edge`\n- `allow-start-agent`\n- `allow-stop-agent`\n- `allow-write-board`\n- `allow-set-agent-configs`\n- `allow-get-global-configs`\n- `allow-get-global-configs-map`\n- `allow-set-global-configs`\n- `allow-set-global-configs-map`\n- `allow-get-agent-default-configs`"
+          "markdownDescription": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-get-agent-definition`\n- `allow-get-agent-definitions`\n- `allow-get-agent-streams`\n- `allow-get-agent-spec`\n- `allow-new-agent-stream`\n- `allow-rename-agent-stream`\n- `allow-unique-stream-name`\n- `allow-add-agent-stream`\n- `allow-remove-agent-stream`\n- `allow-insert-agent-stream`\n- `allow-copy-sub-stream`\n- `allow-start-agent-stream`\n- `allow-stop-agent-stream`\n- `allow-new-agent-stream-node`\n- `allow-add-agent-stream-node`\n- `allow-remove-agent-stream-node`\n- `allow-add-agent-stream-edge`\n- `allow-remove-agent-stream-edge`\n- `allow-start-agent`\n- `allow-stop-agent`\n- `allow-write-board`\n- `allow-set-agent-configs`\n- `allow-get-global-configs`\n- `allow-get-global-configs-map`\n- `allow-set-global-configs`\n- `allow-set-global-configs-map`\n- `allow-get-agent-default-configs`"
         }
       ]
     }

@@ -6,22 +6,22 @@ Default permissions for the plugin
 
 - `allow-get-agent-definition`
 - `allow-get-agent-definitions`
-- `allow-get-agent-flows`
+- `allow-get-agent-streams`
 - `allow-get-agent-spec`
-- `allow-new-agent-flow`
-- `allow-rename-agent-flow`
-- `allow-unique-flow-name`
-- `allow-add-agent-flow`
-- `allow-remove-agent-flow`
-- `allow-insert-agent-flow`
-- `allow-copy-sub-flow`
-- `allow-start-agent-flow`
-- `allow-stop-agent-flow`
-- `allow-new-agent-flow-node`
-- `allow-add-agent-flow-node`
-- `allow-remove-agent-flow-node`
-- `allow-add-agent-flow-edge`
-- `allow-remove-agent-flow-edge`
+- `allow-new-agent-stream`
+- `allow-rename-agent-stream`
+- `allow-unique-stream-name`
+- `allow-add-agent-stream`
+- `allow-remove-agent-stream`
+- `allow-insert-agent-stream`
+- `allow-copy-sub-stream`
+- `allow-start-agent-stream`
+- `allow-stop-agent-stream`
+- `allow-new-agent-stream-node`
+- `allow-add-agent-stream-node`
+- `allow-remove-agent-stream-node`
+- `allow-add-agent-stream-edge`
+- `allow-remove-agent-stream-edge`
 - `allow-start-agent`
 - `allow-stop-agent`
 - `allow-write-board`
@@ -44,25 +44,12 @@ Default permissions for the plugin
 <tr>
 <td>
 
-`askit:allow-add-agent-flow`
+`askit:allow-add-agent-stream`
 
 </td>
 <td>
 
-Enables the add_agent_flow command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`askit:deny-add-agent-flow`
-
-</td>
-<td>
-
-Denies the add_agent_flow command without any pre-configured scope.
+Enables the add_agent_stream command without any pre-configured scope.
 
 </td>
 </tr>
@@ -70,25 +57,12 @@ Denies the add_agent_flow command without any pre-configured scope.
 <tr>
 <td>
 
-`askit:allow-add-agent-flow-edge`
+`askit:deny-add-agent-stream`
 
 </td>
 <td>
 
-Enables the add_agent_flow_edge command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`askit:deny-add-agent-flow-edge`
-
-</td>
-<td>
-
-Denies the add_agent_flow_edge command without any pre-configured scope.
+Denies the add_agent_stream command without any pre-configured scope.
 
 </td>
 </tr>
@@ -96,25 +70,12 @@ Denies the add_agent_flow_edge command without any pre-configured scope.
 <tr>
 <td>
 
-`askit:allow-add-agent-flow-node`
+`askit:allow-add-agent-stream-edge`
 
 </td>
 <td>
 
-Enables the add_agent_flow_node command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`askit:deny-add-agent-flow-node`
-
-</td>
-<td>
-
-Denies the add_agent_flow_node command without any pre-configured scope.
+Enables the add_agent_stream_edge command without any pre-configured scope.
 
 </td>
 </tr>
@@ -122,12 +83,12 @@ Denies the add_agent_flow_node command without any pre-configured scope.
 <tr>
 <td>
 
-`askit:allow-copy-sub-flow`
+`askit:deny-add-agent-stream-edge`
 
 </td>
 <td>
 
-Enables the copy_sub_flow command without any pre-configured scope.
+Denies the add_agent_stream_edge command without any pre-configured scope.
 
 </td>
 </tr>
@@ -135,12 +96,51 @@ Enables the copy_sub_flow command without any pre-configured scope.
 <tr>
 <td>
 
-`askit:deny-copy-sub-flow`
+`askit:allow-add-agent-stream-node`
 
 </td>
 <td>
 
-Denies the copy_sub_flow command without any pre-configured scope.
+Enables the add_agent_stream_node command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`askit:deny-add-agent-stream-node`
+
+</td>
+<td>
+
+Denies the add_agent_stream_node command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`askit:allow-copy-sub-stream`
+
+</td>
+<td>
+
+Enables the copy_sub_stream command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`askit:deny-copy-sub-stream`
+
+</td>
+<td>
+
+Denies the copy_sub_stream command without any pre-configured scope.
 
 </td>
 </tr>
@@ -226,32 +226,6 @@ Denies the get_agent_definitions command without any pre-configured scope.
 <tr>
 <td>
 
-`askit:allow-get-agent-flows`
-
-</td>
-<td>
-
-Enables the get_agent_flows command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`askit:deny-get-agent-flows`
-
-</td>
-<td>
-
-Denies the get_agent_flows command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
 `askit:allow-get-agent-spec`
 
 </td>
@@ -271,6 +245,32 @@ Enables the get_agent_spec command without any pre-configured scope.
 <td>
 
 Denies the get_agent_spec command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`askit:allow-get-agent-streams`
+
+</td>
+<td>
+
+Enables the get_agent_streams command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`askit:deny-get-agent-streams`
+
+</td>
+<td>
+
+Denies the get_agent_streams command without any pre-configured scope.
 
 </td>
 </tr>
@@ -330,25 +330,12 @@ Denies the get_global_configs_map command without any pre-configured scope.
 <tr>
 <td>
 
-`askit:allow-insert-agent-flow`
+`askit:allow-insert-agent-stream`
 
 </td>
 <td>
 
-Enables the insert_agent_flow command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`askit:deny-insert-agent-flow`
-
-</td>
-<td>
-
-Denies the insert_agent_flow command without any pre-configured scope.
+Enables the insert_agent_stream command without any pre-configured scope.
 
 </td>
 </tr>
@@ -356,25 +343,12 @@ Denies the insert_agent_flow command without any pre-configured scope.
 <tr>
 <td>
 
-`askit:allow-new-agent-flow`
+`askit:deny-insert-agent-stream`
 
 </td>
 <td>
 
-Enables the new_agent_flow command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`askit:deny-new-agent-flow`
-
-</td>
-<td>
-
-Denies the new_agent_flow command without any pre-configured scope.
+Denies the insert_agent_stream command without any pre-configured scope.
 
 </td>
 </tr>
@@ -382,25 +356,12 @@ Denies the new_agent_flow command without any pre-configured scope.
 <tr>
 <td>
 
-`askit:allow-new-agent-flow-node`
+`askit:allow-new-agent-stream`
 
 </td>
 <td>
 
-Enables the new_agent_flow_node command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`askit:deny-new-agent-flow-node`
-
-</td>
-<td>
-
-Denies the new_agent_flow_node command without any pre-configured scope.
+Enables the new_agent_stream command without any pre-configured scope.
 
 </td>
 </tr>
@@ -408,25 +369,12 @@ Denies the new_agent_flow_node command without any pre-configured scope.
 <tr>
 <td>
 
-`askit:allow-remove-agent-flow`
+`askit:deny-new-agent-stream`
 
 </td>
 <td>
 
-Enables the remove_agent_flow command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`askit:deny-remove-agent-flow`
-
-</td>
-<td>
-
-Denies the remove_agent_flow command without any pre-configured scope.
+Denies the new_agent_stream command without any pre-configured scope.
 
 </td>
 </tr>
@@ -434,25 +382,12 @@ Denies the remove_agent_flow command without any pre-configured scope.
 <tr>
 <td>
 
-`askit:allow-remove-agent-flow-edge`
+`askit:allow-new-agent-stream-node`
 
 </td>
 <td>
 
-Enables the remove_agent_flow_edge command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`askit:deny-remove-agent-flow-edge`
-
-</td>
-<td>
-
-Denies the remove_agent_flow_edge command without any pre-configured scope.
+Enables the new_agent_stream_node command without any pre-configured scope.
 
 </td>
 </tr>
@@ -460,25 +395,12 @@ Denies the remove_agent_flow_edge command without any pre-configured scope.
 <tr>
 <td>
 
-`askit:allow-remove-agent-flow-node`
+`askit:deny-new-agent-stream-node`
 
 </td>
 <td>
 
-Enables the remove_agent_flow_node command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`askit:deny-remove-agent-flow-node`
-
-</td>
-<td>
-
-Denies the remove_agent_flow_node command without any pre-configured scope.
+Denies the new_agent_stream_node command without any pre-configured scope.
 
 </td>
 </tr>
@@ -486,12 +408,12 @@ Denies the remove_agent_flow_node command without any pre-configured scope.
 <tr>
 <td>
 
-`askit:allow-rename-agent-flow`
+`askit:allow-remove-agent-stream`
 
 </td>
 <td>
 
-Enables the rename_agent_flow command without any pre-configured scope.
+Enables the remove_agent_stream command without any pre-configured scope.
 
 </td>
 </tr>
@@ -499,12 +421,90 @@ Enables the rename_agent_flow command without any pre-configured scope.
 <tr>
 <td>
 
-`askit:deny-rename-agent-flow`
+`askit:deny-remove-agent-stream`
 
 </td>
 <td>
 
-Denies the rename_agent_flow command without any pre-configured scope.
+Denies the remove_agent_stream command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`askit:allow-remove-agent-stream-edge`
+
+</td>
+<td>
+
+Enables the remove_agent_stream_edge command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`askit:deny-remove-agent-stream-edge`
+
+</td>
+<td>
+
+Denies the remove_agent_stream_edge command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`askit:allow-remove-agent-stream-node`
+
+</td>
+<td>
+
+Enables the remove_agent_stream_node command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`askit:deny-remove-agent-stream-node`
+
+</td>
+<td>
+
+Denies the remove_agent_stream_node command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`askit:allow-rename-agent-stream`
+
+</td>
+<td>
+
+Enables the rename_agent_stream command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`askit:deny-rename-agent-stream`
+
+</td>
+<td>
+
+Denies the rename_agent_stream command without any pre-configured scope.
 
 </td>
 </tr>
@@ -616,12 +616,12 @@ Denies the start_agent command without any pre-configured scope.
 <tr>
 <td>
 
-`askit:allow-start-agent-flow`
+`askit:allow-start-agent-stream`
 
 </td>
 <td>
 
-Enables the start_agent_flow command without any pre-configured scope.
+Enables the start_agent_stream command without any pre-configured scope.
 
 </td>
 </tr>
@@ -629,12 +629,12 @@ Enables the start_agent_flow command without any pre-configured scope.
 <tr>
 <td>
 
-`askit:deny-start-agent-flow`
+`askit:deny-start-agent-stream`
 
 </td>
 <td>
 
-Denies the start_agent_flow command without any pre-configured scope.
+Denies the start_agent_stream command without any pre-configured scope.
 
 </td>
 </tr>
@@ -668,25 +668,12 @@ Denies the stop_agent command without any pre-configured scope.
 <tr>
 <td>
 
-`askit:allow-stop-agent-flow`
+`askit:allow-stop-agent-stream`
 
 </td>
 <td>
 
-Enables the stop_agent_flow command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`askit:deny-stop-agent-flow`
-
-</td>
-<td>
-
-Denies the stop_agent_flow command without any pre-configured scope.
+Enables the stop_agent_stream command without any pre-configured scope.
 
 </td>
 </tr>
@@ -694,12 +681,12 @@ Denies the stop_agent_flow command without any pre-configured scope.
 <tr>
 <td>
 
-`askit:allow-unique-flow-name`
+`askit:deny-stop-agent-stream`
 
 </td>
 <td>
 
-Enables the unique_flow_name command without any pre-configured scope.
+Denies the stop_agent_stream command without any pre-configured scope.
 
 </td>
 </tr>
@@ -707,12 +694,25 @@ Enables the unique_flow_name command without any pre-configured scope.
 <tr>
 <td>
 
-`askit:deny-unique-flow-name`
+`askit:allow-unique-stream-name`
 
 </td>
 <td>
 
-Denies the unique_flow_name command without any pre-configured scope.
+Enables the unique_stream_name command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`askit:deny-unique-stream-name`
+
+</td>
+<td>
+
+Denies the unique_stream_name command without any pre-configured scope.
 
 </td>
 </tr>

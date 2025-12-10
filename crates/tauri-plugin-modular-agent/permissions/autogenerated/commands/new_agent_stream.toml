@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-new-agent-stream"
+description = "Enables the new_agent_stream command without any pre-configured scope."
+commands.allow = ["new_agent_stream"]
+
+[[permission]]
+identifier = "deny-new-agent-stream"
+description = "Denies the new_agent_stream command without any pre-configured scope."
+commands.deny = ["new_agent_stream"]
