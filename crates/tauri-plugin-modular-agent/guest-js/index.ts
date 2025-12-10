@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core'
+import { invoke } from "@tauri-apps/api/core";
 
 export type AgentDefinitions = Record<string, AgentDefinition>;
 export type AgentGlobalConfigsMap = Record<string, AgentConfigs>;
@@ -12,15 +12,15 @@ export type AgentDefinition = {
   path: string;
   inputs: string[] | null;
   outputs: string[] | null;
-  default_configs: AgentDefaultConfigs | null;
-  global_configs: AgentGlobalConfigs | null;
-  display_configs: AgentDisplayConfigs | null;
+  default_configs: AgentConfigSpecs | null;
+  global_configs: AgentGlobalConfigSpecs | null;
+  display_configs: AgentDisplayConfigSpecs | null;
 };
 
-export type AgentDefaultConfigs = [string, AgentConfigEntry][];
-export type AgentGlobalConfigs = [string, AgentConfigEntry][];
+export type AgentConfigSpecs = Record<string, AgentConfigSpec>;
+export type AgentGlobalConfigSpecs = Record<string, AgentConfigSpec>;
 
-export type AgentConfigEntry = {
+export type AgentConfigSpec = {
   value: any;
   type: AgentConfigValueType | null;
   title?: string | null;
@@ -28,34 +28,35 @@ export type AgentConfigEntry = {
   hidden?: boolean | null;
 };
 
-export type AgentConfigValueType =
-  | "unit"
-  | "boolean"
-  | "integer"
-  | "number"
-  | "string"
-  | "password"
-  | "text"
-  | "object";
+export type AgentConfigValueType = string;
+// | "unit"
+// | "boolean"
+// | "integer"
+// | "number"
+// | "string"
+// | "password"
+// | "text"
+// | "object";
 
-export type AgentDisplayConfigs = [string, AgentDisplayConfigEntry][];
+export type AgentDisplayConfigSpecs = Record<string, AgentDisplayConfigSpec>;
 
-export type AgentDisplayConfigEntry = {
+export type AgentDisplayConfigSpec = {
+  value?: any | null;
   type: AgentDisplayConfigType | null;
   title?: string | null;
   description?: string | null;
   hideTitle?: boolean | null;
 };
 
-export type AgentDisplayConfigType =
-  | "*"
-  | "boolean"
-  | "integer"
-  | "number"
-  | "string"
-  | "text"
-  | "object"
-  | "messages";
+export type AgentDisplayConfigType = string;
+// | "*"
+// | "boolean"
+// | "integer"
+// | "number"
+// | "string"
+// | "text"
+// | "object"
+// | "messages";
 
 export type AgentFlows = Record<string, AgentFlow>;
 
@@ -72,10 +73,11 @@ export type AgentConfigs = Record<string, any>;
 
 export type AgentSpec = {
   def_name: string;
-  inputs: string[];
-  outputs: string[];
+  inputs?: string[] | null;
+  outputs?: string[] | null;
   configs?: AgentConfigs | null;
-  display_configs?: AgentDisplayConfigs | null;
+  config_specs?: AgentConfigSpecs | null;
+  display_config_specs?: AgentDisplayConfigSpecs | null;
 };
 
 export type AgentFlowNodeExtensions = Record<string, any>;
@@ -132,6 +134,10 @@ export type ErrorMessage = {
   message: string;
 };
 
+export type AgentSpecUpdatedMessage = {
+  agent_id: string;
+};
+
 export type InputMessage = {
   agent_id: string;
   ch: string;
@@ -140,53 +146,68 @@ export type InputMessage = {
 // agent definition
 
 export async function getAgentDefinition(): Promise<AgentDefinition | null> {
-  return await invoke<any>('plugin:askit|get_agent_definition', {})
+  return await invoke<any>("plugin:askit|get_agent_definition", {});
 }
 
 export async function getAgentDefinitions(): Promise<AgentDefinitions> {
-  return await invoke<any>('plugin:askit|get_agent_definitions', {})
+  return await invoke<any>("plugin:askit|get_agent_definitions", {});
+}
+
+// agent spec
+
+export async function getAgentSpec(agentId: string): Promise<AgentSpec | null> {
+  return await invoke<any>("plugin:askit|get_agent_spec", { agentId });
 }
 
 // flow
 
 export async function getAgentFlows(): Promise<AgentFlows> {
-  return await invoke<any>('plugin:askit|get_agent_flows', {})
+  return await invoke<any>("plugin:askit|get_agent_flows", {});
 }
 
 export async function newAgentFlow(flowName: string): Promise<AgentFlow> {
-  return await invoke<any>('plugin:askit|new_agent_flow', { flowName })
+  return await invoke<any>("plugin:askit|new_agent_flow", { flowName });
 }
 
-export async function renameAgentFlow(flowId: string, newName: string): Promise<string> {
-  return await invoke<any>('plugin:askit|rename_agent_flow', { flowId, newName })
+export async function renameAgentFlow(
+  flowId: string,
+  newName: string
+): Promise<string> {
+  return await invoke<any>("plugin:askit|rename_agent_flow", {
+    flowId,
+    newName,
+  });
 }
 
 export async function uniqueFlowName(name: string): Promise<string> {
-  return await invoke<any>('plugin:askit|unique_flow_name', { name })
+  return await invoke<any>("plugin:askit|unique_flow_name", { name });
 }
 
 export async function addAgentFlow(agentFlow: AgentFlow): Promise<void> {
-  await invoke<void>('plugin:askit|add_agent_flow', { agentFlow })
+  await invoke<void>("plugin:askit|add_agent_flow", { agentFlow });
 }
 
 export async function removeAgentFlow(id: string): Promise<void> {
-  await invoke<void>('plugin:askit|remove_agent_flow', { id })
+  await invoke<void>("plugin:askit|remove_agent_flow", { id });
 }
 
 export async function insertAgentFlow(agentFlow: AgentFlow): Promise<void> {
-  await invoke<void>('plugin:askit|insert_agent_flow', { agentFlow })
+  await invoke<void>("plugin:askit|insert_agent_flow", { agentFlow });
 }
 
-export async function copySubFlow(nodes: AgentFlowNode[], edges: AgentFlowEdge[]): Promise<[AgentFlowNode[], AgentFlowEdge[]]> {
-  return await invoke<any>('plugin:askit|copy_sub_flow', { nodes, edges })
+export async function copySubFlow(
+  nodes: AgentFlowNode[],
+  edges: AgentFlowEdge[]
+): Promise<[AgentFlowNode[], AgentFlowEdge[]]> {
+  return await invoke<any>("plugin:askit|copy_sub_flow", { nodes, edges });
 }
 
 export async function startAgentFlow(id: string): Promise<void> {
-  await invoke<void>('plugin:askit|start_agent_flow', { id })
+  await invoke<void>("plugin:askit|start_agent_flow", { id });
 }
 
 export async function stopAgentFlow(id: string): Promise<void> {
-  await invoke<void>('plugin:askit|stop_agent_flow', { id })
+  await invoke<void>("plugin:askit|stop_agent_flow", { id });
 }
 
 // nodes
@@ -194,21 +215,21 @@ export async function stopAgentFlow(id: string): Promise<void> {
 export async function newAgentFlowNode(
   defName: string
 ): Promise<AgentFlowNode> {
-  return await invoke<any>('plugin:askit|new_agent_flow_node', { defName })
+  return await invoke<any>("plugin:askit|new_agent_flow_node", { defName });
 }
 
 export async function addAgentFlowNode(
   flowId: string,
   node: AgentFlowNode
 ): Promise<void> {
-  await invoke<void>('plugin:askit|add_agent_flow_node', { flowId, node })
+  await invoke<void>("plugin:askit|add_agent_flow_node", { flowId, node });
 }
 
 export async function removeAgentFlowNode(
   flowId: string,
   nodeId: string
 ): Promise<void> {
-  await invoke<void>('plugin:askit|remove_agent_flow_node', { flowId, nodeId })
+  await invoke<void>("plugin:askit|remove_agent_flow_node", { flowId, nodeId });
 }
 
 // edge
@@ -217,57 +238,71 @@ export async function addAgentFlowEdge(
   flowId: string,
   edge: AgentFlowEdge
 ): Promise<void> {
-  await invoke<void>('plugin:askit|add_agent_flow_edge', { flowId, edge })
+  await invoke<void>("plugin:askit|add_agent_flow_edge", { flowId, edge });
 }
 
 export async function removeAgentFlowEdge(
   flowId: string,
   edgeId: string
 ): Promise<void> {
-  await invoke<void>('plugin:askit|remove_agent_flow_edge', { flowId, edgeId })
+  await invoke<void>("plugin:askit|remove_agent_flow_edge", { flowId, edgeId });
 }
 
 // agent
 
 export async function startAgent(agentId: string): Promise<void> {
-  await invoke<void>('plugin:askit|start_agent', { agentId })
+  await invoke<void>("plugin:askit|start_agent", { agentId });
 }
 
 export async function stopAgent(agentId: string): Promise<void> {
-  await invoke<void>('plugin:askit|stop_agent', { agentId })
+  await invoke<void>("plugin:askit|stop_agent", { agentId });
 }
 
 // board
 
-export async function writeBoard(board: string, message: string): Promise<void> {
-  await invoke<void>('plugin:askit|write_board', { board, message })
+export async function writeBoard(
+  board: string,
+  message: string
+): Promise<void> {
+  await invoke<void>("plugin:askit|write_board", { board, message });
 }
 
 // configs
 
 export async function setAgentConfigs(
   agentId: string,
-  configs: Record<string, any>
+  configs: AgentConfigs
 ): Promise<void> {
-  await invoke<void>('plugin:askit|set_agent_configs', { agentId, configs })
+  await invoke<void>("plugin:askit|set_agent_configs", { agentId, configs });
 }
 
-export async function getGlobalConfigs(defName: string): Promise<AgentConfigs | null> {
-  return await invoke<any>('plugin:askit|get_global_configs', { defName })
+export async function getGlobalConfigs(
+  defName: string
+): Promise<AgentConfigs | null> {
+  return await invoke<any>("plugin:askit|get_global_configs", { defName });
 }
 
 export async function getGlobalConfigsMap(): Promise<AgentConfigsMap> {
-  return await invoke<any>('plugin:askit|get_global_configs_map', {})
+  return await invoke<any>("plugin:askit|get_global_configs_map", {});
 }
 
-export async function setGlobalConfigs(defName: string, configs: AgentConfigs): Promise<void> {
-  await invoke<void>('plugin:askit|set_global_configs', { defName, configs })
+export async function setGlobalConfigs(
+  defName: string,
+  configs: AgentConfigs
+): Promise<void> {
+  await invoke<void>("plugin:askit|set_global_configs", { defName, configs });
 }
 
-export async function setGlobalConfigsMap(configs: AgentConfigsMap): Promise<void> {
-  await invoke<void>('plugin:askit|set_global_configs_map', { configs })
+export async function setGlobalConfigsMap(
+  configs: AgentConfigsMap
+): Promise<void> {
+  await invoke<void>("plugin:askit|set_global_configs_map", { configs });
 }
 
-export async function getAgentDefaultConfigs(defName: string): Promise<AgentDefaultConfigs | null> {
-  return await invoke<any>('plugin:askit|get_agent_default_configs', { defName })
+export async function getAgentDefaultConfigs(
+  defName: string
+): Promise<AgentConfigSpecs | null> {
+  return await invoke<any>("plugin:askit|get_agent_default_configs", {
+    defName,
+  });
 }

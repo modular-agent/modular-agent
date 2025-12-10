@@ -4,6 +4,7 @@ permissions = [
     "allow-get-agent-definition",
     "allow-get-agent-definitions",
     "allow-get-agent-flows",
+    "allow-get-agent-spec",
     "allow-new-agent-flow",
     "allow-rename-agent-flow",
     "allow-unique-flow-name",

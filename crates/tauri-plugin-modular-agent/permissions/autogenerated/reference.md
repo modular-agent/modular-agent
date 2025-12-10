@@ -7,6 +7,7 @@ Default permissions for the plugin
 - `allow-get-agent-definition`
 - `allow-get-agent-definitions`
 - `allow-get-agent-flows`
+- `allow-get-agent-spec`
 - `allow-new-agent-flow`
 - `allow-rename-agent-flow`
 - `allow-unique-flow-name`
@@ -147,32 +148,6 @@ Denies the copy_sub_flow command without any pre-configured scope.
 <tr>
 <td>
 
-`askit:allow-get-agent-default-config`
-
-</td>
-<td>
-
-Enables the get_agent_default_config command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`askit:deny-get-agent-default-config`
-
-</td>
-<td>
-
-Denies the get_agent_default_config command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
 `askit:allow-get-agent-default-configs`
 
 </td>
@@ -251,32 +226,6 @@ Denies the get_agent_definitions command without any pre-configured scope.
 <tr>
 <td>
 
-`askit:allow-get-agent-defs`
-
-</td>
-<td>
-
-Enables the get_agent_defs command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`askit:deny-get-agent-defs`
-
-</td>
-<td>
-
-Denies the get_agent_defs command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
 `askit:allow-get-agent-flows`
 
 </td>
@@ -303,12 +252,12 @@ Denies the get_agent_flows command without any pre-configured scope.
 <tr>
 <td>
 
-`askit:allow-get-global-config`
+`askit:allow-get-agent-spec`
 
 </td>
 <td>
 
-Enables the get_global_config command without any pre-configured scope.
+Enables the get_agent_spec command without any pre-configured scope.
 
 </td>
 </tr>
@@ -316,12 +265,12 @@ Enables the get_global_config command without any pre-configured scope.
 <tr>
 <td>
 
-`askit:deny-get-global-config`
+`askit:deny-get-agent-spec`
 
 </td>
 <td>
 
-Denies the get_global_config command without any pre-configured scope.
+Denies the get_agent_spec command without any pre-configured scope.
 
 </td>
 </tr>
@@ -563,32 +512,6 @@ Denies the rename_agent_flow command without any pre-configured scope.
 <tr>
 <td>
 
-`askit:allow-set-agent-config`
-
-</td>
-<td>
-
-Enables the set_agent_config command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`askit:deny-set-agent-config`
-
-</td>
-<td>
-
-Denies the set_agent_config command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
 `askit:allow-set-agent-configs`
 
 </td>
@@ -608,32 +531,6 @@ Enables the set_agent_configs command without any pre-configured scope.
 <td>
 
 Denies the set_agent_configs command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`askit:allow-set-global-config`
-
-</td>
-<td>
-
-Enables the set_global_config command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`askit:deny-set-global-config`
-
-</td>
-<td>
-
-Denies the set_global_config command without any pre-configured scope.
 
 </td>
 </tr>

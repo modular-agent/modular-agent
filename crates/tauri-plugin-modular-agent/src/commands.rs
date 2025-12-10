@@ -1,6 +1,6 @@
 use agent_stream_kit::{
-    AgentConfigs, AgentConfigsMap, AgentValue, AgentDefaultConfigs, AgentDefinition, AgentDefinitions,
-    AgentFlow, AgentFlowEdge, AgentFlowNode, AgentFlows,
+    AgentConfigSpecs, AgentConfigs, AgentConfigsMap, AgentDefinition, AgentDefinitions, AgentFlow,
+    AgentFlowEdge, AgentFlowNode, AgentFlows, AgentSpec, AgentValue,
 };
 use tauri::{AppHandle, Runtime};
 
@@ -20,6 +20,13 @@ pub(crate) fn get_agent_definition<R: Runtime>(
 #[tauri::command]
 pub(crate) fn get_agent_definitions<R: Runtime>(app: AppHandle<R>) -> AgentDefinitions {
     app.askit().get_agent_definitions()
+}
+
+// agent spec
+
+#[tauri::command]
+pub(crate) fn get_agent_spec<R: Runtime>(app: AppHandle<R>, agent_id: String) -> Option<AgentSpec> {
+    app.askit().get_agent_spec(&agent_id)
 }
 
 // flow
@@ -63,10 +70,7 @@ pub(crate) async fn remove_agent_flow<R: Runtime>(
     app: tauri::AppHandle<R>,
     id: String,
 ) -> Result<()> {
-    app.askit()
-        .remove_agent_flow(&id)
-        .await
-        .map_err(Into::into)
+    app.askit().remove_agent_flow(&id).await.map_err(Into::into)
 }
 
 #[tauri::command]
@@ -89,25 +93,13 @@ pub(crate) fn copy_sub_flow<R: Runtime>(
 }
 
 #[tauri::command]
-pub(crate) async fn start_agent_flow<R: Runtime>(
-    app: AppHandle<R>,
-    id: String,
-) -> Result<()> {
-    app.askit()
-        .start_agent_flow(&id)
-        .await
-        .map_err(Into::into)
+pub(crate) async fn start_agent_flow<R: Runtime>(app: AppHandle<R>, id: String) -> Result<()> {
+    app.askit().start_agent_flow(&id).await.map_err(Into::into)
 }
 
 #[tauri::command]
-pub(crate) async fn stop_agent_flow<R: Runtime>(
-    app: AppHandle<R>,
-    id: String,
-) -> Result<()> {
-    app.askit()
-        .stop_agent_flow(&id)
-        .await
-        .map_err(Into::into)
+pub(crate) async fn stop_agent_flow<R: Runtime>(app: AppHandle<R>, id: String) -> Result<()> {
+    app.askit().stop_agent_flow(&id).await.map_err(Into::into)
 }
 
 // node
@@ -239,6 +231,6 @@ pub(crate) fn set_global_configs_map<R: Runtime>(app: AppHandle<R>, configs: Age
 pub(crate) async fn get_agent_default_configs<R: Runtime>(
     app: AppHandle<R>,
     def_name: String,
-) -> Option<AgentDefaultConfigs> {
+) -> Option<AgentConfigSpecs> {
     app.askit().get_agent_default_configs(&def_name)
 }
