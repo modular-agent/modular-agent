@@ -204,6 +204,15 @@
         evt.preventDefault();
       }}
     />
+  {:else if ty === "password"}
+    <Input
+      class="nodrag flex-none"
+      type="password"
+      {value}
+      onkeydown={(evt) => {
+        evt.preventDefault();
+      }}
+    />
   {:else if ty === "text"}
     <Textarea
       class="nodrag nowheel flex-1 text-wrap"
