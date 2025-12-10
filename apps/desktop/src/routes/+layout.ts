@@ -1,7 +1,7 @@
-import { getAgentDefinitions, getAgentFlows, getGlobalConfigsMap } from "tauri-plugin-askit-api";
+import { getAgentDefinitions, getAgentStreams, getGlobalConfigsMap } from "tauri-plugin-askit-api";
 import type { AgentDefinitions } from "tauri-plugin-askit-api";
 
-import { deserializeAgentFlow } from "@/lib/agent";
+import { deserializeAgentStream } from "@/lib/agent";
 import { getCoreSettings } from "@/lib/utils";
 
 // Tauri doesn't have a Node.js server to do proper SSR
@@ -16,15 +16,15 @@ export async function load() {
   const agentDefs: AgentDefinitions = await getAgentDefinitions();
   const agentGlobalConfigsMap = await getGlobalConfigsMap();
 
-  const sAgentFlows = await getAgentFlows();
-  const agentFlows = Object.fromEntries(
-    Object.entries(sAgentFlows).map(([key, flow]) => [key, deserializeAgentFlow(flow)]),
+  const sAgentStreams = await getAgentStreams();
+  const AgentStreams = Object.fromEntries(
+    Object.entries(sAgentStreams).map(([key, stream]) => [key, deserializeAgentStream(stream)]),
   );
 
   return {
     coreSettings,
     agentDefs,
     agentGlobalConfigsMap,
-    agentFlows,
+    AgentStreams,
   };
 }

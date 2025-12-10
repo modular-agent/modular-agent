@@ -5,28 +5,28 @@ import { getContext, setContext } from "svelte";
 import type {
   AgentDefinitions,
   AgentDisplayConfigSpec,
-  AgentFlow,
-  AgentFlowEdge,
-  AgentFlowNode,
+  AgentStream,
+  AgentStreamEdge,
+  AgentStreamNode,
   Viewport,
 } from "tauri-plugin-askit-api";
 
-import type { TAgentFlow, TAgentFlowEdge, TAgentFlowNode } from "./types";
+import type { TAgentStream, TAgentStreamEdge, TAgentStreamNode } from "./types";
 
-export async function importAgentFlow(path: string): Promise<AgentFlow> {
-  return await invoke("import_agent_flow_cmd", { path });
+export async function importAgentStream(path: string): Promise<AgentStream> {
+  return await invoke("import_agent_stream_cmd", { path });
 }
 
-export async function renameAgentFlow(flowId: string, newName: string): Promise<string> {
-  return await invoke("rename_agent_flow_cmd", { flowId, newName });
+export async function renameAgentStream(streamId: string, newName: string): Promise<string> {
+  return await invoke("rename_agent_stream_cmd", { streamId, newName });
 }
 
-export async function removeAgentFlow(flowId: string): Promise<void> {
-  await invoke("remove_agent_flow_cmd", { flowId });
+export async function removeAgentStream(streamId: string): Promise<void> {
+  await invoke("remove_agent_stream_cmd", { streamId });
 }
 
-export async function saveAgentFlow(agentFlow: AgentFlow): Promise<void> {
-  await invoke("save_agent_flow_cmd", { agentFlow });
+export async function saveAgentStream(AgentStream: AgentStream): Promise<void> {
+  await invoke("save_agent_stream_cmd", { AgentStream });
 }
 
 const agentDefinitionsKey = Symbol("agentDefinitions");
@@ -39,13 +39,13 @@ export function getAgentDefinitionsContext(): AgentDefinitions {
   return getContext(agentDefinitionsKey);
 }
 
-// Agent Flow
+// Agent Stream
 
-// deserialize: SAgentFlow -> AgentFlow
+// deserialize: SAgentStream -> AgentStream
 
-export function deserializeAgentFlow(flow: AgentFlow): TAgentFlow {
+export function deserializeAgentStream(stream: AgentStream): TAgentStream {
   // Deserialize nodes first
-  const nodes = flow.nodes.map((node) => deserializeAgentFlowNode(node));
+  const nodes = stream.nodes.map((node) => deserializeAgentStreamNode(node));
 
   // Create a map to retrieve available handles from node IDs
   const nodeHandles = new Map<string, { inputs: string[]; outputs: string[]; configs: string[] }>();
@@ -59,7 +59,7 @@ export function deserializeAgentFlow(flow: AgentFlow): TAgentFlow {
   });
 
   // Filter only valid edges
-  const validEdges = flow.edges.filter((edge) => {
+  const validEdges = stream.edges.filter((edge) => {
     const sourceNode = nodeHandles.get(edge.source);
     const targetNode = nodeHandles.get(edge.target);
 
@@ -75,16 +75,16 @@ export function deserializeAgentFlow(flow: AgentFlow): TAgentFlow {
   });
 
   return {
-    id: flow.id,
-    name: flow.name,
+    id: stream.id,
+    name: stream.name,
     nodes: nodes,
-    edges: validEdges.map((edge) => deserializeAgentFlowEdge(edge)),
-    viewport: flow.viewport,
+    edges: validEdges.map((edge) => deserializeAgentStreamEdge(edge)),
+    viewport: stream.viewport,
   };
 }
 
-export function deserializeAgentFlowNode(node: AgentFlowNode): TAgentFlowNode {
-  const { id, enabled, spec, ...rest } = node as AgentFlowNode & Record<string, any>;
+export function deserializeAgentStreamNode(node: AgentStreamNode): TAgentStreamNode {
+  const { id, enabled, spec, ...rest } = node as AgentStreamNode & Record<string, any>;
 
   const { title = null, x = 0, y = 0, width, height, ...extensions } = rest as Record<string, any>;
   return {
@@ -107,7 +107,7 @@ export function deserializeAgentFlowNode(node: AgentFlowNode): TAgentFlowNode {
   };
 }
 
-export function deserializeAgentFlowEdge(edge: AgentFlowEdge): TAgentFlowEdge {
+export function deserializeAgentStreamEdge(edge: AgentStreamEdge): TAgentStreamEdge {
   return {
     id: edge.id,
     source: edge.source,
@@ -117,25 +117,25 @@ export function deserializeAgentFlowEdge(edge: AgentFlowEdge): TAgentFlowEdge {
   };
 }
 
-// serialize: AgentFlow -> SAgentFlow
+// serialize: AgentStream -> SAgentStream
 
-export function serializeAgentFlow(
+export function serializeAgentStream(
   id: string,
   name: string,
-  nodes: TAgentFlowNode[],
-  edges: TAgentFlowEdge[],
+  nodes: TAgentStreamNode[],
+  edges: TAgentStreamEdge[],
   viewport: Viewport,
-): AgentFlow {
+): AgentStream {
   return {
     id,
     name,
-    nodes: nodes.map((node) => serializeAgentFlowNode(node)),
-    edges: edges.map((edge) => serializeAgentFlowEdge(edge)),
+    nodes: nodes.map((node) => serializeAgentStreamNode(node)),
+    edges: edges.map((edge) => serializeAgentStreamEdge(edge)),
     viewport,
   };
 }
 
-export function serializeAgentFlowNode(node: TAgentFlowNode): AgentFlowNode {
+export function serializeAgentStreamNode(node: TAgentStreamNode): AgentStreamNode {
   return {
     id: node.id,
     enabled: node.data.enabled,
@@ -149,7 +149,7 @@ export function serializeAgentFlowNode(node: TAgentFlowNode): AgentFlowNode {
   };
 }
 
-export function serializeAgentFlowEdge(edge: TAgentFlowEdge): AgentFlowEdge {
+export function serializeAgentStreamEdge(edge: TAgentStreamEdge): AgentStreamEdge {
   return {
     id: edge.id,
     source: edge.source,

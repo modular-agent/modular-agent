@@ -152,6 +152,6 @@ $effect.root(() => {
   };
 });
 
-// Agent Flow
+// Agent Stream
 
-export const flowState = $state({ id: "", name: "main" });
+export const streamState = $state({ id: "", name: "main" });

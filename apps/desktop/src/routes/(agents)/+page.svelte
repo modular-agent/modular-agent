@@ -19,39 +19,39 @@
   import { ExclamationCircleOutline, PauseOutline, PlayOutline } from "flowbite-svelte-icons";
   import hotkeys from "hotkeys-js";
   import {
-    addAgentFlowEdge,
-    newAgentFlowNode,
-    addAgentFlowNode,
-    removeAgentFlowEdge,
-    removeAgentFlowNode,
+    addAgentStreamEdge,
+    newAgentStreamNode,
+    addAgentStreamNode,
+    removeAgentStreamEdge,
+    removeAgentStreamNode,
     startAgent,
     stopAgent,
-    newAgentFlow,
-    copySubFlow,
+    newAgentStream,
+    copySubStream,
   } from "tauri-plugin-askit-api";
-  import type { AgentFlowNode, AgentFlowEdge } from "tauri-plugin-askit-api";
+  import type { AgentStreamNode, AgentStreamEdge } from "tauri-plugin-askit-api";
 
   import {
-    deserializeAgentFlow,
-    deserializeAgentFlowEdge,
-    deserializeAgentFlowNode,
-    importAgentFlow,
-    removeAgentFlow,
-    renameAgentFlow,
-    saveAgentFlow,
-    serializeAgentFlow,
-    serializeAgentFlowEdge,
-    serializeAgentFlowNode,
+    deserializeAgentStream,
+    deserializeAgentStreamEdge,
+    deserializeAgentStreamNode,
+    importAgentStream,
+    removeAgentStream,
+    renameAgentStream,
+    saveAgentStream,
+    serializeAgentStream,
+    serializeAgentStreamEdge,
+    serializeAgentStreamNode,
     setAgentDefinitionsContext,
   } from "@/lib/agent";
-  import { flowState } from "@/lib/shared.svelte";
-  import type { TAgentFlowNode, TAgentFlowEdge, TAgentFlow } from "@/lib/types";
+  import { streamState } from "@/lib/shared.svelte";
+  import type { TAgentStreamNode, TAgentStreamEdge, TAgentStream } from "@/lib/types";
 
   import AgentList from "./AgentList.svelte";
   import AgentNode from "./AgentNode.svelte";
   import FileMenu from "./FileMenu.svelte";
-  import FlowList from "./FlowList.svelte";
   import NodeContextMenu from "./NodeContextMenu.svelte";
+  import StreamList from "./StreamList.svelte";
 
   let { data } = $props();
 
@@ -66,76 +66,76 @@
     agent: AgentNode,
   };
 
-  let nodes = $state.raw<TAgentFlowNode[]>([]);
-  let edges = $state.raw<TAgentFlowEdge[]>([]);
+  let nodes = $state.raw<TAgentStreamNode[]>([]);
+  let edges = $state.raw<TAgentStreamEdge[]>([]);
 
   const agentDefs = $derived(data.agentDefs);
-  const flows = getContext<() => Record<string, TAgentFlow>>("agentFlows");
+  const streams = getContext<() => Record<string, TAgentStream>>("AgentStreams");
 
-  let flowNames = $state.raw<{ id: string; name: string }[]>([]);
+  let streamNames = $state.raw<{ id: string; name: string }[]>([]);
 
-  // id -> flow activity
-  let flowActivities = $state<Record<string, boolean>>({});
+  // id -> stream activity
+  let streamActivities = $state<Record<string, boolean>>({});
 
   function updateNodesAndEdges() {
-    nodes = [...flows()[flowState.id].nodes];
-    edges = [...flows()[flowState.id].edges];
-    const viewport = flows()[flowState.id].viewport;
+    nodes = [...streams()[streamState.id].nodes];
+    edges = [...streams()[streamState.id].edges];
+    const viewport = streams()[streamState.id].viewport;
     if (viewport) {
       setViewport(viewport);
     }
   }
 
-  function updateFlowNames() {
-    flowNames = Object.entries(flows())
-      .map(([id, flow]) => ({ id, name: flow.name }))
+  function updateStreamNames() {
+    streamNames = Object.entries(streams())
+      .map(([id, stream]) => ({ id, name: stream.name }))
       .sort((a, b) => a.name.localeCompare(b.name));
   }
 
-  function updateFlowActivities() {
-    flowActivities = Object.fromEntries(
-      Object.entries(flows()).map(([id, flow]) => [
+  function updateStreamActivities() {
+    streamActivities = Object.fromEntries(
+      Object.entries(streams()).map(([id, stream]) => [
         id,
-        flow.nodes.some((node) => node.data.enabled),
+        stream.nodes.some((node) => node.data.enabled),
       ]),
     );
   }
 
-  function updateCurrentFlowActivity() {
-    flowActivities[flowState.id] = nodes.some((node) => node.data.enabled);
+  function updateCurrentStreamActivity() {
+    streamActivities[streamState.id] = nodes.some((node) => node.data.enabled);
   }
 
   onMount(() => {
-    if (flowState.id === "") {
-      Object.entries(flows()).forEach(([id, flow]) => {
-        if (flow.name === flowState.name) {
-          flowState.id = id;
+    if (streamState.id === "") {
+      Object.entries(streams()).forEach(([id, stream]) => {
+        if (stream.name === streamState.name) {
+          streamState.id = id;
         }
       });
     }
     updateNodesAndEdges();
-    updateFlowNames();
-    updateFlowActivities();
+    updateStreamNames();
+    updateStreamActivities();
     // return async () => {
-    //   await syncFlow();
+    //   await syncStream();
     // };
   });
 
-  async function changeFlow(id: string) {
-    flowState.id = id;
-    flowState.name = flows()[id].name;
-    // await syncFlow();
+  async function changeStream(id: string) {
+    streamState.id = id;
+    streamState.name = streams()[id].name;
+    // await syncStream();
     updateNodesAndEdges();
   }
 
-  // async function changeFlowByName(name: string) {
-  //   Object.entries(flows()).forEach(([id, flow]) => {
-  //     if (flow.name === name) {
-  //       flowState.id = id;
-  //       flowState.name = name;
+  // async function changeStreamByName(name: string) {
+  //   Object.entries(streams()).forEach(([id, stream]) => {
+  //     if (stream.name === name) {
+  //       streamState.id = id;
+  //       streamState.name = name;
   //     }
   //   });
-  //   await syncFlow();
+  //   await syncStream();
   //   updateNodesAndEdges();
   // }
 
@@ -145,7 +145,7 @@
     }
     if (params.nodes && params.nodes.length > 0) {
       await checkNodeChange(nodes);
-      updateCurrentFlowActivity();
+      updateCurrentStreamActivity();
     }
   }
 
@@ -153,58 +153,62 @@
     await checkEdgeChange(edges);
   }
 
-  async function checkNodeChange(nodes: TAgentFlowNode[]) {
+  async function checkNodeChange(nodes: TAgentStreamNode[]) {
     const nodeIds = new Set(nodes.map((node) => node.id));
 
-    const deletedNodes = flows()[flowState.id]?.nodes.filter((node) => !nodeIds.has(node.id));
+    const deletedNodes = streams()[streamState.id]?.nodes.filter((node) => !nodeIds.has(node.id));
     if (deletedNodes) {
       for (const node of deletedNodes) {
-        await removeAgentFlowNode(flowState.id, node.id);
-        flows()[flowState.id].nodes = flows()[flowState.id].nodes.filter((n) => n.id !== node.id);
+        await removeAgentStreamNode(streamState.id, node.id);
+        streams()[streamState.id].nodes = streams()[streamState.id].nodes.filter(
+          (n) => n.id !== node.id,
+        );
       }
     }
   }
 
-  async function checkEdgeChange(edges: TAgentFlowEdge[]) {
+  async function checkEdgeChange(edges: TAgentStreamEdge[]) {
     const edgeIds = new Set(edges.map((edge) => edge.id));
 
-    const deletedEdges = flows()[flowState.id]?.edges.filter((edge) => !edgeIds.has(edge.id));
+    const deletedEdges = streams()[streamState.id]?.edges.filter((edge) => !edgeIds.has(edge.id));
     if (deletedEdges) {
       for (const edge of deletedEdges) {
-        await removeAgentFlowEdge(flowState.id, edge.id);
-        flows()[flowState.id].edges = flows()[flowState.id].edges.filter((e) => e.id !== edge.id);
+        await removeAgentStreamEdge(streamState.id, edge.id);
+        streams()[streamState.id].edges = streams()[streamState.id].edges.filter(
+          (e) => e.id !== edge.id,
+        );
       }
     }
 
     const addedEdges = edges.filter(
-      (edge) => !flows()[flowState.id].edges.some((e) => e.id === edge.id),
+      (edge) => !streams()[streamState.id].edges.some((e) => e.id === edge.id),
     );
     for (const edge of addedEdges) {
-      await addAgentFlowEdge(flowState.id, serializeAgentFlowEdge(edge));
-      flows()[flowState.id].edges.push(edge);
+      await addAgentStreamEdge(streamState.id, serializeAgentStreamEdge(edge));
+      streams()[streamState.id].edges.push(edge);
     }
   }
 
-  // async function syncFlow() {
+  // async function syncStream() {
   //   const viewport = getViewport();
-  //   const flow = serializeAgentFlow(
-  //     flowState.id,
-  //     flowState.name,
+  //   const stream = serializeAgentStream(
+  //     streamState.id,
+  //     streamState.name,
   //     nodes,
   //     edges,
   //     agentDefs,
   //     viewport,
   //   );
-  //   flows()[flowState.id] = deserializeAgentFlow(flow, agentDefs);
-  //   await insertAgentFlow(flow);
+  //   streams()[streamState.id] = deserializeAgentStream(stream, agentDefs);
+  //   await insertAgentStream(stream);
   // }
 
   // cut, copy and paste
 
-  let copiedNodes = $state.raw<AgentFlowNode[]>([]);
-  let copiedEdges = $state.raw<AgentFlowEdge[]>([]);
+  let copiedNodes = $state.raw<AgentStreamNode[]>([]);
+  let copiedEdges = $state.raw<AgentStreamEdge[]>([]);
 
-  function selectedNodesAndEdges(): [TAgentFlowNode[], TAgentFlowEdge[]] {
+  function selectedNodesAndEdges(): [TAgentStreamNode[], TAgentStreamEdge[]] {
     const selectedNodes = nodes.filter((node) => node.selected);
     const selectedEdges = edges.filter((edge) => edge.selected);
     return [selectedNodes, selectedEdges];
@@ -215,14 +219,14 @@
     if (selectedNodes.length == 0 && selectedEdges.length == 0) {
       return;
     }
-    copiedNodes = selectedNodes.map((node) => serializeAgentFlowNode(node));
-    copiedEdges = selectedEdges.map((edge) => serializeAgentFlowEdge(edge));
+    copiedNodes = selectedNodes.map((node) => serializeAgentStreamNode(node));
+    copiedEdges = selectedEdges.map((edge) => serializeAgentStreamEdge(edge));
 
     nodes = nodes.filter((node) => !node.selected);
     edges = edges.filter((edge) => !edge.selected);
     await checkNodeChange(nodes);
     await checkEdgeChange(edges);
-    updateCurrentFlowActivity();
+    updateCurrentStreamActivity();
   }
 
   function copyNodesAndEdges() {
@@ -230,8 +234,8 @@
     if (selectedNodes.length == 0) {
       return;
     }
-    copiedNodes = selectedNodes.map((node) => serializeAgentFlowNode(node));
-    copiedEdges = selectedEdges.map((edge) => serializeAgentFlowEdge(edge));
+    copiedNodes = selectedNodes.map((node) => serializeAgentStreamNode(node));
+    copiedEdges = selectedEdges.map((edge) => serializeAgentStreamEdge(edge));
   }
 
   async function pasteNodesAndEdges() {
@@ -250,7 +254,7 @@
       return;
     }
 
-    let [cnodes, cedges] = await copySubFlow(copiedNodes, copiedEdges);
+    let [cnodes, cedges] = await copySubStream(copiedNodes, copiedEdges);
     if (cnodes.length == 0 && cedges.length == 0) return;
 
     let new_nodes = [];
@@ -258,20 +262,20 @@
       node.x += 80;
       node.y += 80;
       node.enabled = false;
-      await addAgentFlowNode(flowState.id, node);
-      const new_node = deserializeAgentFlowNode(node);
+      await addAgentStreamNode(streamState.id, node);
+      const new_node = deserializeAgentStreamNode(node);
       new_node.selected = true;
       new_nodes.push(new_node);
-      flows()[flowState.id].nodes.push(new_node);
+      streams()[streamState.id].nodes.push(new_node);
     }
 
     let new_edges = [];
     for (const edge of cedges) {
-      await addAgentFlowEdge(flowState.id, edge);
-      const new_edge = deserializeAgentFlowEdge(edge);
+      await addAgentStreamEdge(streamState.id, edge);
+      const new_edge = deserializeAgentStreamEdge(edge);
       new_edge.selected = true;
       new_edges.push(new_edge);
-      flows()[flowState.id].edges.push(new_edge);
+      streams()[streamState.id].edges.push(new_edge);
     }
 
     nodes = [...nodes, ...new_nodes];
@@ -292,8 +296,8 @@
   let hiddenAgents = $state(true);
   const key_open_agent = "a";
 
-  let openFlow = $state(false);
-  const key_open_flow = "f";
+  let openStream = $state(false);
+  const key_open_stream = "f";
 
   $effect(() => {
     hotkeys("ctrl+r", (event) => {
@@ -302,15 +306,15 @@
 
     hotkeys("ctrl+s", (event) => {
       event.preventDefault();
-      onSaveFlow();
+      onSaveStream();
     });
 
     hotkeys(key_open_agent, () => {
       hiddenAgents = !hiddenAgents;
     });
 
-    hotkeys(key_open_flow, () => {
-      openFlow = !openFlow;
+    hotkeys(key_open_stream, () => {
+      openStream = !openStream;
     });
 
     hotkeys("ctrl+x", () => {
@@ -331,7 +335,7 @@
       hotkeys.unbind("ctrl+r");
       hotkeys.unbind("ctrl+s");
       hotkeys.unbind(key_open_agent);
-      hotkeys.unbind(key_open_flow);
+      hotkeys.unbind(key_open_stream);
       hotkeys.unbind("ctrl+x");
       hotkeys.unbind("ctrl+c");
       hotkeys.unbind("ctrl+v");
@@ -339,160 +343,160 @@
     };
   });
 
-  // New Flow
+  // New Stream
 
-  let newFlowModal = $state(false);
-  let newFlowName = $state("");
-  let newFlowInput = $state<HTMLInputElement>();
+  let newStreamModal = $state(false);
+  let newStreamName = $state("");
+  let newStreamInput = $state<HTMLInputElement>();
 
-  async function onNewFlow() {
-    newFlowName = flowState.name.split("/").slice(0, -1).join("/");
-    if (newFlowName !== "") {
-      newFlowName += "/";
+  async function onNewStream() {
+    newStreamName = streamState.name.split("/").slice(0, -1).join("/");
+    if (newStreamName !== "") {
+      newStreamName += "/";
     }
-    newFlowModal = true;
+    newStreamModal = true;
     await tick();
-    newFlowInput?.focus();
+    newStreamInput?.focus();
   }
 
-  async function handleCreateNewFlow() {
-    newFlowModal = false;
-    if (!newFlowName) return;
-    const flow_id = await createNewFlow(newFlowName);
-    if (flow_id) {
-      await changeFlow(flow_id);
+  async function handleCreateNewStream() {
+    newStreamModal = false;
+    if (!newStreamName) return;
+    const stream_id = await createNewStream(newStreamName);
+    if (stream_id) {
+      await changeStream(stream_id);
     }
   }
 
-  async function createNewFlow(name: string | null): Promise<string | null> {
+  async function createNewStream(name: string | null): Promise<string | null> {
     if (!name) return null;
-    const flow = await newAgentFlow(name);
-    if (!flow) return null;
-    flows()[flow.id] = deserializeAgentFlow(flow);
-    updateFlowNames();
-    updateFlowActivities();
-    return flow.id;
+    const stream = await newAgentStream(name);
+    if (!stream) return null;
+    streams()[stream.id] = deserializeAgentStream(stream);
+    updateStreamNames();
+    updateStreamActivities();
+    return stream.id;
   }
 
-  // Rename Flow
+  // Rename Stream
 
-  let renameFlowModal = $state(false);
-  let renameFlowName = $state("");
-  let renameFlowInput = $state<HTMLInputElement>();
+  let renameStreamModal = $state(false);
+  let renameStreamName = $state("");
+  let renameStreamInput = $state<HTMLInputElement>();
 
-  async function onRenameFlow() {
-    renameFlowName = flowState.name;
-    renameFlowModal = true;
+  async function onRenameStream() {
+    renameStreamName = streamState.name;
+    renameStreamModal = true;
     await tick();
-    renameFlowInput?.focus();
+    renameStreamInput?.focus();
   }
 
-  async function handleRenameFlow() {
-    renameFlowModal = false;
-    if (!renameFlowName || renameFlowName === flowState.name) return;
-    const newName = await renameFlow(flowState.id, renameFlowName);
+  async function handleRenameStream() {
+    renameStreamModal = false;
+    if (!renameStreamName || renameStreamName === streamState.name) return;
+    const newName = await renameStream(streamState.id, renameStreamName);
     if (!newName) return;
-    // We don't need to sync the current flow.
-    // await changeFlowName(newName);
-    flowState.name = newName;
+    // We don't need to sync the current stream.
+    // await changeStreamName(newName);
+    streamState.name = newName;
     updateNodesAndEdges();
   }
 
-  async function renameFlow(id: string, rename: string): Promise<string | null> {
+  async function renameStream(id: string, rename: string): Promise<string | null> {
     if (!id || !rename) return null;
-    const newName = await renameAgentFlow(id, rename);
+    const newName = await renameAgentStream(id, rename);
     if (!newName) return null;
-    const flow = flows()[id];
-    flow.name = newName;
-    updateFlowNames();
-    updateFlowActivities();
+    const stream = streams()[id];
+    stream.name = newName;
+    updateStreamNames();
+    updateStreamActivities();
     return newName;
   }
 
-  // Delete Flow
+  // Delete Stream
 
-  let deleteFlowModal = $state(false);
+  let deleteStreamModal = $state(false);
   let cannotDeleteToast = $state(false);
 
-  function onDeleteFlow() {
-    if (flowState.name === "main") {
+  function onDeleteStream() {
+    if (streamState.name === "main") {
       cannotDeleteToast = true;
       return;
     }
 
-    deleteFlowModal = true;
+    deleteStreamModal = true;
   }
 
-  async function handleDeleteFlow() {
-    deleteFlowModal = false;
-    await deleteFlow(flowState.id);
+  async function handleDeleteStream() {
+    deleteStreamModal = false;
+    await deleteStream(streamState.id);
 
-    flowState.name = "main";
-    Object.entries(flows()).forEach(([id, flow]) => {
-      if (flow.name === flowState.name) {
-        flowState.id = id;
+    streamState.name = "main";
+    Object.entries(streams()).forEach(([id, stream]) => {
+      if (stream.name === streamState.name) {
+        streamState.id = id;
       }
     });
     updateNodesAndEdges();
   }
 
-  async function deleteFlow(id: string) {
+  async function deleteStream(id: string) {
     if (!id) return;
-    const flow = flows()[id];
-    if (!flow) return;
-    await removeAgentFlow(id);
-    delete flows()[id];
-    updateFlowNames();
-    updateFlowActivities();
+    const stream = streams()[id];
+    if (!stream) return;
+    await removeAgentStream(id);
+    delete streams()[id];
+    updateStreamNames();
+    updateStreamActivities();
   }
 
-  async function onSaveFlow() {
-    if (flowState.id in flows()) {
+  async function onSaveStream() {
+    if (streamState.id in streams()) {
       const viewport = getViewport();
-      const flow = serializeAgentFlow(flowState.id, flowState.name, nodes, edges, viewport);
-      await saveAgentFlow(flow);
-      flows()[flowState.id] = deserializeAgentFlow(flow);
+      const stream = serializeAgentStream(streamState.id, streamState.name, nodes, edges, viewport);
+      await saveAgentStream(stream);
+      streams()[streamState.id] = deserializeAgentStream(stream);
     }
   }
 
-  function onExportFlow() {
+  function onExportStream() {
     const viewport = getViewport();
-    const flow = serializeAgentFlow(flowState.id, flowState.name, nodes, edges, viewport);
-    const jsonStr = JSON.stringify(flow, null, 2);
+    const stream = serializeAgentStream(streamState.id, streamState.name, nodes, edges, viewport);
+    const jsonStr = JSON.stringify(stream, null, 2);
     const blob = new Blob([jsonStr], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = flowState.name + ".json";
+    a.download = streamState.name + ".json";
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   }
 
-  async function onImportFlow() {
+  async function onImportStream() {
     const file = await open({ multiple: false, filter: "json" });
     if (!file) return;
-    const sflow = await importAgentFlow(file);
-    if (!sflow.nodes || !sflow.edges) return;
-    const flow = deserializeAgentFlow(sflow);
-    flows()[flow.id] = flow;
-    updateFlowNames();
-    updateFlowActivities();
-    await changeFlow(flow.id);
+    const sStream = await importAgentStream(file);
+    if (!sStream.nodes || !sStream.edges) return;
+    const stream = deserializeAgentStream(sStream);
+    streams()[stream.id] = stream;
+    updateStreamNames();
+    updateStreamActivities();
+    await changeStream(stream.id);
   }
 
   async function onAddAgent(agent_name: string) {
-    const snode = await newAgentFlowNode(agent_name);
+    const snode = await newAgentStreamNode(agent_name);
     const xy = screenToFlowPosition({
       x: window.innerWidth * 0.45,
       y: window.innerHeight * 0.3,
     });
     snode.x = xy.x;
     snode.y = xy.y;
-    await addAgentFlowNode(flowState.id, snode);
-    const new_node = deserializeAgentFlowNode(snode);
-    flows()[flowState.id].nodes.push(new_node);
+    await addAgentStreamNode(streamState.id, snode);
+    const new_node = deserializeAgentStreamNode(snode);
+    streams()[streamState.id].nodes.push(new_node);
     nodes = [...nodes, new_node];
   }
 
@@ -506,7 +510,7 @@
           await startAgent(node.id);
         }
       }
-      updateCurrentFlowActivity();
+      updateCurrentStreamActivity();
       return;
     }
 
@@ -517,7 +521,7 @@
         await startAgent(node.id);
       }
     }
-    updateCurrentFlowActivity();
+    updateCurrentStreamActivity();
   }
 
   async function onPause() {
@@ -530,7 +534,7 @@
           await stopAgent(node.id);
         }
       }
-      updateCurrentFlowActivity();
+      updateCurrentStreamActivity();
       return;
     }
 
@@ -541,7 +545,7 @@
         await stopAgent(node.id);
       }
     }
-    updateCurrentFlowActivity();
+    updateCurrentStreamActivity();
   }
 
   let nodeContextMenu: {
@@ -563,7 +567,7 @@
   function handleNodeContextMenu({ event, node }: { event: MouseEvent; node: Node }) {
     event.preventDefault();
 
-    const agentNode = node as unknown as TAgentFlowNode;
+    const agentNode = node as unknown as TAgentStreamNode;
 
     const [selectedNodes, _] = selectedNodesAndEdges();
     if (!selectedNodes.some((n) => n.id === agentNode.id)) {
@@ -650,36 +654,36 @@
     {/if}
 
     <FileMenu
-      {onNewFlow}
-      {onRenameFlow}
-      {onDeleteFlow}
-      {onSaveFlow}
-      {onExportFlow}
-      {onImportFlow}
+      {onNewStream}
+      {onRenameStream}
+      {onDeleteStream}
+      {onSaveStream}
+      {onExportStream}
+      {onImportStream}
     />
   </SvelteFlow>
   <div class="absolute top-1 left-0 w-40">
-    <FlowList {flowNames} currentFlow={flowState.id} {flowActivities} {changeFlow} />
+    <StreamList {streamNames} currentStream={streamState.id} {streamActivities} {changeStream} />
   </div>
   <div class="absolute right-0 top-1 w-60">
     <AgentList {agentDefs} {onAddAgent} />
   </div>
 </div>
 
-{#if newFlowModal}
-  <Modal title="New Flow" bind:open={newFlowModal} classBackdrop="bg-transparent">
-    <form onsubmit={handleCreateNewFlow} autocomplete="off">
+{#if newStreamModal}
+  <Modal title="New Stream" bind:open={newStreamModal} classBackdrop="bg-transparent">
+    <form onsubmit={handleCreateNewStream} autocomplete="off">
       <div class="flex flex-col">
-        <label for="flow_name" class="mb-2 text-sm font-medium text-gray-900 dark:text-white"
-          >Flow Name</label
+        <label for="stream_name" class="mb-2 text-sm font-medium text-gray-900 dark:text-white"
+          >Stream Name</label
         >
         <input
-          bind:this={newFlowInput}
+          bind:this={newStreamInput}
           type="text"
-          id="flow_name"
-          bind:value={newFlowName}
+          id="stream_name"
+          bind:value={newStreamName}
           class="block p-2 w-full text-sm text-gray-900 bg-gray-50 rounded-lg border border-gray-300 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
-          placeholder="Flow Name"
+          placeholder="Stream Name"
         />
       </div>
       <div class="flex justify-end mt-4">
@@ -689,20 +693,20 @@
   </Modal>
 {/if}
 
-{#if renameFlowModal}
-  <Modal title="Rename Flow" bind:open={renameFlowModal} classBackdrop="bg-transparent">
-    <form onsubmit={handleRenameFlow} autocomplete="off">
+{#if renameStreamModal}
+  <Modal title="Rename Stream" bind:open={renameStreamModal} classBackdrop="bg-transparent">
+    <form onsubmit={handleRenameStream} autocomplete="off">
       <div class="flex flex-col">
-        <label for="flow_name" class="mb-2 text-sm font-medium text-gray-900 dark:text-white"
-          >Flow Name</label
+        <label for="stream_name" class="mb-2 text-sm font-medium text-gray-900 dark:text-white"
+          >Stream Name</label
         >
         <input
-          bind:this={renameFlowInput}
+          bind:this={renameStreamInput}
           type="text"
-          id="flow_name"
-          bind:value={renameFlowName}
+          id="stream_name"
+          bind:value={renameStreamName}
           class="block p-2 w-full text-sm text-gray-900 bg-gray-50 rounded-lg border border-gray-300 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
-          placeholder="Flow Name"
+          placeholder="Stream Name"
         />
       </div>
       <div class="flex justify-end mt-4">
@@ -712,10 +716,10 @@
   </Modal>
 {/if}
 
-{#if deleteFlowModal}
+{#if deleteStreamModal}
   <Modal
-    title="Delete Flow"
-    bind:open={deleteFlowModal}
+    title="Delete Stream"
+    bind:open={deleteStreamModal}
     size="xs"
     autoclose
     classBackdrop="bg-transparent"
@@ -723,9 +727,9 @@
     <div class="text-center">
       <ExclamationCircleOutline class="mx-auto mb-4 text-gray-400 w-12 h-12 dark:text-gray-200" />
       <h3 class="mb-5 text-lg font-normal text-gray-500 dark:text-gray-400">
-        Are you sure you want to delete this flow?
+        Are you sure you want to delete this stream?
       </h3>
-      <Button onclick={handleDeleteFlow} color="red" class="me-2">Delete</Button>
+      <Button onclick={handleDeleteStream} color="red" class="me-2">Delete</Button>
       <Button color="alternative">Cancel</Button>
     </div>
   </Modal>
@@ -733,7 +737,7 @@
 
 {#if cannotDeleteToast}
   <Toast bind:toastStatus={cannotDeleteToast} class="absolute top-1/2 left-1/2 z-50">
-    "main" flow cannot be deleted.
+    "main" stream cannot be deleted.
   </Toast>
 {/if}
 

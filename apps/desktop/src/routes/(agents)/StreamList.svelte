@@ -1,31 +1,30 @@
 <script lang="ts">
   import { Accordion, AccordionItem } from "flowbite-svelte";
 
-  import FlowListItems from "./FlowListItems.svelte";
+  import StreamListItems from "./StreamListItems.svelte";
 
   interface Props {
-    flowNames: { id: string; name: string }[];
-    currentFlow: string;
-    flowActivities: Record<string, any>;
-    changeFlow: (flowId: string) => void;
+    streamNames: { id: string; name: string }[];
+    currentStream: string;
+    streamActivities: Record<string, any>;
+    changeStream: (streamId: string) => void;
   }
 
-  let { flowNames, currentFlow, flowActivities, changeFlow }: Props = $props();
-
+  let { streamNames, currentStream, streamActivities, changeStream }: Props = $props();
   const directories = $derived.by(() => {
     const result: Record<string, any> = {
-      ".": [], // Special directory for top-level flows (no slashes)
+      ".": [], // Special directory for top-level stream (no slashes)
     };
 
-    // Process each flow name
-    for (const flowName of flowNames) {
-      if (!flowName.name.includes("/")) {
-        // Top-level flow, no directory
-        result["."].push(flowName);
+    // Process each stream name
+    for (const streamName of streamNames) {
+      if (!streamName.name.includes("/")) {
+        // Top-level stream, no directory
+        result["."].push(streamName);
         continue;
       }
 
-      const parts = flowName.name.split("/");
+      const parts = streamName.name.split("/");
       const dir = parts[0];
 
       if (parts.length === 2) {
@@ -35,9 +34,9 @@
             ".": [],
           };
         }
-        result[dir]["."].push(flowName);
+        result[dir]["."].push(streamName);
       } else {
-        // Nested flow with multiple levels
+        // Nested stream with multiple levels
         if (!result[dir]) {
           result[dir] = {};
         }
@@ -54,11 +53,11 @@
           current = current[part];
         }
 
-        // Add flow to the deepest sub-directory
+        // Add stream to the deepest sub-directory
         if (!current["."]) {
           current["."] = [];
         }
-        current["."].push(flowName);
+        current["."].push(streamName);
       }
     }
 
@@ -67,21 +66,21 @@
 </script>
 
 <div class="backdrop-blur-xs">
-  <h4>Flows</h4>
+  <h4>Streams</h4>
   <hr />
   <Accordion flush>
-    {#each directories["."] as flowName}
+    {#each directories["."] as streamName}
       <button
         type="button"
         class="w-full text-left p-1 pl-3 text-gray-400 hover:text-black hover:bg-gray-200 dark:hover:bg-gray-400 flex items-center"
-        onclick={() => changeFlow(flowName.id)}
+        onclick={() => changeStream(streamName.id)}
       >
-        {#if flowName.id === currentFlow}
-          <span class="text-semibold text-gray-900 dark:text-white">{flowName.name}</span>
+        {#if streamName.id === currentStream}
+          <span class="text-semibold text-gray-900 dark:text-white">{streamName.name}</span>
         {:else}
-          <span>{flowName.name}</span>
+          <span>{streamName.name}</span>
         {/if}
-        {#if flowActivities[flowName.id]}
+        {#if streamActivities[streamName.id]}
           <span
             class="flex-none inline-block w-2 h-2 ml-1 bg-green-500 rounded-full mr-2"
             title="active"
@@ -101,11 +100,11 @@
           {dir}
         </div>
         <Accordion flush>
-          <FlowListItems
+          <StreamListItems
             directories={directories[dir]}
-            {currentFlow}
-            {flowActivities}
-            {changeFlow}
+            {currentStream}
+            {streamActivities}
+            {changeStream}
           />
         </Accordion>
       </AccordionItem>

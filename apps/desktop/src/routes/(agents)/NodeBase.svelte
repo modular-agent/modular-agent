@@ -19,10 +19,10 @@
   import type { NodeProps, ResizeDragEvent, ResizeParams } from "@xyflow/svelte";
   import type { AgentDefinition } from "tauri-plugin-askit-api";
 
-  import type { TAgentFlowNodeData } from "@/lib/types";
+  import type { TAgentStreamNodeData } from "@/lib/types";
 
   type Props = NodeProps & {
-    data: TAgentFlowNodeData;
+    data: TAgentStreamNodeData;
     agentDef: AgentDefinition | null;
     titleColor: string;
     inputCount: number;

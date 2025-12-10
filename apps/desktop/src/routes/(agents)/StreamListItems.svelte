@@ -1,16 +1,16 @@
 <script lang="ts">
   import { Accordion, AccordionItem } from "flowbite-svelte";
 
-  import FlowListItems from "./FlowListItems.svelte";
+  import StreamListItems from "./StreamListItems.svelte";
 
   interface Props {
     directories: Record<string, any>;
-    currentFlow: string;
-    flowActivities: Record<string, any>;
-    changeFlow: (flowId: string) => void;
+    currentStream: string;
+    streamActivities: Record<string, any>;
+    changeStream: (streamId: string) => void;
   }
 
-  let { directories, currentFlow, flowActivities, changeFlow }: Props = $props();
+  let { directories, currentStream, streamActivities, changeStream }: Props = $props();
 
   const dirKeys = $derived(Object.keys(directories).sort());
 
@@ -23,22 +23,22 @@
 
 {#each dirKeys as key}
   {#if key === "."}
-    {@const flowNames = directories[key].sort()}
-    {#each flowNames as flowName}
+    {@const streamNames = directories[key].sort()}
+    {#each streamNames as streamName}
       <button
         type="button"
         class="w-full text-left p-1 pl-3 text-gray-400 hover:text-black hover:bg-gray-200 dark:hover:bg-gray-400 flex items-center"
-        onclick={() => changeFlow(flowName.id)}
+        onclick={() => changeStream(streamName.id)}
       >
-        {#if flowName.id === currentFlow}
+        {#if streamName.id === currentStream}
           <span class="text-semibold text-gray-900 dark:text-white"
-            >{getDisplayName(flowName.name)}</span
+            >{getDisplayName(streamName.name)}</span
           >
         {:else}
-          <span>{getDisplayName(flowName.name)}</span>
+          <span>{getDisplayName(streamName.name)}</span>
         {/if}
 
-        {#if flowActivities[flowName.id]}
+        {#if streamActivities[streamName.id]}
           <span
             class="flex-none inline-block w-2 h-2 ml-1 bg-green-500 rounded-full mr-2"
             title="active"
@@ -55,7 +55,12 @@
         {key}
       </div>
       <Accordion flush>
-        <FlowListItems directories={directories[key]} {currentFlow} {flowActivities} {changeFlow} />
+        <StreamListItems
+          directories={directories[key]}
+          {currentStream}
+          {streamActivities}
+          {changeStream}
+        />
       </Accordion>
     </AccordionItem>
   {/if}

@@ -3,51 +3,57 @@
     "w-full text-left text-gray-400 hover:text-black hover:bg-gray-200 dark:hover:bg-gray-400";
 
   interface Props {
-    onNewFlow: () => void;
-    onRenameFlow: () => void;
-    onDeleteFlow: () => void;
-    onSaveFlow: () => void;
-    onExportFlow: () => void;
-    onImportFlow: () => void;
+    onNewStream: () => void;
+    onRenameStream: () => void;
+    onDeleteStream: () => void;
+    onSaveStream: () => void;
+    onExportStream: () => void;
+    onImportStream: () => void;
   }
 </script>
 
 <script lang="ts">
   import { Accordion, AccordionItem } from "flowbite-svelte";
 
-  let { onNewFlow, onRenameFlow, onDeleteFlow, onSaveFlow, onExportFlow, onImportFlow }: Props =
-    $props();
+  let {
+    onNewStream,
+    onRenameStream,
+    onDeleteStream,
+    onSaveStream,
+    onExportStream,
+    onImportStream,
+  }: Props = $props();
 
   let open = $state(false);
 
   function handleNew() {
     open = false;
-    onNewFlow();
+    onNewStream();
   }
 
   function handleRename() {
     open = false;
-    onRenameFlow();
+    onRenameStream();
   }
 
   function handleDelete() {
     open = false;
-    onDeleteFlow();
+    onDeleteStream();
   }
 
   function handleSave() {
     open = false;
-    onSaveFlow();
+    onSaveStream();
   }
 
   function handleExport() {
     open = false;
-    onExportFlow();
+    onExportStream();
   }
 
   function handleImport() {
     open = false;
-    onImportFlow();
+    onImportStream();
   }
 </script>
 

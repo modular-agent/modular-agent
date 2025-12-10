@@ -36,12 +36,12 @@
     subscribeErrorMessage,
     subscribeInputMessage,
   } from "@/lib/shared.svelte";
-  import type { TAgentFlowNodeData } from "@/lib/types";
+  import type { TAgentStreamNodeData } from "@/lib/types";
 
   import NodeBase from "./NodeBase.svelte";
 
   type Props = NodeProps & {
-    data: TAgentFlowNodeData;
+    data: TAgentStreamNodeData;
   };
 
   let { id, data, ...props }: Props = $props();

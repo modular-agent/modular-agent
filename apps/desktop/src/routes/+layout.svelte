@@ -14,7 +14,7 @@
   const { children, data }: LayoutProps = $props();
 
   setContext("coreSettings", () => data.coreSettings);
-  setContext("agentFlows", () => data.agentFlows);
+  setContext("AgentStreams", () => data.AgentStreams);
 
   const key_close = "Escape";
   const key_fullscreen = $derived(data.coreSettings.shortcut_keys["fullscreen"]);
