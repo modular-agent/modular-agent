@@ -1,14 +1,14 @@
-use std::collections::HashMap;
 use std::ops::Not;
 
 use serde::{Deserialize, Serialize};
 
-use super::agent::{Agent, AgentSpec};
-use super::askit::ASKit;
-use super::error::AgentError;
-use super::value::AgentValue;
+use crate::FnvIndexMap;
+use crate::agent::{Agent, AgentSpec};
+use crate::askit::ASKit;
+use crate::error::AgentError;
+use crate::value::AgentValue;
 
-pub type AgentDefinitions = HashMap<String, AgentDefinition>;
+pub type AgentDefinitions = FnvIndexMap<String, AgentDefinition>;
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct AgentDefinition {
@@ -32,13 +32,13 @@ pub struct AgentDefinition {
     pub outputs: Option<Vec<String>>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub default_configs: Option<AgentDefaultConfigs>,
+    pub default_configs: Option<AgentConfigSpecs>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub global_configs: Option<AgentGlobalConfigs>,
+    pub global_configs: Option<AgentGlobalConfigSpecs>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub display_configs: Option<AgentDisplayConfigs>,
+    pub display_configs: Option<AgentDisplayConfigSpecs>,
 
     #[serde(default, skip_serializing_if = "<&bool>::not")]
     pub native_thread: bool,
@@ -47,11 +47,11 @@ pub struct AgentDefinition {
     pub new_boxed: Option<AgentNewBoxedFn>,
 }
 
-pub type AgentDefaultConfigs = Vec<(String, AgentConfigEntry)>;
-pub type AgentGlobalConfigs = Vec<(String, AgentConfigEntry)>;
+pub type AgentConfigSpecs = FnvIndexMap<String, AgentConfigSpec>;
+pub type AgentGlobalConfigSpecs = FnvIndexMap<String, AgentConfigSpec>;
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
-pub struct AgentConfigEntry {
+pub struct AgentConfigSpec {
     pub value: AgentValue,
 
     #[serde(rename = "type")]
@@ -69,10 +69,13 @@ pub struct AgentConfigEntry {
     pub hidden: bool,
 }
 
-pub type AgentDisplayConfigs = Vec<(String, AgentDisplayConfigEntry)>;
+pub type AgentDisplayConfigSpecs = FnvIndexMap<String, AgentDisplayConfigSpec>;
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
-pub struct AgentDisplayConfigEntry {
+pub struct AgentDisplayConfigSpec {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub value: Option<AgentValue>,
+
     #[serde(rename = "type")]
     pub type_: Option<String>,
 
@@ -130,7 +133,7 @@ impl AgentDefinition {
 
     // Default Configs
 
-    pub fn default_configs(mut self, configs: Vec<(&str, AgentConfigEntry)>) -> Self {
+    pub fn default_configs(mut self, configs: Vec<(&str, AgentConfigSpec)>) -> Self {
         self.default_configs = Some(configs.into_iter().map(|(k, v)| (k.into(), v)).collect());
         self
     }
@@ -141,7 +144,7 @@ impl AgentDefinition {
 
     pub fn unit_config_with<F>(self, key: &str, f: F) -> Self
     where
-        F: FnOnce(AgentConfigEntry) -> AgentConfigEntry,
+        F: FnOnce(AgentConfigSpec) -> AgentConfigSpec,
     {
         self.config_type_with(key, (), "unit", f)
     }
@@ -152,7 +155,7 @@ impl AgentDefinition {
 
     pub fn boolean_config_with<F>(self, key: &str, default: bool, f: F) -> Self
     where
-        F: FnOnce(AgentConfigEntry) -> AgentConfigEntry,
+        F: FnOnce(AgentConfigSpec) -> AgentConfigSpec,
     {
         self.config_type_with(key, default, "boolean", f)
     }
@@ -167,7 +170,7 @@ impl AgentDefinition {
 
     pub fn integer_config_with<F>(self, key: &str, default: i64, f: F) -> Self
     where
-        F: FnOnce(AgentConfigEntry) -> AgentConfigEntry,
+        F: FnOnce(AgentConfigSpec) -> AgentConfigSpec,
     {
         self.config_type_with(key, default, "integer", f)
     }
@@ -182,7 +185,7 @@ impl AgentDefinition {
 
     pub fn number_config_with<F>(self, key: &str, default: f64, f: F) -> Self
     where
-        F: FnOnce(AgentConfigEntry) -> AgentConfigEntry,
+        F: FnOnce(AgentConfigSpec) -> AgentConfigSpec,
     {
         self.config_type_with(key, default, "number", f)
     }
@@ -197,7 +200,7 @@ impl AgentDefinition {
 
     pub fn string_config_with<F>(self, key: &str, default: impl Into<String>, f: F) -> Self
     where
-        F: FnOnce(AgentConfigEntry) -> AgentConfigEntry,
+        F: FnOnce(AgentConfigSpec) -> AgentConfigSpec,
     {
         let default = default.into();
         self.config_type_with(key, AgentValue::string(default), "string", f)
@@ -213,7 +216,7 @@ impl AgentDefinition {
 
     pub fn text_config_with<F>(self, key: &str, default: impl Into<String>, f: F) -> Self
     where
-        F: FnOnce(AgentConfigEntry) -> AgentConfigEntry,
+        F: FnOnce(AgentConfigSpec) -> AgentConfigSpec,
     {
         let default = default.into();
         self.config_type_with(key, AgentValue::string(default), "text", f)
@@ -229,7 +232,7 @@ impl AgentDefinition {
 
     pub fn object_config_with<V: Into<AgentValue>, F>(self, key: &str, default: V, f: F) -> Self
     where
-        F: FnOnce(AgentConfigEntry) -> AgentConfigEntry,
+        F: FnOnce(AgentConfigSpec) -> AgentConfigSpec,
     {
         self.config_type_with(key, default, "object", f)
     }
@@ -246,7 +249,7 @@ impl AgentDefinition {
         f: F,
     ) -> Self
     where
-        F: FnOnce(AgentConfigEntry) -> AgentConfigEntry,
+        F: FnOnce(AgentConfigSpec) -> AgentConfigSpec,
     {
         self.config_type_with(key, default, type_, f)
     }
@@ -259,24 +262,26 @@ impl AgentDefinition {
         f: F,
     ) -> Self
     where
-        F: FnOnce(AgentConfigEntry) -> AgentConfigEntry,
+        F: FnOnce(AgentConfigSpec) -> AgentConfigSpec,
     {
-        let entry = AgentConfigEntry::new(default, type_);
-        self.push_default_config_entry(key.into(), f(entry));
+        let entry = AgentConfigSpec::new(default, type_);
+        self.insert_default_config_entry(key.into(), f(entry));
         self
     }
 
-    fn push_default_config_entry(&mut self, key: String, entry: AgentConfigEntry) {
+    fn insert_default_config_entry(&mut self, key: String, entry: AgentConfigSpec) {
         if let Some(configs) = self.default_configs.as_mut() {
-            configs.push((key, entry));
+            configs.insert(key, entry);
         } else {
-            self.default_configs = Some(vec![(key, entry)]);
+            let mut map = FnvIndexMap::default();
+            map.insert(key, entry);
+            self.default_configs = Some(map);
         }
     }
 
     // Global Configs
 
-    pub fn global_configs(mut self, configs: Vec<(&str, AgentConfigEntry)>) -> Self {
+    pub fn global_configs(mut self, configs: Vec<(&str, AgentConfigSpec)>) -> Self {
         self.global_configs = Some(configs.into_iter().map(|(k, v)| (k.into(), v)).collect());
         self
     }
@@ -287,7 +292,7 @@ impl AgentDefinition {
 
     pub fn unit_global_config_with<F>(self, key: &str, f: F) -> Self
     where
-        F: FnOnce(AgentConfigEntry) -> AgentConfigEntry,
+        F: FnOnce(AgentConfigSpec) -> AgentConfigSpec,
     {
         self.global_config_type_with(key, (), "unit", f)
     }
@@ -298,7 +303,7 @@ impl AgentDefinition {
 
     pub fn boolean_global_config_with<F>(self, key: &str, default: bool, f: F) -> Self
     where
-        F: FnOnce(AgentConfigEntry) -> AgentConfigEntry,
+        F: FnOnce(AgentConfigSpec) -> AgentConfigSpec,
     {
         self.global_config_type_with(key, default, "boolean", f)
     }
@@ -309,7 +314,7 @@ impl AgentDefinition {
 
     pub fn integer_global_config_with<F>(self, key: &str, default: i64, f: F) -> Self
     where
-        F: FnOnce(AgentConfigEntry) -> AgentConfigEntry,
+        F: FnOnce(AgentConfigSpec) -> AgentConfigSpec,
     {
         self.global_config_type_with(key, default, "integer", f)
     }
@@ -320,7 +325,7 @@ impl AgentDefinition {
 
     pub fn number_global_config_with<F>(self, key: &str, default: f64, f: F) -> Self
     where
-        F: FnOnce(AgentConfigEntry) -> AgentConfigEntry,
+        F: FnOnce(AgentConfigSpec) -> AgentConfigSpec,
     {
         self.global_config_type_with(key, default, "number", f)
     }
@@ -331,7 +336,7 @@ impl AgentDefinition {
 
     pub fn string_global_config_with<F>(self, key: &str, default: impl Into<String>, f: F) -> Self
     where
-        F: FnOnce(AgentConfigEntry) -> AgentConfigEntry,
+        F: FnOnce(AgentConfigSpec) -> AgentConfigSpec,
     {
         let default = default.into();
         self.global_config_type_with(key, AgentValue::string(default), "string", f)
@@ -343,7 +348,7 @@ impl AgentDefinition {
 
     pub fn text_global_config_with<F>(self, key: &str, default: impl Into<String>, f: F) -> Self
     where
-        F: FnOnce(AgentConfigEntry) -> AgentConfigEntry,
+        F: FnOnce(AgentConfigSpec) -> AgentConfigSpec,
     {
         let default = default.into();
         self.global_config_type_with(key, AgentValue::string(default), "text", f)
@@ -360,7 +365,7 @@ impl AgentDefinition {
         f: F,
     ) -> Self
     where
-        F: FnOnce(AgentConfigEntry) -> AgentConfigEntry,
+        F: FnOnce(AgentConfigSpec) -> AgentConfigSpec,
     {
         self.global_config_type_with(key, default, "object", f)
     }
@@ -373,7 +378,7 @@ impl AgentDefinition {
         f: F,
     ) -> Self
     where
-        F: FnOnce(AgentConfigEntry) -> AgentConfigEntry,
+        F: FnOnce(AgentConfigSpec) -> AgentConfigSpec,
     {
         self.global_config_type_with(key, default, type_, f)
     }
@@ -386,24 +391,26 @@ impl AgentDefinition {
         f: F,
     ) -> Self
     where
-        F: FnOnce(AgentConfigEntry) -> AgentConfigEntry,
+        F: FnOnce(AgentConfigSpec) -> AgentConfigSpec,
     {
-        let entry = AgentConfigEntry::new(default, type_);
-        self.push_global_config_entry(key.into(), f(entry));
+        let entry = AgentConfigSpec::new(default, type_);
+        self.insert_global_config_entry(key.into(), f(entry));
         self
     }
 
-    fn push_global_config_entry(&mut self, key: String, entry: AgentConfigEntry) {
+    fn insert_global_config_entry(&mut self, key: String, entry: AgentConfigSpec) {
         if let Some(configs) = self.global_configs.as_mut() {
-            configs.push((key, entry));
+            configs.insert(key, entry);
         } else {
-            self.global_configs = Some(vec![(key, entry)]);
+            let mut map = FnvIndexMap::default();
+            map.insert(key, entry);
+            self.global_configs = Some(map);
         }
     }
 
     // Display Configs
 
-    pub fn display_configs(mut self, configs: Vec<(&str, AgentDisplayConfigEntry)>) -> Self {
+    pub fn display_configs(mut self, configs: Vec<(&str, AgentDisplayConfigSpec)>) -> Self {
         self.display_configs = Some(configs.into_iter().map(|(k, v)| (k.into(), v)).collect());
         self
     }
@@ -414,7 +421,7 @@ impl AgentDefinition {
 
     pub fn unit_display_config_with<F>(self, key: &str, f: F) -> Self
     where
-        F: FnOnce(AgentDisplayConfigEntry) -> AgentDisplayConfigEntry,
+        F: FnOnce(AgentDisplayConfigSpec) -> AgentDisplayConfigSpec,
     {
         self.display_config_type_with(key, "unit", f)
     }
@@ -425,7 +432,7 @@ impl AgentDefinition {
 
     pub fn boolean_display_config_with<F>(self, key: &str, f: F) -> Self
     where
-        F: FnOnce(AgentDisplayConfigEntry) -> AgentDisplayConfigEntry,
+        F: FnOnce(AgentDisplayConfigSpec) -> AgentDisplayConfigSpec,
     {
         self.display_config_type_with(key, "boolean", f)
     }
@@ -436,7 +443,7 @@ impl AgentDefinition {
 
     pub fn integer_display_config_with<F>(self, key: &str, f: F) -> Self
     where
-        F: FnOnce(AgentDisplayConfigEntry) -> AgentDisplayConfigEntry,
+        F: FnOnce(AgentDisplayConfigSpec) -> AgentDisplayConfigSpec,
     {
         self.display_config_type_with(key, "integer", f)
     }
@@ -447,7 +454,7 @@ impl AgentDefinition {
 
     pub fn number_display_config_with<F>(self, key: &str, f: F) -> Self
     where
-        F: FnOnce(AgentDisplayConfigEntry) -> AgentDisplayConfigEntry,
+        F: FnOnce(AgentDisplayConfigSpec) -> AgentDisplayConfigSpec,
     {
         self.display_config_type_with(key, "number", f)
     }
@@ -458,7 +465,7 @@ impl AgentDefinition {
 
     pub fn string_display_config_with<F>(self, key: &str, f: F) -> Self
     where
-        F: FnOnce(AgentDisplayConfigEntry) -> AgentDisplayConfigEntry,
+        F: FnOnce(AgentDisplayConfigSpec) -> AgentDisplayConfigSpec,
     {
         self.display_config_type_with(key, "string", f)
     }
@@ -469,7 +476,7 @@ impl AgentDefinition {
 
     pub fn text_display_config_with<F>(self, key: &str, f: F) -> Self
     where
-        F: FnOnce(AgentDisplayConfigEntry) -> AgentDisplayConfigEntry,
+        F: FnOnce(AgentDisplayConfigSpec) -> AgentDisplayConfigSpec,
     {
         self.display_config_type_with(key, "text", f)
     }
@@ -480,32 +487,34 @@ impl AgentDefinition {
 
     pub fn object_display_config_with<F>(self, key: &str, f: F) -> Self
     where
-        F: FnOnce(AgentDisplayConfigEntry) -> AgentDisplayConfigEntry,
+        F: FnOnce(AgentDisplayConfigSpec) -> AgentDisplayConfigSpec,
     {
         self.display_config_type_with(key, "object", f)
     }
 
     pub fn custom_display_config_with<F>(self, key: &str, type_: &str, f: F) -> Self
     where
-        F: FnOnce(AgentDisplayConfigEntry) -> AgentDisplayConfigEntry,
+        F: FnOnce(AgentDisplayConfigSpec) -> AgentDisplayConfigSpec,
     {
         self.display_config_type_with(key, type_, f)
     }
 
     fn display_config_type_with<F>(mut self, key: &str, type_: &str, f: F) -> Self
     where
-        F: FnOnce(AgentDisplayConfigEntry) -> AgentDisplayConfigEntry,
+        F: FnOnce(AgentDisplayConfigSpec) -> AgentDisplayConfigSpec,
     {
-        let entry = AgentDisplayConfigEntry::new(type_);
-        self.push_display_config_entry(key.into(), f(entry));
+        let entry = AgentDisplayConfigSpec::new(type_);
+        self.insert_display_config_entry(key.into(), f(entry));
         self
     }
 
-    fn push_display_config_entry(&mut self, key: String, entry: AgentDisplayConfigEntry) {
+    fn insert_display_config_entry(&mut self, key: String, entry: AgentDisplayConfigSpec) {
         if let Some(configs) = self.display_configs.as_mut() {
-            configs.push((key, entry));
+            configs.insert(key, entry);
         } else {
-            self.display_configs = Some(vec![(key, entry)]);
+            let mut map = FnvIndexMap::default();
+            map.insert(key, entry);
+            self.display_configs = Some(map);
         }
     }
 
@@ -517,19 +526,20 @@ impl AgentDefinition {
     pub fn to_spec(&self) -> AgentSpec {
         AgentSpec {
             def_name: self.name.clone(),
-            inputs: self.inputs.clone().unwrap_or_default(),
-            outputs: self.outputs.clone().unwrap_or_default(),
+            inputs: self.inputs.clone(),
+            outputs: self.outputs.clone(),
             configs: self.default_configs.as_ref().map(|cfgs| {
                 cfgs.iter()
                     .map(|(k, v)| (k.clone(), v.value.clone()))
                     .collect()
             }),
-            display_configs: self.display_configs.clone(),
+            config_specs: self.default_configs.clone(),
+            display_config_specs: self.display_configs.clone(),
         }
     }
 }
 
-impl AgentConfigEntry {
+impl AgentConfigSpec {
     pub fn new<V: Into<AgentValue>>(value: V, type_: &str) -> Self {
         Self {
             value: value.into(),
@@ -554,7 +564,7 @@ impl AgentConfigEntry {
     }
 }
 
-impl AgentDisplayConfigEntry {
+impl AgentDisplayConfigSpec {
     pub fn new(type_: &str) -> Self {
         Self {
             type_: Some(type_.into()),
@@ -619,18 +629,16 @@ mod tests {
         assert_eq!(def.outputs.unwrap(), vec!["out"]);
         let display_configs = def.display_configs.unwrap();
         assert_eq!(display_configs.len(), 2);
-        let entry = &display_configs[0];
-        assert_eq!(entry.0, "value");
-        assert_eq!(entry.1.type_.as_ref().unwrap(), "string");
-        assert_eq!(entry.1.title.as_ref().unwrap(), "display_title");
-        assert_eq!(entry.1.description.as_ref().unwrap(), "display_description");
-        assert_eq!(entry.1.hide_title, false);
-        let entry = &display_configs[1];
-        assert_eq!(entry.0, "hide_title_value");
-        assert_eq!(entry.1.type_.as_ref().unwrap(), "integer");
-        assert_eq!(entry.1.title, None);
-        assert_eq!(entry.1.description, None);
-        assert_eq!(entry.1.hide_title, true);
+        let entry = display_configs.get("value").unwrap();
+        assert_eq!(entry.type_.as_ref().unwrap(), "string");
+        assert_eq!(entry.title.as_ref().unwrap(), "display_title");
+        assert_eq!(entry.description.as_ref().unwrap(), "display_description");
+        assert_eq!(entry.hide_title, false);
+        let entry = display_configs.get("hide_title_value").unwrap();
+        assert_eq!(entry.type_.as_ref().unwrap(), "integer");
+        assert_eq!(entry.title, None);
+        assert_eq!(entry.description, None);
+        assert_eq!(entry.hide_title, true);
     }
 
     #[test]
@@ -651,13 +659,13 @@ mod tests {
         print!("{}", json);
         assert_eq!(
             json,
-            r#"{"kind":"test","name":"echo","title":"Echo","category":"Test","inputs":["in"],"outputs":["out"],"display_configs":[["value",{"type":"string","title":"display_title","description":"display_description"}],["hide_title_value",{"type":"integer","hide_title":true}]]}"#
+            r#"{"kind":"test","name":"echo","title":"Echo","category":"Test","inputs":["in"],"outputs":["out"],"display_configs":{"value":{"type":"string","title":"display_title","description":"display_description"},"hide_title_value":{"type":"integer","hide_title":true}}}"#
         );
     }
 
     #[test]
     fn test_deserialize_echo_agent_definition() {
-        let json = r#"{"kind":"test","name":"echo","title":"Echo","category":"Test","inputs":["in"],"outputs":["out"],"display_configs":[["value",{"type":"string","title":"display_title","description":"display_description"}],["hide_title_value",{"type":"integer","hide_title":true}]]}"#;
+        let json = r#"{"kind":"test","name":"echo","title":"Echo","category":"Test","inputs":["in"],"outputs":["out"],"display_configs":{"value":{"type":"string","title":"display_title","description":"display_description"},"hide_title_value":{"type":"integer","hide_title":true}}}"#;
         let def: AgentDefinition = serde_json::from_str(json).unwrap();
         assert_eq!(def.kind, "test");
         assert_eq!(def.name, "echo");
@@ -667,18 +675,18 @@ mod tests {
         assert_eq!(def.outputs.unwrap(), vec!["out"]);
         let display_configs = def.display_configs.unwrap();
         assert_eq!(display_configs.len(), 2);
-        let entry = &display_configs[0];
-        assert_eq!(entry.0, "value");
-        assert_eq!(entry.1.type_.as_ref().unwrap(), "string");
-        assert_eq!(entry.1.title.as_ref().unwrap(), "display_title");
-        assert_eq!(entry.1.description.as_ref().unwrap(), "display_description");
-        assert_eq!(entry.1.hide_title, false);
-        let entry = &display_configs[1];
-        assert_eq!(entry.0, "hide_title_value");
-        assert_eq!(entry.1.type_.as_ref().unwrap(), "integer");
-        assert_eq!(entry.1.title, None);
-        assert_eq!(entry.1.description, None);
-        assert_eq!(entry.1.hide_title, true);
+        let (key, entry) = display_configs.get_index(0).unwrap();
+        assert_eq!(key, "value");
+        assert_eq!(entry.type_.as_ref().unwrap(), "string");
+        assert_eq!(entry.title.as_ref().unwrap(), "display_title");
+        assert_eq!(entry.description.as_ref().unwrap(), "display_description");
+        assert_eq!(entry.hide_title, false);
+        let (key, entry) = display_configs.get_index(1).unwrap();
+        assert_eq!(key, "hide_title_value");
+        assert_eq!(entry.type_.as_ref().unwrap(), "integer");
+        assert_eq!(entry.title, None);
+        assert_eq!(entry.description, None);
+        assert_eq!(entry.hide_title, true);
     }
 
     #[test]
@@ -870,9 +878,7 @@ mod tests {
             .default_configs
             .as_ref()
             .unwrap()
-            .iter()
-            .find(|(k, _)| k == "custom_default")
-            .map(|(_, v)| v)
+            .get("custom_default")
             .unwrap();
         assert_eq!(default_entry.title.as_deref(), Some("Custom"));
 
@@ -880,9 +886,7 @@ mod tests {
             .global_configs
             .as_ref()
             .unwrap()
-            .iter()
-            .find(|(k, _)| k == "custom_global")
-            .map(|(_, v)| v)
+            .get("custom_global")
             .unwrap();
         assert_eq!(global_entry.description.as_deref(), Some("Global Desc"));
 
@@ -890,9 +894,7 @@ mod tests {
             .display_configs
             .as_ref()
             .unwrap()
-            .iter()
-            .find(|(k, _)| k == "custom_display")
-            .map(|(_, v)| v)
+            .get("custom_display")
             .unwrap();
         assert_eq!(display_entry.title.as_deref(), Some("Display"));
     }

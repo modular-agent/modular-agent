@@ -1,13 +1,13 @@
-use std::collections::HashMap;
 use std::sync::atomic::AtomicUsize;
 use std::sync::{Arc, Mutex};
 
 use tokio::sync::{Mutex as AsyncMutex, mpsc};
 
+use crate::FnvIndexMap;
 use crate::agent::{Agent, AgentMessage, AgentSpec, AgentStatus, agent_new};
 use crate::config::{AgentConfigs, AgentConfigsMap};
 use crate::context::AgentContext;
-use crate::definition::{AgentDefaultConfigs, AgentDefinition, AgentDefinitions};
+use crate::definition::{AgentConfigSpecs, AgentDefinition, AgentDefinitions};
 use crate::error::AgentError;
 use crate::flow::{self, AgentFlow, AgentFlowEdge, AgentFlowNode, AgentFlows};
 use crate::message::{self, AgentEventMessage};
@@ -19,19 +19,19 @@ const MESSAGE_LIMIT: usize = 1024;
 #[derive(Clone)]
 pub struct ASKit {
     // agent id -> agent
-    pub(crate) agents: Arc<Mutex<HashMap<String, Arc<AsyncMutex<Box<dyn Agent>>>>>>,
+    pub(crate) agents: Arc<Mutex<FnvIndexMap<String, Arc<AsyncMutex<Box<dyn Agent>>>>>>,
 
     // agent id -> sender
-    pub(crate) agent_txs: Arc<Mutex<HashMap<String, AgentMessageSender>>>,
+    pub(crate) agent_txs: Arc<Mutex<FnvIndexMap<String, AgentMessageSender>>>,
 
     // board name -> [board out agent id]
-    pub(crate) board_out_agents: Arc<Mutex<HashMap<String, Vec<String>>>>,
+    pub(crate) board_out_agents: Arc<Mutex<FnvIndexMap<String, Vec<String>>>>,
 
     // board name -> value
-    pub(crate) board_value: Arc<Mutex<HashMap<String, AgentValue>>>,
+    pub(crate) board_value: Arc<Mutex<FnvIndexMap<String, AgentValue>>>,
 
     // source agent id -> [target agent id / source handle / target handle]
-    pub(crate) edges: Arc<Mutex<HashMap<String, Vec<(String, String, String)>>>>,
+    pub(crate) edges: Arc<Mutex<FnvIndexMap<String, Vec<(String, String, String)>>>>,
 
     // agent def name -> agent definition
     pub(crate) defs: Arc<Mutex<AgentDefinitions>>,
@@ -40,13 +40,13 @@ pub struct ASKit {
     pub(crate) flows: Arc<Mutex<AgentFlows>>,
 
     // agent def name -> config
-    pub(crate) global_configs_map: Arc<Mutex<HashMap<String, AgentConfigs>>>,
+    pub(crate) global_configs_map: Arc<Mutex<FnvIndexMap<String, AgentConfigs>>>,
 
     // message sender
     pub(crate) tx: Arc<Mutex<Option<mpsc::Sender<AgentEventMessage>>>>,
 
     // observers
-    pub(crate) observers: Arc<Mutex<HashMap<usize, Box<dyn ASKitObserver + Sync + Send>>>>,
+    pub(crate) observers: Arc<Mutex<FnvIndexMap<usize, Box<dyn ASKitObserver + Sync + Send>>>>,
 }
 
 impl ASKit {
@@ -121,7 +121,7 @@ impl ASKit {
         defs.get(def_name).cloned()
     }
 
-    pub fn get_agent_default_configs(&self, def_name: &str) -> Option<AgentDefaultConfigs> {
+    pub fn get_agent_default_configs(&self, def_name: &str) -> Option<AgentConfigSpecs> {
         let defs = self.defs.lock().unwrap();
         let Some(def) = defs.get(def_name) else {
             return None;
@@ -168,7 +168,7 @@ impl ASKit {
         let mut flows = self.flows.lock().unwrap();
 
         // remove the original flow
-        let Some(mut flow) = flows.remove(id) else {
+        let Some(mut flow) = flows.swap_remove(id) else {
             return Err(AgentError::RenameFlowFailed(id.into()));
         };
 
@@ -253,7 +253,7 @@ impl ASKit {
     pub async fn remove_agent_flow(&self, id: &str) -> Result<(), AgentError> {
         let flow = {
             let mut flows = self.flows.lock().unwrap();
-            let Some(flow) = flows.remove(id) else {
+            let Some(flow) = flows.swap_remove(id) else {
                 return Err(AgentError::FlowNotFound(id.to_string()));
             };
             flow.clone()
@@ -407,15 +407,15 @@ impl ASKit {
                 }
             }
             for source in sources_to_remove {
-                edges.remove(&source);
+                edges.swap_remove(&source);
             }
-            edges.remove(agent_id);
+            edges.swap_remove(agent_id);
         }
 
         // remove from agents
         {
             let mut agents = self.agents.lock().unwrap();
-            agents.remove(agent_id);
+            agents.swap_remove(agent_id);
         }
 
         Ok(())
@@ -442,7 +442,7 @@ impl ASKit {
                     || *target_handle != edge.target_handle
             });
             if targets.is_empty() {
-                edges.remove(&edge.source);
+                edges.swap_remove(&edge.source);
             }
         }
     }
@@ -607,7 +607,7 @@ impl ASKit {
 
             {
                 let mut agent_txs = self.agent_txs.lock().unwrap();
-                if let Some(tx) = agent_txs.remove(agent_id) {
+                if let Some(tx) = agent_txs.swap_remove(agent_id) {
                     match tx {
                         AgentMessageSender::Sync(tx) => {
                             tx.send(AgentMessage::Stop).unwrap_or_else(|e| {
@@ -862,7 +862,7 @@ impl ASKit {
 
     pub fn unsubscribe(&self, observer_id: usize) {
         let mut observers = self.observers.lock().unwrap();
-        observers.remove(&observer_id);
+        observers.swap_remove(&observer_id);
     }
 
     pub(crate) fn emit_agent_display(&self, agent_id: String, key: String, value: AgentValue) {

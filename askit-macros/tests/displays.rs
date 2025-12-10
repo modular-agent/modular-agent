@@ -1,5 +1,4 @@
-use agent_stream_kit::{AgentData, AgentError, AgentSpec, AsAgent, async_trait};
-use askit_macros::askit_agent;
+use agent_stream_kit::{AgentData, AgentError, AgentSpec, AsAgent, askit_agent, async_trait};
 
 const UNIT_KEY: &str = "unit_disp";
 const BOOLEAN_KEY: &str = "boolean_disp";

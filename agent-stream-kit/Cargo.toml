@@ -9,6 +9,8 @@ license.workspace = true
 [dependencies]
 askit-macros = { workspace = true }
 async-trait = "0.1"
+fnv = "1"
+indexmap = { version = "2", features = ["serde"] }
 inventory = "0.3"
 log = "0.4"
 photon-rs = { version = "0.3.3", optional = true }

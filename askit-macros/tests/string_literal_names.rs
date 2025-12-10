@@ -1,7 +1,6 @@
 use agent_stream_kit::{
-    AgentContext, AgentData, AgentError, AgentSpec, AgentValue, AsAgent, async_trait,
+    AgentContext, AgentData, AgentError, AgentSpec, AgentValue, AsAgent, askit_agent, async_trait,
 };
-use askit_macros::askit_agent;
 
 #[askit_agent(
     title = "Literal Name Agent",

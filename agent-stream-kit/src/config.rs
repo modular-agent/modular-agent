@@ -1,18 +1,19 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
+use crate::FnvIndexMap;
 use crate::error::AgentError;
 use crate::value::AgentValue;
 
-pub type AgentConfigsMap = HashMap<String, AgentConfigs>;
+pub type AgentConfigsMap = FnvIndexMap<String, AgentConfigs>;
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
-pub struct AgentConfigs(BTreeMap<String, AgentValue>);
+pub struct AgentConfigs(FnvIndexMap<String, AgentValue>);
 
 impl AgentConfigs {
     pub fn new() -> Self {
-        Self(BTreeMap::new())
+        Self(FnvIndexMap::default())
     }
 
     pub fn set(&mut self, key: String, value: AgentValue) {
@@ -153,7 +154,7 @@ impl AgentConfigs {
 
 impl IntoIterator for AgentConfigs {
     type Item = (String, AgentValue);
-    type IntoIter = std::collections::btree_map::IntoIter<String, AgentValue>;
+    type IntoIter = indexmap::map::IntoIter<String, AgentValue>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.into_iter()
@@ -162,7 +163,7 @@ impl IntoIterator for AgentConfigs {
 
 impl<'a> IntoIterator for &'a AgentConfigs {
     type Item = (&'a String, &'a AgentValue);
-    type IntoIter = std::collections::btree_map::Iter<'a, String, AgentValue>;
+    type IntoIter = indexmap::map::Iter<'a, String, AgentValue>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.iter()

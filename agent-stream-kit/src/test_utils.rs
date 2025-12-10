@@ -1,14 +1,17 @@
-use crate::{ASKit, AgentContext, AgentData, AgentError, AgentSpec, AgentValue, AsAgent};
-use askit_macros::askit_agent;
-use async_trait::async_trait;
 use std::sync::Arc;
 use std::time::Duration;
+
+use async_trait::async_trait;
 use tokio::{
     sync::{Mutex as AsyncMutex, mpsc},
     time::timeout,
 };
 
+use crate::{ASKit, AgentContext, AgentData, AgentError, AgentSpec, AgentValue, AsAgent};
+use askit_macros::askit_agent;
+
 pub type ProbeEvent = (AgentContext, AgentValue);
+
 pub const DEFAULT_PROBE_TIMEOUT: Duration = Duration::from_secs(1);
 
 #[derive(Clone)]

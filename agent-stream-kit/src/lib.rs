@@ -30,6 +30,12 @@ pub use photon_rs::{self, PhotonImage};
 pub extern crate self as agent_stream_kit;
 pub use inventory;
 
+// re-export FnvIndexMap
+pub use fnv;
+pub use indexmap;
+pub type FnvIndexMap<K, V> = indexmap::IndexMap<K, V, fnv::FnvBuildHasher>;
+pub type FnvIndexSet<T> = indexmap::IndexSet<T, fnv::FnvBuildHasher>;
+
 // Re-exports askit_macros
 pub use askit_macros::askit_agent;
 
@@ -40,8 +46,7 @@ pub use askit::{ASKit, ASKitEvent, ASKitObserver};
 pub use config::{AgentConfigs, AgentConfigsMap};
 pub use context::AgentContext;
 pub use definition::{
-    AgentConfigEntry, AgentDefaultConfigs, AgentDefinition, AgentDefinitions,
-    AgentDisplayConfigEntry,
+    AgentConfigSpec, AgentConfigSpecs, AgentDefinition, AgentDefinitions, AgentDisplayConfigSpec,
 };
 pub use error::AgentError;
 pub use flow::{AgentFlow, AgentFlowEdge, AgentFlowNode, AgentFlows};

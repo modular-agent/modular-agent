@@ -1,11 +1,13 @@
 extern crate agent_stream_kit as askit;
 
+use std::vec;
+
+use async_trait::async_trait;
+
 use askit::{
     ASKit, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
+    askit_agent,
 };
-use askit_macros::askit_agent;
-use async_trait::async_trait;
-use std::vec;
 
 static CATEGORY: &str = "Core/Utils";
 

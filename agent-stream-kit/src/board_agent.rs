@@ -1,12 +1,14 @@
-use askit_macros::askit_agent;
-use async_trait::async_trait;
 use std::vec;
 
-use super::agent::{Agent, AgentData, AgentSpec, AsAgent};
-use super::askit::ASKit;
-use super::context::AgentContext;
-use super::error::AgentError;
-use super::value::AgentValue;
+use async_trait::async_trait;
+
+use askit_macros::askit_agent;
+
+use crate::agent::{Agent, AgentData, AgentSpec, AsAgent};
+use crate::askit::ASKit;
+use crate::context::AgentContext;
+use crate::error::AgentError;
+use crate::value::AgentValue;
 
 static CONFIG_BOARD_NAME: &str = "board";
 static CONFIG_VAR_NAME: &str = "var";

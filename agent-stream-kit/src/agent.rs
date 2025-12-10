@@ -3,13 +3,13 @@ use std::any::Any;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
-use super::askit::ASKit;
-use super::config::AgentConfigs;
-use super::context::AgentContext;
-use super::definition::AgentDisplayConfigs;
-use super::error::AgentError;
-use super::runtime::runtime;
-use super::value::AgentValue;
+use crate::askit::ASKit;
+use crate::config::AgentConfigs;
+use crate::context::AgentContext;
+use crate::definition::{AgentConfigSpecs, AgentDisplayConfigSpecs};
+use crate::error::AgentError;
+use crate::runtime::runtime;
+use crate::value::AgentValue;
 
 #[derive(Debug, Default, Clone, PartialEq)]
 pub enum AgentStatus {
@@ -130,20 +130,24 @@ pub struct AgentSpec {
     pub def_name: String,
 
     /// List of input pin names.
-    #[serde(skip_serializing_if = "Vec::is_empty", default)]
-    pub inputs: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub inputs: Option<Vec<String>>,
 
     /// List of output pin names.
-    #[serde(skip_serializing_if = "Vec::is_empty", default)]
-    pub outputs: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub outputs: Option<Vec<String>>,
 
     /// Config values.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub configs: Option<AgentConfigs>,
 
-    /// Display config values.
+    /// Config specs.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub display_configs: Option<AgentDisplayConfigs>,
+    pub config_specs: Option<AgentConfigSpecs>,
+
+    /// Display config specs.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub display_config_specs: Option<AgentDisplayConfigSpecs>,
 }
 
 pub trait HasAgentData {

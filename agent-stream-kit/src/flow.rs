@@ -1,15 +1,15 @@
-use std::collections::HashMap;
 use std::sync::atomic::AtomicUsize;
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
-use super::agent::AgentSpec;
-use super::askit::ASKit;
-use super::definition::{AgentDefinition, AgentDefinitions};
-use super::error::AgentError;
+use crate::FnvIndexMap;
+use crate::agent::AgentSpec;
+use crate::askit::ASKit;
+use crate::definition::{AgentDefinition, AgentDefinitions};
+use crate::error::AgentError;
 
-pub type AgentFlows = HashMap<String, AgentFlow>;
+pub type AgentFlows = FnvIndexMap<String, AgentFlow>;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AgentFlow {
@@ -23,7 +23,7 @@ pub struct AgentFlow {
     edges: Vec<AgentFlowEdge>,
 
     #[serde(flatten)]
-    pub extensions: HashMap<String, Value>,
+    pub extensions: FnvIndexMap<String, Value>,
 }
 
 impl AgentFlow {
@@ -33,7 +33,7 @@ impl AgentFlow {
             name,
             nodes: Vec::new(),
             edges: Vec::new(),
-            extensions: HashMap::new(),
+            extensions: FnvIndexMap::default(),
         }
     }
 
@@ -170,7 +170,7 @@ pub fn copy_sub_flow(
     edges: &Vec<AgentFlowEdge>,
 ) -> (Vec<AgentFlowNode>, Vec<AgentFlowEdge>) {
     let mut new_nodes = Vec::new();
-    let mut node_id_map = HashMap::new();
+    let mut node_id_map = FnvIndexMap::default();
     for node in nodes {
         let new_id = new_id();
         node_id_map.insert(node.id.clone(), new_id.clone());
@@ -208,7 +208,7 @@ pub struct AgentFlowNode {
     pub spec: AgentSpec,
 
     #[serde(flatten)]
-    pub extensions: HashMap<String, Value>,
+    pub extensions: FnvIndexMap<String, Value>,
 }
 
 impl AgentFlowNode {
@@ -219,7 +219,7 @@ impl AgentFlowNode {
             id: new_id(),
             enabled: false,
             spec,
-            extensions: HashMap::new(),
+            extensions: FnvIndexMap::default(),
         })
     }
 }

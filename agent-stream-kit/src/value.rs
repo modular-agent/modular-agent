@@ -9,7 +9,7 @@ use serde::{
     ser::{SerializeMap, SerializeSeq},
 };
 
-use super::error::AgentError;
+use crate::error::AgentError;
 
 #[cfg(feature = "image")]
 const IMAGE_BASE64_PREFIX: &str = "data:image/png;base64,";

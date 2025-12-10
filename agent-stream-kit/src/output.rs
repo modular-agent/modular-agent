@@ -1,8 +1,7 @@
+use crate::agent::Agent;
+use crate::context::AgentContext;
 use crate::error::AgentError;
-
-use super::agent::Agent;
-use super::context::AgentContext;
-use super::value::AgentValue;
+use crate::value::AgentValue;
 
 pub trait AgentOutput {
     fn try_output_raw(

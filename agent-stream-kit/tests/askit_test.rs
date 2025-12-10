@@ -43,7 +43,7 @@ fn test_agent_default_configs() {
 
     let configs = askit.get_agent_default_configs(COUNTER_DEF).unwrap();
     assert_eq!(configs.len(), 1);
-    assert_eq!(configs[0].0, "initial_count");
+    assert!(configs.contains_key("initial_count"));
 
     askit.quit();
 }

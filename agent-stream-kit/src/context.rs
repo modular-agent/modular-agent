@@ -1,21 +1,19 @@
-use std::{
-    collections::BTreeMap,
-    sync::{
-        Arc,
-        atomic::{AtomicUsize, Ordering},
-    },
+use std::sync::{
+    Arc,
+    atomic::{AtomicUsize, Ordering},
 };
 
 use serde::{Deserialize, Serialize};
 
-use super::value::AgentValue;
+use crate::FnvIndexMap;
+use crate::value::AgentValue;
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct AgentContext {
     id: usize,
 
     #[serde(skip_serializing_if = "Option::is_none")]
-    vars: Option<Arc<BTreeMap<String, AgentValue>>>,
+    vars: Option<Arc<FnvIndexMap<String, AgentValue>>>,
 }
 
 impl AgentContext {
@@ -40,7 +38,7 @@ impl AgentContext {
         let mut vars = if let Some(vars) = &self.vars {
             vars.as_ref().clone()
         } else {
-            BTreeMap::new()
+            FnvIndexMap::default()
         };
         vars.insert(key, value);
         Self {
