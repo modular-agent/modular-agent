@@ -1,8 +1,7 @@
 use agent_stream_kit::{
     ASKit, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
-    async_trait,
+    askit_agent, async_trait,
 };
-use askit_macros::askit_agent;
 
 static CATEGORY: &str = "Std/Stream";
 
@@ -20,7 +19,7 @@ static PIN_OUT4: &str = "out4";
     title = "Sequence",
     category = CATEGORY,
     inputs = [PIN_IN],
-    outputs = [PIN_OUT1],
+    outputs = [PIN_OUT1, PIN_OUT2],
     integer_config(name = "n", default = 2),
 )]
 struct SequenceAgent {
@@ -36,8 +35,26 @@ impl AsAgent for SequenceAgent {
             .as_ref()
             .map(|cfg| cfg.get_integer_or("n", 2))
             .unwrap_or(2) as usize;
+        let mut spec = spec;
+        spec.outputs = Some((1..=n).map(|i| format!("out{}", i)).collect());
         let data = AgentData::new(askit, id, spec);
         Ok(Self { data, n })
+    }
+
+    fn configs_changed(&mut self) -> Result<(), AgentError> {
+        let cfg_n = self
+            .data
+            .spec
+            .configs
+            .as_ref()
+            .map(|cfg| cfg.get_integer_or("n", 2))
+            .unwrap_or(2) as usize;
+        if cfg_n != self.n {
+            self.n = cfg_n;
+            self.data.spec.outputs = Some((1..=self.n).map(|i| format!("out{}", i)).collect());
+            self.emit_agent_spec_updated();
+        }
+        Ok(())
     }
 
     async fn process(
