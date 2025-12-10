@@ -29,36 +29,19 @@
   import type { AgentConfigSpec, AgentDisplayConfigSpec } from "tauri-plugin-askit-api";
 
   import Messages from "@/components/Messages.svelte";
-  import {
-    getAgentDefinitionsContext,
-    inferTypeForDisplay,
-    // serializeAgentFlowNodeConfigs,
-  } from "@/lib/agent";
+  import { getAgentDefinitionsContext, inferTypeForDisplay } from "@/lib/agent";
   import {
     subscribeAgentSpecUpdatedMessage,
     subscribeDisplayMessage,
     subscribeErrorMessage,
     subscribeInputMessage,
   } from "@/lib/shared.svelte";
-  import type { TAgentFlow, TAgentFlowNodeData } from "@/lib/types";
-
-  // import type { TAgentFlowNodeConfigs, TAgentFlowNodeDisplays } from "@/lib/types";
+  import type { TAgentFlowNodeData } from "@/lib/types";
 
   import NodeBase from "./NodeBase.svelte";
 
   type Props = NodeProps & {
     data: TAgentFlowNodeData;
-    // data: {
-    //   name: string;
-    //   title: string | null;
-    //   enabled: boolean;
-    //   // inputs: string[] | null;
-    //   // outputs: string[] | null;
-    //   // configs: TAgentFlowNodeConfigs;
-    //   // displays: TAgentFlowNodeDisplays;
-    //   spec: AgentSpec;
-    //   display_values: Record<string, any> | null;
-    // };
   };
 
   let { id, data, ...props }: Props = $props();
@@ -136,10 +119,6 @@
   async function updateConfig(key: string, value: any) {
     const newConfigs = { ...data.spec.configs, [key]: value };
     updateNodeData(id, { spec: { ...data.spec, configs: newConfigs } });
-    // const sConfig = serializeAgentFlowNodeConfigs(newConfigs, agentDefaultConfigs);
-    // if (sConfig) {
-    //   await setAgentConfigs(id, sConfig);
-    // }
     await setAgentConfigs(id, newConfigs);
   }
 
@@ -286,7 +265,6 @@
 
 {#snippet inputItem(key: string, value: any, config_spec: AgentConfigSpec | undefined)}
   {#if config_spec?.hidden !== true}
-    <!-- {@const config = data.spec.configs?.[key]} -->
     {@const ty = config_spec?.type}
     <div class="flex-none relative flex items-center">
       <h3>{config_spec?.title || key}</h3>
@@ -302,7 +280,6 @@
     {/if}
     {#if !connectedConfigs.includes(key)}
       <!-- Not connected, show input -->
-      <!-- {@const config = data.spec.configs?.[key]} -->
       {#if ty === "unit"}
         <Button color="alternative" class="flex-none" onclick={() => updateConfig(key, {})} />
       {:else if ty === "boolean"}

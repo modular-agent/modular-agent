@@ -17,13 +17,12 @@
 
   import { Handle, NodeResizer, Position } from "@xyflow/svelte";
   import type { NodeProps, ResizeDragEvent, ResizeParams } from "@xyflow/svelte";
-  import type { AgentDefinition, AgentSpec } from "tauri-plugin-askit-api";
+  import type { AgentDefinition } from "tauri-plugin-askit-api";
+
+  import type { TAgentFlowNodeData } from "@/lib/types";
 
   type Props = NodeProps & {
-    data: {
-      enabled: boolean;
-      spec: AgentSpec;
-    };
+    data: TAgentFlowNodeData;
     agentDef: AgentDefinition | null;
     titleColor: string;
     inputCount: number;
@@ -34,8 +33,6 @@
   let { data, agentDef, selected, height, titleColor, inputCount, title, contents }: Props =
     $props();
 
-  // const inputs = agentDef?.inputs ?? [];
-  // const outputs = agentDef?.outputs ?? [];
   const inputs = $derived(data.spec.inputs ?? []);
   const outputs = $derived(data.spec.outputs ?? []);
 
