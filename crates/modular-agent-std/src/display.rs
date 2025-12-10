@@ -2,9 +2,8 @@ use std::vec;
 
 use agent_stream_kit::{
     ASKit, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
-    async_trait,
+    askit_agent, async_trait,
 };
-use askit_macros::askit_agent;
 
 static CATEGORY: &str = "Std/Display";
 static DISPLAY_VALUE: &str = "value";

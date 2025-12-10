@@ -4,10 +4,9 @@ use std::sync::Arc;
 
 use agent_stream_kit::photon_rs::{self, PhotonImage};
 use agent_stream_kit::{
-    ASKit, Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue,
-    AsAgent, async_trait,
+    ASKit, Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
+    askit_agent, async_trait,
 };
-use askit_macros::askit_agent;
 
 static CATEGORY: &str = "Std/Image";
 

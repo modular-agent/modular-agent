@@ -16,12 +16,14 @@ checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 
 [[package]]
 name = "agent-stream-kit"
-version = "0.14.0"
+version = "0.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6b2249ef35ee97751452be8440bb40b0d5787e2b379b95a41ae778e2b38f9390"
+checksum = "fdf9582f0afd2e37bf48fde7afc73e40cc280f07c368a8819ec9d109e597a06b"
 dependencies = [
  "askit-macros",
  "async-trait",
+ "fnv",
+ "indexmap",
  "inventory",
  "log",
  "photon-rs",
@@ -60,9 +62,9 @@ dependencies = [
 
 [[package]]
 name = "askit-macros"
-version = "0.14.0"
+version = "0.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "740633f2b7f516b9e27a3117d0984f0af070c2df9e255f09179b1571f5ffe704"
+checksum = "c46abab60969720581468ba5367c549a0f22a99b3db83dbc31fe8d669714a42a"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -71,10 +73,9 @@ dependencies = [
 
 [[package]]
 name = "askit-std-agents"
-version = "0.4.3"
+version = "0.4.4"
 dependencies = [
  "agent-stream-kit",
- "askit-macros",
  "chrono",
  "cron",
  "handlebars",
@@ -514,6 +515,8 @@ checksum = "0ad4bb2b565bca0645f4d68c5c9af97fba094e9791da685bf83cb5f3ce74acf2"
 dependencies = [
  "equivalent",
  "hashbrown",
+ "serde",
+ "serde_core",
 ]
 
 [[package]]
