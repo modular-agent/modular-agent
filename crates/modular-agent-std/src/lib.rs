@@ -2,7 +2,7 @@ pub mod data;
 pub mod display;
 pub mod file;
 pub mod input;
-pub mod stream;
+pub mod sequence;
 pub mod string;
 pub mod time;
 pub mod utils;
