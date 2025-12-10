@@ -1,3 +1,4 @@
+pub mod array;
 pub mod data;
 pub mod display;
 pub mod file;
