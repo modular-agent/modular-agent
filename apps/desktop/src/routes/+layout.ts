@@ -18,7 +18,7 @@ export async function load() {
 
   const sAgentFlows = await getAgentFlows();
   const agentFlows = Object.fromEntries(
-    Object.entries(sAgentFlows).map(([key, flow]) => [key, deserializeAgentFlow(flow, agentDefs)]),
+    Object.entries(sAgentFlows).map(([key, flow]) => [key, deserializeAgentFlow(flow)]),
   );
 
   return {

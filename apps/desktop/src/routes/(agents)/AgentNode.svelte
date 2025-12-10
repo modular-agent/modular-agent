@@ -25,40 +25,51 @@
   } from "@xyflow/svelte";
   import { Button, Input, NumberInput, Popover, Textarea, Toggle } from "flowbite-svelte";
   import { ExclamationCircleOutline } from "flowbite-svelte-icons";
-  import { setAgentConfigs } from "tauri-plugin-askit-api";
-  import type { AgentConfigEntry, AgentDisplayConfigEntry } from "tauri-plugin-askit-api";
+  import { getAgentSpec, setAgentConfigs } from "tauri-plugin-askit-api";
+  import type { AgentConfigSpec, AgentDisplayConfigSpec } from "tauri-plugin-askit-api";
 
   import Messages from "@/components/Messages.svelte";
   import {
     getAgentDefinitionsContext,
     inferTypeForDisplay,
-    serializeAgentFlowNodeConfigs,
+    // serializeAgentFlowNodeConfigs,
   } from "@/lib/agent";
   import {
+    subscribeAgentSpecUpdatedMessage,
     subscribeDisplayMessage,
     subscribeErrorMessage,
     subscribeInputMessage,
   } from "@/lib/shared.svelte";
-  import type { TAgentFlowNodeConfigs, TAgentFlowNodeDisplays } from "@/lib/types";
+  import type { TAgentFlow, TAgentFlowNodeData } from "@/lib/types";
+
+  // import type { TAgentFlowNodeConfigs, TAgentFlowNodeDisplays } from "@/lib/types";
 
   import NodeBase from "./NodeBase.svelte";
 
   type Props = NodeProps & {
-    data: {
-      name: string;
-      title: string | null;
-      enabled: boolean;
-      configs: TAgentFlowNodeConfigs;
-      displays: TAgentFlowNodeDisplays;
-    };
+    data: TAgentFlowNodeData;
+    // data: {
+    //   name: string;
+    //   title: string | null;
+    //   enabled: boolean;
+    //   // inputs: string[] | null;
+    //   // outputs: string[] | null;
+    //   // configs: TAgentFlowNodeConfigs;
+    //   // displays: TAgentFlowNodeDisplays;
+    //   spec: AgentSpec;
+    //   display_values: Record<string, any> | null;
+    // };
   };
 
   let { id, data, ...props }: Props = $props();
 
-  const agentDef = getAgentDefinitionsContext()?.[data.name];
-  const agentDefaultConfigs = agentDef?.default_configs;
-  const agentDisplayConfigs = agentDef?.display_configs;
-  const description = agentDef?.description;
+  console.log("AgentNode data:", data);
+
+  const agentDef = $derived(getAgentDefinitionsContext()?.[data.name]);
+  const description = $derived(agentDef?.description);
+
+  const agentConfigs = $derived(data.spec.configs ?? null);
+  const agentDisplayConfigSpecs = $derived(data.spec.display_config_specs ?? null);
 
   let errorMessages = $state<string[]>([]);
   let inputMessage = $state<string>("");
@@ -75,13 +86,23 @@
   onMount(() => {
     let unsubscribers: Unsubscriber[] = [];
 
-    if (agentDisplayConfigs) {
+    unsubscribers.push(
+      subscribeAgentSpecUpdatedMessage(id, () => {
+        getAgentSpec(id).then((spec) => {
+          if (spec) {
+            updateNodeData(id, { spec });
+          }
+        });
+      }),
+    );
+
+    if (data.spec.display_config_specs) {
       // Subscribe to display messages for each display config key
-      agentDisplayConfigs.forEach(([key, _]) => {
+      Object.entries(data.spec.display_config_specs).forEach(([key, _]) => {
         unsubscribers.push(
           subscribeDisplayMessage(id, key, (value) => {
-            const newDisplay = { ...data.displays, [key]: value };
-            updateNodeData(id, { displays: newDisplay });
+            const newDisplay = { ...data.display_values, [key]: value };
+            updateNodeData(id, { display_values: newDisplay });
           }),
         );
       });
@@ -113,12 +134,13 @@
   const { updateNodeData } = useSvelteFlow();
 
   async function updateConfig(key: string, value: any) {
-    const newConfigs = { ...data.configs, [key]: value };
-    updateNodeData(id, { configs: newConfigs });
-    const sConfig = serializeAgentFlowNodeConfigs(newConfigs, agentDefaultConfigs);
-    if (sConfig) {
-      await setAgentConfigs(id, sConfig);
-    }
+    const newConfigs = { ...data.spec.configs, [key]: value };
+    updateNodeData(id, { spec: { ...data.spec, configs: newConfigs } });
+    // const sConfig = serializeAgentFlowNodeConfigs(newConfigs, agentDefaultConfigs);
+    // if (sConfig) {
+    //   await setAgentConfigs(id, sConfig);
+    // }
+    await setAgentConfigs(id, newConfigs);
   }
 
   function clearError() {
@@ -179,7 +201,11 @@
 {/snippet}
 
 {#snippet displayItem(ty: string | null, value: any)}
-  {#if ty === "boolean"}
+  {#if ty === "undefined"}
+    <div class="flex-none border-1 p-2">&nbsp;</div>
+  {:else if ty === "null"}
+    <div class="flex-none border-1 p-2">&nbsp;</div>
+  {:else if ty === "boolean"}
     {#if value}
       <div class="flex-none border-1 p-2">true</div>
     {:else}
@@ -241,12 +267,12 @@
   {/if}
 {/snippet}
 
-{#snippet display(key: string, value: any, display_config: AgentDisplayConfigEntry)}
-  {#if display_config?.hideTitle === true}
-    <h3 class="flex-none">{display_config?.title || key}</h3>
-    <p class="flex-none text-xs text-gray-500">{display_config?.description}</p>
+{#snippet display(key: string, value: any, display_config_spec: AgentDisplayConfigSpec | undefined)}
+  {#if display_config_spec?.hideTitle !== true}
+    <h3 class="flex-none">{display_config_spec?.title || key}</h3>
+    <p class="flex-none text-xs text-gray-500">{display_config_spec?.description}</p>
   {/if}
-  {@const ty = inferTypeForDisplay(display_config, value)}
+  {@const ty = inferTypeForDisplay(display_config_spec, value)}
   {#if value instanceof Array && ty !== "object" && ty !== "message"}
     <div class="flex-none flex flex-col gap-2">
       {#each value as v}
@@ -258,12 +284,12 @@
   {/if}
 {/snippet}
 
-{#snippet inputItem(key: string, default_config: AgentConfigEntry)}
-  {#if default_config?.hidden !== true}
-    {@const config = data.configs[key]}
-    {@const ty = default_config?.type}
+{#snippet inputItem(key: string, value: any, config_spec: AgentConfigSpec | undefined)}
+  {#if config_spec?.hidden !== true}
+    <!-- {@const config = data.spec.configs?.[key]} -->
+    {@const ty = config_spec?.type}
     <div class="flex-none relative flex items-center">
-      <h3>{default_config?.title || key}</h3>
+      <h3>{config_spec?.title || key}</h3>
       <Handle
         id="config:{key}"
         type="target"
@@ -271,30 +297,34 @@
         style="top: 50%; transform: translate({HANDLE_X_OFFSET}, -50%); {CONFIG_HANDLE_STYLE}"
       />
     </div>
-    {#if default_config?.description}
-      <p class="flex-none text-xs text-gray-500">{default_config?.description}</p>
+    {#if config_spec?.description}
+      <p class="flex-none text-xs text-gray-500">{config_spec?.description}</p>
     {/if}
     {#if !connectedConfigs.includes(key)}
+      <!-- Not connected, show input -->
+      <!-- {@const config = data.spec.configs?.[key]} -->
       {#if ty === "unit"}
         <Button color="alternative" class="flex-none" onclick={() => updateConfig(key, {})} />
       {:else if ty === "boolean"}
-        <Toggle
-          class="flex-none"
-          checked={config}
-          onchange={() => updateConfig(key, !data.configs[key])}
-        />
+        <Toggle class="flex-none" checked={value} onchange={() => updateConfig(key, !value)} />
       {:else if ty === "integer"}
         <NumberInput
           class="nodrag flex-none"
-          value={config}
+          {value}
           onkeydown={(evt) => {
             if (evt.key === "Enter") {
-              updateConfig(key, evt.currentTarget.value);
+              let intValue = parseInt(evt.currentTarget.value);
+              if (!isNaN(intValue)) {
+                updateConfig(key, intValue);
+              }
             }
           }}
           onchange={(evt) => {
-            if (evt.currentTarget.value !== data.configs[key]) {
-              updateConfig(key, evt.currentTarget.value);
+            let intValue = parseInt(evt.currentTarget.value);
+            if (!isNaN(intValue)) {
+              if (intValue !== value) {
+                updateConfig(key, intValue);
+              }
             }
           }}
         />
@@ -302,15 +332,21 @@
         <Input
           class="nodrag flex-none"
           type="text"
-          value={config}
+          {value}
           onkeydown={(evt) => {
             if (evt.key === "Enter") {
-              updateConfig(key, evt.currentTarget.value);
+              let numValue = parseFloat(evt.currentTarget.value);
+              if (!isNaN(numValue)) {
+                updateConfig(key, numValue);
+              }
             }
           }}
           onchange={(evt) => {
-            if (evt.currentTarget.value !== data.configs[key]) {
-              updateConfig(key, evt.currentTarget.value);
+            let numValue = parseFloat(evt.currentTarget.value);
+            if (!isNaN(numValue)) {
+              if (numValue !== value) {
+                updateConfig(key, numValue);
+              }
             }
           }}
         />
@@ -318,14 +354,14 @@
         <Input
           class="nodrag flex-none"
           type="text"
-          value={config}
+          {value}
           onkeydown={(evt) => {
             if (evt.key === "Enter") {
               updateConfig(key, evt.currentTarget.value);
             }
           }}
           onchange={(evt) => {
-            if (evt.currentTarget.value !== data.configs[key]) {
+            if (evt.currentTarget.value !== value) {
               updateConfig(key, evt.currentTarget.value);
             }
           }}
@@ -334,14 +370,14 @@
         <Input
           class="nodrag flex-none"
           type="password"
-          value={config}
+          {value}
           onkeydown={(evt) => {
             if (evt.key === "Enter") {
               updateConfig(key, evt.currentTarget.value);
             }
           }}
           onchange={(evt) => {
-            if (evt.currentTarget.value !== data.configs[key]) {
+            if (evt.currentTarget.value !== value) {
               updateConfig(key, evt.currentTarget.value);
             }
           }}
@@ -349,7 +385,7 @@
       {:else if ty === "text"}
         <Textarea
           class="nodrag nowheel flex-1"
-          value={config}
+          {value}
           onkeydown={(evt) => {
             if (evt.ctrlKey && evt.key === "Enter") {
               evt.preventDefault();
@@ -357,7 +393,7 @@
             }
           }}
           onchange={(evt) => {
-            if (evt.currentTarget.value !== data.configs[key]) {
+            if (evt.currentTarget.value !== value) {
               updateConfig(key, evt.currentTarget.value);
             }
           }}
@@ -365,39 +401,53 @@
       {:else if ty === "object"}
         <Textarea
           class="nodrag nowheel flex-1"
-          value={config}
+          value={JSON.stringify(value, null, 2)}
           onkeydown={(evt) => {
             if (evt.ctrlKey && evt.key === "Enter") {
               evt.preventDefault();
-              updateConfig(key, evt.currentTarget.value);
+              let objValue;
+              try {
+                objValue = JSON.parse(evt.currentTarget.value);
+                updateConfig(key, objValue);
+              } catch (e) {
+                console.error("Invalid JSON:", e);
+                return;
+              }
             }
           }}
           onchange={(evt) => {
-            if (evt.currentTarget.value !== data.configs[key]) {
-              updateConfig(key, evt.currentTarget.value);
+            if (evt.currentTarget.value !== value) {
+              let objValue;
+              try {
+                objValue = JSON.parse(evt.currentTarget.value);
+                updateConfig(key, objValue);
+              } catch (e) {
+                console.error("Invalid JSON:", e);
+                return;
+              }
             }
           }}
         />
       {:else}
-        <Textarea class="nodrag nowheel flex-1" value={JSON.stringify(config, null, 2)} disabled />
+        <Textarea class="nodrag nowheel flex-1" value={JSON.stringify(value, null, 2)} disabled />
       {/if}
     {/if}
   {/if}
 {/snippet}
 
 {#snippet contents()}
-  {#if agentDefaultConfigs}
+  {#if data.spec.configs}
     <form class="grow flex flex-col gap-1 pl-4 pr-4 pb-4">
-      {#each agentDefaultConfigs as [key, default_config]}
-        {@render inputItem(key, default_config)}
+      {#each Object.entries(data.spec.configs) as [key, value]}
+        {@render inputItem(key, value, data.spec.config_specs?.[key])}
       {/each}
     </form>
   {/if}
 
-  {#if agentDisplayConfigs}
+  {#if data.spec.display_config_specs}
     <div class="grow flex flex-col gap-1 pl-4 pr-4 pb-4">
-      {#each agentDisplayConfigs as [key, display_config]}
-        {@render display(key, data.displays[key], display_config)}
+      {#each Object.entries(data.spec.display_config_specs) as [key, display_config_spec]}
+        {@render display(key, data.display_values?.[key], display_config_spec)}
       {/each}
     </div>
   {/if}

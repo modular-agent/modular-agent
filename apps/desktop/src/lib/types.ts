@@ -11,7 +11,6 @@ export type TAgentFlow = {
 
 export type TAgentFlowNode = Node & {
   data: TAgentFlowNodeData;
-  spec: AgentSpec;
   extensions?: Record<string, any>;
 };
 
@@ -19,11 +18,12 @@ export type TAgentFlowNodeData = {
   name: string;
   enabled: boolean;
   title: string | null;
-  configs: TAgentFlowNodeConfigs | null;
-  displays: TAgentFlowNodeDisplays | null;
+  spec: AgentSpec;
+  // configs: TAgentFlowNodeConfigs | null;
+  display_values: Record<string, any> | null;
 };
 
-export type TAgentFlowNodeConfigs = Record<string, any>;
+// export type TAgentFlowNodeConfigs = Record<string, any>;
 export type TAgentFlowNodeDisplays = Record<string, any>;
 
 export type TAgentFlowEdge = Edge;

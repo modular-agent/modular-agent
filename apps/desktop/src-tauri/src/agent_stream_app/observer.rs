@@ -5,6 +5,7 @@ use tauri::{AppHandle, Emitter};
 
 const EMIT_DISPLAY: &str = "askit:display";
 const EMIT_ERROR: &str = "askit:error";
+const EMIT_AGENT_SPEC_UPDATED: &str = "askit:agent_spec_updated";
 const EMIT_INPUT: &str = "askit:input";
 
 #[derive(Clone)]
@@ -49,6 +50,22 @@ impl ASAppObserver {
         Ok(())
     }
 
+    fn emit_agent_spec_updated(&self, agent_id: String) -> Result<()> {
+        #[derive(Clone, Serialize)]
+        struct AgentSpecUpdatedMessage {
+            agent_id: String,
+        }
+
+        self.app
+            .emit(
+                EMIT_AGENT_SPEC_UPDATED,
+                AgentSpecUpdatedMessage { agent_id },
+            )
+            .context("Failed to emit agent spec updated message")?;
+
+        Ok(())
+    }
+
     fn emit_input(&self, agent_id: String, ch: String) -> Result<()> {
         #[derive(Clone, Serialize)]
         struct InputMessage {
@@ -77,6 +94,12 @@ impl ASKitObserver for ASAppObserver {
                 self.emit_error(agent_id.to_string(), message.to_string())
                     .unwrap_or_else(|e| {
                         log::error!("Failed to emit error message: {}", e);
+                    });
+            }
+            ASKitEvent::AgentSpecUpdated(agent_id) => {
+                self.emit_agent_spec_updated(agent_id.to_string())
+                    .unwrap_or_else(|e| {
+                        log::error!("Failed to emit agent spec updated message: {}", e);
                     });
             }
             ASKitEvent::AgentIn(agent_id, channel) => {

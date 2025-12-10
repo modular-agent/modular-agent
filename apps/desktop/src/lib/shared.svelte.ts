@@ -2,7 +2,30 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 import { writable, type Writable } from "svelte/store";
 
-import type { DisplayMessage, ErrorMessage, InputMessage } from "tauri-plugin-askit-api";
+import type {
+  AgentSpecUpdatedMessage,
+  DisplayMessage,
+  ErrorMessage,
+  InputMessage,
+} from "tauri-plugin-askit-api";
+
+// Agent Spec Updated
+
+let agentSpecUpdatedMessageStore: Map<string, Writable<any>> = new Map<string, Writable<any>>();
+
+export function subscribeAgentSpecUpdatedMessage(
+  agentId: string,
+  callback: () => void,
+): () => void {
+  let store = agentSpecUpdatedMessageStore.get(agentId);
+  if (!store) {
+    store = writable(null);
+    agentSpecUpdatedMessageStore.set(agentId, store);
+  }
+  return store.subscribe(callback);
+}
+
+let unlistenAgentSpecUpdated: UnlistenFn | null = null;
 
 // Display Message
 
@@ -71,6 +94,17 @@ let unlistenInput: UnlistenFn | null = null;
 //
 
 $effect.root(() => {
+  listen<AgentSpecUpdatedMessage>("askit:agent_spec_updated", (event) => {
+    const { agent_id } = event.payload;
+    let store = agentSpecUpdatedMessageStore.get(agent_id);
+    if (!store) {
+      return;
+    }
+    store.set(Date.now());
+  }).then((unlistenFn) => {
+    unlistenAgentSpecUpdated = unlistenFn;
+  });
+
   listen<DisplayMessage>("askit:display", (event) => {
     const { agent_id, key, value } = event.payload;
     let store = displayMessageStore.get(agent_id);

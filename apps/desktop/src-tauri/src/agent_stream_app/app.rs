@@ -2,7 +2,6 @@ use std::path::PathBuf;
 
 use anyhow::{bail, Context as _, Result};
 use dirs;
-use serde::de;
 use tauri::{AppHandle, Manager, State};
 
 use agent_stream_kit::{ASKit, AgentFlow};

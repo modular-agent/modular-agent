@@ -66,7 +66,7 @@
   let nodes = $state.raw<TAgentFlowNode[]>([]);
   let edges = $state.raw<TAgentFlowEdge[]>([]);
 
-  const agentDefs = data.agentDefs;
+  const agentDefs = $derived(data.agentDefs);
   const flows = getContext<() => Record<string, TAgentFlow>>("agentFlows");
 
   let flowNames = $state.raw<{ id: string; name: string }[]>([]);
@@ -212,7 +212,7 @@
     if (selectedNodes.length == 0 && selectedEdges.length == 0) {
       return;
     }
-    copiedNodes = selectedNodes.map((node) => serializeAgentFlowNode(node, agentDefs));
+    copiedNodes = selectedNodes.map((node) => serializeAgentFlowNode(node));
     copiedEdges = selectedEdges.map((edge) => serializeAgentFlowEdge(edge));
 
     nodes = nodes.filter((node) => !node.selected);
@@ -227,7 +227,7 @@
     if (selectedNodes.length == 0) {
       return;
     }
-    copiedNodes = selectedNodes.map((node) => serializeAgentFlowNode(node, agentDefs));
+    copiedNodes = selectedNodes.map((node) => serializeAgentFlowNode(node));
     copiedEdges = selectedEdges.map((edge) => serializeAgentFlowEdge(edge));
   }
 
@@ -256,7 +256,7 @@
       node.y += 80;
       node.enabled = false;
       await addAgentFlowNode(flowState.id, node);
-      const new_node = deserializeAgentFlowNode(node, agentDefs);
+      const new_node = deserializeAgentFlowNode(node);
       new_node.selected = true;
       new_nodes.push(new_node);
       flows()[flowState.id].nodes.push(new_node);
@@ -365,7 +365,7 @@
     if (!name) return null;
     const flow = await newAgentFlow(name);
     if (!flow) return null;
-    flows()[flow.id] = deserializeAgentFlow(flow, agentDefs);
+    flows()[flow.id] = deserializeAgentFlow(flow);
     updateFlowNames();
     updateFlowActivities();
     return flow.id;
@@ -446,29 +446,15 @@
   async function onSaveFlow() {
     if (flowState.id in flows()) {
       const viewport = getViewport();
-      const flow = serializeAgentFlow(
-        flowState.id,
-        flowState.name,
-        nodes,
-        edges,
-        agentDefs,
-        viewport,
-      );
+      const flow = serializeAgentFlow(flowState.id, flowState.name, nodes, edges, viewport);
       await saveAgentFlow(flow);
-      flows()[flowState.id] = deserializeAgentFlow(flow, agentDefs);
+      flows()[flowState.id] = deserializeAgentFlow(flow);
     }
   }
 
   function onExportFlow() {
     const viewport = getViewport();
-    const flow = serializeAgentFlow(
-      flowState.id,
-      flowState.name,
-      nodes,
-      edges,
-      agentDefs,
-      viewport,
-    );
+    const flow = serializeAgentFlow(flowState.id, flowState.name, nodes, edges, viewport);
     const jsonStr = JSON.stringify(flow, null, 2);
     const blob = new Blob([jsonStr], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -486,7 +472,7 @@
     if (!file) return;
     const sflow = await importAgentFlow(file);
     if (!sflow.nodes || !sflow.edges) return;
-    const flow = deserializeAgentFlow(sflow, agentDefs);
+    const flow = deserializeAgentFlow(sflow);
     flows()[flow.id] = flow;
     updateFlowNames();
     updateFlowActivities();
@@ -502,7 +488,7 @@
     snode.x = xy.x;
     snode.y = xy.y;
     await addAgentFlowNode(flowState.id, snode);
-    const new_node = deserializeAgentFlowNode(snode, agentDefs);
+    const new_node = deserializeAgentFlowNode(snode);
     flows()[flowState.id].nodes.push(new_node);
     nodes = [...nodes, new_node];
   }
