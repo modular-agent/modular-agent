@@ -29,11 +29,11 @@
     newAgentStream,
     copySubStream,
   } from "tauri-plugin-askit-api";
-  import type { AgentStreamNode, AgentStreamEdge } from "tauri-plugin-askit-api";
+  import type { AgentStreamNode, ChannelSpec } from "tauri-plugin-askit-api";
 
   import {
     deserializeAgentStream,
-    deserializeAgentStreamEdge,
+    deserializeChannelSpec,
     deserializeAgentStreamNode,
     importAgentStream,
     removeAgentStream,
@@ -206,7 +206,7 @@
   // cut, copy and paste
 
   let copiedNodes = $state.raw<AgentStreamNode[]>([]);
-  let copiedEdges = $state.raw<AgentStreamEdge[]>([]);
+  let copiedEdges = $state.raw<ChannelSpec[]>([]);
 
   function selectedNodesAndEdges(): [TAgentStreamNode[], TAgentStreamEdge[]] {
     const selectedNodes = nodes.filter((node) => node.selected);
@@ -272,7 +272,7 @@
     let new_edges = [];
     for (const edge of cedges) {
       await addAgentStreamChannel(streamState.id, edge);
-      const new_edge = deserializeAgentStreamEdge(edge);
+      const new_edge = deserializeChannelSpec(edge);
       new_edge.selected = true;
       new_edges.push(new_edge);
       streams()[streamState.id].edges.push(new_edge);

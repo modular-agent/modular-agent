@@ -6,7 +6,7 @@ import type {
   AgentDefinitions,
   AgentConfigSpec,
   AgentStream,
-  AgentStreamEdge,
+  ChannelSpec,
   AgentStreamNode,
   Viewport,
 } from "tauri-plugin-askit-api";
@@ -78,7 +78,7 @@ export function deserializeAgentStream(stream: AgentStream): TAgentStream {
     id: stream.id,
     name: stream.name,
     nodes: nodes,
-    edges: validEdges.map((edge) => deserializeAgentStreamEdge(edge)),
+    edges: validEdges.map((ch) => deserializeChannelSpec(ch)),
     viewport: stream.viewport,
   };
 }
@@ -106,13 +106,13 @@ export function deserializeAgentStreamNode(node: AgentStreamNode): TAgentStreamN
   };
 }
 
-export function deserializeAgentStreamEdge(edge: AgentStreamEdge): TAgentStreamEdge {
+export function deserializeChannelSpec(channel: ChannelSpec): TAgentStreamEdge {
   return {
-    id: edge.id,
-    source: edge.source,
-    sourceHandle: edge.source_handle,
-    target: edge.target,
-    targetHandle: edge.target_handle,
+    id: channel.id,
+    source: channel.source,
+    sourceHandle: channel.source_handle,
+    target: channel.target,
+    targetHandle: channel.target_handle,
   };
 }
 
@@ -148,7 +148,7 @@ export function serializeAgentStreamNode(node: TAgentStreamNode): AgentStreamNod
   };
 }
 
-export function serializeAgentStreamEdge(edge: TAgentStreamEdge): AgentStreamEdge {
+export function serializeAgentStreamEdge(edge: TAgentStreamEdge): ChannelSpec {
   return {
     id: edge.id,
     source: edge.source,
