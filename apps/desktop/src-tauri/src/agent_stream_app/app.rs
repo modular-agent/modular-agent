@@ -182,9 +182,11 @@ impl ASApp {
         stream.set_name(base_name.clone());
 
         // Rename IDs in the stream
-        let (nodes, edges) = self.askit.copy_sub_stream(stream.nodes(), stream.edges());
-        stream.set_nodes(nodes);
-        stream.set_edges(edges);
+        let (agents, edges) = self
+            .askit
+            .copy_sub_stream(stream.agents(), stream.channels());
+        stream.set_agents(agents);
+        stream.set_channels(edges);
 
         Ok(stream)
     }
@@ -250,10 +252,8 @@ pub async fn remove_agent_stream_cmd(
 }
 
 #[tauri::command]
-pub fn save_agent_stream_cmd(asapp: State<ASApp>, agent_stream: AgentStream) -> Result<(), String> {
-    asapp
-        .save_agent_stream(agent_stream)
-        .map_err(|e| e.to_string())
+pub fn save_agent_stream_cmd(asapp: State<ASApp>, stream: AgentStream) -> Result<(), String> {
+    asapp.save_agent_stream(stream).map_err(|e| e.to_string())
 }
 
 #[tauri::command]

@@ -19,11 +19,11 @@
   import { ExclamationCircleOutline, PauseOutline, PlayOutline } from "flowbite-svelte-icons";
   import hotkeys from "hotkeys-js";
   import {
-    addAgentStreamEdge,
-    newAgentStreamNode,
-    addAgentStreamNode,
-    removeAgentStreamEdge,
-    removeAgentStreamNode,
+    addAgentStreamAgent,
+    addAgentStreamChannel,
+    newAgentStreamAgent,
+    removeAgentStreamAgent,
+    removeAgentStreamChannel,
     startAgent,
     stopAgent,
     newAgentStream,
@@ -159,7 +159,7 @@
     const deletedNodes = streams()[streamState.id]?.nodes.filter((node) => !nodeIds.has(node.id));
     if (deletedNodes) {
       for (const node of deletedNodes) {
-        await removeAgentStreamNode(streamState.id, node.id);
+        await removeAgentStreamAgent(streamState.id, node.id);
         streams()[streamState.id].nodes = streams()[streamState.id].nodes.filter(
           (n) => n.id !== node.id,
         );
@@ -173,7 +173,7 @@
     const deletedEdges = streams()[streamState.id]?.edges.filter((edge) => !edgeIds.has(edge.id));
     if (deletedEdges) {
       for (const edge of deletedEdges) {
-        await removeAgentStreamEdge(streamState.id, edge.id);
+        await removeAgentStreamChannel(streamState.id, edge.id);
         streams()[streamState.id].edges = streams()[streamState.id].edges.filter(
           (e) => e.id !== edge.id,
         );
@@ -184,7 +184,7 @@
       (edge) => !streams()[streamState.id].edges.some((e) => e.id === edge.id),
     );
     for (const edge of addedEdges) {
-      await addAgentStreamEdge(streamState.id, serializeAgentStreamEdge(edge));
+      await addAgentStreamChannel(streamState.id, serializeAgentStreamEdge(edge));
       streams()[streamState.id].edges.push(edge);
     }
   }
@@ -262,7 +262,7 @@
       node.x += 80;
       node.y += 80;
       node.enabled = false;
-      await addAgentStreamNode(streamState.id, node);
+      await addAgentStreamAgent(streamState.id, node);
       const new_node = deserializeAgentStreamNode(node);
       new_node.selected = true;
       new_nodes.push(new_node);
@@ -271,7 +271,7 @@
 
     let new_edges = [];
     for (const edge of cedges) {
-      await addAgentStreamEdge(streamState.id, edge);
+      await addAgentStreamChannel(streamState.id, edge);
       const new_edge = deserializeAgentStreamEdge(edge);
       new_edge.selected = true;
       new_edges.push(new_edge);
@@ -478,7 +478,7 @@
     const file = await open({ multiple: false, filter: "json" });
     if (!file) return;
     const sStream = await importAgentStream(file);
-    if (!sStream.nodes || !sStream.edges) return;
+    if (!sStream.agents || !sStream.channels) return;
     const stream = deserializeAgentStream(sStream);
     streams()[stream.id] = stream;
     updateStreamNames();
@@ -487,14 +487,14 @@
   }
 
   async function onAddAgent(agent_name: string) {
-    const snode = await newAgentStreamNode(agent_name);
+    const snode = await newAgentStreamAgent(agent_name);
     const xy = screenToFlowPosition({
       x: window.innerWidth * 0.45,
       y: window.innerHeight * 0.3,
     });
     snode.x = xy.x;
     snode.y = xy.y;
-    await addAgentStreamNode(streamState.id, snode);
+    await addAgentStreamAgent(streamState.id, snode);
     const new_node = deserializeAgentStreamNode(snode);
     streams()[streamState.id].nodes.push(new_node);
     nodes = [...nodes, new_node];

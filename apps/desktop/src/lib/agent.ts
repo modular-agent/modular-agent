@@ -25,8 +25,8 @@ export async function removeAgentStream(streamId: string): Promise<void> {
   await invoke("remove_agent_stream_cmd", { streamId });
 }
 
-export async function saveAgentStream(AgentStream: AgentStream): Promise<void> {
-  await invoke("save_agent_stream_cmd", { AgentStream });
+export async function saveAgentStream(stream: AgentStream): Promise<void> {
+  await invoke("save_agent_stream_cmd", { stream });
 }
 
 const agentDefinitionsKey = Symbol("agentDefinitions");
@@ -44,8 +44,8 @@ export function getAgentDefinitionsContext(): AgentDefinitions {
 // deserialize: SAgentStream -> AgentStream
 
 export function deserializeAgentStream(stream: AgentStream): TAgentStream {
-  // Deserialize nodes first
-  const nodes = stream.nodes.map((node) => deserializeAgentStreamNode(node));
+  // Deserialize agents first
+  const nodes = stream.agents.map((agent) => deserializeAgentStreamNode(agent));
 
   // Create a map to retrieve available handles from node IDs
   const nodeHandles = new Map<string, { inputs: string[]; outputs: string[]; configs: string[] }>();
@@ -59,17 +59,17 @@ export function deserializeAgentStream(stream: AgentStream): TAgentStream {
   });
 
   // Filter only valid edges
-  const validEdges = stream.edges.filter((edge) => {
-    const sourceNode = nodeHandles.get(edge.source);
-    const targetNode = nodeHandles.get(edge.target);
+  const validEdges = stream.channels.filter((ch) => {
+    const sourceNode = nodeHandles.get(ch.source);
+    const targetNode = nodeHandles.get(ch.target);
 
     if (!sourceNode || !targetNode) return false;
 
     // Ensure that the source and target handles actually exist
-    const isSourceValid = sourceNode.outputs.includes(edge.source_handle ?? "");
-    const isTargetValid = edge.target_handle?.startsWith("config:")
-      ? targetNode.configs.includes((edge.target_handle ?? "").substring(7))
-      : targetNode.inputs.includes(edge.target_handle ?? "");
+    const isSourceValid = sourceNode.outputs.includes(ch.source_handle ?? "");
+    const isTargetValid = ch.target_handle?.startsWith("config:")
+      ? targetNode.configs.includes((ch.target_handle ?? "").substring(7))
+      : targetNode.inputs.includes(ch.target_handle ?? "");
 
     return isSourceValid && isTargetValid;
   });
@@ -128,8 +128,8 @@ export function serializeAgentStream(
   return {
     id,
     name,
-    nodes: nodes.map((node) => serializeAgentStreamNode(node)),
-    edges: edges.map((edge) => serializeAgentStreamEdge(edge)),
+    agents: nodes.map((node) => serializeAgentStreamNode(node)),
+    channels: edges.map((edge) => serializeAgentStreamEdge(edge)),
     viewport,
   };
 }
