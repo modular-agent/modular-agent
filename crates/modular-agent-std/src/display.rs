@@ -43,7 +43,7 @@ impl AsAgent for DisplayValueAgent {
         _pin: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
-        self.emit_display(DISPLAY_VALUE, value);
+        self.emit_config_updated(DISPLAY_VALUE, value);
         Ok(())
     }
 }
@@ -82,7 +82,7 @@ impl AsAgent for DebugValueAgent {
         let ctx = AgentValue::from_json(ctx_json)?;
         let debug_value =
             AgentValue::object([("ctx".to_string(), ctx), ("value".to_string(), value)].into());
-        self.emit_display(DISPLAY_VALUE, debug_value);
+        self.emit_config_updated(DISPLAY_VALUE, debug_value);
         Ok(())
     }
 }

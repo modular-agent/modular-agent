@@ -41,7 +41,7 @@ impl AsAgent for CounterAgent {
 
     async fn start(&mut self) -> Result<(), AgentError> {
         self.count = 0;
-        self.emit_display(DISPLAY_COUNT, AgentValue::integer(0));
+        self.emit_config_updated(DISPLAY_COUNT, AgentValue::integer(0));
         Ok(())
     }
 
@@ -57,7 +57,7 @@ impl AsAgent for CounterAgent {
             self.count += 1;
         }
         self.try_output(ctx, PIN_COUNT, AgentValue::integer(self.count))?;
-        self.emit_display(DISPLAY_COUNT, AgentValue::integer(self.count));
+        self.emit_config_updated(DISPLAY_COUNT, AgentValue::integer(self.count));
 
         Ok(())
     }
