@@ -26,7 +26,7 @@
   import { Button, Input, NumberInput, Popover, Textarea, Toggle } from "flowbite-svelte";
   import { ExclamationCircleOutline } from "flowbite-svelte-icons";
   import { getAgentSpec, setAgentConfigs } from "tauri-plugin-askit-api";
-  import type { AgentConfigSpec, AgentDisplayConfigSpec } from "tauri-plugin-askit-api";
+  import type { AgentConfigSpec } from "tauri-plugin-askit-api";
 
   import Messages from "@/components/Messages.svelte";
   import { getAgentDefinitionsContext, inferTypeForDisplay } from "@/lib/agent";
@@ -48,9 +48,6 @@
 
   const agentDef = $derived.by(() => getAgentDefinitionsContext()?.[data.name]);
   const description = $derived(agentDef?.description);
-
-  const agentConfigs = $derived(data.spec.configs ?? null);
-  const agentDisplayConfigSpecs = $derived(data.spec.display_config_specs ?? null);
 
   let errorMessages = $state<string[]>([]);
   let inputMessage = $state<string>("");
@@ -77,15 +74,17 @@
       }),
     );
 
-    if (data.spec.display_config_specs) {
-      // Subscribe to display messages for each display config key
-      Object.entries(data.spec.display_config_specs).forEach(([key, _]) => {
-        unsubscribers.push(
-          subscribeDisplayMessage(id, key, (value) => {
-            const newDisplay = { ...data.display_values, [key]: value };
-            updateNodeData(id, { display_values: newDisplay });
-          }),
-        );
+    if (data.spec.config_specs) {
+      // Subscribe to display messages for each readonly config key
+      Object.entries(data.spec.config_specs).forEach(([key, spec]) => {
+        if (spec.readonly) {
+          unsubscribers.push(
+            subscribeDisplayMessage(id, key, (value) => {
+              const newConfigs = { ...data.spec.configs, [key]: value };
+              updateNodeData(id, { spec: { ...data.spec, configs: newConfigs } });
+            }),
+          );
+        }
       });
     }
 
@@ -253,12 +252,12 @@
   {/if}
 {/snippet}
 
-{#snippet display(key: string, value: any, display_config_spec: AgentDisplayConfigSpec | undefined)}
-  {#if display_config_spec?.hideTitle !== true}
-    <h3 class="flex-none">{display_config_spec?.title || key}</h3>
-    <p class="flex-none text-xs text-gray-500">{display_config_spec?.description}</p>
+{#snippet display(key: string, value: any, config_spec: AgentConfigSpec | undefined)}
+  {#if config_spec?.hideTitle !== true}
+    <h3 class="flex-none">{config_spec?.title || key}</h3>
+    <p class="flex-none text-xs text-gray-500">{config_spec?.description}</p>
   {/if}
-  {@const ty = inferTypeForDisplay(display_config_spec, value)}
+  {@const ty = inferTypeForDisplay(config_spec, value)}
   {#if value instanceof Array && ty !== "object" && ty !== "message"}
     <div class="flex-none flex flex-col gap-2">
       {#each value as v}
@@ -271,7 +270,11 @@
 {/snippet}
 
 {#snippet inputItem(key: string, value: any, config_spec: AgentConfigSpec | undefined)}
-  {#if config_spec?.hidden !== true}
+  {#if config_spec?.hidden === true}
+    <!-- Hidden, do not render anything -->
+  {:else if config_spec?.readonly === true}
+    {@render display(key, value, config_spec)}
+  {:else}
     {@const ty = config_spec?.type}
     <div class="flex-none relative flex items-center">
       <h3>{config_spec?.title || key}</h3>
@@ -426,14 +429,6 @@
         {@render inputItem(key, value, data.spec.config_specs?.[key])}
       {/each}
     </form>
-  {/if}
-
-  {#if data.spec.display_config_specs}
-    <div class="grow flex flex-col gap-1 pl-4 pr-4 pb-4">
-      {#each Object.entries(data.spec.display_config_specs) as [key, display_config_spec]}
-        {@render display(key, data.display_values?.[key], display_config_spec)}
-      {/each}
-    </div>
   {/if}
 {/snippet}
 

@@ -4,7 +4,7 @@ import { getContext, setContext } from "svelte";
 
 import type {
   AgentDefinitions,
-  AgentDisplayConfigSpec,
+  AgentConfigSpec,
   AgentStream,
   AgentStreamEdge,
   AgentStreamNode,
@@ -95,7 +95,6 @@ export function deserializeAgentStreamNode(node: AgentStreamNode): TAgentStreamN
       enabled,
       title,
       spec,
-      display_values: spec.display_config_specs ? {} : null,
     },
     position: {
       x,
@@ -161,7 +160,7 @@ export function serializeAgentStreamEdge(edge: TAgentStreamEdge): AgentStreamEdg
 
 // display
 
-export function inferTypeForDisplay(spec: AgentDisplayConfigSpec | undefined, value: any): string {
+export function inferTypeForDisplay(spec: AgentConfigSpec | undefined, value: any): string {
   let ty = spec?.type;
   if (ty !== undefined && ty !== null && ty !== "*") {
     return ty;
@@ -188,7 +187,7 @@ export function inferTypeForDisplay(spec: AgentDisplayConfigSpec | undefined, va
   } else if (Array.isArray(value)) {
     let tys = new Set<string>();
     for (const v of value) {
-      tys.add(inferTypeForDisplay({} as AgentDisplayConfigSpec, v));
+      tys.add(inferTypeForDisplay({} as AgentConfigSpec, v));
     }
     if (tys.size === 1) {
       return tys.values().next().value ?? "object";

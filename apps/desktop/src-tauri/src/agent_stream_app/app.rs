@@ -167,8 +167,7 @@ impl ASApp {
         let content = std::fs::read_to_string(&path)?;
         // let mut stream = AgentStream::from_json(&content)?;
 
-        let defs = self.askit.get_agent_definitions();
-        let mut stream = AgentStream::from_json_with_defs(&content, &defs)?;
+        let mut stream = AgentStream::from_json(&content)?;
 
         // Get the base name from the file name
         let base_name = path

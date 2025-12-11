@@ -19,9 +19,6 @@ export type TAgentStreamNodeData = {
   enabled: boolean;
   title: string | null;
   spec: AgentSpec;
-  display_values: Record<string, any> | null;
 };
-
-export type TAgentStreamNodeDisplays = Record<string, any>;
 
 export type TAgentStreamEdge = Edge;
