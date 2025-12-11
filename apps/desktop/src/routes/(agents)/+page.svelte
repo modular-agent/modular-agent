@@ -10,7 +10,6 @@
     Controls,
     MiniMap,
     SvelteFlow,
-    type Edge,
     type NodeEventWithPointer,
     type OnDelete,
     type NodeTypes,
