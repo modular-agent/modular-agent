@@ -1,18 +1,22 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
 
-  import { Handle, Position } from "@xyflow/svelte";
+  import { Handle, Position, type NodeProps } from "@xyflow/svelte";
   import { Button, Input, NumberInput, Textarea, Toggle } from "flowbite-svelte";
   import type { AgentConfigSpec } from "tauri-plugin-askit-api";
 
   import Messages from "@/components/Messages.svelte";
   import { inferTypeForDisplay } from "@/lib/agent";
 
-  export let name: string;
-  export let value: any;
-  export let configSpec: AgentConfigSpec | undefined;
-  export let connected = false;
-  export let updateConfig: (key: string, value: any) => void;
+  type Props = {
+    name: string;
+    value: any;
+    configSpec: AgentConfigSpec | undefined;
+    connected: boolean;
+    updateConfig: (key: string, value: any) => void;
+  };
+
+  let { name, value, configSpec, connected = false, updateConfig }: Props = $props();
 
   const CONFIG_HANDLE_STYLE =
     "width: 11px; height: 11px; background-color: #000; border: 2px solid #fff;";
