@@ -6,30 +6,19 @@
     Database: "bg-teal-500",
     default: "bg-purple-500",
   };
-
-  const CONFIG_HANDLE_STYLE =
-    "width: 11px; height: 11px; background-color: #000; border: 2px solid #fff;";
-  const HANDLE_X_OFFSET = "-23px";
 </script>
 
 <script lang="ts">
   import { onMount } from "svelte";
   import type { Unsubscriber } from "svelte/store";
 
-  import {
-    Handle,
-    Position,
-    useSvelteFlow,
-    useNodeConnections,
-    type NodeProps,
-  } from "@xyflow/svelte";
-  import { Button, Input, NumberInput, Popover, Textarea, Toggle } from "flowbite-svelte";
+  import { useSvelteFlow, useNodeConnections, type NodeProps } from "@xyflow/svelte";
+  import { Button, Input, Popover, Textarea } from "flowbite-svelte";
   import { ExclamationCircleOutline } from "flowbite-svelte-icons";
   import { getAgentSpec, setAgentConfigs } from "tauri-plugin-askit-api";
-  import type { AgentConfigSpec, AgentSpec } from "tauri-plugin-askit-api";
+  import type { AgentSpec } from "tauri-plugin-askit-api";
 
-  import Messages from "@/components/Messages.svelte";
-  import { getAgentDefinitionsContext, inferTypeForDisplay } from "@/lib/agent";
+  import { getAgentDefinitionsContext } from "@/lib/agent";
   import {
     subscribeAgentSpecUpdatedMessage,
     subscribeAgentConfigUpdatedMessage,
@@ -37,6 +26,7 @@
     subscribeAgentInMessage,
   } from "@/lib/shared.svelte";
 
+  import AgentConfig from "./AgentConfig.svelte";
   import NodeBase from "./NodeBase.svelte";
 
   type Props = NodeProps & {
@@ -178,257 +168,17 @@
   </div>
 {/snippet}
 
-{#snippet displayItem(ty: string | null, value: any)}
-  {#if ty === "undefined"}
-    <div class="flex-none border-1 p-2">&nbsp;</div>
-  {:else if ty === "null"}
-    <div class="flex-none border-1 p-2">&nbsp;</div>
-  {:else if ty === "boolean"}
-    {#if value}
-      <div class="flex-none border-1 p-2">true</div>
-    {:else}
-      <div class="flex-none border-1 p-2">false</div>
-    {/if}
-  {:else if ty === "integer"}
-    <div class="flex-none border-1 p-2">{value}</div>
-  {:else if ty === "number"}
-    <div class="flex-none border-1 p-2">{value}</div>
-  {:else if ty === "string"}
-    <Input
-      type="text"
-      class="nodrag nowheel flex-none text-wrap"
-      {value}
-      onkeydown={(evt) => {
-        if (evt.ctrlKey && (evt.key === "a" || evt.key === "c")) {
-          return;
-        }
-        evt.preventDefault();
-      }}
-    />
-  {:else if ty === "password"}
-    <Input
-      class="nodrag flex-none"
-      type="password"
-      {value}
-      onkeydown={(evt) => {
-        evt.preventDefault();
-      }}
-    />
-  {:else if ty === "text"}
-    <Textarea
-      class="nodrag nowheel flex-1 text-wrap"
-      {value}
-      onkeydown={(evt) => {
-        if (evt.ctrlKey && (evt.key === "a" || evt.key === "c")) {
-          return;
-        }
-        evt.preventDefault();
-      }}
-    />
-  {:else if ty === "image"}
-    <img class="flex-1 object-scale-down" src={value} alt="" />
-  {:else if ty === "object"}
-    <Textarea
-      class="nodrag nowheel flex-1 text-wrap"
-      value={JSON.stringify(value, null, 2)}
-      onkeydown={(evt) => {
-        if (evt.ctrlKey && (evt.key === "a" || evt.key === "c")) {
-          return;
-        }
-        evt.preventDefault();
-      }}
-    />
-  {:else if ty === "message" || ty === "messages"}
-    <Messages messages={value} />
-  {:else}
-    <Textarea
-      class="nodrag nowheel flex-1 text-wrap"
-      value={JSON.stringify(value, null, 2)}
-      onkeydown={(evt) => {
-        if (evt.ctrlKey && (evt.key === "a" || evt.key === "c")) {
-          return;
-        }
-        evt.preventDefault();
-      }}
-    />
-  {/if}
-{/snippet}
-
-{#snippet display(key: string, value: any, config_spec: AgentConfigSpec | undefined)}
-  {#if config_spec?.hideTitle !== true}
-    <h3 class="flex-none">{config_spec?.title || key}</h3>
-    <p class="flex-none text-xs text-gray-500">{config_spec?.description}</p>
-  {/if}
-  {@const ty = inferTypeForDisplay(config_spec, value)}
-  {#if value instanceof Array && ty !== "object" && ty !== "message"}
-    <div class="flex-none flex flex-col gap-2">
-      {#each value as v}
-        {@render displayItem(ty, v)}
-      {/each}
-    </div>
-  {:else}
-    {@render displayItem(ty, value)}
-  {/if}
-{/snippet}
-
-{#snippet inputItem(key: string, value: any, config_spec: AgentConfigSpec | undefined)}
-  {#if config_spec?.hidden === true}
-    <!-- Hidden, do not render anything -->
-  {:else if config_spec?.readonly === true}
-    {@render display(key, value, config_spec)}
-  {:else}
-    {@const ty = config_spec?.type}
-    <div class="flex-none relative flex items-center">
-      <h3>{config_spec?.title || key}</h3>
-      <Handle
-        id="config:{key}"
-        type="target"
-        position={Position.Left}
-        style="top: 50%; transform: translate({HANDLE_X_OFFSET}, -50%); {CONFIG_HANDLE_STYLE}"
-      />
-    </div>
-    {#if config_spec?.description}
-      <p class="flex-none text-xs text-gray-500">{config_spec?.description}</p>
-    {/if}
-    {#if !connectedConfigs.includes(key)}
-      <!-- Not connected, show input -->
-      {#if ty === "unit"}
-        <Button color="alternative" class="flex-none" onclick={() => updateConfig(key, {})} />
-      {:else if ty === "boolean"}
-        <Toggle class="flex-none" checked={value} onchange={() => updateConfig(key, !value)} />
-      {:else if ty === "integer"}
-        <NumberInput
-          class="nodrag flex-none"
-          {value}
-          onkeydown={(evt) => {
-            if (evt.key === "Enter") {
-              let intValue = parseInt(evt.currentTarget.value);
-              if (!isNaN(intValue)) {
-                updateConfig(key, intValue);
-              }
-            }
-          }}
-          onchange={(evt) => {
-            let intValue = parseInt(evt.currentTarget.value);
-            if (!isNaN(intValue)) {
-              if (intValue !== value) {
-                updateConfig(key, intValue);
-              }
-            }
-          }}
-        />
-      {:else if ty === "number"}
-        <Input
-          class="nodrag flex-none"
-          type="text"
-          {value}
-          onkeydown={(evt) => {
-            if (evt.key === "Enter") {
-              let numValue = parseFloat(evt.currentTarget.value);
-              if (!isNaN(numValue)) {
-                updateConfig(key, numValue);
-              }
-            }
-          }}
-          onchange={(evt) => {
-            let numValue = parseFloat(evt.currentTarget.value);
-            if (!isNaN(numValue)) {
-              if (numValue !== value) {
-                updateConfig(key, numValue);
-              }
-            }
-          }}
-        />
-      {:else if ty === "string"}
-        <Input
-          class="nodrag flex-none"
-          type="text"
-          {value}
-          onkeydown={(evt) => {
-            if (evt.key === "Enter") {
-              updateConfig(key, evt.currentTarget.value);
-            }
-          }}
-          onchange={(evt) => {
-            if (evt.currentTarget.value !== value) {
-              updateConfig(key, evt.currentTarget.value);
-            }
-          }}
-        />
-      {:else if ty === "password"}
-        <Input
-          class="nodrag flex-none"
-          type="password"
-          {value}
-          onkeydown={(evt) => {
-            if (evt.key === "Enter") {
-              updateConfig(key, evt.currentTarget.value);
-            }
-          }}
-          onchange={(evt) => {
-            if (evt.currentTarget.value !== value) {
-              updateConfig(key, evt.currentTarget.value);
-            }
-          }}
-        />
-      {:else if ty === "text"}
-        <Textarea
-          class="nodrag nowheel flex-1"
-          {value}
-          onkeydown={(evt) => {
-            if (evt.ctrlKey && evt.key === "Enter") {
-              evt.preventDefault();
-              updateConfig(key, evt.currentTarget.value);
-            }
-          }}
-          onchange={(evt) => {
-            if (evt.currentTarget.value !== value) {
-              updateConfig(key, evt.currentTarget.value);
-            }
-          }}
-        />
-      {:else if ty === "object"}
-        <Textarea
-          class="nodrag nowheel flex-1"
-          value={JSON.stringify(value, null, 2)}
-          onkeydown={(evt) => {
-            if (evt.ctrlKey && evt.key === "Enter") {
-              evt.preventDefault();
-              let objValue;
-              try {
-                objValue = JSON.parse(evt.currentTarget.value);
-                updateConfig(key, objValue);
-              } catch (e) {
-                console.error("Invalid JSON:", e);
-                return;
-              }
-            }
-          }}
-          onchange={(evt) => {
-            if (evt.currentTarget.value !== value) {
-              let objValue;
-              try {
-                objValue = JSON.parse(evt.currentTarget.value);
-                updateConfig(key, objValue);
-              } catch (e) {
-                console.error("Invalid JSON:", e);
-                return;
-              }
-            }
-          }}
-        />
-      {:else}
-        <Textarea class="nodrag nowheel flex-1" value={JSON.stringify(value, null, 2)} disabled />
-      {/if}
-    {/if}
-  {/if}
-{/snippet}
-
 {#snippet contents()}
   {#if data.configs}
     <form class="grow flex flex-col gap-1 pl-4 pr-4 pb-4">
       {#each Object.entries(data.configs) as [key, value]}
-        {@render inputItem(key, value, data.config_specs?.[key])}
+        <AgentConfig
+          name={key}
+          {value}
+          configSpec={data.config_specs?.[key]}
+          connected={connectedConfigs.includes(key)}
+          {updateConfig}
+        />
       {/each}
     </form>
   {/if}
