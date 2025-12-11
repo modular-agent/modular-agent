@@ -5,9 +5,9 @@ import { getContext, setContext } from "svelte";
 import type {
   AgentDefinitions,
   AgentConfigSpec,
+  AgentSpec,
   AgentStream,
   ChannelSpec,
-  AgentStreamNode,
   Viewport,
 } from "tauri-plugin-askit-api";
 
@@ -51,9 +51,9 @@ export function deserializeAgentStream(stream: AgentStream): TAgentStream {
   const nodeHandles = new Map<string, { inputs: string[]; outputs: string[]; configs: string[] }>();
 
   nodes.forEach((node) => {
-    const inputs = node.data.spec.inputs ?? [];
-    const outputs = node.data.spec.outputs ?? [];
-    const configs = Object.keys(node.data.spec.configs ?? {});
+    const inputs = node.data.inputs ?? [];
+    const outputs = node.data.outputs ?? [];
+    const configs = Object.keys(node.data.configs ?? {});
 
     nodeHandles.set(node.id, { inputs, outputs, configs });
   });
@@ -83,26 +83,17 @@ export function deserializeAgentStream(stream: AgentStream): TAgentStream {
   };
 }
 
-export function deserializeAgentStreamNode(node: AgentStreamNode): TAgentStreamNode {
-  const { id, enabled, spec, ...rest } = node as AgentStreamNode & Record<string, any>;
-
-  const { title = null, x = 0, y = 0, width, height, ...extensions } = rest as Record<string, any>;
+export function deserializeAgentStreamNode(spec: AgentSpec): TAgentStreamNode {
   return {
-    id,
+    id: spec.id ?? crypto.randomUUID(),
     type: "agent",
-    data: {
-      name: spec.def_name,
-      enabled,
-      title,
-      spec,
-    },
+    data: { ...spec },
     position: {
-      x,
-      y,
+      x: spec.x ?? 0,
+      y: spec.y ?? 0,
     },
-    width,
-    height,
-    extensions,
+    width: spec.width,
+    height: spec.height,
   };
 }
 
@@ -134,17 +125,20 @@ export function serializeAgentStream(
   };
 }
 
-export function serializeAgentStreamNode(node: TAgentStreamNode): AgentStreamNode {
+export function serializeAgentStreamNode(node: TAgentStreamNode): AgentSpec {
   return {
     id: node.id,
+    def_name: node.data.def_name,
+    inputs: node.data.inputs,
+    outputs: node.data.outputs,
+    configs: node.data.configs,
+    config_specs: node.data.config_specs,
     enabled: node.data.enabled,
-    spec: node.data.spec,
-    title: node.data.title,
+    // extensions
     x: node.position.x,
     y: node.position.y,
     width: node.width,
     height: node.height,
-    ...(node.extensions ?? {}),
   };
 }
 

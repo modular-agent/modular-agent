@@ -29,7 +29,7 @@
     newAgentStream,
     copySubStream,
   } from "tauri-plugin-askit-api";
-  import type { AgentStreamNode, ChannelSpec } from "tauri-plugin-askit-api";
+  import type { AgentSpec, ChannelSpec } from "tauri-plugin-askit-api";
 
   import {
     deserializeAgentStream,
@@ -205,7 +205,7 @@
 
   // cut, copy and paste
 
-  let copiedNodes = $state.raw<AgentStreamNode[]>([]);
+  let copiedNodes = $state.raw<AgentSpec[]>([]);
   let copiedEdges = $state.raw<ChannelSpec[]>([]);
 
   function selectedNodesAndEdges(): [TAgentStreamNode[], TAgentStreamEdge[]] {

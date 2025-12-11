@@ -26,7 +26,7 @@
   import { Button, Input, NumberInput, Popover, Textarea, Toggle } from "flowbite-svelte";
   import { ExclamationCircleOutline } from "flowbite-svelte-icons";
   import { getAgentSpec, setAgentConfigs } from "tauri-plugin-askit-api";
-  import type { AgentConfigSpec } from "tauri-plugin-askit-api";
+  import type { AgentConfigSpec, AgentSpec } from "tauri-plugin-askit-api";
 
   import Messages from "@/components/Messages.svelte";
   import { getAgentDefinitionsContext, inferTypeForDisplay } from "@/lib/agent";
@@ -36,17 +36,16 @@
     subscribeAgentErrorMessage,
     subscribeAgentInMessage,
   } from "@/lib/shared.svelte";
-  import type { TAgentStreamNodeData } from "@/lib/types";
 
   import NodeBase from "./NodeBase.svelte";
 
   type Props = NodeProps & {
-    data: TAgentStreamNodeData;
+    data: AgentSpec;
   };
 
   let { id, data, ...props }: Props = $props();
 
-  const agentDef = $derived.by(() => getAgentDefinitionsContext()?.[data.name]);
+  const agentDef = $derived.by(() => getAgentDefinitionsContext()?.[data.def_name]);
   const description = $derived(agentDef?.description);
 
   let errorMessages = $state<string[]>([]);
@@ -67,12 +66,13 @@
     unsubscribers.push(
       subscribeAgentConfigUpdatedMessage(id, ({ key, value }) => {
         // TODO: validate key and value
-        let currentValue = data.spec.configs?.[key];
+        if (!key) return;
+        let currentValue = data.configs?.[key];
         if (currentValue === value) {
           return;
         }
-        const newConfigs = { ...data.spec.configs, [key]: value };
-        updateNodeData(id, { spec: { ...data.spec, configs: newConfigs } });
+        const newConfigs = { ...data.configs, [key]: value };
+        updateNodeData(id, { ...data, configs: newConfigs });
       }),
     );
 
@@ -112,12 +112,12 @@
 
   async function updateConfig(key: string, value: any) {
     // TODO: validate key and value
-    let currentValue = data.spec.configs?.[key];
+    let currentValue = data.configs?.[key];
     if (currentValue === value) {
       return;
     }
-    const newConfigs = { ...data.spec.configs, [key]: value };
-    updateNodeData(id, { spec: { ...data.spec, configs: newConfigs } });
+    const newConfigs = { ...data.configs, [key]: value };
+    updateNodeData(id, { ...data, configs: newConfigs });
     await setAgentConfigs(id, newConfigs);
   }
 
@@ -139,12 +139,12 @@
           <Input
             class="mt-1"
             type="text"
-            value={data.title ?? agentDef?.title ?? data.name}
+            value={data.title ?? agentDef?.title ?? data.def_name}
             onblur={() => (editTitle = false)}
             onkeydown={(evt) => {
               if (evt.key === "Enter") {
                 const newTitle = evt.currentTarget.value;
-                if (newTitle === "" || newTitle === (agentDef?.title ?? data.name)) {
+                if (newTitle === "" || newTitle === (agentDef?.title ?? data.def_name)) {
                   updateNodeData(id, { title: null });
                 } else if (newTitle !== data.title) {
                   updateNodeData(id, { title: newTitle });
@@ -162,13 +162,13 @@
             tabindex={-1}
           >
             <h3 class="text-xl">
-              {data.title ?? agentDef?.title ?? data.name}
+              {data.title ?? agentDef?.title ?? data.def_name}
             </h3>
           </button>
         {/if}
       {:else}
         <h3 class="text-xl">
-          <s>{data.name}</s>
+          <s>{data.def_name}</s>
         </h3>
       {/if}
       {#if errorMessages.length > 0}
@@ -425,10 +425,10 @@
 {/snippet}
 
 {#snippet contents()}
-  {#if data.spec.configs}
+  {#if data.configs}
     <form class="grow flex flex-col gap-1 pl-4 pr-4 pb-4">
-      {#each Object.entries(data.spec.configs) as [key, value]}
-        {@render inputItem(key, value, data.spec.config_specs?.[key])}
+      {#each Object.entries(data.configs) as [key, value]}
+        {@render inputItem(key, value, data.config_specs?.[key])}
       {/each}
     </form>
   {/if}
@@ -439,7 +439,7 @@
 {#if description || data.title}
   <Popover triggeredBy="#t-{uid}" placement="top-start" arrow={false} class="z-40">
     {#if data.title}
-      <p class="text-sm font-semibold pb-1">{agentDef?.title ?? data.name}</p>
+      <p class="text-sm font-semibold pb-1">{agentDef?.title ?? data.def_name}</p>
     {/if}
     {#if description}
       <p class="text-sm text-gray-500">{description}</p>

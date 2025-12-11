@@ -34,15 +34,8 @@ export type TAgentStream = {
 };
 
 export type TAgentStreamNode = Node & {
-  data: TAgentStreamNodeData;
+  data: AgentSpec;
   extensions?: Record<string, any>;
-};
-
-export type TAgentStreamNodeData = {
-  name: string;
-  enabled: boolean;
-  title: string | null;
-  spec: AgentSpec;
 };
 
 export type TAgentStreamEdge = Edge;
