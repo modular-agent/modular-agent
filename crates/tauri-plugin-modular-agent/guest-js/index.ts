@@ -92,30 +92,9 @@ export type Settings = {
 
 // emit
 
-export type ConfigMessage = {
-  agent_id: string;
+export type BoardMessage = {
   key: string;
   value: any;
-};
-
-export type DisplayMessage = {
-  agent_id: string;
-  key: string;
-  value: any;
-};
-
-export type ErrorMessage = {
-  agent_id: string;
-  message: string;
-};
-
-export type AgentSpecUpdatedMessage = {
-  agent_id: string;
-};
-
-export type InputMessage = {
-  agent_id: string;
-  ch: string;
 };
 
 // agent definition

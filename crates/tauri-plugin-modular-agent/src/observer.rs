@@ -18,7 +18,8 @@ impl<R: Runtime> ASKitObserver for BoardObserver<R> {
                             name: name.to_string(),
                             value: value.clone(),
                         },
-                    ).unwrap_or_else(|e| {
+                    )
+                    .unwrap_or_else(|e| {
                         eprintln!("Failed to emit board event: {}", e);
                     });
             }
