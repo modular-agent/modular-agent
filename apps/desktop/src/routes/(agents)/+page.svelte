@@ -12,6 +12,7 @@
     SvelteFlow,
     type Edge,
     type NodeEventWithPointer,
+    type OnDelete,
     type NodeTypes,
   } from "@xyflow/svelte";
   // 👇 this is important! You need to import the styles for Svelte Flow to work
@@ -140,15 +141,18 @@
   //   updateNodesAndEdges();
   // }
 
-  async function handleOnDelete(params: { nodes: Node[]; edges: Edge[] }) {
-    if (params.edges && params.edges.length > 0) {
+  const handleOnDelete: OnDelete<TAgentStreamNode, TAgentStreamEdge> = async ({
+    nodes: deletedNodes,
+    edges: deletedEdges,
+  }) => {
+    if (deletedEdges && deletedEdges.length > 0) {
       await checkEdgeChange(edges);
     }
-    if (params.nodes && params.nodes.length > 0) {
+    if (deletedNodes && deletedNodes.length > 0) {
       await checkNodeChange(nodes);
       updateCurrentStreamActivity();
     }
-  }
+  };
 
   async function handleOnConnect() {
     await checkEdgeChange(edges);
