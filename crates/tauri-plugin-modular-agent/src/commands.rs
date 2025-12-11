@@ -1,6 +1,6 @@
 use agent_stream_kit::{
     AgentConfigSpecs, AgentConfigs, AgentConfigsMap, AgentDefinition, AgentDefinitions, AgentSpec,
-    AgentStream, AgentStreamNode, AgentStreams, AgentValue, ChannelSpec,
+    AgentStream, AgentStreams, AgentValue, ChannelSpec,
 };
 use tauri::{AppHandle, Runtime};
 
@@ -96,9 +96,9 @@ pub(crate) fn insert_agent_stream<R: Runtime>(
 #[tauri::command]
 pub(crate) fn copy_sub_stream<R: Runtime>(
     app: AppHandle<R>,
-    agents: Vec<AgentStreamNode>,
+    agents: Vec<AgentSpec>,
     channels: Vec<ChannelSpec>,
-) -> (Vec<AgentStreamNode>, Vec<ChannelSpec>) {
+) -> (Vec<AgentSpec>, Vec<ChannelSpec>) {
     app.askit().copy_sub_stream(&agents, &channels)
 }
 
@@ -121,7 +121,7 @@ pub(crate) async fn stop_agent_stream<R: Runtime>(app: AppHandle<R>, id: String)
 pub fn new_agent_stream_agent<R: Runtime>(
     app: AppHandle<R>,
     def_name: String,
-) -> Result<AgentStreamNode> {
+) -> Result<AgentSpec> {
     app.askit()
         .new_agent_stream_agent(&def_name)
         .map_err(Into::into)
@@ -131,7 +131,7 @@ pub fn new_agent_stream_agent<R: Runtime>(
 pub(crate) fn add_agent_stream_agent<R: Runtime>(
     app: AppHandle<R>,
     stream_id: String,
-    agent: AgentStreamNode,
+    agent: AgentSpec,
 ) -> Result<()> {
     app.askit()
         .add_agent_stream_agent(&stream_id, &agent)

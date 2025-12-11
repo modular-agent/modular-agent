@@ -38,7 +38,7 @@ export type AgentStreams = Record<string, AgentStream>;
 export type AgentStream = {
   id: string;
   name: string;
-  agents: AgentStreamNode[];
+  agents: AgentSpec[];
   channels: ChannelSpec[];
   viewport: Viewport | null;
 };
@@ -47,21 +47,17 @@ export type AgentConfigsMap = Record<string, AgentConfigs>;
 
 export type AgentConfigs = Record<string, any>;
 
+export type AgentSpecExtensions = Record<string, any>;
+
 export type AgentSpec = {
+  id?: string | null;
   def_name: string;
   inputs?: string[] | null;
   outputs?: string[] | null;
   configs?: AgentConfigs | null;
   config_specs?: AgentConfigSpecs | null;
-};
-
-export type AgentStreamNodeExtensions = Record<string, any>;
-
-export type AgentStreamNode = AgentStreamNodeExtensions & {
-  id: string;
-  enabled: boolean;
-  spec: AgentSpec;
-};
+  enabled?: boolean | null;
+} & AgentSpecExtensions;
 
 export type ChannelSpec = {
   id: string;
@@ -152,9 +148,9 @@ export async function insertAgentStream(
 }
 
 export async function copySubStream(
-  agents: AgentStreamNode[],
+  agents: AgentSpec[],
   channels: ChannelSpec[]
-): Promise<[AgentStreamNode[], ChannelSpec[]]> {
+): Promise<[AgentSpec[], ChannelSpec[]]> {
   return await invoke<any>("plugin:askit|copy_sub_stream", {
     agents,
     channels,
@@ -171,15 +167,13 @@ export async function stopAgentStream(id: string): Promise<void> {
 
 // agents
 
-export async function newAgentStreamAgent(
-  defName: string
-): Promise<AgentStreamNode> {
+export async function newAgentStreamAgent(defName: string): Promise<AgentSpec> {
   return await invoke<any>("plugin:askit|new_agent_stream_agent", { defName });
 }
 
 export async function addAgentStreamAgent(
   streamId: string,
-  agent: AgentStreamNode
+  agent: AgentSpec
 ): Promise<void> {
   await invoke<void>("plugin:askit|add_agent_stream_agent", {
     streamId,
