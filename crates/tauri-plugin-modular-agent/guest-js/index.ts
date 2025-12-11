@@ -39,7 +39,7 @@ export type AgentStream = {
   id: string;
   name: string;
   agents: AgentStreamNode[];
-  channels: AgentStreamEdge[];
+  channels: ChannelSpec[];
   viewport: Viewport | null;
 };
 
@@ -63,7 +63,7 @@ export type AgentStreamNode = AgentStreamNodeExtensions & {
   spec: AgentSpec;
 };
 
-export type AgentStreamEdge = {
+export type ChannelSpec = {
   id: string;
   source: string;
   source_handle: string | null;
@@ -153,8 +153,8 @@ export async function insertAgentStream(
 
 export async function copySubStream(
   agents: AgentStreamNode[],
-  channels: AgentStreamEdge[]
-): Promise<[AgentStreamNode[], AgentStreamEdge[]]> {
+  channels: ChannelSpec[]
+): Promise<[AgentStreamNode[], ChannelSpec[]]> {
   return await invoke<any>("plugin:askit|copy_sub_stream", {
     agents,
     channels,
@@ -201,7 +201,7 @@ export async function removeAgentStreamAgent(
 
 export async function addAgentStreamChannel(
   streamId: string,
-  channel: AgentStreamEdge
+  channel: ChannelSpec
 ): Promise<void> {
   await invoke<void>("plugin:askit|add_agent_stream_channel", {
     streamId,
