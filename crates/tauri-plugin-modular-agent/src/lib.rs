@@ -55,7 +55,7 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             commands::get_global_configs_map,
             commands::set_global_configs,
             commands::set_global_configs_map,
-            commands::get_agent_default_configs,
+            commands::get_agent_config_specs,
         ])
         .setup(|app, _api| {
             let askit = ASKit::init()?;

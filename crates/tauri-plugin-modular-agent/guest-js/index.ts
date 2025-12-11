@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 
 export type AgentDefinitions = Record<string, AgentDefinition>;
+
 export type AgentGlobalConfigsMap = Record<string, AgentConfigs>;
 
 export type AgentDefinition = {
@@ -11,52 +12,26 @@ export type AgentDefinition = {
   category?: string | null;
   inputs?: string[] | null;
   outputs?: string[] | null;
-  default_configs?: AgentConfigSpecs | null;
+  configs?: AgentConfigSpecs | null;
   global_configs?: AgentGlobalConfigSpecs | null;
-  display_configs?: AgentDisplayConfigSpecs | null;
   native_thread?: boolean | null;
 };
 
 export type AgentConfigSpecs = Record<string, AgentConfigSpec>;
+
 export type AgentGlobalConfigSpecs = Record<string, AgentConfigSpec>;
 
 export type AgentConfigSpec = {
   value: any;
   type: AgentConfigValueType | null;
   title?: string | null;
+  hideTitle?: boolean | null;
   description?: string | null;
   hidden?: boolean | null;
+  readonly?: boolean | null;
 };
 
 export type AgentConfigValueType = string;
-// | "unit"
-// | "boolean"
-// | "integer"
-// | "number"
-// | "string"
-// | "password"
-// | "text"
-// | "object";
-
-export type AgentDisplayConfigSpecs = Record<string, AgentDisplayConfigSpec>;
-
-export type AgentDisplayConfigSpec = {
-  value?: any | null;
-  type: AgentDisplayConfigType | null;
-  title?: string | null;
-  description?: string | null;
-  hideTitle?: boolean | null;
-};
-
-export type AgentDisplayConfigType = string;
-// | "*"
-// | "boolean"
-// | "integer"
-// | "number"
-// | "string"
-// | "text"
-// | "object"
-// | "messages";
 
 export type AgentStreams = Record<string, AgentStream>;
 
@@ -69,6 +44,7 @@ export type AgentStream = {
 };
 
 export type AgentConfigsMap = Record<string, AgentConfigs>;
+
 export type AgentConfigs = Record<string, any>;
 
 export type AgentSpec = {
@@ -77,7 +53,6 @@ export type AgentSpec = {
   outputs?: string[] | null;
   configs?: AgentConfigs | null;
   config_specs?: AgentConfigSpecs | null;
-  display_config_specs?: AgentDisplayConfigSpecs | null;
 };
 
 export type AgentStreamNodeExtensions = Record<string, any>;
@@ -307,10 +282,10 @@ export async function setGlobalConfigsMap(
   await invoke<void>("plugin:askit|set_global_configs_map", { configs });
 }
 
-export async function getAgentDefaultConfigs(
+export async function getAgentConfigSpecs(
   defName: string
 ): Promise<AgentConfigSpecs | null> {
-  return await invoke<any>("plugin:askit|get_agent_default_configs", {
+  return await invoke<any>("plugin:askit|get_agent_config_specs", {
     defName,
   });
 }

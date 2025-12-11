@@ -241,9 +241,9 @@ pub(crate) fn set_global_configs_map<R: Runtime>(app: AppHandle<R>, configs: Age
 }
 
 #[tauri::command]
-pub(crate) async fn get_agent_default_configs<R: Runtime>(
+pub(crate) async fn get_agent_config_specs<R: Runtime>(
     app: AppHandle<R>,
     def_name: String,
 ) -> Option<AgentConfigSpecs> {
-    app.askit().get_agent_default_configs(&def_name)
+    app.askit().get_agent_config_specs(&def_name)
 }

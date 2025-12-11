@@ -30,7 +30,7 @@ Default permissions for the plugin
 - `allow-get-global-configs-map`
 - `allow-set-global-configs`
 - `allow-set-global-configs-map`
-- `allow-get-agent-default-configs`
+- `allow-get-agent-config-specs`
 
 ## Permission Table
 
@@ -148,12 +148,12 @@ Denies the copy_sub_stream command without any pre-configured scope.
 <tr>
 <td>
 
-`askit:allow-get-agent-default-configs`
+`askit:allow-get-agent-config-specs`
 
 </td>
 <td>
 
-Enables the get_agent_default_configs command without any pre-configured scope.
+Enables the get_agent_config_specs command without any pre-configured scope.
 
 </td>
 </tr>
@@ -161,12 +161,12 @@ Enables the get_agent_default_configs command without any pre-configured scope.
 <tr>
 <td>
 
-`askit:deny-get-agent-default-configs`
+`askit:deny-get-agent-config-specs`
 
 </td>
 <td>
 
-Denies the get_agent_default_configs command without any pre-configured scope.
+Denies the get_agent_config_specs command without any pre-configured scope.
 
 </td>
 </tr>

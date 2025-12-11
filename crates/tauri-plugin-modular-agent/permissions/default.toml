@@ -27,5 +27,5 @@ permissions = [
     "allow-get-global-configs-map",
     "allow-set-global-configs",
     "allow-set-global-configs-map",
-    "allow-get-agent-default-configs",
+    "allow-get-agent-config-specs",
 ]

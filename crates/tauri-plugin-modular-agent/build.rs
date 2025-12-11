@@ -25,7 +25,7 @@ const COMMANDS: &[&str] = &[
     "get_global_configs_map",
     "set_global_configs",
     "set_global_configs_map",
-    "get_agent_default_configs",
+    "get_agent_config_specs",
 ];
 
 fn main() {
