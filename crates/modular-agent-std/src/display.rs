@@ -13,7 +13,13 @@ static DISPLAY_VALUE: &str = "value";
     title = "Display Value",
     category = CATEGORY,
     inputs = ["*"],
-    any_display(name = DISPLAY_VALUE, hide_title)
+    custom_config(
+        name = DISPLAY_VALUE,
+        readonly,
+        type_="*",
+        default=AgentValue::unit(),
+        hide_title,
+    )
 )]
 struct DisplayValueAgent {
     data: AgentData,
@@ -47,7 +53,11 @@ impl AsAgent for DisplayValueAgent {
     title = "Debug Value",
     category = CATEGORY,
     inputs = ["*"],
-    object_display(name = DISPLAY_VALUE, hide_title)
+    object_config(
+        name = DISPLAY_VALUE,
+        readonly,
+        hide_title,
+    )
 )]
 struct DebugValueAgent {
     data: AgentData,

@@ -19,7 +19,11 @@ static DISPLAY_COUNT: &str = "count";
     category = CATEGORY,
     inputs = [PIN_IN, PIN_RESET],
     outputs = [PIN_COUNT],
-    integer_display(name = DISPLAY_COUNT, hide_title)
+    integer_config(
+        name = DISPLAY_COUNT,
+        readonly,
+        hide_title,
+    )
 )]
 struct CounterAgent {
     data: AgentData,
