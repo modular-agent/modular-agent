@@ -11,7 +11,7 @@ use crate::definition::{AgentConfigSpecs, AgentDefinition, AgentDefinitions};
 use crate::error::AgentError;
 use crate::message::{self, AgentEventMessage};
 use crate::registry;
-use crate::stream::{self, AgentStream, AgentStreamEdge, AgentStreamNode, AgentStreams};
+use crate::stream::{self, AgentStream, AgentStreamNode, AgentStreams, ChannelSpec};
 use crate::value::AgentValue;
 
 const MESSAGE_LIMIT: usize = 1024;
@@ -323,7 +323,7 @@ impl ASKit {
     pub fn add_agent_stream_channel(
         &self,
         stream_id: &str,
-        channel: &AgentStreamEdge,
+        channel: &ChannelSpec,
     ) -> Result<(), AgentError> {
         let mut streams = self.streams.lock().unwrap();
         let Some(stream) = streams.get_mut(stream_id) else {
@@ -334,7 +334,7 @@ impl ASKit {
         Ok(())
     }
 
-    pub(crate) fn add_channel(&self, channel: &AgentStreamEdge) -> Result<(), AgentError> {
+    pub(crate) fn add_channel(&self, channel: &ChannelSpec) -> Result<(), AgentError> {
         // check if the source agent exists
         {
             let agents = self.agents.lock().unwrap();
@@ -441,7 +441,7 @@ impl ASKit {
         Ok(())
     }
 
-    pub(crate) fn remove_channel(&self, channel: &AgentStreamEdge) {
+    pub(crate) fn remove_channel(&self, channel: &ChannelSpec) {
         let mut channels = self.channels.lock().unwrap();
         if let Some(targets) = channels.get_mut(&channel.source) {
             targets.retain(|(target, source_handle, target_handle)| {
@@ -458,8 +458,8 @@ impl ASKit {
     pub fn copy_sub_stream(
         &self,
         agents: &Vec<AgentStreamNode>,
-        channels: &Vec<AgentStreamEdge>,
-    ) -> (Vec<AgentStreamNode>, Vec<AgentStreamEdge>) {
+        channels: &Vec<ChannelSpec>,
+    ) -> (Vec<AgentStreamNode>, Vec<ChannelSpec>) {
         stream::copy_sub_stream(agents, channels)
     }
 

@@ -20,7 +20,7 @@ pub struct AgentStream {
 
     agents: Vec<AgentStreamNode>,
 
-    channels: Vec<AgentStreamEdge>,
+    channels: Vec<ChannelSpec>,
 
     #[serde(flatten)]
     pub extensions: FnvIndexMap<String, Value>,
@@ -65,15 +65,15 @@ impl AgentStream {
         self.agents = agents;
     }
 
-    pub fn channels(&self) -> &Vec<AgentStreamEdge> {
+    pub fn channels(&self) -> &Vec<ChannelSpec> {
         &self.channels
     }
 
-    pub fn add_channels(&mut self, channel: AgentStreamEdge) {
+    pub fn add_channels(&mut self, channel: ChannelSpec) {
         self.channels.push(channel);
     }
 
-    pub fn remove_channel(&mut self, channel_id: &str) -> Option<AgentStreamEdge> {
+    pub fn remove_channel(&mut self, channel_id: &str) -> Option<ChannelSpec> {
         if let Some(channel) = self
             .channels
             .iter()
@@ -87,7 +87,7 @@ impl AgentStream {
         }
     }
 
-    pub fn set_channels(&mut self, channels: Vec<AgentStreamEdge>) {
+    pub fn set_channels(&mut self, channels: Vec<ChannelSpec>) {
         self.channels = channels;
     }
 
@@ -137,8 +137,8 @@ impl AgentStream {
 
 pub fn copy_sub_stream(
     agents: &Vec<AgentStreamNode>,
-    channels: &Vec<AgentStreamEdge>,
-) -> (Vec<AgentStreamNode>, Vec<AgentStreamEdge>) {
+    channels: &Vec<ChannelSpec>,
+) -> (Vec<AgentStreamNode>, Vec<ChannelSpec>) {
     let mut new_agents = Vec::new();
     let mut agent_id_map = FnvIndexMap::default();
     for agent in agents {
@@ -202,10 +202,10 @@ fn new_id() -> String {
         .to_string();
 }
 
-// AgentStreamEdge
+// ChannelSpec
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
-pub struct AgentStreamEdge {
+pub struct ChannelSpec {
     pub id: String,
     pub source: String,
     pub source_handle: String,

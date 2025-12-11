@@ -49,5 +49,5 @@ pub use definition::{AgentConfigSpec, AgentConfigSpecs, AgentDefinition, AgentDe
 pub use error::AgentError;
 pub use output::AgentOutput;
 pub use registry::AgentRegistration;
-pub use stream::{AgentStream, AgentStreamEdge, AgentStreamNode, AgentStreams};
+pub use stream::{AgentStream, ChannelSpec, AgentStreamNode, AgentStreams};
 pub use value::{AgentValue, AgentValueMap};
