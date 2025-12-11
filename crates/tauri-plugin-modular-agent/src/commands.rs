@@ -96,10 +96,10 @@ pub(crate) fn insert_agent_stream<R: Runtime>(
 #[tauri::command]
 pub(crate) fn copy_sub_stream<R: Runtime>(
     app: AppHandle<R>,
-    nodes: Vec<AgentStreamNode>,
-    edges: Vec<AgentStreamEdge>,
+    agents: Vec<AgentStreamNode>,
+    channels: Vec<AgentStreamEdge>,
 ) -> (Vec<AgentStreamNode>, Vec<AgentStreamEdge>) {
-    app.askit().copy_sub_stream(&nodes, &edges)
+    app.askit().copy_sub_stream(&agents, &channels)
 }
 
 #[tauri::command]
@@ -115,62 +115,62 @@ pub(crate) async fn stop_agent_stream<R: Runtime>(app: AppHandle<R>, id: String)
     app.askit().stop_agent_stream(&id).await.map_err(Into::into)
 }
 
-// node
+// agent
 
 #[tauri::command]
-pub fn new_agent_stream_node<R: Runtime>(
+pub fn new_agent_stream_agent<R: Runtime>(
     app: AppHandle<R>,
     def_name: String,
 ) -> Result<AgentStreamNode> {
     app.askit()
-        .new_agent_stream_node(&def_name)
+        .new_agent_stream_agent(&def_name)
         .map_err(Into::into)
 }
 
 #[tauri::command]
-pub(crate) fn add_agent_stream_node<R: Runtime>(
+pub(crate) fn add_agent_stream_agent<R: Runtime>(
     app: AppHandle<R>,
     stream_id: String,
-    node: AgentStreamNode,
+    agent: AgentStreamNode,
 ) -> Result<()> {
     app.askit()
-        .add_agent_stream_node(&stream_id, &node)
+        .add_agent_stream_agent(&stream_id, &agent)
         .map_err(Into::into)
 }
 
 #[tauri::command]
-pub(crate) async fn remove_agent_stream_node<R: Runtime>(
+pub(crate) async fn remove_agent_stream_agent<R: Runtime>(
     app: AppHandle<R>,
     stream_id: String,
-    node_id: String,
+    agent_id: String,
 ) -> Result<()> {
     app.askit()
-        .remove_agent_stream_node(&stream_id, &node_id)
+        .remove_agent_stream_agent(&stream_id, &agent_id)
         .await
         .map_err(Into::into)
 }
 
-// edge
+// channel
 
 #[tauri::command]
-pub(crate) fn add_agent_stream_edge<R: Runtime>(
+pub(crate) fn add_agent_stream_channel<R: Runtime>(
     app: AppHandle<R>,
     stream_id: String,
-    edge: AgentStreamEdge,
+    channel: AgentStreamEdge,
 ) -> Result<()> {
     app.askit()
-        .add_agent_stream_edge(&stream_id, &edge)
+        .add_agent_stream_channel(&stream_id, &channel)
         .map_err(Into::into)
 }
 
 #[tauri::command]
-pub(crate) fn remove_agent_stream_edge<R: Runtime>(
+pub(crate) fn remove_agent_stream_channel<R: Runtime>(
     app: AppHandle<R>,
     stream_id: String,
-    edge_id: String,
+    channel_id: String,
 ) -> Result<()> {
     app.askit()
-        .remove_agent_stream_edge(&stream_id, &edge_id)
+        .remove_agent_stream_channel(&stream_id, &channel_id)
         .map_err(Into::into)
 }
 

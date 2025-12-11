@@ -38,8 +38,8 @@ export type AgentStreams = Record<string, AgentStream>;
 export type AgentStream = {
   id: string;
   name: string;
-  nodes: AgentStreamNode[];
-  edges: AgentStreamEdge[];
+  agents: AgentStreamNode[];
+  channels: AgentStreamEdge[];
   viewport: Viewport | null;
 };
 
@@ -152,10 +152,13 @@ export async function insertAgentStream(
 }
 
 export async function copySubStream(
-  nodes: AgentStreamNode[],
-  edges: AgentStreamEdge[]
+  agents: AgentStreamNode[],
+  channels: AgentStreamEdge[]
 ): Promise<[AgentStreamNode[], AgentStreamEdge[]]> {
-  return await invoke<any>("plugin:askit|copy_sub_stream", { nodes, edges });
+  return await invoke<any>("plugin:askit|copy_sub_stream", {
+    agents,
+    channels,
+  });
 }
 
 export async function startAgentStream(id: string): Promise<void> {
@@ -166,47 +169,53 @@ export async function stopAgentStream(id: string): Promise<void> {
   await invoke<void>("plugin:askit|stop_agent_stream", { id });
 }
 
-// nodes
+// agents
 
-export async function newAgentStreamNode(
+export async function newAgentStreamAgent(
   defName: string
 ): Promise<AgentStreamNode> {
-  return await invoke<any>("plugin:askit|new_agent_stream_node", { defName });
+  return await invoke<any>("plugin:askit|new_agent_stream_agent", { defName });
 }
 
-export async function addAgentStreamNode(
+export async function addAgentStreamAgent(
   streamId: string,
-  node: AgentStreamNode
+  agent: AgentStreamNode
 ): Promise<void> {
-  await invoke<void>("plugin:askit|add_agent_stream_node", { streamId, node });
-}
-
-export async function removeAgentStreamNode(
-  streamId: string,
-  nodeId: string
-): Promise<void> {
-  await invoke<void>("plugin:askit|remove_agent_stream_node", {
+  await invoke<void>("plugin:askit|add_agent_stream_agent", {
     streamId,
-    nodeId,
+    agent,
   });
 }
 
-// edge
-
-export async function addAgentStreamEdge(
+export async function removeAgentStreamAgent(
   streamId: string,
-  edge: AgentStreamEdge
+  agentId: string
 ): Promise<void> {
-  await invoke<void>("plugin:askit|add_agent_stream_edge", { streamId, edge });
+  await invoke<void>("plugin:askit|remove_agent_stream_agent", {
+    streamId,
+    agentId,
+  });
 }
 
-export async function removeAgentStreamEdge(
+// channel
+
+export async function addAgentStreamChannel(
   streamId: string,
-  edgeId: string
+  channel: AgentStreamEdge
 ): Promise<void> {
-  await invoke<void>("plugin:askit|remove_agent_stream_edge", {
+  await invoke<void>("plugin:askit|add_agent_stream_channel", {
     streamId,
-    edgeId,
+    channel,
+  });
+}
+
+export async function removeAgentStreamChannel(
+  streamId: string,
+  channelId: string
+): Promise<void> {
+  await invoke<void>("plugin:askit|remove_agent_stream_channel", {
+    streamId,
+    channelId,
   });
 }
 

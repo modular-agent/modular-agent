@@ -17,11 +17,11 @@ Default permissions for the plugin
 - `allow-copy-sub-stream`
 - `allow-start-agent-stream`
 - `allow-stop-agent-stream`
-- `allow-new-agent-stream-node`
-- `allow-add-agent-stream-node`
-- `allow-remove-agent-stream-node`
-- `allow-add-agent-stream-edge`
-- `allow-remove-agent-stream-edge`
+- `allow-new-agent-stream-agent`
+- `allow-add-agent-stream-agent`
+- `allow-remove-agent-stream-agent`
+- `allow-add-agent-stream-channel`
+- `allow-remove-agent-stream-channel`
 - `allow-start-agent`
 - `allow-stop-agent`
 - `allow-write-board`
@@ -70,25 +70,12 @@ Denies the add_agent_stream command without any pre-configured scope.
 <tr>
 <td>
 
-`askit:allow-add-agent-stream-edge`
+`askit:allow-add-agent-stream-agent`
 
 </td>
 <td>
 
-Enables the add_agent_stream_edge command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`askit:deny-add-agent-stream-edge`
-
-</td>
-<td>
-
-Denies the add_agent_stream_edge command without any pre-configured scope.
+Enables the add_agent_stream_agent command without any pre-configured scope.
 
 </td>
 </tr>
@@ -96,12 +83,12 @@ Denies the add_agent_stream_edge command without any pre-configured scope.
 <tr>
 <td>
 
-`askit:allow-add-agent-stream-node`
+`askit:deny-add-agent-stream-agent`
 
 </td>
 <td>
 
-Enables the add_agent_stream_node command without any pre-configured scope.
+Denies the add_agent_stream_agent command without any pre-configured scope.
 
 </td>
 </tr>
@@ -109,12 +96,25 @@ Enables the add_agent_stream_node command without any pre-configured scope.
 <tr>
 <td>
 
-`askit:deny-add-agent-stream-node`
+`askit:allow-add-agent-stream-channel`
 
 </td>
 <td>
 
-Denies the add_agent_stream_node command without any pre-configured scope.
+Enables the add_agent_stream_channel command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`askit:deny-add-agent-stream-channel`
+
+</td>
+<td>
+
+Denies the add_agent_stream_channel command without any pre-configured scope.
 
 </td>
 </tr>
@@ -382,12 +382,12 @@ Denies the new_agent_stream command without any pre-configured scope.
 <tr>
 <td>
 
-`askit:allow-new-agent-stream-node`
+`askit:allow-new-agent-stream-agent`
 
 </td>
 <td>
 
-Enables the new_agent_stream_node command without any pre-configured scope.
+Enables the new_agent_stream_agent command without any pre-configured scope.
 
 </td>
 </tr>
@@ -395,12 +395,12 @@ Enables the new_agent_stream_node command without any pre-configured scope.
 <tr>
 <td>
 
-`askit:deny-new-agent-stream-node`
+`askit:deny-new-agent-stream-agent`
 
 </td>
 <td>
 
-Denies the new_agent_stream_node command without any pre-configured scope.
+Denies the new_agent_stream_agent command without any pre-configured scope.
 
 </td>
 </tr>
@@ -434,25 +434,12 @@ Denies the remove_agent_stream command without any pre-configured scope.
 <tr>
 <td>
 
-`askit:allow-remove-agent-stream-edge`
+`askit:allow-remove-agent-stream-agent`
 
 </td>
 <td>
 
-Enables the remove_agent_stream_edge command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`askit:deny-remove-agent-stream-edge`
-
-</td>
-<td>
-
-Denies the remove_agent_stream_edge command without any pre-configured scope.
+Enables the remove_agent_stream_agent command without any pre-configured scope.
 
 </td>
 </tr>
@@ -460,12 +447,12 @@ Denies the remove_agent_stream_edge command without any pre-configured scope.
 <tr>
 <td>
 
-`askit:allow-remove-agent-stream-node`
+`askit:deny-remove-agent-stream-agent`
 
 </td>
 <td>
 
-Enables the remove_agent_stream_node command without any pre-configured scope.
+Denies the remove_agent_stream_agent command without any pre-configured scope.
 
 </td>
 </tr>
@@ -473,12 +460,25 @@ Enables the remove_agent_stream_node command without any pre-configured scope.
 <tr>
 <td>
 
-`askit:deny-remove-agent-stream-node`
+`askit:allow-remove-agent-stream-channel`
 
 </td>
 <td>
 
-Denies the remove_agent_stream_node command without any pre-configured scope.
+Enables the remove_agent_stream_channel command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`askit:deny-remove-agent-stream-channel`
+
+</td>
+<td>
+
+Denies the remove_agent_stream_channel command without any pre-configured scope.
 
 </td>
 </tr>
