@@ -103,9 +103,6 @@
   async function updateConfig(key: string, value: any) {
     // TODO: validate key and value
     let currentValue = data.configs?.[key];
-    if (currentValue === value) {
-      return;
-    }
     const newConfigs = { ...data.configs, [key]: value };
     updateNodeData(id, { ...data, configs: newConfigs });
     await setAgentConfigs(id, newConfigs);
