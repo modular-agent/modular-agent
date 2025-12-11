@@ -90,7 +90,7 @@ fn explicit_fields_and_configs_are_set() {
     );
     assert_eq!(def.outputs.as_deref(), Some(&["out_x".into()][..]));
 
-    let cfgs = def.default_configs.expect("default configs exist");
+    let cfgs = def.configs.expect("default configs exist");
     let (key, entry) = cfgs.first().expect("one config entry");
     assert_eq!(key, CONFIG_KEY);
     assert_eq!(entry.value, AgentValue::string("default_value"));

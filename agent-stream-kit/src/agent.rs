@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use crate::askit::ASKit;
 use crate::config::AgentConfigs;
 use crate::context::AgentContext;
-use crate::definition::{AgentConfigSpecs, AgentDisplayConfigSpecs};
+use crate::definition::AgentConfigSpecs;
 use crate::error::AgentError;
 use crate::runtime::runtime;
 use crate::value::AgentValue;
@@ -144,10 +144,6 @@ pub struct AgentSpec {
     /// Config specs.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub config_specs: Option<AgentConfigSpecs>,
-
-    /// Display config specs.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub display_config_specs: Option<AgentDisplayConfigSpecs>,
 }
 
 pub trait HasAgentData {

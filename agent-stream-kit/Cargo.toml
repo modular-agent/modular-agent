@@ -32,5 +32,5 @@ name = "counter_test"
 path = "tests/counter_test.rs"
 
 [[test]]
-name = "flow_test"
-path = "tests/flow_test.rs"
+name = "stream_test"
+path = "tests/stream_test.rs"

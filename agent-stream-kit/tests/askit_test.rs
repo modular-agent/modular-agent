@@ -41,7 +41,7 @@ fn test_agent_definition() {
 fn test_agent_default_configs() {
     let askit = ASKit::init().unwrap();
 
-    let configs = askit.get_agent_default_configs(COUNTER_DEF).unwrap();
+    let configs = askit.get_agent_config_specs(COUNTER_DEF).unwrap();
     assert_eq!(configs.len(), 1);
     assert!(configs.contains_key("initial_count"));
 

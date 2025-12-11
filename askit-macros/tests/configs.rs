@@ -100,7 +100,7 @@ fn def_name_is_generated() {
 fn config_entries_are_generated() {
     let def = ConfigAgent::agent_definition();
     let configs: HashMap<_, _> = def
-        .default_configs
+        .configs
         .expect("default configs")
         .into_iter()
         .collect();

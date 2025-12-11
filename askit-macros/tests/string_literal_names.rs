@@ -6,8 +6,7 @@ use agent_stream_kit::{
     title = "Literal Name Agent",
     category = "Tests",
     string_config(name = "literal_config", default = "val"),
-    string_global_config(name = "literal_global", default = "global_val"),
-    string_display(name = "literal_display", title = "Literal Title")
+    string_global_config(name = "literal_global", default = "global_val")
 )]
 struct LiteralNameAgent {
     data: AgentData,
@@ -39,7 +38,7 @@ impl AsAgent for LiteralNameAgent {
 fn string_literal_names_are_kept() {
     let def = LiteralNameAgent::agent_definition();
 
-    let cfgs = def.default_configs.expect("default configs exist");
+    let cfgs = def.configs.expect("default configs exist");
     let (cfg_key, cfg_entry) = cfgs.first().expect("config entry exists");
     assert_eq!(cfg_key, "literal_config");
     assert_eq!(cfg_entry.value, AgentValue::string("val"));
@@ -48,9 +47,4 @@ fn string_literal_names_are_kept() {
     let (g_key, g_entry) = global_cfgs.first().expect("global entry exists");
     assert_eq!(g_key, "literal_global");
     assert_eq!(g_entry.value, AgentValue::string("global_val"));
-
-    let display_cfgs = def.display_configs.expect("display configs exist");
-    let (d_key, d_entry) = display_cfgs.first().expect("display entry exists");
-    assert_eq!(d_key, "literal_display");
-    assert_eq!(d_entry.title.as_deref(), Some("Literal Title"));
 }

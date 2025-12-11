@@ -9,9 +9,9 @@ use crate::config::{AgentConfigs, AgentConfigsMap};
 use crate::context::AgentContext;
 use crate::definition::{AgentConfigSpecs, AgentDefinition, AgentDefinitions};
 use crate::error::AgentError;
-use crate::stream::{self, AgentStream, AgentStreamEdge, AgentStreamNode, AgentStreams};
 use crate::message::{self, AgentEventMessage};
 use crate::registry;
+use crate::stream::{self, AgentStream, AgentStreamEdge, AgentStreamNode, AgentStreams};
 use crate::value::AgentValue;
 
 const MESSAGE_LIMIT: usize = 1024;
@@ -121,12 +121,12 @@ impl ASKit {
         defs.get(def_name).cloned()
     }
 
-    pub fn get_agent_default_configs(&self, def_name: &str) -> Option<AgentConfigSpecs> {
+    pub fn get_agent_config_specs(&self, def_name: &str) -> Option<AgentConfigSpecs> {
         let defs = self.defs.lock().unwrap();
         let Some(def) = defs.get(def_name) else {
             return None;
         };
-        def.default_configs.clone()
+        def.configs.clone()
     }
 
     pub fn get_agent_spec(&self, agent_id: &str) -> Option<AgentSpec> {
@@ -300,7 +300,11 @@ impl ASKit {
         self.add_agent(stream_id, node)
     }
 
-    pub(crate) fn add_agent(&self, stream_id: &str, node: &AgentStreamNode) -> Result<(), AgentError> {
+    pub(crate) fn add_agent(
+        &self,
+        stream_id: &str,
+        node: &AgentStreamNode,
+    ) -> Result<(), AgentError> {
         let mut agents = self.agents.lock().unwrap();
         if agents.contains_key(&node.id) {
             return Err(AgentError::AgentAlreadyExists(node.id.to_string()));
@@ -421,7 +425,11 @@ impl ASKit {
         Ok(())
     }
 
-    pub fn remove_agent_stream_edge(&self, stream_id: &str, edge_id: &str) -> Result<(), AgentError> {
+    pub fn remove_agent_stream_edge(
+        &self,
+        stream_id: &str,
+        edge_id: &str,
+    ) -> Result<(), AgentError> {
         let mut streams = self.streams.lock().unwrap();
         let Some(stream) = streams.get_mut(stream_id) else {
             return Err(AgentError::StreamNotFound(stream_id.to_string()));

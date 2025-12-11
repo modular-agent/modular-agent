@@ -11,11 +11,11 @@ mod config;
 mod context;
 mod definition;
 mod error;
-mod stream;
 mod message;
 mod output;
 mod registry;
 mod runtime;
+mod stream;
 pub mod test_utils;
 mod value;
 
@@ -45,11 +45,9 @@ pub use agent::{
 pub use askit::{ASKit, ASKitEvent, ASKitObserver};
 pub use config::{AgentConfigs, AgentConfigsMap};
 pub use context::AgentContext;
-pub use definition::{
-    AgentConfigSpec, AgentConfigSpecs, AgentDefinition, AgentDefinitions, AgentDisplayConfigSpec,
-};
+pub use definition::{AgentConfigSpec, AgentConfigSpecs, AgentDefinition, AgentDefinitions};
 pub use error::AgentError;
-pub use stream::{AgentStream, AgentStreamEdge, AgentStreamNode, AgentStreams};
 pub use output::AgentOutput;
 pub use registry::AgentRegistration;
+pub use stream::{AgentStream, AgentStreamEdge, AgentStreamNode, AgentStreams};
 pub use value::{AgentValue, AgentValueMap};

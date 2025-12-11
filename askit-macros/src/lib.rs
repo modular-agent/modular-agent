@@ -53,7 +53,6 @@ struct AgentArgs {
     outputs: Vec<Expr>,
     configs: Vec<ConfigSpec>,
     global_configs: Vec<ConfigSpec>,
-    displays: Vec<DisplaySpec>,
 }
 
 #[derive(Default)]
@@ -62,6 +61,8 @@ struct CommonConfig {
     default: Option<Expr>,
     title: Option<Expr>,
     description: Option<Expr>,
+    hide_title: bool,
+    readonly: bool,
 }
 
 struct CustomConfig {
@@ -70,6 +71,8 @@ struct CustomConfig {
     type_: Expr,
     title: Option<Expr>,
     description: Option<Expr>,
+    hide_title: bool,
+    readonly: bool,
 }
 
 enum ConfigSpec {
@@ -81,34 +84,6 @@ enum ConfigSpec {
     Text(CommonConfig),
     Object(CommonConfig),
     Custom(CustomConfig),
-}
-
-enum DisplaySpec {
-    Unit(CommonDisplay),
-    Boolean(CommonDisplay),
-    Integer(CommonDisplay),
-    Number(CommonDisplay),
-    String(CommonDisplay),
-    Text(CommonDisplay),
-    Object(CommonDisplay),
-    Any(CommonDisplay),
-    Custom(CustomDisplay),
-}
-
-#[derive(Default)]
-struct CommonDisplay {
-    name: Option<Expr>,
-    title: Option<Expr>,
-    description: Option<Expr>,
-    hide_title: bool,
-}
-
-struct CustomDisplay {
-    name: Expr,
-    type_: Expr,
-    title: Option<Expr>,
-    description: Option<Expr>,
-    hide_title: bool,
 }
 
 fn expand_askit_agent(
@@ -142,7 +117,6 @@ fn expand_askit_agent(
         outputs: Vec::new(),
         configs: Vec::new(),
         global_configs: Vec::new(),
-        displays: Vec::new(),
     };
 
     for meta in args {
@@ -254,51 +228,6 @@ fn expand_askit_agent(
                     .global_configs
                     .push(ConfigSpec::Unit(parse_common_config(ml)?));
             }
-            Meta::List(ml) if ml.path.is_ident("unit_display") => {
-                parsed
-                    .displays
-                    .push(DisplaySpec::Unit(parse_common_display(ml)?));
-            }
-            Meta::List(ml) if ml.path.is_ident("boolean_display") => {
-                parsed
-                    .displays
-                    .push(DisplaySpec::Boolean(parse_common_display(ml)?));
-            }
-            Meta::List(ml) if ml.path.is_ident("integer_display") => {
-                parsed
-                    .displays
-                    .push(DisplaySpec::Integer(parse_common_display(ml)?));
-            }
-            Meta::List(ml) if ml.path.is_ident("number_display") => {
-                parsed
-                    .displays
-                    .push(DisplaySpec::Number(parse_common_display(ml)?));
-            }
-            Meta::List(ml) if ml.path.is_ident("string_display") => {
-                parsed
-                    .displays
-                    .push(DisplaySpec::String(parse_common_display(ml)?));
-            }
-            Meta::List(ml) if ml.path.is_ident("text_display") => {
-                parsed
-                    .displays
-                    .push(DisplaySpec::Text(parse_common_display(ml)?));
-            }
-            Meta::List(ml) if ml.path.is_ident("object_display") => {
-                parsed
-                    .displays
-                    .push(DisplaySpec::Object(parse_common_display(ml)?));
-            }
-            Meta::List(ml) if ml.path.is_ident("any_display") => {
-                parsed
-                    .displays
-                    .push(DisplaySpec::Any(parse_common_display(ml)?));
-            }
-            Meta::List(ml) if ml.path.is_ident("custom_display_config") => {
-                parsed
-                    .displays
-                    .push(DisplaySpec::Custom(parse_custom_display(ml)?));
-            }
             other => {
                 return Err(syn::Error::new_spanned(
                     other,
@@ -364,11 +293,23 @@ fn expand_askit_agent(
                 let description = c
                     .description
                     .map(|d| quote! { let entry = entry.description(#d); });
+                let hide_title = if c.hide_title {
+                    quote! { let entry = entry.hide_title(); }
+                } else {
+                    quote! {}
+                };
+                let readonly = if c.readonly {
+                    quote! { let entry = entry.readonly(); }
+                } else {
+                    quote! {}
+                };
                 Ok(quote! {
                     .unit_config_with(#name, |entry| {
                         let entry = entry;
                         #title
                         #description
+                        #hide_title
+                        #readonly
                         entry
                     })
                 })
@@ -382,11 +323,23 @@ fn expand_askit_agent(
                 let description = c
                     .description
                     .map(|d| quote! { let entry = entry.description(#d); });
+                let hide_title = if c.hide_title {
+                    quote! { let entry = entry.hide_title(); }
+                } else {
+                    quote! {}
+                };
+                let readonly = if c.readonly {
+                    quote! { let entry = entry.readonly(); }
+                } else {
+                    quote! {}
+                };
                 Ok(quote! {
                     .boolean_config_with(#name, #default, |entry| {
                         let entry = entry;
                         #title
                         #description
+                        #hide_title
+                        #readonly
                         entry
                     })
                 })
@@ -400,11 +353,23 @@ fn expand_askit_agent(
                 let description = c
                     .description
                     .map(|d| quote! { let entry = entry.description(#d); });
+                let hide_title = if c.hide_title {
+                    quote! { let entry = entry.hide_title(); }
+                } else {
+                    quote! {}
+                };
+                let readonly = if c.readonly {
+                    quote! { let entry = entry.readonly(); }
+                } else {
+                    quote! {}
+                };
                 Ok(quote! {
                     .integer_config_with(#name, #default, |entry| {
                         let entry = entry;
                         #title
                         #description
+                        #hide_title
+                        #readonly
                         entry
                     })
                 })
@@ -418,11 +383,23 @@ fn expand_askit_agent(
                 let description = c
                     .description
                     .map(|d| quote! { let entry = entry.description(#d); });
+                let hide_title = if c.hide_title {
+                    quote! { let entry = entry.hide_title(); }
+                } else {
+                    quote! {}
+                };
+                let readonly = if c.readonly {
+                    quote! { let entry = entry.readonly(); }
+                } else {
+                    quote! {}
+                };
                 Ok(quote! {
                     .number_config_with(#name, #default, |entry| {
                         let entry = entry;
                         #title
                         #description
+                        #hide_title
+                        #readonly
                         entry
                     })
                 })
@@ -436,11 +413,23 @@ fn expand_askit_agent(
                 let description = c
                     .description
                     .map(|d| quote! { let entry = entry.description(#d); });
+                let hide_title = if c.hide_title {
+                    quote! { let entry = entry.hide_title(); }
+                } else {
+                    quote! {}
+                };
+                let readonly = if c.readonly {
+                    quote! { let entry = entry.readonly(); }
+                } else {
+                    quote! {}
+                };
                 Ok(quote! {
                     .string_config_with(#name, #default, |entry| {
                         let entry = entry;
                         #title
                         #description
+                        #hide_title
+                        #readonly
                         entry
                     })
                 })
@@ -454,11 +443,23 @@ fn expand_askit_agent(
                 let description = c
                     .description
                     .map(|d| quote! { let entry = entry.description(#d); });
+                let hide_title = if c.hide_title {
+                    quote! { let entry = entry.hide_title(); }
+                } else {
+                    quote! {}
+                };
+                let readonly = if c.readonly {
+                    quote! { let entry = entry.readonly(); }
+                } else {
+                    quote! {}
+                };
                 Ok(quote! {
                     .text_config_with(#name, #default, |entry| {
                         let entry = entry;
                         #title
                         #description
+                        #hide_title
+                        #readonly
                         entry
                     })
                 })
@@ -474,11 +475,23 @@ fn expand_askit_agent(
                 let description = c
                     .description
                     .map(|d| quote! { let entry = entry.description(#d); });
+                let hide_title = if c.hide_title {
+                    quote! { let entry = entry.hide_title(); }
+                } else {
+                    quote! {}
+                };
+                let readonly = if c.readonly {
+                    quote! { let entry = entry.readonly(); }
+                } else {
+                    quote! {}
+                };
                 Ok(quote! {
                     .object_config_with(#name, #default, |entry| {
                         let entry = entry;
                         #title
                         #description
+                        #hide_title
+                        #readonly
                         entry
                     })
                 })
@@ -499,11 +512,23 @@ fn expand_askit_agent(
                 let description = c
                     .description
                     .map(|d| quote! { let entry = entry.description(#d); });
+                let hide_title = if c.hide_title {
+                    quote! { let entry = entry.hide_title(); }
+                } else {
+                    quote! {}
+                };
+                let readonly = if c.readonly {
+                    quote! { let entry = entry.readonly(); }
+                } else {
+                    quote! {}
+                };
                 Ok(quote! {
                     .unit_global_config_with(#name, |entry| {
                         let entry = entry;
                         #title
                         #description
+                        #hide_title
+                        #readonly
                         entry
                     })
                 })
@@ -517,11 +542,23 @@ fn expand_askit_agent(
                 let description = c
                     .description
                     .map(|d| quote! { let entry = entry.description(#d); });
+                let hide_title = if c.hide_title {
+                    quote! { let entry = entry.hide_title(); }
+                } else {
+                    quote! {}
+                };
+                let readonly = if c.readonly {
+                    quote! { let entry = entry.readonly(); }
+                } else {
+                    quote! {}
+                };
                 Ok(quote! {
                     .boolean_global_config_with(#name, #default, |entry| {
                         let entry = entry;
                         #title
                         #description
+                        #hide_title
+                        #readonly
                         entry
                     })
                 })
@@ -535,11 +572,23 @@ fn expand_askit_agent(
                 let description = c
                     .description
                     .map(|d| quote! { let entry = entry.description(#d); });
+                let hide_title = if c.hide_title {
+                    quote! { let entry = entry.hide_title(); }
+                } else {
+                    quote! {}
+                };
+                let readonly = if c.readonly {
+                    quote! { let entry = entry.readonly(); }
+                } else {
+                    quote! {}
+                };
                 Ok(quote! {
                     .integer_global_config_with(#name, #default, |entry| {
                         let entry = entry;
                         #title
                         #description
+                        #hide_title
+                        #readonly
                         entry
                     })
                 })
@@ -553,11 +602,23 @@ fn expand_askit_agent(
                 let description = c
                     .description
                     .map(|d| quote! { let entry = entry.description(#d); });
+                let hide_title = if c.hide_title {
+                    quote! { let entry = entry.hide_title(); }
+                } else {
+                    quote! {}
+                };
+                let readonly = if c.readonly {
+                    quote! { let entry = entry.readonly(); }
+                } else {
+                    quote! {}
+                };
                 Ok(quote! {
                     .number_global_config_with(#name, #default, |entry| {
                         let entry = entry;
                         #title
                         #description
+                        #hide_title
+                        #readonly
                         entry
                     })
                 })
@@ -571,11 +632,23 @@ fn expand_askit_agent(
                 let description = c
                     .description
                     .map(|d| quote! { let entry = entry.description(#d); });
+                let hide_title = if c.hide_title {
+                    quote! { let entry = entry.hide_title(); }
+                } else {
+                    quote! {}
+                };
+                let readonly = if c.readonly {
+                    quote! { let entry = entry.readonly(); }
+                } else {
+                    quote! {}
+                };
                 Ok(quote! {
                     .string_global_config_with(#name, #default, |entry| {
                         let entry = entry;
                         #title
                         #description
+                        #hide_title
+                        #readonly
                         entry
                     })
                 })
@@ -589,11 +662,23 @@ fn expand_askit_agent(
                 let description = c
                     .description
                     .map(|d| quote! { let entry = entry.description(#d); });
+                let hide_title = if c.hide_title {
+                    quote! { let entry = entry.hide_title(); }
+                } else {
+                    quote! {}
+                };
+                let readonly = if c.readonly {
+                    quote! { let entry = entry.readonly(); }
+                } else {
+                    quote! {}
+                };
                 Ok(quote! {
                     .text_global_config_with(#name, #default, |entry| {
                         let entry = entry;
                         #title
                         #description
+                        #hide_title
+                        #readonly
                         entry
                     })
                 })
@@ -609,58 +694,28 @@ fn expand_askit_agent(
                 let description = c
                     .description
                     .map(|d| quote! { let entry = entry.description(#d); });
+                let hide_title = if c.hide_title {
+                    quote! { let entry = entry.hide_title(); }
+                } else {
+                    quote! {}
+                };
+                let readonly = if c.readonly {
+                    quote! { let entry = entry.readonly(); }
+                } else {
+                    quote! {}
+                };
                 Ok(quote! {
                     .object_global_config_with(#name, #default, |entry| {
                         let entry = entry;
                         #title
                         #description
+                        #hide_title
+                        #readonly
                         entry
                     })
                 })
             }
             ConfigSpec::Custom(c) => custom_config_call("custom_global_config_with", c),
-        })
-        .collect::<syn::Result<Vec<_>>>()?;
-
-    let display_calls = parsed
-        .displays
-        .into_iter()
-        .map(|disp| match disp {
-            DisplaySpec::Unit(c) => display_call("unit", c),
-            DisplaySpec::Boolean(c) => display_call("boolean", c),
-            DisplaySpec::Integer(c) => display_call("integer", c),
-            DisplaySpec::Number(c) => display_call("number", c),
-            DisplaySpec::String(c) => display_call("string", c),
-            DisplaySpec::Text(c) => display_call("text", c),
-            DisplaySpec::Object(c) => display_call("object", c),
-            DisplaySpec::Any(c) => display_call("*", c),
-            DisplaySpec::Custom(c) => {
-                let CustomDisplay {
-                    name,
-                    type_,
-                    title,
-                    description,
-                    hide_title,
-                } = c;
-                let title = title.map(|t| quote! { let entry = entry.title(#t); });
-                let description =
-                    description.map(|d| quote! { let entry = entry.description(#d); });
-                let hide_title = if hide_title {
-                    quote! { let entry = entry.hide_title(); }
-                } else {
-                    quote! {}
-                };
-
-                Ok(quote! {
-                    .custom_display_config_with(#name, #type_, |entry| {
-                        let entry = entry;
-                        #title
-                        #description
-                        #hide_title
-                        entry
-                    })
-                })
-            }
         })
         .collect::<syn::Result<Vec<_>>>()?;
 
@@ -677,7 +732,6 @@ fn expand_askit_agent(
         #outputs
         #(#config_calls)*
         #(#global_config_calls)*
-        #(#display_calls)*
     };
 
     let expanded = quote! {
@@ -747,6 +801,8 @@ fn parse_custom_config(list: MetaList) -> syn::Result<CustomConfig> {
     let mut type_ = None;
     let mut title = None;
     let mut description = None;
+    let mut hide_title = false;
+    let mut readonly = false;
     let nested = list.parse_args_with(Punctuated::<Meta, Comma>::parse_terminated)?;
 
     for meta in nested {
@@ -764,10 +820,16 @@ fn parse_custom_config(list: MetaList) -> syn::Result<CustomConfig> {
             Meta::NameValue(nv) if nv.path.is_ident("default") => {
                 default = Some(nv.value.clone());
             }
+            Meta::Path(p) if p.is_ident("hide_title") => {
+                hide_title = true;
+            }
+            Meta::Path(p) if p.is_ident("readonly") => {
+                readonly = true;
+            }
             other => {
                 return Err(syn::Error::new_spanned(
                     other,
-                    "custom_config supports name, default, type/type_, title, description",
+                    "custom_config supports name, default, type/type_, title, description, hide_title, readonly",
                 ));
             }
         }
@@ -784,6 +846,8 @@ fn parse_custom_config(list: MetaList) -> syn::Result<CustomConfig> {
         type_,
         title,
         description,
+        hide_title,
+        readonly,
     })
 }
 
@@ -821,10 +885,16 @@ fn parse_common_config(list: MetaList) -> syn::Result<CommonConfig> {
             Meta::NameValue(nv) if nv.path.is_ident("description") => {
                 cfg.description = Some(nv.value.clone());
             }
+            Meta::Path(p) if p.is_ident("hide_title") => {
+                cfg.hide_title = true;
+            }
+            Meta::Path(p) if p.is_ident("readonly") => {
+                cfg.readonly = true;
+            }
             other => {
                 return Err(syn::Error::new_spanned(
                     other,
-                    "config supports name, default, title, description",
+                    "config supports name, default, title, description, hide_title, readonly",
                 ));
             }
         }
@@ -836,84 +906,6 @@ fn parse_common_config(list: MetaList) -> syn::Result<CommonConfig> {
     Ok(cfg)
 }
 
-fn parse_common_display(list: MetaList) -> syn::Result<CommonDisplay> {
-    let mut cfg = CommonDisplay::default();
-    let nested = list.parse_args_with(Punctuated::<Meta, Comma>::parse_terminated)?;
-
-    for meta in nested {
-        match meta {
-            Meta::NameValue(nv) if nv.path.is_ident("name") => {
-                cfg.name = Some(nv.value.clone());
-            }
-            Meta::NameValue(nv) if nv.path.is_ident("title") => {
-                cfg.title = Some(nv.value.clone());
-            }
-            Meta::NameValue(nv) if nv.path.is_ident("description") => {
-                cfg.description = Some(nv.value.clone());
-            }
-            Meta::Path(p) if p.is_ident("hide_title") => {
-                cfg.hide_title = true;
-            }
-            other => {
-                return Err(syn::Error::new_spanned(
-                    other,
-                    "display supports name, title, description, hide_title",
-                ));
-            }
-        }
-    }
-
-    if cfg.name.is_none() {
-        return Err(syn::Error::new(list.span(), "display missing `name`"));
-    }
-    Ok(cfg)
-}
-
-fn parse_custom_display(list: MetaList) -> syn::Result<CustomDisplay> {
-    let mut name = None;
-    let mut type_ = None;
-    let mut title = None;
-    let mut description = None;
-    let mut hide_title = false;
-    let nested = list.parse_args_with(Punctuated::<Meta, Comma>::parse_terminated)?;
-
-    for meta in nested {
-        if parse_name_type_title_description(
-            &meta,
-            &mut name,
-            &mut type_,
-            &mut title,
-            &mut description,
-        ) {
-            continue;
-        }
-
-        match meta {
-            Meta::Path(p) if p.is_ident("hide_title") => {
-                hide_title = true;
-            }
-            other => {
-                return Err(syn::Error::new_spanned(
-                    other,
-                    "custom_display supports name, type/type_, title, description, hide_title",
-                ));
-            }
-        }
-    }
-
-    let name = name.ok_or_else(|| syn::Error::new(list.span(), "custom_display missing `name`"))?;
-    let type_ =
-        type_.ok_or_else(|| syn::Error::new(list.span(), "custom_display missing `type`"))?;
-
-    Ok(CustomDisplay {
-        name,
-        type_,
-        title,
-        description,
-        hide_title,
-    })
-}
-
 fn custom_config_call(method: &str, cfg: CustomConfig) -> syn::Result<proc_macro2::TokenStream> {
     let CustomConfig {
         name,
@@ -921,9 +913,21 @@ fn custom_config_call(method: &str, cfg: CustomConfig) -> syn::Result<proc_macro
         type_,
         title,
         description,
+        hide_title,
+        readonly,
     } = cfg;
     let title = title.map(|t| quote! { let entry = entry.title(#t); });
     let description = description.map(|d| quote! { let entry = entry.description(#d); });
+    let hide_title = if hide_title {
+        quote! { let entry = entry.hide_title(); }
+    } else {
+        quote! {}
+    };
+    let readonly = if readonly {
+        quote! { let entry = entry.readonly(); }
+    } else {
+        quote! {}
+    };
     let method_ident = format_ident!("{}", method);
 
     Ok(quote! {
@@ -931,31 +935,8 @@ fn custom_config_call(method: &str, cfg: CustomConfig) -> syn::Result<proc_macro
             let entry = entry;
             #title
             #description
-            entry
-        })
-    })
-}
-
-fn display_call(type_name: &str, cfg: CommonDisplay) -> syn::Result<proc_macro2::TokenStream> {
-    let name = cfg
-        .name
-        .ok_or_else(|| syn::Error::new(Span::call_site(), "display missing `name`"))?;
-    let title = cfg.title.map(|t| quote! { let entry = entry.title(#t); });
-    let description = cfg
-        .description
-        .map(|d| quote! { let entry = entry.description(#d); });
-    let hide_title = if cfg.hide_title {
-        quote! { let entry = entry.hide_title(); }
-    } else {
-        quote! {}
-    };
-
-    Ok(quote! {
-        .custom_display_config_with(#name, #type_name, |entry| {
-            let entry = entry;
-            #title
-            #description
             #hide_title
+            #readonly
             entry
         })
     })

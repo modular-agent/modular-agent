@@ -32,14 +32,13 @@ pub struct AgentDefinition {
     pub outputs: Option<Vec<String>>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub default_configs: Option<AgentConfigSpecs>,
+    pub configs: Option<AgentConfigSpecs>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub global_configs: Option<AgentGlobalConfigSpecs>,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub display_configs: Option<AgentDisplayConfigSpecs>,
-
+    // #[serde(skip_serializing_if = "Option::is_none")]
+    // pub display_configs: Option<AgentDisplayConfigSpecs>,
     #[serde(default, skip_serializing_if = "<&bool>::not")]
     pub native_thread: bool,
 
@@ -60,6 +59,9 @@ pub struct AgentConfigSpec {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
 
+    #[serde(default, skip_serializing_if = "<&bool>::not")]
+    pub hide_title: bool,
+
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
 
@@ -67,26 +69,10 @@ pub struct AgentConfigSpec {
     /// If set to `true`, the entry will be hidden. The default behavior is to show the entry.
     #[serde(default, skip_serializing_if = "<&bool>::not")]
     pub hidden: bool,
-}
 
-pub type AgentDisplayConfigSpecs = FnvIndexMap<String, AgentDisplayConfigSpec>;
-
-#[derive(Debug, Default, Serialize, Deserialize, Clone)]
-pub struct AgentDisplayConfigSpec {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub value: Option<AgentValue>,
-
-    #[serde(rename = "type")]
-    pub type_: Option<String>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub title: Option<String>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub description: Option<String>,
-
+    /// Indicates whether this configuration entry is read-only.
     #[serde(default, skip_serializing_if = "<&bool>::not")]
-    pub hide_title: bool,
+    pub readonly: bool,
 }
 
 pub type AgentNewBoxedFn =
@@ -131,10 +117,10 @@ impl AgentDefinition {
         self
     }
 
-    // Default Configs
+    // Config Spec
 
-    pub fn default_configs(mut self, configs: Vec<(&str, AgentConfigSpec)>) -> Self {
-        self.default_configs = Some(configs.into_iter().map(|(k, v)| (k.into(), v)).collect());
+    pub fn configs(mut self, configs: Vec<(&str, AgentConfigSpec)>) -> Self {
+        self.configs = Some(configs.into_iter().map(|(k, v)| (k.into(), v)).collect());
         self
     }
 
@@ -265,17 +251,17 @@ impl AgentDefinition {
         F: FnOnce(AgentConfigSpec) -> AgentConfigSpec,
     {
         let entry = AgentConfigSpec::new(default, type_);
-        self.insert_default_config_entry(key.into(), f(entry));
+        self.insert_config_entry(key.into(), f(entry));
         self
     }
 
-    fn insert_default_config_entry(&mut self, key: String, entry: AgentConfigSpec) {
-        if let Some(configs) = self.default_configs.as_mut() {
+    fn insert_config_entry(&mut self, key: String, entry: AgentConfigSpec) {
+        if let Some(configs) = self.configs.as_mut() {
             configs.insert(key, entry);
         } else {
             let mut map = FnvIndexMap::default();
             map.insert(key, entry);
-            self.default_configs = Some(map);
+            self.configs = Some(map);
         }
     }
 
@@ -408,116 +394,6 @@ impl AgentDefinition {
         }
     }
 
-    // Display Configs
-
-    pub fn display_configs(mut self, configs: Vec<(&str, AgentDisplayConfigSpec)>) -> Self {
-        self.display_configs = Some(configs.into_iter().map(|(k, v)| (k.into(), v)).collect());
-        self
-    }
-
-    pub fn unit_display_config(self, key: &str) -> Self {
-        self.unit_display_config_with(key, |entry| entry)
-    }
-
-    pub fn unit_display_config_with<F>(self, key: &str, f: F) -> Self
-    where
-        F: FnOnce(AgentDisplayConfigSpec) -> AgentDisplayConfigSpec,
-    {
-        self.display_config_type_with(key, "unit", f)
-    }
-
-    pub fn boolean_display_config(self, key: &str) -> Self {
-        self.boolean_display_config_with(key, |entry| entry)
-    }
-
-    pub fn boolean_display_config_with<F>(self, key: &str, f: F) -> Self
-    where
-        F: FnOnce(AgentDisplayConfigSpec) -> AgentDisplayConfigSpec,
-    {
-        self.display_config_type_with(key, "boolean", f)
-    }
-
-    pub fn integer_display_config(self, key: &str) -> Self {
-        self.integer_display_config_with(key, |entry| entry)
-    }
-
-    pub fn integer_display_config_with<F>(self, key: &str, f: F) -> Self
-    where
-        F: FnOnce(AgentDisplayConfigSpec) -> AgentDisplayConfigSpec,
-    {
-        self.display_config_type_with(key, "integer", f)
-    }
-
-    pub fn number_display_config(self, key: &str) -> Self {
-        self.number_display_config_with(key, |entry| entry)
-    }
-
-    pub fn number_display_config_with<F>(self, key: &str, f: F) -> Self
-    where
-        F: FnOnce(AgentDisplayConfigSpec) -> AgentDisplayConfigSpec,
-    {
-        self.display_config_type_with(key, "number", f)
-    }
-
-    pub fn string_display_config(self, key: &str) -> Self {
-        self.string_display_config_with(key, |entry| entry)
-    }
-
-    pub fn string_display_config_with<F>(self, key: &str, f: F) -> Self
-    where
-        F: FnOnce(AgentDisplayConfigSpec) -> AgentDisplayConfigSpec,
-    {
-        self.display_config_type_with(key, "string", f)
-    }
-
-    pub fn text_display_config(self, key: &str) -> Self {
-        self.text_display_config_with(key, |entry| entry)
-    }
-
-    pub fn text_display_config_with<F>(self, key: &str, f: F) -> Self
-    where
-        F: FnOnce(AgentDisplayConfigSpec) -> AgentDisplayConfigSpec,
-    {
-        self.display_config_type_with(key, "text", f)
-    }
-
-    pub fn object_display_config(self, key: &str) -> Self {
-        self.object_display_config_with(key, |entry| entry)
-    }
-
-    pub fn object_display_config_with<F>(self, key: &str, f: F) -> Self
-    where
-        F: FnOnce(AgentDisplayConfigSpec) -> AgentDisplayConfigSpec,
-    {
-        self.display_config_type_with(key, "object", f)
-    }
-
-    pub fn custom_display_config_with<F>(self, key: &str, type_: &str, f: F) -> Self
-    where
-        F: FnOnce(AgentDisplayConfigSpec) -> AgentDisplayConfigSpec,
-    {
-        self.display_config_type_with(key, type_, f)
-    }
-
-    fn display_config_type_with<F>(mut self, key: &str, type_: &str, f: F) -> Self
-    where
-        F: FnOnce(AgentDisplayConfigSpec) -> AgentDisplayConfigSpec,
-    {
-        let entry = AgentDisplayConfigSpec::new(type_);
-        self.insert_display_config_entry(key.into(), f(entry));
-        self
-    }
-
-    fn insert_display_config_entry(&mut self, key: String, entry: AgentDisplayConfigSpec) {
-        if let Some(configs) = self.display_configs.as_mut() {
-            configs.insert(key, entry);
-        } else {
-            let mut map = FnvIndexMap::default();
-            map.insert(key, entry);
-            self.display_configs = Some(map);
-        }
-    }
-
     pub fn use_native_thread(mut self) -> Self {
         self.native_thread = true;
         self
@@ -528,13 +404,13 @@ impl AgentDefinition {
             def_name: self.name.clone(),
             inputs: self.inputs.clone(),
             outputs: self.outputs.clone(),
-            configs: self.default_configs.as_ref().map(|cfgs| {
+            configs: self.configs.as_ref().map(|cfgs| {
                 cfgs.iter()
                     .map(|(k, v)| (k.clone(), v.value.clone()))
                     .collect()
             }),
-            config_specs: self.default_configs.clone(),
-            display_config_specs: self.display_configs.clone(),
+            config_specs: self.configs.clone(),
+            // display_config_specs: self.display_configs.clone(),
         }
     }
 }
@@ -553,6 +429,11 @@ impl AgentConfigSpec {
         self
     }
 
+    pub fn hide_title(mut self) -> Self {
+        self.hide_title = true;
+        self
+    }
+
     pub fn description(mut self, description: &str) -> Self {
         self.description = Some(description.into());
         self
@@ -562,30 +443,9 @@ impl AgentConfigSpec {
         self.hidden = true;
         self
     }
-}
 
-impl AgentDisplayConfigSpec {
-    pub fn new(type_: &str) -> Self {
-        Self {
-            type_: Some(type_.into()),
-            ..Default::default()
-        }
-    }
-
-    pub fn hide_title(mut self) -> Self {
-        self.hide_title = true;
-        self
-    }
-
-    #[allow(unused)]
-    pub fn title(mut self, title: &str) -> Self {
-        self.title = Some(title.into());
-        self
-    }
-
-    #[allow(unused)]
-    pub fn description(mut self, description: &str) -> Self {
-        self.description = Some(description.into());
+    pub fn readonly(mut self) -> Self {
+        self.readonly = true;
         self
     }
 }
@@ -614,7 +474,7 @@ mod tests {
         assert!(def.category.is_none());
         assert!(def.inputs.is_none());
         assert!(def.outputs.is_none());
-        assert!(def.display_configs.is_none());
+        assert!(def.configs.is_none());
     }
 
     #[test]
@@ -627,18 +487,22 @@ mod tests {
         assert_eq!(def.category.unwrap(), "Test");
         assert_eq!(def.inputs.unwrap(), vec!["in"]);
         assert_eq!(def.outputs.unwrap(), vec!["out"]);
-        let display_configs = def.display_configs.unwrap();
-        assert_eq!(display_configs.len(), 2);
-        let entry = display_configs.get("value").unwrap();
+        let default_configs = def.configs.unwrap();
+        assert_eq!(default_configs.len(), 2);
+        let entry = default_configs.get("value").unwrap();
+        assert_eq!(entry.value, AgentValue::string("abc"));
         assert_eq!(entry.type_.as_ref().unwrap(), "string");
         assert_eq!(entry.title.as_ref().unwrap(), "display_title");
         assert_eq!(entry.description.as_ref().unwrap(), "display_description");
         assert_eq!(entry.hide_title, false);
-        let entry = display_configs.get("hide_title_value").unwrap();
+        assert_eq!(entry.readonly, true);
+        let entry = default_configs.get("hide_title_value").unwrap();
+        assert_eq!(entry.value, AgentValue::integer(1));
         assert_eq!(entry.type_.as_ref().unwrap(), "integer");
         assert_eq!(entry.title, None);
         assert_eq!(entry.description, None);
         assert_eq!(entry.hide_title, true);
+        assert_eq!(entry.readonly, true);
     }
 
     #[test]
@@ -659,13 +523,13 @@ mod tests {
         print!("{}", json);
         assert_eq!(
             json,
-            r#"{"kind":"test","name":"echo","title":"Echo","category":"Test","inputs":["in"],"outputs":["out"],"display_configs":{"value":{"type":"string","title":"display_title","description":"display_description"},"hide_title_value":{"type":"integer","hide_title":true}}}"#
+            r#"{"kind":"test","name":"echo","title":"Echo","category":"Test","inputs":["in"],"outputs":["out"],"configs":{"value":{"value":"abc","type":"string","title":"display_title","description":"display_description","readonly":true},"hide_title_value":{"value":1,"type":"integer","hide_title":true,"readonly":true}}}"#
         );
     }
 
     #[test]
     fn test_deserialize_echo_agent_definition() {
-        let json = r#"{"kind":"test","name":"echo","title":"Echo","category":"Test","inputs":["in"],"outputs":["out"],"display_configs":{"value":{"type":"string","title":"display_title","description":"display_description"},"hide_title_value":{"type":"integer","hide_title":true}}}"#;
+        let json = r#"{"kind":"test","name":"echo","title":"Echo","category":"Test","inputs":["in"],"outputs":["out"],"configs":{"value":{"value":"abc","type":"string","title":"display_title","description":"display_description","readonly":true},"hide_title_value":{"value":1,"type":"integer","hide_title":true,"readonly":true}}}"#;
         let def: AgentDefinition = serde_json::from_str(json).unwrap();
         assert_eq!(def.kind, "test");
         assert_eq!(def.name, "echo");
@@ -673,15 +537,15 @@ mod tests {
         assert_eq!(def.category.unwrap(), "Test");
         assert_eq!(def.inputs.unwrap(), vec!["in"]);
         assert_eq!(def.outputs.unwrap(), vec!["out"]);
-        let display_configs = def.display_configs.unwrap();
-        assert_eq!(display_configs.len(), 2);
-        let (key, entry) = display_configs.get_index(0).unwrap();
+        let default_configs = def.configs.unwrap();
+        assert_eq!(default_configs.len(), 2);
+        let (key, entry) = default_configs.get_index(0).unwrap();
         assert_eq!(key, "value");
         assert_eq!(entry.type_.as_ref().unwrap(), "string");
         assert_eq!(entry.title.as_ref().unwrap(), "display_title");
         assert_eq!(entry.description.as_ref().unwrap(), "display_description");
         assert_eq!(entry.hide_title, false);
-        let (key, entry) = display_configs.get_index(1).unwrap();
+        let (key, entry) = default_configs.get_index(1).unwrap();
         assert_eq!(key, "hide_title_value");
         assert_eq!(entry.type_.as_ref().unwrap(), "integer");
         assert_eq!(entry.title, None);
@@ -709,10 +573,7 @@ mod tests {
             .object_config_default("object_value")
             .object_config("object_custom", custom_object_value.clone());
 
-        let configs = def
-            .default_configs
-            .clone()
-            .expect("default configs should exist");
+        let configs = def.configs.clone().expect("default configs should exist");
         assert_eq!(configs.len(), 13);
         let config_map: std::collections::HashMap<_, _> = configs.into_iter().collect();
 
@@ -817,69 +678,15 @@ mod tests {
     }
 
     #[test]
-    fn test_display_config_helpers() {
-        let def = AgentDefinition::new("test", "helpers", None)
-            .unit_display_config("display_unit")
-            .boolean_display_config("display_boolean")
-            .integer_display_config("display_integer")
-            .number_display_config("display_number")
-            .string_display_config("display_string")
-            .text_display_config("display_text")
-            .object_display_config("display_object");
-
-        let display_configs = def.display_configs.expect("display configs should exist");
-        assert_eq!(display_configs.len(), 7);
-        let config_map: std::collections::HashMap<_, _> = display_configs.into_iter().collect();
-
-        assert_eq!(
-            config_map.get("display_unit").unwrap().type_.as_deref(),
-            Some("unit")
-        );
-        assert_eq!(
-            config_map.get("display_boolean").unwrap().type_.as_deref(),
-            Some("boolean")
-        );
-        assert_eq!(
-            config_map.get("display_integer").unwrap().type_.as_deref(),
-            Some("integer")
-        );
-        assert_eq!(
-            config_map.get("display_number").unwrap().type_.as_deref(),
-            Some("number")
-        );
-        assert_eq!(
-            config_map.get("display_string").unwrap().type_.as_deref(),
-            Some("string")
-        );
-        assert_eq!(
-            config_map.get("display_text").unwrap().type_.as_deref(),
-            Some("text")
-        );
-        assert_eq!(
-            config_map.get("display_object").unwrap().type_.as_deref(),
-            Some("object")
-        );
-
-        for entry in config_map.values() {
-            assert!(!entry.hide_title);
-        }
-    }
-
-    #[test]
     fn test_config_helper_customization() {
         let def = AgentDefinition::new("test", "custom", None)
             .integer_config_with("custom_default", 1, |entry| entry.title("Custom"))
             .text_global_config_with("custom_global", "value", |entry| {
                 entry.description("Global Desc")
-            })
-            .text_display_config_with("custom_display", |entry| entry.title("Display"));
+            });
+        // .text_display_config_with("custom_display", |entry| entry.title("Display"));
 
-        let default_entry = def
-            .default_configs
-            .as_ref()
-            .unwrap()
-            .get("custom_default")
-            .unwrap();
+        let default_entry = def.configs.as_ref().unwrap().get("custom_default").unwrap();
         assert_eq!(default_entry.title.as_deref(), Some("Custom"));
 
         let global_entry = def
@@ -889,14 +696,6 @@ mod tests {
             .get("custom_global")
             .unwrap();
         assert_eq!(global_entry.description.as_deref(), Some("Global Desc"));
-
-        let display_entry = def
-            .display_configs
-            .as_ref()
-            .unwrap()
-            .get("custom_display")
-            .unwrap();
-        assert_eq!(display_entry.title.as_deref(), Some("Display"));
     }
 
     fn echo_agent_definition() -> AgentDefinition {
@@ -909,11 +708,12 @@ mod tests {
         .category("Test")
         .inputs(vec!["in"])
         .outputs(vec!["out"])
-        .string_display_config_with("value", |entry| {
+        .string_config_with("value", "abc", |entry| {
             entry
                 .title("display_title")
                 .description("display_description")
+                .readonly()
         })
-        .integer_display_config_with("hide_title_value", |entry| entry.hide_title())
+        .integer_config_with("hide_title_value", 1, |entry| entry.hide_title().readonly())
     }
 }
