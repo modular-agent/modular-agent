@@ -167,25 +167,25 @@ export async function stopAgentStream(id: string): Promise<void> {
 
 // agents
 
-export async function newAgentStreamAgent(defName: string): Promise<AgentSpec> {
-  return await invoke<any>("plugin:askit|new_agent_stream_agent", { defName });
+export async function newAgentSpec(defName: string): Promise<AgentSpec> {
+  return await invoke<any>("plugin:askit|new_agent_spec", { defName });
 }
 
-export async function addAgentStreamAgent(
+export async function addAgent(
   streamId: string,
-  agent: AgentSpec
+  spec: AgentSpec
 ): Promise<void> {
-  await invoke<void>("plugin:askit|add_agent_stream_agent", {
+  await invoke<void>("plugin:askit|add_agent", {
     streamId,
-    agent,
+    spec,
   });
 }
 
-export async function removeAgentStreamAgent(
+export async function removeAgent(
   streamId: string,
   agentId: string
 ): Promise<void> {
-  await invoke<void>("plugin:askit|remove_agent_stream_agent", {
+  await invoke<void>("plugin:askit|remove_agent", {
     streamId,
     agentId,
   });
@@ -193,21 +193,21 @@ export async function removeAgentStreamAgent(
 
 // channel
 
-export async function addAgentStreamChannel(
+export async function addChannel(
   streamId: string,
   channel: ChannelSpec
 ): Promise<void> {
-  await invoke<void>("plugin:askit|add_agent_stream_channel", {
+  await invoke<void>("plugin:askit|add_channel", {
     streamId,
     channel,
   });
 }
 
-export async function removeAgentStreamChannel(
+export async function removeChannel(
   streamId: string,
   channelId: string
 ): Promise<void> {
-  await invoke<void>("plugin:askit|remove_agent_stream_channel", {
+  await invoke<void>("plugin:askit|remove_channel", {
     streamId,
     channelId,
   });

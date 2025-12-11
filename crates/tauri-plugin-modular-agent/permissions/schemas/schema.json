@@ -295,6 +295,18 @@
       "type": "string",
       "oneOf": [
         {
+          "description": "Enables the add_agent command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-add-agent",
+          "markdownDescription": "Enables the add_agent command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the add_agent command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-add-agent",
+          "markdownDescription": "Denies the add_agent command without any pre-configured scope."
+        },
+        {
           "description": "Enables the add_agent_stream command without any pre-configured scope.",
           "type": "string",
           "const": "allow-add-agent-stream",
@@ -307,28 +319,16 @@
           "markdownDescription": "Denies the add_agent_stream command without any pre-configured scope."
         },
         {
-          "description": "Enables the add_agent_stream_agent command without any pre-configured scope.",
+          "description": "Enables the add_channel command without any pre-configured scope.",
           "type": "string",
-          "const": "allow-add-agent-stream-agent",
-          "markdownDescription": "Enables the add_agent_stream_agent command without any pre-configured scope."
+          "const": "allow-add-channel",
+          "markdownDescription": "Enables the add_channel command without any pre-configured scope."
         },
         {
-          "description": "Denies the add_agent_stream_agent command without any pre-configured scope.",
+          "description": "Denies the add_channel command without any pre-configured scope.",
           "type": "string",
-          "const": "deny-add-agent-stream-agent",
-          "markdownDescription": "Denies the add_agent_stream_agent command without any pre-configured scope."
-        },
-        {
-          "description": "Enables the add_agent_stream_channel command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-add-agent-stream-channel",
-          "markdownDescription": "Enables the add_agent_stream_channel command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the add_agent_stream_channel command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-add-agent-stream-channel",
-          "markdownDescription": "Denies the add_agent_stream_channel command without any pre-configured scope."
+          "const": "deny-add-channel",
+          "markdownDescription": "Denies the add_channel command without any pre-configured scope."
         },
         {
           "description": "Enables the copy_sub_stream command without any pre-configured scope.",
@@ -439,6 +439,18 @@
           "markdownDescription": "Denies the insert_agent_stream command without any pre-configured scope."
         },
         {
+          "description": "Enables the new_agent_spec command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-new-agent-spec",
+          "markdownDescription": "Enables the new_agent_spec command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the new_agent_spec command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-new-agent-spec",
+          "markdownDescription": "Denies the new_agent_spec command without any pre-configured scope."
+        },
+        {
           "description": "Enables the new_agent_stream command without any pre-configured scope.",
           "type": "string",
           "const": "allow-new-agent-stream",
@@ -451,16 +463,16 @@
           "markdownDescription": "Denies the new_agent_stream command without any pre-configured scope."
         },
         {
-          "description": "Enables the new_agent_stream_agent command without any pre-configured scope.",
+          "description": "Enables the remove_agent command without any pre-configured scope.",
           "type": "string",
-          "const": "allow-new-agent-stream-agent",
-          "markdownDescription": "Enables the new_agent_stream_agent command without any pre-configured scope."
+          "const": "allow-remove-agent",
+          "markdownDescription": "Enables the remove_agent command without any pre-configured scope."
         },
         {
-          "description": "Denies the new_agent_stream_agent command without any pre-configured scope.",
+          "description": "Denies the remove_agent command without any pre-configured scope.",
           "type": "string",
-          "const": "deny-new-agent-stream-agent",
-          "markdownDescription": "Denies the new_agent_stream_agent command without any pre-configured scope."
+          "const": "deny-remove-agent",
+          "markdownDescription": "Denies the remove_agent command without any pre-configured scope."
         },
         {
           "description": "Enables the remove_agent_stream command without any pre-configured scope.",
@@ -475,28 +487,16 @@
           "markdownDescription": "Denies the remove_agent_stream command without any pre-configured scope."
         },
         {
-          "description": "Enables the remove_agent_stream_agent command without any pre-configured scope.",
+          "description": "Enables the remove_channel command without any pre-configured scope.",
           "type": "string",
-          "const": "allow-remove-agent-stream-agent",
-          "markdownDescription": "Enables the remove_agent_stream_agent command without any pre-configured scope."
+          "const": "allow-remove-channel",
+          "markdownDescription": "Enables the remove_channel command without any pre-configured scope."
         },
         {
-          "description": "Denies the remove_agent_stream_agent command without any pre-configured scope.",
+          "description": "Denies the remove_channel command without any pre-configured scope.",
           "type": "string",
-          "const": "deny-remove-agent-stream-agent",
-          "markdownDescription": "Denies the remove_agent_stream_agent command without any pre-configured scope."
-        },
-        {
-          "description": "Enables the remove_agent_stream_channel command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-remove-agent-stream-channel",
-          "markdownDescription": "Enables the remove_agent_stream_channel command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the remove_agent_stream_channel command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-remove-agent-stream-channel",
-          "markdownDescription": "Denies the remove_agent_stream_channel command without any pre-configured scope."
+          "const": "deny-remove-channel",
+          "markdownDescription": "Denies the remove_channel command without any pre-configured scope."
         },
         {
           "description": "Enables the rename_agent_stream command without any pre-configured scope.",
@@ -619,10 +619,10 @@
           "markdownDescription": "Denies the write_board command without any pre-configured scope."
         },
         {
-          "description": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-get-agent-definition`\n- `allow-get-agent-definitions`\n- `allow-get-agent-streams`\n- `allow-get-agent-spec`\n- `allow-new-agent-stream`\n- `allow-rename-agent-stream`\n- `allow-unique-stream-name`\n- `allow-add-agent-stream`\n- `allow-remove-agent-stream`\n- `allow-insert-agent-stream`\n- `allow-copy-sub-stream`\n- `allow-start-agent-stream`\n- `allow-stop-agent-stream`\n- `allow-new-agent-stream-agent`\n- `allow-add-agent-stream-agent`\n- `allow-remove-agent-stream-agent`\n- `allow-add-agent-stream-channel`\n- `allow-remove-agent-stream-channel`\n- `allow-start-agent`\n- `allow-stop-agent`\n- `allow-write-board`\n- `allow-set-agent-configs`\n- `allow-get-global-configs`\n- `allow-get-global-configs-map`\n- `allow-set-global-configs`\n- `allow-set-global-configs-map`\n- `allow-get-agent-config-specs`",
+          "description": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-get-agent-definition`\n- `allow-get-agent-definitions`\n- `allow-get-agent-streams`\n- `allow-get-agent-spec`\n- `allow-new-agent-stream`\n- `allow-rename-agent-stream`\n- `allow-unique-stream-name`\n- `allow-add-agent-stream`\n- `allow-remove-agent-stream`\n- `allow-insert-agent-stream`\n- `allow-copy-sub-stream`\n- `allow-start-agent-stream`\n- `allow-stop-agent-stream`\n- `allow-new-agent-spec`\n- `allow-add-agent`\n- `allow-remove-agent`\n- `allow-add-channel`\n- `allow-remove-channel`\n- `allow-start-agent`\n- `allow-stop-agent`\n- `allow-write-board`\n- `allow-set-agent-configs`\n- `allow-get-global-configs`\n- `allow-get-global-configs-map`\n- `allow-set-global-configs`\n- `allow-set-global-configs-map`\n- `allow-get-agent-config-specs`",
           "type": "string",
           "const": "default",
-          "markdownDescription": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-get-agent-definition`\n- `allow-get-agent-definitions`\n- `allow-get-agent-streams`\n- `allow-get-agent-spec`\n- `allow-new-agent-stream`\n- `allow-rename-agent-stream`\n- `allow-unique-stream-name`\n- `allow-add-agent-stream`\n- `allow-remove-agent-stream`\n- `allow-insert-agent-stream`\n- `allow-copy-sub-stream`\n- `allow-start-agent-stream`\n- `allow-stop-agent-stream`\n- `allow-new-agent-stream-agent`\n- `allow-add-agent-stream-agent`\n- `allow-remove-agent-stream-agent`\n- `allow-add-agent-stream-channel`\n- `allow-remove-agent-stream-channel`\n- `allow-start-agent`\n- `allow-stop-agent`\n- `allow-write-board`\n- `allow-set-agent-configs`\n- `allow-get-global-configs`\n- `allow-get-global-configs-map`\n- `allow-set-global-configs`\n- `allow-set-global-configs-map`\n- `allow-get-agent-config-specs`"
+          "markdownDescription": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-get-agent-definition`\n- `allow-get-agent-definitions`\n- `allow-get-agent-streams`\n- `allow-get-agent-spec`\n- `allow-new-agent-stream`\n- `allow-rename-agent-stream`\n- `allow-unique-stream-name`\n- `allow-add-agent-stream`\n- `allow-remove-agent-stream`\n- `allow-insert-agent-stream`\n- `allow-copy-sub-stream`\n- `allow-start-agent-stream`\n- `allow-stop-agent-stream`\n- `allow-new-agent-spec`\n- `allow-add-agent`\n- `allow-remove-agent`\n- `allow-add-channel`\n- `allow-remove-channel`\n- `allow-start-agent`\n- `allow-stop-agent`\n- `allow-write-board`\n- `allow-set-agent-configs`\n- `allow-get-global-configs`\n- `allow-get-global-configs-map`\n- `allow-set-global-configs`\n- `allow-set-global-configs-map`\n- `allow-get-agent-config-specs`"
         }
       ]
     }

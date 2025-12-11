@@ -17,11 +17,11 @@ Default permissions for the plugin
 - `allow-copy-sub-stream`
 - `allow-start-agent-stream`
 - `allow-stop-agent-stream`
-- `allow-new-agent-stream-agent`
-- `allow-add-agent-stream-agent`
-- `allow-remove-agent-stream-agent`
-- `allow-add-agent-stream-channel`
-- `allow-remove-agent-stream-channel`
+- `allow-new-agent-spec`
+- `allow-add-agent`
+- `allow-remove-agent`
+- `allow-add-channel`
+- `allow-remove-channel`
 - `allow-start-agent`
 - `allow-stop-agent`
 - `allow-write-board`
@@ -40,6 +40,32 @@ Default permissions for the plugin
 <th>Description</th>
 </tr>
 
+
+<tr>
+<td>
+
+`askit:allow-add-agent`
+
+</td>
+<td>
+
+Enables the add_agent command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`askit:deny-add-agent`
+
+</td>
+<td>
+
+Denies the add_agent command without any pre-configured scope.
+
+</td>
+</tr>
 
 <tr>
 <td>
@@ -70,25 +96,12 @@ Denies the add_agent_stream command without any pre-configured scope.
 <tr>
 <td>
 
-`askit:allow-add-agent-stream-agent`
+`askit:allow-add-channel`
 
 </td>
 <td>
 
-Enables the add_agent_stream_agent command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`askit:deny-add-agent-stream-agent`
-
-</td>
-<td>
-
-Denies the add_agent_stream_agent command without any pre-configured scope.
+Enables the add_channel command without any pre-configured scope.
 
 </td>
 </tr>
@@ -96,25 +109,12 @@ Denies the add_agent_stream_agent command without any pre-configured scope.
 <tr>
 <td>
 
-`askit:allow-add-agent-stream-channel`
+`askit:deny-add-channel`
 
 </td>
 <td>
 
-Enables the add_agent_stream_channel command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`askit:deny-add-agent-stream-channel`
-
-</td>
-<td>
-
-Denies the add_agent_stream_channel command without any pre-configured scope.
+Denies the add_channel command without any pre-configured scope.
 
 </td>
 </tr>
@@ -356,6 +356,32 @@ Denies the insert_agent_stream command without any pre-configured scope.
 <tr>
 <td>
 
+`askit:allow-new-agent-spec`
+
+</td>
+<td>
+
+Enables the new_agent_spec command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`askit:deny-new-agent-spec`
+
+</td>
+<td>
+
+Denies the new_agent_spec command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
 `askit:allow-new-agent-stream`
 
 </td>
@@ -382,12 +408,12 @@ Denies the new_agent_stream command without any pre-configured scope.
 <tr>
 <td>
 
-`askit:allow-new-agent-stream-agent`
+`askit:allow-remove-agent`
 
 </td>
 <td>
 
-Enables the new_agent_stream_agent command without any pre-configured scope.
+Enables the remove_agent command without any pre-configured scope.
 
 </td>
 </tr>
@@ -395,12 +421,12 @@ Enables the new_agent_stream_agent command without any pre-configured scope.
 <tr>
 <td>
 
-`askit:deny-new-agent-stream-agent`
+`askit:deny-remove-agent`
 
 </td>
 <td>
 
-Denies the new_agent_stream_agent command without any pre-configured scope.
+Denies the remove_agent command without any pre-configured scope.
 
 </td>
 </tr>
@@ -434,25 +460,12 @@ Denies the remove_agent_stream command without any pre-configured scope.
 <tr>
 <td>
 
-`askit:allow-remove-agent-stream-agent`
+`askit:allow-remove-channel`
 
 </td>
 <td>
 
-Enables the remove_agent_stream_agent command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`askit:deny-remove-agent-stream-agent`
-
-</td>
-<td>
-
-Denies the remove_agent_stream_agent command without any pre-configured scope.
+Enables the remove_channel command without any pre-configured scope.
 
 </td>
 </tr>
@@ -460,25 +473,12 @@ Denies the remove_agent_stream_agent command without any pre-configured scope.
 <tr>
 <td>
 
-`askit:allow-remove-agent-stream-channel`
+`askit:deny-remove-channel`
 
 </td>
 <td>
 
-Enables the remove_agent_stream_channel command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`askit:deny-remove-agent-stream-channel`
-
-</td>
-<td>
-
-Denies the remove_agent_stream_channel command without any pre-configured scope.
+Denies the remove_channel command without any pre-configured scope.
 
 </td>
 </tr>

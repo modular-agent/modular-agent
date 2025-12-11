@@ -118,34 +118,34 @@ pub(crate) async fn stop_agent_stream<R: Runtime>(app: AppHandle<R>, id: String)
 // agent
 
 #[tauri::command]
-pub fn new_agent_stream_agent<R: Runtime>(
+pub fn new_agent_spec<R: Runtime>(
     app: AppHandle<R>,
     def_name: String,
 ) -> Result<AgentSpec> {
     app.askit()
-        .new_agent_stream_agent(&def_name)
+        .new_agent_spec(&def_name)
         .map_err(Into::into)
 }
 
 #[tauri::command]
-pub(crate) fn add_agent_stream_agent<R: Runtime>(
+pub(crate) fn add_agent<R: Runtime>(
     app: AppHandle<R>,
     stream_id: String,
-    agent: AgentSpec,
+    spec: AgentSpec,
 ) -> Result<()> {
     app.askit()
-        .add_agent_stream_agent(&stream_id, &agent)
+        .add_agent(stream_id, spec)
         .map_err(Into::into)
 }
 
 #[tauri::command]
-pub(crate) async fn remove_agent_stream_agent<R: Runtime>(
+pub(crate) async fn remove_agent<R: Runtime>(
     app: AppHandle<R>,
     stream_id: String,
     agent_id: String,
 ) -> Result<()> {
     app.askit()
-        .remove_agent_stream_agent(&stream_id, &agent_id)
+        .remove_agent(&stream_id, &agent_id)
         .await
         .map_err(Into::into)
 }
@@ -153,24 +153,24 @@ pub(crate) async fn remove_agent_stream_agent<R: Runtime>(
 // channel
 
 #[tauri::command]
-pub(crate) fn add_agent_stream_channel<R: Runtime>(
+pub(crate) fn add_channel<R: Runtime>(
     app: AppHandle<R>,
     stream_id: String,
     channel: ChannelSpec,
 ) -> Result<()> {
     app.askit()
-        .add_agent_stream_channel(&stream_id, &channel)
+        .add_channel(&stream_id, channel)
         .map_err(Into::into)
 }
 
 #[tauri::command]
-pub(crate) fn remove_agent_stream_channel<R: Runtime>(
+pub(crate) fn remove_channel<R: Runtime>(
     app: AppHandle<R>,
     stream_id: String,
     channel_id: String,
 ) -> Result<()> {
     app.askit()
-        .remove_agent_stream_channel(&stream_id, &channel_id)
+        .remove_channel(&stream_id, &channel_id)
         .map_err(Into::into)
 }
 

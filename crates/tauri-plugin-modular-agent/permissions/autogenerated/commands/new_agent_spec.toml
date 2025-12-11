@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-new-agent-spec"
+description = "Enables the new_agent_spec command without any pre-configured scope."
+commands.allow = ["new_agent_spec"]
+
+[[permission]]
+identifier = "deny-new-agent-spec"
+description = "Denies the new_agent_spec command without any pre-configured scope."
+commands.deny = ["new_agent_spec"]
