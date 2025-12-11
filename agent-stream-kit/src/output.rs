@@ -20,10 +20,10 @@ pub trait AgentOutput {
         self.try_output_raw(ctx, pin.into(), value)
     }
 
-    fn emit_display_raw(&self, key: String, value: AgentValue);
+    fn emit_config_updated_raw(&self, key: String, value: AgentValue);
 
-    fn emit_display<S: Into<String>>(&self, key: S, value: AgentValue) {
-        self.emit_display_raw(key.into(), value);
+    fn emit_config_updated<S: Into<String>>(&self, key: S, value: AgentValue) {
+        self.emit_config_updated_raw(key.into(), value);
     }
 
     fn emit_agent_spec_updated_raw(&self);
@@ -51,9 +51,9 @@ impl<T: Agent> AgentOutput for T {
             .try_send_agent_out(self.id().into(), ctx, pin, value)
     }
 
-    fn emit_display_raw(&self, key: String, value: AgentValue) {
+    fn emit_config_updated_raw(&self, key: String, value: AgentValue) {
         self.askit()
-            .emit_agent_display(self.id().to_string(), key, value);
+            .emit_agent_config_updated(self.id().to_string(), key, value);
     }
 
     fn emit_agent_spec_updated_raw(&self) {

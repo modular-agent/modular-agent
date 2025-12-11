@@ -873,8 +873,13 @@ impl ASKit {
         observers.swap_remove(&observer_id);
     }
 
-    pub(crate) fn emit_agent_display(&self, agent_id: String, key: String, value: AgentValue) {
-        self.notify_observers(ASKitEvent::AgentDisplay(agent_id, key, value));
+    pub(crate) fn emit_agent_config_updated(
+        &self,
+        agent_id: String,
+        key: String,
+        value: AgentValue,
+    ) {
+        self.notify_observers(ASKitEvent::AgentConfigUpdated(agent_id, key, value));
     }
 
     pub(crate) fn emit_agent_error(&self, agent_id: String, message: String) {
@@ -907,11 +912,11 @@ impl ASKit {
 
 #[derive(Clone, Debug)]
 pub enum ASKitEvent {
-    AgentDisplay(String, String, AgentValue), // (agent_id, key, value)
-    AgentError(String, String),               // (agent_id, message)
-    AgentIn(String, String),                  // (agent_id, pin)
-    AgentSpecUpdated(String),                 // (agent_id)
-    Board(String, AgentValue),                // (board name, value)
+    AgentConfigUpdated(String, String, AgentValue), // (agent_id, key, value)
+    AgentError(String, String),                     // (agent_id, message)
+    AgentIn(String, String),                        // (agent_id, pin)
+    AgentSpecUpdated(String),                       // (agent_id)
+    Board(String, AgentValue),                      // (board name, value)
 }
 
 pub trait ASKitObserver {
