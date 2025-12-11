@@ -3,10 +3,10 @@ use anyhow::{Context as _, Result};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 
-const EMIT_DISPLAY: &str = "askit:display";
-const EMIT_ERROR: &str = "askit:error";
+const EMIT_AGENT_CONFIG_UPDATED: &str = "askit:agent_config_updated";
+const EMIT_AGENT_ERROR: &str = "askit:agent_error";
+const EMIT_AGENT_IN: &str = "askit:agent_in";
 const EMIT_AGENT_SPEC_UPDATED: &str = "askit:agent_spec_updated";
-const EMIT_INPUT: &str = "askit:input";
 
 #[derive(Clone)]
 pub struct ASAppObserver {
@@ -14,9 +14,14 @@ pub struct ASAppObserver {
 }
 
 impl ASAppObserver {
-    fn emit_display(&self, agent_id: String, key: String, value: AgentValue) -> Result<()> {
+    fn emit_agent_config_updated(
+        &self,
+        agent_id: String,
+        key: String,
+        value: AgentValue,
+    ) -> Result<()> {
         #[derive(Clone, Serialize)]
-        struct DisplayMessage {
+        struct AgentConfigUpdatedMessage {
             agent_id: String,
             key: String,
             value: AgentValue,
@@ -24,28 +29,42 @@ impl ASAppObserver {
 
         self.app
             .emit(
-                EMIT_DISPLAY,
-                DisplayMessage {
+                EMIT_AGENT_CONFIG_UPDATED,
+                AgentConfigUpdatedMessage {
                     agent_id,
                     key,
                     value,
                 },
             )
-            .context("Failed to emit display message")?;
+            .context("Failed to emit agent config updated message")?;
 
         Ok(())
     }
 
-    fn emit_error(&self, agent_id: String, message: String) -> Result<()> {
+    fn emit_agent_error(&self, agent_id: String, message: String) -> Result<()> {
         #[derive(Clone, Serialize)]
-        struct ErrorMessage {
+        struct AgentErrorMessage {
             agent_id: String,
             message: String,
         }
 
         self.app
-            .emit(EMIT_ERROR, ErrorMessage { agent_id, message })
-            .context("Failed to emit error message")?;
+            .emit(EMIT_AGENT_ERROR, AgentErrorMessage { agent_id, message })
+            .context("Failed to emit agent error message")?;
+
+        Ok(())
+    }
+
+    fn emit_agent_in(&self, agent_id: String, ch: String) -> Result<()> {
+        #[derive(Clone, Serialize)]
+        struct AgentInMessage {
+            agent_id: String,
+            ch: String,
+        }
+
+        self.app
+            .emit(EMIT_AGENT_IN, AgentInMessage { agent_id, ch })
+            .context("Failed to emit agent-in message")?;
 
         Ok(())
     }
@@ -65,47 +84,37 @@ impl ASAppObserver {
 
         Ok(())
     }
-
-    fn emit_input(&self, agent_id: String, ch: String) -> Result<()> {
-        #[derive(Clone, Serialize)]
-        struct InputMessage {
-            agent_id: String,
-            ch: String,
-        }
-
-        self.app
-            .emit(EMIT_INPUT, InputMessage { agent_id, ch })
-            .context("Failed to emit input message")?;
-
-        Ok(())
-    }
 }
 
 impl ASKitObserver for ASAppObserver {
     fn notify(&self, event: &ASKitEvent) {
         match event {
-            ASKitEvent::AgentDisplay(agent_id, key, value) => {
-                self.emit_display(agent_id.to_string(), key.to_string(), value.clone())
-                    .unwrap_or_else(|e| {
-                        log::error!("Failed to emit display message: {}", e);
-                    });
+            ASKitEvent::AgentConfigUpdated(agent_id, key, value) => {
+                self.emit_agent_config_updated(
+                    agent_id.to_string(),
+                    key.to_string(),
+                    value.clone(),
+                )
+                .unwrap_or_else(|e| {
+                    log::error!("Failed to emit agent config updated message: {}", e);
+                });
             }
             ASKitEvent::AgentError(agent_id, message) => {
-                self.emit_error(agent_id.to_string(), message.to_string())
+                self.emit_agent_error(agent_id.to_string(), message.to_string())
                     .unwrap_or_else(|e| {
-                        log::error!("Failed to emit error message: {}", e);
+                        log::error!("Failed to emit agent error message: {}", e);
+                    });
+            }
+            ASKitEvent::AgentIn(agent_id, channel) => {
+                self.emit_agent_in(agent_id.to_string(), channel.to_string())
+                    .unwrap_or_else(|e| {
+                        log::error!("Failed to emit agent-in message: {}", e);
                     });
             }
             ASKitEvent::AgentSpecUpdated(agent_id) => {
                 self.emit_agent_spec_updated(agent_id.to_string())
                     .unwrap_or_else(|e| {
                         log::error!("Failed to emit agent spec updated message: {}", e);
-                    });
-            }
-            ASKitEvent::AgentIn(agent_id, channel) => {
-                self.emit_input(agent_id.to_string(), channel.to_string())
-                    .unwrap_or_else(|e| {
-                        log::error!("Failed to emit input message: {}", e);
                     });
             }
             _ => {}

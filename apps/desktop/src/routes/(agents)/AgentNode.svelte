@@ -32,9 +32,9 @@
   import { getAgentDefinitionsContext, inferTypeForDisplay } from "@/lib/agent";
   import {
     subscribeAgentSpecUpdatedMessage,
-    subscribeDisplayMessage,
-    subscribeErrorMessage,
-    subscribeInputMessage,
+    subscribeAgentConfigUpdatedMessage,
+    subscribeAgentErrorMessage,
+    subscribeAgentInMessage,
   } from "@/lib/shared.svelte";
   import type { TAgentStreamNodeData } from "@/lib/types";
 
@@ -65,42 +65,39 @@
     let unsubscribers: Unsubscriber[] = [];
 
     unsubscribers.push(
-      subscribeAgentSpecUpdatedMessage(id, () => {
-        getAgentSpec(id).then((spec) => {
-          if (spec) {
-            updateNodeData(id, { spec });
-          }
-        });
+      subscribeAgentConfigUpdatedMessage(id, ({ key, value }) => {
+        // TODO: validate key and value
+        let currentValue = data.spec.configs?.[key];
+        if (currentValue === value) {
+          return;
+        }
+        const newConfigs = { ...data.spec.configs, [key]: value };
+        updateNodeData(id, { spec: { ...data.spec, configs: newConfigs } });
       }),
     );
 
-    if (data.spec.config_specs) {
-      // Subscribe to display messages for each readonly config key
-      Object.entries(data.spec.config_specs).forEach(([key, spec]) => {
-        if (spec.readonly) {
-          unsubscribers.push(
-            subscribeDisplayMessage(id, key, (value) => {
-              const newConfigs = { ...data.spec.configs, [key]: value };
-              updateNodeData(id, { spec: { ...data.spec, configs: newConfigs } });
-            }),
-          );
-        }
-      });
-    }
-
-    // Add subscription for error messages
     unsubscribers.push(
-      subscribeErrorMessage(id, (message) => {
+      subscribeAgentErrorMessage(id, (message) => {
         if (!message) return;
         errorMessages.push(message);
       }),
     );
 
     unsubscribers.push(
-      subscribeInputMessage(id, ({ ch, t }) => {
+      subscribeAgentInMessage(id, ({ ch, t }) => {
         if (!ch || ch === "") return;
         inputMessage = ch;
         inputCount += 1;
+      }),
+    );
+
+    unsubscribers.push(
+      subscribeAgentSpecUpdatedMessage(id, () => {
+        getAgentSpec(id).then((spec) => {
+          if (spec) {
+            updateNodeData(id, { spec });
+          }
+        });
       }),
     );
 
@@ -114,6 +111,11 @@
   const { updateNodeData } = useSvelteFlow();
 
   async function updateConfig(key: string, value: any) {
+    // TODO: validate key and value
+    let currentValue = data.spec.configs?.[key];
+    if (currentValue === value) {
+      return;
+    }
     const newConfigs = { ...data.spec.configs, [key]: value };
     updateNodeData(id, { spec: { ...data.spec, configs: newConfigs } });
     await setAgentConfigs(id, newConfigs);
