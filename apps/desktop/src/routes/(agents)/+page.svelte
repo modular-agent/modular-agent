@@ -11,6 +11,7 @@
     MiniMap,
     SvelteFlow,
     type Edge,
+    type NodeEventWithPointer,
     type NodeTypes,
   } from "@xyflow/svelte";
   // 👇 this is important! You need to import the styles for Svelte Flow to work
@@ -564,21 +565,22 @@
     nodeContextMenu = null;
   }
 
-  function handleNodeContextMenu({ event, node }: { event: MouseEvent; node: Node }) {
+  const handleNodeContextMenu: NodeEventWithPointer<MouseEvent, TAgentStreamNode> = ({
+    event,
+    node,
+  }) => {
     event.preventDefault();
 
-    const agentNode = node as unknown as TAgentStreamNode;
-
     const [selectedNodes, _] = selectedNodesAndEdges();
-    if (!selectedNodes.some((n) => n.id === agentNode.id)) {
+    if (!selectedNodes.some((n) => n.id === node.id)) {
       nodes.forEach((n) => {
         updateNode(n.id, { selected: false });
       });
-      updateNode(agentNode.id, { selected: true });
+      updateNode(node.id, { selected: true });
     }
 
     showNodeContextMenu(event.clientX, event.clientY);
-  }
+  };
 
   function handleSelectionContextMenu({ event }: { event: MouseEvent }) {
     event.preventDefault();
