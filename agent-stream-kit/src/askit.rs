@@ -31,7 +31,7 @@ pub struct ASKit {
     pub(crate) board_value: Arc<Mutex<FnvIndexMap<String, AgentValue>>>,
 
     // source agent id -> [target agent id / source handle / target handle]
-    pub(crate) edges: Arc<Mutex<FnvIndexMap<String, Vec<(String, String, String)>>>>,
+    pub(crate) channels: Arc<Mutex<FnvIndexMap<String, Vec<(String, String, String)>>>>,
 
     // agent def name -> agent definition
     pub(crate) defs: Arc<Mutex<AgentDefinitions>>,
@@ -56,7 +56,7 @@ impl ASKit {
             agent_txs: Default::default(),
             board_out_agents: Default::default(),
             board_value: Default::default(),
-            edges: Default::default(),
+            channels: Default::default(),
             defs: Default::default(),
             streams: Default::default(),
             global_configs_map: Default::default(),
@@ -233,17 +233,17 @@ impl ASKit {
             streams.insert(id.to_string(), agent_stream.clone());
         }
 
-        // add nodes into agents
-        for node in agent_stream.nodes().iter() {
-            if let Err(e) = self.add_agent(id, node) {
-                log::error!("Failed to add_agent_node {}: {}", node.id, e);
+        // add agents
+        for agent in agent_stream.agents().iter() {
+            if let Err(e) = self.add_agent(id, agent) {
+                log::error!("Failed to add_agent {}: {}", agent.id, e);
             }
         }
 
-        // add edges into edges
-        for edge in agent_stream.edges().iter() {
-            self.add_edge(edge).unwrap_or_else(|e| {
-                log::error!("Failed to add_edge {}: {}", edge.source, e);
+        // add channels
+        for channel in agent_stream.channels().iter() {
+            self.add_channel(channel).unwrap_or_else(|e| {
+                log::error!("Failed to add_channel {}: {}", channel.source, e);
             });
         }
 
@@ -261,12 +261,12 @@ impl ASKit {
 
         stream.stop(self).await?;
 
-        // Remove all nodes and edges associated with the stream
-        for node in stream.nodes() {
-            self.remove_agent(&node.id).await?;
+        // Remove all agents and channels associated with the stream
+        for agent in stream.agents() {
+            self.remove_agent(&agent.id).await?;
         }
-        for edge in stream.edges() {
-            self.remove_edge(edge);
+        for channel in stream.channels() {
+            self.remove_channel(channel);
         }
 
         Ok(())
@@ -280,38 +280,38 @@ impl ASKit {
         Ok(())
     }
 
-    pub fn new_agent_stream_node(&self, def_name: &str) -> Result<AgentStreamNode, AgentError> {
+    pub fn new_agent_stream_agent(&self, def_name: &str) -> Result<AgentStreamNode, AgentError> {
         let def = self
             .get_agent_definition(def_name)
             .ok_or_else(|| AgentError::AgentDefinitionNotFound(def_name.to_string()))?;
         AgentStreamNode::new(&def)
     }
 
-    pub fn add_agent_stream_node(
+    pub fn add_agent_stream_agent(
         &self,
         stream_id: &str,
-        node: &AgentStreamNode,
+        agent: &AgentStreamNode,
     ) -> Result<(), AgentError> {
         let mut streams = self.streams.lock().unwrap();
         let Some(stream) = streams.get_mut(stream_id) else {
             return Err(AgentError::StreamNotFound(stream_id.to_string()));
         };
-        stream.add_node(node.clone());
-        self.add_agent(stream_id, node)
+        stream.add_agent(agent.clone());
+        self.add_agent(stream_id, agent)
     }
 
     pub(crate) fn add_agent(
         &self,
         stream_id: &str,
-        node: &AgentStreamNode,
+        agent: &AgentStreamNode,
     ) -> Result<(), AgentError> {
         let mut agents = self.agents.lock().unwrap();
-        if agents.contains_key(&node.id) {
-            return Err(AgentError::AgentAlreadyExists(node.id.to_string()));
+        if agents.contains_key(&agent.id) {
+            return Err(AgentError::AgentAlreadyExists(agent.id.to_string()));
         }
-        let mut agent = agent_new(self.clone(), node.id.clone(), node.spec.clone())?;
-        agent.set_stream_id(stream_id.to_string());
-        agents.insert(node.id.clone(), Arc::new(AsyncMutex::new(agent)));
+        let mut ag = agent_new(self.clone(), agent.id.clone(), agent.spec.clone())?;
+        ag.set_stream_id(stream_id.to_string());
+        agents.insert(agent.id.clone(), Arc::new(AsyncMutex::new(ag)));
         Ok(())
     }
 
@@ -320,100 +320,100 @@ impl ASKit {
         agents.get(agent_id).cloned()
     }
 
-    pub fn add_agent_stream_edge(
+    pub fn add_agent_stream_channel(
         &self,
         stream_id: &str,
-        edge: &AgentStreamEdge,
+        channel: &AgentStreamEdge,
     ) -> Result<(), AgentError> {
         let mut streams = self.streams.lock().unwrap();
         let Some(stream) = streams.get_mut(stream_id) else {
             return Err(AgentError::StreamNotFound(stream_id.to_string()));
         };
-        stream.add_edge(edge.clone());
-        self.add_edge(edge)?;
+        stream.add_channels(channel.clone());
+        self.add_channel(channel)?;
         Ok(())
     }
 
-    pub(crate) fn add_edge(&self, edge: &AgentStreamEdge) -> Result<(), AgentError> {
+    pub(crate) fn add_channel(&self, channel: &AgentStreamEdge) -> Result<(), AgentError> {
         // check if the source agent exists
         {
             let agents = self.agents.lock().unwrap();
-            if !agents.contains_key(&edge.source) {
-                return Err(AgentError::SourceAgentNotFound(edge.source.to_string()));
+            if !agents.contains_key(&channel.source) {
+                return Err(AgentError::SourceAgentNotFound(channel.source.to_string()));
             }
         }
 
         // check if handles are valid
-        if edge.source_handle.is_empty() {
+        if channel.source_handle.is_empty() {
             return Err(AgentError::EmptySourceHandle);
         }
-        if edge.target_handle.is_empty() {
+        if channel.target_handle.is_empty() {
             return Err(AgentError::EmptyTargetHandle);
         }
 
-        let mut edges = self.edges.lock().unwrap();
-        if let Some(targets) = edges.get_mut(&edge.source) {
+        let mut channels = self.channels.lock().unwrap();
+        if let Some(targets) = channels.get_mut(&channel.source) {
             if targets
                 .iter()
                 .any(|(target, source_handle, target_handle)| {
-                    *target == edge.target
-                        && *source_handle == edge.source_handle
-                        && *target_handle == edge.target_handle
+                    *target == channel.target
+                        && *source_handle == channel.source_handle
+                        && *target_handle == channel.target_handle
                 })
             {
-                return Err(AgentError::EdgeAlreadyExists);
+                return Err(AgentError::ChannelAlreadyExists);
             }
             targets.push((
-                edge.target.clone(),
-                edge.source_handle.clone(),
-                edge.target_handle.clone(),
+                channel.target.clone(),
+                channel.source_handle.clone(),
+                channel.target_handle.clone(),
             ));
         } else {
-            edges.insert(
-                edge.source.clone(),
+            channels.insert(
+                channel.source.clone(),
                 vec![(
-                    edge.target.clone(),
-                    edge.source_handle.clone(),
-                    edge.target_handle.clone(),
+                    channel.target.clone(),
+                    channel.source_handle.clone(),
+                    channel.target_handle.clone(),
                 )],
             );
         }
         Ok(())
     }
 
-    pub async fn remove_agent_stream_node(
+    pub async fn remove_agent_stream_agent(
         &self,
         stream_id: &str,
-        node_id: &str,
+        agent_id: &str,
     ) -> Result<(), AgentError> {
         {
             let mut streams = self.streams.lock().unwrap();
             let Some(stream) = streams.get_mut(stream_id) else {
                 return Err(AgentError::StreamNotFound(stream_id.to_string()));
             };
-            stream.remove_node(node_id);
+            stream.remove_agent(agent_id);
         }
-        self.remove_agent(node_id).await?;
+        self.remove_agent(agent_id).await?;
         Ok(())
     }
 
     pub(crate) async fn remove_agent(&self, agent_id: &str) -> Result<(), AgentError> {
         self.stop_agent(agent_id).await?;
 
-        // remove from edges
+        // remove from channels
         {
-            let mut edges = self.edges.lock().unwrap();
+            let mut channels = self.channels.lock().unwrap();
             let mut sources_to_remove = Vec::new();
-            for (source, targets) in edges.iter_mut() {
+            for (source, targets) in channels.iter_mut() {
                 targets.retain(|(target, _, _)| target != agent_id);
                 if targets.is_empty() {
                     sources_to_remove.push(source.clone());
                 }
             }
             for source in sources_to_remove {
-                edges.swap_remove(&source);
+                channels.swap_remove(&source);
             }
-            edges.swap_remove(agent_id);
+            channels.swap_remove(agent_id);
         }
 
         // remove from agents
@@ -425,42 +425,42 @@ impl ASKit {
         Ok(())
     }
 
-    pub fn remove_agent_stream_edge(
+    pub fn remove_agent_stream_channel(
         &self,
         stream_id: &str,
-        edge_id: &str,
+        channel_id: &str,
     ) -> Result<(), AgentError> {
         let mut streams = self.streams.lock().unwrap();
         let Some(stream) = streams.get_mut(stream_id) else {
             return Err(AgentError::StreamNotFound(stream_id.to_string()));
         };
-        let Some(edge) = stream.remove_edge(edge_id) else {
-            return Err(AgentError::EdgeNotFound(edge_id.to_string()));
+        let Some(channel) = stream.remove_channel(channel_id) else {
+            return Err(AgentError::ChannelNotFound(channel_id.to_string()));
         };
-        self.remove_edge(&edge);
+        self.remove_channel(&channel);
         Ok(())
     }
 
-    pub(crate) fn remove_edge(&self, edge: &AgentStreamEdge) {
-        let mut edges = self.edges.lock().unwrap();
-        if let Some(targets) = edges.get_mut(&edge.source) {
+    pub(crate) fn remove_channel(&self, channel: &AgentStreamEdge) {
+        let mut channels = self.channels.lock().unwrap();
+        if let Some(targets) = channels.get_mut(&channel.source) {
             targets.retain(|(target, source_handle, target_handle)| {
-                *target != edge.target
-                    || *source_handle != edge.source_handle
-                    || *target_handle != edge.target_handle
+                *target != channel.target
+                    || *source_handle != channel.source_handle
+                    || *target_handle != channel.target_handle
             });
             if targets.is_empty() {
-                edges.swap_remove(&edge.source);
+                channels.swap_remove(&channel.source);
             }
         }
     }
 
     pub fn copy_sub_stream(
         &self,
-        nodes: &Vec<AgentStreamNode>,
-        edges: &Vec<AgentStreamEdge>,
+        agents: &Vec<AgentStreamNode>,
+        channels: &Vec<AgentStreamEdge>,
     ) -> (Vec<AgentStreamNode>, Vec<AgentStreamEdge>) {
-        stream::copy_sub_stream(nodes, edges)
+        stream::copy_sub_stream(agents, channels)
     }
 
     pub async fn start_agent_stream(&self, id: &str) -> Result<(), AgentError> {

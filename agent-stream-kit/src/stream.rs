@@ -18,9 +18,9 @@ pub struct AgentStream {
 
     name: String,
 
-    nodes: Vec<AgentStreamNode>,
+    agents: Vec<AgentStreamNode>,
 
-    edges: Vec<AgentStreamEdge>,
+    channels: Vec<AgentStreamEdge>,
 
     #[serde(flatten)]
     pub extensions: FnvIndexMap<String, Value>,
@@ -31,8 +31,8 @@ impl AgentStream {
         Self {
             id: new_id(),
             name,
-            nodes: Vec::new(),
-            edges: Vec::new(),
+            agents: Vec::new(),
+            channels: Vec::new(),
             extensions: FnvIndexMap::default(),
         }
     }
@@ -49,45 +49,50 @@ impl AgentStream {
         self.name = new_name;
     }
 
-    pub fn nodes(&self) -> &Vec<AgentStreamNode> {
-        &self.nodes
+    pub fn agents(&self) -> &Vec<AgentStreamNode> {
+        &self.agents
     }
 
-    pub fn add_node(&mut self, node: AgentStreamNode) {
-        self.nodes.push(node);
+    pub fn add_agent(&mut self, agent: AgentStreamNode) {
+        self.agents.push(agent);
     }
 
-    pub fn remove_node(&mut self, node_id: &str) {
-        self.nodes.retain(|node| node.id != node_id);
+    pub fn remove_agent(&mut self, agent_id: &str) {
+        self.agents.retain(|agent| agent.id != agent_id);
     }
 
-    pub fn set_nodes(&mut self, nodes: Vec<AgentStreamNode>) {
-        self.nodes = nodes;
+    pub fn set_agents(&mut self, agents: Vec<AgentStreamNode>) {
+        self.agents = agents;
     }
 
-    pub fn edges(&self) -> &Vec<AgentStreamEdge> {
-        &self.edges
+    pub fn channels(&self) -> &Vec<AgentStreamEdge> {
+        &self.channels
     }
 
-    pub fn add_edge(&mut self, edge: AgentStreamEdge) {
-        self.edges.push(edge);
+    pub fn add_channels(&mut self, channel: AgentStreamEdge) {
+        self.channels.push(channel);
     }
 
-    pub fn remove_edge(&mut self, edge_id: &str) -> Option<AgentStreamEdge> {
-        if let Some(edge) = self.edges.iter().find(|edge| edge.id == edge_id).cloned() {
-            self.edges.retain(|e| e.id != edge_id);
-            Some(edge)
+    pub fn remove_channel(&mut self, channel_id: &str) -> Option<AgentStreamEdge> {
+        if let Some(channel) = self
+            .channels
+            .iter()
+            .find(|channel| channel.id == channel_id)
+            .cloned()
+        {
+            self.channels.retain(|e| e.id != channel_id);
+            Some(channel)
         } else {
             None
         }
     }
 
-    pub fn set_edges(&mut self, edges: Vec<AgentStreamEdge>) {
-        self.edges = edges;
+    pub fn set_channels(&mut self, channels: Vec<AgentStreamEdge>) {
+        self.channels = channels;
     }
 
     pub async fn start(&self, askit: &ASKit) -> Result<(), AgentError> {
-        for agent in self.nodes.iter() {
+        for agent in self.agents.iter() {
             if !agent.enabled {
                 continue;
             }
@@ -99,7 +104,7 @@ impl AgentStream {
     }
 
     pub async fn stop(&self, askit: &ASKit) -> Result<(), AgentError> {
-        for agent in self.nodes.iter() {
+        for agent in self.agents.iter() {
             if !agent.enabled {
                 continue;
             }
@@ -111,7 +116,7 @@ impl AgentStream {
     }
 
     pub fn disable_all_nodes(&mut self) {
-        for node in self.nodes.iter_mut() {
+        for node in self.agents.iter_mut() {
             node.enabled = false;
         }
     }
@@ -131,35 +136,35 @@ impl AgentStream {
 }
 
 pub fn copy_sub_stream(
-    nodes: &Vec<AgentStreamNode>,
-    edges: &Vec<AgentStreamEdge>,
+    agents: &Vec<AgentStreamNode>,
+    channels: &Vec<AgentStreamEdge>,
 ) -> (Vec<AgentStreamNode>, Vec<AgentStreamEdge>) {
-    let mut new_nodes = Vec::new();
-    let mut node_id_map = FnvIndexMap::default();
-    for node in nodes {
+    let mut new_agents = Vec::new();
+    let mut agent_id_map = FnvIndexMap::default();
+    for agent in agents {
         let new_id = new_id();
-        node_id_map.insert(node.id.clone(), new_id.clone());
-        let mut new_node = node.clone();
-        new_node.id = new_id;
-        new_nodes.push(new_node);
+        agent_id_map.insert(agent.id.clone(), new_id.clone());
+        let mut new_agent = agent.clone();
+        new_agent.id = new_id;
+        new_agents.push(new_agent);
     }
 
-    let mut new_edges = Vec::new();
-    for edge in edges {
-        let Some(source) = node_id_map.get(&edge.source) else {
+    let mut new_channels = Vec::new();
+    for channel in channels {
+        let Some(source) = agent_id_map.get(&channel.source) else {
             continue;
         };
-        let Some(target) = node_id_map.get(&edge.target) else {
+        let Some(target) = agent_id_map.get(&channel.target) else {
             continue;
         };
-        let mut new_edge = edge.clone();
-        new_edge.id = new_id();
-        new_edge.source = source.clone();
-        new_edge.target = target.clone();
-        new_edges.push(new_edge);
+        let mut new_channel = channel.clone();
+        new_channel.id = new_id();
+        new_channel.source = source.clone();
+        new_channel.target = target.clone();
+        new_channels.push(new_channel);
     }
 
-    (new_nodes, new_edges)
+    (new_agents, new_channels)
 }
 
 // AgentStreamNode

@@ -47,14 +47,14 @@ fn test_agent_stream_add_agent() {
     let askit = ASKit::init().unwrap();
 
     let mut stream = AgentStream::new("test_stream".into());
-    assert_eq!(stream.nodes().len(), 0);
+    assert_eq!(stream.agents().len(), 0);
 
     let def = askit.get_agent_definition(COUNTER_DEF).unwrap();
     let node = AgentStreamNode::new(&def).unwrap();
 
-    stream.add_node(node);
+    stream.add_agent(node);
 
-    assert_eq!(stream.nodes().len(), 1);
+    assert_eq!(stream.agents().len(), 1);
 }
 
 #[test]
@@ -62,16 +62,16 @@ fn test_agent_stream_remove_agent() {
     let askit = ASKit::init().unwrap();
 
     let mut stream = AgentStream::new("test_stream".into());
-    assert_eq!(stream.nodes().len(), 0);
+    assert_eq!(stream.agents().len(), 0);
 
     let def = askit.get_agent_definition(COUNTER_DEF).unwrap();
     let node = AgentStreamNode::new(&def).unwrap();
 
     let node_id = node.id.clone();
 
-    stream.add_node(node);
-    assert_eq!(stream.nodes().len(), 1);
+    stream.add_agent(node);
+    assert_eq!(stream.agents().len(), 1);
 
-    stream.remove_node(&node_id);
-    assert_eq!(stream.nodes().len(), 0);
+    stream.remove_agent(&node_id);
+    assert_eq!(stream.agents().len(), 0);
 }

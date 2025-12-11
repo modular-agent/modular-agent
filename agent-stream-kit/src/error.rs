@@ -53,11 +53,11 @@ pub enum AgentError {
     #[error("Target handle is empty")]
     EmptyTargetHandle,
 
-    #[error("Edge already exists")]
-    EdgeAlreadyExists,
+    #[error("Channel already exists")]
+    ChannelAlreadyExists,
 
-    #[error("Edge {0} not found")]
-    EdgeNotFound(String),
+    #[error("Channel {0} not found")]
+    ChannelNotFound(String),
 
     #[error("Agent stream {0} not found")]
     StreamNotFound(String),

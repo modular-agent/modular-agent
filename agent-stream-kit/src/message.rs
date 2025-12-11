@@ -81,7 +81,7 @@ pub async fn agent_out(
 ) {
     let targets;
     {
-        let env_edges = askit.edges.lock().unwrap();
+        let env_edges = askit.channels.lock().unwrap();
         targets = env_edges.get(&source_agent).cloned();
     }
 
@@ -137,7 +137,7 @@ pub async fn board_out(askit: &ASKit, name: String, ctx: AgentContext, value: Ag
 
             let edges;
             {
-                let env_edges = askit.edges.lock().unwrap();
+                let env_edges = askit.channels.lock().unwrap();
                 edges = env_edges.get(&node).cloned();
             }
             let Some(edges) = edges else {
