@@ -2,27 +2,27 @@ extern crate agent_stream_kit as askit;
 
 mod common;
 
-use askit::{ASKit, AgentStream, AgentStreamNode};
+use askit::{ASKit, AgentSpec, AgentStream};
 
 const COUNTER_DEF: &str = concat!(module_path!(), "::common::CounterAgent");
 
 // AgentStreamNode
 
 #[test]
-fn test_agent_stream_node_new() {
+fn test_agent_spec_from_def() {
     let askit = ASKit::init().unwrap();
 
     let def = askit.get_agent_definition(COUNTER_DEF).unwrap();
 
-    let node = AgentStreamNode::new(&def).unwrap();
+    let spec = AgentSpec::from_def(&def);
 
-    assert_eq!(node.spec.def_name, COUNTER_DEF);
-    assert!(!node.enabled);
+    assert_eq!(spec.def_name, COUNTER_DEF);
+    assert!(!spec.enabled);
 
-    let node2 = AgentStreamNode::new(&def).unwrap();
-    assert_eq!(node2.spec.def_name, COUNTER_DEF);
-    assert!(node.id != node2.id);
-    assert!(!node2.enabled);
+    let spec2 = AgentSpec::from_def(&def);
+    assert_eq!(spec2.def_name, COUNTER_DEF);
+    assert!(spec.id != spec2.id);
+    assert!(!spec2.enabled);
 }
 
 // AgentStream
@@ -50,9 +50,9 @@ fn test_agent_stream_add_agent() {
     assert_eq!(stream.agents().len(), 0);
 
     let def = askit.get_agent_definition(COUNTER_DEF).unwrap();
-    let node = AgentStreamNode::new(&def).unwrap();
+    let spec = AgentSpec::from_def(&def);
 
-    stream.add_agent(node);
+    stream.add_agent(spec);
 
     assert_eq!(stream.agents().len(), 1);
 }
@@ -65,13 +65,13 @@ fn test_agent_stream_remove_agent() {
     assert_eq!(stream.agents().len(), 0);
 
     let def = askit.get_agent_definition(COUNTER_DEF).unwrap();
-    let node = AgentStreamNode::new(&def).unwrap();
+    let spec = AgentSpec::from_def(&def);
 
-    let node_id = node.id.clone();
+    let spec_id = spec.id.clone();
 
-    stream.add_agent(node);
+    stream.add_agent(spec);
     assert_eq!(stream.agents().len(), 1);
 
-    stream.remove_agent(&node_id);
+    stream.remove_agent(&spec_id);
     assert_eq!(stream.agents().len(), 0);
 }

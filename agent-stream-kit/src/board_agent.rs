@@ -4,10 +4,11 @@ use async_trait::async_trait;
 
 use askit_macros::askit_agent;
 
-use crate::agent::{Agent, AgentData, AgentSpec, AsAgent};
+use crate::agent::{Agent, AgentData, AsAgent};
 use crate::askit::ASKit;
 use crate::context::AgentContext;
 use crate::error::AgentError;
+use crate::spec::AgentSpec;
 use crate::value::AgentValue;
 
 static CONFIG_BOARD_NAME: &str = "board";

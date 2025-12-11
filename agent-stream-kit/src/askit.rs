@@ -4,14 +4,14 @@ use std::sync::{Arc, Mutex};
 use tokio::sync::{Mutex as AsyncMutex, mpsc};
 
 use crate::FnvIndexMap;
-use crate::agent::{Agent, AgentMessage, AgentSpec, AgentStatus, agent_new};
+use crate::agent::{Agent, AgentMessage, AgentStatus, agent_new};
 use crate::config::{AgentConfigs, AgentConfigsMap};
 use crate::context::AgentContext;
 use crate::definition::{AgentConfigSpecs, AgentDefinition, AgentDefinitions};
 use crate::error::AgentError;
 use crate::message::{self, AgentEventMessage};
 use crate::registry;
-use crate::stream::{self, AgentStream, AgentStreamNode, AgentStreams, ChannelSpec};
+use crate::spec::{self, AgentSpec, AgentStream, AgentStreams, ChannelSpec};
 use crate::value::AgentValue;
 
 const MESSAGE_LIMIT: usize = 1024;
@@ -280,17 +280,17 @@ impl ASKit {
         Ok(())
     }
 
-    pub fn new_agent_stream_agent(&self, def_name: &str) -> Result<AgentStreamNode, AgentError> {
+    pub fn new_agent_stream_agent(&self, def_name: &str) -> Result<AgentSpec, AgentError> {
         let def = self
             .get_agent_definition(def_name)
             .ok_or_else(|| AgentError::AgentDefinitionNotFound(def_name.to_string()))?;
-        AgentStreamNode::new(&def)
+        Ok(AgentSpec::from_def(&def))
     }
 
     pub fn add_agent_stream_agent(
         &self,
         stream_id: &str,
-        agent: &AgentStreamNode,
+        agent: &AgentSpec,
     ) -> Result<(), AgentError> {
         let mut streams = self.streams.lock().unwrap();
         let Some(stream) = streams.get_mut(stream_id) else {
@@ -300,18 +300,14 @@ impl ASKit {
         self.add_agent(stream_id, agent)
     }
 
-    pub(crate) fn add_agent(
-        &self,
-        stream_id: &str,
-        agent: &AgentStreamNode,
-    ) -> Result<(), AgentError> {
+    pub(crate) fn add_agent(&self, stream_id: &str, spec: &AgentSpec) -> Result<(), AgentError> {
         let mut agents = self.agents.lock().unwrap();
-        if agents.contains_key(&agent.id) {
-            return Err(AgentError::AgentAlreadyExists(agent.id.to_string()));
+        if agents.contains_key(&spec.id) {
+            return Err(AgentError::AgentAlreadyExists(spec.id.to_string()));
         }
-        let mut ag = agent_new(self.clone(), agent.id.clone(), agent.spec.clone())?;
-        ag.set_stream_id(stream_id.to_string());
-        agents.insert(agent.id.clone(), Arc::new(AsyncMutex::new(ag)));
+        let mut agent = agent_new(self.clone(), spec.id.clone(), spec.clone())?;
+        agent.set_stream_id(stream_id.to_string());
+        agents.insert(spec.id.clone(), Arc::new(AsyncMutex::new(agent)));
         Ok(())
     }
 
@@ -457,10 +453,10 @@ impl ASKit {
 
     pub fn copy_sub_stream(
         &self,
-        agents: &Vec<AgentStreamNode>,
+        agents: &Vec<AgentSpec>,
         channels: &Vec<ChannelSpec>,
-    ) -> (Vec<AgentStreamNode>, Vec<ChannelSpec>) {
-        stream::copy_sub_stream(agents, channels)
+    ) -> (Vec<AgentSpec>, Vec<ChannelSpec>) {
+        spec::copy_sub_stream(agents, channels)
     }
 
     pub async fn start_agent_stream(&self, id: &str) -> Result<(), AgentError> {

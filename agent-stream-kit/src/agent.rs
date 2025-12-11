@@ -1,14 +1,13 @@
 use std::any::Any;
 
 use async_trait::async_trait;
-use serde::{Deserialize, Serialize};
 
 use crate::askit::ASKit;
 use crate::config::AgentConfigs;
 use crate::context::AgentContext;
-use crate::definition::AgentConfigSpecs;
 use crate::error::AgentError;
 use crate::runtime::runtime;
+use crate::spec::AgentSpec;
 use crate::value::AgentValue;
 
 #[derive(Debug, Default, Clone, PartialEq)]
@@ -121,29 +120,6 @@ impl AgentData {
             status: AgentStatus::Init,
         }
     }
-}
-
-/// Information held by each agent.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AgentSpec {
-    /// Name of the AgentDefinition.
-    pub def_name: String,
-
-    /// List of input pin names.
-    #[serde(skip_serializing_if = "Option::is_none", default)]
-    pub inputs: Option<Vec<String>>,
-
-    /// List of output pin names.
-    #[serde(skip_serializing_if = "Option::is_none", default)]
-    pub outputs: Option<Vec<String>>,
-
-    /// Config values.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub configs: Option<AgentConfigs>,
-
-    /// Config specs.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub config_specs: Option<AgentConfigSpecs>,
 }
 
 pub trait HasAgentData {

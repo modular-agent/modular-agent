@@ -15,7 +15,7 @@ mod message;
 mod output;
 mod registry;
 mod runtime;
-mod stream;
+mod spec;
 pub mod test_utils;
 mod value;
 
@@ -39,9 +39,7 @@ pub type FnvIndexSet<T> = indexmap::IndexSet<T, fnv::FnvBuildHasher>;
 // Re-exports askit_macros
 pub use askit_macros::askit_agent;
 
-pub use agent::{
-    Agent, AgentData, AgentSpec, AgentStatus, AsAgent, HasAgentData, agent_new, new_agent_boxed,
-};
+pub use agent::{Agent, AgentData, AgentStatus, AsAgent, HasAgentData, agent_new, new_agent_boxed};
 pub use askit::{ASKit, ASKitEvent, ASKitObserver};
 pub use config::{AgentConfigs, AgentConfigsMap};
 pub use context::AgentContext;
@@ -49,5 +47,5 @@ pub use definition::{AgentConfigSpec, AgentConfigSpecs, AgentDefinition, AgentDe
 pub use error::AgentError;
 pub use output::AgentOutput;
 pub use registry::AgentRegistration;
-pub use stream::{AgentStream, ChannelSpec, AgentStreamNode, AgentStreams};
+pub use spec::{AgentSpec, AgentStream, AgentStreams, ChannelSpec};
 pub use value::{AgentValue, AgentValueMap};

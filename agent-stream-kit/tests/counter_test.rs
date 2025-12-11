@@ -1,7 +1,7 @@
 extern crate agent_stream_kit as askit;
 
 use askit::{
-    ASKit, AgentContext, AgentStatus, AgentStream, AgentStreamNode, AgentValue, ChannelSpec,
+    ASKit, AgentContext, AgentSpec, AgentStatus, AgentStream, AgentValue, ChannelSpec,
     test_utils::{TestProbeAgent, probe_receiver},
 };
 
@@ -27,8 +27,8 @@ fn test_register_agents() {
 fn test_agent_new() {
     let askit = ASKit::init().unwrap();
     let def = askit.get_agent_definition(COUNTER_DEF).unwrap();
-
-    let agent = askit::agent_new(askit.clone(), "agent_1".into(), def.to_spec()).unwrap();
+    let spec = AgentSpec::from_def(&def);
+    let agent = askit::agent_new(askit.clone(), "agent_1".into(), spec).unwrap();
     assert_eq!(agent.def_name(), COUNTER_DEF);
     assert_eq!(agent.id(), "agent_1");
     assert_eq!(agent.status(), &AgentStatus::Init);
@@ -40,8 +40,8 @@ fn test_agent_new() {
 async fn test_agent_start() {
     let askit = ASKit::init().unwrap();
     let def = askit.get_agent_definition(COUNTER_DEF).unwrap();
-
-    let mut agent = askit::agent_new(askit.clone(), "agent_1".into(), def.to_spec()).unwrap();
+    let spec = AgentSpec::from_def(&def);
+    let mut agent = askit::agent_new(askit.clone(), "agent_1".into(), spec).unwrap();
     agent.start().await.unwrap();
 
     assert_eq!(agent.status(), &AgentStatus::Start);
@@ -56,8 +56,8 @@ async fn test_agent_stop() {
     askit.ready().await.unwrap();
 
     let def = askit.get_agent_definition(COUNTER_DEF).unwrap();
-
-    let mut agent = askit::agent_new(askit.clone(), "agent_1".into(), def.to_spec()).unwrap();
+    let spec = AgentSpec::from_def(&def);
+    let mut agent = askit::agent_new(askit.clone(), "agent_1".into(), spec).unwrap();
     agent.start().await.unwrap();
 
     let ctx = AgentContext::new();
@@ -78,28 +78,28 @@ async fn test_agent_process() {
 
     // build a flow: Counter -> TestProbe
     let counter_def = askit.get_agent_definition(COUNTER_DEF).unwrap();
-    let mut counter_node = AgentStreamNode::new(&counter_def).unwrap();
-    counter_node.enabled = true;
+    let mut counter_spec = AgentSpec::from_def(&counter_def);
+    counter_spec.enabled = true;
 
     let probe_def = askit.get_agent_definition(PROBE_DEF).unwrap();
-    let mut probe_node = AgentStreamNode::new(&probe_def).unwrap();
-    probe_node.enabled = true;
+    let mut probe_spec = AgentSpec::from_def(&probe_def);
+    probe_spec.enabled = true;
 
-    let counter_id = counter_node.id.clone();
-    let probe_id = probe_node.id.clone();
+    let counter_id = counter_spec.id.clone();
+    let probe_id = probe_spec.id.clone();
 
-    let mut flow = AgentStream::new("counter_probe_flow".into());
-    flow.add_agent(counter_node);
-    flow.add_agent(probe_node);
-    flow.add_channels(ChannelSpec {
-        id: "edge_counter_probe".into(),
+    let mut stream = AgentStream::new("counter_probe_stream".into());
+    stream.add_agent(counter_spec);
+    stream.add_agent(probe_spec);
+    stream.add_channels(ChannelSpec {
+        id: "ch_counter_probe".into(),
         source: counter_id.clone(),
         source_handle: "count".into(),
         target: probe_id.clone(),
         target_handle: "in".into(),
     });
 
-    askit.add_agent_stream(&flow).unwrap();
+    askit.add_agent_stream(&stream).unwrap();
     askit.ready().await.unwrap();
 
     askit

@@ -117,7 +117,8 @@ mod tests {
     async fn probe_receives_in_order() {
         let askit = ASKit::new();
         let def = TestProbeAgent::agent_definition();
-        let mut probe = TestProbeAgent::new(askit, "p1".into(), def.to_spec()).unwrap();
+        let spec = AgentSpec::from_def(&def);
+        let mut probe = TestProbeAgent::new(askit, "p1".into(), spec).unwrap();
 
         probe
             .process(AgentContext::new(), "in".into(), AgentValue::integer(1))
@@ -138,7 +139,8 @@ mod tests {
     async fn probe_times_out() {
         let askit = ASKit::new();
         let def = TestProbeAgent::agent_definition();
-        let probe = TestProbeAgent::new(askit, "p1".into(), def.to_spec()).unwrap();
+        let spec = AgentSpec::from_def(&def);
+        let probe = TestProbeAgent::new(askit, "p1".into(), spec).unwrap();
         let err = probe
             .recv_with_timeout(Duration::from_millis(10))
             .await
@@ -150,7 +152,8 @@ mod tests {
     async fn probe_receiver_clone_works() {
         let askit = ASKit::new();
         let def = TestProbeAgent::agent_definition();
-        let mut probe = TestProbeAgent::new(askit, "p1".into(), def.to_spec()).unwrap();
+        let spec = AgentSpec::from_def(&def);
+        let mut probe = TestProbeAgent::new(askit, "p1".into(), spec).unwrap();
         let rx1 = probe.probe_receiver();
         let rx2 = probe.probe_receiver();
 

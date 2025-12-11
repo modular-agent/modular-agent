@@ -3,9 +3,10 @@ use std::ops::Not;
 use serde::{Deserialize, Serialize};
 
 use crate::FnvIndexMap;
-use crate::agent::{Agent, AgentSpec};
+use crate::agent::Agent;
 use crate::askit::ASKit;
 use crate::error::AgentError;
+use crate::spec::AgentSpec;
 use crate::value::AgentValue;
 
 pub type AgentDefinitions = FnvIndexMap<String, AgentDefinition>;
@@ -37,8 +38,6 @@ pub struct AgentDefinition {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub global_configs: Option<AgentGlobalConfigSpecs>,
 
-    // #[serde(skip_serializing_if = "Option::is_none")]
-    // pub display_configs: Option<AgentDisplayConfigSpecs>,
     #[serde(default, skip_serializing_if = "<&bool>::not")]
     pub native_thread: bool,
 
@@ -401,6 +400,7 @@ impl AgentDefinition {
 
     pub fn to_spec(&self) -> AgentSpec {
         AgentSpec {
+            id: String::new(),
             def_name: self.name.clone(),
             inputs: self.inputs.clone(),
             outputs: self.outputs.clone(),
@@ -410,7 +410,8 @@ impl AgentDefinition {
                     .collect()
             }),
             config_specs: self.configs.clone(),
-            // display_config_specs: self.display_configs.clone(),
+            enabled: false,
+            extensions: FnvIndexMap::default(),
         }
     }
 }

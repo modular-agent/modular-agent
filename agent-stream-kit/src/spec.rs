@@ -1,12 +1,13 @@
+use std::ops::Not;
 use std::sync::atomic::AtomicUsize;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::FnvIndexMap;
-use crate::agent::AgentSpec;
 use crate::askit::ASKit;
-use crate::definition::AgentDefinition;
+use crate::config::AgentConfigs;
+use crate::definition::{AgentConfigSpecs, AgentDefinition};
 use crate::error::AgentError;
 
 pub type AgentStreams = FnvIndexMap<String, AgentStream>;
@@ -18,7 +19,7 @@ pub struct AgentStream {
 
     name: String,
 
-    agents: Vec<AgentStreamNode>,
+    agents: Vec<AgentSpec>,
 
     channels: Vec<ChannelSpec>,
 
@@ -49,11 +50,11 @@ impl AgentStream {
         self.name = new_name;
     }
 
-    pub fn agents(&self) -> &Vec<AgentStreamNode> {
+    pub fn agents(&self) -> &Vec<AgentSpec> {
         &self.agents
     }
 
-    pub fn add_agent(&mut self, agent: AgentStreamNode) {
+    pub fn add_agent(&mut self, agent: AgentSpec) {
         self.agents.push(agent);
     }
 
@@ -61,7 +62,7 @@ impl AgentStream {
         self.agents.retain(|agent| agent.id != agent_id);
     }
 
-    pub fn set_agents(&mut self, agents: Vec<AgentStreamNode>) {
+    pub fn set_agents(&mut self, agents: Vec<AgentSpec>) {
         self.agents = agents;
     }
 
@@ -136,9 +137,9 @@ impl AgentStream {
 }
 
 pub fn copy_sub_stream(
-    agents: &Vec<AgentStreamNode>,
+    agents: &Vec<AgentSpec>,
     channels: &Vec<ChannelSpec>,
-) -> (Vec<AgentStreamNode>, Vec<ChannelSpec>) {
+) -> (Vec<AgentSpec>, Vec<ChannelSpec>) {
     let mut new_agents = Vec::new();
     let mut agent_id_map = FnvIndexMap::default();
     for agent in agents {
@@ -167,37 +168,51 @@ pub fn copy_sub_stream(
     (new_agents, new_channels)
 }
 
-// AgentStreamNode
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct AgentStreamNode {
+/// Information held by each agent.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentSpec {
+    #[serde(skip_serializing_if = "String::is_empty", default)]
     pub id: String,
 
+    /// Name of the AgentDefinition.
+    #[serde(skip_serializing_if = "String::is_empty", default)]
+    pub def_name: String,
+
+    /// List of input pin names.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub inputs: Option<Vec<String>>,
+
+    /// List of output pin names.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub outputs: Option<Vec<String>>,
+
+    /// Config values.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub configs: Option<AgentConfigs>,
+
+    /// Config specs.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub config_specs: Option<AgentConfigSpecs>,
+
+    #[serde(default, skip_serializing_if = "<&bool>::not")]
     pub enabled: bool,
 
-    pub spec: AgentSpec,
-
     #[serde(flatten)]
-    pub extensions: FnvIndexMap<String, Value>,
+    pub extensions: FnvIndexMap<String, serde_json::Value>,
 }
 
-impl AgentStreamNode {
-    pub fn new(def: &AgentDefinition) -> Result<Self, AgentError> {
-        let spec = def.to_spec();
-
-        Ok(Self {
-            id: new_id(),
-            enabled: false,
-            spec,
-            extensions: FnvIndexMap::default(),
-        })
+impl AgentSpec {
+    pub fn from_def(def: &AgentDefinition) -> Self {
+        let mut spec = def.to_spec();
+        spec.id = new_id();
+        spec
     }
 }
 
-static NODE_ID_COUNTER: AtomicUsize = AtomicUsize::new(1);
+static ID_COUNTER: AtomicUsize = AtomicUsize::new(1);
 
 fn new_id() -> String {
-    return NODE_ID_COUNTER
+    return ID_COUNTER
         .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
         .to_string();
 }
