@@ -94,7 +94,7 @@ impl ASKit {
         *tx_lock = None;
     }
 
-    pub fn register_agent(&self, def: AgentDefinition) {
+    pub fn register_agent_definiton(&self, def: AgentDefinition) {
         let def_name = def.name.clone();
         let def_global_configs = def.global_configs.clone();
 
@@ -235,14 +235,14 @@ impl ASKit {
 
         // add agents
         for agent in agent_stream.agents().iter() {
-            if let Err(e) = self.add_agent(id, agent) {
+            if let Err(e) = self.add_agent_internal(id.to_string(), agent.clone()) {
                 log::error!("Failed to add_agent {}: {}", agent.id, e);
             }
         }
 
         // add channels
         for channel in agent_stream.channels().iter() {
-            self.add_channel(channel).unwrap_or_else(|e| {
+            self.add_channel_internal(channel.clone()).unwrap_or_else(|e| {
                 log::error!("Failed to add_channel {}: {}", channel.source, e);
             });
         }
@@ -263,10 +263,10 @@ impl ASKit {
 
         // Remove all agents and channels associated with the stream
         for agent in stream.agents() {
-            self.remove_agent(&agent.id).await?;
+            self.remove_agent_internal(&agent.id).await?;
         }
         for channel in stream.channels() {
-            self.remove_channel(channel);
+            self.remove_channel_internal(channel);
         }
 
         Ok(())
@@ -280,57 +280,62 @@ impl ASKit {
         Ok(())
     }
 
-    pub fn new_agent_stream_agent(&self, def_name: &str) -> Result<AgentSpec, AgentError> {
+    /// Create a new agent spec from the given agent definition name.
+    pub fn new_agent_spec(&self, def_name: &str) -> Result<AgentSpec, AgentError> {
         let def = self
             .get_agent_definition(def_name)
             .ok_or_else(|| AgentError::AgentDefinitionNotFound(def_name.to_string()))?;
         Ok(AgentSpec::from_def(&def))
     }
 
-    pub fn add_agent_stream_agent(
+    /// Add an agent to the specified stream.
+    pub fn add_agent(
         &self,
-        stream_id: &str,
-        agent: &AgentSpec,
+        stream_id: String,
+        spec: AgentSpec,
     ) -> Result<(), AgentError> {
         let mut streams = self.streams.lock().unwrap();
-        let Some(stream) = streams.get_mut(stream_id) else {
+        let Some(stream) = streams.get_mut(&stream_id) else {
             return Err(AgentError::StreamNotFound(stream_id.to_string()));
         };
-        stream.add_agent(agent.clone());
-        self.add_agent(stream_id, agent)
+        self.add_agent_internal(stream_id, spec.clone())?;
+        stream.add_agent(spec.clone());
+        Ok(())
     }
 
-    pub(crate) fn add_agent(&self, stream_id: &str, spec: &AgentSpec) -> Result<(), AgentError> {
+    fn add_agent_internal(&self, stream_id: String, spec: AgentSpec) -> Result<(), AgentError> {
         let mut agents = self.agents.lock().unwrap();
         if agents.contains_key(&spec.id) {
             return Err(AgentError::AgentAlreadyExists(spec.id.to_string()));
         }
-        let mut agent = agent_new(self.clone(), spec.id.clone(), spec.clone())?;
-        agent.set_stream_id(stream_id.to_string());
-        agents.insert(spec.id.clone(), Arc::new(AsyncMutex::new(agent)));
+        let spec_id = spec.id.clone();
+        let mut agent = agent_new(self.clone(), spec_id.clone(), spec)?;
+        agent.set_stream_id(stream_id);
+        agents.insert(spec_id, Arc::new(AsyncMutex::new(agent)));
         Ok(())
     }
 
+    /// Get the agent by id.
     pub fn get_agent(&self, agent_id: &str) -> Option<Arc<AsyncMutex<Box<dyn Agent>>>> {
         let agents = self.agents.lock().unwrap();
         agents.get(agent_id).cloned()
     }
 
-    pub fn add_agent_stream_channel(
+    pub fn add_channel(
         &self,
         stream_id: &str,
-        channel: &ChannelSpec,
+        channel: ChannelSpec,
     ) -> Result<(), AgentError> {
         let mut streams = self.streams.lock().unwrap();
         let Some(stream) = streams.get_mut(stream_id) else {
             return Err(AgentError::StreamNotFound(stream_id.to_string()));
         };
         stream.add_channels(channel.clone());
-        self.add_channel(channel)?;
+        self.add_channel_internal(channel)?;
         Ok(())
     }
 
-    pub(crate) fn add_channel(&self, channel: &ChannelSpec) -> Result<(), AgentError> {
+    fn add_channel_internal(&self, channel: ChannelSpec) -> Result<(), AgentError> {
         // check if the source agent exists
         {
             let agents = self.agents.lock().unwrap();
@@ -360,24 +365,24 @@ impl ASKit {
                 return Err(AgentError::ChannelAlreadyExists);
             }
             targets.push((
-                channel.target.clone(),
-                channel.source_handle.clone(),
-                channel.target_handle.clone(),
+                channel.target,
+                channel.source_handle,
+                channel.target_handle,
             ));
         } else {
             channels.insert(
-                channel.source.clone(),
+                channel.source,
                 vec![(
-                    channel.target.clone(),
-                    channel.source_handle.clone(),
-                    channel.target_handle.clone(),
+                    channel.target,
+                    channel.source_handle,
+                    channel.target_handle,
                 )],
             );
         }
         Ok(())
     }
 
-    pub async fn remove_agent_stream_agent(
+    pub async fn remove_agent(
         &self,
         stream_id: &str,
         agent_id: &str,
@@ -389,11 +394,11 @@ impl ASKit {
             };
             stream.remove_agent(agent_id);
         }
-        self.remove_agent(agent_id).await?;
+        self.remove_agent_internal(agent_id).await?;
         Ok(())
     }
 
-    pub(crate) async fn remove_agent(&self, agent_id: &str) -> Result<(), AgentError> {
+    async fn remove_agent_internal(&self, agent_id: &str) -> Result<(), AgentError> {
         self.stop_agent(agent_id).await?;
 
         // remove from channels
@@ -421,7 +426,7 @@ impl ASKit {
         Ok(())
     }
 
-    pub fn remove_agent_stream_channel(
+    pub fn remove_channel(
         &self,
         stream_id: &str,
         channel_id: &str,
@@ -433,11 +438,11 @@ impl ASKit {
         let Some(channel) = stream.remove_channel(channel_id) else {
             return Err(AgentError::ChannelNotFound(channel_id.to_string()));
         };
-        self.remove_channel(&channel);
+        self.remove_channel_internal(&channel);
         Ok(())
     }
 
-    pub(crate) fn remove_channel(&self, channel: &ChannelSpec) {
+    fn remove_channel_internal(&self, channel: &ChannelSpec) {
         let mut channels = self.channels.lock().unwrap();
         if let Some(targets) = channels.get_mut(&channel.source) {
             targets.retain(|(target, source_handle, target_handle)| {

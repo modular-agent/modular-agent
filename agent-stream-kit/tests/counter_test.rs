@@ -11,7 +11,7 @@ const COUNTER_DEF: &str = common::CounterAgent::DEF_NAME;
 const PROBE_DEF: &str = TestProbeAgent::DEF_NAME;
 
 #[test]
-fn test_register_agents() {
+fn test_register_agent_definiton() {
     let askit = ASKit::init().unwrap();
 
     // Check the properties of the counter agent

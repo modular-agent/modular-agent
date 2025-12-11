@@ -749,7 +749,7 @@ fn expand_askit_agent(
             }
 
             pub fn register(askit: &::agent_stream_kit::ASKit) {
-                askit.register_agent(Self::agent_definition());
+                askit.register_agent_definiton(Self::agent_definition());
             }
         }
 
