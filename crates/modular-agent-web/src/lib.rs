@@ -6,3 +6,6 @@ pub mod html_scraper;
 
 #[cfg(feature = "html-to-markdown")]
 pub mod html_to_markdown;
+
+#[cfg(feature = "yt-transcript")]
+pub mod yt_transcript;
