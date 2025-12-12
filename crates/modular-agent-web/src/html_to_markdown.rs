@@ -34,20 +34,37 @@ impl AsAgent for HtmlToMarkdownAgent {
         _pin: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
+        if value.is_array() {
+            let mut arr = vec![];
+            for item in value.as_array().unwrap() {
+                let html = item.as_str().ok_or_else(|| {
+                    AgentError::InvalidValue(
+                        "Input array items for 'html' must be strings".to_string(),
+                    )
+                })?;
+                let markdown = html2markdown(html)?;
+                arr.push(AgentValue::string(markdown));
+            }
+            return self.try_output(ctx, PORT_MARKDOWN, AgentValue::array(arr));
+        }
+
         let html = value.as_str().ok_or_else(|| {
             AgentError::InvalidValue("Input value for 'html' must be a string".to_string())
         })?;
-
-        let mut options = ConversionOptions::default();
-        options.preprocessing.enabled = true;
-        options.preprocessing.preset = PreprocessingPreset::Aggressive;
-        options.preprocessing.remove_navigation = true;
-        options.preprocessing.remove_forms = true;
-
-        let markdown = convert(html, Some(options)).map_err(|e| {
-            AgentError::InvalidValue(format!("Failed to convert HTML to Markdown: {}", e))
-        })?;
-
+        let markdown = html2markdown(html)?;
         self.try_output(ctx, PORT_MARKDOWN, AgentValue::string(markdown))
     }
+}
+
+fn html2markdown(html: &str) -> Result<String, AgentError> {
+    let mut options = ConversionOptions::default();
+    options.preprocessing.enabled = true;
+    options.preprocessing.preset = PreprocessingPreset::Aggressive;
+    options.preprocessing.remove_navigation = true;
+    options.preprocessing.remove_forms = true;
+
+    let markdown = convert(html, Some(options)).map_err(|e| {
+        AgentError::InvalidValue(format!("Failed to convert HTML to Markdown: {}", e))
+    })?;
+    Ok(markdown)
 }

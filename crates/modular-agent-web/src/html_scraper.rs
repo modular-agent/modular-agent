@@ -34,22 +34,41 @@ impl AsAgent for HtmlScraperAgent {
         _pin: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
-        let selector_str = self.configs()?.get_string("selector")?;
+        let selector_str = self.configs()?.get_string_or_default("selector");
+        if selector_str.is_empty() {
+            return Ok(());
+        }
         let selector = Selector::parse(&selector_str).map_err(|e| {
             AgentError::InvalidValue(format!("Invalid CSS selector '{}': {}", selector_str, e))
         })?;
+
+        if value.is_array() {
+            let mut arr = vec![];
+            for item in value.as_array().unwrap() {
+                let html = item.as_str().ok_or_else(|| {
+                    AgentError::InvalidValue(
+                        "Input array items for 'html' must be strings".to_string(),
+                    )
+                })?;
+                let fragment = Html::parse_fragment(html);
+                let selected: Vec<AgentValue> = fragment
+                    .select(&selector)
+                    .map(|elem| AgentValue::string(elem.html()))
+                    .collect();
+                arr.extend(selected);
+            }
+            return self.try_output(ctx, PORT_HTML, AgentValue::array(arr));
+        }
 
         let html = value.as_str().ok_or_else(|| {
             AgentError::InvalidValue("Input value for 'html' must be a string".to_string())
         })?;
 
         let document = Html::parse_document(html);
-
         let selected: Vec<AgentValue> = document
             .select(&selector)
             .map(|elem| AgentValue::string(elem.html()))
             .collect();
-
         self.try_output(ctx, PORT_HTML, AgentValue::array(selected))
     }
 }
