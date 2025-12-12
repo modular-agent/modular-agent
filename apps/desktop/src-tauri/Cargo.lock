@@ -45,7 +45,7 @@ checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 
 [[package]]
 name = "agent-stream-app"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "agent-stream-kit",
  "anyhow",
@@ -76,9 +76,9 @@ dependencies = [
 
 [[package]]
 name = "agent-stream-kit"
-version = "0.15.0"
+version = "0.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fdf9582f0afd2e37bf48fde7afc73e40cc280f07c368a8819ec9d109e597a06b"
+checksum = "81a13a6495de591525e7c52a96908b7fb6ff4fd0e6b65145d4a2e30e130490de"
 dependencies = [
  "askit-macros",
  "async-trait",
@@ -232,9 +232,9 @@ dependencies = [
 
 [[package]]
 name = "askit-cozodb-agents"
-version = "0.2.4"
+version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d4dd748f0cbc536aabcba8536c934ebcc95020193d1b654a8e4037260bfa3408"
+checksum = "7017d6eb3e8c1fb0f4d80eba08fb16161f2f0c8358ad6cfee3a717d62a017e8b"
 dependencies = [
  "agent-stream-kit",
  "cozo",
@@ -245,9 +245,9 @@ dependencies = [
 
 [[package]]
 name = "askit-lifelog-agents"
-version = "0.2.4"
+version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f7d326dad88604426b3816757a436b37c17973fb3b318324216c1617d5079d14"
+checksum = "61f1499b71ebf31729c05fc8476bb5d26ef33154108fa69f6b7005debeb1ef94"
 dependencies = [
  "active-win-pos-rs",
  "agent-stream-kit",
@@ -263,9 +263,9 @@ dependencies = [
 
 [[package]]
 name = "askit-llm-agents"
-version = "0.6.4"
+version = "0.6.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bc8549f6f6d562243e2b0800eadbad4ea23eb353170dc5adb4c8ab655378dc7e"
+checksum = "a0fe8a40bbd7ea676ac02f943beaf5d6f0ecff5a8a28514b88b546d78d117c3c"
 dependencies = [
  "agent-stream-kit",
  "async-openai",
@@ -286,9 +286,9 @@ dependencies = [
 
 [[package]]
 name = "askit-macros"
-version = "0.15.0"
+version = "0.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c46abab60969720581468ba5367c549a0f22a99b3db83dbc31fe8d669714a42a"
+checksum = "a4df9e3d6804861ddc5e8322a818837f0245109cf1f47305416bcc908ae60e4c"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -297,9 +297,9 @@ dependencies = [
 
 [[package]]
 name = "askit-rhai-agents"
-version = "0.2.4"
+version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9a681c327a7a54baf36dd8c99d8de762a20477e45efe756db296d31752898364"
+checksum = "959c8d24bcb5349e696983c05345926ebc7e981524a69e053fb6c590682e0c5c"
 dependencies = [
  "agent-stream-kit",
  "rhai",
@@ -309,9 +309,9 @@ dependencies = [
 
 [[package]]
 name = "askit-std-agents"
-version = "0.4.4"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "387dfc8f1fdf783edef0291fbe24abd4374e7f0dbfaa5c72c254948e707d3ec9"
+checksum = "b0d3e00b18e7de90f3c77e4a8d2ff92daf8a45cd3b1d5bcea2f3f50eca418ecb"
 dependencies = [
  "agent-stream-kit",
  "chrono",
@@ -7032,9 +7032,9 @@ dependencies = [
 
 [[package]]
 name = "tauri-plugin-askit"
-version = "0.6.0"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "84f07e62946741d99ac9db8c30733d5690cc324b1a2d88e0c8de5ff5947e7061"
+checksum = "2a16aeb155aa1472123f823fe3713e6f2ee50e17c7df6c8609149368ec874dcb"
 dependencies = [
  "agent-stream-kit",
  "serde",
