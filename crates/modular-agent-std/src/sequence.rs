@@ -133,9 +133,7 @@ impl AsAgent for SyncAgent {
         let ctx_id = ctx.id();
         if ctx_id != self.current_id {
             self.current_id = ctx_id;
-            for slot in &mut self.input_values {
-                *slot = None;
-            }
+            self.input_values = vec![None; self.n];
         }
 
         // Store the input value
