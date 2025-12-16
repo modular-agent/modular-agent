@@ -25,7 +25,7 @@ export type AgentConfigSpec = {
   value: any;
   type: AgentConfigValueType | null;
   title?: string | null;
-  hideTitle?: boolean | null;
+  hide_title?: boolean | null;
   description?: string | null;
   hidden?: boolean | null;
   readonly?: boolean | null;
