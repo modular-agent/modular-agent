@@ -3,13 +3,16 @@ use agent_stream_kit::{
     askit_agent, async_trait,
 };
 use handlebars::Handlebars;
+use serde_json::json;
 
 static CATEGORY: &str = "Std/String";
 
-static PIN_DATA: &str = "data";
+static PIN_VALUE: &str = "value";
 static PIN_STRING: &str = "string";
 static PIN_STRINGS: &str = "strings";
 
+static CONFIG_LEN: &str = "len";
+static CONFIG_OVERLAP: &str = "overlap";
 static CONFIG_SEP: &str = "sep";
 static CONFIG_TEMPLATE: &str = "template";
 
@@ -78,11 +81,83 @@ impl AsAgent for StringJoinAgent {
     }
 }
 
+#[askit_agent(
+    title = "String Length Split",
+    category = CATEGORY,
+    inputs = [PIN_STRING],
+    outputs = [PIN_STRINGS],
+    integer_config(name = CONFIG_LEN, default = 65536),
+    integer_config(name = CONFIG_OVERLAP, default = 1024),
+)]
+struct StringLengthSplitAgent {
+    data: AgentData,
+}
+
+#[async_trait]
+impl AsAgent for StringLengthSplitAgent {
+    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+        Ok(Self {
+            data: AgentData::new(askit, id, spec),
+        })
+    }
+
+    async fn process(
+        &mut self,
+        ctx: AgentContext,
+        _pin: String,
+        value: AgentValue,
+    ) -> Result<(), AgentError> {
+        let config = self.configs()?;
+
+        let n = config.get_integer_or_default(CONFIG_LEN) as usize;
+        if n <= 0 {
+            return Err(AgentError::InvalidConfig("n must be greater than 0".into()));
+        }
+
+        let overlap = config.get_integer_or_default(CONFIG_OVERLAP) as usize;
+        if overlap >= n {
+            return Err(AgentError::InvalidConfig(
+                "overlap must be less than n".into(),
+            ));
+        }
+
+        let s = value
+            .as_str()
+            .ok_or_else(|| AgentError::InvalidValue("Input value must be a string".into()))?;
+
+        let mut out = Vec::new();
+        let mut start = 0;
+        let len = s.len();
+        while start < len {
+            let mut end = usize::min(start + n, len);
+            while !s.is_char_boundary(end) {
+                end -= 1;
+            }
+            if end <= start {
+                end = start + s[start..].chars().next().map(|c| c.len_utf8()).unwrap_or(1);
+            }
+
+            out.push(AgentValue::string(s[start..end].to_string()));
+
+            if end == len {
+                break;
+            }
+
+            let mut next_start = end.saturating_sub(overlap);
+            while next_start < len && !s.is_char_boundary(next_start) {
+                next_start += 1;
+            }
+            start = next_start;
+        }
+        self.try_output(ctx, PIN_STRINGS, AgentValue::array(out))
+    }
+}
+
 // Template String Agent
 #[askit_agent(
     title = "Template String",
     category = CATEGORY,
-    inputs = [PIN_DATA],
+    inputs = [PIN_VALUE],
     outputs = [PIN_STRING],
     string_config(name = CONFIG_TEMPLATE, default = "{{value}}")
 )]
@@ -119,14 +194,16 @@ impl AsAgent for TemplateStringAgent {
                 .as_array()
                 .ok_or_else(|| AgentError::InvalidArrayValue("Expected array".into()))?
             {
-                let rendered_string = reg.render_template(&template, v).map_err(|e| {
+                let data = json!({"value": v});
+                let rendered_string = reg.render_template(&template, &data).map_err(|e| {
                     AgentError::InvalidValue(format!("Failed to render template: {}", e))
                 })?;
                 out_arr.push(rendered_string.into());
             }
             self.try_output(ctx, PIN_STRING, AgentValue::array(out_arr))
         } else {
-            let rendered_string = reg.render_template(&template, &value).map_err(|e| {
+            let data = json!({"value": value});
+            let rendered_string = reg.render_template(&template, &data).map_err(|e| {
                 AgentError::InvalidValue(format!("Failed to render template: {}", e))
             })?;
             let out_value = AgentValue::string(rendered_string);
@@ -139,7 +216,7 @@ impl AsAgent for TemplateStringAgent {
 #[askit_agent(
     title = "Template Text",
     category = CATEGORY,
-    inputs = [PIN_DATA],
+    inputs = [PIN_VALUE],
     outputs = [PIN_STRING],
     text_config(name = CONFIG_TEMPLATE, default = "{{value}}")
 )]
@@ -176,14 +253,16 @@ impl AsAgent for TemplateTextAgent {
                 .as_array()
                 .ok_or_else(|| AgentError::InvalidArrayValue("Expected array".into()))?
             {
-                let rendered_string = reg.render_template(&template, v).map_err(|e| {
+                let data = json!({"value": v});
+                let rendered_string = reg.render_template(&template, &data).map_err(|e| {
                     AgentError::InvalidValue(format!("Failed to render template: {}", e))
                 })?;
                 out_arr.push(rendered_string.into());
             }
             self.try_output(ctx, PIN_STRING, AgentValue::array(out_arr))
         } else {
-            let rendered_string = reg.render_template(&template, &value).map_err(|e| {
+            let data = json!({"value": value});
+            let rendered_string = reg.render_template(&template, &data).map_err(|e| {
                 AgentError::InvalidValue(format!("Failed to render template: {}", e))
             })?;
             let out_value = AgentValue::string(rendered_string);
@@ -196,7 +275,7 @@ impl AsAgent for TemplateTextAgent {
 #[askit_agent(
     title = "Template Array",
     category = CATEGORY,
-    inputs = [PIN_DATA],
+    inputs = [PIN_VALUE],
     outputs = [PIN_STRING],
     text_config(name = CONFIG_TEMPLATE, default = "{{value}}")
 )]
