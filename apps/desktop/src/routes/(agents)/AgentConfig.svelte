@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
 
-  import { Handle, Position, type NodeProps } from "@xyflow/svelte";
+  import { Handle, Position } from "@xyflow/svelte";
   import { Button, Input, NumberInput, Textarea, Toggle } from "flowbite-svelte";
   import type { AgentConfigSpec } from "tauri-plugin-askit-api";
 
@@ -132,12 +132,12 @@
   {@render renderer(v)}
 {/snippet}
 
-{#snippet display(name: string, v: any, config_spec: AgentConfigSpec | undefined)}
-  {#if config_spec?.hideTitle !== true}
-    <h3 class="flex-none">{config_spec?.title || name}</h3>
-    <p class="flex-none text-xs text-gray-500">{config_spec?.description}</p>
+{#snippet display(name: string, v: any, configSpec: AgentConfigSpec | undefined)}
+  {#if configSpec?.hide_title !== true}
+    <h3 class="flex-none">{configSpec?.title || name}</h3>
+    <p class="flex-none text-xs text-gray-500">{configSpec?.description}</p>
   {/if}
-  {@const ty = inferTypeForDisplay(config_spec, v)}
+  {@const ty = inferTypeForDisplay(configSpec, v)}
   {#if v instanceof Array && ty !== "object" && ty !== "message"}
     <div class="flex-none flex flex-col gap-2">
       {#each v as item}
@@ -301,7 +301,9 @@
 {:else}
   {@const ty = configSpec?.type}
   <div class="flex-none relative flex items-center">
-    <h3>{configSpec?.title || name}</h3>
+    {#if configSpec?.hide_title !== true}
+      <h3>{configSpec?.title || name}</h3>
+    {/if}
     <Handle
       id="config:{name}"
       type="target"
