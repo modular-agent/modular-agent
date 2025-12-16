@@ -23,7 +23,7 @@ use schemars::{Schema, json_schema, schema_for_value};
 use tokio_stream::StreamExt;
 
 use crate::message::{Message, MessageHistory, ToolCall};
-use crate::tool::{self, list_tool_infos_regex};
+use crate::tool::{self, list_tool_infos_patterns};
 
 static CATEGORY: &str = "LLM/Ollama";
 
@@ -286,7 +286,7 @@ impl AsAgent for OllamaChatAgent {
         let options_json = if !config_options.is_empty() && config_options != "{}" {
             Some(
                 serde_json::from_str::<ModelOptions>(&config_options).map_err(|e| {
-                    AgentError::InvalidValue(format!("Invalid JSON in options: {}", e))
+                    AgentError::InvalidConfig(format!("Invalid JSON in options: {}", e))
                 })?,
             )
         } else {
@@ -297,10 +297,13 @@ impl AsAgent for OllamaChatAgent {
         let tool_infos = if config_tools.is_empty() {
             vec![]
         } else {
-            let regex = regex::Regex::new(&config_tools).map_err(|e| {
-                AgentError::InvalidValue(format!("Invalid regex in tools config: {}", e))
-            })?;
-            list_tool_infos_regex(&regex)
+            list_tool_infos_patterns(&config_tools)
+                .map_err(|e| {
+                    AgentError::InvalidConfig(format!(
+                        "Invalid regex patterns in tools config: {}",
+                        e
+                    ))
+                })?
                 .into_iter()
                 .map(|tool| tool.into())
                 .collect::<Vec<ollama_rs::generation::tools::ToolInfo>>()

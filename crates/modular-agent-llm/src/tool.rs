@@ -8,14 +8,14 @@ use agent_stream_kit::{
     ASKit, Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
     askit_agent, async_trait,
 };
-use regex::Regex;
+use regex::{Regex, RegexSet};
 use tokio::sync::{Mutex as AsyncMutex, oneshot};
 
 use crate::message::{Message, ToolCall};
 
 const CATEGORY: &str = "LLM/Tool";
 
-const PIN_REGEX: &str = "regex";
+const PIN_PATTERNS: &str = "patterns";
 const PIN_TOOLS: &str = "tools";
 
 const PIN_TOOL_IN: &str = "tool_in";
@@ -130,21 +130,29 @@ pub fn list_tool_infos() -> Vec<ToolInfo> {
         .collect()
 }
 
-/// List registerd tool infos filtered by a regex.
-pub fn list_tool_infos_regex(regex: &Regex) -> Vec<ToolInfo> {
-    registry()
+/// List registerd tool infos filtered by patterns.
+pub fn list_tool_infos_patterns(patterns: &str) -> Result<Vec<ToolInfo>, regex::Error> {
+    // Split patterns by newline and trim whitespace
+    let patterns = patterns
+        .lines()
+        .map(|line| line.trim())
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<&str>>();
+    let reg_set = RegexSet::new(&patterns)?;
+    let tool_names = registry()
         .read()
         .unwrap()
         .tools
         .values()
         .filter_map(|entry| {
-            if regex.is_match(&entry.info.name) {
+            if reg_set.is_match(&entry.info.name) {
                 Some(entry.info.clone())
             } else {
                 None
             }
         })
-        .collect()
+        .collect();
+    Ok(tool_names)
 }
 
 /// Get a tool by name.
@@ -200,7 +208,7 @@ pub async fn call_tools(
 #[askit_agent(
     title="List Tools",
     category=CATEGORY,
-    inputs=[PIN_REGEX],
+    inputs=[PIN_PATTERNS],
     outputs=[PIN_TOOLS],
 )]
 pub struct ListToolsAgent {
@@ -221,16 +229,15 @@ impl AsAgent for ListToolsAgent {
         _pin: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
-        let regex = value
-            .as_str()
-            .map(|s| Regex::new(s))
-            .transpose()
-            .map_err(|e| {
-                AgentError::Other(format!("Failed to compile regex from input value: {e}"))
-            })?;
+        let Some(patterns) = value.as_str() else {
+            return Err(AgentError::InvalidValue(
+                "patterns input must be a string".to_string(),
+            ));
+        };
 
-        let tools = if let Some(regex) = regex {
-            list_tool_infos_regex(&regex)
+        let tools = if !patterns.is_empty() {
+            list_tool_infos_patterns(patterns)
+                .map_err(|e| AgentError::InvalidValue(format!("Invalid regex patterns: {}", e)))?
         } else {
             list_tool_infos()
         };
@@ -253,7 +260,7 @@ impl AsAgent for ListToolsAgent {
     outputs=[PIN_TOOL_IN],
     string_config(name=CONFIG_TOOL_NAME),
     text_config(name=CONFIG_TOOL_DESCRIPTION),
-    text_config(name=CONFIG_TOOL_PARAMETERS),
+    object_config(name=CONFIG_TOOL_PARAMETERS),
 )]
 pub struct FlowToolAgent {
     data: AgentData,

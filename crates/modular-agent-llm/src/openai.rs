@@ -27,7 +27,7 @@ use async_openai::{
 use futures::StreamExt;
 
 use crate::message::{self, Message, MessageHistory, ToolCall, ToolCallFunction};
-use crate::tool::{self, list_tool_infos, list_tool_infos_regex};
+use crate::tool::{self, list_tool_infos, list_tool_infos_patterns};
 
 static CATEGORY: &str = "LLM/OpenAI";
 
@@ -271,19 +271,21 @@ impl AsAgent for OpenAIChatAgent {
         } else {
             None
         };
-
         let config_tools = self.configs()?.get_string_or_default(CONFIG_TOOLS);
         let tool_infos = if config_tools.is_empty() {
-            list_tool_infos()
+            vec![]
         } else {
-            let regex = regex::Regex::new(&config_tools).map_err(|e| {
-                AgentError::InvalidValue(format!("Invalid regex in tools config: {}", e))
-            })?;
-            list_tool_infos_regex(&regex)
-        }
-        .into_iter()
-        .map(|tool| tool.try_into())
-        .collect::<Result<Vec<ChatCompletionTool>, AgentError>>()?;
+            list_tool_infos_patterns(&config_tools)
+                .map_err(|e| {
+                    AgentError::InvalidConfig(format!(
+                        "Invalid regex patterns in tools config: {}",
+                        e
+                    ))
+                })?
+                .into_iter()
+                .map(|tool| tool.try_into())
+                .collect::<Result<Vec<ChatCompletionTool>, AgentError>>()?
+        };
 
         let use_stream = self.configs()?.get_bool_or_default(CONFIG_STREAM);
 
@@ -578,16 +580,19 @@ impl AsAgent for OpenAIResponsesAgent {
 
         let config_tools = self.configs()?.get_string_or_default(CONFIG_TOOLS);
         let tool_infos = if config_tools.is_empty() {
-            list_tool_infos()
+            vec![]
         } else {
-            let regex = regex::Regex::new(&config_tools).map_err(|e| {
-                AgentError::InvalidValue(format!("Invalid regex in tools config: {}", e))
-            })?;
-            list_tool_infos_regex(&regex)
-        }
-        .into_iter()
-        .map(|tool| tool.try_into())
-        .collect::<Result<Vec<ToolDefinition>, AgentError>>()?;
+            list_tool_infos_patterns(&config_tools)
+                .map_err(|e| {
+                    AgentError::InvalidConfig(format!(
+                        "Invalid regex patterns in tools config: {}",
+                        e
+                    ))
+                })?
+                .into_iter()
+                .map(|tool| tool.try_into())
+                .collect::<Result<Vec<ToolDefinition>, AgentError>>()?
+        };
 
         let use_stream = self.configs()?.get_bool_or_default(CONFIG_STREAM);
 
