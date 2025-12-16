@@ -8,6 +8,7 @@ use agent_stream_kit::{
     AgentValue, AsAgent, askit_agent, async_trait,
 };
 
+use ollama_rs::generation::completion::GenerationContext;
 use ollama_rs::{
     Ollama,
     generation::{
@@ -22,7 +23,7 @@ use schemars::{Schema, json_schema, schema_for_value};
 use tokio_stream::StreamExt;
 
 use crate::message::{Message, MessageHistory, ToolCall};
-use crate::tool::{self, list_tool_infos, list_tool_infos_regex};
+use crate::tool::{self, list_tool_infos_regex};
 
 static CATEGORY: &str = "LLM/Ollama";
 
@@ -33,6 +34,7 @@ static PIN_MESSAGE: &str = "message";
 static PIN_MODEL_INFO: &str = "model_info";
 static PIN_MODEL_LIST: &str = "model_list";
 static PIN_MODEL_NAME: &str = "model_name";
+static PIN_PROMPT: &str = "prompt";
 static PIN_RESET: &str = "reset";
 static PIN_RESPONSE: &str = "response";
 static PIN_UNIT: &str = "unit";
@@ -40,9 +42,11 @@ static PIN_UNIT: &str = "unit";
 static CONFIG_MODEL: &str = "model";
 static CONFIG_OLLAMA_URL: &str = "ollama_url";
 static CONFIG_OPTIONS: &str = "options";
+static CONFIG_PREAMBLE: &str = "preamble";
 static CONFIG_STREAM: &str = "stream";
 static CONFIG_SYSTEM: &str = "system";
 static CONFIG_TOOLS: &str = "tools";
+static CONFIG_USE_CONTEXT: &str = "use_context";
 
 const DEFAULT_CONFIG_MODEL: &str = "gpt-oss:20b";
 const DEFAULT_OLLAMA_URL: &str = "http://localhost:11434";
@@ -96,16 +100,18 @@ impl OllamaManager {
 #[askit_agent(
     title="Ollama Completion",
     category=CATEGORY,
-    inputs=[PIN_MESSAGE],
+    inputs=[PIN_PROMPT, PIN_RESET],
     outputs=[PIN_MESSAGE, PIN_RESPONSE],
     string_config(name=CONFIG_MODEL, default=DEFAULT_CONFIG_MODEL),
     text_config(name=CONFIG_SYSTEM, default=""),
+    boolean_config(name=CONFIG_USE_CONTEXT),
     text_config(name=CONFIG_OPTIONS, default="{}"),
     string_global_config(name=CONFIG_OLLAMA_URL, default=DEFAULT_OLLAMA_URL, title="Ollama URL"),
 )]
 pub struct OllamaCompletionAgent {
     data: AgentData,
     manager: OllamaManager,
+    context: Option<GenerationContext>,
 }
 
 #[async_trait]
@@ -114,26 +120,37 @@ impl AsAgent for OllamaCompletionAgent {
         Ok(Self {
             data: AgentData::new(askit, id, spec),
             manager: OllamaManager::new(),
+            context: None,
         })
+    }
+
+    async fn stop(&mut self) -> Result<(), AgentError> {
+        self.context = None;
+        Ok(())
     }
 
     async fn process(
         &mut self,
         ctx: AgentContext,
-        _pin: String,
+        pin: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
+        if pin == PIN_RESET {
+            self.context = None;
+            return Ok(());
+        }
+
         let config_model = &self.configs()?.get_string_or_default(CONFIG_MODEL);
         if config_model.is_empty() {
             return Ok(());
         }
 
-        let message = value.as_str().unwrap_or("");
-        if message.is_empty() {
+        let prompt = value.as_str().unwrap_or("");
+        if prompt.is_empty() {
             return Ok(());
         }
 
-        let mut request = GenerationRequest::new(config_model.to_string(), message);
+        let mut request = GenerationRequest::new(config_model.to_string(), prompt);
 
         let config_system = self.configs()?.get_string_or_default(CONFIG_SYSTEM);
         if !config_system.is_empty() {
@@ -151,11 +168,22 @@ impl AsAgent for OllamaCompletionAgent {
             }
         }
 
+        let use_context = self.configs()?.get_bool_or_default(CONFIG_USE_CONTEXT);
+        if use_context {
+            if let Some(context) = &self.context {
+                request = request.context(context.clone());
+            }
+        }
+
         let client = self.manager.get_client(self.askit())?;
         let res = client
             .generate(request)
             .await
             .map_err(|e| AgentError::IoError(format!("Ollama Error: {}", e)))?;
+
+        if use_context {
+            self.context = res.context.clone().or(self.context.clone());
+        }
 
         let message = Message::assistant(res.response.clone());
         self.try_output(ctx.clone(), PIN_MESSAGE, message.into())?;
@@ -173,15 +201,17 @@ impl AsAgent for OllamaCompletionAgent {
     category=CATEGORY,
     inputs=[PIN_MESSAGE, PIN_RESET],
     outputs=[PIN_MESSAGE, PIN_HISTORY, PIN_RESPONSE],
-    string_config(name=CONFIG_MODEL, default=DEFAULT_CONFIG_MODEL),
     boolean_config(name=CONFIG_STREAM, title="Stream"),
-    string_config(name=CONFIG_TOOLS, default=""),
-    text_config(name=CONFIG_OPTIONS, default="{}")
+    string_config(name=CONFIG_MODEL, default=DEFAULT_CONFIG_MODEL),
+    text_config(name=CONFIG_TOOLS, default=""),
+    text_config(name=CONFIG_PREAMBLE, default=""),
+    text_config(name=CONFIG_OPTIONS, default="{}"),
 )]
 pub struct OllamaChatAgent {
     data: AgentData,
     manager: OllamaManager,
     history: MessageHistory,
+    preamble_included: bool,
 }
 
 impl OllamaChatAgent {
@@ -203,6 +233,7 @@ impl AsAgent for OllamaChatAgent {
             data: AgentData::new(askit, id, spec),
             manager: OllamaManager::new(),
             history: Default::default(),
+            preamble_included: false,
         })
     }
 
@@ -215,12 +246,24 @@ impl AsAgent for OllamaChatAgent {
         if pin == PIN_RESET {
             self.history = MessageHistory::default();
             self.try_output(ctx, PIN_HISTORY, self.history.clone().into())?;
+            self.preamble_included = false;
             return Ok(());
         }
 
         let config_model = &self.configs()?.get_string_or_default(CONFIG_MODEL);
         if config_model.is_empty() {
             return Ok(());
+        }
+
+        if !self.preamble_included {
+            self.preamble_included = true;
+            let preamble_str = self.configs()?.get_string_or_default(CONFIG_PREAMBLE);
+            if !preamble_str.is_empty() {
+                let preamble_history = MessageHistory::parse(&preamble_str).map_err(|e| {
+                    AgentError::InvalidValue(format!("Failed to parse preamble messages: {}", e))
+                })?;
+                self.history.set_preamble(preamble_history.messages());
+            }
         }
 
         let messages = MessageHistory::from_value(value)?.messages();
@@ -252,16 +295,16 @@ impl AsAgent for OllamaChatAgent {
 
         let config_tools = self.configs()?.get_string_or_default(CONFIG_TOOLS);
         let tool_infos = if config_tools.is_empty() {
-            list_tool_infos()
+            vec![]
         } else {
             let regex = regex::Regex::new(&config_tools).map_err(|e| {
                 AgentError::InvalidValue(format!("Invalid regex in tools config: {}", e))
             })?;
             list_tool_infos_regex(&regex)
-        }
-        .into_iter()
-        .map(|tool| tool.into())
-        .collect::<Vec<ollama_rs::generation::tools::ToolInfo>>();
+                .into_iter()
+                .map(|tool| tool.into())
+                .collect::<Vec<ollama_rs::generation::tools::ToolInfo>>()
+        };
 
         let use_stream = self.configs()?.get_bool_or_default(CONFIG_STREAM);
 
