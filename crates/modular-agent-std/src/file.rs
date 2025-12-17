@@ -5,6 +5,7 @@ use agent_stream_kit::{
     ASKit, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
     askit_agent, async_trait,
 };
+use glob::glob;
 
 static CATEGORY: &str = "Std/File";
 
@@ -12,6 +13,58 @@ static PIN_PATH: &str = "path";
 static PIN_FILES: &str = "files";
 static PIN_TEXT: &str = "text";
 static PIN_DATA: &str = "data";
+
+// Glob Agent
+#[askit_agent(
+    title = "Glob",
+    category = CATEGORY,
+    inputs = [PIN_PATH],
+    outputs = [PIN_FILES]
+)]
+struct GlobAgent {
+    data: AgentData,
+}
+
+#[async_trait]
+impl AsAgent for GlobAgent {
+    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+        Ok(Self {
+            data: AgentData::new(askit, id, spec),
+        })
+    }
+
+    async fn process(
+        &mut self,
+        ctx: AgentContext,
+        _pin: String,
+        value: AgentValue,
+    ) -> Result<(), AgentError> {
+        let pat = value
+            .as_str()
+            .ok_or_else(|| AgentError::InvalidValue("not a string".to_string()))?;
+
+        let mut files = Vec::new();
+
+        for entry in glob(pat).map_err(|e| {
+            AgentError::InvalidValue(format!("Failed to read glob pattern {}: {}", pat, e))
+        })? {
+            match entry {
+                Ok(path) => {
+                    files.push(path.to_string_lossy().to_string().into());
+                }
+                Err(e) => {
+                    return Err(AgentError::InvalidValue(format!(
+                        "Failed to read glob entry: {}",
+                        e
+                    )));
+                }
+            }
+        }
+
+        let out_value = AgentValue::array(files);
+        self.try_output(ctx, PIN_FILES, out_value)
+    }
+}
 
 // List Files Agent
 #[askit_agent(
