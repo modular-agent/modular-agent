@@ -9,6 +9,7 @@ use agent_stream_kit::{
 };
 
 use ollama_rs::generation::completion::GenerationContext;
+use ollama_rs::generation::embeddings::request::EmbeddingsInput;
 use ollama_rs::{
     Ollama,
     generation::{
@@ -462,13 +463,29 @@ impl AsAgent for OllamaEmbeddingsAgent {
             return Ok(());
         }
 
-        let input = value.as_str().unwrap_or(""); // TODO: other types
-        if input.is_empty() {
+        let mut input_is_array = false;
+        let mut input: EmbeddingsInput = "".into();
+        if value.is_array() {
+            input_is_array = true;
+            let mut inputs = vec![];
+            for item in value.as_array().unwrap_or(&vec![]) {
+                let s = item.as_str().unwrap_or("");
+                if !s.is_empty() {
+                    inputs.push(s.to_string());
+                }
+            }
+            input = inputs.into();
+        } else if value.is_string() {
+            let s = value.as_str().unwrap_or("");
+            if !s.is_empty() {
+                input = s.into();
+            }
+        } else {
             return Ok(());
         }
 
         let client = self.manager.get_client(self.askit())?;
-        let mut request = GenerateEmbeddingsRequest::new(config_model.to_string(), input.into());
+        let mut request = GenerateEmbeddingsRequest::new(config_model.to_string(), input);
 
         let config_options = self.configs()?.get_string_or_default(CONFIG_OPTIONS);
         if !config_options.is_empty() && config_options != "{}" {
@@ -486,7 +503,15 @@ impl AsAgent for OllamaEmbeddingsAgent {
             .await
             .map_err(|e| AgentError::IoError(format!("Ollama Error: {}", e)))?;
 
-        let embeddings = AgentValue::from_serialize(&res.embeddings)?;
+        let embeddings = if input_is_array {
+            AgentValue::from_serialize(&res.embeddings)?
+        } else {
+            if res.embeddings.is_empty() {
+                AgentValue::unit()
+            } else {
+                AgentValue::from_serialize(&res.embeddings[0])?
+            }
+        };
         self.try_output(ctx.clone(), PIN_EMBEDDINGS, embeddings)?;
 
         Ok(())
