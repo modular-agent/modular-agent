@@ -8,7 +8,7 @@ use agent_stream_kit::{
     ASKit, Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
     askit_agent, async_trait,
 };
-use regex::{Regex, RegexSet};
+use regex::RegexSet;
 use tokio::sync::{Mutex as AsyncMutex, oneshot};
 
 use crate::message::{Message, ToolCall};
