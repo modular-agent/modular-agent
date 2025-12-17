@@ -85,7 +85,7 @@
       subscribeAgentSpecUpdatedMessage(id, () => {
         getAgentSpec(id).then((spec) => {
           if (spec) {
-            updateNodeData(id, { spec });
+            updateNodeData(id, { ...spec });
           }
         });
       }),
