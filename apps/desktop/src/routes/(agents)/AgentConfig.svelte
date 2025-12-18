@@ -32,6 +32,7 @@
     string: displayString,
     password: displayPassword,
     text: displayText,
+    html: displayHtml,
     image: displayImage,
     object: displayObject,
     message: displayMessages,
@@ -104,6 +105,12 @@
       evt.preventDefault();
     }}
   />
+{/snippet}
+
+{#snippet displayHtml(value: any)}
+  <div class="nodrag nowheel flex-1 agent-config-html">
+    {@html typeof value === "string" ? value : String(value ?? "")}
+  </div>
 {/snippet}
 
 {#snippet displayImage(value: string)}
@@ -319,3 +326,35 @@
     {@render renderInput(name, value)}
   {/if}
 {/if}
+
+<style>
+  .agent-config-html :global(table) {
+    border-collapse: separate;
+    border-spacing: 0;
+  }
+
+  .agent-config-html :global(th) {
+    text-align: left;
+    font-weight: 700;
+    border-bottom: 1.5px solid rgb(156 163 175 / 0.6);
+    padding-bottom: 0.35rem;
+  }
+
+  .agent-config-html :global(td) {
+    text-align: left;
+  }
+
+  .agent-config-html :global(th),
+  .agent-config-html :global(td) {
+    padding: 0;
+  }
+
+  .agent-config-html :global(th:not(:first-child)),
+  .agent-config-html :global(td:not(:first-child)) {
+    padding-left: 1rem;
+  }
+
+  .agent-config-html :global(tbody td) {
+    padding-top: 0.35rem;
+  }
+</style>

@@ -36,7 +36,7 @@
 
   let bgColor = $derived(bgColors[agentDef ? (data.enabled ? 1 : 0) : 2]);
 
-  let ht = $derived(height);
+  let ht = $state(400);
 
   function onResize(_ev: ResizeDragEvent, params: ResizeParams) {
     ht = params.height;
@@ -50,6 +50,7 @@
   });
 
   $effect(() => {
+    ht = height ?? ht;
     if (inputCount > lastInputCount) {
       highlight.set(1, { instant: true });
       highlight.target = 0;
@@ -83,8 +84,12 @@
       {/each}
     </div>
   </div>
-  <div class="w-full grow flex flex-col gap-2">
-    {@render contents()}
+  <div class="w-full grow flex flex-col min-h-0">
+    <div
+      class="ml-2 w-[calc(100%-0.5rem)] grow flex flex-col gap-2 overflow-auto pretty-scroll min-h-0"
+    >
+      {@render contents()}
+    </div>
   </div>
 </div>
 {#each inputs as input, idx}
