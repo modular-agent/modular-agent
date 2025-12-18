@@ -28,6 +28,10 @@
   background-clip: content-box;
 }
 
+.pretty-scroll::-webkit-scrollbar-thumb:horizontal {
+  border-left-width: 10px;
+}
+
 .pretty-scroll::-webkit-scrollbar-thumb:hover {
   background-color: rgb(156 163 175 / 0.7);
 }

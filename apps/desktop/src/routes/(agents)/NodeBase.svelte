@@ -5,7 +5,7 @@
     "bg-rose-400 dark:bg-rose-400 opacity-50",
   ];
 
-  const DEFAULT_HANDLE_STYLE = "width: 11px; height: 11px;";
+  const DEFAULT_HANDLE_STYLE = "width: 12px; height: 12px;";
 
   const HANDLE_OFFSET = 71;
   const HANDLE_GAP = 25.5;
@@ -84,12 +84,8 @@
       {/each}
     </div>
   </div>
-  <div class="w-full grow flex flex-col min-h-0">
-    <div
-      class="ml-2 w-[calc(100%-0.5rem)] grow flex flex-col gap-2 overflow-auto pretty-scroll min-h-0"
-    >
-      {@render contents()}
-    </div>
+  <div class="w-full grow flex flex-col gap-2 overflow-auto pretty-scroll min-h-0">
+    {@render contents()}
   </div>
 </div>
 {#each inputs as input, idx}
