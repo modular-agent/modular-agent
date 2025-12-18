@@ -36,7 +36,7 @@
 
   let bgColor = $derived(bgColors[agentDef ? (data.enabled ? 1 : 0) : 2]);
 
-  let ht = $state(400);
+  let ht = $state<number | null>(null);
 
   function onResize(_ev: ResizeDragEvent, params: ResizeParams) {
     ht = params.height;
