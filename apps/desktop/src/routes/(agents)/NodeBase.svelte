@@ -42,8 +42,7 @@
     ht = params.height;
   }
 
-  let highlightCount = $derived(inputCount);
-  let lastHighlightCount = $derived(inputCount);
+  let lastInputCount = $state(0);
 
   let highlight = new Spring(0, {
     stiffness: 0.03,
@@ -51,10 +50,10 @@
   });
 
   $effect(() => {
-    if (highlightCount > lastHighlightCount) {
+    if (inputCount > lastInputCount) {
       highlight.set(1, { instant: true });
       highlight.target = 0;
-      lastHighlightCount = highlightCount;
+      lastInputCount = inputCount;
     }
   });
 </script>
