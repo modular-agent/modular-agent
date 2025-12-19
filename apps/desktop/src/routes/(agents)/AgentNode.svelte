@@ -127,6 +127,7 @@
             class="mt-1"
             type="text"
             value={data.title ?? agentDef?.title ?? data.def_name}
+            autofocus
             onblur={() => (editTitle = false)}
             onkeydown={(evt) => {
               if (evt.key === "Enter") {
@@ -144,7 +145,7 @@
           <button
             id="t-{uid}"
             type="button"
-            onclick={() => (editTitle = true)}
+            ondblclick={() => (editTitle = true)}
             class="flex-none"
             tabindex={-1}
           >
