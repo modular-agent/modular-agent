@@ -8,10 +8,17 @@
     categories: Record<string, any>;
     agentDefs: AgentDefinitions;
     expandAll?: boolean;
-    onAddAgent: (agentName: string) => Promise<void>;
+    onAddAgentClick?: (event: MouseEvent, agentName: string) => void;
+    onDragAgentStart?: (event: DragEvent, agentName: string) => void;
   }
 
-  let { categories, agentDefs, expandAll = false, onAddAgent }: Props = $props();
+  let {
+    categories,
+    agentDefs,
+    expandAll = false,
+    onAddAgentClick,
+    onDragAgentStart,
+  }: Props = $props();
 
   const categoryKeys = $derived(Object.keys(categories).sort());
 </script>
@@ -23,7 +30,9 @@
       <button
         type="button"
         class="w-full pl-2 text-left text-gray-400 hover:text-black hover:bg-gray-200 dark:hover:bg-gray-400"
-        onclick={() => onAddAgent(agentName)}
+        draggable={true}
+        ondragstart={(event) => onDragAgentStart?.(event, agentName)}
+        onclick={(event) => onAddAgentClick?.(event, agentName)}
       >
         {agentDefs[agentName].title ?? agentName}
       </button>
@@ -38,7 +47,13 @@
         {key}
       </div>
       <Accordion flush multiple={expandAll}>
-        <AgentListItems categories={categories[key]} {agentDefs} {expandAll} {onAddAgent} />
+        <AgentListItems
+          categories={categories[key]}
+          {agentDefs}
+          {expandAll}
+          {onAddAgentClick}
+          {onDragAgentStart}
+        />
       </Accordion>
     </AccordionItem>
   {/if}

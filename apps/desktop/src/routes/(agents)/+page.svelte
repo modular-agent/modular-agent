@@ -490,12 +490,43 @@
     await changeStream(stream.id);
   }
 
-  async function onAddAgent(agent_name: string) {
+  const AGENT_DRAG_FORMAT = "application/agent-name";
+
+  function handleAgentDragStart(event: DragEvent, agentName: string) {
+    event.dataTransfer?.setData(AGENT_DRAG_FORMAT, agentName);
+    event.dataTransfer?.setData("text/plain", agentName);
+    if (event.dataTransfer) {
+      event.dataTransfer.effectAllowed = "move";
+    }
+  }
+
+  function handleDragOver(event: DragEvent) {
+    const hasAgent = event.dataTransfer?.types?.includes(AGENT_DRAG_FORMAT);
+    if (!hasAgent) return;
+    event.preventDefault();
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = "move";
+    }
+  }
+
+  async function handleDrop(event: DragEvent) {
+    const hasAgent = event.dataTransfer?.types?.includes(AGENT_DRAG_FORMAT);
+    if (!hasAgent) return;
+    event.preventDefault();
+    const agentName = event.dataTransfer?.getData(AGENT_DRAG_FORMAT);
+    if (!agentName) return;
+    await onAddAgent(agentName, { x: event.clientX - 40, y: event.clientY - 20 });
+  }
+
+  async function onAddAgent(agent_name: string, position?: { x: number; y: number }) {
     const snode = await newAgentSpec(agent_name);
-    const xy = screenToFlowPosition({
-      x: window.innerWidth * 0.45,
-      y: window.innerHeight * 0.3,
-    });
+    const xy =
+      position !== undefined
+        ? screenToFlowPosition(position)
+        : screenToFlowPosition({
+            x: window.innerWidth * 0.45,
+            y: window.innerHeight * 0.3,
+          });
     snode.x = xy.x;
     snode.y = xy.y;
     await addAgent(streamState.id, snode);
@@ -615,6 +646,8 @@
     onpaneclick={handlePaneClick}
     ondelete={handleOnDelete}
     onconnect={handleOnConnect}
+    ondragover={handleDragOver}
+    ondrop={handleDrop}
     deleteKey={["Delete"]}
     connectionRadius={38}
     colorMode="dark"
@@ -671,7 +704,7 @@
     <StreamList {streamNames} currentStream={streamState.id} {streamActivities} {changeStream} />
   </div>
   <div class="absolute right-0 top-1 w-60">
-    <AgentList {agentDefs} {onAddAgent} />
+    <AgentList {agentDefs} {onAddAgent} onDragAgentStart={handleAgentDragStart} />
   </div>
 </div>
 

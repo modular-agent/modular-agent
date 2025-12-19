@@ -6,10 +6,20 @@
 
   interface Props {
     agentDefs: AgentDefinitions;
-    onAddAgent: (agentName: string) => Promise<void>;
+    onAddAgent: (agentName: string, position?: { x: number; y: number }) => Promise<void>;
+    onDragAgentStart?: (event: DragEvent, agentName: string) => void;
   }
 
-  let { agentDefs, onAddAgent }: Props = $props();
+  let { agentDefs, onAddAgent, onDragAgentStart }: Props = $props();
+
+  let containerEl: HTMLDivElement;
+
+  function handleAddAgentClick(event: MouseEvent, agentName: string) {
+    const rect = containerEl?.getBoundingClientRect();
+    const x = (rect?.left ?? window.innerWidth * 0.8) - 100;
+    const y = event.clientY - 20;
+    onAddAgent(agentName, { x, y });
+  }
 
   let searchTerm = $state("");
 
@@ -54,7 +64,7 @@
   );
 </script>
 
-<div class="backdrop-blur-xs">
+<div class="backdrop-blur-xs" bind:this={containerEl}>
   <div class="mb-2 flex items-center justify-between gap-2">
     <h4 class="mb-0">Agents</h4>
     <input
@@ -65,6 +75,12 @@
   </div>
   <hr />
   <Accordion flush class="" multiple={expandAll}>
-    <AgentListItems {categories} {agentDefs} {expandAll} {onAddAgent} />
+    <AgentListItems
+      {categories}
+      {agentDefs}
+      {expandAll}
+      onAddAgentClick={handleAddAgentClick}
+      {onDragAgentStart}
+    />
   </Accordion>
 </div>
