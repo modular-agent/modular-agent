@@ -184,11 +184,17 @@
 
 <NodeBase {id} {data} {agentDef} {titleColor} {inputCount} {title} {contents} {...props} />
 
-{#if description || data.title}
+{#if description || data.def_name || agentDef?.category}
   <Popover triggeredBy="#t-{uid}" placement="top-start" arrow={false} class="z-40">
-    {#if data.title}
-      <p class="text-sm font-semibold pb-1">{agentDef?.title ?? data.def_name}</p>
-    {/if}
+    <p class="text-sm font-semibold">
+      {data.def_name}<br />
+      {#if agentDef?.title}
+        {agentDef.title}
+      {/if}
+      {#if agentDef?.category}
+        ({agentDef.category})
+      {/if}
+    </p>
     {#if description}
       <p class="text-sm text-gray-500">{description}</p>
     {/if}
