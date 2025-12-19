@@ -7,10 +7,11 @@
   interface Props {
     categories: Record<string, any>;
     agentDefs: AgentDefinitions;
+    expandAll?: boolean;
     onAddAgent: (agentName: string) => Promise<void>;
   }
 
-  let { categories, agentDefs, onAddAgent }: Props = $props();
+  let { categories, agentDefs, expandAll = false, onAddAgent }: Props = $props();
 
   const categoryKeys = $derived(Object.keys(categories).sort());
 </script>
@@ -31,12 +32,13 @@
     <AccordionItem
       borderBottomClass="border-b group-last:border-none"
       paddingFlush="pl-2 pr-2 py-1"
+      open={expandAll}
     >
       <div slot="header">
         {key}
       </div>
-      <Accordion flush>
-        <AgentListItems categories={categories[key]} {agentDefs} {onAddAgent} />
+      <Accordion flush multiple={expandAll}>
+        <AgentListItems categories={categories[key]} {agentDefs} {expandAll} {onAddAgent} />
       </Accordion>
     </AccordionItem>
   {/if}
