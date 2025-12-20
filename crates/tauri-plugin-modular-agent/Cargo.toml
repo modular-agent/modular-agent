@@ -1,6 +1,6 @@
 [package]
 name = "tauri-plugin-askit"
-version = "0.7.0"
+version = "0.7.1"
 authors = ["Akira Ishino <akira@lumilab.jp>"]
 license = "Apache-2.0 OR MIT"
 description = "Tauri plugin for Agent Stream Kit"
