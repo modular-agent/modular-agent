@@ -1,6 +1,6 @@
 [package]
 name = "askit-llm-agents"
-version = "0.6.5"
+version = "0.6.6"
 description = "LLM Agents for Agent Stream Kit"
 authors = ["Akira Ishino <akira@lumilab.jp>"]
 edition = "2024"
