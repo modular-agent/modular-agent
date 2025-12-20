@@ -6,6 +6,8 @@ use agent_stream_kit::{
 static CATEGORY: &str = "Std/Sequence";
 
 static PIN_IN: &str = "in";
+static PIN_IN1: &str = "in1";
+static PIN_IN2: &str = "in2";
 static PIN_OUT1: &str = "out1";
 static PIN_OUT2: &str = "out2";
 
@@ -70,7 +72,7 @@ impl AsAgent for SequenceAgent {
 #[askit_agent(
     title = "Sync",
     category = CATEGORY,
-    inputs = [PIN_IN],
+    inputs = [PIN_IN1, PIN_IN2],
     outputs = [PIN_OUT1, PIN_OUT2],
     integer_config(name = "n", default = 2),
 )]
