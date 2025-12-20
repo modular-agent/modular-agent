@@ -474,14 +474,22 @@ impl AsAgent for OllamaEmbeddingsAgent {
                     inputs.push(s.to_string());
                 }
             }
+            if inputs.is_empty() {
+                return Err(AgentError::InvalidValue("Input array is empty".to_string()));
+            }
             input = inputs.into();
         } else if value.is_string() {
             let s = value.as_str().unwrap_or("");
-            if !s.is_empty() {
-                input = s.into();
+            if s.is_empty() {
+                return Err(AgentError::InvalidValue(
+                    "Input string is empty".to_string(),
+                ));
             }
+            input = s.into();
         } else {
-            return Ok(());
+            return Err(AgentError::InvalidValue(
+                "Input must be a string or an array of strings".to_string(),
+            ));
         }
 
         let client = self.manager.get_client(self.askit())?;
