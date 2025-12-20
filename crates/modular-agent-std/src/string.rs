@@ -7,14 +7,87 @@ use serde_json::json;
 
 static CATEGORY: &str = "Std/String";
 
-static PIN_VALUE: &str = "value";
 static PIN_STRING: &str = "string";
 static PIN_STRINGS: &str = "strings";
+static PIN_VALUE: &str = "value";
+static PIN_T: &str = "t";
+static PIN_F: &str = "f";
 
 static CONFIG_LEN: &str = "len";
 static CONFIG_OVERLAP: &str = "overlap";
 static CONFIG_SEP: &str = "sep";
 static CONFIG_TEMPLATE: &str = "template";
+
+/// Check if the input is a string.
+#[askit_agent(
+    title = "IsString",
+    category = CATEGORY,
+    inputs = [PIN_VALUE],
+    outputs = [PIN_T, PIN_F],
+)]
+struct IsStringAgent {
+    data: AgentData,
+}
+
+#[async_trait]
+impl AsAgent for IsStringAgent {
+    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+        Ok(Self {
+            data: AgentData::new(askit, id, spec),
+        })
+    }
+
+    async fn process(
+        &mut self,
+        ctx: AgentContext,
+        _pin: String,
+        value: AgentValue,
+    ) -> Result<(), AgentError> {
+        if value.is_string() {
+            self.try_output(ctx, PIN_T, value)
+        } else {
+            self.try_output(ctx, PIN_F, value)
+        }
+    }
+}
+
+/// Check if the input string is empty.
+#[askit_agent(
+    title = "IsEmptyString",
+    category = CATEGORY,
+    inputs = [PIN_STRING],
+    outputs = [PIN_T, PIN_F],
+)]
+struct IsEmptyStringAgent {
+    data: AgentData,
+}
+
+#[async_trait]
+impl AsAgent for IsEmptyStringAgent {
+    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+        Ok(Self {
+            data: AgentData::new(askit, id, spec),
+        })
+    }
+
+    async fn process(
+        &mut self,
+        ctx: AgentContext,
+        _pin: String,
+        value: AgentValue,
+    ) -> Result<(), AgentError> {
+        let is_empty = if let Some(s) = value.as_str() {
+            s.is_empty()
+        } else {
+            false
+        };
+        if is_empty {
+            self.try_output(ctx, PIN_T, value)
+        } else {
+            self.try_output(ctx, PIN_F, value)
+        }
+    }
+}
 
 /// The `StringJoinAgent` is responsible for joining an array of strings into a single string
 /// using a specified separator. It processes input value, applies transformations to handle
