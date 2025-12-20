@@ -464,7 +464,7 @@ impl AsAgent for OllamaEmbeddingsAgent {
         }
 
         let mut input_is_array = false;
-        let mut input: EmbeddingsInput = "".into();
+        let input: EmbeddingsInput;
         if value.is_array() {
             input_is_array = true;
             let mut inputs = vec![];
