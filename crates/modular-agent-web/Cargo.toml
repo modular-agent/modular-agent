@@ -23,3 +23,8 @@ fetch-url = []
 html-scraper = ["scraper"]
 html-to-markdown = ["html-to-markdown-rs"]
 yt-transcript = ["yt-transcript-rs"]
+
+[patch.crates-io]
+yt-transcript-rs = { git = "https://github.com/stn/yt-transcript-rs", branch = "remove-cargo-husky" }
+# agent-stream-kit = { path = "../agent-stream-kit/agent-stream-kit" }
+# askit-macros = { path = "../agent-stream-kit/askit-macros" }
