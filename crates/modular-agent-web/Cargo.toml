@@ -14,7 +14,7 @@ scraper = { version = "0.25.0", optional = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 url = "2.5.7"
-yt-transcript-rs = { version = "0.1.8", optional = true }
+yt-transcript-rs = { version = "0.1.8", git = "https://github.com/stn/yt-transcript-rs", branch = "remove-cargo-husky", optional = true }
 
 [features]
 default = ["fetch-url", "html-scraper", "html-to-markdown", "reqwest/default-tls", "yt-transcript"]
@@ -24,7 +24,6 @@ html-scraper = ["scraper"]
 html-to-markdown = ["html-to-markdown-rs"]
 yt-transcript = ["yt-transcript-rs"]
 
-[patch.crates-io]
-yt-transcript-rs = { git = "https://github.com/stn/yt-transcript-rs", branch = "remove-cargo-husky" }
+#[patch.crates-io]
 # agent-stream-kit = { path = "../agent-stream-kit/agent-stream-kit" }
 # askit-macros = { path = "../agent-stream-kit/askit-macros" }
