@@ -6,8 +6,308 @@ use agent_stream_kit::{
 static CATEGORY: &str = "Std/Array";
 
 static PIN_ARRAY: &str = "array";
+static PIN_IN1: &str = "in1";
+static PIN_IN2: &str = "in2";
+static PIN_T: &str = "T";
+static PIN_F: &str = "F";
 static PIN_VALUE: &str = "value";
 
+/// Check if an input is an array.
+#[askit_agent(
+    title = "IsArray",
+    category = CATEGORY,
+    inputs = [PIN_VALUE],
+    outputs = [PIN_T, PIN_F],
+)]
+struct IsArrayAgent {
+    data: AgentData,
+}
+
+#[async_trait]
+impl AsAgent for IsArrayAgent {
+    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+        let data = AgentData::new(askit, id, spec);
+        Ok(Self { data })
+    }
+    async fn process(
+        &mut self,
+        ctx: AgentContext,
+        _pin: String,
+        value: AgentValue,
+    ) -> Result<(), AgentError> {
+        if value.is_array() {
+            self.try_output(ctx, PIN_T, value)
+        } else {
+            self.try_output(ctx, PIN_F, value)
+        }
+    }
+}
+
+/// Checks if an input array is empty, emitting to T or F accordingly.
+/// If the input is not an array, it is treated as non-empty.
+#[askit_agent(
+    title = "IsEmptyArray",
+    category = CATEGORY,
+    inputs = [PIN_ARRAY],
+    outputs = [PIN_T, PIN_F],
+)]
+struct IsEmptyArrayAgent {
+    data: AgentData,
+}
+
+#[async_trait]
+impl AsAgent for IsEmptyArrayAgent {
+    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+        let data = AgentData::new(askit, id, spec);
+        Ok(Self { data })
+    }
+
+    async fn process(
+        &mut self,
+        ctx: AgentContext,
+        _pin: String,
+        value: AgentValue,
+    ) -> Result<(), AgentError> {
+        let mut is_empty = false;
+        if value.is_array() {
+            let arr = value.as_array().unwrap();
+            if arr.is_empty() {
+                is_empty = true;
+            }
+        }
+        if is_empty {
+            self.try_output(ctx, PIN_T, value)
+        } else {
+            self.try_output(ctx, PIN_F, value)
+        }
+    }
+}
+
+/// Outputs the length of the input array.
+/// If the input is not an array, outputs 1.
+/// This is different from IsEmpty, but is designed for consistency with Map.
+#[askit_agent(
+    title = "ArrayLength",
+    category = CATEGORY,
+    inputs = [PIN_ARRAY],
+    outputs = [PIN_VALUE],
+)]
+struct ArrayLengthAgent {
+    data: AgentData,
+}
+
+#[async_trait]
+impl AsAgent for ArrayLengthAgent {
+    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+        let data = AgentData::new(askit, id, spec);
+        Ok(Self { data })
+    }
+
+    async fn process(
+        &mut self,
+        ctx: AgentContext,
+        _pin: String,
+        value: AgentValue,
+    ) -> Result<(), AgentError> {
+        let length = if value.is_array() {
+            let arr = value.as_array().unwrap();
+            arr.len() as i64
+        } else {
+            1
+        };
+        self.try_output(ctx, PIN_VALUE, AgentValue::integer(length))
+    }
+}
+
+/// Output the first item of the input array.
+/// If the input is not an array, outputs the input itself.
+/// Errors if the input array is empty.
+#[askit_agent(
+    title = "ArrayFirst",
+    category = CATEGORY,
+    inputs = [PIN_ARRAY],
+    outputs = [PIN_VALUE],
+)]
+struct ArrayFirstAgent {
+    data: AgentData,
+}
+
+#[async_trait]
+impl AsAgent for ArrayFirstAgent {
+    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+        let data = AgentData::new(askit, id, spec);
+        Ok(Self { data })
+    }
+
+    async fn process(
+        &mut self,
+        ctx: AgentContext,
+        _pin: String,
+        value: AgentValue,
+    ) -> Result<(), AgentError> {
+        if value.is_array() {
+            let arr = value.as_array().unwrap();
+            if arr.is_empty() {
+                return Err(AgentError::InvalidValue(
+                    "Input array is empty, no first item".into(),
+                ));
+            }
+            let first_item = arr[0].clone();
+            self.try_output(ctx, PIN_VALUE, first_item)
+        } else {
+            self.try_output(ctx, PIN_VALUE, value)
+        }
+    }
+}
+
+/// Output the rest of the input array after removing the first item.
+/// If the input is not an array, outputs an empty array.
+/// Output an empty array if the input array is empty.
+#[askit_agent(
+    title = "ArrayRest",
+    category = CATEGORY,
+    inputs = [PIN_ARRAY],
+    outputs = [PIN_ARRAY],
+)]
+struct ArrayRestAgent {
+    data: AgentData,
+}
+
+#[async_trait]
+impl AsAgent for ArrayRestAgent {
+    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+        let data = AgentData::new(askit, id, spec);
+        Ok(Self { data })
+    }
+
+    async fn process(
+        &mut self,
+        ctx: AgentContext,
+        _pin: String,
+        value: AgentValue,
+    ) -> Result<(), AgentError> {
+        if value.is_array() {
+            let arr = value.as_array().unwrap();
+            if arr.is_empty() {
+                return self.try_output(ctx, PIN_ARRAY, AgentValue::array(Vec::new()));
+            }
+            let rest_items = arr[1..].to_vec();
+            self.try_output(ctx, PIN_ARRAY, AgentValue::array(rest_items))
+        } else {
+            self.try_output(ctx, PIN_ARRAY, AgentValue::array_default())
+        }
+    }
+}
+
+//// Output the last item of the input array.
+/// If the input is not an array, outputs the input itself.
+/// Errors if the input array is empty.
+#[askit_agent(
+    title = "ArrayLast",
+    category = CATEGORY,
+    inputs = [PIN_ARRAY],
+    outputs = [PIN_VALUE],
+)]
+struct ArrayLastAgent {
+    data: AgentData,
+}
+
+#[async_trait]
+impl AsAgent for ArrayLastAgent {
+    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+        let data = AgentData::new(askit, id, spec);
+        Ok(Self { data })
+    }
+
+    async fn process(
+        &mut self,
+        ctx: AgentContext,
+        _pin: String,
+        value: AgentValue,
+    ) -> Result<(), AgentError> {
+        if value.is_array() {
+            let arr = value.as_array().unwrap();
+            if arr.is_empty() {
+                return Err(AgentError::InvalidValue(
+                    "Input array is empty, no last item".into(),
+                ));
+            }
+            let last_item = arr[arr.len() - 1].clone();
+            self.try_output(ctx, PIN_VALUE, last_item)
+        } else {
+            self.try_output(ctx, PIN_VALUE, value)
+        }
+    }
+}
+
+/// Output the nth-item of the input array.
+/// If the input is not an array, outputs the input itself if n=0, else errors.
+/// Errors if the input array is shorter than n+1.
+#[askit_agent(
+    title = "ArrayNth",
+    category = CATEGORY,
+    inputs = [PIN_ARRAY],
+    outputs = [PIN_VALUE],
+    integer_config(name = "n", default = 0),
+)]
+struct ArrayNthAgent {
+    data: AgentData,
+}
+
+#[async_trait]
+impl AsAgent for ArrayNthAgent {
+    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+        let data = AgentData::new(askit, id, spec);
+        Ok(Self { data })
+    }
+
+    async fn process(
+        &mut self,
+        ctx: AgentContext,
+        _pin: String,
+        value: AgentValue,
+    ) -> Result<(), AgentError> {
+        let n = self
+            .data
+            .spec
+            .configs
+            .as_ref()
+            .map(|cfg| cfg.get_integer_or("n", 0))
+            .unwrap_or(0);
+        if n < 0 {
+            return Err(AgentError::InvalidConfig("n must be non-negative".into()));
+        }
+        let n = n as usize;
+
+        if value.is_array() {
+            let arr = value.as_array().unwrap();
+            if n >= arr.len() {
+                return Err(AgentError::InvalidValue(format!(
+                    "Input array length {} is less than n+1={}",
+                    arr.len(),
+                    n + 1
+                )));
+            }
+            let nth_item = arr[n].clone();
+            self.try_output(ctx, PIN_VALUE, nth_item)
+        } else {
+            if n == 0 {
+                self.try_output(ctx, PIN_VALUE, value)
+            } else {
+                Err(AgentError::InvalidValue(
+                    "Input is not an array and n != 0".into(),
+                ))
+            }
+        }
+    }
+}
+
+/// Maps over an input array, emitting each item individually with context variables `map_i` and `map_n`.
+///
+/// `map_i` is an array of indices representing the current position in nested maps,
+/// and `map_n` is an array of lengths representing the size of each level of mapping.
+///
+/// If the input is not an array, it is treated as a single-item array.
 #[askit_agent(
     title = "Map",
     category = CATEGORY,
@@ -31,38 +331,78 @@ impl AsAgent for MapAgent {
         _pin: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
-        if value.is_array() {
-            let arr = value
+        let base_map_i = match ctx.get_var("map_i") {
+            Some(v) => v
                 .as_array()
-                .ok_or_else(|| AgentError::InvalidValue("Failed to get array".into()))?;
-            let n = arr.len();
-            for (i, item) in arr.iter().cloned().enumerate() {
-                let c = ctx
-                    .with_var("map_i".into(), AgentValue::integer(i as i64))
-                    .with_var("map_n".into(), AgentValue::integer(n as i64));
-                self.try_output(c, PIN_VALUE, item.clone())?;
-            }
-        } else {
+                .cloned()
+                .ok_or_else(|| AgentError::InvalidValue("map_i must be an array".into()))?,
+            None => Vec::new(),
+        };
+        let base_map_n = match ctx.get_var("map_n") {
+            Some(v) => v
+                .as_array()
+                .cloned()
+                .ok_or_else(|| AgentError::InvalidValue("map_n must be an array".into()))?,
+            None => Vec::new(),
+        };
+        if base_map_i.len() != base_map_n.len() {
             return Err(AgentError::InvalidValue(
-                "Input value is not an array".into(),
+                "map_i and map_n length mismatch".into(),
             ));
+        }
+
+        if !value.is_array() {
+            // n = 1
+            let mut map_i_stack = base_map_i.clone();
+            let mut map_n_stack = base_map_n.clone();
+            map_i_stack.push(AgentValue::integer(0));
+            map_n_stack.push(AgentValue::integer(1));
+            let c = ctx
+                .with_var("map_i".into(), AgentValue::array(map_i_stack))
+                .with_var("map_n".into(), AgentValue::array(map_n_stack));
+            return self.try_output(c, PIN_VALUE, value);
+        }
+
+        let arr = value
+            .as_array()
+            .ok_or_else(|| AgentError::InvalidValue("Failed to get array".into()))?;
+
+        let n = arr.len();
+        for (i, item) in arr.iter().cloned().enumerate() {
+            let mut map_i_stack = base_map_i.clone();
+            let mut map_n_stack = base_map_n.clone();
+            map_i_stack.push(AgentValue::integer(i as i64));
+            map_n_stack.push(AgentValue::integer(n as i64));
+
+            let c = ctx
+                .with_var("map_i".into(), AgentValue::array(map_i_stack))
+                .with_var("map_n".into(), AgentValue::array(map_n_stack));
+            self.try_output(c, PIN_VALUE, item)?;
         }
         Ok(())
     }
 }
 
-/// Collects input values into an array and emits the array.
+/// Collects input values into an array.
+///
+/// Expects context variables `map_i` and `map_n` to determine the position of each input value.
+/// `map_i` is an array of indices representing the current position in nested maps,
+/// and `map_n` is an array of lengths representing the size of each level of mapping.
+///
+/// If the context variables are not present, the input value is emitted directly.
+///
+/// Incomplete arrays are emitted when the context changes.
 #[askit_agent(
     title = "Collect",
     category = CATEGORY,
+    description = "Collects input values into an array",
     inputs = [PIN_VALUE],
     outputs = [PIN_ARRAY],
-    string_config(name = "timeout", default = "10s")
 )]
 struct CollectAgent {
     data: AgentData,
     input_values: Vec<Option<AgentValue>>,
-    current_id: usize,
+    last_ctx: Option<AgentContext>,
 }
 
 #[async_trait]
@@ -72,7 +412,7 @@ impl AsAgent for CollectAgent {
         Ok(Self {
             data,
             input_values: Vec::new(),
-            current_id: 0,
+            last_ctx: None,
         })
     }
 
@@ -82,26 +422,96 @@ impl AsAgent for CollectAgent {
         _pin: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
-        let Some(map_i) = ctx.get_var("map_i").and_then(|v| v.as_i64()) else {
-            // no need to collect
-            return self.try_output(ctx, PIN_ARRAY, value);
-        };
-        let Some(map_n) = ctx.get_var("map_n").and_then(|v| v.as_i64()) else {
-            // no need to collect
-            return self.try_output(ctx, PIN_ARRAY, value);
-        };
-
         // Reset input values if context ID changes
         let ctx_id = ctx.id();
-        if ctx_id != self.current_id {
-            self.current_id = ctx_id;
-            self.input_values = vec![None; map_n as usize];
+        if let Some(last_ctx) = &self.last_ctx {
+            if ctx_id != last_ctx.id() {
+                // Output incomplete array from previous context
+                let mut arr = Vec::new();
+                for v in &self.input_values {
+                    match v {
+                        Some(val) => arr.push(val.clone()),
+                        None => arr.push(AgentValue::unit()), // FIXME: or error?
+                    }
+                }
+                self.input_values = Vec::new();
+                let mut map_i_stack = match last_ctx.get_var("map_i") {
+                    Some(v) => v
+                        .as_array()
+                        .cloned()
+                        .ok_or_else(|| AgentError::InvalidValue("map_i must be an array".into()))?,
+                    None => Vec::new(),
+                };
+                let mut map_n_stack = match last_ctx.get_var("map_n") {
+                    Some(v) => v
+                        .as_array()
+                        .cloned()
+                        .ok_or_else(|| AgentError::InvalidValue("map_n must be an array".into()))?,
+                    None => Vec::new(),
+                };
+                map_i_stack.pop();
+                map_n_stack.pop();
+                let next_ctx = last_ctx
+                    .with_var("map_i".into(), AgentValue::array(map_i_stack))
+                    .with_var("map_n".into(), AgentValue::array(map_n_stack));
+                self.try_output(next_ctx, PIN_ARRAY, AgentValue::array(arr))?;
+            }
+        }
+        self.last_ctx = None;
+
+        let mut map_i_stack = match ctx.get_var("map_i") {
+            Some(v) => v
+                .as_array()
+                .cloned()
+                .ok_or_else(|| AgentError::InvalidValue("map_i must be an array".into()))?,
+            None => return self.try_output(ctx, PIN_ARRAY, value),
+        };
+        let mut map_n_stack = match ctx.get_var("map_n") {
+            Some(v) => v
+                .as_array()
+                .cloned()
+                .ok_or_else(|| AgentError::InvalidValue("map_n must be an array".into()))?,
+            None => return self.try_output(ctx, PIN_ARRAY, value),
+        };
+
+        if map_i_stack.len() != map_n_stack.len() {
+            return Err(AgentError::InvalidValue(
+                "map_i and map_n length mismatch".into(),
+            ));
+        }
+        if map_i_stack.is_empty() {
+            return self.try_output(ctx, PIN_ARRAY, value);
         }
 
-        self.input_values[map_i as usize] = Some(value);
+        let idx = map_i_stack
+            .last()
+            .and_then(|v| v.as_i64())
+            .ok_or_else(|| AgentError::InvalidValue("map_i must end with integer".into()))?;
+        let n = map_n_stack
+            .last()
+            .and_then(|v| v.as_i64())
+            .ok_or_else(|| AgentError::InvalidValue("map_n must end with integer".into()))?;
+        if idx < 0 || n < 1 {
+            return Err(AgentError::InvalidValue(
+                "Invalid map_i/map_n values".into(),
+            ));
+        }
+
+        let idx_usize = idx as usize;
+        let n_usize = n as usize;
+        if idx_usize >= n_usize {
+            return Err(AgentError::InvalidValue("map_i is out of bounds".into()));
+        }
+
+        if self.input_values.len() != n_usize {
+            self.input_values = vec![None; n_usize];
+        }
+
+        self.input_values[idx_usize] = Some(value);
 
         // Check if some input is still missing
         if self.input_values.iter().any(|v| v.is_none()) {
+            self.last_ctx = Some(ctx.clone());
             return Ok(());
         }
 
@@ -111,6 +521,121 @@ impl AsAgent for CollectAgent {
             .iter()
             .map(|v| v.clone().unwrap())
             .collect();
+        self.input_values = Vec::new();
+        map_i_stack.pop();
+        map_n_stack.pop();
+        let next_ctx = ctx
+            .with_var("map_i".into(), AgentValue::array(map_i_stack))
+            .with_var("map_n".into(), AgentValue::array(map_n_stack));
+        self.try_output(next_ctx, PIN_ARRAY, AgentValue::array(arr))
+    }
+}
+
+/// Zips multiple inputs into an array.
+///
+/// The number of inputs n is specified via configuration.
+///
+/// If n=2, it takes two inputs: in1 and in2. Once all inputs are present,
+/// it emits them as [in1, in2].
+///
+/// If in2 arrives repeatedly before in1, the in2 values are queued; when in1 arrives,
+/// they’re paired in order from the head of the queue and emitted.
+#[askit_agent(
+    title = "ZipToArray",
+    category = CATEGORY,
+    inputs = [PIN_IN1, PIN_IN2],
+    outputs = [PIN_ARRAY],
+    integer_config(name = "n", default = 2),
+)]
+struct ZipToArrayAgent {
+    data: AgentData,
+    n: usize,
+    input_values: Vec<Vec<AgentValue>>,
+}
+
+#[async_trait]
+impl AsAgent for ZipToArrayAgent {
+    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+        let mut n = spec
+            .configs
+            .as_ref()
+            .map(|cfg| cfg.get_integer_or("n", 2))
+            .unwrap_or(2) as usize;
+        if n < 1 {
+            n = 1;
+        }
+        let mut spec = spec;
+        spec.inputs = Some((1..=n).map(|i| format!("in{}", i)).collect());
+        let data = AgentData::new(askit, id, spec);
+        Ok(Self {
+            data,
+            n,
+            input_values: vec![Vec::new(); n],
+        })
+    }
+
+    fn configs_changed(&mut self) -> Result<(), AgentError> {
+        let cfg_n = self
+            .data
+            .spec
+            .configs
+            .as_ref()
+            .map(|cfg| cfg.get_integer_or("n", 2))
+            .unwrap_or(2) as usize;
+        if cfg_n < 1 {
+            return Err(AgentError::InvalidConfig("n must be at least 1".into()));
+        }
+        if cfg_n != self.n {
+            self.n = cfg_n;
+            self.data.spec.inputs = Some((1..=self.n).map(|i| format!("in{}", i)).collect());
+            self.input_values = vec![Vec::new(); self.n];
+            self.emit_agent_spec_updated();
+        }
+        Ok(())
+    }
+
+    async fn stop(&mut self) -> Result<(), AgentError> {
+        // Clear input queues on stop
+        self.input_values = vec![Vec::new(); self.n];
+        Ok(())
+    }
+
+    async fn process(
+        &mut self,
+        ctx: AgentContext,
+        pin: String,
+        value: AgentValue,
+    ) -> Result<(), AgentError> {
+        // Store the input value
+        let Some(i) = pin
+            .strip_prefix("in")
+            .and_then(|s| s.parse::<usize>().ok())
+            .and_then(|idx| {
+                if idx >= 1 && idx <= self.n {
+                    Some(idx - 1)
+                } else {
+                    None
+                }
+            })
+        else {
+            return Err(AgentError::InvalidValue(format!(
+                "Invalid input pin: {}",
+                pin
+            )));
+        };
+
+        self.input_values[i].push(value);
+
+        // Check if some input is still missing
+        if self.input_values.iter().any(|v| v.is_empty()) {
+            return Ok(());
+        }
+
+        // All inputs are present, emit the array
+        let arr: Vec<AgentValue> = self.input_values.iter().map(|v| v[0].clone()).collect();
+        for v in &mut self.input_values {
+            v.remove(0);
+        }
         self.try_output(ctx, PIN_ARRAY, AgentValue::array(arr))
     }
 }
