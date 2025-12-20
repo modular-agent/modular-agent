@@ -1,13 +1,16 @@
 use std::vec;
 
 use agent_stream_kit::{
-    ASKit, Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
-    askit_agent, async_trait,
+    ASKit, Agent, AgentConfigSpec, AgentConfigSpecs, AgentConfigs, AgentContext, AgentData,
+    AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent, askit_agent, async_trait,
 };
 
 static CATEGORY: &str = "Std/Data";
 
+static PIN_IN1: &str = "in1";
+static PIN_IN2: &str = "in2";
 static PIN_JSON: &str = "json";
+static PIN_OBJECT: &str = "object";
 static PIN_VALUE: &str = "value";
 
 static CONFIG_KEY: &str = "key";
@@ -259,6 +262,146 @@ fn set_nested_value<'a>(value: &'a mut AgentValue, keys: Vec<&str>, new_value: A
     let last_key = keys.last().unwrap();
     if let Some(obj) = current_value.as_object_mut() {
         obj.insert((*last_key).to_string(), new_value);
+    }
+}
+
+/// Zips multiple inputs into an object.
+///
+/// The number of inputs n and keys are specified via configuration.
+///
+/// If n=2, it takes two inputs: in1 and in2. Once all inputs are present,
+/// it emits them as { key1: in1, key2: in2 }.
+///
+/// If in2 arrives repeatedly before in1, the in2 values are queued; when in1 arrives,
+/// they’re paired in order from the head of the queue and emitted.
+#[askit_agent(
+    title = "ZipToObject",
+    category = CATEGORY,
+    inputs = [PIN_IN1, PIN_IN2],
+    outputs = [PIN_OBJECT],
+    integer_config(name = "n", default = 2),
+)]
+struct ZipToObjectAgent {
+    data: AgentData,
+    n: usize,
+    input_values: Vec<Vec<AgentValue>>,
+}
+
+impl ZipToObjectAgent {
+    fn update_spec(spec: &mut AgentSpec) -> Result<usize, AgentError> {
+        let mut n = spec
+            .configs
+            .as_ref()
+            .map(|cfg| cfg.get_integer_or("n", 2))
+            .unwrap_or(2);
+        if n < 1 {
+            n = 1;
+        }
+
+        let mut configs = AgentConfigs::new();
+        let mut config_specs = AgentConfigSpecs::default();
+
+        configs.set("n".to_string(), AgentValue::integer(n));
+        let Some(n_spec) = spec
+            .config_specs
+            .as_ref()
+            .and_then(|cs| cs.get("n"))
+            .cloned()
+        else {
+            return Err(AgentError::InvalidConfig(
+                "config_specs must be present".into(),
+            ));
+        };
+        config_specs.insert("n".to_string(), n_spec);
+
+        for i in 1..=n {
+            let key_cfg = format!("k{}", i);
+            let v = spec
+                .configs
+                .as_ref()
+                .map(|cfg| cfg.get_string_or_default(&key_cfg))
+                .unwrap_or_default();
+            configs.set(key_cfg.clone(), AgentValue::string(v));
+            config_specs.insert(
+                key_cfg,
+                AgentConfigSpec {
+                    value: AgentValue::string_default(),
+                    type_: Some("string".to_string()),
+                    ..Default::default()
+                },
+            );
+        }
+
+        spec.configs = Some(configs);
+        spec.config_specs = Some(config_specs);
+
+        Ok(n as usize)
+    }
+}
+
+#[async_trait]
+impl AsAgent for ZipToObjectAgent {
+    fn new(askit: ASKit, id: String, mut spec: AgentSpec) -> Result<Self, AgentError> {
+        let n = Self::update_spec(&mut spec)?;
+        let data = AgentData::new(askit, id, spec);
+        Ok(Self {
+            data,
+            n,
+            input_values: vec![Vec::new(); n],
+        })
+    }
+
+    fn configs_changed(&mut self) -> Result<(), AgentError> {
+        Self::update_spec(&mut self.data.spec)?;
+        Ok(())
+    }
+
+    async fn stop(&mut self) -> Result<(), AgentError> {
+        // Clear input queues on stop
+        self.input_values = vec![Vec::new(); self.n];
+        Ok(())
+    }
+
+    async fn process(
+        &mut self,
+        ctx: AgentContext,
+        pin: String,
+        value: AgentValue,
+    ) -> Result<(), AgentError> {
+        // Store the input value
+        let Some(i) = pin
+            .strip_prefix("in")
+            .and_then(|s| s.parse::<usize>().ok())
+            .and_then(|idx| {
+                if idx >= 1 && idx <= self.n {
+                    Some(idx - 1)
+                } else {
+                    None
+                }
+            })
+        else {
+            return Err(AgentError::InvalidValue(format!(
+                "Invalid input pin: {}",
+                pin
+            )));
+        };
+
+        self.input_values[i].push(value);
+
+        // Check if some input is still missing
+        if self.input_values.iter().any(|v| v.is_empty()) {
+            return Ok(());
+        }
+
+        // All inputs are present, emit an object
+        let mut obj = AgentValue::object_default();
+        for j in 0..self.n {
+            let key_cfg = format!("k{}", j + 1);
+            let key = self.configs()?.get_string_or_default(&key_cfg);
+            let val = self.input_values[j].remove(0);
+            obj.set(key, val)?;
+        }
+        self.try_output(ctx, PIN_OBJECT, obj)
     }
 }
 
