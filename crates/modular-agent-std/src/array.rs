@@ -13,6 +13,10 @@ static PIN_T: &str = "T";
 static PIN_F: &str = "F";
 static PIN_VALUE: &str = "value";
 
+static FRAME_MAP: &str = "map";
+static FRAME_KEY_INDEX: &str = "i";
+static FRAME_KEY_LENGTH: &str = "n";
+
 /// Check if an input is an array.
 #[askit_agent(
     title = "IsArray",
@@ -303,12 +307,97 @@ impl AsAgent for ArrayNthAgent {
     }
 }
 
-/// Maps over an input array, emitting each item individually with context variables `map_i` and `map_n`.
-///
-/// `map_i` is an array of indices representing the current position in nested maps,
-/// and `map_n` is an array of lengths representing the size of each level of mapping.
-///
-/// If the input is not an array, it is treated as a single-item array.
+fn map_frame_data(index: usize, len: usize) -> AgentValue {
+    let mut data = AgentValue::object_default();
+    let _ = data.set(
+        FRAME_KEY_INDEX.to_string(),
+        AgentValue::integer(index as i64),
+    );
+    let _ = data.set(
+        FRAME_KEY_LENGTH.to_string(),
+        AgentValue::integer(len as i64),
+    );
+    data
+}
+
+fn current_map_frame(ctx: &AgentContext) -> Result<Option<(usize, usize)>, AgentError> {
+    let frames = match ctx.frames() {
+        Some(frames) => frames,
+        None => return Ok(None),
+    };
+    let Some(last_index) = frames.len().checked_sub(1) else {
+        return Ok(None);
+    };
+    let Some(frame) = frames.get(last_index) else {
+        return Ok(None);
+    };
+    if frame.name != FRAME_MAP {
+        return Ok(None);
+    }
+    let idx = frame
+        .data
+        .get(FRAME_KEY_INDEX)
+        .and_then(|v| v.as_i64())
+        .ok_or_else(|| AgentError::InvalidValue("map frame missing integer index".into()))?;
+    let len = frame
+        .data
+        .get(FRAME_KEY_LENGTH)
+        .and_then(|v| v.as_i64())
+        .ok_or_else(|| AgentError::InvalidValue("map frame missing integer length".into()))?;
+    if idx < 0 || len < 1 {
+        return Err(AgentError::InvalidValue("Invalid map frame values".into()));
+    }
+    Ok(Some((idx as usize, len as usize)))
+}
+
+fn pop_map_frame(ctx: &AgentContext) -> Result<AgentContext, AgentError> {
+    let (frame, next_ctx) = ctx.pop_frame();
+    match frame {
+        Some(f) if f.name == FRAME_MAP => Ok(next_ctx),
+        Some(f) => Err(AgentError::InvalidValue(format!(
+            "Unexpected frame '{}', expected map",
+            f.name
+        ))),
+        None => Err(AgentError::InvalidValue(
+            "Missing map frame in context".into(),
+        )),
+    }
+}
+
+fn map_frame_indices(ctx: &AgentContext) -> Result<Vec<(i64, i64)>, AgentError> {
+    let mut indices = Vec::new();
+    let Some(frames) = ctx.frames() else {
+        return Ok(indices);
+    };
+    for frame in frames.iter() {
+        if frame.name != FRAME_MAP {
+            continue;
+        }
+        let idx = frame
+            .data
+            .get(FRAME_KEY_INDEX)
+            .and_then(|v| v.as_i64())
+            .ok_or_else(|| AgentError::InvalidValue("map frame missing integer index".into()))?;
+        let len = frame
+            .data
+            .get(FRAME_KEY_LENGTH)
+            .and_then(|v| v.as_i64())
+            .ok_or_else(|| AgentError::InvalidValue("map frame missing integer length".into()))?;
+        if idx < 0 || len < 1 {
+            return Err(AgentError::InvalidValue("Invalid map frame values".into()));
+        }
+        if idx >= len {
+            return Err(AgentError::InvalidValue(
+                "map frame index is out of bounds".into(),
+            ));
+        }
+        indices.push((idx, len));
+    }
+    Ok(indices)
+}
+
+/// Maps over an input array, emitting each item individually with a `map` frame that captures the index and length.
+/// Nested maps accumulate frames to preserve lineage. If the input is not an array, it is treated as a single-item array.
 #[askit_agent(
     title = "Map",
     category = CATEGORY,
@@ -332,35 +421,8 @@ impl AsAgent for MapAgent {
         _pin: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
-        let base_map_i = match ctx.get_var("map_i") {
-            Some(v) => v
-                .as_array()
-                .cloned()
-                .ok_or_else(|| AgentError::InvalidValue("map_i must be an array".into()))?,
-            None => Vec::new(),
-        };
-        let base_map_n = match ctx.get_var("map_n") {
-            Some(v) => v
-                .as_array()
-                .cloned()
-                .ok_or_else(|| AgentError::InvalidValue("map_n must be an array".into()))?,
-            None => Vec::new(),
-        };
-        if base_map_i.len() != base_map_n.len() {
-            return Err(AgentError::InvalidValue(
-                "map_i and map_n length mismatch".into(),
-            ));
-        }
-
         if !value.is_array() {
-            // n = 1
-            let mut map_i_stack = base_map_i.clone();
-            let mut map_n_stack = base_map_n.clone();
-            map_i_stack.push(AgentValue::integer(0));
-            map_n_stack.push(AgentValue::integer(1));
-            let c = ctx
-                .with_var("map_i".into(), AgentValue::array(map_i_stack))
-                .with_var("map_n".into(), AgentValue::array(map_n_stack));
+            let c = ctx.push_frame(FRAME_MAP.to_string(), map_frame_data(0, 1));
             return self.try_output(c, PIN_VALUE, value);
         }
 
@@ -370,14 +432,7 @@ impl AsAgent for MapAgent {
 
         let n = arr.len();
         for (i, item) in arr.iter().cloned().enumerate() {
-            let mut map_i_stack = base_map_i.clone();
-            let mut map_n_stack = base_map_n.clone();
-            map_i_stack.push(AgentValue::integer(i as i64));
-            map_n_stack.push(AgentValue::integer(n as i64));
-
-            let c = ctx
-                .with_var("map_i".into(), AgentValue::array(map_i_stack))
-                .with_var("map_n".into(), AgentValue::array(map_n_stack));
+            let c = ctx.push_frame(FRAME_MAP.to_string(), map_frame_data(i, n));
             self.try_output(c, PIN_VALUE, item)?;
         }
         Ok(())
@@ -386,11 +441,9 @@ impl AsAgent for MapAgent {
 
 /// Collects input values into an array.
 ///
-/// Expects context variables `map_i` and `map_n` to determine the position of each input value.
-/// `map_i` is an array of indices representing the current position in nested maps,
-/// and `map_n` is an array of lengths representing the size of each level of mapping.
-///
-/// If the context variables are not present, the input value is emitted directly.
+/// Expects a `map` frame to determine the position and length for each input value.
+/// The `map` frame stores keys `i` (index) and `n` (length). Nested maps stack frames.
+/// If a `map` frame is not present, the input value is emitted directly.
 ///
 /// Incomplete arrays are emitted when the context changes.
 #[askit_agent(
@@ -404,6 +457,13 @@ struct CollectAgent {
     data: AgentData,
     input_values: Vec<Option<AgentValue>>,
     last_ctx: Option<AgentContext>,
+}
+
+fn drain_input_values(values: &mut Vec<Option<AgentValue>>) -> Vec<AgentValue> {
+    values
+        .drain(..)
+        .map(|v| v.unwrap_or_else(AgentValue::unit))
+        .collect()
 }
 
 #[async_trait]
@@ -427,81 +487,26 @@ impl AsAgent for CollectAgent {
         let ctx_id = ctx.id();
         if let Some(last_ctx) = &self.last_ctx {
             if ctx_id != last_ctx.id() {
-                // Output incomplete array from previous context
-                let mut arr = Vec::new();
-                for v in &self.input_values {
-                    match v {
-                        Some(val) => arr.push(val.clone()),
-                        None => arr.push(AgentValue::unit()), // FIXME: or error?
-                    }
+                if !self.input_values.is_empty() {
+                    // Output incomplete array from previous context
+                    let arr = drain_input_values(&mut self.input_values);
+                    let next_ctx = pop_map_frame(last_ctx)?;
+                    self.try_output(next_ctx, PIN_ARRAY, AgentValue::array(arr))?;
                 }
                 self.input_values = Vec::new();
-                let mut map_i_stack = match last_ctx.get_var("map_i") {
-                    Some(v) => v
-                        .as_array()
-                        .cloned()
-                        .ok_or_else(|| AgentError::InvalidValue("map_i must be an array".into()))?,
-                    None => Vec::new(),
-                };
-                let mut map_n_stack = match last_ctx.get_var("map_n") {
-                    Some(v) => v
-                        .as_array()
-                        .cloned()
-                        .ok_or_else(|| AgentError::InvalidValue("map_n must be an array".into()))?,
-                    None => Vec::new(),
-                };
-                map_i_stack.pop();
-                map_n_stack.pop();
-                let next_ctx = last_ctx
-                    .with_var("map_i".into(), AgentValue::array(map_i_stack))
-                    .with_var("map_n".into(), AgentValue::array(map_n_stack));
-                self.try_output(next_ctx, PIN_ARRAY, AgentValue::array(arr))?;
             }
         }
         self.last_ctx = None;
 
-        let mut map_i_stack = match ctx.get_var("map_i") {
-            Some(v) => v
-                .as_array()
-                .cloned()
-                .ok_or_else(|| AgentError::InvalidValue("map_i must be an array".into()))?,
-            None => return self.try_output(ctx, PIN_ARRAY, value),
-        };
-        let mut map_n_stack = match ctx.get_var("map_n") {
-            Some(v) => v
-                .as_array()
-                .cloned()
-                .ok_or_else(|| AgentError::InvalidValue("map_n must be an array".into()))?,
-            None => return self.try_output(ctx, PIN_ARRAY, value),
-        };
-
-        if map_i_stack.len() != map_n_stack.len() {
-            return Err(AgentError::InvalidValue(
-                "map_i and map_n length mismatch".into(),
-            ));
-        }
-        if map_i_stack.is_empty() {
+        let Some((idx_usize, n_usize)) = current_map_frame(&ctx)? else {
+            self.input_values = Vec::new();
             return self.try_output(ctx, PIN_ARRAY, value);
-        }
+        };
 
-        let idx = map_i_stack
-            .last()
-            .and_then(|v| v.as_i64())
-            .ok_or_else(|| AgentError::InvalidValue("map_i must end with integer".into()))?;
-        let n = map_n_stack
-            .last()
-            .and_then(|v| v.as_i64())
-            .ok_or_else(|| AgentError::InvalidValue("map_n must end with integer".into()))?;
-        if idx < 0 || n < 1 {
-            return Err(AgentError::InvalidValue(
-                "Invalid map_i/map_n values".into(),
-            ));
-        }
-
-        let idx_usize = idx as usize;
-        let n_usize = n as usize;
         if idx_usize >= n_usize {
-            return Err(AgentError::InvalidValue("map_i is out of bounds".into()));
+            return Err(AgentError::InvalidValue(
+                "map frame index is out of bounds".into(),
+            ));
         }
 
         if self.input_values.len() != n_usize {
@@ -523,11 +528,7 @@ impl AsAgent for CollectAgent {
             .map(|v| v.clone().unwrap())
             .collect();
         self.input_values = Vec::new();
-        map_i_stack.pop();
-        map_n_stack.pop();
-        let next_ctx = ctx
-            .with_var("map_i".into(), AgentValue::array(map_i_stack))
-            .with_var("map_n".into(), AgentValue::array(map_n_stack));
+        let next_ctx = pop_map_frame(&ctx)?;
         self.try_output(next_ctx, PIN_ARRAY, AgentValue::array(arr))
     }
 }
@@ -643,7 +644,7 @@ impl AsAgent for ZipToArrayAgent {
 
 /// Zips multiple inputs into an array within the same context.
 ///
-/// This agent supports Map/Collect context variables (`map_i` and `map_n`).
+/// This agent uses `map` frames (index/length) to align inputs within the same mapped context.
 #[askit_agent(
     title = "ZipCtxToArray",
     category = CATEGORY,
@@ -659,52 +660,15 @@ struct ZipCtxToArrayAgent {
 
 impl ZipCtxToArrayAgent {
     fn ctx_key(&self, ctx: &AgentContext) -> Result<String, AgentError> {
-        let map_i = ctx
-            .get_var("map_i")
-            .map(|v| {
-                v.as_array()
-                    .cloned()
-                    .ok_or_else(|| AgentError::InvalidValue("map_i must be an array".into()))
-            })
-            .transpose()?;
-        let map_n = ctx
-            .get_var("map_n")
-            .map(|v| {
-                v.as_array()
-                    .cloned()
-                    .ok_or_else(|| AgentError::InvalidValue("map_n must be an array".into()))
-            })
-            .transpose()?;
-
-        if let (Some(map_i_vals), Some(map_n_vals)) = (&map_i, &map_n) {
-            if map_i_vals.len() != map_n_vals.len() {
-                return Err(AgentError::InvalidValue(
-                    "map_i and map_n length mismatch".into(),
-                ));
-            }
+        let map_frames = map_frame_indices(ctx)?;
+        if map_frames.is_empty() {
+            return Ok(ctx.id().to_string());
         }
-
-        if let Some(map_i) = map_i {
-            if map_i.is_empty() {
-                return Ok(ctx.id().to_string());
-            }
-            let indices = map_i
-                .iter()
-                .map(|v| {
-                    v.as_i64().ok_or_else(|| {
-                        AgentError::InvalidValue("map_i must contain integers".into())
-                    })
-                })
-                .collect::<Result<Vec<_>, _>>()?;
-            let key = indices
-                .iter()
-                .map(|i| i.to_string())
-                .collect::<Vec<_>>()
-                .join(",");
-            Ok(format!("{}:{}", ctx.id(), key))
-        } else {
-            Ok(ctx.id().to_string())
-        }
+        let parts: Vec<String> = map_frames
+            .iter()
+            .map(|(idx, len)| format!("{}:{}", idx, len))
+            .collect();
+        Ok(format!("{}:{}", ctx.id(), parts.join(",")))
     }
 
     fn find_first_common_key(&self) -> Option<(String, Vec<usize>)> {
