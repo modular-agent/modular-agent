@@ -1,7 +1,11 @@
+use std::collections::VecDeque;
+
 use agent_stream_kit::{
     ASKit, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
     askit_agent, async_trait,
 };
+
+use crate::ctx_utils::find_first_common_key;
 
 static CATEGORY: &str = "Std/Sequence";
 
@@ -11,13 +15,16 @@ static PIN_IN2: &str = "in2";
 static PIN_OUT1: &str = "out1";
 static PIN_OUT2: &str = "out2";
 
+static CONFIG_N: &str = "n";
+static CONFIG_USE_CTX: &str = "use_ctx";
+
 /// Receives an input and emits it sequentially to n outputs.
 #[askit_agent(
     title = "Sequence",
     category = CATEGORY,
     inputs = [PIN_IN],
     outputs = [PIN_OUT1, PIN_OUT2],
-    integer_config(name = "n", default = 2),
+    integer_config(name = CONFIG_N, default = 2),
 )]
 struct SequenceAgent {
     data: AgentData,
@@ -30,7 +37,7 @@ impl AsAgent for SequenceAgent {
         let n = spec
             .configs
             .as_ref()
-            .map(|cfg| cfg.get_integer_or("n", 2))
+            .map(|cfg| cfg.get_integer_or(CONFIG_N, 2))
             .unwrap_or(2) as usize;
         let mut spec = spec;
         spec.outputs = Some((1..=n).map(|i| format!("out{}", i)).collect());
@@ -44,7 +51,7 @@ impl AsAgent for SequenceAgent {
             .spec
             .configs
             .as_ref()
-            .map(|cfg| cfg.get_integer_or("n", 2))
+            .map(|cfg| cfg.get_integer_or(CONFIG_N, 2))
             .unwrap_or(2) as usize;
         if cfg_n != self.n {
             self.n = cfg_n;
@@ -74,32 +81,43 @@ impl AsAgent for SequenceAgent {
     category = CATEGORY,
     inputs = [PIN_IN1, PIN_IN2],
     outputs = [PIN_OUT1, PIN_OUT2],
-    integer_config(name = "n", default = 2),
+    integer_config(name = CONFIG_N, default = 2),
+    boolean_config(name = CONFIG_USE_CTX),
 )]
 struct SyncAgent {
     data: AgentData,
     n: usize,
-    input_values: Vec<Option<AgentValue>>,
-    current_id: usize,
+    use_ctx: bool,
+    input_values: Vec<Vec<AgentValue>>,
+    ctx_input_values: Vec<VecDeque<(String, AgentValue)>>,
 }
 
 #[async_trait]
 impl AsAgent for SyncAgent {
     fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
-        let n = spec
+        let mut n = spec
             .configs
             .as_ref()
-            .map(|cfg| cfg.get_integer_or("n", 2))
+            .map(|cfg| cfg.get_integer_or(CONFIG_N, 2))
             .unwrap_or(2) as usize;
+        if n < 1 {
+            n = 1;
+        }
         let mut spec = spec;
+        let use_ctx = spec
+            .configs
+            .as_ref()
+            .map(|cfg| cfg.get_bool_or_default(CONFIG_USE_CTX))
+            .unwrap_or(false);
         spec.inputs = Some((1..=n).map(|i| format!("in{}", i)).collect());
         spec.outputs = Some((1..=n).map(|i| format!("out{}", i)).collect());
         let data = AgentData::new(askit, id, spec);
         Ok(Self {
             data,
             n,
-            input_values: vec![None; n],
-            current_id: 0,
+            use_ctx,
+            input_values: vec![Vec::new(); n],
+            ctx_input_values: vec![VecDeque::new(); n],
         })
     }
 
@@ -109,19 +127,41 @@ impl AsAgent for SyncAgent {
             .spec
             .configs
             .as_ref()
-            .map(|cfg| cfg.get_integer_or("n", 2))
+            .map(|cfg| cfg.get_integer_or(CONFIG_N, 2))
             .unwrap_or(2) as usize;
+        let cfg_use_ctx = self
+            .data
+            .spec
+            .configs
+            .as_ref()
+            .map(|cfg| cfg.get_bool_or_default(CONFIG_USE_CTX))
+            .unwrap_or(false);
         if cfg_n < 1 {
             return Err(AgentError::InvalidConfig("n must be at least 1".into()));
         }
+        let mut changed = false;
         if cfg_n != self.n {
             self.n = cfg_n;
             self.data.spec.inputs = Some((1..=self.n).map(|i| format!("in{}", i)).collect());
             self.data.spec.outputs = Some((1..=self.n).map(|i| format!("out{}", i)).collect());
-            self.input_values = vec![None; self.n];
-            self.current_id = 0;
+            changed = true;
+        }
+        if cfg_use_ctx != self.use_ctx {
+            self.use_ctx = cfg_use_ctx;
+            changed = true;
+        }
+        if changed {
+            self.input_values = vec![Vec::new(); self.n];
+            self.ctx_input_values = vec![VecDeque::new(); self.n];
             self.emit_agent_spec_updated();
         }
+        Ok(())
+    }
+
+    async fn stop(&mut self) -> Result<(), AgentError> {
+        // Clear input queues on stop
+        self.input_values = vec![Vec::new(); self.n];
+        self.ctx_input_values = vec![VecDeque::new(); self.n];
         Ok(())
     }
 
@@ -131,13 +171,6 @@ impl AsAgent for SyncAgent {
         pin: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
-        // Reset input values if context ID changes
-        let ctx_id = ctx.id();
-        if ctx_id != self.current_id {
-            self.current_id = ctx_id;
-            self.input_values = vec![None; self.n];
-        }
-
         // Store the input value
         let Some(i) = pin
             .strip_prefix("in")
@@ -156,20 +189,70 @@ impl AsAgent for SyncAgent {
             )));
         };
 
-        self.input_values[i] = Some(value);
+        if self.use_ctx {
+            if self.ctx_input_values.len() != self.n {
+                self.ctx_input_values = vec![VecDeque::new(); self.n];
+            }
 
-        // Check if some input is still missing
-        if self.input_values.iter().any(|v| v.is_none()) {
+            let ctx_key = ctx.ctx_key()?;
+            self.ctx_input_values[i].push_back((ctx_key, value));
+
+            if self.ctx_input_values.iter().any(|q| q.is_empty()) {
+                return Ok(());
+            }
+
+            let Some((_target_key, positions)) = find_first_common_key(&self.ctx_input_values)
+            else {
+                return Ok(());
+            };
+
+            for (queue, pos) in self.ctx_input_values.iter_mut().zip(positions) {
+                for _ in 0..pos {
+                    queue.pop_front();
+                }
+            }
+
+            // Now all heads share target_key
+            let arr: Vec<AgentValue> = self
+                .ctx_input_values
+                .iter()
+                .map(|q| q.front().unwrap().1.clone())
+                .collect();
+            for q in self.ctx_input_values.iter_mut() {
+                q.pop_front();
+            }
+
+            // output in order
+            for i in 0..self.n {
+                self.try_output(
+                    ctx.clone(),
+                    self.data.spec.outputs.as_ref().unwrap()[i].clone(),
+                    arr[i].clone(),
+                )?;
+            }
+
             return Ok(());
         }
 
-        // All inputs are present, output in order
+        self.input_values[i].push(value);
+
+        // Check if some input is still missing
+        if self.input_values.iter().any(|v| v.is_empty()) {
+            return Ok(());
+        }
+
+        // All inputs are present, emit the array
+        let arr: Vec<AgentValue> = self.input_values.iter().map(|v| v[0].clone()).collect();
+        for v in &mut self.input_values {
+            v.remove(0);
+        }
+
+        // output in order
         for i in 0..self.n {
-            let out_value = self.input_values[i].take().unwrap();
             self.try_output(
                 ctx.clone(),
                 self.data.spec.outputs.as_ref().unwrap()[i].clone(),
-                out_value,
+                arr[i].clone(),
             )?;
         }
 
