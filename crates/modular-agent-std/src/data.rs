@@ -5,6 +5,8 @@ use agent_stream_kit::{
     AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent, askit_agent, async_trait,
 };
 
+use crate::ctx_utils::find_first_common_key;
+
 static CATEGORY: &str = "Std/Data";
 
 static PIN_IN1: &str = "in1";
@@ -361,37 +363,6 @@ impl ZipToObjectAgent {
 
         Ok((n as usize, use_ctx))
     }
-
-    fn find_first_common_key(
-        queues: &Vec<VecDeque<(String, AgentValue)>>,
-    ) -> Option<(String, Vec<usize>)> {
-        let (base_idx, base_queue) = queues
-            .iter()
-            .enumerate()
-            .filter(|(_, q)| !q.is_empty())
-            .min_by_key(|(_, q)| q.len())?;
-
-        for (pos, (key, _)) in base_queue.iter().enumerate() {
-            let mut positions = vec![usize::MAX; queues.len()];
-            positions[base_idx] = pos;
-            let mut found_in_all = true;
-            for (idx, queue) in queues.iter().enumerate() {
-                if idx == base_idx {
-                    continue;
-                }
-                if let Some(p) = queue.iter().position(|(k, _)| k == key) {
-                    positions[idx] = p;
-                } else {
-                    found_in_all = false;
-                    break;
-                }
-            }
-            if found_in_all {
-                return Some((key.clone(), positions));
-            }
-        }
-        None
-    }
 }
 
 #[async_trait]
@@ -468,8 +439,7 @@ impl AsAgent for ZipToObjectAgent {
                 return Ok(());
             }
 
-            let Some((_target_key, positions)) =
-                ZipToObjectAgent::find_first_common_key(&self.ctx_input_values)
+            let Some((_target_key, positions)) = find_first_common_key(&self.ctx_input_values)
             else {
                 return Ok(());
             };
