@@ -473,9 +473,8 @@ struct ZipToArrayAgent {
     ctx_input_values: Vec<VecDeque<(String, AgentValue)>>,
 }
 
-#[async_trait]
-impl AsAgent for ZipToArrayAgent {
-    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+impl ZipToArrayAgent {
+    fn update_spec(spec: &mut AgentSpec) -> Result<(usize, bool), AgentError> {
         let mut n = spec
             .configs
             .as_ref()
@@ -484,13 +483,23 @@ impl AsAgent for ZipToArrayAgent {
         if n < 1 {
             n = 1;
         }
-        let mut spec = spec;
+
         let use_ctx = spec
             .configs
             .as_ref()
             .map(|cfg| cfg.get_bool_or_default(CONFIG_USE_CTX))
             .unwrap_or(false);
+
         spec.inputs = Some((1..=n).map(|i| format!("in{}", i)).collect());
+
+        Ok((n, use_ctx))
+    }
+}
+
+#[async_trait]
+impl AsAgent for ZipToArrayAgent {
+    fn new(askit: ASKit, id: String, mut spec: AgentSpec) -> Result<Self, AgentError> {
+        let (n, use_ctx) = Self::update_spec(&mut spec)?;
         let data = AgentData::new(askit, id, spec);
         Ok(Self {
             data,
@@ -502,31 +511,14 @@ impl AsAgent for ZipToArrayAgent {
     }
 
     fn configs_changed(&mut self) -> Result<(), AgentError> {
-        let cfg_n = self
-            .data
-            .spec
-            .configs
-            .as_ref()
-            .map(|cfg| cfg.get_integer_or(CONFIG_N, 2))
-            .unwrap_or(2) as usize;
-        let cfg_use_ctx = self
-            .data
-            .spec
-            .configs
-            .as_ref()
-            .map(|cfg| cfg.get_bool_or_default(CONFIG_USE_CTX))
-            .unwrap_or(false);
-        if cfg_n < 1 {
-            return Err(AgentError::InvalidConfig("n must be at least 1".into()));
-        }
+        let (n, use_ctx) = Self::update_spec(&mut self.data.spec)?;
         let mut changed = false;
-        if cfg_n != self.n {
-            self.n = cfg_n;
-            self.data.spec.inputs = Some((1..=self.n).map(|i| format!("in{}", i)).collect());
+        if n != self.n {
+            self.n = n;
             changed = true;
         }
-        if cfg_use_ctx != self.use_ctx {
-            self.use_ctx = cfg_use_ctx;
+        if use_ctx != self.use_ctx {
+            self.use_ctx = use_ctx;
             changed = true;
         }
         if changed {

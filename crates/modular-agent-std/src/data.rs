@@ -393,6 +393,7 @@ impl AsAgent for ZipToObjectAgent {
         if changed {
             self.input_values = vec![Vec::new(); self.n];
             self.ctx_input_values = vec![VecDeque::new(); self.n];
+            self.emit_agent_spec_updated();
         }
         Ok(())
     }
