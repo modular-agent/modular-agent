@@ -1,4 +1,4 @@
-use std::vec;
+use std::{collections::VecDeque, vec};
 
 use agent_stream_kit::{
     ASKit, Agent, AgentConfigSpec, AgentConfigSpecs, AgentConfigs, AgentContext, AgentData,
@@ -15,6 +15,8 @@ static PIN_VALUE: &str = "value";
 
 static CONFIG_KEY: &str = "key";
 static CONFIG_VALUE: &str = "value";
+static CONFIG_N: &str = "n";
+static CONFIG_USE_CTX: &str = "use_ctx";
 
 // Get Value
 #[askit_agent(
@@ -274,45 +276,67 @@ fn set_nested_value<'a>(value: &'a mut AgentValue, keys: Vec<&str>, new_value: A
 ///
 /// If in2 arrives repeatedly before in1, the in2 values are queued; when in1 arrives,
 /// they’re paired in order from the head of the queue and emitted.
+///
+/// When the `use_ctx` config is true, inputs are matched by context key (including map frames)
+/// so that mapped items zip correctly even when they interleave.
 #[askit_agent(
     title = "ZipToObject",
     category = CATEGORY,
     inputs = [PIN_IN1, PIN_IN2],
     outputs = [PIN_OBJECT],
-    integer_config(name = "n", default = 2),
+    integer_config(name = CONFIG_N, default = 2),
+    boolean_config(name = CONFIG_USE_CTX),
 )]
 struct ZipToObjectAgent {
     data: AgentData,
     n: usize,
+    use_ctx: bool,
     input_values: Vec<Vec<AgentValue>>,
+    ctx_input_values: Vec<VecDeque<(String, AgentValue)>>,
 }
 
 impl ZipToObjectAgent {
-    fn update_spec(spec: &mut AgentSpec) -> Result<usize, AgentError> {
+    fn update_spec(spec: &mut AgentSpec) -> Result<(usize, bool), AgentError> {
         let mut n = spec
             .configs
             .as_ref()
-            .map(|cfg| cfg.get_integer_or("n", 2))
+            .map(|cfg| cfg.get_integer_or(CONFIG_N, 2))
             .unwrap_or(2);
         if n < 1 {
             n = 1;
         }
 
+        let use_ctx = spec
+            .configs
+            .as_ref()
+            .map(|cfg| cfg.get_bool_or_default(CONFIG_USE_CTX))
+            .unwrap_or(false);
+
         let mut configs = AgentConfigs::new();
         let mut config_specs = AgentConfigSpecs::default();
 
-        configs.set("n".to_string(), AgentValue::integer(n));
+        configs.set(CONFIG_N.to_string(), AgentValue::integer(n));
         let Some(n_spec) = spec
             .config_specs
             .as_ref()
-            .and_then(|cs| cs.get("n"))
+            .and_then(|cs| cs.get(CONFIG_N))
+            .cloned()
+        else {
+            return Err(AgentError::InvalidConfig("config n must be present".into()));
+        };
+        config_specs.insert(CONFIG_N.to_string(), n_spec);
+
+        let Some(use_ctx_spec) = spec
+            .config_specs
+            .as_ref()
+            .and_then(|cs| cs.get(CONFIG_USE_CTX))
             .cloned()
         else {
             return Err(AgentError::InvalidConfig(
-                "config_specs must be present".into(),
+                "config use_ctx must be present".into(),
             ));
         };
-        config_specs.insert("n".to_string(), n_spec);
+        config_specs.insert(CONFIG_USE_CTX.to_string(), use_ctx_spec);
 
         for i in 1..=n {
             let key_cfg = format!("k{}", i);
@@ -335,30 +359,77 @@ impl ZipToObjectAgent {
         spec.configs = Some(configs);
         spec.config_specs = Some(config_specs);
 
-        Ok(n as usize)
+        Ok((n as usize, use_ctx))
+    }
+
+    fn find_first_common_key(
+        queues: &Vec<VecDeque<(String, AgentValue)>>,
+    ) -> Option<(String, Vec<usize>)> {
+        let (base_idx, base_queue) = queues
+            .iter()
+            .enumerate()
+            .filter(|(_, q)| !q.is_empty())
+            .min_by_key(|(_, q)| q.len())?;
+
+        for (pos, (key, _)) in base_queue.iter().enumerate() {
+            let mut positions = vec![usize::MAX; queues.len()];
+            positions[base_idx] = pos;
+            let mut found_in_all = true;
+            for (idx, queue) in queues.iter().enumerate() {
+                if idx == base_idx {
+                    continue;
+                }
+                if let Some(p) = queue.iter().position(|(k, _)| k == key) {
+                    positions[idx] = p;
+                } else {
+                    found_in_all = false;
+                    break;
+                }
+            }
+            if found_in_all {
+                return Some((key.clone(), positions));
+            }
+        }
+        None
     }
 }
 
 #[async_trait]
 impl AsAgent for ZipToObjectAgent {
     fn new(askit: ASKit, id: String, mut spec: AgentSpec) -> Result<Self, AgentError> {
-        let n = Self::update_spec(&mut spec)?;
+        let (n, use_ctx) = Self::update_spec(&mut spec)?;
         let data = AgentData::new(askit, id, spec);
         Ok(Self {
             data,
             n,
             input_values: vec![Vec::new(); n],
+            use_ctx,
+            ctx_input_values: vec![VecDeque::new(); n],
         })
     }
 
     fn configs_changed(&mut self) -> Result<(), AgentError> {
-        Self::update_spec(&mut self.data.spec)?;
+        let (n, use_ctx) = Self::update_spec(&mut self.data.spec)?;
+        let mut changed = false;
+        if n != self.n {
+            self.n = n;
+            changed = true;
+        }
+        if use_ctx != self.use_ctx {
+            self.use_ctx = use_ctx;
+            changed = true;
+        }
+        if changed {
+            self.input_values = vec![Vec::new(); self.n];
+            self.ctx_input_values = vec![VecDeque::new(); self.n];
+        }
         Ok(())
     }
 
     async fn stop(&mut self) -> Result<(), AgentError> {
         // Clear input queues on stop
         self.input_values = vec![Vec::new(); self.n];
+        self.ctx_input_values = vec![VecDeque::new(); self.n];
         Ok(())
     }
 
@@ -385,6 +456,45 @@ impl AsAgent for ZipToObjectAgent {
                 pin
             )));
         };
+
+        if self.use_ctx {
+            if self.ctx_input_values.len() != self.n {
+                self.ctx_input_values = vec![VecDeque::new(); self.n];
+            }
+            let ctx_key = ctx.ctx_key()?;
+            self.ctx_input_values[i].push_back((ctx_key, value));
+
+            if self.ctx_input_values.iter().any(|q| q.is_empty()) {
+                return Ok(());
+            }
+
+            let Some((_target_key, positions)) =
+                ZipToObjectAgent::find_first_common_key(&self.ctx_input_values)
+            else {
+                return Ok(());
+            };
+
+            for (queue, pos) in self.ctx_input_values.iter_mut().zip(positions) {
+                for _ in 0..pos {
+                    queue.pop_front();
+                }
+            }
+
+            let mut obj = AgentValue::object_default();
+            for j in 0..self.n {
+                let key_cfg = format!("k{}", j + 1);
+                let key = self.configs()?.get_string_or_default(&key_cfg);
+                let val = self.ctx_input_values[j]
+                    .front()
+                    .map(|(_, v)| v.clone())
+                    .ok_or_else(|| AgentError::InvalidValue("missing queued value".into()))?;
+                obj.set(key, val)?;
+            }
+            for q in self.ctx_input_values.iter_mut() {
+                q.pop_front();
+            }
+            return self.try_output(ctx, PIN_OBJECT, obj);
+        }
 
         self.input_values[i].push(value);
 
