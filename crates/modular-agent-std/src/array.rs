@@ -13,6 +13,9 @@ static PIN_T: &str = "T";
 static PIN_F: &str = "F";
 static PIN_VALUE: &str = "value";
 
+static CONFIG_N: &str = "n";
+static CONFIG_USE_CTX: &str = "use_ctx";
+
 /// Check if an input is an array.
 #[askit_agent(
     title = "IsArray",
@@ -249,7 +252,7 @@ impl AsAgent for ArrayLastAgent {
     category = CATEGORY,
     inputs = [PIN_ARRAY],
     outputs = [PIN_VALUE],
-    integer_config(name = "n", default = 0),
+    integer_config(name = CONFIG_N, default = 0),
 )]
 struct ArrayNthAgent {
     data: AgentData,
@@ -273,7 +276,7 @@ impl AsAgent for ArrayNthAgent {
             .spec
             .configs
             .as_ref()
-            .map(|cfg| cfg.get_integer_or("n", 0))
+            .map(|cfg| cfg.get_integer_or(CONFIG_N, 0))
             .unwrap_or(0);
         if n < 0 {
             return Err(AgentError::InvalidConfig("n must be non-negative".into()));
@@ -449,136 +452,40 @@ impl AsAgent for CollectAgent {
 ///
 /// If in2 arrives repeatedly before in1, the in2 values are queued; when in1 arrives,
 /// they’re paired in order from the head of the queue and emitted.
+///
+/// When the `use_ctx` config is true, inputs are matched by context key (including map frames)
+/// so that mapped items zip correctly even when they interleave.
 #[askit_agent(
     title = "ZipToArray",
     category = CATEGORY,
     inputs = [PIN_IN1, PIN_IN2],
     outputs = [PIN_ARRAY],
-    integer_config(name = "n", default = 2),
+    integer_config(name = CONFIG_N, default = 2),
+    boolean_config(name = CONFIG_USE_CTX),
 )]
 struct ZipToArrayAgent {
     data: AgentData,
     n: usize,
+    use_ctx: bool,
     input_values: Vec<Vec<AgentValue>>,
+    ctx_input_values: Vec<VecDeque<(String, AgentValue)>>,
 }
 
-#[async_trait]
-impl AsAgent for ZipToArrayAgent {
-    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
-        let mut n = spec
-            .configs
-            .as_ref()
-            .map(|cfg| cfg.get_integer_or("n", 2))
-            .unwrap_or(2) as usize;
-        if n < 1 {
-            n = 1;
-        }
-        let mut spec = spec;
-        spec.inputs = Some((1..=n).map(|i| format!("in{}", i)).collect());
-        let data = AgentData::new(askit, id, spec);
-        Ok(Self {
-            data,
-            n,
-            input_values: vec![Vec::new(); n],
-        })
-    }
-
-    fn configs_changed(&mut self) -> Result<(), AgentError> {
-        let cfg_n = self
-            .data
-            .spec
-            .configs
-            .as_ref()
-            .map(|cfg| cfg.get_integer_or("n", 2))
-            .unwrap_or(2) as usize;
-        if cfg_n < 1 {
-            return Err(AgentError::InvalidConfig("n must be at least 1".into()));
-        }
-        if cfg_n != self.n {
-            self.n = cfg_n;
-            self.data.spec.inputs = Some((1..=self.n).map(|i| format!("in{}", i)).collect());
-            self.input_values = vec![Vec::new(); self.n];
-            self.emit_agent_spec_updated();
-        }
-        Ok(())
-    }
-
-    async fn stop(&mut self) -> Result<(), AgentError> {
-        // Clear input queues on stop
-        self.input_values = vec![Vec::new(); self.n];
-        Ok(())
-    }
-
-    async fn process(
-        &mut self,
-        ctx: AgentContext,
-        pin: String,
-        value: AgentValue,
-    ) -> Result<(), AgentError> {
-        // Store the input value
-        let Some(i) = pin
-            .strip_prefix("in")
-            .and_then(|s| s.parse::<usize>().ok())
-            .and_then(|idx| {
-                if idx >= 1 && idx <= self.n {
-                    Some(idx - 1)
-                } else {
-                    None
-                }
-            })
-        else {
-            return Err(AgentError::InvalidValue(format!(
-                "Invalid input pin: {}",
-                pin
-            )));
-        };
-
-        self.input_values[i].push(value);
-
-        // Check if some input is still missing
-        if self.input_values.iter().any(|v| v.is_empty()) {
-            return Ok(());
-        }
-
-        // All inputs are present, emit the array
-        let arr: Vec<AgentValue> = self.input_values.iter().map(|v| v[0].clone()).collect();
-        for v in &mut self.input_values {
-            v.remove(0);
-        }
-        self.try_output(ctx, PIN_ARRAY, AgentValue::array(arr))
-    }
-}
-
-/// Zips multiple inputs into an array within the same context.
-///
-/// This agent uses `map` frames (index/length) to align inputs within the same mapped context.
-#[askit_agent(
-    title = "ZipCtxToArray",
-    category = CATEGORY,
-    inputs = [PIN_IN1, PIN_IN2],
-    outputs = [PIN_ARRAY],
-    integer_config(name = "n", default = 2),
-)]
-struct ZipCtxToArrayAgent {
-    data: AgentData,
-    n: usize,
-    input_values: Vec<VecDeque<(String, AgentValue)>>,
-}
-
-impl ZipCtxToArrayAgent {
-    fn find_first_common_key(&self) -> Option<(String, Vec<usize>)> {
-        let (base_idx, base_queue) = self
-            .input_values
+impl ZipToArrayAgent {
+    fn find_first_common_key(
+        queues: &Vec<VecDeque<(String, AgentValue)>>,
+    ) -> Option<(String, Vec<usize>)> {
+        let (base_idx, base_queue) = queues
             .iter()
             .enumerate()
             .filter(|(_, q)| !q.is_empty())
             .min_by_key(|(_, q)| q.len())?;
 
         for (pos, (key, _)) in base_queue.iter().enumerate() {
-            let mut positions = vec![usize::MAX; self.n];
+            let mut positions = vec![usize::MAX; queues.len()];
             positions[base_idx] = pos;
             let mut found_in_all = true;
-            for (idx, queue) in self.input_values.iter().enumerate() {
+            for (idx, queue) in queues.iter().enumerate() {
                 if idx == base_idx {
                     continue;
                 }
@@ -598,23 +505,30 @@ impl ZipCtxToArrayAgent {
 }
 
 #[async_trait]
-impl AsAgent for ZipCtxToArrayAgent {
+impl AsAgent for ZipToArrayAgent {
     fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         let mut n = spec
             .configs
             .as_ref()
-            .map(|cfg| cfg.get_integer_or("n", 2))
+            .map(|cfg| cfg.get_integer_or(CONFIG_N, 2))
             .unwrap_or(2) as usize;
         if n < 1 {
             n = 1;
         }
         let mut spec = spec;
+        let use_ctx = spec
+            .configs
+            .as_ref()
+            .map(|cfg| cfg.get_bool_or_default(CONFIG_USE_CTX))
+            .unwrap_or(false);
         spec.inputs = Some((1..=n).map(|i| format!("in{}", i)).collect());
         let data = AgentData::new(askit, id, spec);
         Ok(Self {
             data,
             n,
-            input_values: vec![VecDeque::new(); n],
+            use_ctx,
+            input_values: vec![Vec::new(); n],
+            ctx_input_values: vec![VecDeque::new(); n],
         })
     }
 
@@ -624,15 +538,31 @@ impl AsAgent for ZipCtxToArrayAgent {
             .spec
             .configs
             .as_ref()
-            .map(|cfg| cfg.get_integer_or("n", 2))
+            .map(|cfg| cfg.get_integer_or(CONFIG_N, 2))
             .unwrap_or(2) as usize;
+        let cfg_use_ctx = self
+            .data
+            .spec
+            .configs
+            .as_ref()
+            .map(|cfg| cfg.get_bool_or_default(CONFIG_USE_CTX))
+            .unwrap_or(false);
         if cfg_n < 1 {
             return Err(AgentError::InvalidConfig("n must be at least 1".into()));
         }
+        let mut changed = false;
         if cfg_n != self.n {
             self.n = cfg_n;
             self.data.spec.inputs = Some((1..=self.n).map(|i| format!("in{}", i)).collect());
-            self.input_values = vec![VecDeque::new(); self.n];
+            changed = true;
+        }
+        if cfg_use_ctx != self.use_ctx {
+            self.use_ctx = cfg_use_ctx;
+            changed = true;
+        }
+        if changed {
+            self.input_values = vec![Vec::new(); self.n];
+            self.ctx_input_values = vec![VecDeque::new(); self.n];
             self.emit_agent_spec_updated();
         }
         Ok(())
@@ -640,7 +570,8 @@ impl AsAgent for ZipCtxToArrayAgent {
 
     async fn stop(&mut self) -> Result<(), AgentError> {
         // Clear input queues on stop
-        self.input_values = vec![VecDeque::new(); self.n];
+        self.input_values = vec![Vec::new(); self.n];
+        self.ctx_input_values = vec![VecDeque::new(); self.n];
         Ok(())
     }
 
@@ -668,36 +599,54 @@ impl AsAgent for ZipCtxToArrayAgent {
             )));
         };
 
-        let ctx_key = ctx.ctx_key()?;
-        if self.input_values.len() != self.n {
-            self.input_values = vec![VecDeque::new(); self.n];
-        }
-
-        self.input_values[i].push_back((ctx_key, value));
-
-        if self.input_values.iter().any(|q| q.is_empty()) {
-            return Ok(());
-        }
-
-        let Some((_target_key, positions)) = self.find_first_common_key() else {
-            return Ok(());
-        };
-
-        for (queue, pos) in self.input_values.iter_mut().zip(positions) {
-            for _ in 0..pos {
-                queue.pop_front();
+        if self.use_ctx {
+            if self.ctx_input_values.len() != self.n {
+                self.ctx_input_values = vec![VecDeque::new(); self.n];
             }
+
+            let ctx_key = ctx.ctx_key()?;
+            self.ctx_input_values[i].push_back((ctx_key, value));
+
+            if self.ctx_input_values.iter().any(|q| q.is_empty()) {
+                return Ok(());
+            }
+
+            let Some((_target_key, positions)) =
+                ZipToArrayAgent::find_first_common_key(&self.ctx_input_values)
+            else {
+                return Ok(());
+            };
+
+            for (queue, pos) in self.ctx_input_values.iter_mut().zip(positions) {
+                for _ in 0..pos {
+                    queue.pop_front();
+                }
+            }
+
+            // Now all heads share target_key
+            let arr: Vec<AgentValue> = self
+                .ctx_input_values
+                .iter()
+                .map(|q| q.front().unwrap().1.clone())
+                .collect();
+            for q in self.ctx_input_values.iter_mut() {
+                q.pop_front();
+            }
+            return self.try_output(ctx, PIN_ARRAY, AgentValue::array(arr));
         }
 
-        // Now all heads share target_key
-        let arr: Vec<AgentValue> = self
-            .input_values
-            .iter()
-            .map(|q| q.front().unwrap().1.clone())
-            .collect();
-        for q in self.input_values.iter_mut() {
-            q.pop_front();
+        self.input_values[i].push(value);
+
+        // Check if some input is still missing
+        if self.input_values.iter().any(|v| v.is_empty()) {
+            return Ok(());
         }
-        self.try_output(ctx.clone(), PIN_ARRAY, AgentValue::array(arr))
+
+        // All inputs are present, emit the array
+        let arr: Vec<AgentValue> = self.input_values.iter().map(|v| v[0].clone()).collect();
+        for v in &mut self.input_values {
+            v.remove(0);
+        }
+        self.try_output(ctx, PIN_ARRAY, AgentValue::array(arr))
     }
 }
