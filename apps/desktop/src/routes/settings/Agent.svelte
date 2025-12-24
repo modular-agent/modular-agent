@@ -1,8 +1,13 @@
 <script lang="ts">
-  import { Button, Input, NumberInput, Textarea, Toggle } from "flowbite-svelte";
   import type { AgentConfigs, AgentDefinition } from "tauri-plugin-askit-api";
 
-  import Card from "@/components/Card.svelte";
+  import { Button } from "$lib/components/ui/button/index.js";
+  import * as Card from "$lib/components/ui/card/index.js";
+  import { FieldGroup, Field, FieldLabel } from "$lib/components/ui/field/index.js";
+  import { Input } from "$lib/components/ui/input/index.js";
+  import { Switch } from "$lib/components/ui/switch/index.js";
+
+  import FieldDescription from "@/lib/components/ui/field/field-description.svelte";
   import { setGlobalConfigs } from "@/lib/utils";
 
   interface Props {
@@ -27,45 +32,52 @@
   }
 </script>
 
-{#if !agentDef}
-  <Card title={agentName} subtitle="Agent not found">
-    <p class="text-sm text-gray-500">This agent is not defined in the system.</p>
-  </Card>
-{:else if !agentDef.global_configs}
-  <Card title={agentName} subtitle="No global config">
-    <p class="text-sm text-gray-500">This agent has no global config.</p>
-  </Card>
-{:else}
-  <Card title={ad?.title ?? agentName} subtitle={ad?.description}>
+<Card.Root class="@container/card">
+  <Card.Header>
+    <Card.Title>{ad?.title ?? agentName}</Card.Title>
+    <Card.Description>{ad?.description}</Card.Description>
+  </Card.Header>
+  <Card.Content>
     {#if ad?.global_configs}
       <form>
-        {#each Object.entries(ad.global_configs) as [key, globalConfig]}
-          {@const ty = globalConfig.type}
-          <label class="block mb-3 text-sm font-medium text-gray-900 dark:text-white">
-            {globalConfig?.title || key}
-            <p class="text-xs text-gray-500">{globalConfig?.description}</p>
-            {#if ty === "boolean"}
-              <Toggle bind:checked={configs[key]} />
-            {:else if ty === "integer"}
-              <NumberInput bind:value={configs[key]} />
-            {:else if ty === "number"}
-              <Input type="number" bind:value={configs[key]} />
-            {:else if ty === "string"}
-              <Input type="text" bind:value={configs[key]} />
-            {:else if ty === "text"}
-              <Textarea bind:value={configs[key]} />
-            {:else if ty === "password"}
-              <Input type="password" bind:value={configs[key]} />
-            {:else if ty === "object"}
-              <Textarea bind:value={configs[key]} />
-            {:else}
-              <Input type="text" value={JSON.stringify(configs[key], null, 2)} disabled />
-            {/if}
-          </label>
-        {/each}
+        <FieldGroup>
+          {#each Object.entries(ad.global_configs) as [key, globalConfig]}
+            <Field
+              orientation="horizontal"
+              class="grid gap-4 sm:grid-cols-[220px_1fr] items-center"
+            >
+              <div class="flex flex-col">
+                <FieldLabel>
+                  {globalConfig?.title || key}
+                </FieldLabel>
+                <FieldDescription>{globalConfig?.description}</FieldDescription>
+              </div>
+              {@const ty = globalConfig.type}
+              {#if ty === "boolean"}
+                <Switch bind:checked={configs[key]} />
+              {:else if ty === "integer"}
+                <Input bind:value={configs[key]} />
+              {:else if ty === "number"}
+                <Input type="number" bind:value={configs[key]} />
+              {:else if ty === "string"}
+                <Input type="text" bind:value={configs[key]} />
+              {:else if ty === "text"}
+                <Input bind:value={configs[key]} />
+              {:else if ty === "password"}
+                <Input type="password" bind:value={configs[key]} />
+              {:else if ty === "object"}
+                <Input bind:value={configs[key]} />
+              {:else}
+                <Input type="text" value={JSON.stringify(configs[key], null, 2)} disabled />
+              {/if}
+            </Field>
+          {/each}
 
-        <Button onclick={saveConfigs} class="mt-3 w-fit" outline>Save</Button>
+          <Field orientation="responsive">
+            <Button onclick={saveConfigs} variant="outline">Save</Button>
+          </Field>
+        </FieldGroup>
       </form>
     {/if}
-  </Card>
-{/if}
+  </Card.Content>
+</Card.Root>

@@ -9,12 +9,18 @@
   const agentDefs = $derived(data.agentDefs);
 </script>
 
-<main class="container mx-auto p-8 space-y-8 mt-20">
-  <h1 class="text-xl font-semibold sm:text-2xl">Settings</h1>
-  <Core {settings} />
+<div class="w-full pl-4 pr-4 pb-6">
+  <header class="flex-none h-14 items-center">
+    <div class="text-2xl font-semibold">Settings</div>
+  </header>
+  <div class="@container/main flex flex-1 flex-col">
+    <Core {settings} />
 
-  <h2 class="text-xl font-semibold sm:text-2xl">Agents</h2>
-  {#each Object.entries(agentGlobalConfigsMap) as [agentName, agentConfigs]}
-    <Agent {agentName} {agentConfigs} agentDef={agentDefs[agentName]} />
-  {/each}
-</main>
+    <div class="flex flex-col mt-8 gap-6">
+      <div class="flex-none text-xl font-semibold">Agents</div>
+      {#each Object.entries(agentGlobalConfigsMap) as [agentName, agentConfigs]}
+        <Agent {agentName} {agentConfigs} agentDef={agentDefs[agentName]} />
+      {/each}
+    </div>
+  </div>
+</div>

@@ -66,7 +66,8 @@ export function deserializeAgentStream(stream: AgentStream): TAgentStream {
     if (!sourceNode || !targetNode) return false;
 
     // Ensure that the source and target handles actually exist
-    const isSourceValid = sourceNode.outputs.includes(ch.source_handle ?? "");
+    const isSourceValid =
+      ch.source_handle === "err" || sourceNode.outputs.includes(ch.source_handle ?? "");
     const isTargetValid = ch.target_handle?.startsWith("config:")
       ? targetNode.configs.includes((ch.target_handle ?? "").substring(7))
       : targetNode.inputs.includes(ch.target_handle ?? "");
@@ -139,6 +140,7 @@ export function serializeAgentStreamNode(node: TAgentStreamNode): AgentSpec {
     y: node.position.y,
     width: node.width,
     height: node.height,
+    show_err: node.data.show_err,
   };
 }
 

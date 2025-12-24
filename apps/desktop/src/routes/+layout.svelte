@@ -5,8 +5,8 @@
 
   import hotkeys from "hotkeys-js";
 
-  import Attribution from "@/components/Attribution.svelte";
-  import NavBar from "@/components/NavBar.svelte";
+  import AppSidebar from "$lib/components/app-sidebar.svelte";
+  import * as Sidebar from "$lib/components/ui/sidebar/index.js";
 
   import "../app.css";
   import type { LayoutProps } from "./$types";
@@ -41,7 +41,7 @@
   });
 </script>
 
-<NavBar />
-
-{@render children?.()}
-<Attribution />
+<Sidebar.Provider>
+  <AppSidebar />
+  {@render children?.()}
+</Sidebar.Provider>

@@ -60,8 +60,6 @@ impl Default for CoreSettings {
             {
                 map.insert("fullscreen".into(), "F11".into());
             }
-            map.insert("screenshot_only".into(), " ".into());
-            map.insert("search".into(), "Ctrl+K, Command+K".into());
             map
         });
 

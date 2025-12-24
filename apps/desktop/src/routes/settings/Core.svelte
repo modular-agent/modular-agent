@@ -1,9 +1,14 @@
 <script lang="ts">
   import { message } from "@tauri-apps/plugin-dialog";
 
-  import { Button, Input, Label, Toggle } from "flowbite-svelte";
+  import { onMount } from "svelte";
 
-  import Card from "@/components/Card.svelte";
+  import { Button } from "$lib/components/ui/button/index.js";
+  import * as Card from "$lib/components/ui/card/index.js";
+  import { FieldGroup, Field, FieldLabel } from "$lib/components/ui/field/index.js";
+  import { Input } from "$lib/components/ui/input/index.js";
+  import { Switch } from "$lib/components/ui/switch/index.js";
+
   import { exitApp, setCoreSettings } from "@/lib/utils";
 
   interface Props {
@@ -12,13 +17,12 @@
 
   const { settings }: Props = $props();
 
-  let autostart = $derived.by(() => {
-    let a = settings["autostart"];
-    return a;
-  });
-  let shortcut_keys = $derived.by(() => {
-    let sk = settings["shortcut_keys"];
-    return sk;
+  let autostart = $state(false);
+  let shortcut_keys = $state<Record<string, string>>({});
+
+  onMount(() => {
+    autostart = settings["autostart"];
+    shortcut_keys = settings["shortcut_keys"];
   });
 
   async function saveSettings() {
@@ -32,24 +36,33 @@
   }
 </script>
 
-<Card title="Core">
-  <form class="grid grid-cols-6 gap-6">
-    <Toggle bind:checked={autostart}>Auto Start</Toggle>
+<Card.Root class="@container/card">
+  <Card.Header>
+    <Card.Title>Core</Card.Title>
+  </Card.Header>
+  <Card.Content class="px-2 pt-4">
+    <form>
+      <FieldGroup>
+        <Field orientation="horizontal">
+          <Switch bind:checked={autostart} />
+          <FieldLabel>Auto Start on System Boot</FieldLabel>
+        </Field>
 
-    <div class="col-span-6">
-      <h3 class="text-lg font-semibold">Shortcut Keys</h3>
-    </div>
+        <div class="font-semibold mt-4">Shortcut Keys</div>
 
-    <Label class="col-span-2 space-y-2">
-      <span>Global Shortcut</span>
-    </Label>
-    <Input class="col-span-4" type="text" bind:value={shortcut_keys.global_shortcut} />
+        {#each Object.entries(shortcut_keys) as [key, _]}
+          <Field orientation="horizontal" class="grid gap-4 sm:grid-cols-[220px_1fr] items-center">
+            <FieldLabel>
+              {key}
+            </FieldLabel>
+            <Input type="text" bind:value={shortcut_keys[key]} />
+          </Field>
+        {/each}
 
-    <Label class="col-span-2 space-y-2">
-      <span>Fullscreen</span>
-    </Label>
-    <Input class="col-span-4" type="text" bind:value={shortcut_keys.fullscreen} />
-
-    <Button onclick={saveSettings} class="w-fit" outline>Save</Button>
-  </form>
-</Card>
+        <Field orientation="responsive" class="mt-4">
+          <Button type="submit" onclick={saveSettings} variant="outline">Save</Button>
+        </Field>
+      </FieldGroup>
+    </form>
+  </Card.Content>
+</Card.Root>
