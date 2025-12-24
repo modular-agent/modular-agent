@@ -33,6 +33,7 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             commands::get_agent_definitions,
             commands::get_agent_spec,
             commands::get_agent_streams,
+            commands::get_running_agent_streams,
             commands::new_agent_stream,
             commands::rename_agent_stream,
             commands::unique_stream_name,

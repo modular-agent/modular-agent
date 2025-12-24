@@ -40,6 +40,7 @@ export type AgentStream = {
   name: string;
   agents: AgentSpec[];
   channels: ChannelSpec[];
+  run_on_start?: boolean | null;
   viewport: Viewport | null;
 };
 
@@ -56,6 +57,8 @@ export type AgentSpec = {
   outputs?: string[] | null;
   configs?: AgentConfigs | null;
   config_specs?: AgentConfigSpecs | null;
+  disabled?: boolean | null;
+  /** @deprecated */
   enabled?: boolean | null;
 } & AgentSpecExtensions;
 
@@ -71,19 +74,6 @@ export type Viewport = {
   x: number;
   y: number;
   zoom: number;
-};
-
-// settings
-
-export type CoreSettings = {
-  autostart: boolean;
-  shortcut_keys: Record<string, string>;
-};
-
-export type Settings = {
-  core: CoreSettings;
-  agents: Record<string, AgentDefinition>;
-  agent_streams: AgentStream[];
 };
 
 // emit
@@ -113,6 +103,10 @@ export async function getAgentSpec(agentId: string): Promise<AgentSpec | null> {
 
 export async function getAgentStreams(): Promise<AgentStreams> {
   return await invoke<any>("plugin:askit|get_agent_streams", {});
+}
+
+export async function getRunningAgentStreams(): Promise<string[]> {
+  return await invoke<any>("plugin:askit|get_running_agent_streams", {});
 }
 
 export async function newAgentStream(streamName: string): Promise<AgentStream> {

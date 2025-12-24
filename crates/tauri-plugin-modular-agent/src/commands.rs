@@ -37,6 +37,11 @@ pub(crate) fn get_agent_streams<R: Runtime>(app: AppHandle<R>) -> AgentStreams {
 }
 
 #[tauri::command]
+pub(crate) fn get_running_agent_streams<R: Runtime>(app: AppHandle<R>) -> Vec<String> {
+    app.askit().get_running_agent_streams()
+}
+
+#[tauri::command]
 pub(crate) fn new_agent_stream<R: Runtime>(
     app: AppHandle<R>,
     stream_name: String,
@@ -118,13 +123,8 @@ pub(crate) async fn stop_agent_stream<R: Runtime>(app: AppHandle<R>, id: String)
 // agent
 
 #[tauri::command]
-pub fn new_agent_spec<R: Runtime>(
-    app: AppHandle<R>,
-    def_name: String,
-) -> Result<AgentSpec> {
-    app.askit()
-        .new_agent_spec(&def_name)
-        .map_err(Into::into)
+pub fn new_agent_spec<R: Runtime>(app: AppHandle<R>, def_name: String) -> Result<AgentSpec> {
+    app.askit().new_agent_spec(&def_name).map_err(Into::into)
 }
 
 #[tauri::command]
@@ -133,9 +133,7 @@ pub(crate) fn add_agent<R: Runtime>(
     stream_id: String,
     spec: AgentSpec,
 ) -> Result<()> {
-    app.askit()
-        .add_agent(stream_id, spec)
-        .map_err(Into::into)
+    app.askit().add_agent(stream_id, spec).map_err(Into::into)
 }
 
 #[tauri::command]

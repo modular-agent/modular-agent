@@ -7,6 +7,7 @@ Default permissions for the plugin
 - `allow-get-agent-definition`
 - `allow-get-agent-definitions`
 - `allow-get-agent-streams`
+- `allow-get-running-agent-streams`
 - `allow-get-agent-spec`
 - `allow-new-agent-stream`
 - `allow-rename-agent-stream`
@@ -323,6 +324,32 @@ Enables the get_global_configs_map command without any pre-configured scope.
 <td>
 
 Denies the get_global_configs_map command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`askit:allow-get-running-agent-streams`
+
+</td>
+<td>
+
+Enables the get_running_agent_streams command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`askit:deny-get-running-agent-streams`
+
+</td>
+<td>
+
+Denies the get_running_agent_streams command without any pre-configured scope.
 
 </td>
 </tr>
