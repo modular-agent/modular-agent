@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { getCurrentWindow } from "@tauri-apps/api/window";
   import { open } from "@tauri-apps/plugin-dialog";
 
   import { getContext, onMount } from "svelte";
@@ -86,6 +87,8 @@
 
   onMount(() => {
     updateNodesAndEdges();
+
+    getCurrentWindow().setTitle(stream.name + " - Agent Stream App");
   });
 
   const handleOnDelete: OnDelete<TAgentStreamNode, TAgentStreamEdge> = async ({
@@ -466,6 +469,7 @@
   <header class="flex flex-none items-center justify-between pl-2">
     <Menubar {onImportStream} {onExportStream} />
     <StreamName name={stream.name} class="mr-4" />
+    <div>{" "}</div>
   </header>
   <SvelteFlow
     bind:nodes

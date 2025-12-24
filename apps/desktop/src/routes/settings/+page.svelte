@@ -1,4 +1,8 @@
 <script lang="ts">
+  import { getCurrentWindow } from "@tauri-apps/api/window";
+
+  import { onMount } from "svelte";
+
   import Agent from "./Agent.svelte";
   import Core from "./Core.svelte";
 
@@ -7,6 +11,10 @@
   const settings = $derived(data.coreSettings);
   const agentGlobalConfigsMap = $derived(data.agentGlobalConfigsMap);
   const agentDefs = $derived(data.agentDefs);
+
+  onMount(() => {
+    getCurrentWindow().setTitle("Settings - Agent Stream App");
+  });
 </script>
 
 <div class="w-full pl-4 pr-4 pb-6">

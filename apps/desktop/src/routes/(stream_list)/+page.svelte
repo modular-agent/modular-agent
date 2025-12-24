@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { getCurrentWindow } from "@tauri-apps/api/window";
+
   import { getContext, onMount } from "svelte";
 
   import { newAgentStream } from "tauri-plugin-askit-api";
@@ -66,6 +68,8 @@
   onMount(() => {
     updateStreamNames();
     updateStreamActivities();
+
+    getCurrentWindow().setTitle("Streams - Agent Stream App");
   });
 </script>
 
