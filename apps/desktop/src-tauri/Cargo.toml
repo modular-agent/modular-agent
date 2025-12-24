@@ -1,6 +1,6 @@
 [package]
 name = "agent-stream-app"
-version = "0.6.0"
+version = "0.7.0"
 description = "Agent Stream App"
 authors = ["Akira Ishino <akira@lumilab.jp>"]
 edition = "2021"
