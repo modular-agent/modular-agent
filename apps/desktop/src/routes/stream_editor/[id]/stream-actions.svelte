@@ -24,11 +24,11 @@
 <div class="flex mr-4">
   {#if isRunning}
     <Button onclick={handleStop} variant="ghost" class="w-4">
-      <SquareIcon />
+      <SquareIcon color="red" />
     </Button>
   {:else}
     <Button onclick={handleStart} variant="ghost" class="w-4">
-      <PlayIcon />
+      <PlayIcon color="blue" />
     </Button>
   {/if}
 </div>
