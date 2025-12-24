@@ -20,7 +20,7 @@
   <Breadcrumb.List>
     {#each path_components as component, index (index)}
       <Breadcrumb.Item>
-        <Breadcrumb.Page>{component}</Breadcrumb.Page>
+        <Breadcrumb.Page><span class="font-bold">{component}</span></Breadcrumb.Page>
       </Breadcrumb.Item>
       {#if index < path_components.length - 1}
         <Breadcrumb.Separator>
