@@ -80,6 +80,7 @@ export function deserializeAgentStream(stream: AgentStream): TAgentStream {
     name: stream.name,
     nodes: nodes,
     edges: validEdges.map((ch) => deserializeChannelSpec(ch)),
+    run_on_start: stream.run_on_start ?? false,
     viewport: stream.viewport,
   };
 }
@@ -115,6 +116,7 @@ export function serializeAgentStream(
   name: string,
   nodes: TAgentStreamNode[],
   edges: TAgentStreamEdge[],
+  run_on_start: boolean,
   viewport: Viewport,
 ): AgentStream {
   return {
@@ -122,6 +124,7 @@ export function serializeAgentStream(
     name,
     agents: nodes.map((node) => serializeAgentStreamNode(node)),
     channels: edges.map((edge) => serializeAgentStreamEdge(edge)),
+    run_on_start,
     viewport,
   };
 }
@@ -135,6 +138,7 @@ export function serializeAgentStreamNode(node: TAgentStreamNode): AgentSpec {
     configs: node.data.configs,
     config_specs: node.data.config_specs,
     enabled: node.data.enabled,
+    disabled: node.data.disabled,
     // extensions
     x: node.position.x,
     y: node.position.y,

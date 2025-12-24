@@ -4,14 +4,31 @@
 
   import { Button } from "$lib/components/ui/button/index.js";
 
-  let { onPause, onPlay } = $props();
+  import { runningStreams } from "@/lib/shared.svelte";
+
+  let { stream, onstop, onstart } = $props();
+
+  let isRunning = $derived(runningStreams.has(stream.id));
+
+  async function handleStart() {
+    await onstart();
+    runningStreams.add(stream.id);
+  }
+
+  async function handleStop() {
+    await onstop();
+    runningStreams.delete(stream.id);
+  }
 </script>
 
 <div class="flex mr-4">
-  <Button onclick={onPause} variant="ghost" class="w-4">
-    <SquareIcon />
-  </Button>
-  <Button onclick={onPlay} variant="ghost" class="w-4">
-    <PlayIcon />
-  </Button>
+  {#if isRunning}
+    <Button onclick={handleStop} variant="ghost" class="w-4">
+      <SquareIcon />
+    </Button>
+  {:else}
+    <Button onclick={handleStart} variant="ghost" class="w-4">
+      <PlayIcon />
+    </Button>
+  {/if}
 </div>

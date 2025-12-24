@@ -148,10 +148,11 @@ impl ASApp {
     pub fn import_agent_stream(&self, path: String) -> Result<AgentStream> {
         let path = PathBuf::from(path);
         let mut stream = self.read_agent_stream(path)?;
+        stream.set_run_on_start(false);
 
         let name = self.askit.unique_stream_name(stream.name());
         stream.set_name(name);
-        stream.disable_all_nodes();
+
         self.askit
             .add_agent_stream(&stream)
             .context("Failed to add agent stream")?;

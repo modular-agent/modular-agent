@@ -35,7 +35,7 @@
   const outputs = $derived(data.outputs ?? []);
   const showErr = $derived(data.show_err ?? false);
 
-  let bgColor = $derived(bgColors[agentDef ? (data.enabled ? 1 : 0) : 2]);
+  let bgColor = $derived(bgColors[agentDef ? (data.disabled ? 0 : 1) : 2]);
 
   let ht = $state<number | null>(null);
 

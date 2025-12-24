@@ -27,6 +27,8 @@
     startAgent,
     stopAgent,
     copySubStream,
+    startAgentStream,
+    stopAgentStream,
   } from "tauri-plugin-askit-api";
   import type { AgentSpec, ChannelSpec } from "tauri-plugin-askit-api";
 
@@ -196,7 +198,6 @@
     for (const node of cnodes) {
       node.x += 80;
       node.y += 80;
-      node.enabled = false;
       await addAgent(stream.id, node);
       const new_node = deserializeAgentStreamNode(node);
       new_node.selected = true;
@@ -283,7 +284,14 @@
   async function onSaveStream() {
     if (stream.id in streams()) {
       const viewport = getViewport();
-      const s = serializeAgentStream(stream.id, stream.name, nodes, edges, viewport);
+      const s = serializeAgentStream(
+        stream.id,
+        stream.name,
+        nodes,
+        edges,
+        stream.run_on_start,
+        viewport,
+      );
       await saveAgentStream(s);
       streams()[stream.id] = deserializeAgentStream(s);
     }
@@ -291,7 +299,14 @@
 
   function onExportStream() {
     const viewport = getViewport();
-    const s = serializeAgentStream(stream.id, stream.name, nodes, edges, viewport);
+    const s = serializeAgentStream(
+      stream.id,
+      stream.name,
+      nodes,
+      edges,
+      stream.run_on_start,
+      viewport,
+    );
     const jsonStr = JSON.stringify(s, null, 2);
     const blob = new Blob([jsonStr], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -361,47 +376,31 @@
     nodes = [...nodes, new_node];
   }
 
-  async function onPlay() {
+  async function onEnable() {
     const [selectedNodes, selectedEdges] = selectedNodesAndEdges();
     if (selectedNodes.length > 0 || selectedEdges.length > 0) {
-      // start only selected agents
+      // enable selected agents
       for (const node of selectedNodes) {
-        if (!node.data.enabled) {
-          updateNodeData(node.id, { enabled: true });
+        if (node.data.disabled) {
+          updateNodeData(node.id, { disabled: false });
           await startAgent(node.id);
         }
       }
       return;
     }
-
-    // start all agents
-    for (const node of nodes) {
-      if (!node.data.enabled) {
-        updateNodeData(node.id, { enabled: true });
-        await startAgent(node.id);
-      }
-    }
   }
 
-  async function onPause() {
+  async function onDisable() {
     const [selectedNodes, selectedEdges] = selectedNodesAndEdges();
     if (selectedNodes.length > 0 || selectedEdges.length > 0) {
-      // stop only selected agents
+      // disable selected agents
       for (const node of selectedNodes) {
-        if (node.data.enabled) {
-          updateNodeData(node.id, { enabled: false });
+        if (!node.data.disabled) {
+          updateNodeData(node.id, { disabled: true });
           await stopAgent(node.id);
         }
       }
       return;
-    }
-
-    // stop all agents
-    for (const node of nodes) {
-      if (node.data.enabled) {
-        updateNodeData(node.id, { enabled: false });
-        await stopAgent(node.id);
-      }
     }
   }
 
@@ -413,6 +412,14 @@
     selectedNodes.forEach((node) => {
       updateNodeData(node.id, { show_err: !node.data.show_err });
     });
+  }
+
+  async function onStart() {
+    await startAgentStream(stream.id);
+  }
+
+  async function onStop() {
+    await stopAgentStream(stream.id);
   }
 
   let openNodeContextMenu = $state(false);
@@ -469,7 +476,7 @@
     <Menubar {onImportStream} {onExportStream} />
     <div class="flex flex-row items-center">
       <StreamName name={stream.name} class="mr-4" />
-      <StreamActions {onPause} {onPlay} />
+      <StreamActions {stream} onstop={onStop} onstart={onStart} />
     </div>
     <div>{" "}</div>
   </header>
@@ -504,8 +511,8 @@
       bind:open={openNodeContextMenu}
       x={nodeContextMenuX}
       y={nodeContextMenuY}
-      onstart={onPlay}
-      onstop={onPause}
+      onenable={onEnable}
+      ondisable={onDisable}
       oncut={cutNodesAndEdges}
       oncopy={copyNodesAndEdges}
       ontoggleerr={onToggleErr}

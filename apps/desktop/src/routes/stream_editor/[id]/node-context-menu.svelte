@@ -5,8 +5,8 @@
     open = $bindable(false),
     x = 0,
     y = 0,
-    onstart,
-    onstop,
+    onenable,
+    ondisable,
     oncut,
     oncopy,
     ontoggleerr,
@@ -16,13 +16,13 @@
     getBoundingClientRect: () => DOMRect.fromRect({ x, y, width: 0, height: 0 }),
   });
 
-  function handleStart() {
-    onstart?.();
+  function handleEnable() {
+    onenable?.();
     open = false;
   }
 
-  function handleStop() {
-    onstop?.();
+  function handleDisable() {
+    ondisable?.();
     open = false;
   }
 
@@ -50,8 +50,6 @@
     updatePositionStrategy="always"
     customAnchor={anchor}
   >
-    <ContextMenu.Item inset onclick={handleStart}>Start</ContextMenu.Item>
-    <ContextMenu.Item inset onclick={handleStop}>Stop</ContextMenu.Item>
     <ContextMenu.Item inset onclick={handleCut}>
       Cut
       <ContextMenu.Shortcut>ctl-X</ContextMenu.Shortcut>
@@ -60,6 +58,10 @@
       Copy
       <ContextMenu.Shortcut>ctl-C</ContextMenu.Shortcut>
     </ContextMenu.Item>
+    <ContextMenu.Separator />
+    <ContextMenu.Item inset onclick={handleEnable}>Enable</ContextMenu.Item>
+    <ContextMenu.Item inset onclick={handleDisable}>Disable</ContextMenu.Item>
+    <ContextMenu.Separator />
     <ContextMenu.Item inset onclick={handleToggleErr}>Err</ContextMenu.Item>
   </ContextMenu.Content>
 </ContextMenu.Root>

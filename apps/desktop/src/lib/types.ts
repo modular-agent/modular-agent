@@ -30,6 +30,7 @@ export type TAgentStream = {
   name: string;
   nodes: TAgentStreamNode[];
   edges: TAgentStreamEdge[];
+  run_on_start: boolean;
   viewport: Viewport | null;
 };
 

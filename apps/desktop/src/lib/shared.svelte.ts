@@ -1,6 +1,9 @@
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
+import { SvelteSet } from "svelte/reactivity";
 import { writable, type Writable } from "svelte/store";
+
+import { getRunningAgentStreams } from "tauri-plugin-askit-api";
 
 import type {
   AgentConfigUpdatedMessage,
@@ -8,6 +11,20 @@ import type {
   AgentInMessage,
   AgentSpecUpdatedMessage,
 } from "./types";
+
+// Agent Streams
+
+export const runningStreams = new SvelteSet<string>();
+
+export async function updateRunningStreams() {
+  const streams = await getRunningAgentStreams();
+  runningStreams.clear();
+  streams.forEach((s) => runningStreams.add(s));
+}
+
+$effect.root(() => {
+  updateRunningStreams();
+});
 
 // Agent Config Updated Message
 
@@ -141,7 +158,3 @@ $effect.root(() => {
     unlistenAgentSpecUpdated?.();
   };
 });
-
-// Agent Stream
-
-export const streamState = $state({ id: "", name: "main" });

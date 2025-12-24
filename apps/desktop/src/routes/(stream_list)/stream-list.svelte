@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { onMount } from "svelte";
+
   import {
     type ColumnDef,
     type ColumnFiltersState,
@@ -15,6 +17,8 @@
   import { Input } from "$lib/components/ui/input/index.js";
   import * as Table from "$lib/components/ui/table/index.js";
 
+  import { runningStreams, updateRunningStreams } from "@/lib/shared.svelte";
+
   import NewStreamDialog from "./new-stream-dialog.svelte";
   import StreamListActions from "./stream-list-actions.svelte";
   import StreamListName from "./stream-list-name.svelte";
@@ -22,7 +26,6 @@
 
   interface Props {
     streamNames: { id: string; name: string }[];
-    streamActivities: Record<string, any>;
     createNewStream?: (name: string | null) => Promise<string | null>;
     renameStream?: (id: string, rename: string) => Promise<string | null>;
     deleteStream?: (id: string) => Promise<void>;
@@ -34,8 +37,7 @@
     active: boolean;
   };
 
-  let { streamNames, streamActivities, createNewStream, renameStream, deleteStream }: Props =
-    $props();
+  let { streamNames, createNewStream, renameStream, deleteStream }: Props = $props();
 
   let columnFilters = $state<ColumnFiltersState>([]);
   let columnVisibility = $state<VisibilityState>({});
@@ -44,7 +46,7 @@
   const data: Stream[] = $derived.by(() => {
     return streamNames.map((stream) => ({
       ...stream,
-      active: streamActivities[stream.id] || false,
+      active: runningStreams.has(stream.id),
     }));
   });
 
@@ -109,6 +111,10 @@
         return columnVisibility;
       },
     },
+  });
+
+  onMount(() => {
+    updateRunningStreams();
   });
 </script>
 
