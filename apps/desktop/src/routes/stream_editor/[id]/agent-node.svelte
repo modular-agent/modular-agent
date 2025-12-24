@@ -12,11 +12,15 @@
   import { onMount } from "svelte";
   import type { Unsubscriber } from "svelte/store";
 
+  import AlertCircleIcon from "@lucide/svelte/icons/alert-circle";
   import { useSvelteFlow, useNodeConnections, type NodeProps } from "@xyflow/svelte";
-  import { Button, Input, Popover, Textarea } from "flowbite-svelte";
-  import { ExclamationCircleOutline } from "flowbite-svelte-icons";
   import { getAgentSpec, setAgentConfigs } from "tauri-plugin-askit-api";
   import type { AgentSpec } from "tauri-plugin-askit-api";
+
+  import * as Alert from "$lib/components/ui/alert/index.js";
+  import { Button } from "$lib/components/ui/button/index.js";
+  import * as HoverCard from "$lib/components/ui/hover-card/index.js";
+  import { Input } from "$lib/components/ui/input/index.js";
 
   import { getAgentDefinitionsContext } from "@/lib/agent";
   import {
@@ -142,17 +146,34 @@
             }}
           />
         {:else}
-          <button
-            id="t-{uid}"
-            type="button"
-            ondblclick={() => (editTitle = true)}
-            class="flex-none"
-            tabindex={-1}
-          >
-            <h3 class="text-xl">
-              {data.title ?? agentDef?.title ?? data.def_name}
-            </h3>
-          </button>
+          <HoverCard.Root>
+            <HoverCard.Trigger>
+              <button
+                type="button"
+                ondblclick={() => (editTitle = true)}
+                class="flex-none"
+                tabindex={-1}
+              >
+                <div class="text-xl">
+                  {data.title ?? agentDef?.title ?? data.def_name}
+                </div>
+              </button>
+            </HoverCard.Trigger>
+            <HoverCard.Content class="w-full max-w-xl">
+              <p class="text-sm font-semibold">
+                {data.def_name}<br />
+                {#if agentDef?.title}
+                  {agentDef.title}
+                {/if}
+                {#if agentDef?.category}
+                  ({agentDef.category})
+                {/if}
+              </p>
+              {#if description}
+                <p class="text-sm">{description}</p>
+              {/if}
+            </HoverCard.Content>
+          </HoverCard.Root>
         {/if}
       {:else}
         <h3 class="text-xl">
@@ -160,7 +181,23 @@
         </h3>
       {/if}
       {#if errorMessages.length > 0}
-        <ExclamationCircleOutline id="e-{uid}" class="ml-2 pt-1 w-6 h-6 text-red-500" />
+        <HoverCard.Root>
+          <HoverCard.Trigger class="ml-4">
+            <AlertCircleIcon color="red" />
+          </HoverCard.Trigger>
+          <HoverCard.Content class="w-full max-w-xl">
+            <div class="flex flex-col gap-2 mb-2">
+              {#each errorMessages as msg}
+                <Alert.Root variant="destructive">
+                  <Alert.Description>
+                    <div>{msg}</div>
+                  </Alert.Description>
+                </Alert.Root>
+              {/each}
+            </div>
+            <Button onclick={clearError} variant="outline">Clear</Button>
+          </HoverCard.Content>
+        </HoverCard.Root>
       {/if}
     </div>
   </div>
@@ -183,41 +220,3 @@
 {/snippet}
 
 <NodeBase {id} {data} {agentDef} {titleColor} {inputCount} {title} {contents} {...props} />
-
-{#if description || data.def_name || agentDef?.category}
-  <Popover triggeredBy="#t-{uid}" placement="top-start" arrow={false} class="z-40">
-    <p class="text-sm font-semibold">
-      {data.def_name}<br />
-      {#if agentDef?.title}
-        {agentDef.title}
-      {/if}
-      {#if agentDef?.category}
-        ({agentDef.category})
-      {/if}
-    </p>
-    {#if description}
-      <p class="text-sm text-gray-500">{description}</p>
-    {/if}
-  </Popover>
-{/if}
-
-{#if errorMessages.length > 0}
-  <Popover
-    triggeredBy="#e-{uid}"
-    placement="bottom"
-    arrow={false}
-    class="w-96 min-h-60 z-40 text-xs font-light text-gray-500 bg-white dark:bg-gray-800 dark:border-gray-600 dark:text-gray-400 flex flex-col"
-  >
-    <div class="grow flex flex-col gap-2">
-      <Textarea
-        class="grow nodrag nowheel text-wrap"
-        value={errorMessages.join("\n")}
-        onkeydown={(evt) => {
-          evt.preventDefault();
-        }}
-        rows={8}
-      />
-      <Button size="xs" color="red" class="w-10 flex-none" onclick={clearError}>Clear</Button>
-    </div>
-  </Popover>
-{/if}

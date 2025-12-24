@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{
     collections::HashMap,
+    ops::Not,
     sync::{LazyLock, Mutex},
 };
 use tauri::{AppHandle, Manager, State};
@@ -43,7 +44,13 @@ pub fn quit(_app: &AppHandle) {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CoreSettings {
-    pub autostart: Option<bool>,
+    #[serde(default, skip_serializing_if = "<&bool>::not")]
+    pub autostart: bool,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color_mode: Option<String>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub shortcut_keys: Option<HashMap<String, String>>,
 }
 
@@ -64,7 +71,8 @@ impl Default for CoreSettings {
         });
 
         CoreSettings {
-            autostart: Some(false),
+            autostart: false,
+            color_mode: None,
             shortcut_keys: Some(SHORTCUT_KEYS.clone()),
         }
     }

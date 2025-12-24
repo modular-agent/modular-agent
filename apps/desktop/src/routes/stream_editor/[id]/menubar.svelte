@@ -4,9 +4,11 @@
   let { onImportStream, onExportStream } = $props();
 </script>
 
-<Menubar.Root>
+<Menubar.Root class="border-none shadow-none">
   <Menubar.Menu>
-    <Menubar.Trigger>File</Menubar.Trigger>
+    <Menubar.Trigger class="focus:bg-background data-[state=open]:bg-background"
+      >File</Menubar.Trigger
+    >
     <Menubar.Content>
       <Menubar.Item onclick={onImportStream}>Import</Menubar.Item>
       <Menubar.Item onclick={onExportStream}>Export</Menubar.Item>

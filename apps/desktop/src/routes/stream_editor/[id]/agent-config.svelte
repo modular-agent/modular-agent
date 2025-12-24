@@ -2,11 +2,16 @@
   import type { Snippet } from "svelte";
 
   import { Handle, Position } from "@xyflow/svelte";
-  import { Button, Input, NumberInput, Textarea, Toggle } from "flowbite-svelte";
   import type { AgentConfigSpec } from "tauri-plugin-askit-api";
 
-  import Messages from "@/components/Messages.svelte";
+  import { Button } from "$lib/components/ui/button/index.js";
+  import { Input } from "$lib/components/ui/input/index.js";
+  import { Switch } from "$lib/components/ui/switch/index.js";
+  import { Textarea } from "$lib/components/ui/textarea/index.js";
+
   import { inferTypeForDisplay } from "@/lib/agent";
+
+  import Messages from "./messages.svelte";
 
   type Props = {
     name: string;
@@ -157,15 +162,16 @@
 {/snippet}
 
 {#snippet inputUnit(key: string, v: any)}
-  <Button color="alternative" class="flex-none" onclick={() => updateConfig(key, {})} />
+  <Button class="flex-none" onclick={() => updateConfig(key, {})} variant="outline" />
 {/snippet}
 
 {#snippet inputBoolean(key: string, v: boolean)}
-  <Toggle class="flex-none" checked={v} onchange={() => updateConfig(key, !v)} />
+  <Switch class="flex-none" checked={v} onchange={() => updateConfig(key, !v)} />
 {/snippet}
 
 {#snippet inputInteger(key: string, v: number)}
-  <NumberInput
+  <Input
+    type="number"
     class="nodrag flex-none"
     value={v}
     onkeydown={(evt) => {

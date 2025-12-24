@@ -1,8 +1,8 @@
 <script lang="ts" module>
   const bgColors = [
-    "bg-zinc-100 dark:bg-zinc-900 opacity-50",
-    "bg-slate-200 dark:bg-[#353535] opacity-90",
-    "bg-rose-400 dark:bg-rose-400 opacity-50",
+    "bg-muted dark:bg-muted opacity-50",
+    "bg-background dark:bg-background opacity-90",
+    "bg-destructive dark:bg-destructive opacity-50",
   ];
 
   const DEFAULT_HANDLE_STYLE = "width: 12px; height: 12px;";
@@ -62,7 +62,7 @@
 
 <NodeResizer isVisible={selected} {onResize} />
 <div
-  class="{bgColor} flex flex-col p-0 text-black dark:text-white border-2 border-color-[#777] rounded-xl"
+  class="{bgColor} flex flex-col p-0 border-2 rounded-xl"
   style:height={ht ? `${ht}px` : "auto"}
   style:box-shadow={highlight.current > 0.05 ? `0 0 ${highlight.current * 20}px #fff78b` : ""}
 >

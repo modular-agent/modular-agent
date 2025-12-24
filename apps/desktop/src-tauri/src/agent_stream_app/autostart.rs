@@ -21,7 +21,7 @@ pub fn init(app: &AppHandle) -> Result<()> {
 
     let autostart_manager = app.autolaunch();
 
-    if is_autostart == Some(true) {
+    if is_autostart {
         if autostart_manager.is_enabled()? {
             log::debug!("Autostart is already enabled");
         } else {

@@ -17,10 +17,13 @@
 </script>
 
 <script lang="ts">
+  import BotIcon from "@lucide/svelte/icons/bot";
+  import CatIcon from "@lucide/svelte/icons/cat";
   import DOMPurify from "dompurify";
-  import { Avatar, Card } from "flowbite-svelte";
   import { marked } from "marked";
 
+  import * as Avatar from "$lib/components/ui/avatar/index.js";
+  import * as Item from "$lib/components/ui/item/index.js";
   import { truncate } from "$lib/utils";
 
   let { messages }: Props = $props();
@@ -48,26 +51,42 @@
         }
       }
       if (msg.thinking) {
-        html += `<p><details><summary>${truncate(msg.thinking, 30)}</summary><p>${msg.thinking}</p></details></p>`;
+        html += `<br><p><details><summary>${truncate(msg.thinking, 30)}</summary><p>${msg.thinking}</p></details></p>`;
       }
       return { role, html };
     });
   });
 </script>
 
-<div class="nodrag nowheel max-h-[800px] overflow-y-auto">
+<div class="grid gap-2 nodrag nowheel">
   {#each msgs as message}
-    <Card class="mb-1 min-w-full">
-      <div class="flex items-center space-x-4 rtl:space-x-reverse">
-        <Avatar class="flex-none shrink-0">{message.role}</Avatar>
-        <div class="grow">
+    <Item.Root variant="outline">
+      <Item.Media>
+        <Avatar.Root class="size-10">
+          {#if message.role === "ai"}
+            <Avatar.Fallback>
+              <BotIcon />
+            </Avatar.Fallback>
+          {:else if message.role === "user"}
+            <Avatar.Fallback>
+              <CatIcon />
+            </Avatar.Fallback>
+          {:else}
+            <Avatar.Fallback>
+              {message.role}
+            </Avatar.Fallback>
+          {/if}
+        </Avatar.Root>
+      </Item.Media>
+      <Item.Content>
+        <Item.Description class="line-clamp-none">
           {#if message.role === "ai"}
             {@html message.html}
           {:else}
             {message.html}
           {/if}
-        </div>
-      </div>
-    </Card>
+        </Item.Description>
+      </Item.Content>
+    </Item.Root>
   {/each}
 </div>

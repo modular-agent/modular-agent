@@ -17,8 +17,6 @@
   } from "@xyflow/svelte";
   // 👇 this is important! You need to import the styles for Svelte Flow to work
   import "@xyflow/svelte/dist/style.css";
-  import { Button, ButtonGroup } from "flowbite-svelte";
-  import { PauseOutline, PlayOutline } from "flowbite-svelte-icons";
   import hotkeys from "hotkeys-js";
   import {
     addAgent,
@@ -51,6 +49,7 @@
   import AgentNode from "./agent-node.svelte";
   import Menubar from "./menubar.svelte";
   import NodeContextMenu from "./node-context-menu.svelte";
+  import StreamActions from "./stream-actions.svelte";
   import StreamName from "./stream-name.svelte";
 
   let { data } = $props();
@@ -468,7 +467,10 @@
 <div class="flex flex-col w-full min-h-screen">
   <header class="flex flex-none items-center justify-between pl-2">
     <Menubar {onImportStream} {onExportStream} />
-    <StreamName name={stream.name} class="mr-4" />
+    <div class="flex flex-row items-center">
+      <StreamName name={stream.name} class="mr-4" />
+      <StreamActions {onPause} {onPlay} />
+    </div>
     <div>{" "}</div>
   </header>
   <SvelteFlow
@@ -486,35 +488,17 @@
     ondrop={handleDrop}
     deleteKey={["Delete"]}
     connectionRadius={38}
-    colorMode="dark"
+    colorMode={(data.coreSettings.color_mode as "light" | "dark" | "system") || "system"}
     fitView
     maxZoom={2}
     minZoom={0.1}
     attributionPosition="bottom-right"
-    class="flex-1 w-full text-black! !dark:text-white bg-gray-100! dark:bg-black!"
+    class="flex-1 w-full"
   >
-    <Background
-      variant={BackgroundVariant.Lines}
-      bgColor="#000"
-      patternColor="#1a1a1a"
-      gap={28}
-      lineWidth={1}
-    />
+    <Background variant={BackgroundVariant.Dots} gap={28} lineWidth={1} />
 
     <Controls />
     <MiniMap />
-    <ButtonGroup class="absolute bottom-4 z-10 w-full flex justify-center">
-      <Button onclick={onPause} pill class="bg-gray-100! dark:bg-gray-900! opacity-80">
-        <PauseOutline
-          class="w-5 h-5 mb-1/2 text-gray-500 dark:text-gray-400 group-hover:text-primary-600 dark:group-hover:text-primary-500"
-        />
-      </Button>
-      <Button onclick={onPlay} pill class="bg-gray-100! dark:bg-gray-900! opacity-80">
-        <PlayOutline
-          class="w-5 h-5 mb-1/2 text-gray-500 dark:text-gray-400 group-hover:text-primary-600 dark:group-hover:text-primary-500"
-        />
-      </Button>
-    </ButtonGroup>
 
     <NodeContextMenu
       bind:open={openNodeContextMenu}
@@ -528,7 +512,7 @@
     />
 
     <div
-      class="absolute right-6 top-0 w-60 z-20 max-h-[calc(100vh-200px)] overflow-y-auto pretty-scroll overflow-x-hidden rounded-md border shadow-lg"
+      class="absolute right-6 top-6 w-60 z-20 max-h-[calc(100vh-216px)] overflow-y-auto pretty-scroll overflow-x-hidden rounded-md border shadow-lg"
     >
       <AgentList class="h-full" {agentDefs} {onAddAgent} onDragAgentStart={handleAgentDragStart} />
     </div>
@@ -554,19 +538,19 @@
   }
   :global(.svelte-flow__resize-control.line.top) {
     border: var(--resize-control-size) solid var(--resize-control-color);
-    border-image: linear-gradient(to top, #000, var(--resize-control-color)) 1;
+    border-image: linear-gradient(to top, var(--background), var(--resize-control-color)) 1;
   }
   :global(.svelte-flow__resize-control.line.right) {
     border: var(--resize-control-size) solid var(--resize-control-color);
-    border-image: linear-gradient(to right, #000, var(--resize-control-color)) 1;
+    border-image: linear-gradient(to right, var(--background), var(--resize-control-color)) 1;
   }
   :global(.svelte-flow__resize-control.line.bottom) {
     border: var(--resize-control-size) solid var(--resize-control-color);
-    border-image: linear-gradient(to bottom, #000, var(--resize-control-color)) 1;
+    border-image: linear-gradient(to bottom, var(--background), var(--resize-control-color)) 1;
   }
   :global(.svelte-flow__resize-control.line.left) {
     border: var(--resize-control-size) solid var(--resize-control-color);
-    border-image: linear-gradient(to left, #000, var(--resize-control-color)) 1;
+    border-image: linear-gradient(to left, var(--background), var(--resize-control-color)) 1;
   }
   :global(.svelte-flow__controls) {
     margin-left: 4px;

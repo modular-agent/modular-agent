@@ -1,11 +1,7 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
-@plugin "flowbite/plugin";
-
 @custom-variant dark (&:is(.dark *));
-
-@source "../node_modules/flowbite-svelte/dist";
 
 :root {
   --radius: 0.625rem;

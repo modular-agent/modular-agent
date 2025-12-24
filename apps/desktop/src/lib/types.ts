@@ -1,5 +1,5 @@
 import type { Edge, Node } from "@xyflow/svelte";
-import type { AgentSpec, Viewport } from "tauri-plugin-askit-api";
+import type { AgentSpec, AgentDefinition, Viewport } from "tauri-plugin-askit-api";
 
 // Messages
 
@@ -39,3 +39,11 @@ export type TAgentStreamNode = Node & {
 };
 
 export type TAgentStreamEdge = Edge;
+
+// Settings
+
+export type CoreSettings = {
+  autostart?: boolean;
+  color_mode?: string | null;
+  shortcut_keys?: Record<string, string> | null;
+};
