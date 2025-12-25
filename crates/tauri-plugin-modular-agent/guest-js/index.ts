@@ -33,10 +33,15 @@ export type AgentConfigSpec = {
 
 export type AgentConfigValueType = string;
 
-export type AgentStreams = Record<string, AgentStream>;
-
-export type AgentStream = {
+export type AgentStreamInfo = {
   id: string;
+  name: string;
+  running: boolean;
+};
+
+// export type AgentStreamSpecs = Record<string, AgentStreamSpec>;
+
+export type AgentStreamSpec = {
   name: string;
   agents: AgentSpec[];
   channels: ChannelSpec[];
@@ -101,7 +106,11 @@ export async function getAgentSpec(agentId: string): Promise<AgentSpec | null> {
 
 // stream
 
-export async function getAgentStreams(): Promise<AgentStreams> {
+export async function getAgentStreamInfos(): Promise<AgentStreamInfo[]> {
+  return await invoke<any>("plugin:askit|get_agent_stream_infos", {});
+}
+
+export async function getAgentStreams(): Promise<AgentStreamSpec[]> {
   return await invoke<any>("plugin:askit|get_agent_streams", {});
 }
 
@@ -109,7 +118,7 @@ export async function getRunningAgentStreams(): Promise<string[]> {
   return await invoke<any>("plugin:askit|get_running_agent_streams", {});
 }
 
-export async function newAgentStream(streamName: string): Promise<AgentStream> {
+export async function newAgentStream(streamName: string): Promise<string> {
   return await invoke<any>("plugin:askit|new_agent_stream", { streamName });
 }
 
@@ -127,19 +136,19 @@ export async function uniqueStreamName(name: string): Promise<string> {
   return await invoke<any>("plugin:askit|unique_stream_name", { name });
 }
 
-export async function addAgentStream(AgentStream: AgentStream): Promise<void> {
-  await invoke<void>("plugin:askit|add_agent_stream", { AgentStream });
+export async function addAgentStream(spec: AgentStreamSpec): Promise<string> {
+  return await invoke<any>("plugin:askit|add_agent_stream", { spec });
 }
 
 export async function removeAgentStream(id: string): Promise<void> {
   await invoke<void>("plugin:askit|remove_agent_stream", { id });
 }
 
-export async function insertAgentStream(
-  AgentStream: AgentStream
-): Promise<void> {
-  await invoke<void>("plugin:askit|insert_agent_stream", { AgentStream });
-}
+// export async function insertAgentStream(
+//   AgentStream: AgentStream
+// ): Promise<void> {
+//   await invoke<void>("plugin:askit|insert_agent_stream", { AgentStream });
+// }
 
 export async function copySubStream(
   agents: AgentSpec[],

@@ -1,7 +1,8 @@
 use agent_stream_kit::{
     AgentConfigSpecs, AgentConfigs, AgentConfigsMap, AgentDefinition, AgentDefinitions, AgentSpec,
-    AgentStream, AgentStreams, AgentValue, ChannelSpec,
+    AgentValue, ChannelSpec,
 };
+use agent_stream_kit::{AgentStreamInfo, AgentStreamSpec};
 use tauri::{AppHandle, Runtime};
 
 use crate::ASKitExt;
@@ -32,10 +33,17 @@ pub(crate) fn get_agent_spec<R: Runtime>(app: AppHandle<R>, agent_id: String) ->
 // stream
 
 #[tauri::command]
-pub(crate) fn get_agent_streams<R: Runtime>(app: AppHandle<R>) -> AgentStreams {
+pub(crate) fn get_agent_stream_infos<R: Runtime>(app: AppHandle<R>) -> Vec<AgentStreamInfo> {
+    app.askit().get_agent_stream_infos()
+}
+
+#[deprecated]
+#[tauri::command]
+pub(crate) fn get_agent_streams<R: Runtime>(app: AppHandle<R>) -> Vec<AgentStreamSpec> {
     app.askit().get_agent_streams()
 }
 
+#[deprecated]
 #[tauri::command]
 pub(crate) fn get_running_agent_streams<R: Runtime>(app: AppHandle<R>) -> Vec<String> {
     app.askit().get_running_agent_streams()
@@ -45,7 +53,7 @@ pub(crate) fn get_running_agent_streams<R: Runtime>(app: AppHandle<R>) -> Vec<St
 pub(crate) fn new_agent_stream<R: Runtime>(
     app: AppHandle<R>,
     stream_name: String,
-) -> Result<AgentStream> {
+) -> Result<String> {
     app.askit()
         .new_agent_stream(&stream_name)
         .map_err(Into::into)
@@ -70,11 +78,9 @@ pub(crate) fn unique_stream_name<R: Runtime>(app: tauri::AppHandle<R>, name: Str
 #[tauri::command]
 pub(crate) fn add_agent_stream<R: Runtime>(
     app: AppHandle<R>,
-    agent_stream: AgentStream,
-) -> Result<()> {
-    app.askit()
-        .add_agent_stream(&agent_stream)
-        .map_err(Into::into)
+    spec: AgentStreamSpec,
+) -> Result<String> {
+    app.askit().add_agent_stream(spec).map_err(Into::into)
 }
 
 #[tauri::command]
@@ -88,15 +94,15 @@ pub(crate) async fn remove_agent_stream<R: Runtime>(
         .map_err(Into::into)
 }
 
-#[tauri::command]
-pub(crate) fn insert_agent_stream<R: Runtime>(
-    app: AppHandle<R>,
-    agent_stream: AgentStream,
-) -> Result<()> {
-    app.askit()
-        .insert_agent_stream(agent_stream)
-        .map_err(Into::into)
-}
+// #[tauri::command]
+// pub(crate) fn insert_agent_stream<R: Runtime>(
+//     app: AppHandle<R>,
+//     agent_stream: AgentStream,
+// ) -> Result<()> {
+//     app.askit()
+//         .insert_agent_stream(agent_stream)
+//         .map_err(Into::into)
+// }
 
 #[tauri::command]
 pub(crate) fn copy_sub_stream<R: Runtime>(

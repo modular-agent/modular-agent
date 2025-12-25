@@ -6,6 +6,7 @@ Default permissions for the plugin
 
 - `allow-get-agent-definition`
 - `allow-get-agent-definitions`
+- `allow-get-agent-stream-infos`
 - `allow-get-agent-streams`
 - `allow-get-running-agent-streams`
 - `allow-get-agent-spec`
@@ -14,7 +15,6 @@ Default permissions for the plugin
 - `allow-unique-stream-name`
 - `allow-add-agent-stream`
 - `allow-remove-agent-stream`
-- `allow-insert-agent-stream`
 - `allow-copy-sub-stream`
 - `allow-start-agent-stream`
 - `allow-stop-agent-stream`
@@ -253,6 +253,32 @@ Denies the get_agent_spec command without any pre-configured scope.
 <tr>
 <td>
 
+`askit:allow-get-agent-stream-infos`
+
+</td>
+<td>
+
+Enables the get_agent_stream_infos command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`askit:deny-get-agent-stream-infos`
+
+</td>
+<td>
+
+Denies the get_agent_stream_infos command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
 `askit:allow-get-agent-streams`
 
 </td>
@@ -350,32 +376,6 @@ Enables the get_running_agent_streams command without any pre-configured scope.
 <td>
 
 Denies the get_running_agent_streams command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`askit:allow-insert-agent-stream`
-
-</td>
-<td>
-
-Enables the insert_agent_stream command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`askit:deny-insert-agent-stream`
-
-</td>
-<td>
-
-Denies the insert_agent_stream command without any pre-configured scope.
 
 </td>
 </tr>
