@@ -1,10 +1,10 @@
 use std::path::PathBuf;
 
-use anyhow::{bail, Context as _, Result};
+use anyhow::{anyhow, bail, Context as _, Result};
 use dirs;
 use tauri::{AppHandle, Manager, State};
 
-use agent_stream_kit::{ASKit, AgentStream};
+use agent_stream_kit::{ASKit, AgentStreamSpec};
 use tauri_plugin_askit::ASKitExt;
 
 use super::observer::ASAppObserver;
@@ -19,32 +19,25 @@ impl ASApp {
     // AgentStream
 
     pub async fn remove_agent_stream(&self, stream_id: &str) -> Result<()> {
-        let name = {
-            if let Some(stream) = self.askit.get_agent_streams().get(stream_id) {
-                stream.name().to_string()
-            } else {
-                bail!("Agent stream not found: {}", stream_id);
-            }
-        };
-
+        let spec = self
+            .askit
+            .get_agent_stream(stream_id)
+            .ok_or_else(|| anyhow!("Agent stream not found: {}", stream_id))?;
         self.askit.remove_agent_stream(stream_id).await?;
-        let stream_path = self.agent_stream_path(&name)?;
+        let stream_path = self.agent_stream_path(&spec.name)?;
         if stream_path.exists() {
             std::fs::remove_file(stream_path)
                 .with_context(|| "Failed to remove agent stream file")?;
         }
-
         Ok(())
     }
 
     pub fn rename_agent_stream(&self, stream_id: &str, new_name: &str) -> Result<String> {
-        let old_name = {
-            if let Some(stream) = self.askit.get_agent_streams().get(stream_id) {
-                stream.name().to_string()
-            } else {
-                bail!("Agent stream not found: {}", stream_id);
-            }
-        };
+        let old_spec = self
+            .askit
+            .get_agent_stream(stream_id)
+            .ok_or_else(|| anyhow!("Agent stream not found: {}", stream_id))?;
+        let old_name = old_spec.name.clone();
 
         let new_stream_path = self.agent_stream_path(new_name)?;
         if new_stream_path.exists() {
@@ -74,8 +67,8 @@ impl ASApp {
         Ok(stream_path)
     }
 
-    pub fn save_agent_stream(&self, agent_stream: AgentStream) -> Result<()> {
-        let stream_path = self.agent_stream_path(agent_stream.name())?;
+    pub fn save_agent_stream(&self, agent_stream: AgentStreamSpec) -> Result<()> {
+        let stream_path = self.agent_stream_path(&agent_stream.name)?;
 
         // Ensure the parent directory exists
         let parent_path = stream_path.parent().context("no parent path")?;
@@ -127,12 +120,12 @@ impl ASApp {
                 match self.read_agent_stream(path) {
                     Ok(stream) => {
                         if name_prefix.is_empty() {
-                            self.askit.add_agent_stream(&stream)?;
+                            self.askit.add_agent_stream(stream)?;
                         } else {
                             let mut stream = stream;
-                            let full_name = format!("{}/{}", name_prefix, stream.name());
-                            stream.set_name(full_name);
-                            self.askit.add_agent_stream(&stream)?;
+                            let full_name = format!("{}/{}", name_prefix, stream.name);
+                            stream.name = full_name;
+                            self.askit.add_agent_stream(stream)?;
                         }
                     }
                     Err(e) => {
@@ -145,22 +138,23 @@ impl ASApp {
         Ok(())
     }
 
-    pub fn import_agent_stream(&self, path: String) -> Result<AgentStream> {
+    pub fn import_agent_stream(&self, path: String) -> Result<String> {
         let path = PathBuf::from(path);
-        let mut stream = self.read_agent_stream(path)?;
-        stream.set_run_on_start(false);
+        let mut spec = self.read_agent_stream(path)?;
+        spec.run_on_start = false;
 
-        let name = self.askit.unique_stream_name(stream.name());
-        stream.set_name(name);
+        let name = self.askit.unique_stream_name(&spec.name);
+        spec.name = name;
 
-        self.askit
-            .add_agent_stream(&stream)
+        let id = self
+            .askit
+            .add_agent_stream(spec)
             .context("Failed to add agent stream")?;
 
-        Ok(stream)
+        Ok(id)
     }
 
-    fn read_agent_stream(&self, path: PathBuf) -> Result<AgentStream> {
+    fn read_agent_stream(&self, path: PathBuf) -> Result<AgentStreamSpec> {
         if !path.is_file() || path.extension().unwrap_or_default() != "json" {
             bail!("Invalid file extension");
         }
@@ -168,7 +162,7 @@ impl ASApp {
         let content = std::fs::read_to_string(&path)?;
         // let mut stream = AgentStream::from_json(&content)?;
 
-        let mut stream = AgentStream::from_json(&content)?;
+        let mut spec = AgentStreamSpec::from_json(&content)?;
 
         // Get the base name from the file name
         let base_name = path
@@ -180,16 +174,16 @@ impl ASApp {
         if base_name.is_empty() {
             bail!("Agent stream name is empty");
         }
-        stream.set_name(base_name.clone());
+        spec.name = base_name.clone();
 
         // Rename IDs in the stream
-        let (agents, edges) = self
-            .askit
-            .copy_sub_stream(stream.agents(), stream.channels());
-        stream.set_agents(agents);
-        stream.set_channels(edges);
+        let agents_vec: Vec<_> = spec.agents.iter().cloned().collect();
+        let channels_vec: Vec<_> = spec.channels.iter().cloned().collect();
+        let (agents, edges) = self.askit.copy_sub_stream(&agents_vec, &channels_vec);
+        spec.agents = agents.into();
+        spec.channels = edges.into();
 
-        Ok(stream)
+        Ok(spec)
     }
 }
 
@@ -203,11 +197,11 @@ pub fn init(app: &AppHandle) -> Result<()> {
         log::error!("Failed to read agent streams: {}", e);
     });
 
-    if asapp.askit.get_agent_streams().get("main").is_none() {
-        if let Err(e) = asapp.askit.new_agent_stream("main") {
-            log::error!("Failed to create main agent stream: {}", e);
-        };
-    }
+    // if asapp.askit.get_agent_streams().get("main").is_none() {
+    //     if let Err(e) = asapp.askit.new_agent_stream("main") {
+    //         log::error!("Failed to create main agent stream: {}", e);
+    //     };
+    // }
 
     app.manage(asapp);
 
@@ -253,11 +247,11 @@ pub async fn remove_agent_stream_cmd(
 }
 
 #[tauri::command]
-pub fn save_agent_stream_cmd(asapp: State<ASApp>, stream: AgentStream) -> Result<(), String> {
+pub fn save_agent_stream_cmd(asapp: State<ASApp>, stream: AgentStreamSpec) -> Result<(), String> {
     asapp.save_agent_stream(stream).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub fn import_agent_stream_cmd(asapp: State<ASApp>, path: String) -> Result<AgentStream, String> {
+pub fn import_agent_stream_cmd(asapp: State<ASApp>, path: String) -> Result<String, String> {
     asapp.import_agent_stream(path).map_err(|e| e.to_string())
 }
