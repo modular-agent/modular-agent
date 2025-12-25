@@ -3,7 +3,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { SvelteSet } from "svelte/reactivity";
 import { writable, type Writable } from "svelte/store";
 
-import { getRunningAgentStreams } from "tauri-plugin-askit-api";
+import { getRunningAgentStreams, startAgentStream, stopAgentStream } from "tauri-plugin-askit-api";
 
 import type {
   AgentConfigUpdatedMessage,
@@ -20,6 +20,22 @@ export async function updateRunningStreams() {
   const streams = await getRunningAgentStreams();
   runningStreams.clear();
   streams.forEach((s) => runningStreams.add(s));
+}
+
+export async function startStream(id: string) {
+  if (runningStreams.has(id)) {
+    return;
+  }
+  await startAgentStream(id);
+  runningStreams.add(id);
+}
+
+export async function stopStream(id: string) {
+  if (!runningStreams.has(id)) {
+    return;
+  }
+  await stopAgentStream(id);
+  runningStreams.delete(id);
 }
 
 $effect.root(() => {

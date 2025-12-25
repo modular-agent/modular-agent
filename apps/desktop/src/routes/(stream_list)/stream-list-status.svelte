@@ -7,8 +7,8 @@
 </script>
 
 {#if active}
-  <Badge variant="secondary" class="bg-green-500 text-white dark:bg-green-500">
-    <CirclePlayIcon />
+  <Badge variant="outline" class="text-muted-foreground px-1.5">
+    <CirclePlayIcon color="green" />
     Running
   </Badge>
 {/if}

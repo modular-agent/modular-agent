@@ -1,11 +1,15 @@
 <script lang="ts">
-  import EllipsisIcon from "@lucide/svelte/icons/ellipsis";
+  import EllipsisVerticalIcon from "@lucide/svelte/icons/ellipsis-vertical";
+  import PlayIcon from "@lucide/svelte/icons/play";
+  import SquareIcon from "@lucide/svelte/icons/square";
 
   import { Button } from "$lib/components/ui/button/index.js";
   import * as Dialog from "$lib/components/ui/dialog/index.js";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
   import { Label } from "$lib/components/ui/label/index.js";
+
+  import { runningStreams, startStream, stopStream } from "@/lib/shared.svelte";
 
   let {
     id,
@@ -16,6 +20,20 @@
     renameStream?: (id: string, rename: string) => Promise<string | null>;
     deleteStream?: (id: string) => Promise<void>;
   } = $props();
+
+  // start and stop
+
+  let running = $derived(runningStreams.has(id));
+
+  async function handleStart() {
+    await startStream(id);
+  }
+
+  async function handleStop() {
+    await stopStream(id);
+  }
+
+  // rename and delete
 
   let name = $state("");
   let openRenameDialog = $state(false);
@@ -36,12 +54,21 @@
   }
 </script>
 
+{#if running}
+  <Button onclick={handleStop} variant="ghost" class="w-4 mr-4">
+    <SquareIcon color="red" />
+  </Button>
+{:else}
+  <Button onclick={handleStart} variant="ghost" class="w-4 mr-4">
+    <PlayIcon color="blue" />
+  </Button>
+{/if}
 <DropdownMenu.Root>
   <DropdownMenu.Trigger>
     {#snippet child({ props })}
       <Button {...props} variant="ghost" size="icon" class="relative size-8 p-0">
         <span class="sr-only">Open menu</span>
-        <EllipsisIcon />
+        <EllipsisVerticalIcon />
       </Button>
     {/snippet}
   </DropdownMenu.Trigger>

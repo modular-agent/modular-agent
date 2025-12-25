@@ -4,20 +4,18 @@
 
   import { Button } from "$lib/components/ui/button/index.js";
 
-  import { runningStreams } from "@/lib/shared.svelte";
+  import { runningStreams, startStream, stopStream } from "@/lib/shared.svelte";
 
-  let { stream, onstop, onstart } = $props();
+  let { stream } = $props();
 
   let isRunning = $derived(runningStreams.has(stream.id));
 
   async function handleStart() {
-    await onstart();
-    runningStreams.add(stream.id);
+    await startStream(stream.id);
   }
 
   async function handleStop() {
-    await onstop();
-    runningStreams.delete(stream.id);
+    await stopStream(stream.id);
   }
 </script>
 

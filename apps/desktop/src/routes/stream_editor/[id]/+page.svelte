@@ -27,8 +27,6 @@
     startAgent,
     stopAgent,
     copySubStream,
-    startAgentStream,
-    stopAgentStream,
   } from "tauri-plugin-askit-api";
   import type { AgentSpec, ChannelSpec } from "tauri-plugin-askit-api";
 
@@ -414,14 +412,6 @@
     });
   }
 
-  async function onStart() {
-    await startAgentStream(stream.id);
-  }
-
-  async function onStop() {
-    await stopAgentStream(stream.id);
-  }
-
   let openNodeContextMenu = $state(false);
   let nodeContextMenuX = $state(0);
   let nodeContextMenuY = $state(0);
@@ -476,7 +466,7 @@
     <Menubar {onImportStream} {onExportStream} />
     <div class="flex flex-row items-center">
       <StreamName name={stream.name} class="mr-4" />
-      <StreamActions {stream} onstop={onStop} onstart={onStart} />
+      <StreamActions {stream} />
     </div>
     <div>{" "}</div>
   </header>

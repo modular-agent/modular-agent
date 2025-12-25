@@ -72,6 +72,7 @@
     },
     {
       id: "actions",
+      header: "Actions",
       cell: ({ row }) => {
         return renderComponent(StreamListActions, {
           id: row.original.id,
