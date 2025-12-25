@@ -5,7 +5,13 @@
 
   import { newAgentStream } from "tauri-plugin-askit-api";
 
-  import { deserializeAgentStream, removeAgentStream, renameAgentStream } from "@/lib/agent";
+  import {
+    deserializeAgentStream,
+    serializeAgentStream,
+    removeAgentStream,
+    renameAgentStream,
+    saveAgentStream,
+  } from "@/lib/agent";
   import type { TAgentStream } from "@/lib/types";
 
   import StreamList from "./stream-list.svelte";
@@ -14,11 +20,11 @@
 
   const streams = getContext<() => Record<string, TAgentStream>>("AgentStreams");
 
-  let streamNames = $state.raw<{ id: string; name: string }[]>([]);
+  let streamNames = $state.raw<{ id: string; name: string; run_on_start?: boolean }[]>([]);
 
   function updateStreamNames() {
     streamNames = Object.entries(streams())
-      .map(([id, stream]) => ({ id, name: stream.name }))
+      .map(([id, stream]) => ({ id, name: stream.name, run_on_start: stream.run_on_start }))
       .sort((a, b) => a.name.localeCompare(b.name));
   }
 
@@ -50,6 +56,24 @@
     updateStreamNames();
   }
 
+  async function toggleRunOnStart(id: string) {
+    if (!id) return;
+    const stream = streams()[id];
+    if (!stream) return;
+    stream.run_on_start = !stream.run_on_start;
+    const s = serializeAgentStream(
+      stream.id,
+      stream.name,
+      stream.nodes,
+      stream.edges,
+      stream.run_on_start,
+      stream.viewport,
+    );
+    await saveAgentStream(s);
+    streams()[id] = stream;
+    updateStreamNames();
+  }
+
   onMount(() => {
     updateStreamNames();
 
@@ -57,5 +81,5 @@
   });
 </script>
 
-<header class="flex-none h-14 items-centger"></header>
-<StreamList {streamNames} {createNewStream} {renameStream} {deleteStream} />
+<header class="flex-none h-14 items-center"></header>
+<StreamList {streamNames} {createNewStream} {renameStream} {deleteStream} {toggleRunOnStart} />

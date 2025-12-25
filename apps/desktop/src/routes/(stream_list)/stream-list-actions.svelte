@@ -15,10 +15,12 @@
     id,
     renameStream,
     deleteStream,
+    toggleRunOnStart,
   }: {
     id: string;
-    renameStream?: (id: string, rename: string) => Promise<string | null>;
-    deleteStream?: (id: string) => Promise<void>;
+    renameStream: (id: string, rename: string) => Promise<string | null>;
+    deleteStream: (id: string) => Promise<void>;
+    toggleRunOnStart: (id: string) => Promise<void>;
   } = $props();
 
   // start and stop
@@ -42,15 +44,19 @@
   async function handleRenameStream(e: Event) {
     e.preventDefault();
     if (!name) return;
-    const new_name = await renameStream?.(id, name);
+    const new_name = await renameStream(id, name);
     name = "";
     openRenameDialog = false;
   }
 
   async function handleDeleteStream(e: Event) {
     e.preventDefault();
-    await deleteStream?.(id);
+    await deleteStream(id);
     openDeleteDialog = false;
+  }
+
+  async function handleRunOnStart(e: Event) {
+    await toggleRunOnStart(id);
   }
 </script>
 
@@ -75,6 +81,8 @@
   <DropdownMenu.Content>
     <DropdownMenu.Item onclick={() => (openRenameDialog = true)}>Rename</DropdownMenu.Item>
     <DropdownMenu.Item onclick={() => (openDeleteDialog = true)}>Delete</DropdownMenu.Item>
+    <DropdownMenu.Separator />
+    <DropdownMenu.Item onclick={handleRunOnStart}>Run on Start</DropdownMenu.Item>
   </DropdownMenu.Content>
 </DropdownMenu.Root>
 

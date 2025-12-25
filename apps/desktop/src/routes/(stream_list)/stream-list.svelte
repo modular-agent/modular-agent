@@ -26,18 +26,21 @@
 
   interface Props {
     streamNames: { id: string; name: string }[];
-    createNewStream?: (name: string | null) => Promise<string | null>;
-    renameStream?: (id: string, rename: string) => Promise<string | null>;
-    deleteStream?: (id: string) => Promise<void>;
+    createNewStream: (name: string | null) => Promise<string | null>;
+    renameStream: (id: string, rename: string) => Promise<string | null>;
+    deleteStream: (id: string) => Promise<void>;
+    toggleRunOnStart: (id: string) => Promise<void>;
   }
 
   type Stream = {
     id: string;
     name: string;
+    run_on_start?: boolean;
     active: boolean;
   };
 
-  let { streamNames, createNewStream, renameStream, deleteStream }: Props = $props();
+  let { streamNames, createNewStream, renameStream, deleteStream, toggleRunOnStart }: Props =
+    $props();
 
   let columnFilters = $state<ColumnFiltersState>([]);
   let columnVisibility = $state<VisibilityState>({});
@@ -52,7 +55,7 @@
 
   const columns: ColumnDef<Stream>[] = [
     {
-      accessorKey: "name",
+      id: "name",
       header: "Name",
       cell: ({ row }) => {
         return renderComponent(StreamListName, {
@@ -62,11 +65,12 @@
       },
     },
     {
-      accessorKey: "active",
+      id: "status",
       header: "Status",
-      cell: (info) => {
+      cell: ({ row }) => {
         return renderComponent(StreamListStatus, {
-          active: info.getValue() as boolean,
+          active: row.original.active,
+          run_on_start: row.original.run_on_start,
         });
       },
     },
@@ -78,6 +82,7 @@
           id: row.original.id,
           renameStream,
           deleteStream,
+          toggleRunOnStart,
         });
       },
     },

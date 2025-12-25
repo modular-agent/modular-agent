@@ -116,8 +116,8 @@ export function serializeAgentStream(
   name: string,
   nodes: TAgentStreamNode[],
   edges: TAgentStreamEdge[],
-  run_on_start: boolean,
-  viewport: Viewport,
+  run_on_start: boolean | null,
+  viewport: Viewport | null,
 ): AgentStream {
   return {
     id,
