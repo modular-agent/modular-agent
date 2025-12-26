@@ -6,6 +6,7 @@ Default permissions for the plugin
 
 - `allow-get-agent-definition`
 - `allow-get-agent-definitions`
+- `allow-get-agent-stream-info`
 - `allow-get-agent-stream-infos`
 - `allow-get-agent-stream-spec`
 - `allow-set-agent-stream-spec`
