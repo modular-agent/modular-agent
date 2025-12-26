@@ -415,6 +415,18 @@
           "markdownDescription": "Denies the get_agent_stream_infos command without any pre-configured scope."
         },
         {
+          "description": "Enables the get_agent_stream_spec command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-agent-stream-spec",
+          "markdownDescription": "Enables the get_agent_stream_spec command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_agent_stream_spec command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-agent-stream-spec",
+          "markdownDescription": "Denies the get_agent_stream_spec command without any pre-configured scope."
+        },
+        {
           "description": "Enables the get_agent_streams command without any pre-configured scope.",
           "type": "string",
           "const": "allow-get-agent-streams",
@@ -547,6 +559,18 @@
           "markdownDescription": "Denies the set_agent_configs command without any pre-configured scope."
         },
         {
+          "description": "Enables the set_agent_stream_spec command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-set-agent-stream-spec",
+          "markdownDescription": "Enables the set_agent_stream_spec command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the set_agent_stream_spec command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-set-agent-stream-spec",
+          "markdownDescription": "Denies the set_agent_stream_spec command without any pre-configured scope."
+        },
+        {
           "description": "Enables the set_global_configs command without any pre-configured scope.",
           "type": "string",
           "const": "allow-set-global-configs",
@@ -643,10 +667,10 @@
           "markdownDescription": "Denies the write_board command without any pre-configured scope."
         },
         {
-          "description": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-get-agent-definition`\n- `allow-get-agent-definitions`\n- `allow-get-agent-stream-infos`\n- `allow-get-agent-streams`\n- `allow-get-running-agent-streams`\n- `allow-get-agent-spec`\n- `allow-new-agent-stream`\n- `allow-rename-agent-stream`\n- `allow-unique-stream-name`\n- `allow-add-agent-stream`\n- `allow-remove-agent-stream`\n- `allow-copy-sub-stream`\n- `allow-start-agent-stream`\n- `allow-stop-agent-stream`\n- `allow-new-agent-spec`\n- `allow-add-agent`\n- `allow-remove-agent`\n- `allow-add-channel`\n- `allow-remove-channel`\n- `allow-start-agent`\n- `allow-stop-agent`\n- `allow-write-board`\n- `allow-set-agent-configs`\n- `allow-get-global-configs`\n- `allow-get-global-configs-map`\n- `allow-set-global-configs`\n- `allow-set-global-configs-map`\n- `allow-get-agent-config-specs`",
+          "description": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-get-agent-definition`\n- `allow-get-agent-definitions`\n- `allow-get-agent-stream-infos`\n- `allow-get-agent-stream-spec`\n- `allow-set-agent-stream-spec`\n- `allow-get-agent-streams`\n- `allow-get-running-agent-streams`\n- `allow-get-agent-spec`\n- `allow-new-agent-stream`\n- `allow-rename-agent-stream`\n- `allow-unique-stream-name`\n- `allow-add-agent-stream`\n- `allow-remove-agent-stream`\n- `allow-copy-sub-stream`\n- `allow-start-agent-stream`\n- `allow-stop-agent-stream`\n- `allow-new-agent-spec`\n- `allow-add-agent`\n- `allow-remove-agent`\n- `allow-add-channel`\n- `allow-remove-channel`\n- `allow-start-agent`\n- `allow-stop-agent`\n- `allow-write-board`\n- `allow-set-agent-configs`\n- `allow-get-global-configs`\n- `allow-get-global-configs-map`\n- `allow-set-global-configs`\n- `allow-set-global-configs-map`\n- `allow-get-agent-config-specs`",
           "type": "string",
           "const": "default",
-          "markdownDescription": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-get-agent-definition`\n- `allow-get-agent-definitions`\n- `allow-get-agent-stream-infos`\n- `allow-get-agent-streams`\n- `allow-get-running-agent-streams`\n- `allow-get-agent-spec`\n- `allow-new-agent-stream`\n- `allow-rename-agent-stream`\n- `allow-unique-stream-name`\n- `allow-add-agent-stream`\n- `allow-remove-agent-stream`\n- `allow-copy-sub-stream`\n- `allow-start-agent-stream`\n- `allow-stop-agent-stream`\n- `allow-new-agent-spec`\n- `allow-add-agent`\n- `allow-remove-agent`\n- `allow-add-channel`\n- `allow-remove-channel`\n- `allow-start-agent`\n- `allow-stop-agent`\n- `allow-write-board`\n- `allow-set-agent-configs`\n- `allow-get-global-configs`\n- `allow-get-global-configs-map`\n- `allow-set-global-configs`\n- `allow-set-global-configs-map`\n- `allow-get-agent-config-specs`"
+          "markdownDescription": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-get-agent-definition`\n- `allow-get-agent-definitions`\n- `allow-get-agent-stream-infos`\n- `allow-get-agent-stream-spec`\n- `allow-set-agent-stream-spec`\n- `allow-get-agent-streams`\n- `allow-get-running-agent-streams`\n- `allow-get-agent-spec`\n- `allow-new-agent-stream`\n- `allow-rename-agent-stream`\n- `allow-unique-stream-name`\n- `allow-add-agent-stream`\n- `allow-remove-agent-stream`\n- `allow-copy-sub-stream`\n- `allow-start-agent-stream`\n- `allow-stop-agent-stream`\n- `allow-new-agent-spec`\n- `allow-add-agent`\n- `allow-remove-agent`\n- `allow-add-channel`\n- `allow-remove-channel`\n- `allow-start-agent`\n- `allow-stop-agent`\n- `allow-write-board`\n- `allow-set-agent-configs`\n- `allow-get-global-configs`\n- `allow-get-global-configs-map`\n- `allow-set-global-configs`\n- `allow-set-global-configs-map`\n- `allow-get-agent-config-specs`"
         }
       ]
     }

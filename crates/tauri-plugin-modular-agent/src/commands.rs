@@ -46,6 +46,25 @@ pub(crate) fn get_agent_stream_infos<R: Runtime>(
     app.askit().get_agent_stream_infos()
 }
 
+#[tauri::command]
+pub(crate) fn get_agent_stream_spec<R: Runtime>(
+    app: AppHandle<R>,
+    id: String,
+) -> Option<AgentStreamSpec> {
+    app.askit().get_agent_stream_spec(&id)
+}
+
+#[tauri::command]
+pub(crate) fn set_agent_stream_spec<R: Runtime>(
+    app: AppHandle<R>,
+    id: String,
+    spec: AgentStreamSpec,
+) -> Result<()> {
+    app.askit()
+        .set_agent_stream_spec(&id, spec)
+        .map_err(Into::into)
+}
+
 #[deprecated]
 #[tauri::command]
 pub(crate) fn get_agent_streams<R: Runtime>(app: AppHandle<R>) -> Vec<AgentStreamSpec> {

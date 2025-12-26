@@ -4,6 +4,8 @@ const COMMANDS: &[&str] = &[
     "get_agent_spec",
     "get_agent_stream_info",
     "get_agent_stream_infos",
+    "get_agent_stream_spec",
+    "set_agent_stream_spec",
     "get_agent_streams",
     "get_running_agent_streams",
     "new_agent_stream",

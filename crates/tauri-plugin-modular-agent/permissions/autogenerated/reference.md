@@ -7,6 +7,8 @@ Default permissions for the plugin
 - `allow-get-agent-definition`
 - `allow-get-agent-definitions`
 - `allow-get-agent-stream-infos`
+- `allow-get-agent-stream-spec`
+- `allow-set-agent-stream-spec`
 - `allow-get-agent-streams`
 - `allow-get-running-agent-streams`
 - `allow-get-agent-spec`
@@ -305,6 +307,32 @@ Denies the get_agent_stream_infos command without any pre-configured scope.
 <tr>
 <td>
 
+`askit:allow-get-agent-stream-spec`
+
+</td>
+<td>
+
+Enables the get_agent_stream_spec command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`askit:deny-get-agent-stream-spec`
+
+</td>
+<td>
+
+Denies the get_agent_stream_spec command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
 `askit:allow-get-agent-streams`
 
 </td>
@@ -584,6 +612,32 @@ Enables the set_agent_configs command without any pre-configured scope.
 <td>
 
 Denies the set_agent_configs command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`askit:allow-set-agent-stream-spec`
+
+</td>
+<td>
+
+Enables the set_agent_stream_spec command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`askit:deny-set-agent-stream-spec`
+
+</td>
+<td>
+
+Denies the set_agent_stream_spec command without any pre-configured scope.
 
 </td>
 </tr>

@@ -117,6 +117,19 @@ export async function getAgentStreamInfos(): Promise<AgentStreamInfo[]> {
   return await invoke<any>("plugin:askit|get_agent_stream_infos", {});
 }
 
+export async function getAgentStreamSpec(
+  id: string
+): Promise<AgentStreamSpec | null> {
+  return await invoke<any>("plugin:askit|get_agent_stream_spec", { id });
+}
+
+export async function setAgentStreamSpec(
+  id: string,
+  spec: AgentStreamSpec
+): Promise<void> {
+  await invoke<void>("plugin:askit|set_agent_stream_spec", { id, spec });
+}
+
 /** @deprecated */
 export async function getAgentStreams(): Promise<AgentStreamSpec[]> {
   return await invoke<any>("plugin:askit|get_agent_streams", {});
