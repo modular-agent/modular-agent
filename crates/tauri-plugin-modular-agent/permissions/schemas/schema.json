@@ -391,6 +391,18 @@
           "markdownDescription": "Denies the get_agent_spec command without any pre-configured scope."
         },
         {
+          "description": "Enables the get_agent_stream_info command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-agent-stream-info",
+          "markdownDescription": "Enables the get_agent_stream_info command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_agent_stream_info command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-agent-stream-info",
+          "markdownDescription": "Denies the get_agent_stream_info command without any pre-configured scope."
+        },
+        {
           "description": "Enables the get_agent_stream_infos command without any pre-configured scope.",
           "type": "string",
           "const": "allow-get-agent-stream-infos",

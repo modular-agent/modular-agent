@@ -253,6 +253,32 @@ Denies the get_agent_spec command without any pre-configured scope.
 <tr>
 <td>
 
+`askit:allow-get-agent-stream-info`
+
+</td>
+<td>
+
+Enables the get_agent_stream_info command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`askit:deny-get-agent-stream-info`
+
+</td>
+<td>
+
+Denies the get_agent_stream_info command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
 `askit:allow-get-agent-stream-infos`
 
 </td>

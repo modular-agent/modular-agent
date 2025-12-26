@@ -1,5 +1,12 @@
 import { invoke } from "@tauri-apps/api/core";
 
+export type AgentStreamInfo = {
+  id: string;
+  name: string;
+  running: boolean;
+  run_on_start: boolean;
+};
+
 export type AgentDefinitions = Record<string, AgentDefinition>;
 
 export type AgentGlobalConfigsMap = Record<string, AgentConfigs>;
@@ -33,16 +40,10 @@ export type AgentConfigSpec = {
 
 export type AgentConfigValueType = string;
 
-export type AgentStreamInfo = {
-  id: string;
-  name: string;
-  running: boolean;
-};
-
 // export type AgentStreamSpecs = Record<string, AgentStreamSpec>;
 
 export type AgentStreamSpec = {
-  name: string;
+  // name: string;
   agents: AgentSpec[];
   channels: ChannelSpec[];
   run_on_start?: boolean | null;
@@ -106,29 +107,37 @@ export async function getAgentSpec(agentId: string): Promise<AgentSpec | null> {
 
 // stream
 
+export async function getAgentStreamInfo(
+  id: string
+): Promise<AgentStreamInfo | null> {
+  return await invoke<any>("plugin:askit|get_agent_stream_info", { id });
+}
+
 export async function getAgentStreamInfos(): Promise<AgentStreamInfo[]> {
   return await invoke<any>("plugin:askit|get_agent_stream_infos", {});
 }
 
+/** @deprecated */
 export async function getAgentStreams(): Promise<AgentStreamSpec[]> {
   return await invoke<any>("plugin:askit|get_agent_streams", {});
 }
 
+/** @deprecated */
 export async function getRunningAgentStreams(): Promise<string[]> {
   return await invoke<any>("plugin:askit|get_running_agent_streams", {});
 }
 
-export async function newAgentStream(streamName: string): Promise<string> {
-  return await invoke<any>("plugin:askit|new_agent_stream", { streamName });
+export async function newAgentStream(name: string): Promise<[string, string]> {
+  return await invoke<any>("plugin:askit|new_agent_stream", { name });
 }
 
 export async function renameAgentStream(
-  streamId: string,
-  newName: string
+  id: string,
+  name: string
 ): Promise<string> {
   return await invoke<any>("plugin:askit|rename_agent_stream", {
-    streamId,
-    newName,
+    id,
+    name,
   });
 }
 
@@ -136,8 +145,11 @@ export async function uniqueStreamName(name: string): Promise<string> {
   return await invoke<any>("plugin:askit|unique_stream_name", { name });
 }
 
-export async function addAgentStream(spec: AgentStreamSpec): Promise<string> {
-  return await invoke<any>("plugin:askit|add_agent_stream", { spec });
+export async function addAgentStream(
+  name: string,
+  spec: AgentStreamSpec
+): Promise<string> {
+  return await invoke<any>("plugin:askit|add_agent_stream", { name, spec });
 }
 
 export async function removeAgentStream(id: string): Promise<void> {

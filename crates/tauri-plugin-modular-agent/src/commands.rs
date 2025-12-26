@@ -1,8 +1,7 @@
 use agent_stream_kit::{
     AgentConfigSpecs, AgentConfigs, AgentConfigsMap, AgentDefinition, AgentDefinitions, AgentSpec,
-    AgentValue, ChannelSpec,
+    AgentStreamSpec, AgentValue, ChannelSpec,
 };
-use agent_stream_kit::{AgentStreamInfo, AgentStreamSpec};
 use tauri::{AppHandle, Runtime};
 
 use crate::ASKitExt;
@@ -33,7 +32,17 @@ pub(crate) fn get_agent_spec<R: Runtime>(app: AppHandle<R>, agent_id: String) ->
 // stream
 
 #[tauri::command]
-pub(crate) fn get_agent_stream_infos<R: Runtime>(app: AppHandle<R>) -> Vec<AgentStreamInfo> {
+pub(crate) fn get_agent_stream_info<R: Runtime>(
+    app: AppHandle<R>,
+    id: String,
+) -> Option<agent_stream_kit::AgentStreamInfo> {
+    app.askit().get_agent_stream_info(&id)
+}
+
+#[tauri::command]
+pub(crate) fn get_agent_stream_infos<R: Runtime>(
+    app: AppHandle<R>,
+) -> Vec<agent_stream_kit::AgentStreamInfo> {
     app.askit().get_agent_stream_infos()
 }
 
@@ -50,23 +59,18 @@ pub(crate) fn get_running_agent_streams<R: Runtime>(app: AppHandle<R>) -> Vec<St
 }
 
 #[tauri::command]
-pub(crate) fn new_agent_stream<R: Runtime>(
-    app: AppHandle<R>,
-    stream_name: String,
-) -> Result<String> {
-    app.askit()
-        .new_agent_stream(&stream_name)
-        .map_err(Into::into)
+pub(crate) fn new_agent_stream<R: Runtime>(app: AppHandle<R>, name: String) -> Result<String> {
+    app.askit().new_agent_stream(&name).map_err(Into::into)
 }
 
 #[tauri::command]
 pub(crate) fn rename_agent_stream<R: Runtime>(
     app: AppHandle<R>,
     id: String,
-    new_name: String,
+    name: String,
 ) -> Result<String> {
     app.askit()
-        .rename_agent_stream(&id, &new_name)
+        .rename_agent_stream(&id, &name)
         .map_err(Into::into)
 }
 
@@ -78,9 +82,10 @@ pub(crate) fn unique_stream_name<R: Runtime>(app: tauri::AppHandle<R>, name: Str
 #[tauri::command]
 pub(crate) fn add_agent_stream<R: Runtime>(
     app: AppHandle<R>,
+    name: String,
     spec: AgentStreamSpec,
 ) -> Result<String> {
-    app.askit().add_agent_stream(spec).map_err(Into::into)
+    app.askit().add_agent_stream(name, spec).map_err(Into::into)
 }
 
 #[tauri::command]
