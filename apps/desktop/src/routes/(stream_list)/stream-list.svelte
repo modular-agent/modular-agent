@@ -1,6 +1,4 @@
 <script lang="ts">
-  import { onMount } from "svelte";
-
   import {
     type ColumnDef,
     type ColumnFiltersState,
@@ -8,6 +6,7 @@
     getCoreRowModel,
     getFilteredRowModel,
   } from "@tanstack/table-core";
+  import type { AgentStreamInfo } from "tauri-plugin-askit-api";
 
   import {
     createSvelteTable,
@@ -17,43 +16,29 @@
   import { Input } from "$lib/components/ui/input/index.js";
   import * as Table from "$lib/components/ui/table/index.js";
 
-  import { runningStreams, updateRunningStreams } from "@/lib/shared.svelte";
-
   import NewStreamDialog from "./new-stream-dialog.svelte";
   import StreamListActions from "./stream-list-actions.svelte";
   import StreamListName from "./stream-list-name.svelte";
   import StreamListStatus from "./stream-list-status.svelte";
 
-  interface Props {
-    streamNames: { id: string; name: string }[];
-    createNewStream: (name: string | null) => Promise<string | null>;
-    renameStream: (id: string, rename: string) => Promise<string | null>;
-    deleteStream: (id: string) => Promise<void>;
-    toggleRunOnStart: (id: string) => Promise<void>;
-  }
-
-  type Stream = {
-    id: string;
-    name: string;
-    run_on_start?: boolean;
-    active: boolean;
+  type Props = {
+    streams: AgentStreamInfo[];
   };
 
-  let { streamNames, createNewStream, renameStream, deleteStream, toggleRunOnStart }: Props =
-    $props();
+  let { streams }: Props = $props();
 
   let columnFilters = $state<ColumnFiltersState>([]);
   let columnVisibility = $state<VisibilityState>({});
 
   // Join streamNames with their activities
-  const data: Stream[] = $derived.by(() => {
-    return streamNames.map((stream) => ({
-      ...stream,
-      active: runningStreams.has(stream.id),
-    }));
-  });
+  // const data: Stream[] = $derived.by(() => {
+  //   return streamNames.map((stream) => ({
+  //     ...stream,
+  //     active: runningStreams.has(stream.id),
+  //   }));
+  // });
 
-  const columns: ColumnDef<Stream>[] = [
+  const columns: ColumnDef<AgentStreamInfo>[] = [
     {
       id: "name",
       header: "Name",
@@ -69,7 +54,7 @@
       header: "Status",
       cell: ({ row }) => {
         return renderComponent(StreamListStatus, {
-          active: row.original.active,
+          running: row.original.running,
           run_on_start: row.original.run_on_start,
         });
       },
@@ -80,9 +65,7 @@
       cell: ({ row }) => {
         return renderComponent(StreamListActions, {
           id: row.original.id,
-          renameStream,
-          deleteStream,
-          toggleRunOnStart,
+          name: row.original.name,
         });
       },
     },
@@ -90,7 +73,7 @@
 
   const table = createSvelteTable({
     get data() {
-      return data;
+      return streams;
     },
     columns,
     getCoreRowModel: getCoreRowModel(),
@@ -119,9 +102,9 @@
     },
   });
 
-  onMount(() => {
-    updateRunningStreams();
-  });
+  // onMount(() => {
+  //   updateRunningStreams();
+  // });
 </script>
 
 <div class="text-primary p-2 w-full">
@@ -139,7 +122,7 @@
         class="max-w-sm"
       />
     </div>
-    <NewStreamDialog {createNewStream} />
+    <NewStreamDialog />
   </div>
   <div class="">
     <Table.Root>

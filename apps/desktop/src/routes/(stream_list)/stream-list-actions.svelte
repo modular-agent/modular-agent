@@ -2,30 +2,33 @@
   import EllipsisVerticalIcon from "@lucide/svelte/icons/ellipsis-vertical";
   import PlayIcon from "@lucide/svelte/icons/play";
   import SquareIcon from "@lucide/svelte/icons/square";
+  import { getAgentStreamSpec, setAgentStreamSpec } from "tauri-plugin-askit-api";
 
+  import { saveAgentStream } from "$lib/agent";
   import { Button } from "$lib/components/ui/button/index.js";
   import * as Dialog from "$lib/components/ui/dialog/index.js";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
   import { Label } from "$lib/components/ui/label/index.js";
-
-  import { runningStreams, startStream, stopStream } from "@/lib/shared.svelte";
-
-  let {
-    id,
-    renameStream,
+  import {
     deleteStream,
-    toggleRunOnStart,
-  }: {
+    reloadStreamInfos,
+    renameStream,
+    startStream,
+    stopStream,
+    streamInfos,
+  } from "$lib/shared.svelte";
+
+  type Props = {
     id: string;
-    renameStream: (id: string, rename: string) => Promise<string | null>;
-    deleteStream: (id: string) => Promise<void>;
-    toggleRunOnStart: (id: string) => Promise<void>;
-  } = $props();
+    name: string;
+  };
+
+  let { id, name }: Props = $props();
 
   // start and stop
 
-  let running = $derived(runningStreams.has(id));
+  let running = $derived(streamInfos.get(id)?.running);
 
   async function handleStart() {
     await startStream(id);
@@ -37,15 +40,15 @@
 
   // rename and delete
 
-  let name = $state("");
+  let new_name = $state("");
   let openRenameDialog = $state(false);
   let openDeleteDialog = $state(false);
 
   async function handleRenameStream(e: Event) {
     e.preventDefault();
-    if (!name) return;
-    const new_name = await renameStream(id, name);
-    name = "";
+    if (!new_name) return;
+    await renameStream(id, new_name);
+    new_name = "";
     openRenameDialog = false;
   }
 
@@ -55,8 +58,13 @@
     openDeleteDialog = false;
   }
 
-  async function handleRunOnStart(e: Event) {
-    await toggleRunOnStart(id);
+  async function handleRunOnStart() {
+    let spec = await getAgentStreamSpec(id);
+    if (!spec) return;
+    spec.run_on_start = !spec.run_on_start;
+    await setAgentStreamSpec(id, spec);
+    await saveAgentStream(name, spec);
+    await reloadStreamInfos();
   }
 </script>
 
@@ -95,7 +103,7 @@
       <div class="grid gap-4">
         <div class="grid gap-3">
           <Label for="name-1">Name</Label>
-          <Input id="name-1" name="name" bind:value={name} />
+          <Input id="name-1" name="name" bind:value={new_name} />
         </div>
       </div>
       <Dialog.Footer>

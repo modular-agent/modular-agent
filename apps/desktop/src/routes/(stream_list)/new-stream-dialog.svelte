@@ -5,19 +5,14 @@
   import * as Dialog from "$lib/components/ui/dialog/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
   import { Label } from "$lib/components/ui/label/index.js";
-
-  interface Props {
-    createNewStream?: (name: string | null) => Promise<string | null>;
-  }
-
-  let { createNewStream }: Props = $props();
+  import { newStream } from "$lib/shared.svelte";
 
   let name = $state("");
 
   async function handleNewStream(e: Event) {
     e.preventDefault();
     if (!name) return;
-    const stream_id = await createNewStream?.(name);
+    const stream_id = await newStream(name);
     name = "";
     if (stream_id) {
       goto(`/stream_editor/${stream_id}`);

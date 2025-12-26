@@ -1,13 +1,18 @@
 <script lang="ts">
   import CirclePlayIcon from "@lucide/svelte/icons/circle-play";
 
-  import Badge from "@/lib/components/ui/badge/badge.svelte";
+  import Badge from "$lib/components/ui/badge/badge.svelte";
 
-  let { active, run_on_start }: { active: boolean; run_on_start?: boolean } = $props();
+  type Props = {
+    running: boolean;
+    run_on_start?: boolean;
+  };
+
+  let { running, run_on_start }: Props = $props();
 </script>
 
 <div class="w-24">
-  {#if active}
+  {#if running}
     <Badge variant="outline" class="text-muted-foreground px-1.5">
       <CirclePlayIcon color="green" />
       Running

@@ -1,7 +1,12 @@
 <script lang="ts">
   import { Button } from "$lib/components/ui/button/index.js";
 
-  let { id, name }: { id: string; name: string } = $props();
+  type Props = {
+    id: string;
+    name: string;
+  };
+
+  let { id, name }: Props = $props();
 </script>
 
 <a href={`/stream_editor/${id}`}>

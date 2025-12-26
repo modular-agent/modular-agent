@@ -1,10 +1,22 @@
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
-import { SvelteSet } from "svelte/reactivity";
+import { SvelteMap } from "svelte/reactivity";
 import { writable, type Writable } from "svelte/store";
 
-import { getRunningAgentStreams, startAgentStream, stopAgentStream } from "tauri-plugin-askit-api";
+import type { AgentStreamInfo, AgentStreamSpec } from "tauri-plugin-askit-api";
+import {
+  getAgentStreamInfos,
+  getAgentStreamSpec,
+  setAgentStreamSpec,
+} from "tauri-plugin-askit-api";
 
+import {
+  newAgentStream,
+  removeAgentStream,
+  renameAgentStream,
+  startAgentStream,
+  stopAgentStream,
+} from "./agent";
 import type {
   AgentConfigUpdatedMessage,
   AgentErrorMessage,
@@ -14,32 +26,94 @@ import type {
 
 // Agent Streams
 
-export const runningStreams = new SvelteSet<string>();
+export const streamInfos = new SvelteMap<string, AgentStreamInfo>();
 
-export async function updateRunningStreams() {
-  const streams = await getRunningAgentStreams();
-  runningStreams.clear();
-  streams.forEach((s) => runningStreams.add(s));
+export async function reloadStreamInfos() {
+  const streams = await getAgentStreamInfos();
+  streamInfos.clear();
+  streams.forEach((s) => streamInfos.set(s.id, s));
+}
+
+export async function newStream(name: string): Promise<string> {
+  const id = await newAgentStream(name);
+  await reloadStreamInfos();
+  return id;
+}
+
+export async function renameStream(id: string, newName: string): Promise<string> {
+  const name = await renameAgentStream(id, newName);
+  await reloadStreamInfos();
+  return name;
+}
+
+export async function deleteStream(id: string): Promise<void> {
+  await removeAgentStream(id);
+  await reloadStreamInfos();
 }
 
 export async function startStream(id: string) {
-  if (runningStreams.has(id)) {
+  let info = streamInfos.get(id);
+  if (!info || info.running) {
     return;
   }
   await startAgentStream(id);
-  runningStreams.add(id);
+  await reloadStreamInfos();
 }
 
 export async function stopStream(id: string) {
-  if (!runningStreams.has(id)) {
+  let info = streamInfos.get(id);
+  if (!info || !info.running) {
     return;
   }
   await stopAgentStream(id);
-  runningStreams.delete(id);
+  await reloadStreamInfos();
 }
 
+export async function updateStreamSpec(id: string, spec: Partial<AgentStreamSpec>): Promise<void> {
+  let existingSpec = await getAgentStreamSpec(id);
+  if (!existingSpec) {
+    return;
+  }
+  const updatedSpec: AgentStreamSpec = { ...existingSpec, ...spec };
+  await setAgentStreamSpec(id, updatedSpec);
+}
+
+// export async function updateStreamInfo(id: string, info: Partial<AgentStreamInfo>): Promise<void> {
+//   const existing = streamInfos.get(id);
+//   if (!existing) {
+//     return;
+//   }
+//   const updated: AgentStreamInfo = { ...existing, ...info };
+//   streamInfos.set(id, updated);
+// }
+
+// export const runningStreams = new SvelteSet<string>();
+
+// export async function updateRunningStreams() {
+//   const streams = await getRunningAgentStreams();
+//   runningStreams.clear();
+//   streams.forEach((s) => runningStreams.add(s));
+// }
+
+// export async function startStream(id: string) {
+//   if (runningStreams.has(id)) {
+//     return;
+//   }
+//   await startAgentStream(id);
+//   runningStreams.add(id);
+// }
+
+// export async function stopStream(id: string) {
+//   if (!runningStreams.has(id)) {
+//     return;
+//   }
+//   await stopAgentStream(id);
+//   runningStreams.delete(id);
+// }
+
 $effect.root(() => {
-  updateRunningStreams();
+  // updateRunningStreams();
+  reloadStreamInfos();
 });
 
 // Agent Config Updated Message

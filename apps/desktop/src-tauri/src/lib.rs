@@ -83,10 +83,14 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             exit_app_cmd,
+            // agent_stream_app::app::get_agent_stream_infos_cmd,
+            agent_stream_app::app::new_agent_stream_cmd,
             agent_stream_app::app::rename_agent_stream_cmd,
             agent_stream_app::app::remove_agent_stream_cmd,
             agent_stream_app::app::import_agent_stream_cmd,
             agent_stream_app::app::save_agent_stream_cmd,
+            agent_stream_app::app::start_agent_stream_cmd,
+            agent_stream_app::app::stop_agent_stream_cmd,
             agent_stream_app::settings::get_core_settings_cmd,
             agent_stream_app::settings::set_core_settings_cmd,
             agent_stream_app::settings::set_global_configs_cmd,

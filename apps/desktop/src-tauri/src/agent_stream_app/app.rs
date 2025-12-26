@@ -13,18 +13,42 @@ static ASKIT_STREAMS_PATH: &'static str = ".askit/streams";
 
 pub struct ASApp {
     askit: ASKit,
+    // stream_infos: Mutex<Vec<AgentStreamInfo>>,
 }
 
 impl ASApp {
+    pub fn new(askit: &ASKit) -> Self {
+        Self {
+            askit: askit.clone(),
+            // stream_infos: Mutex::new(Vec::new()),
+        }
+    }
+
+    // AgentStreamInfo
+
+    // pub fn get_agent_stream_infos(&self) -> Vec<AgentStreamInfo> {
+    //     let infos = self.stream_infos.lock().unwrap();
+    //     infos.clone()
+    // }
+
     // AgentStream
 
+    /// Create a new agent stream with the given name.
+    /// Update the stream infos list.
+    pub fn new_agent_stream(&self, name: &str) -> Result<String> {
+        let id = self.askit.new_agent_stream(name)?;
+        Ok(id)
+    }
+
+    /// Remove an agent stream by its ID, and delete its file.
+    /// Update the stream infos list.
     pub async fn remove_agent_stream(&self, stream_id: &str) -> Result<()> {
-        let spec = self
+        let info = self
             .askit
-            .get_agent_stream(stream_id)
+            .get_agent_stream_info(stream_id)
             .ok_or_else(|| anyhow!("Agent stream not found: {}", stream_id))?;
         self.askit.remove_agent_stream(stream_id).await?;
-        let stream_path = self.agent_stream_path(&spec.name)?;
+        let stream_path = agent_stream_path(&info.name)?;
         if stream_path.exists() {
             std::fs::remove_file(stream_path)
                 .with_context(|| "Failed to remove agent stream file")?;
@@ -32,20 +56,22 @@ impl ASApp {
         Ok(())
     }
 
+    /// Rename an agent stream by its ID, and rename its file.
+    /// Update the stream infos list.
     pub fn rename_agent_stream(&self, stream_id: &str, new_name: &str) -> Result<String> {
-        let old_spec = self
+        let old_info = self
             .askit
-            .get_agent_stream(stream_id)
+            .get_agent_stream_info(stream_id)
             .ok_or_else(|| anyhow!("Agent stream not found: {}", stream_id))?;
-        let old_name = old_spec.name.clone();
-
-        let new_stream_path = self.agent_stream_path(new_name)?;
+        let old_name = old_info.name.clone();
+        let new_stream_path = agent_stream_path(new_name)?;
         if new_stream_path.exists() {
             bail!("Agent stream file already exists: {:?}", new_stream_path);
         }
 
         self.askit.rename_agent_stream(stream_id, new_name)?;
-        let old_stream_path = self.agent_stream_path(&old_name)?;
+
+        let old_stream_path = agent_stream_path(&old_name)?;
         if old_stream_path.exists() {
             std::fs::rename(old_stream_path, new_stream_path)
                 .with_context(|| "Failed to rename old agent stream file")?;
@@ -54,21 +80,8 @@ impl ASApp {
         Ok(new_name.to_string())
     }
 
-    fn agent_stream_path(&self, stream_name: &str) -> Result<PathBuf> {
-        let mut stream_path = agent_streams_dir()?;
-
-        let path_components: Vec<&str> = stream_name.split('/').collect();
-        for &component in &path_components[..path_components.len()] {
-            stream_path = stream_path.join(component);
-        }
-
-        stream_path = stream_path.with_extension("json");
-
-        Ok(stream_path)
-    }
-
-    pub fn save_agent_stream(&self, agent_stream: AgentStreamSpec) -> Result<()> {
-        let stream_path = self.agent_stream_path(&agent_stream.name)?;
+    pub fn save_agent_stream(&self, name: String, spec: AgentStreamSpec) -> Result<()> {
+        let stream_path = agent_stream_path(&name)?;
 
         // Ensure the parent directory exists
         let parent_path = stream_path.parent().context("no parent path")?;
@@ -76,25 +89,58 @@ impl ASApp {
             std::fs::create_dir_all(parent_path)?;
         }
 
-        let json = agent_stream.to_json()?;
+        let json = spec.to_json()?;
         std::fs::write(stream_path, json).with_context(|| "Failed to write agent stream file")?;
 
         Ok(())
     }
 
-    fn read_agent_streams_dir(&self) -> Result<()> {
+    pub fn import_agent_stream(&self, path: String) -> Result<String> {
+        let path = PathBuf::from(path);
+        let name = path
+            .file_stem()
+            .context("Failed to get file stem")?
+            .to_string_lossy()
+            .to_string();
+
+        let mut spec = self.read_agent_stream(path)?;
+        // When importing, set run_on_start to false to avoid auto-starting imported streams
+        spec.run_on_start = false;
+
+        let name = self.askit.unique_stream_name(&name);
+
+        let id = self
+            .askit
+            .add_agent_stream(name.clone(), spec.clone())
+            .context("Failed to add agent stream")?;
+
+        self.save_agent_stream(name, spec)?;
+
+        Ok(id)
+    }
+
+    pub async fn start_agent_stream(&self, stream_id: &str) -> Result<()> {
+        self.askit.start_agent_stream(stream_id).await?;
+        Ok(())
+    }
+
+    pub async fn stop_agent_stream(&self, stream_id: &str) -> Result<()> {
+        self.askit.stop_agent_stream(stream_id).await?;
+        Ok(())
+    }
+
+    fn read_agent_streams_dir(&mut self) -> Result<()> {
         let streams_dir = agent_streams_dir()?;
         if !streams_dir.exists() {
             std::fs::create_dir_all(&streams_dir)
                 .with_context(|| "Failed to create streams directory")?;
             return Ok(());
         }
-
         self.read_agent_streams_dir_recursive(&streams_dir, "")?;
         Ok(())
     }
 
-    fn read_agent_streams_dir_recursive(&self, dir: &PathBuf, name_prefix: &str) -> Result<()> {
+    fn read_agent_streams_dir_recursive(&mut self, dir: &PathBuf, name_prefix: &str) -> Result<()> {
         if !dir.exists() || !dir.is_dir() {
             return Ok(());
         }
@@ -103,8 +149,11 @@ impl ASApp {
             .with_context(|| format!("Failed to read directory: {:?}", dir))?;
 
         for entry in entries {
-            let entry = entry.with_context(|| "Failed to read directory entry")?;
-            let path = entry.path();
+            if let Err(err) = entry {
+                log::warn!("Failed to read directory entry: {}", err);
+                continue;
+            };
+            let path = entry?.path();
             if path.is_dir() {
                 let dir_name = path
                     .file_name()
@@ -117,20 +166,28 @@ impl ASApp {
                 };
                 self.read_agent_streams_dir_recursive(&path, &new_prefix)?;
             } else if path.is_file() && path.extension().unwrap_or_default() == "json" {
-                match self.read_agent_stream(path) {
-                    Ok(stream) => {
-                        if name_prefix.is_empty() {
-                            self.askit.add_agent_stream(stream)?;
-                        } else {
-                            let mut stream = stream;
-                            let full_name = format!("{}/{}", name_prefix, stream.name);
-                            stream.name = full_name;
-                            self.askit.add_agent_stream(stream)?;
-                        }
-                    }
+                // Get the base name from the file name
+                let base_name = path
+                    .file_stem()
+                    .context("Failed to get file stem")?
+                    .to_string_lossy()
+                    .trim()
+                    .to_string();
+                let name = if name_prefix.is_empty() {
+                    base_name
+                } else {
+                    format!("{}/{}", name_prefix, base_name)
+                };
+                let spec = match self.read_agent_stream(path) {
+                    Ok(spec) => spec,
                     Err(e) => {
                         log::error!("Failed to read agent stream: {}", e);
+                        continue;
                     }
+                };
+                if let Err(e) = self.askit.add_agent_stream(name, spec) {
+                    log::error!("Failed to add agent stream: {}", e);
+                    continue;
                 }
             }
         }
@@ -138,45 +195,14 @@ impl ASApp {
         Ok(())
     }
 
-    pub fn import_agent_stream(&self, path: String) -> Result<String> {
-        let path = PathBuf::from(path);
-        let mut spec = self.read_agent_stream(path)?;
-        spec.run_on_start = false;
-
-        let name = self.askit.unique_stream_name(&spec.name);
-        spec.name = name;
-
-        let id = self
-            .askit
-            .add_agent_stream(spec)
-            .context("Failed to add agent stream")?;
-
-        Ok(id)
-    }
-
     fn read_agent_stream(&self, path: PathBuf) -> Result<AgentStreamSpec> {
         if !path.is_file() || path.extension().unwrap_or_default() != "json" {
             bail!("Invalid file extension");
         }
-
         let content = std::fs::read_to_string(&path)?;
-        // let mut stream = AgentStream::from_json(&content)?;
-
         let mut spec = AgentStreamSpec::from_json(&content)?;
 
-        // Get the base name from the file name
-        let base_name = path
-            .file_stem()
-            .context("Failed to get file stem")?
-            .to_string_lossy()
-            .trim()
-            .to_string();
-        if base_name.is_empty() {
-            bail!("Agent stream name is empty");
-        }
-        spec.name = base_name.clone();
-
-        // Rename IDs in the stream
+        // Rename IDs in the spec
         let agents_vec: Vec<_> = spec.agents.iter().cloned().collect();
         let channels_vec: Vec<_> = spec.channels.iter().cloned().collect();
         let (agents, edges) = self.askit.copy_sub_stream(&agents_vec, &channels_vec);
@@ -189,22 +215,9 @@ impl ASApp {
 
 pub fn init(app: &AppHandle) -> Result<()> {
     let askit = app.askit();
-
-    let asapp = ASApp {
-        askit: askit.clone(),
-    };
-    asapp.read_agent_streams_dir().unwrap_or_else(|e| {
-        log::error!("Failed to read agent streams: {}", e);
-    });
-
-    // if asapp.askit.get_agent_streams().get("main").is_none() {
-    //     if let Err(e) = asapp.askit.new_agent_stream("main") {
-    //         log::error!("Failed to create main agent stream: {}", e);
-    //     };
-    // }
-
+    let mut asapp = ASApp::new(askit);
+    asapp.read_agent_streams_dir()?;
     app.manage(asapp);
-
     Ok(())
 }
 
@@ -224,34 +237,78 @@ fn agent_streams_dir() -> Result<PathBuf> {
     Ok(streams_dir)
 }
 
+// Get the file path for an agent stream based on its name.
+// '/' in the name indicates subdirectories.
+fn agent_stream_path(stream_name: &str) -> Result<PathBuf> {
+    let mut stream_path = agent_streams_dir()?;
+
+    let path_components: Vec<&str> = stream_name.split('/').collect();
+    for &component in &path_components[..path_components.len()] {
+        stream_path = stream_path.join(component);
+    }
+
+    stream_path = stream_path.with_extension("json");
+
+    Ok(stream_path)
+}
+
+// #[tauri::command]
+// pub fn get_agent_stream_infos_cmd(asapp: State<'_, ASApp>) -> Vec<AgentStreamInfo> {
+//     asapp.get_agent_stream_infos().clone()
+// }
+
+#[tauri::command]
+pub fn new_agent_stream_cmd(asapp: State<'_, ASApp>, name: String) -> Result<String, String> {
+    asapp.new_agent_stream(&name).map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 pub fn rename_agent_stream_cmd(
     asapp: State<'_, ASApp>,
-    stream_id: String,
-    new_name: String,
+    id: String,
+    name: String,
 ) -> Result<String, String> {
     asapp
-        .rename_agent_stream(&stream_id, &new_name)
+        .rename_agent_stream(&id, &name)
         .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub async fn remove_agent_stream_cmd(
-    asapp: State<'_, ASApp>,
-    stream_id: String,
-) -> Result<(), String> {
+pub async fn remove_agent_stream_cmd(asapp: State<'_, ASApp>, id: String) -> Result<(), String> {
     asapp
-        .remove_agent_stream(&stream_id)
+        .remove_agent_stream(&id)
         .await
         .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub fn save_agent_stream_cmd(asapp: State<ASApp>, stream: AgentStreamSpec) -> Result<(), String> {
-    asapp.save_agent_stream(stream).map_err(|e| e.to_string())
+pub fn save_agent_stream_cmd(
+    asapp: State<'_, ASApp>,
+    name: String,
+    spec: AgentStreamSpec,
+) -> Result<(), String> {
+    asapp
+        .save_agent_stream(name, spec)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub fn import_agent_stream_cmd(asapp: State<ASApp>, path: String) -> Result<String, String> {
+pub fn import_agent_stream_cmd(asapp: State<'_, ASApp>, path: String) -> Result<String, String> {
     asapp.import_agent_stream(path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn start_agent_stream_cmd(asapp: State<'_, ASApp>, id: String) -> Result<(), String> {
+    asapp
+        .start_agent_stream(&id)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn stop_agent_stream_cmd(asapp: State<'_, ASApp>, id: String) -> Result<(), String> {
+    asapp
+        .stop_agent_stream(&id)
+        .await
+        .map_err(|e| e.to_string())
 }

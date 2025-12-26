@@ -1,5 +1,5 @@
 import type { Edge, Node } from "@xyflow/svelte";
-import type { AgentSpec, AgentDefinition, Viewport } from "tauri-plugin-askit-api";
+import type { AgentSpec, Viewport } from "tauri-plugin-askit-api";
 
 // Messages
 

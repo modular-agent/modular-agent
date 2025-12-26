@@ -6,27 +6,39 @@ import type {
   AgentDefinitions,
   AgentConfigSpec,
   AgentSpec,
-  AgentStream,
+  AgentStreamSpec,
   ChannelSpec,
   Viewport,
 } from "tauri-plugin-askit-api";
 
 import type { TAgentStream, TAgentStreamEdge, TAgentStreamNode } from "./types";
 
-export async function importAgentStream(path: string): Promise<AgentStream> {
+export async function newAgentStream(name: string): Promise<string> {
+  return await invoke("new_agent_stream_cmd", { name });
+}
+
+export async function renameAgentStream(id: string, name: string): Promise<string> {
+  return await invoke("rename_agent_stream_cmd", { id, name });
+}
+
+export async function removeAgentStream(id: string): Promise<void> {
+  await invoke("remove_agent_stream_cmd", { id });
+}
+
+export async function saveAgentStream(name: string, spec: AgentStreamSpec): Promise<void> {
+  await invoke("save_agent_stream_cmd", { name, spec });
+}
+
+export async function importAgentStream(path: string): Promise<string> {
   return await invoke("import_agent_stream_cmd", { path });
 }
 
-export async function renameAgentStream(streamId: string, newName: string): Promise<string> {
-  return await invoke("rename_agent_stream_cmd", { streamId, newName });
+export async function startAgentStream(id: string): Promise<void> {
+  await invoke("start_agent_stream_cmd", { id });
 }
 
-export async function removeAgentStream(streamId: string): Promise<void> {
-  await invoke("remove_agent_stream_cmd", { streamId });
-}
-
-export async function saveAgentStream(stream: AgentStream): Promise<void> {
-  await invoke("save_agent_stream_cmd", { stream });
+export async function stopAgentStream(id: string): Promise<void> {
+  await invoke("stop_agent_stream_cmd", { id });
 }
 
 const agentDefinitionsKey = Symbol("agentDefinitions");
@@ -43,7 +55,7 @@ export function getAgentDefinitionsContext(): AgentDefinitions {
 
 // deserialize: SAgentStream -> AgentStream
 
-export function deserializeAgentStream(stream: AgentStream): TAgentStream {
+export function deserializeAgentStream(stream: AgentStreamSpec): TAgentStream {
   // Deserialize agents first
   const nodes = stream.agents.map((agent) => deserializeAgentStreamNode(agent));
 
@@ -118,7 +130,7 @@ export function serializeAgentStream(
   edges: TAgentStreamEdge[],
   run_on_start: boolean | null,
   viewport: Viewport | null,
-): AgentStream {
+): AgentStreamSpec {
   return {
     id,
     name,
