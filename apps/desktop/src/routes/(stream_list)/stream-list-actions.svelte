@@ -77,6 +77,7 @@
     <PlayIcon color="blue" />
   </Button>
 {/if}
+
 <DropdownMenu.Root>
   <DropdownMenu.Trigger>
     {#snippet child({ props })}

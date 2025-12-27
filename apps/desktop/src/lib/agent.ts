@@ -78,6 +78,7 @@ export function streamToFlow(info: AgentStreamInfo, spec: AgentStreamSpec): Agen
     name: info.name,
     nodes: nodes,
     edges: validEdges.map((ch) => channelSpecToEdge(ch)),
+    running: info.running,
     run_on_start: spec.run_on_start ?? false,
     viewport: spec.viewport,
   };

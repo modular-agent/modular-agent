@@ -4,23 +4,30 @@
 
   import { Button } from "$lib/components/ui/button/index.js";
   import { startStream, stopStream } from "$lib/shared.svelte";
+  import type { AgentStreamFlow } from "$lib/types";
 
-  let { flow } = $props();
+  type Props = {
+    flow: AgentStreamFlow | null;
+  };
 
-  let isRunning = $derived(flow.running ?? false);
+  let { flow }: Props = $props();
+
+  let isRunning = $derived(flow?.running ?? false);
 
   async function handleStart() {
+    if (!flow) return;
     await startStream(flow.id);
     flow.running = true;
   }
 
   async function handleStop() {
+    if (!flow) return;
     await stopStream(flow.id);
     flow.running = false;
   }
 </script>
 
-<div class="flex mr-4">
+<div class="flex flex-row">
   {#if isRunning}
     <Button onclick={handleStop} variant="ghost" class="w-4">
       <SquareIcon color="red" />

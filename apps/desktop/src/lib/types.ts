@@ -30,6 +30,7 @@ export type AgentStreamFlow = {
   name: string;
   nodes: AgentStreamNode[];
   edges: AgentStreamEdge[];
+  running: boolean;
   run_on_start: boolean;
   viewport: Viewport | null;
 };

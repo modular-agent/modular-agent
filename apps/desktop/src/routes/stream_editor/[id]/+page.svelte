@@ -42,6 +42,7 @@
     saveAgentStream,
     streamToFlow,
   } from "$lib/agent";
+  import FlowStatus from "$lib/components/flow-status.svelte";
   import { ScrollArea } from "$lib/components/ui/scroll-area/index.js";
   import { agentDefs, coreSettings } from "$lib/shared.svelte";
   import type { AgentStreamNode, AgentStreamEdge, AgentStreamFlow } from "$lib/types";
@@ -428,13 +429,17 @@
 </script>
 
 <div class="flex flex-col w-full min-h-screen">
-  <header class="flex flex-none items-center justify-between pl-2">
-    <Menubar {onImportStream} {onExportStream} />
-    <div class="flex flex-row items-center">
+  <header class="grid grid-cols-[auto_1fr_100px] flex-none items-center pl-2 pr-4 gap-4">
+    <div class="justify-self-start">
+      <Menubar {onImportStream} {onExportStream} />
+    </div>
+    <div class="flex flex-row items-center justify-center">
       <StreamName name={flow?.name} class="mr-4" />
       <StreamActions {flow} />
     </div>
-    <div>{" "}</div>
+    <div class="justify-self-end">
+      <FlowStatus running={flow?.running ?? false} run_on_start={flow?.run_on_start} />
+    </div>
   </header>
   <SvelteFlow
     bind:nodes

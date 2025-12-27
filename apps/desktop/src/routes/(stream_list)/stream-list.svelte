@@ -8,6 +8,7 @@
   } from "@tanstack/table-core";
   import type { AgentStreamInfo } from "tauri-plugin-askit-api";
 
+  import FlowStatus from "$lib/components/flow-status.svelte";
   import {
     createSvelteTable,
     FlexRender,
@@ -19,7 +20,6 @@
   import NewStreamDialog from "./new-stream-dialog.svelte";
   import StreamListActions from "./stream-list-actions.svelte";
   import StreamListName from "./stream-list-name.svelte";
-  import StreamListStatus from "./stream-list-status.svelte";
 
   type Props = {
     streams: AgentStreamInfo[];
@@ -30,18 +30,12 @@
   let columnFilters = $state<ColumnFiltersState>([]);
   let columnVisibility = $state<VisibilityState>({});
 
-  // Join streamNames with their activities
-  // const data: Stream[] = $derived.by(() => {
-  //   return streamNames.map((stream) => ({
-  //     ...stream,
-  //     active: runningStreams.has(stream.id),
-  //   }));
-  // });
-
   const columns: ColumnDef<AgentStreamInfo>[] = [
     {
       id: "name",
       header: "Name",
+      accessorFn: (row) => row.name,
+      filterFn: "includesString",
       cell: ({ row }) => {
         return renderComponent(StreamListName, {
           id: row.original.id,
@@ -53,7 +47,7 @@
       id: "status",
       header: "Status",
       cell: ({ row }) => {
-        return renderComponent(StreamListStatus, {
+        return renderComponent(FlowStatus, {
           running: row.original.running,
           run_on_start: row.original.run_on_start,
         });
@@ -101,10 +95,6 @@
       },
     },
   });
-
-  // onMount(() => {
-  //   updateRunningStreams();
-  // });
 </script>
 
 <div class="text-primary p-2 w-full">
