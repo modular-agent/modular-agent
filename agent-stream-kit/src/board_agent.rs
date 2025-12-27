@@ -11,17 +11,15 @@ use crate::error::AgentError;
 use crate::spec::AgentSpec;
 use crate::value::AgentValue;
 
-static CONFIG_BOARD_NAME: &str = "board";
-static CONFIG_VAR_NAME: &str = "var";
+static CONFIG_NAME: &str = "name";
 
 #[askit_agent(
     kind = "Board",
-    title = "Board In",
+    title = "->Board",
     category = "Core",
     inputs = ["*"],
     string_config(
-        name = CONFIG_BOARD_NAME,
-        title = "Board Name",
+        name = CONFIG_NAME,
     )
 )]
 struct BoardInAgent {
@@ -35,7 +33,7 @@ impl AsAgent for BoardInAgent {
         let board_name = spec
             .configs
             .as_ref()
-            .and_then(|c| c.get_string(CONFIG_BOARD_NAME).ok());
+            .and_then(|c| c.get_string(CONFIG_NAME).ok());
         Ok(Self {
             data: AgentData::new(askit, id, spec),
             board_name,
@@ -43,7 +41,7 @@ impl AsAgent for BoardInAgent {
     }
 
     fn configs_changed(&mut self) -> Result<(), AgentError> {
-        self.board_name = self.configs()?.get_string(CONFIG_BOARD_NAME).ok();
+        self.board_name = self.configs()?.get_string(CONFIG_NAME).ok();
         Ok(())
     }
 
@@ -67,12 +65,11 @@ impl AsAgent for BoardInAgent {
 
 #[askit_agent(
     kind = "Board",
-    title = "Board Out",
+    title = "Board->",
     category = "Core",
     outputs = ["*"],
     string_config(
-        name = CONFIG_BOARD_NAME,
-        title = "Board Name"
+        name = CONFIG_NAME,
     )
 )]
 struct BoardOutAgent {
@@ -86,7 +83,7 @@ impl AsAgent for BoardOutAgent {
         let board_name = spec
             .configs
             .as_ref()
-            .and_then(|c| c.get_string(CONFIG_BOARD_NAME).ok());
+            .and_then(|c| c.get_string(CONFIG_NAME).ok());
         Ok(Self {
             data: AgentData::new(askit, id, spec),
             board_name,
@@ -118,7 +115,7 @@ impl AsAgent for BoardOutAgent {
     }
 
     fn configs_changed(&mut self) -> Result<(), AgentError> {
-        let board_name = self.configs()?.get_string(CONFIG_BOARD_NAME).ok();
+        let board_name = self.configs()?.get_string(CONFIG_NAME).ok();
         if self.board_name != board_name {
             if let Some(board_name) = &self.board_name {
                 let askit = self.askit();
@@ -144,12 +141,11 @@ impl AsAgent for BoardOutAgent {
 
 #[askit_agent(
     kind = "Board",
-    title = "Var In",
+    title = "->Var",
     category = "Core",
     inputs = ["*"],
     string_config(
-        name = CONFIG_VAR_NAME,
-        title = "Var Name",
+        name = CONFIG_NAME,
     )
 )]
 struct VarInAgent {
@@ -163,7 +159,7 @@ impl AsAgent for VarInAgent {
         let var_name = spec
             .configs
             .as_ref()
-            .and_then(|c| c.get_string(CONFIG_VAR_NAME).ok());
+            .and_then(|c| c.get_string(CONFIG_NAME).ok());
         Ok(Self {
             data: AgentData::new(askit, id, spec),
             var_name,
@@ -171,7 +167,7 @@ impl AsAgent for VarInAgent {
     }
 
     fn configs_changed(&mut self) -> Result<(), AgentError> {
-        self.var_name = self.configs()?.get_string(CONFIG_VAR_NAME).ok();
+        self.var_name = self.configs()?.get_string(CONFIG_NAME).ok();
         Ok(())
     }
 
@@ -196,12 +192,11 @@ impl AsAgent for VarInAgent {
 
 #[askit_agent(
     kind = "Board",
-    title = "Var Out",
+    title = "Var->",
     category = "Core",
     outputs = ["*"],
     string_config(
-        name = CONFIG_VAR_NAME,
-        title = "Var Name"
+        name = CONFIG_NAME,
     )
 )]
 struct VarOutAgent {
@@ -215,7 +210,7 @@ impl AsAgent for VarOutAgent {
         let var_name = spec
             .configs
             .as_ref()
-            .and_then(|c| c.get_string(CONFIG_VAR_NAME).ok());
+            .and_then(|c| c.get_string(CONFIG_NAME).ok());
         Ok(Self {
             data: AgentData::new(askit, id, spec),
             var_name,
@@ -249,7 +244,7 @@ impl AsAgent for VarOutAgent {
     }
 
     fn configs_changed(&mut self) -> Result<(), AgentError> {
-        let new_var_name = self.configs()?.get_string(CONFIG_VAR_NAME).ok();
+        let new_var_name = self.configs()?.get_string(CONFIG_NAME).ok();
         if self.var_name != new_var_name {
             if let Some(var_name) = &self.var_name {
                 let board_name = board_name_for_var(self.stream_id(), var_name);
@@ -276,5 +271,5 @@ impl AsAgent for VarOutAgent {
 }
 
 fn board_name_for_var(flow_id: &str, var_name: &str) -> String {
-    format!("%{}%{}", flow_id, var_name)
+    format!("%{}/{}", flow_id, var_name)
 }

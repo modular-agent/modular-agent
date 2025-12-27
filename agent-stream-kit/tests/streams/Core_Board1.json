@@ -1,0 +1,58 @@
+{
+  "id": "6",
+  "name": "Core/Board1",
+  "agents": [
+    {
+      "id": "430",
+      "def_name": "agent_stream_kit::board_agent::BoardInAgent",
+      "inputs": [
+        "*"
+      ],
+      "configs": {
+        "name": "board2"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "enabled": true,
+      "x": 4571.67031189522,
+      "y": 202.53362160607347
+    },
+    {
+      "id": "431",
+      "def_name": "agent_stream_kit::board_agent::BoardOutAgent",
+      "outputs": [
+        "*"
+      ],
+      "configs": {
+        "name": "board1"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "enabled": true,
+      "x": 4171.199660975647,
+      "y": 201.2141136953006
+    }
+  ],
+  "channels": [
+    {
+      "id": "xy-edge__431*-430*",
+      "source": "431",
+      "source_handle": "*",
+      "target": "430",
+      "target_handle": "*"
+    }
+  ],
+  "viewport": {
+    "x": -5886.356428363344,
+    "y": -94.98356554367385,
+    "zoom": 1.515716566510398
+  }
+}

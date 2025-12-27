@@ -1,13 +1,13 @@
 extern crate agent_stream_kit as askit;
 
 use askit::{
-    ASKit, AgentContext, AgentSpec, AgentStatus, AgentStream, AgentValue, ChannelSpec,
+    ASKit, AgentContext, AgentSpec, AgentStatus, AgentStreamSpec, AgentValue, ChannelSpec,
     test_utils::{TestProbeAgent, probe_receiver},
 };
 
 mod common;
 
-const COUNTER_DEF: &str = common::CounterAgent::DEF_NAME;
+const COUNTER_DEF: &str = common::agents::CounterAgent::DEF_NAME;
 const PROBE_DEF: &str = TestProbeAgent::DEF_NAME;
 
 #[test]
@@ -78,28 +78,29 @@ async fn test_agent_process() {
 
     // build a flow: Counter -> TestProbe
     let counter_def = askit.get_agent_definition(COUNTER_DEF).unwrap();
-    let mut counter_spec = AgentSpec::from_def(&counter_def);
-    counter_spec.enabled = true;
+    let counter_spec = AgentSpec::from_def(&counter_def);
 
     let probe_def = askit.get_agent_definition(PROBE_DEF).unwrap();
-    let mut probe_spec = AgentSpec::from_def(&probe_def);
-    probe_spec.enabled = true;
+    let probe_spec = AgentSpec::from_def(&probe_def);
 
     let counter_id = counter_spec.id.clone();
     let probe_id = probe_spec.id.clone();
 
-    let mut stream = AgentStream::new("counter_probe_stream".into());
-    stream.add_agent(counter_spec);
-    stream.add_agent(probe_spec);
-    stream.add_channels(ChannelSpec {
+    let mut spec = AgentStreamSpec::default();
+    spec.add_agent(counter_spec);
+    spec.add_agent(probe_spec);
+    spec.add_channels(ChannelSpec {
         id: "ch_counter_probe".into(),
         source: counter_id.clone(),
         source_handle: "count".into(),
         target: probe_id.clone(),
         target_handle: "in".into(),
     });
+    spec.run_on_start = true;
 
-    askit.add_agent_stream(&stream).unwrap();
+    askit
+        .add_agent_stream("counter_probe_stream".to_string(), spec)
+        .unwrap();
     askit.ready().await.unwrap();
 
     askit

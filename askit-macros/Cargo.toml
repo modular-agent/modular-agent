@@ -15,4 +15,4 @@ quote = "1"
 syn = { version = "2", features = ["full"] }
 
 [dev-dependencies]
-agent-stream-kit = { path = "../agent-stream-kit", features = ["test-utils"] }
+agent-stream-kit = { path = "../agent-stream-kit" }

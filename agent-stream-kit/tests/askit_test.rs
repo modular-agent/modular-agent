@@ -4,7 +4,7 @@ use askit::ASKit;
 
 mod common;
 
-const COUNTER_DEF: &str = common::CounterAgent::DEF_NAME;
+const COUNTER_DEF: &str = common::agents::CounterAgent::DEF_NAME;
 
 #[test]
 fn test_init() {
@@ -20,7 +20,7 @@ fn test_init() {
         "agent_stream_kit::board_agent::VarInAgent",
         "agent_stream_kit::board_agent::VarOutAgent",
         "agent_stream_kit::test_utils::TestProbeAgent",
-        "askit_test::common::CounterAgent",
+        "askit_test::common::agents::CounterAgent",
     ];
     assert_eq!(keys, expected);
 

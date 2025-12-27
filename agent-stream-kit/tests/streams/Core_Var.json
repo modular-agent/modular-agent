@@ -1,0 +1,58 @@
+{
+  "id": "14",
+  "name": "Core/Var",
+  "agents": [
+    {
+      "id": "434",
+      "def_name": "agent_stream_kit::board_agent::VarInAgent",
+      "inputs": [
+        "*"
+      ],
+      "configs": {
+        "name": "var2"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "enabled": true,
+      "x": 4584.503622522021,
+      "y": 370.17718467519427
+    },
+    {
+      "id": "435",
+      "def_name": "agent_stream_kit::board_agent::VarOutAgent",
+      "outputs": [
+        "*"
+      ],
+      "configs": {
+        "name": "var1"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "enabled": true,
+      "x": 4181.363572648034,
+      "y": 370.1771846751944
+    }
+  ],
+  "channels": [
+    {
+      "id": "xy-edge__435*-434*",
+      "source": "435",
+      "source_handle": "*",
+      "target": "434",
+      "target_handle": "*"
+    }
+  ],
+  "viewport": {
+    "x": -3245.37936347749,
+    "y": -74.58331017277237,
+    "zoom": 0.9227562483962616
+  }
+}

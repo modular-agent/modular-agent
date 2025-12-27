@@ -10,6 +10,7 @@ license.workspace = true
 askit-macros = { workspace = true }
 async-trait = "0.1"
 fnv = "1"
+im = { version = "15.1.0", features = ["serde"] }
 indexmap = { version = "2", features = ["serde"] }
 inventory = "0.3"
 log = "0.4"
@@ -25,7 +26,14 @@ tokio = { version = "1", features = ["macros"] }
 [features]
 default = ["image"]
 image = ["photon-rs"]
-test-utils = []
+
+[[test]]
+name = "askit_test"
+path = "tests/askit_test.rs"
+
+[[test]]
+name = "board_test"
+path = "tests/board_test.rs"
 
 [[test]]
 name = "counter_test"
@@ -34,3 +42,7 @@ path = "tests/counter_test.rs"
 [[test]]
 name = "stream_test"
 path = "tests/stream_test.rs"
+
+[[test]]
+name = "var_test"
+path = "tests/var_test.rs"

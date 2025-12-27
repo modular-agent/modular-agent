@@ -410,7 +410,9 @@ impl AgentDefinition {
                     .collect()
             }),
             config_specs: self.configs.clone(),
+            #[allow(deprecated)]
             enabled: false,
+            disabled: false,
             extensions: FnvIndexMap::default(),
         }
     }

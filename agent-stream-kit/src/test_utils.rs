@@ -1,4 +1,5 @@
-use std::sync::Arc;
+use std::path::Path;
+use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 use async_trait::async_trait;
@@ -7,8 +8,122 @@ use tokio::{
     time::timeout,
 };
 
-use crate::{ASKit, AgentContext, AgentData, AgentError, AgentSpec, AgentValue, AsAgent};
-use askit_macros::askit_agent;
+use crate::{
+    ASKit, ASKitEvent, ASKitObserver, AgentContext, AgentData, AgentError, AgentSpec,
+    AgentStreamSpec, AgentValue, AsAgent, askit_agent,
+};
+
+/// Setting up ASKit
+pub async fn setup_askit() -> ASKit {
+    let askit = ASKit::init().unwrap();
+    askit.ready().await.unwrap();
+
+    // set an observer to receive board events
+    subscribe_board_observer(&askit).unwrap();
+
+    askit
+}
+
+/// Load and start an agent stream from a file.
+pub async fn load_and_start_stream(askit: &ASKit, path: &str) -> Result<String, AgentError> {
+    let stream_json = std::fs::read_to_string(path)
+        .map_err(|e| AgentError::IoError(format!("Failed to read stream file: {}", e)))?;
+    let mut spec = AgentStreamSpec::from_json(&stream_json)?;
+    spec.run_on_start = true;
+    let name = Path::new(path)
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("stream")
+        .to_string();
+    let id = askit.add_agent_stream(name, spec)?;
+    askit.start_agent_stream(&id).await?;
+    Ok(id)
+}
+
+// BoardObserver
+
+static BOARD_RX: OnceLock<AsyncMutex<mpsc::UnboundedReceiver<(String, AgentValue)>>> =
+    OnceLock::new();
+
+#[derive(Clone)]
+pub struct BoardObserver {
+    sender: mpsc::UnboundedSender<(String, AgentValue)>,
+}
+
+#[allow(dead_code)]
+impl BoardObserver {
+    pub fn new(sender: mpsc::UnboundedSender<(String, AgentValue)>) -> Self {
+        Self { sender }
+    }
+}
+
+impl ASKitObserver for BoardObserver {
+    fn notify(&self, event: &ASKitEvent) {
+        if let ASKitEvent::Board(name, value) = event {
+            self.sender
+                .send((name.to_string(), value.clone()))
+                .unwrap_or_else(|e| {
+                    eprintln!("BoardObserver failed to send board event: {}", e);
+                });
+        }
+    }
+}
+
+pub fn subscribe_board_observer(askit: &ASKit) -> Result<(), AgentError> {
+    // set an observer to receive board events
+    let (tx, rx) = mpsc::unbounded_channel();
+    let observer = BoardObserver::new(tx);
+    askit.subscribe(Box::new(observer));
+    BOARD_RX
+        .set(AsyncMutex::new(rx))
+        .map_err(|_| AgentError::SendMessageFailed("board receiver already initialized".into()))
+}
+
+pub const DEFAULT_BOARD_TIMEOUT: Duration = Duration::from_secs(1);
+
+fn board_rx()
+-> Result<&'static AsyncMutex<mpsc::UnboundedReceiver<(String, AgentValue)>>, AgentError> {
+    BOARD_RX
+        .get()
+        .ok_or_else(|| AgentError::SendMessageFailed("board receiver not initialized".into()))
+}
+
+pub async fn recv_board_with_timeout(
+    duration: Duration,
+) -> Result<(String, AgentValue), AgentError> {
+    let rx = board_rx()?;
+    let mut rx = rx.lock().await;
+    timeout(duration, rx.recv())
+        .await
+        .map_err(|_| AgentError::SendMessageFailed("board receive timed out".into()))?
+        .ok_or_else(|| AgentError::SendMessageFailed("board channel closed".into()))
+}
+
+pub async fn expect_board_value(
+    expected_name: &str,
+    expected_value: &AgentValue,
+) -> Result<(), AgentError> {
+    let (name, value) = recv_board_with_timeout(DEFAULT_BOARD_TIMEOUT).await?;
+    if name == expected_name && &value == expected_value {
+        Ok(())
+    } else {
+        Err(AgentError::SendMessageFailed(format!(
+            "expected board '{}' with value {:?}, got '{}' with value {:?}",
+            expected_name, expected_value, name, value
+        )))
+    }
+}
+
+pub async fn expect_var_value(
+    flow_id: &str,
+    var_name: &str,
+    expected_value: &AgentValue,
+) -> Result<(), AgentError> {
+    let expected_name = format!("%{}/{}", flow_id, var_name);
+    expect_board_value(&expected_name, expected_value).await
+}
+
+// TestProbeAgent
 
 pub type ProbeEvent = (AgentContext, AgentValue);
 

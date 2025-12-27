@@ -1,4 +1,5 @@
 use std::any::Any;
+use std::sync::Arc;
 
 use async_trait::async_trait;
 
@@ -238,9 +239,20 @@ impl<T: AsAgent> Agent for T {
         pin: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
-        if let Err(e) = self.process(ctx, pin, value).await {
+        if let Err(e) = self.process(ctx.clone(), pin, value).await {
             self.askit()
                 .emit_agent_error(self.id().to_string(), e.to_string());
+            self.askit()
+                .send_agent_out(
+                    self.id().to_string(),
+                    ctx,
+                    "err".to_string(),
+                    AgentValue::Error(Arc::new(e.clone())),
+                )
+                .await
+                .unwrap_or_else(|e| {
+                    log::error!("Failed to send error message for {}: {}", self.id(), e);
+                });
             return Err(e);
         }
         Ok(())

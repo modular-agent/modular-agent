@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-#[derive(Debug, Error)]
+#[derive(Clone, Debug, Error)]
 pub enum AgentError {
     #[error("Agent stream {0} already exists")]
     DuplicateStreamName(String),

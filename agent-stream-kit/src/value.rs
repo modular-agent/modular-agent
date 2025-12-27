@@ -31,6 +31,10 @@ pub enum AgentValue {
     // Recursive data structures
     Array(Arc<Vec<AgentValue>>),
     Object(Arc<AgentValueMap<String, AgentValue>>),
+
+    // Error
+    // special type to represent errors
+    Error(Arc<AgentError>),
 }
 
 pub type AgentValueMap<S, T> = BTreeMap<S, T>;
@@ -167,6 +171,7 @@ impl AgentValue {
                 let arr: Vec<serde_json::Value> = a.iter().map(|v| v.to_json()).collect();
                 serde_json::Value::Array(arr)
             }
+            AgentValue::Error(_) => serde_json::Value::Null, // Errors are not serializable
         }
     }
 
@@ -394,6 +399,7 @@ impl Serialize for AgentValue {
                 }
                 seq.end()
             }
+            AgentValue::Error(_) => serializer.serialize_none(), // Errors are not serializable
         }
     }
 }
