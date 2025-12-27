@@ -1,6 +1,6 @@
 {
   "name": "tauri-plugin-askit-api",
-  "version": "0.7.1",
+  "version": "0.8.0",
   "license": "MIT OR Apache-2.0",
   "author": "Akira Ishino",
   "description": "Tauri plugin for Agent Stream Kit",
