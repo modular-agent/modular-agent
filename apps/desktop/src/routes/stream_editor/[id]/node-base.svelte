@@ -1,9 +1,11 @@
 <script lang="ts" module>
   const bgColors = [
-    "bg-muted dark:bg-muted opacity-50",
-    "bg-background dark:bg-background opacity-90",
-    "bg-destructive dark:bg-destructive opacity-50",
+    "bg-muted dark:bg-muted",
+    "bg-background dark:bg-background",
+    "bg-destructive dark:bg-destructive",
   ];
+
+  const highlightColor = "oklch(0.95 0.12 102)";
 
   const DEFAULT_HANDLE_STYLE = "width: 12px; height: 12px;";
 
@@ -64,9 +66,11 @@
 
 <NodeResizer isVisible={selected} {onResize} />
 <div
-  class="{bgColor} flex flex-col p-0 border-2 rounded-xl"
+  class="{bgColor} flex flex-col p-0 border-primary border-3 rounded-xl"
   style:height={ht ? `${ht}px` : "auto"}
-  style:box-shadow={highlight.current > 0.05 ? `0 0 ${highlight.current * 20}px #fff78b` : ""}
+  style:box-shadow={highlight.current > 0.05
+    ? `0 0 ${highlight.current * 40}px ${highlightColor}`
+    : ""}
 >
   <div class="w-full min-w-40 flex-none pl-4 pr-4 pb-2 {titleColor} rounded-t-lg">
     {@render title()}

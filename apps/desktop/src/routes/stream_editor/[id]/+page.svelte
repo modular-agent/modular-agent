@@ -491,13 +491,12 @@
 
 <style>
   :root {
-    --resize-control-size: 6px;
-    --resize-control-color: #00eeff;
+    --resize-control-size: 2px;
+    --resize-control-color: var(--color-red-500);
   }
 
   :global(.svelte-flow__edge .svelte-flow__edge-path) {
     stroke-width: 8px;
-    stroke-opacity: 0.8;
   }
 
   :global(.svelte-flow__resize-control.handle) {
@@ -508,19 +507,15 @@
   }
   :global(.svelte-flow__resize-control.line.top) {
     border: var(--resize-control-size) solid var(--resize-control-color);
-    border-image: linear-gradient(to top, var(--background), var(--resize-control-color)) 1;
   }
   :global(.svelte-flow__resize-control.line.right) {
     border: var(--resize-control-size) solid var(--resize-control-color);
-    border-image: linear-gradient(to right, var(--background), var(--resize-control-color)) 1;
   }
   :global(.svelte-flow__resize-control.line.bottom) {
     border: var(--resize-control-size) solid var(--resize-control-color);
-    border-image: linear-gradient(to bottom, var(--background), var(--resize-control-color)) 1;
   }
   :global(.svelte-flow__resize-control.line.left) {
     border: var(--resize-control-size) solid var(--resize-control-color);
-    border-image: linear-gradient(to left, var(--background), var(--resize-control-color)) 1;
   }
   :global(.svelte-flow__controls) {
     margin-left: 4px;
