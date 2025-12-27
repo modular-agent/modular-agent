@@ -129,7 +129,6 @@ export function nodeToAgentSpec(node: AgentStreamNode): AgentSpec {
     outputs: node.data.outputs,
     configs: node.data.configs,
     config_specs: node.data.config_specs,
-    enabled: node.data.enabled,
     disabled: node.data.disabled,
     // extensions
     x: node.position.x,
