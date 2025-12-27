@@ -19,6 +19,8 @@
   import type { NodeProps, ResizeDragEvent, ResizeParams } from "@xyflow/svelte";
   import type { AgentDefinition, AgentSpec } from "tauri-plugin-askit-api";
 
+  import { ScrollArea } from "$lib/components/ui/scroll-area/index.js";
+
   type Props = NodeProps & {
     data: AgentSpec;
     agentDef: AgentDefinition | null;
@@ -85,8 +87,10 @@
       {/each}
     </div>
   </div>
-  <div class="w-full grow flex flex-col gap-2 overflow-auto pretty-scroll min-h-0">
-    {@render contents()}
+  <div class="w-full grow flex flex-col gap-2 overflow-auto min-h-0">
+    <ScrollArea>
+      {@render contents()}
+    </ScrollArea>
   </div>
   {#if showErr}
     <div class="text-right mr-2 mb-2">err</div>
