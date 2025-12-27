@@ -6,14 +6,11 @@ const COMMANDS: &[&str] = &[
     "get_agent_stream_infos",
     "get_agent_stream_spec",
     "set_agent_stream_spec",
-    "get_agent_streams",
-    "get_running_agent_streams",
     "new_agent_stream",
     "rename_agent_stream",
     "unique_stream_name",
     "add_agent_stream",
     "remove_agent_stream",
-    // "insert_agent_stream",
     "copy_sub_stream",
     "start_agent_stream",
     "stop_agent_stream",
@@ -30,7 +27,6 @@ const COMMANDS: &[&str] = &[
     "get_global_configs_map",
     "set_global_configs",
     "set_global_configs_map",
-    "get_agent_config_specs",
 ];
 
 fn main() {

@@ -9,8 +9,6 @@ export type AgentStreamInfo = {
 
 export type AgentDefinitions = Record<string, AgentDefinition>;
 
-export type AgentGlobalConfigsMap = Record<string, AgentConfigs>;
-
 export type AgentDefinition = {
   kind: string;
   name: string;
@@ -20,17 +18,17 @@ export type AgentDefinition = {
   inputs?: string[] | null;
   outputs?: string[] | null;
   configs?: AgentConfigSpecs | null;
-  global_configs?: AgentGlobalConfigSpecs | null;
+  global_configs?: AgentGlobalConfigs | null;
   native_thread?: boolean | null;
 };
 
 export type AgentConfigSpecs = Record<string, AgentConfigSpec>;
 
-export type AgentGlobalConfigSpecs = Record<string, AgentConfigSpec>;
+export type AgentGlobalConfigs = Record<string, AgentConfigSpec>;
 
 export type AgentConfigSpec = {
   value: any;
-  type: AgentConfigValueType | null;
+  type: string | null;
   title?: string | null;
   hide_title?: boolean | null;
   description?: string | null;
@@ -38,12 +36,7 @@ export type AgentConfigSpec = {
   readonly?: boolean | null;
 };
 
-export type AgentConfigValueType = string;
-
-// export type AgentStreamSpecs = Record<string, AgentStreamSpec>;
-
 export type AgentStreamSpec = {
-  // name: string;
   agents: AgentSpec[];
   channels: ChannelSpec[];
   run_on_start?: boolean | null;
@@ -51,6 +44,8 @@ export type AgentStreamSpec = {
 };
 
 export type AgentConfigsMap = Record<string, AgentConfigs>;
+
+export type AgentGlobalConfigsMap = Record<string, AgentConfigs>;
 
 export type AgentConfigs = Record<string, any>;
 
@@ -64,8 +59,6 @@ export type AgentSpec = {
   configs?: AgentConfigs | null;
   config_specs?: AgentConfigSpecs | null;
   disabled?: boolean | null;
-  /** @deprecated */
-  enabled?: boolean | null;
 } & AgentSpecExtensions;
 
 export type ChannelSpec = {
@@ -130,16 +123,6 @@ export async function setAgentStreamSpec(
   await invoke<void>("plugin:askit|set_agent_stream_spec", { id, spec });
 }
 
-/** @deprecated */
-export async function getAgentStreams(): Promise<AgentStreamSpec[]> {
-  return await invoke<any>("plugin:askit|get_agent_streams", {});
-}
-
-/** @deprecated */
-export async function getRunningAgentStreams(): Promise<string[]> {
-  return await invoke<any>("plugin:askit|get_running_agent_streams", {});
-}
-
 export async function newAgentStream(name: string): Promise<[string, string]> {
   return await invoke<any>("plugin:askit|new_agent_stream", { name });
 }
@@ -168,12 +151,6 @@ export async function addAgentStream(
 export async function removeAgentStream(id: string): Promise<void> {
   await invoke<void>("plugin:askit|remove_agent_stream", { id });
 }
-
-// export async function insertAgentStream(
-//   AgentStream: AgentStream
-// ): Promise<void> {
-//   await invoke<void>("plugin:askit|insert_agent_stream", { AgentStream });
-// }
 
 export async function copySubStream(
   agents: AgentSpec[],
@@ -290,12 +267,4 @@ export async function setGlobalConfigsMap(
   configs: AgentConfigsMap
 ): Promise<void> {
   await invoke<void>("plugin:askit|set_global_configs_map", { configs });
-}
-
-export async function getAgentConfigSpecs(
-  defName: string
-): Promise<AgentConfigSpecs | null> {
-  return await invoke<any>("plugin:askit|get_agent_config_specs", {
-    defName,
-  });
 }

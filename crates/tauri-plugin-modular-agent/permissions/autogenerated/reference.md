@@ -6,13 +6,11 @@ Default permissions for the plugin
 
 - `allow-get-agent-definition`
 - `allow-get-agent-definitions`
+- `allow-get-agent-spec`
 - `allow-get-agent-stream-info`
 - `allow-get-agent-stream-infos`
 - `allow-get-agent-stream-spec`
 - `allow-set-agent-stream-spec`
-- `allow-get-agent-streams`
-- `allow-get-running-agent-streams`
-- `allow-get-agent-spec`
 - `allow-new-agent-stream`
 - `allow-rename-agent-stream`
 - `allow-unique-stream-name`
@@ -34,7 +32,6 @@ Default permissions for the plugin
 - `allow-get-global-configs-map`
 - `allow-set-global-configs`
 - `allow-set-global-configs-map`
-- `allow-get-agent-config-specs`
 
 ## Permission Table
 
@@ -145,32 +142,6 @@ Enables the copy_sub_stream command without any pre-configured scope.
 <td>
 
 Denies the copy_sub_stream command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`askit:allow-get-agent-config-specs`
-
-</td>
-<td>
-
-Enables the get_agent_config_specs command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`askit:deny-get-agent-config-specs`
-
-</td>
-<td>
-
-Denies the get_agent_config_specs command without any pre-configured scope.
 
 </td>
 </tr>
@@ -334,32 +305,6 @@ Denies the get_agent_stream_spec command without any pre-configured scope.
 <tr>
 <td>
 
-`askit:allow-get-agent-streams`
-
-</td>
-<td>
-
-Enables the get_agent_streams command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`askit:deny-get-agent-streams`
-
-</td>
-<td>
-
-Denies the get_agent_streams command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
 `askit:allow-get-global-configs`
 
 </td>
@@ -405,32 +350,6 @@ Enables the get_global_configs_map command without any pre-configured scope.
 <td>
 
 Denies the get_global_configs_map command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`askit:allow-get-running-agent-streams`
-
-</td>
-<td>
-
-Enables the get_running_agent_streams command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`askit:deny-get-running-agent-streams`
-
-</td>
-<td>
-
-Denies the get_running_agent_streams command without any pre-configured scope.
 
 </td>
 </tr>

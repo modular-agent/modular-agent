@@ -1,6 +1,6 @@
 use agent_stream_kit::{
-    AgentConfigSpecs, AgentConfigs, AgentConfigsMap, AgentDefinition, AgentDefinitions, AgentSpec,
-    AgentStreamSpec, AgentValue, ChannelSpec,
+    AgentConfigs, AgentConfigsMap, AgentDefinition, AgentDefinitions, AgentSpec, AgentStreamSpec,
+    AgentValue, ChannelSpec,
 };
 use tauri::{AppHandle, Runtime};
 
@@ -65,18 +65,6 @@ pub(crate) fn set_agent_stream_spec<R: Runtime>(
         .map_err(Into::into)
 }
 
-#[deprecated]
-#[tauri::command]
-pub(crate) fn get_agent_streams<R: Runtime>(app: AppHandle<R>) -> Vec<AgentStreamSpec> {
-    app.askit().get_agent_streams()
-}
-
-#[deprecated]
-#[tauri::command]
-pub(crate) fn get_running_agent_streams<R: Runtime>(app: AppHandle<R>) -> Vec<String> {
-    app.askit().get_running_agent_streams()
-}
-
 #[tauri::command]
 pub(crate) fn new_agent_stream<R: Runtime>(app: AppHandle<R>, name: String) -> Result<String> {
     app.askit().new_agent_stream(&name).map_err(Into::into)
@@ -117,16 +105,6 @@ pub(crate) async fn remove_agent_stream<R: Runtime>(
         .await
         .map_err(Into::into)
 }
-
-// #[tauri::command]
-// pub(crate) fn insert_agent_stream<R: Runtime>(
-//     app: AppHandle<R>,
-//     agent_stream: AgentStream,
-// ) -> Result<()> {
-//     app.askit()
-//         .insert_agent_stream(agent_stream)
-//         .map_err(Into::into)
-// }
 
 #[tauri::command]
 pub(crate) fn copy_sub_stream<R: Runtime>(
@@ -266,12 +244,4 @@ pub(crate) fn set_global_configs<R: Runtime>(
 #[tauri::command]
 pub(crate) fn set_global_configs_map<R: Runtime>(app: AppHandle<R>, configs: AgentConfigsMap) {
     app.askit().set_global_configs_map(configs)
-}
-
-#[tauri::command]
-pub(crate) async fn get_agent_config_specs<R: Runtime>(
-    app: AppHandle<R>,
-    def_name: String,
-) -> Option<AgentConfigSpecs> {
-    app.askit().get_agent_config_specs(&def_name)
 }

@@ -36,14 +36,11 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             commands::get_agent_stream_infos,
             commands::get_agent_stream_spec,
             commands::set_agent_stream_spec,
-            commands::get_agent_streams,
-            commands::get_running_agent_streams,
             commands::new_agent_stream,
             commands::rename_agent_stream,
             commands::unique_stream_name,
             commands::add_agent_stream,
             commands::remove_agent_stream,
-            // commands::insert_agent_stream,
             commands::copy_sub_stream,
             commands::start_agent_stream,
             commands::stop_agent_stream,
@@ -60,7 +57,6 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             commands::get_global_configs_map,
             commands::set_global_configs,
             commands::set_global_configs_map,
-            commands::get_agent_config_specs,
         ])
         .setup(|app, _api| {
             let askit = ASKit::init()?;
