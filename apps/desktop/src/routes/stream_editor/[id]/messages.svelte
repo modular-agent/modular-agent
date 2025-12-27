@@ -19,6 +19,7 @@
 <script lang="ts">
   import BotIcon from "@lucide/svelte/icons/bot";
   import CatIcon from "@lucide/svelte/icons/cat";
+  import ScrollTextIcon from "@lucide/svelte/icons/scroll-text";
   import DOMPurify from "dompurify";
   import { marked } from "marked";
 
@@ -64,12 +65,16 @@
       <Item.Media>
         <Avatar.Root class="size-10">
           {#if message.role === "ai"}
-            <Avatar.Fallback>
+            <Avatar.Fallback class="bg-background">
               <BotIcon />
             </Avatar.Fallback>
           {:else if message.role === "user"}
-            <Avatar.Fallback>
+            <Avatar.Fallback class="bg-background">
               <CatIcon />
+            </Avatar.Fallback>
+          {:else if message.role === "system"}
+            <Avatar.Fallback class="bg-background">
+              <ScrollTextIcon />
             </Avatar.Fallback>
           {:else}
             <Avatar.Fallback>
