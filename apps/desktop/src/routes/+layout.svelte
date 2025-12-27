@@ -16,13 +16,9 @@
 
   const { children }: LayoutProps = $props();
 
-  const key_close = "Escape";
   const key_fullscreen = $derived(coreSettings.shortcut_keys?.["fullscreen"]);
 
   $effect(() => {
-    hotkeys(key_close, () => {
-      getCurrentWindow().close();
-    });
     if (key_fullscreen) {
       hotkeys(key_fullscreen, () => {
         getCurrentWindow()
