@@ -1,4 +1,4 @@
-<script lang="ts">
+<script lang="ts" module>
   import {
     type ColumnDef,
     type ColumnFiltersState,
@@ -21,10 +21,22 @@
   import StreamListActions from "./stream-list-actions.svelte";
   import StreamListName from "./stream-list-name.svelte";
 
+  declare module "@tanstack/table-core" {
+    interface ColumnMeta<TData, TValue> {
+      headerClass?: string;
+      cellClass?: string;
+    }
+  }
+
+  const STATUS_COL_WIDTH = "w-[220px]";
+  const ACTIONS_COL_WIDTH = "w-[140px]";
+
   type Props = {
     streams: AgentStreamInfo[];
   };
+</script>
 
+<script lang="ts">
   let { streams }: Props = $props();
 
   let columnFilters = $state<ColumnFiltersState>([]);
@@ -42,6 +54,10 @@
           name: row.original.name,
         });
       },
+      meta: {
+        headerClass: "w-full px-2",
+        cellClass: "w-full px-2",
+      },
     },
     {
       id: "status",
@@ -50,7 +66,12 @@
         return renderComponent(FlowStatus, {
           running: row.original.running,
           run_on_start: row.original.run_on_start,
+          class: "w-full justify-end",
         });
+      },
+      meta: {
+        headerClass: `${STATUS_COL_WIDTH} pl-4`,
+        cellClass: `${STATUS_COL_WIDTH} pl-4`,
       },
     },
     {
@@ -61,6 +82,10 @@
           id: row.original.id,
           name: row.original.name,
         });
+      },
+      meta: {
+        headerClass: `${ACTIONS_COL_WIDTH} pl-4`,
+        cellClass: `${ACTIONS_COL_WIDTH} pl-4`,
       },
     },
   ];
@@ -97,10 +122,10 @@
   });
 </script>
 
-<div class="text-primary p-2 w-full">
-  <h4>Streams</h4>
-  <div class="flex items-center justify-between p-2">
-    <div class="py-2">
+<div class="text-primary p-4 w-full">
+  <div class="text-lg font-semibold">Streams</div>
+  <div class="flex items-center justify-between py-4">
+    <div class="py-2 w-64">
       <Input
         value={(table.getColumn("name")?.getFilterValue() as string) ?? ""}
         onchange={(e) => {
@@ -109,7 +134,6 @@
         oninput={(e) => {
           table.getColumn("name")?.setFilterValue(e.currentTarget.value);
         }}
-        class="max-w-sm"
       />
     </div>
     <NewStreamDialog />
@@ -120,7 +144,10 @@
         {#each table.getHeaderGroups() as headerGroup (headerGroup.id)}
           <Table.Row>
             {#each headerGroup.headers as header (header.id)}
-              <Table.Head colspan={header.colSpan}>
+              <Table.Head
+                colspan={header.colSpan}
+                class={header.column.columnDef.meta?.headerClass}
+              >
                 {#if !header.isPlaceholder}
                   <FlexRender
                     content={header.column.columnDef.header}
@@ -136,7 +163,7 @@
         {#each table.getRowModel().rows as row (row.id)}
           <Table.Row data-state={row.getIsSelected() && "selected"}>
             {#each row.getVisibleCells() as cell (cell.id)}
-              <Table.Cell>
+              <Table.Cell class={cell.column.columnDef.meta?.cellClass}>
                 <FlexRender content={cell.column.columnDef.cell} context={cell.getContext()} />
               </Table.Cell>
             {/each}

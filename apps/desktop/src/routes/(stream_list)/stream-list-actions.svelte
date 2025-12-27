@@ -68,32 +68,34 @@
   }
 </script>
 
-{#if running}
-  <Button onclick={handleStop} variant="ghost" class="w-4 mr-4">
-    <SquareIcon color="red" />
-  </Button>
-{:else}
-  <Button onclick={handleStart} variant="ghost" class="w-4 mr-4">
-    <PlayIcon color="blue" />
-  </Button>
-{/if}
+<div class="flex items-center justify-end gap-2">
+  {#if running}
+    <Button onclick={handleStop} variant="ghost" class="w-4">
+      <SquareIcon color="red" />
+    </Button>
+  {:else}
+    <Button onclick={handleStart} variant="ghost" class="w-4">
+      <PlayIcon color="blue" />
+    </Button>
+  {/if}
 
-<DropdownMenu.Root>
-  <DropdownMenu.Trigger>
-    {#snippet child({ props })}
-      <Button {...props} variant="ghost" size="icon" class="relative size-8 p-0">
-        <span class="sr-only">Open menu</span>
-        <EllipsisVerticalIcon />
-      </Button>
-    {/snippet}
-  </DropdownMenu.Trigger>
-  <DropdownMenu.Content>
-    <DropdownMenu.Item onclick={() => (openRenameDialog = true)}>Rename</DropdownMenu.Item>
-    <DropdownMenu.Item onclick={() => (openDeleteDialog = true)}>Delete</DropdownMenu.Item>
-    <DropdownMenu.Separator />
-    <DropdownMenu.Item onclick={handleRunOnStart}>Run on Start</DropdownMenu.Item>
-  </DropdownMenu.Content>
-</DropdownMenu.Root>
+  <DropdownMenu.Root>
+    <DropdownMenu.Trigger>
+      {#snippet child({ props })}
+        <Button {...props} variant="ghost" size="icon" class="relative size-8 p-0">
+          <span class="sr-only">Open menu</span>
+          <EllipsisVerticalIcon />
+        </Button>
+      {/snippet}
+    </DropdownMenu.Trigger>
+    <DropdownMenu.Content>
+      <DropdownMenu.Item onclick={() => (openRenameDialog = true)}>Rename</DropdownMenu.Item>
+      <DropdownMenu.Item onclick={() => (openDeleteDialog = true)}>Delete</DropdownMenu.Item>
+      <DropdownMenu.Separator />
+      <DropdownMenu.Item onclick={handleRunOnStart}>Run on Start</DropdownMenu.Item>
+    </DropdownMenu.Content>
+  </DropdownMenu.Root>
+</div>
 
 <Dialog.Root bind:open={openRenameDialog}>
   <form>
