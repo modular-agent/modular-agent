@@ -66,7 +66,7 @@
       <Label>Agents</Label>
       <Input
         type="search"
-        class="mr-5 text-sm h-6 bg-sidebar dark:bg-sidebar"
+        class="mr-8 text-sm h-6 bg-sidebar dark:bg-sidebar"
         bind:value={searchTerm}
       />
     </div>

@@ -42,6 +42,7 @@
     saveAgentStream,
     streamToFlow,
   } from "$lib/agent";
+  import { ScrollArea } from "$lib/components/ui/scroll-area/index.js";
   import { agentDefs, coreSettings } from "$lib/shared.svelte";
   import type { AgentStreamNode, AgentStreamEdge, AgentStreamFlow } from "$lib/types";
 
@@ -474,9 +475,16 @@
     />
 
     <div
-      class="absolute right-6 top-6 w-60 z-20 max-h-[calc(100vh-216px)] overflow-y-auto pretty-scroll overflow-x-hidden rounded-md border shadow-lg"
+      class="absolute right-6 top-6 w-60 z-20 max-h-[calc(100vh-216px)] overflow-x-hidden rounded-md border shadow-lg"
     >
-      <AgentList class="h-full" {agentDefs} {onAddAgent} onDragAgentStart={handleAgentDragStart} />
+      <ScrollArea>
+        <AgentList
+          class="h-full"
+          {agentDefs}
+          {onAddAgent}
+          onDragAgentStart={handleAgentDragStart}
+        />
+      </ScrollArea>
     </div>
   </SvelteFlow>
 </div>
