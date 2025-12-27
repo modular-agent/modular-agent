@@ -11,8 +11,8 @@ use askit_llm_agents;
 use askit_rhai_agents;
 #[allow(unused_imports)]
 use askit_std_agents;
-#[allow(unused_imports)]
-use askit_web_agents;
+// #[allow(unused_imports)]
+// use askit_web_agents;
 
 mod agent_stream_app;
 
