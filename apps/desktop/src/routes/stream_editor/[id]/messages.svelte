@@ -84,7 +84,7 @@
         </Avatar.Root>
       </Item.Media>
       <Item.Content>
-        <Item.Description class="line-clamp-none">
+        <Item.Description class="line-clamp-none text-primary">
           {#if message.role === "ai"}
             {@html message.html}
           {:else}
