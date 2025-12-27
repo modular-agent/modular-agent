@@ -2,7 +2,7 @@
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { open } from "@tauri-apps/plugin-dialog";
 
-  import { getContext, onMount } from "svelte";
+  import { onMount } from "svelte";
 
   import {
     useSvelteFlow,
@@ -12,8 +12,8 @@
     MiniMap,
     SvelteFlow,
     type NodeEventWithPointer,
-    type OnDelete,
     type NodeTypes,
+    type OnDelete,
   } from "@xyflow/svelte";
   // 👇 this is important! You need to import the styles for Svelte Flow to work
   import "@xyflow/svelte/dist/style.css";
@@ -21,29 +21,29 @@
   import {
     addAgent,
     addChannel,
+    copySubStream,
     newAgentSpec,
     removeAgent,
     removeChannel,
     startAgent,
     stopAgent,
-    copySubStream,
   } from "tauri-plugin-askit-api";
   import type { AgentSpec, ChannelSpec } from "tauri-plugin-askit-api";
 
   import { goto } from "$app/navigation";
 
   import {
-    deserializeAgentStream,
-    deserializeChannelSpec,
-    deserializeAgentStreamNode,
+    agentSpecToNode,
+    channelSpecToEdge,
+    edgeToChannelSpec,
+    flowToStreamSpec,
     importAgentStream,
+    nodeToAgentSpec,
     saveAgentStream,
-    serializeAgentStream,
-    serializeAgentStreamEdge,
-    serializeAgentStreamNode,
-    setAgentDefinitionsContext,
-  } from "@/lib/agent";
-  import type { TAgentStreamNode, TAgentStreamEdge, TAgentStream } from "@/lib/types";
+    streamToFlow,
+  } from "$lib/agent";
+  import { agentDefs, coreSettings } from "$lib/shared.svelte";
+  import type { AgentStreamNode, AgentStreamEdge, AgentStreamFlow } from "$lib/types";
 
   import AgentList from "./agent-list.svelte";
   import AgentNode from "./agent-node.svelte";
@@ -52,19 +52,6 @@
   import StreamActions from "./stream-actions.svelte";
   import StreamName from "./stream-name.svelte";
 
-  let { data } = $props();
-
-  // FIXME: should we move this to a higher level component?
-  $effect.pre(() => {
-    setAgentDefinitionsContext(data.agentDefs);
-  });
-
-  const agentDefs = $derived(data.agentDefs);
-  const streams = getContext<() => Record<string, TAgentStream>>("AgentStreams");
-
-  const stream_id = $derived(data.id);
-  const stream = $derived.by(() => streams()[stream_id]);
-
   const { getViewport, screenToFlowPosition, setViewport, updateEdge, updateNode, updateNodeData } =
     $derived(useSvelteFlow());
 
@@ -72,25 +59,36 @@
     agent: AgentNode,
   };
 
-  let nodes = $state.raw<TAgentStreamNode[]>([]);
-  let edges = $state.raw<TAgentStreamEdge[]>([]);
+  let { data } = $props();
+
+  let flow = $state<AgentStreamFlow | null>(null);
+
+  let nodes = $state.raw<AgentStreamNode[]>([]);
+  let edges = $state.raw<AgentStreamEdge[]>([]);
 
   function updateNodesAndEdges() {
-    nodes = [...stream.nodes];
-    edges = [...stream.edges];
-    const viewport = stream.viewport;
+    if (!flow) return;
+    nodes = [...flow.nodes];
+    edges = [...flow.edges];
+    const viewport = flow.viewport;
     if (viewport) {
       setViewport(viewport);
     }
   }
 
-  onMount(() => {
-    updateNodesAndEdges();
-
-    getCurrentWindow().setTitle(stream.name + " - Agent Stream App");
+  $effect.pre(() => {
+    flow = streamToFlow(data.info, data.spec);
   });
 
-  const handleOnDelete: OnDelete<TAgentStreamNode, TAgentStreamEdge> = async ({
+  onMount(() => {
+    if (!flow) return;
+
+    updateNodesAndEdges();
+
+    getCurrentWindow().setTitle(flow.name + " - Agent Stream App");
+  });
+
+  const handleOnDelete: OnDelete<AgentStreamNode, AgentStreamEdge> = async ({
     nodes: deletedNodes,
     edges: deletedEdges,
   }) => {
@@ -106,36 +104,34 @@
     await checkEdgeChange(edges);
   }
 
-  async function checkNodeChange(nodes: TAgentStreamNode[]) {
+  async function checkNodeChange(nodes: AgentStreamNode[]) {
+    if (!flow) return;
     const nodeIds = new Set(nodes.map((node) => node.id));
-
-    const deletedNodes = stream.nodes.filter((node) => !nodeIds.has(node.id));
+    const deletedNodes = flow.nodes.filter((node) => !nodeIds.has(node.id));
     if (deletedNodes) {
       for (const node of deletedNodes) {
-        await removeAgent(stream.id, node.id);
-        stream.nodes = stream.nodes.filter((n) => n.id !== node.id);
-        streams()[stream.id].nodes = stream.nodes;
+        await removeAgent(flow.id, node.id);
+        flow.nodes = flow.nodes.filter((n) => n.id !== node.id);
       }
     }
   }
 
-  async function checkEdgeChange(edges: TAgentStreamEdge[]) {
+  async function checkEdgeChange(edges: AgentStreamEdge[]) {
+    if (!flow) return;
     const edgeIds = new Set(edges.map((edge) => edge.id));
 
-    const deletedEdges = stream.edges.filter((edge) => !edgeIds.has(edge.id));
+    const deletedEdges = flow.edges.filter((edge) => !edgeIds.has(edge.id));
     if (deletedEdges) {
       for (const edge of deletedEdges) {
-        await removeChannel(stream.id, edge.id);
-        stream.edges = stream.edges.filter((e) => e.id !== edge.id);
-        streams()[stream.id].edges = stream.edges;
+        await removeChannel(flow.id, edge.id);
+        flow.edges = flow.edges.filter((e) => e.id !== edge.id);
       }
     }
 
-    const addedEdges = edges.filter((edge) => !stream.edges.some((e) => e.id === edge.id));
+    const addedEdges = edges.filter((edge) => !flow?.edges.some((e) => e.id === edge.id));
     for (const edge of addedEdges) {
-      await addChannel(stream.id, serializeAgentStreamEdge(edge));
-      stream.edges.push(edge);
-      streams()[stream.id].edges = stream.edges;
+      await addChannel(flow.id, edgeToChannelSpec(edge));
+      flow.edges.push(edge);
     }
   }
 
@@ -144,7 +140,7 @@
   let copiedNodes = $state.raw<AgentSpec[]>([]);
   let copiedEdges = $state.raw<ChannelSpec[]>([]);
 
-  function selectedNodesAndEdges(): [TAgentStreamNode[], TAgentStreamEdge[]] {
+  function selectedNodesAndEdges(): [AgentStreamNode[], AgentStreamEdge[]] {
     const selectedNodes = nodes.filter((node) => node.selected);
     const selectedEdges = edges.filter((edge) => edge.selected);
     return [selectedNodes, selectedEdges];
@@ -155,8 +151,8 @@
     if (selectedNodes.length == 0 && selectedEdges.length == 0) {
       return;
     }
-    copiedNodes = selectedNodes.map((node) => serializeAgentStreamNode(node));
-    copiedEdges = selectedEdges.map((edge) => serializeAgentStreamEdge(edge));
+    copiedNodes = selectedNodes.map((node) => nodeToAgentSpec(node));
+    copiedEdges = selectedEdges.map((edge) => edgeToChannelSpec(edge));
 
     nodes = nodes.filter((node) => !node.selected);
     edges = edges.filter((edge) => !edge.selected);
@@ -169,11 +165,13 @@
     if (selectedNodes.length == 0) {
       return;
     }
-    copiedNodes = selectedNodes.map((node) => serializeAgentStreamNode(node));
-    copiedEdges = selectedEdges.map((edge) => serializeAgentStreamEdge(edge));
+    copiedNodes = selectedNodes.map((node) => nodeToAgentSpec(node));
+    copiedEdges = selectedEdges.map((edge) => edgeToChannelSpec(edge));
   }
 
   async function pasteNodesAndEdges() {
+    if (!flow) return;
+
     nodes.forEach((node) => {
       if (node.selected) {
         updateNode(node.id, { selected: false });
@@ -196,22 +194,20 @@
     for (const node of cnodes) {
       node.x += 80;
       node.y += 80;
-      await addAgent(stream.id, node);
-      const new_node = deserializeAgentStreamNode(node);
+      await addAgent(flow.id, node);
+      const new_node = agentSpecToNode(node);
       new_node.selected = true;
       new_nodes.push(new_node);
-      stream.nodes.push(new_node);
-      streams()[stream.id].nodes = stream.nodes;
+      flow.nodes.push(new_node);
     }
 
     let new_edges = [];
     for (const edge of cedges) {
-      await addChannel(stream.id, edge);
-      const new_edge = deserializeChannelSpec(edge);
+      await addChannel(flow.id, edge);
+      const new_edge = channelSpecToEdge(edge);
       new_edge.selected = true;
       new_edges.push(new_edge);
-      stream.edges.push(new_edge);
-      streams()[stream.id].edges = stream.edges;
+      flow.edges.push(new_edge);
     }
 
     nodes = [...nodes, ...new_nodes];
@@ -229,12 +225,6 @@
 
   // shortcuts
 
-  let hiddenAgents = $state(true);
-  const key_open_agent = "a";
-
-  let openStream = $state(false);
-  const key_open_stream = "f";
-
   $effect(() => {
     hotkeys("ctrl+r", (event) => {
       event.preventDefault();
@@ -243,14 +233,6 @@
     hotkeys("ctrl+s", (event) => {
       event.preventDefault();
       onSaveStream();
-    });
-
-    hotkeys(key_open_agent, () => {
-      hiddenAgents = !hiddenAgents;
-    });
-
-    hotkeys(key_open_stream, () => {
-      openStream = !openStream;
     });
 
     hotkeys("ctrl+x", () => {
@@ -270,8 +252,6 @@
     return () => {
       hotkeys.unbind("ctrl+r");
       hotkeys.unbind("ctrl+s");
-      hotkeys.unbind(key_open_agent);
-      hotkeys.unbind(key_open_stream);
       hotkeys.unbind("ctrl+x");
       hotkeys.unbind("ctrl+c");
       hotkeys.unbind("ctrl+v");
@@ -280,37 +260,24 @@
   });
 
   async function onSaveStream() {
-    if (stream.id in streams()) {
-      const viewport = getViewport();
-      const s = serializeAgentStream(
-        stream.id,
-        stream.name,
-        nodes,
-        edges,
-        stream.run_on_start,
-        viewport,
-      );
-      await saveAgentStream(s);
-      streams()[stream.id] = deserializeAgentStream(s);
-    }
+    if (!flow) return;
+
+    const viewport = getViewport();
+    const s = flowToStreamSpec(nodes, edges, flow.run_on_start, viewport);
+    await saveAgentStream(flow.name, s);
   }
 
   function onExportStream() {
+    if (!flow) return;
+
     const viewport = getViewport();
-    const s = serializeAgentStream(
-      stream.id,
-      stream.name,
-      nodes,
-      edges,
-      stream.run_on_start,
-      viewport,
-    );
+    const s = flowToStreamSpec(nodes, edges, flow.run_on_start, viewport);
     const jsonStr = JSON.stringify(s, null, 2);
     const blob = new Blob([jsonStr], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = stream.name + ".json";
+    a.download = flow.name + ".json";
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -321,11 +288,8 @@
   async function onImportStream() {
     const file = await open({ multiple: false, filter: "json" });
     if (!file) return;
-    const sStream = await importAgentStream(file);
-    if (!sStream.agents || !sStream.channels) return;
-    const stream = deserializeAgentStream(sStream);
-    streams()[stream.id] = stream;
-    goto(`/stream_editor/${stream.id}`);
+    const id = await importAgentStream(file);
+    goto(`/stream_editor/${id}`);
   }
 
   const AGENT_DRAG_FORMAT = "application/agent-name";
@@ -357,6 +321,8 @@
   }
 
   async function onAddAgent(agent_name: string, position?: { x: number; y: number }) {
+    if (!flow) return;
+
     const snode = await newAgentSpec(agent_name);
     const xy =
       position !== undefined
@@ -367,10 +333,9 @@
           });
     snode.x = xy.x;
     snode.y = xy.y;
-    await addAgent(stream.id, snode);
-    const new_node = deserializeAgentStreamNode(snode);
-    stream.nodes.push(new_node);
-    streams()[stream.id].nodes = stream.nodes;
+    await addAgent(flow.id, snode);
+    const new_node = agentSpecToNode(snode);
+    flow.nodes.push(new_node);
     nodes = [...nodes, new_node];
   }
 
@@ -426,7 +391,7 @@
     openNodeContextMenu = false;
   }
 
-  const handleNodeContextMenu: NodeEventWithPointer<MouseEvent, TAgentStreamNode> = ({
+  const handleNodeContextMenu: NodeEventWithPointer<MouseEvent, AgentStreamNode> = ({
     event,
     node,
   }) => {
@@ -465,8 +430,8 @@
   <header class="flex flex-none items-center justify-between pl-2">
     <Menubar {onImportStream} {onExportStream} />
     <div class="flex flex-row items-center">
-      <StreamName name={stream.name} class="mr-4" />
-      <StreamActions {stream} />
+      <StreamName name={flow?.name} class="mr-4" />
+      <StreamActions {flow} />
     </div>
     <div>{" "}</div>
   </header>
@@ -485,7 +450,7 @@
     ondrop={handleDrop}
     deleteKey={["Delete"]}
     connectionRadius={38}
-    colorMode={(data.coreSettings.color_mode as "light" | "dark" | "system") || "system"}
+    colorMode={(coreSettings.color_mode as "light" | "dark" | "system") || "system"}
     fitView
     maxZoom={2}
     minZoom={0.1}

@@ -5,10 +5,14 @@ import { writable, type Writable } from "svelte/store";
 
 import type { AgentStreamInfo, AgentStreamSpec } from "tauri-plugin-askit-api";
 import {
+  getAgentDefinitions,
   getAgentStreamInfos,
   getAgentStreamSpec,
   setAgentStreamSpec,
+  getGlobalConfigsMap,
 } from "tauri-plugin-askit-api";
+
+import { getCoreSettings } from "$lib/utils";
 
 import {
   newAgentStream,
@@ -23,6 +27,14 @@ import type {
   AgentInMessage,
   AgentSpecUpdatedMessage,
 } from "./types";
+
+// AgentDefinitions
+
+export const agentDefs = await getAgentDefinitions();
+
+// Agent Global Configs Map
+
+export const agentGlobalConfigsMap = await getGlobalConfigsMap();
 
 // Agent Streams
 
@@ -78,41 +90,7 @@ export async function updateStreamSpec(id: string, spec: Partial<AgentStreamSpec
   await setAgentStreamSpec(id, updatedSpec);
 }
 
-// export async function updateStreamInfo(id: string, info: Partial<AgentStreamInfo>): Promise<void> {
-//   const existing = streamInfos.get(id);
-//   if (!existing) {
-//     return;
-//   }
-//   const updated: AgentStreamInfo = { ...existing, ...info };
-//   streamInfos.set(id, updated);
-// }
-
-// export const runningStreams = new SvelteSet<string>();
-
-// export async function updateRunningStreams() {
-//   const streams = await getRunningAgentStreams();
-//   runningStreams.clear();
-//   streams.forEach((s) => runningStreams.add(s));
-// }
-
-// export async function startStream(id: string) {
-//   if (runningStreams.has(id)) {
-//     return;
-//   }
-//   await startAgentStream(id);
-//   runningStreams.add(id);
-// }
-
-// export async function stopStream(id: string) {
-//   if (!runningStreams.has(id)) {
-//     return;
-//   }
-//   await stopAgentStream(id);
-//   runningStreams.delete(id);
-// }
-
 $effect.root(() => {
-  // updateRunningStreams();
   reloadStreamInfos();
 });
 
@@ -248,3 +226,7 @@ $effect.root(() => {
     unlistenAgentSpecUpdated?.();
   };
 });
+
+// Core Settings
+
+export const coreSettings = await getCoreSettings();

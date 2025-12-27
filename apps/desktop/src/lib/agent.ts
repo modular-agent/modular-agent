@@ -1,17 +1,15 @@
 import { invoke } from "@tauri-apps/api/core";
 
-import { getContext, setContext } from "svelte";
-
 import type {
-  AgentDefinitions,
   AgentConfigSpec,
   AgentSpec,
   AgentStreamSpec,
   ChannelSpec,
   Viewport,
+  AgentStreamInfo,
 } from "tauri-plugin-askit-api";
 
-import type { TAgentStream, TAgentStreamEdge, TAgentStreamNode } from "./types";
+import type { AgentStreamFlow, AgentStreamEdge, AgentStreamNode } from "./types";
 
 export async function newAgentStream(name: string): Promise<string> {
   return await invoke("new_agent_stream_cmd", { name });
@@ -41,23 +39,11 @@ export async function stopAgentStream(id: string): Promise<void> {
   await invoke("stop_agent_stream_cmd", { id });
 }
 
-const agentDefinitionsKey = Symbol("agentDefinitions");
-
-export function setAgentDefinitionsContext(defs: AgentDefinitions): void {
-  setContext(agentDefinitionsKey, defs);
-}
-
-export function getAgentDefinitionsContext(): AgentDefinitions {
-  return getContext(agentDefinitionsKey);
-}
-
 // Agent Stream
 
-// deserialize: SAgentStream -> AgentStream
-
-export function deserializeAgentStream(stream: AgentStreamSpec): TAgentStream {
+export function streamToFlow(info: AgentStreamInfo, spec: AgentStreamSpec): AgentStreamFlow {
   // Deserialize agents first
-  const nodes = stream.agents.map((agent) => deserializeAgentStreamNode(agent));
+  const nodes = spec.agents.map((agent) => agentSpecToNode(agent));
 
   // Create a map to retrieve available handles from node IDs
   const nodeHandles = new Map<string, { inputs: string[]; outputs: string[]; configs: string[] }>();
@@ -71,7 +57,7 @@ export function deserializeAgentStream(stream: AgentStreamSpec): TAgentStream {
   });
 
   // Filter only valid edges
-  const validEdges = stream.channels.filter((ch) => {
+  const validEdges = spec.channels.filter((ch) => {
     const sourceNode = nodeHandles.get(ch.source);
     const targetNode = nodeHandles.get(ch.target);
 
@@ -88,16 +74,16 @@ export function deserializeAgentStream(stream: AgentStreamSpec): TAgentStream {
   });
 
   return {
-    id: stream.id,
-    name: stream.name,
+    id: info.id,
+    name: info.name,
     nodes: nodes,
-    edges: validEdges.map((ch) => deserializeChannelSpec(ch)),
-    run_on_start: stream.run_on_start ?? false,
-    viewport: stream.viewport,
+    edges: validEdges.map((ch) => channelSpecToEdge(ch)),
+    run_on_start: spec.run_on_start ?? false,
+    viewport: spec.viewport,
   };
 }
 
-export function deserializeAgentStreamNode(spec: AgentSpec): TAgentStreamNode {
+export function agentSpecToNode(spec: AgentSpec): AgentStreamNode {
   return {
     id: spec.id ?? crypto.randomUUID(),
     type: "agent",
@@ -111,7 +97,7 @@ export function deserializeAgentStreamNode(spec: AgentSpec): TAgentStreamNode {
   };
 }
 
-export function deserializeChannelSpec(channel: ChannelSpec): TAgentStreamEdge {
+export function channelSpecToEdge(channel: ChannelSpec): AgentStreamEdge {
   return {
     id: channel.id,
     source: channel.source,
@@ -121,27 +107,21 @@ export function deserializeChannelSpec(channel: ChannelSpec): TAgentStreamEdge {
   };
 }
 
-// serialize: AgentStream -> SAgentStream
-
-export function serializeAgentStream(
-  id: string,
-  name: string,
-  nodes: TAgentStreamNode[],
-  edges: TAgentStreamEdge[],
+export function flowToStreamSpec(
+  nodes: AgentStreamNode[],
+  edges: AgentStreamEdge[],
   run_on_start: boolean | null,
   viewport: Viewport | null,
 ): AgentStreamSpec {
   return {
-    id,
-    name,
-    agents: nodes.map((node) => serializeAgentStreamNode(node)),
-    channels: edges.map((edge) => serializeAgentStreamEdge(edge)),
+    agents: nodes.map((node) => nodeToAgentSpec(node)),
+    channels: edges.map((edge) => edgeToChannelSpec(edge)),
     run_on_start,
     viewport,
   };
 }
 
-export function serializeAgentStreamNode(node: TAgentStreamNode): AgentSpec {
+export function nodeToAgentSpec(node: AgentStreamNode): AgentSpec {
   return {
     id: node.id,
     def_name: node.data.def_name,
@@ -160,7 +140,7 @@ export function serializeAgentStreamNode(node: TAgentStreamNode): AgentSpec {
   };
 }
 
-export function serializeAgentStreamEdge(edge: TAgentStreamEdge): ChannelSpec {
+export function edgeToChannelSpec(edge: AgentStreamEdge): ChannelSpec {
   return {
     id: edge.id,
     source: edge.source,

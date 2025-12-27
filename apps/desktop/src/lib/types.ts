@@ -23,23 +23,23 @@ export type AgentSpecUpdatedMessage = {
   agent_id: string;
 };
 
-// Agent Stream Serialized Types
+// for SvelteFlow
 
-export type TAgentStream = {
+export type AgentStreamFlow = {
   id: string;
   name: string;
-  nodes: TAgentStreamNode[];
-  edges: TAgentStreamEdge[];
+  nodes: AgentStreamNode[];
+  edges: AgentStreamEdge[];
   run_on_start: boolean;
   viewport: Viewport | null;
 };
 
-export type TAgentStreamNode = Node & {
+export type AgentStreamNode = Node & {
   data: AgentSpec;
   extensions?: Record<string, any>;
 };
 
-export type TAgentStreamEdge = Edge;
+export type AgentStreamEdge = Edge;
 
 // Settings
 

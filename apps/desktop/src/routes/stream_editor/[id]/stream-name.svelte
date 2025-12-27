@@ -11,9 +11,9 @@
     ref = $bindable(null),
     class: className,
     ...restProps
-  }: WithElementRef<HTMLAttributes<HTMLElement>> & { name: string } = $props();
+  }: WithElementRef<HTMLAttributes<HTMLElement>> & { name?: string } = $props();
 
-  let path_components = $derived(name.split("/"));
+  let path_components = $derived(name ? name.split("/") : []);
 </script>
 
 <Breadcrumb.Root bind:ref class={className} {...restProps}>
