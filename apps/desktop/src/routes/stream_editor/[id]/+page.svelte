@@ -429,13 +429,13 @@
 </script>
 
 <div class="flex flex-col w-full min-h-screen">
-  <header class="grid grid-cols-[auto_1fr_100px] flex-none items-center pl-2 pr-4 gap-4">
+  <header class="grid grid-cols-[auto_1fr_100px] flex-none items-center pl-1 pr-2 gap-4">
     <div class="justify-self-start">
       <Menubar {onImportStream} {onExportStream} />
     </div>
     <div class="flex flex-row items-center justify-center">
       <StreamName name={flow?.name} class="mr-4" />
-      <StreamActions {flow} />
+      <StreamActions bind:flow />
     </div>
     <div class="justify-self-end">
       <FlowStatus running={flow?.running ?? false} run_on_start={flow?.run_on_start} />
@@ -480,7 +480,7 @@
     />
 
     <div
-      class="absolute right-6 top-6 w-60 z-20 max-h-[calc(100vh-216px)] overflow-x-hidden rounded-md border shadow-lg"
+      class="absolute right-2 top-2 w-60 z-20 max-h-[calc(100vh-210px)] overflow-x-hidden rounded-md border shadow-lg"
     >
       <ScrollArea>
         <AgentList
@@ -523,12 +523,12 @@
     border: var(--resize-control-size) solid var(--resize-control-color);
   }
   :global(.svelte-flow__controls) {
-    margin-left: 4px;
-    margin-bottom: 4px;
+    margin-left: 8px;
+    margin-bottom: 8px;
   }
   :global(.svelte-flow__minimap) {
-    margin-right: 4px;
-    margin-bottom: 4px;
+    margin-right: 8px;
+    margin-bottom: 8px;
   }
   :global(.svelte-flow__attribution) {
     z-index: 20;

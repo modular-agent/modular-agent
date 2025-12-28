@@ -10,7 +10,7 @@
     flow: AgentStreamFlow | null;
   };
 
-  let { flow }: Props = $props();
+  let { flow = $bindable() }: Props = $props();
 
   let isRunning = $derived(flow?.running ?? false);
 
