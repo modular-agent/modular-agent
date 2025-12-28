@@ -173,10 +173,10 @@ pub(crate) fn add_channel<R: Runtime>(
 pub(crate) fn remove_channel<R: Runtime>(
     app: AppHandle<R>,
     stream_id: String,
-    channel_id: String,
+    channel: ChannelSpec,
 ) -> Result<()> {
     app.askit()
-        .remove_channel(&stream_id, &channel_id)
+        .remove_channel(&stream_id, &channel)
         .map_err(Into::into)
 }
 

@@ -62,7 +62,6 @@ export type AgentSpec = {
 } & AgentSpecExtensions;
 
 export type ChannelSpec = {
-  id: string;
   source: string;
   source_handle: string | null;
   target: string;
@@ -210,11 +209,11 @@ export async function addChannel(
 
 export async function removeChannel(
   streamId: string,
-  channelId: string
+  channel: ChannelSpec
 ): Promise<void> {
   await invoke<void>("plugin:askit|remove_channel", {
     streamId,
-    channelId,
+    channel,
   });
 }
 
