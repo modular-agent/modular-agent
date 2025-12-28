@@ -64,3 +64,73 @@ async fn test_ready() {
     askit.ready().await.unwrap();
     askit.quit();
 }
+
+#[tokio::test]
+async fn test_add_agent() {
+    let askit = ASKit::init().unwrap();
+    askit.ready().await.unwrap();
+
+    let stream_id = askit.new_agent_stream("s1").unwrap();
+    let def = askit.get_agent_definition(COUNTER_DEF).unwrap();
+    let spec = askit::AgentSpec::from_def(&def);
+    let agent_id = spec.id.clone();
+
+    askit.add_agent(stream_id.clone(), spec).unwrap();
+    let stream_spec = askit.get_agent_stream_spec(&stream_id).unwrap();
+    assert!(stream_spec.agents.iter().any(|a| a.id == agent_id));
+
+    askit.quit();
+}
+
+#[tokio::test]
+async fn test_remove_agent() {
+    let askit = ASKit::init().unwrap();
+    askit.ready().await.unwrap();
+
+    let stream_id = askit.new_agent_stream("s1").unwrap();
+    let def = askit.get_agent_definition(COUNTER_DEF).unwrap();
+
+    let spec = askit::AgentSpec::from_def(&def);
+    let agent_id = spec.id.clone();
+    askit.add_agent(stream_id.clone(), spec).unwrap();
+
+    askit.remove_agent(&stream_id, &agent_id).await.unwrap();
+    let stream_spec = askit.get_agent_stream_spec(&stream_id).unwrap();
+    assert!(!stream_spec.agents.iter().any(|a| a.id == agent_id));
+
+    askit.quit();
+}
+
+#[tokio::test]
+async fn test_remove_after_connect_agent() {
+    let askit = ASKit::init().unwrap();
+    askit.ready().await.unwrap();
+
+    let stream_id = askit.new_agent_stream("s1").unwrap();
+
+    let def = askit.get_agent_definition(COUNTER_DEF).unwrap();
+
+    let spec = askit::AgentSpec::from_def(&def);
+    let agent1_id = spec.id.clone();
+    askit.add_agent(stream_id.clone(), spec).unwrap();
+
+    let spec = askit::AgentSpec::from_def(&def);
+    let agent2_id = spec.id.clone();
+    askit.add_agent(stream_id.clone(), spec).unwrap();
+
+    let channel_spec = askit::ChannelSpec {
+        id: "ch1".into(),
+        source: agent1_id.clone(),
+        source_handle: "count".into(),
+        target: agent2_id.clone(),
+        target_handle: "in".into(),
+    };
+
+    askit.add_channel(&stream_id, channel_spec).unwrap();
+
+    askit.remove_agent(&stream_id, &agent1_id).await.unwrap();
+    let stream_spec = askit.get_agent_stream_spec(&stream_id).unwrap();
+    assert!(!stream_spec.agents.iter().any(|a| a.id == agent1_id));
+
+    askit.quit();
+}

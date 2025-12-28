@@ -256,11 +256,17 @@ impl ASKit {
             stream
         };
 
-        stream.stop(self).await?;
+        stream.stop(self).await.unwrap_or_else(|e| {
+            log::error!("Failed to stop stream {}: {}", id, e);
+        });
 
         // Remove all agents and channels associated with the stream
         for agent in &stream.spec().agents {
-            self.remove_agent_internal(&agent.id).await?;
+            self.remove_agent_internal(&agent.id)
+                .await
+                .unwrap_or_else(|e| {
+                    log::error!("Failed to remove_agent {}: {}", agent.id, e);
+                });
         }
         for channel in &stream.spec().channels {
             self.remove_channel_internal(channel);
@@ -405,7 +411,9 @@ impl ASKit {
             };
             stream.spec_mut().remove_agent(agent_id);
         }
-        self.remove_agent_internal(agent_id).await?;
+        if let Err(e) = self.remove_agent_internal(agent_id).await {
+            return Err(e);
+        }
         Ok(())
     }
 
@@ -447,8 +455,13 @@ impl ASKit {
         };
 
         let Some(channel) = stream.spec_mut().remove_channel(channel_id) else {
+            let mut streams = self.streams.lock().unwrap();
+            streams.insert(stream_id.to_string(), stream);
             return Err(AgentError::ChannelNotFound(channel_id.to_string()));
         };
+        let mut streams = self.streams.lock().unwrap();
+        streams.insert(stream_id.to_string(), stream);
+
         self.remove_channel_internal(&channel);
         Ok(())
     }
