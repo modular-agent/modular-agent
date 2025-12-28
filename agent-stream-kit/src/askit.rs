@@ -445,7 +445,7 @@ impl ASKit {
         Ok(())
     }
 
-    pub fn remove_channel(&self, stream_id: &str, channel_id: &str) -> Result<(), AgentError> {
+    pub fn remove_channel(&self, stream_id: &str, channel: &ChannelSpec) -> Result<(), AgentError> {
         let mut stream = {
             let mut streams = self.streams.lock().unwrap();
             let Some(stream) = streams.swap_remove(stream_id) else {
@@ -454,10 +454,13 @@ impl ASKit {
             stream
         };
 
-        let Some(channel) = stream.spec_mut().remove_channel(channel_id) else {
+        let Some(channel) = stream.spec_mut().remove_channel(channel) else {
             let mut streams = self.streams.lock().unwrap();
             streams.insert(stream_id.to_string(), stream);
-            return Err(AgentError::ChannelNotFound(channel_id.to_string()));
+            return Err(AgentError::ChannelNotFound(format!(
+                "{}:{}->{}:{}",
+                channel.source, channel.source_handle, channel.target, channel.target_handle
+            )));
         };
         let mut streams = self.streams.lock().unwrap();
         streams.insert(stream_id.to_string(), stream);

@@ -119,7 +119,6 @@ async fn test_remove_after_connect_agent() {
     askit.add_agent(stream_id.clone(), spec).unwrap();
 
     let channel_spec = askit::ChannelSpec {
-        id: "ch1".into(),
         source: agent1_id.clone(),
         source_handle: "count".into(),
         target: agent2_id.clone(),

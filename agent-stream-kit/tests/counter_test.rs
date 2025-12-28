@@ -90,7 +90,6 @@ async fn test_agent_process() {
     spec.add_agent(counter_spec);
     spec.add_agent(probe_spec);
     spec.add_channels(ChannelSpec {
-        id: "ch_counter_probe".into(),
         source: counter_id.clone(),
         source_handle: "count".into(),
         target: probe_id.clone(),

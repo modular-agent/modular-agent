@@ -37,18 +37,11 @@ impl AgentStreamSpec {
         self.channels.push_back(channel);
     }
 
-    pub fn remove_channel(&mut self, channel_id: &str) -> Option<ChannelSpec> {
-        if let Some(channel) = self
-            .channels
-            .iter()
-            .find(|channel| channel.id == channel_id)
-            .cloned()
-        {
-            self.channels.retain(|e| e.id != channel_id);
-            Some(channel)
-        } else {
-            None
-        }
+    pub fn remove_channel(&mut self, channel: &ChannelSpec) -> Option<ChannelSpec> {
+        let Some(index) = self.channels.index_of(channel) else {
+            return None;
+        };
+        Some(self.channels.remove(index))
     }
 
     pub fn to_json(&self) -> Result<String, AgentError> {
@@ -87,7 +80,6 @@ pub fn copy_sub_stream(
             continue;
         };
         let mut new_channel = channel.clone();
-        new_channel.id = new_id();
         new_channel.source = source.clone();
         new_channel.target = target.clone();
         new_channels.push(new_channel);
@@ -143,9 +135,8 @@ impl AgentSpec {
 
 // ChannelSpec
 
-#[derive(Debug, Default, Serialize, Deserialize, Clone)]
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ChannelSpec {
-    pub id: String,
     pub source: String,
     pub source_handle: String,
     pub target: String,
