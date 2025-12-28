@@ -14,6 +14,7 @@
     type NodeEventWithPointer,
     type NodeTypes,
     type OnDelete,
+    type Connection,
   } from "@xyflow/svelte";
   // 👇 this is important! You need to import the styles for Svelte Flow to work
   import "@xyflow/svelte/dist/style.css";
@@ -68,16 +69,6 @@
   let nodes = $state.raw<AgentStreamNode[]>([]);
   let edges = $state.raw<AgentStreamEdge[]>([]);
 
-  function updateNodesAndEdges() {
-    if (!flow) return;
-    nodes = [...flow.nodes];
-    edges = [...flow.edges];
-    const viewport = flow.viewport;
-    if (viewport) {
-      setViewport(viewport);
-    }
-  }
-
   $effect.pre(() => {
     flow = streamToFlow(data.info, data.spec);
   });
@@ -85,7 +76,12 @@
   onMount(() => {
     if (!flow) return;
 
-    updateNodesAndEdges();
+    nodes = [...flow.nodes];
+    edges = [...flow.edges];
+    const viewport = flow.viewport;
+    if (viewport) {
+      setViewport(viewport);
+    }
 
     getCurrentWindow().setTitle(flow.name + " - Agent Stream App");
   });
@@ -95,46 +91,38 @@
     edges: deletedEdges,
   }) => {
     if (deletedEdges && deletedEdges.length > 0) {
-      await checkEdgeChange(edges);
+      await deleteEdges(deletedEdges);
     }
     if (deletedNodes && deletedNodes.length > 0) {
-      await checkNodeChange(nodes);
+      await deleteNodes(deletedNodes);
     }
   };
 
-  async function handleOnConnect() {
-    await checkEdgeChange(edges);
-  }
-
-  async function checkNodeChange(nodes: AgentStreamNode[]) {
+  async function deleteNodes(deletedNodes: AgentStreamNode[]) {
     if (!flow) return;
-    const nodeIds = new Set(nodes.map((node) => node.id));
-    const deletedNodes = flow.nodes.filter((node) => !nodeIds.has(node.id));
-    if (deletedNodes) {
-      for (const node of deletedNodes) {
-        await removeAgent(flow.id, node.id);
-        flow.nodes = flow.nodes.filter((n) => n.id !== node.id);
-      }
+
+    for (const n of deletedNodes) {
+      await removeAgent(flow.id, n.id);
     }
   }
 
-  async function checkEdgeChange(edges: AgentStreamEdge[]) {
+  async function deleteEdges(deletedEdges: AgentStreamEdge[]) {
     if (!flow) return;
-    const edgeIds = new Set(edges.map((edge) => edge.id));
 
-    const deletedEdges = flow.edges.filter((edge) => !edgeIds.has(edge.id));
-    if (deletedEdges) {
-      for (const edge of deletedEdges) {
-        await removeChannel(flow.id, edge.id);
-        flow.edges = flow.edges.filter((e) => e.id !== edge.id);
-      }
+    for (const e of deletedEdges) {
+      await removeChannel(flow.id, e.id);
     }
+  }
 
-    const addedEdges = edges.filter((edge) => !flow?.edges.some((e) => e.id === edge.id));
-    for (const edge of addedEdges) {
-      await addChannel(flow.id, edgeToChannelSpec(edge));
-      flow.edges.push(edge);
-    }
+  async function handleOnConnect(connection: Connection) {
+    if (!flow) return;
+
+    let edge = {
+      id: crypto.randomUUID(),
+      ...connection,
+    } as AgentStreamEdge;
+
+    await addChannel(flow.id, edgeToChannelSpec(edge));
   }
 
   // cut, copy and paste
@@ -149,6 +137,8 @@
   }
 
   async function cutNodesAndEdges() {
+    if (!flow) return;
+
     const [selectedNodes, selectedEdges] = selectedNodesAndEdges();
     if (selectedNodes.length == 0 && selectedEdges.length == 0) {
       return;
@@ -156,10 +146,14 @@
     copiedNodes = selectedNodes.map((node) => nodeToAgentSpec(node));
     copiedEdges = selectedEdges.map((edge) => edgeToChannelSpec(edge));
 
+    for (const edge of selectedEdges) {
+      await removeChannel(flow.id, edge.id);
+    }
+    for (const node of selectedNodes) {
+      await removeAgent(flow.id, node.id);
+    }
     nodes = nodes.filter((node) => !node.selected);
     edges = edges.filter((edge) => !edge.selected);
-    await checkNodeChange(nodes);
-    await checkEdgeChange(edges);
   }
 
   function copyNodesAndEdges() {
@@ -200,7 +194,6 @@
       const new_node = agentSpecToNode(node);
       new_node.selected = true;
       new_nodes.push(new_node);
-      flow.nodes.push(new_node);
     }
 
     let new_edges = [];
@@ -209,7 +202,6 @@
       const new_edge = channelSpecToEdge(edge);
       new_edge.selected = true;
       new_edges.push(new_edge);
-      flow.edges.push(new_edge);
     }
 
     nodes = [...nodes, ...new_nodes];
@@ -337,8 +329,11 @@
     snode.y = xy.y;
     await addAgent(flow.id, snode);
     const new_node = agentSpecToNode(snode);
-    flow.nodes.push(new_node);
     nodes = [...nodes, new_node];
+
+    if (flow.running) {
+      await startAgent(new_node.id);
+    }
   }
 
   async function onEnable() {
