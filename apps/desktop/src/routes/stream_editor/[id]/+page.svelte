@@ -110,7 +110,8 @@
     if (!flow) return;
 
     for (const e of deletedEdges) {
-      await removeChannel(flow.id, e.id);
+      let ch = edgeToChannelSpec(e);
+      await removeChannel(flow.id, ch);
     }
   }
 
@@ -147,7 +148,8 @@
     copiedEdges = selectedEdges.map((edge) => edgeToChannelSpec(edge));
 
     for (const edge of selectedEdges) {
-      await removeChannel(flow.id, edge.id);
+      let ch = edgeToChannelSpec(edge);
+      await removeChannel(flow.id, ch);
     }
     for (const node of selectedNodes) {
       await removeAgent(flow.id, node.id);

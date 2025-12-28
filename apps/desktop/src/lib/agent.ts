@@ -100,7 +100,7 @@ export function agentSpecToNode(spec: AgentSpec): AgentStreamNode {
 
 export function channelSpecToEdge(channel: ChannelSpec): AgentStreamEdge {
   return {
-    id: channel.id,
+    id: crypto.randomUUID(),
     source: channel.source,
     sourceHandle: channel.source_handle,
     target: channel.target,
@@ -142,7 +142,6 @@ export function nodeToAgentSpec(node: AgentStreamNode): AgentSpec {
 
 export function edgeToChannelSpec(edge: AgentStreamEdge): ChannelSpec {
   return {
-    id: edge.id,
     source: edge.source,
     source_handle: edge.sourceHandle ?? null,
     target: edge.target,
