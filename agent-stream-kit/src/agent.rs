@@ -26,6 +26,10 @@ pub enum AgentMessage {
         value: AgentValue,
     },
     Config {
+        key: String,
+        value: AgentValue,
+    },
+    Configs {
         configs: AgentConfigs,
     },
     Stop,

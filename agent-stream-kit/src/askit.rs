@@ -503,6 +503,7 @@ impl ASKit {
             def.native_thread
         };
         let agent_status = {
+            // This will not block since the agent is not started yet.
             let agent = agent.lock().await;
             agent.status().clone()
         };
@@ -535,9 +536,18 @@ impl ASKit {
                                         log::error!("Process Error {}: {}", agent_id, e);
                                     });
                             }
-                            AgentMessage::Config { configs } => {
+                            AgentMessage::Config { key, value } => {
+                                agent
+                                    .lock()
+                                    .await
+                                    .set_config(key, value)
+                                    .unwrap_or_else(|e| {
+                                        log::error!("Config Error {}: {}", agent_id, e);
+                                    });
+                            }
+                            AgentMessage::Configs { configs } => {
                                 agent.lock().await.set_configs(configs).unwrap_or_else(|e| {
-                                    log::error!("Config Error {}: {}", agent_id, e);
+                                    log::error!("Configs Error {}: {}", agent_id, e);
                                 });
                             }
                             AgentMessage::Stop => {
@@ -575,9 +585,18 @@ impl ASKit {
                                         log::error!("Process Error {}: {}", agent_id, e);
                                     });
                             }
-                            AgentMessage::Config { configs } => {
+                            AgentMessage::Config { key, value } => {
+                                agent
+                                    .lock()
+                                    .await
+                                    .set_config(key, value)
+                                    .unwrap_or_else(|e| {
+                                        log::error!("Config Error {}: {}", agent_id, e);
+                                    });
+                            }
+                            AgentMessage::Configs { configs } => {
                                 agent.lock().await.set_configs(configs).unwrap_or_else(|e| {
-                                    log::error!("Config Error {}: {}", agent_id, e);
+                                    log::error!("Configs Error {}: {}", agent_id, e);
                                 });
                             }
                             AgentMessage::Stop => {
@@ -654,32 +673,27 @@ impl ASKit {
             a.clone()
         };
 
-        let agent_status = {
-            let agent = agent.lock().await;
-            agent.status().clone()
+        let tx = {
+            let agent_txs = self.agent_txs.lock().unwrap();
+            agent_txs.get(&agent_id).cloned()
         };
-        if agent_status == AgentStatus::Init {
+
+        let Some(tx) = tx else {
+            // The agent is not running. We can set the configs directly.
             agent.lock().await.set_configs(configs.clone())?;
-        } else if agent_status == AgentStatus::Start {
-            let tx = {
-                let agent_txs = self.agent_txs.lock().unwrap();
-                let Some(tx) = agent_txs.get(&agent_id) else {
-                    return Err(AgentError::AgentTxNotFound(agent_id.to_string()));
-                };
-                tx.clone()
-            };
-            let message = AgentMessage::Config { configs };
-            match tx {
-                AgentMessageSender::Sync(tx) => {
-                    tx.send(message).map_err(|_| {
-                        AgentError::SendMessageFailed("Failed to send config message".to_string())
-                    })?;
-                }
-                AgentMessageSender::Async(tx) => {
-                    tx.send(message).await.map_err(|_| {
-                        AgentError::SendMessageFailed("Failed to send config message".to_string())
-                    })?;
-                }
+            return Ok(());
+        };
+        let message = AgentMessage::Configs { configs };
+        match tx {
+            AgentMessageSender::Sync(tx) => {
+                tx.send(message).map_err(|_| {
+                    AgentError::SendMessageFailed("Failed to send config message".to_string())
+                })?;
+            }
+            AgentMessageSender::Async(tx) => {
+                tx.send(message).await.map_err(|_| {
+                    AgentError::SendMessageFailed("Failed to send config message".to_string())
+                })?;
             }
         }
         Ok(())
@@ -729,33 +743,31 @@ impl ASKit {
             a.clone()
         };
 
-        let agent_status = {
-            let agent = agent.lock().await;
-            agent.status().clone()
-        };
-        if agent_status != AgentStatus::Start {
-            return Ok(());
-        }
-
-        if pin.starts_with("config:") {
+        let message = if pin.starts_with("config:") {
             let config_key = pin[7..].to_string();
-            let mut agent = agent.lock().await;
-            agent.set_config(config_key.clone(), value.clone())?;
-            return Ok(());
-        }
-
-        let message = AgentMessage::Input {
-            ctx,
-            pin: pin.clone(),
-            value,
+            AgentMessage::Config {
+                key: config_key,
+                value,
+            }
+        } else {
+            AgentMessage::Input {
+                ctx,
+                pin: pin.clone(),
+                value,
+            }
         };
 
         let tx = {
             let agent_txs = self.agent_txs.lock().unwrap();
-            let Some(tx) = agent_txs.get(&agent_id) else {
-                return Err(AgentError::AgentTxNotFound(agent_id.to_string()));
-            };
-            tx.clone()
+            agent_txs.get(&agent_id).cloned()
+        };
+
+        let Some(tx) = tx else {
+            // The agent is not running. If it's a config message, we can set it directly.
+            if let AgentMessage::Config { key, value } = message {
+                agent.lock().await.set_config(key, value)?;
+            }
+            return Ok(());
         };
         match tx {
             AgentMessageSender::Sync(tx) => {
