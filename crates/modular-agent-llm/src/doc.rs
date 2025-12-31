@@ -4,7 +4,6 @@ use agent_stream_kit::{
     ASKit, Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
     askit_agent, async_trait,
 };
-// use fastembed::{EmbeddingModel, InitOptions, TextEmbedding};
 use icu_normalizer::{ComposingNormalizer, ComposingNormalizerBorrowed};
 use text_splitter::{ChunkConfig, TextSplitter};
 use tokenizers::Tokenizer;
@@ -18,73 +17,6 @@ static PIN_STRING: &str = "string";
 static CONFIG_MAX_CHARACTERS: &str = "max_characters";
 static CONFIG_MAX_TOKENS: &str = "max_tokens";
 static CONFIG_TOKENIZER: &str = "tokenizer";
-// static CONFIG_MODEL: &str = "model";
-
-// #[askit_agent(
-//     title="Embedding",
-//     category=CATEGORY,
-//     inputs=[PIN_TEXT],
-//     outputs=[PIN_ARRAY],
-//     string_config(name=CONFIG_MODEL, default="multilingual-e5-large"),
-// )]
-// pub struct EmbeddingAgent {
-//     data: AgentData,
-// }
-
-// #[async_trait]
-// impl AsAgent for EmbeddingAgent {
-//     fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
-//         Ok(Self {
-//             data: AgentData::new(askit, id, spec),
-//         })
-//     }
-
-//     async fn process(
-//         &mut self,
-//         ctx: AgentContext,
-//         _pin: String,
-//         value: AgentValue,
-//     ) -> Result<(), AgentError> {
-//         let model_name = self
-//             .configs()?
-//             .get_string_or_default(CONFIG_MODEL)
-//             .to_lowercase();
-//         if model_name.is_empty() {
-//             return Err(AgentError::InvalidConfig(
-//                 "model must be a non-empty string".to_string(),
-//             ));
-//         }
-//         // let emb_model: EmbeddingModel = model_name
-//         //     .parse()
-//         //     .map_err(|e| AgentError::InvalidConfig(format!("Failed to parse model name: {}", e)))?;
-//         let emb_model = EmbeddingModel::MultilingualE5Large;
-
-//         let text = value
-//             .as_str()
-//             .ok_or_else(|| AgentError::InvalidValue("Input must be a string".to_string()))?;
-
-//         let mut model = TextEmbedding::try_new(InitOptions::new(emb_model))
-//             .map_err(|e| AgentError::Other(format!("Failed to load model: {}", e)))?;
-
-//         let chunks = vec![text];
-//         let embeddings = model
-//             .embed(chunks.clone(), None)
-//             .map_err(|e| AgentError::Other(format!("Failed to compute embeddings: {}", e)))?
-//             .into_iter()
-//             .map(|emb| {
-//                 AgentValue::array(
-//                     emb.into_iter()
-//                         .map(|v| AgentValue::number(v as f64))
-//                         .collect(),
-//                 )
-//             })
-//             .collect::<Vec<_>>();
-
-//         self.try_output(ctx.clone(), PIN_ARRAY, AgentValue::array(embeddings))?;
-
-//         Ok(())
-//     }
-// }
 
 #[askit_agent(
     title="NFKC",
@@ -246,20 +178,28 @@ impl AsAgent for SplitTextAgent {
 )]
 pub struct SplitTextByTokensAgent {
     data: AgentData,
+    splitter: Option<TextSplitter<Tokenizer>>,
 }
 
 impl SplitTextByTokensAgent {
     fn split_into_chunks(
-        &self,
+        &mut self,
         text: &str,
         max_tokens: usize,
         tokenizer_model: &str,
     ) -> Result<Vec<AgentValue>, AgentError> {
-        let tokenizer = Tokenizer::from_pretrained(tokenizer_model, None)
-            .map_err(|e| AgentError::InvalidConfig(format!("Failed to load tokenizer: {}", e)))?;
+        if self.splitter.is_none() {
+            let tokenizer = Tokenizer::from_pretrained(tokenizer_model, None).map_err(|e| {
+                AgentError::InvalidConfig(format!("Failed to load tokenizer: {}", e))
+            })?;
 
-        let splitter = TextSplitter::new(ChunkConfig::new(max_tokens).with_sizer(tokenizer));
-        Ok(splitter
+            let splitter = TextSplitter::new(ChunkConfig::new(max_tokens).with_sizer(tokenizer));
+            self.splitter = Some(splitter);
+        }
+        Ok(self
+            .splitter
+            .as_ref()
+            .unwrap()
             .chunk_indices(text)
             .map(|(start, t)| {
                 AgentValue::array(vec![
@@ -276,7 +216,18 @@ impl AsAgent for SplitTextByTokensAgent {
     fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
             data: AgentData::new(askit, id, spec),
+            splitter: None,
         })
+    }
+
+    fn configs_changed(&mut self) -> Result<(), AgentError> {
+        self.splitter = None;
+        Ok(())
+    }
+
+    async fn stop(&mut self) -> Result<(), AgentError> {
+        self.splitter = None;
+        Ok(())
     }
 
     async fn process(
