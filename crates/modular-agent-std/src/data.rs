@@ -361,6 +361,8 @@ impl ZipToObjectAgent {
         spec.configs = Some(configs);
         spec.config_specs = Some(config_specs);
 
+        spec.inputs = Some((1..=n).map(|i| format!("in{}", i)).collect());
+
         Ok((n as usize, use_ctx))
     }
 }
