@@ -308,6 +308,59 @@ impl AsAgent for ArrayNthAgent {
     }
 }
 
+/// Takes the first n items from the input array.
+/// If the input is not an array, outputs an array with the input as the only item.
+/// If n is greater than the array length, outputs the entire array.
+#[askit_agent(
+    title = "ArrayTake",
+    category = CATEGORY,
+    inputs = [PIN_ARRAY],
+    outputs = [PIN_ARRAY],
+    integer_config(name = CONFIG_N, default = 0),
+)]
+struct ArrayTakeAgent {
+    data: AgentData,
+}
+
+#[async_trait]
+impl AsAgent for ArrayTakeAgent {
+    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+        let data = AgentData::new(askit, id, spec);
+        Ok(Self { data })
+    }
+
+    async fn process(
+        &mut self,
+        ctx: AgentContext,
+        _pin: String,
+        value: AgentValue,
+    ) -> Result<(), AgentError> {
+        let n = self
+            .data
+            .spec
+            .configs
+            .as_ref()
+            .map(|cfg| cfg.get_integer_or(CONFIG_N, 0))
+            .unwrap_or(0);
+        if n <= 0 {
+            // output empty array
+            return self.try_output(ctx, PIN_ARRAY, AgentValue::array_default());
+        }
+        let n = n as usize;
+
+        if value.is_array() {
+            let arr = value.as_array().unwrap();
+            if n >= arr.len() {
+                return self.try_output(ctx, PIN_ARRAY, value);
+            }
+            let taken_items = arr[..n].to_vec();
+            self.try_output(ctx, PIN_ARRAY, AgentValue::array(taken_items))
+        } else {
+            self.try_output(ctx, PIN_ARRAY, AgentValue::array(vec![value]))
+        }
+    }
+}
+
 /// Maps over an input array, emitting each item individually with a `map` frame that captures the index and length.
 /// Nested maps accumulate frames to preserve lineage. If the input is not an array, it is treated as a single-item array.
 #[askit_agent(
