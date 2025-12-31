@@ -9,10 +9,11 @@ use glob::glob;
 
 static CATEGORY: &str = "Std/File";
 
-static PIN_PATH: &str = "path";
-static PIN_FILES: &str = "files";
-static PIN_TEXT: &str = "text";
 static PIN_DATA: &str = "data";
+static PIN_DOC: &str = "doc";
+static PIN_FILES: &str = "files";
+static PIN_PATH: &str = "path";
+static PIN_STRING: &str = "string";
 
 // Glob Agent
 #[askit_agent(
@@ -137,7 +138,7 @@ impl AsAgent for ListFilesAgent {
     title = "Read Text File",
     category = CATEGORY,
     inputs = [PIN_PATH],
-    outputs = [PIN_TEXT]
+    outputs = [PIN_STRING, PIN_DOC]
 )]
 struct ReadTextFileAgent {
     data: AgentData,
@@ -179,8 +180,21 @@ impl AsAgent for ReadTextFileAgent {
         let content = fs::read_to_string(path).map_err(|e| {
             AgentError::InvalidValue(format!("Failed to read file {}: {}", path.display(), e))
         })?;
-        let out_value = AgentValue::string(content);
-        self.try_output(ctx, PIN_TEXT, out_value)
+
+        let text = AgentValue::string(content);
+        self.try_output(ctx.clone(), PIN_STRING, text.clone())?;
+
+        let out_doc = AgentValue::object(
+            [
+                (
+                    "path".into(),
+                    AgentValue::string(path.to_string_lossy().to_string()),
+                ),
+                ("text".into(), text),
+            ]
+            .into(),
+        );
+        self.try_output(ctx, PIN_DOC, out_doc)
     }
 }
 
