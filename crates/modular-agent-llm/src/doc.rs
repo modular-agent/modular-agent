@@ -136,7 +136,7 @@ impl AsAgent for NFKCAgent {
             }
         }
 
-        Err(AgentError::InvalidPin(format!("Unknown pin: {}", pin)))
+        Err(AgentError::InvalidPin(pin))
     }
 }
 
@@ -211,7 +211,7 @@ impl AsAgent for SplitTextAgent {
             }
         }
 
-        Err(AgentError::InvalidPin(format!("Unknown pin: {}", pin)))
+        Err(AgentError::InvalidPin(pin))
     }
 }
 
@@ -300,6 +300,6 @@ impl AsAgent for SplitTextByTokensAgent {
             return self.try_output(ctx.clone(), PIN_DOC, output);
         }
 
-        Err(AgentError::InvalidPin(format!("Unknown pin: {}", pin)))
+        Err(AgentError::InvalidPin(pin))
     }
 }

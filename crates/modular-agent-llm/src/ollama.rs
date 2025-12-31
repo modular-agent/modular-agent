@@ -619,7 +619,7 @@ impl AsAgent for OllamaEmbeddingsAgent {
             return self.try_output(ctx.clone(), PIN_DOC, output);
         }
 
-        Err(AgentError::InvalidPin(format!("Unknown pin: {}", pin)))
+        Err(AgentError::InvalidPin(pin))
     }
 }
 
