@@ -5,9 +5,9 @@ use agent_stream_kit::{
     askit_agent, async_trait,
 };
 // use fastembed::{EmbeddingModel, InitOptions, TextEmbedding};
+use icu_normalizer::{ComposingNormalizer, ComposingNormalizerBorrowed};
 use text_splitter::{ChunkConfig, TextSplitter};
 use tokenizers::Tokenizer;
-use unicode_normalization::UnicodeNormalization;
 
 static CATEGORY: &str = "LLM/Doc";
 
@@ -94,6 +94,7 @@ static CONFIG_TOKENIZER: &str = "tokenizer";
 )]
 pub struct NFKCAgent {
     data: AgentData,
+    normalizer: Option<ComposingNormalizerBorrowed<'static>>,
 }
 
 #[async_trait]
@@ -101,7 +102,19 @@ impl AsAgent for NFKCAgent {
     fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
             data: AgentData::new(askit, id, spec),
+            normalizer: None,
         })
+    }
+
+    async fn start(&mut self) -> Result<(), AgentError> {
+        let normalizer = ComposingNormalizer::new_nfkc();
+        self.normalizer = Some(normalizer);
+        Ok(())
+    }
+
+    async fn stop(&mut self) -> Result<(), AgentError> {
+        self.normalizer = None;
+        Ok(())
     }
 
     async fn process(
@@ -115,7 +128,11 @@ impl AsAgent for NFKCAgent {
             if s.is_empty() {
                 return self.try_output(ctx.clone(), PIN_STRING, value);
             }
-            let nfkc_text: String = s.nfkc().collect();
+            let nfkc_text = self
+                .normalizer
+                .as_ref()
+                .map(|n| n.normalize(s))
+                .unwrap_or_default();
             return self.try_output(ctx.clone(), PIN_STRING, AgentValue::string(nfkc_text));
         }
 
@@ -125,7 +142,11 @@ impl AsAgent for NFKCAgent {
                 if text.is_empty() {
                     return self.try_output(ctx.clone(), PIN_DOC, value);
                 }
-                let nfkc_text: String = text.nfkc().collect();
+                let nfkc_text = self
+                    .normalizer
+                    .as_ref()
+                    .map(|n| n.normalize(text))
+                    .unwrap_or_default();
                 let mut output = value.clone();
                 output.set("text".to_string(), AgentValue::string(nfkc_text))?;
                 return self.try_output(ctx.clone(), PIN_DOC, output);

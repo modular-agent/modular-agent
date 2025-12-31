@@ -11,6 +11,7 @@ agent-stream-kit = "0.17.0"
 async-openai = { version = "0.30.1", optional = true }
 async-trait = "0.1"
 futures = { version = "0.3.31", optional = true }
+icu_normalizer = "2.1.1"
 ollama-rs = { version = "0.3.2", default-features = false, features = ["macros", "rustls", "stream"], optional = true }
 photon-rs = { version = "0.3.3", optional = true }
 regex = "1.12.2"
@@ -23,7 +24,6 @@ text-splitter = { version = "0.28.0", features = ["tokenizers"] }
 tokenizers = { version = "0.22.2", features = ["http"] }
 tokio = { version = "1.48.0", features = ["rt-multi-thread"] }
 tokio-stream = "0.1"
-unicode-normalization = "0.1.25"
 uuid = { version = "1.18.1", features = ["v4"] }
 
 [features]
