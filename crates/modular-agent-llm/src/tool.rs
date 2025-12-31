@@ -11,7 +11,7 @@ use agent_stream_kit::{
 use regex::RegexSet;
 use tokio::sync::{Mutex as AsyncMutex, oneshot};
 
-use crate::message::{Message, ToolCall};
+use crate::message_lib::{Message, ToolCall};
 
 const CATEGORY: &str = "LLM/Tool";
 

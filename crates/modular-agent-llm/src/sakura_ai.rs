@@ -12,7 +12,7 @@ use ollama_rs::{generation::chat::request::ChatMessageRequest, models::ModelOpti
 use sakura_ai_rs::SakuraAI;
 use tokio_stream::StreamExt;
 
-use crate::message::Message;
+use crate::message_lib::Message;
 
 static CATEGORY: &str = "LLM/Sakura";
 

@@ -1,6 +1,6 @@
-pub mod common;
+pub mod doc;
 pub mod message;
-pub mod text;
+pub mod message_lib;
 pub mod tool;
 
 #[cfg(feature = "mcp")]

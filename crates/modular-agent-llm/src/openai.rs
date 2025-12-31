@@ -26,7 +26,7 @@ use async_openai::{
 };
 use futures::StreamExt;
 
-use crate::message::{self, Message, MessageHistory, ToolCall, ToolCallFunction};
+use crate::message_lib::{Message, MessageHistory, ToolCall, ToolCallFunction};
 use crate::tool::{self, list_tool_infos_patterns};
 
 static CATEGORY: &str = "LLM/OpenAI";
@@ -335,7 +335,7 @@ impl AsAgent for OpenAIChatAgent {
                 message.id = Some(id.clone());
                 let mut content = String::new();
                 let mut thinking = String::new();
-                let mut tool_calls: Vec<message::ToolCall> = Vec::new();
+                let mut tool_calls: Vec<ToolCall> = Vec::new();
                 while let Some(res) = stream.next().await {
                     let res =
                         res.map_err(|_| AgentError::IoError(format!("OpenAI Stream Error")))?;
@@ -641,7 +641,7 @@ impl AsAgent for OpenAIResponsesAgent {
                 let mut message = Message::assistant("".to_string());
                 message.id = Some(id.clone());
                 let mut content = String::new();
-                let mut tool_calls: Vec<message::ToolCall> = Vec::new();
+                let mut tool_calls: Vec<ToolCall> = Vec::new();
                 while let Some(res) = stream.next().await {
                     let res_event = res
                         .map_err(|e| AgentError::IoError(format!("OpenAI Stream Error: {}", e)))?;
@@ -877,7 +877,7 @@ impl TryFrom<tool::ToolInfo> for ToolDefinition {
     }
 }
 
-impl TryFrom<&ChatCompletionMessageToolCallChunk> for message::ToolCall {
+impl TryFrom<&ChatCompletionMessageToolCallChunk> for ToolCall {
     type Error = AgentError;
 
     fn try_from(call: &ChatCompletionMessageToolCallChunk) -> Result<Self, AgentError> {
@@ -899,16 +899,16 @@ impl TryFrom<&ChatCompletionMessageToolCallChunk> for message::ToolCall {
             serde_json::json!({})
         };
 
-        let function = message::ToolCallFunction {
+        let function = ToolCallFunction {
             id: call.id.clone(),
             name: name.clone(),
             parameters,
         };
-        Ok(message::ToolCall { function })
+        Ok(ToolCall { function })
     }
 }
 
-impl TryFrom<&ChatCompletionMessageToolCall> for message::ToolCall {
+impl TryFrom<&ChatCompletionMessageToolCall> for ToolCall {
     type Error = AgentError;
 
     fn try_from(call: &ChatCompletionMessageToolCall) -> Result<Self, AgentError> {
@@ -916,11 +916,11 @@ impl TryFrom<&ChatCompletionMessageToolCall> for message::ToolCall {
             AgentError::InvalidValue(format!("Failed to parse tool call arguments JSON: {}", e))
         })?;
 
-        let function = message::ToolCallFunction {
+        let function = ToolCallFunction {
             id: Some(call.id.clone()),
             name: call.function.name.clone(),
             parameters,
         };
-        Ok(message::ToolCall { function })
+        Ok(ToolCall { function })
     }
 }

@@ -23,14 +23,14 @@ use ollama_rs::{
 use schemars::{Schema, json_schema, schema_for_value};
 use tokio_stream::StreamExt;
 
-use crate::message::{Message, MessageHistory, ToolCall};
+use crate::message_lib::{Message, MessageHistory, ToolCall, ToolCallFunction};
 use crate::tool::{self, list_tool_infos_patterns};
 
 static CATEGORY: &str = "LLM/Ollama";
 
-static PIN_EMBEDDINGS: &str = "embeddings";
+static PIN_DOC: &str = "doc";
+static PIN_EMBEDDING: &str = "embedding";
 static PIN_HISTORY: &str = "history";
-static PIN_INPUT: &str = "input";
 static PIN_MESSAGE: &str = "message";
 static PIN_MODEL_INFO: &str = "model_info";
 static PIN_MODEL_LIST: &str = "model_list";
@@ -38,6 +38,7 @@ static PIN_MODEL_NAME: &str = "model_name";
 static PIN_PROMPT: &str = "prompt";
 static PIN_RESET: &str = "reset";
 static PIN_RESPONSE: &str = "response";
+static PIN_STRING: &str = "string";
 static PIN_UNIT: &str = "unit";
 
 static CONFIG_MODEL: &str = "model";
@@ -50,6 +51,7 @@ static CONFIG_TOOLS: &str = "tools";
 static CONFIG_USE_CONTEXT: &str = "use_context";
 
 const DEFAULT_CONFIG_MODEL: &str = "gpt-oss:20b";
+const DEFAULT_CONFIG_EMBEDDINGS_MODEL: &str = "nomic-embed-text-v2-moe:latest";
 const DEFAULT_OLLAMA_URL: &str = "http://localhost:11434";
 
 // Shared client management for Ollama agents
@@ -99,7 +101,7 @@ impl OllamaManager {
 
 // Ollama Completion Agent
 #[askit_agent(
-    title="Ollama Completion",
+    title="Completion",
     category=CATEGORY,
     inputs=[PIN_PROMPT, PIN_RESET],
     outputs=[PIN_MESSAGE, PIN_RESPONSE],
@@ -198,7 +200,7 @@ impl AsAgent for OllamaCompletionAgent {
 
 // Ollama Chat Agent
 #[askit_agent(
-    title="Ollama Chat",
+    title="Chat",
     category=CATEGORY,
     inputs=[PIN_MESSAGE, PIN_RESET],
     outputs=[PIN_MESSAGE, PIN_HISTORY, PIN_RESPONSE],
@@ -342,7 +344,7 @@ impl AsAgent for OllamaChatAgent {
                 let mut message = Message::assistant("".to_string());
                 let mut content = String::new();
                 let mut thinking = String::new();
-                let mut tool_calls: Vec<crate::message::ToolCall> = vec![];
+                let mut tool_calls: Vec<ToolCall> = vec![];
                 while let Some(res) = stream.next().await {
                     let res =
                         res.map_err(|_| AgentError::IoError(format!("Ollama Stream Error")))?;
@@ -361,8 +363,8 @@ impl AsAgent for OllamaChatAgent {
                             }
                         }
 
-                        let tool_call = crate::message::ToolCall {
-                            function: crate::message::ToolCallFunction {
+                        let tool_call = ToolCall {
+                            function: ToolCallFunction {
                                 id: None,
                                 name: call.function.name.clone(),
                                 parameters,
@@ -429,18 +431,37 @@ impl AsAgent for OllamaChatAgent {
     }
 }
 
-// Ollama Embeddings Agent
 #[askit_agent(
-    title="Ollama Embeddings",
+    title="Embeddings",
     category=CATEGORY,
-    inputs=[PIN_INPUT],
-    outputs=[PIN_EMBEDDINGS],
-    string_config(name=CONFIG_MODEL, default=DEFAULT_CONFIG_MODEL),
+    inputs=[PIN_STRING, PIN_DOC],
+    outputs=[PIN_EMBEDDING, PIN_DOC],
+    string_config(name=CONFIG_MODEL, default=DEFAULT_CONFIG_EMBEDDINGS_MODEL),
     text_config(name=CONFIG_OPTIONS, default="{}")
 )]
 pub struct OllamaEmbeddingsAgent {
     data: AgentData,
     manager: OllamaManager,
+}
+
+impl OllamaEmbeddingsAgent {
+    async fn generate_embeddings(
+        &self,
+        input: EmbeddingsInput,
+        model_name: String,
+        model_options: Option<ModelOptions>,
+    ) -> Result<Vec<Vec<f32>>, AgentError> {
+        let client = self.manager.get_client(self.askit())?;
+        let mut request = GenerateEmbeddingsRequest::new(model_name, input);
+        if let Some(options) = model_options {
+            request = request.options(options);
+        }
+        let res = client
+            .generate_embeddings(request)
+            .await
+            .map_err(|e| AgentError::IoError(format!("generate_embeddings: {}", e)))?;
+        Ok(res.embeddings)
+    }
 }
 
 #[async_trait]
@@ -455,80 +476,156 @@ impl AsAgent for OllamaEmbeddingsAgent {
     async fn process(
         &mut self,
         ctx: AgentContext,
-        _pin: String,
+        pin: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
         let config_model = &self.configs()?.get_string_or_default(CONFIG_MODEL);
         if config_model.is_empty() {
-            return Ok(());
+            return Err(AgentError::InvalidConfig("model is not set".to_string()));
         }
-
-        let mut input_is_array = false;
-        let input: EmbeddingsInput;
-        if value.is_array() {
-            input_is_array = true;
-            let mut inputs = vec![];
-            for item in value.as_array().unwrap_or(&vec![]) {
-                let s = item.as_str().unwrap_or("");
-                if !s.is_empty() {
-                    inputs.push(s.to_string());
-                }
-            }
-            if inputs.is_empty() {
-                return Err(AgentError::InvalidValue("Input array is empty".to_string()));
-            }
-            input = inputs.into();
-        } else if value.is_string() {
-            let s = value.as_str().unwrap_or("");
-            if s.is_empty() {
-                return Err(AgentError::InvalidValue(
-                    "Input string is empty".to_string(),
-                ));
-            }
-            input = s.into();
-        } else {
-            return Err(AgentError::InvalidValue(
-                "Input must be a string or an array of strings".to_string(),
-            ));
-        }
-
-        let client = self.manager.get_client(self.askit())?;
-        let mut request = GenerateEmbeddingsRequest::new(config_model.to_string(), input);
 
         let config_options = self.configs()?.get_string_or_default(CONFIG_OPTIONS);
-        if !config_options.is_empty() && config_options != "{}" {
-            if let Ok(options_json) = serde_json::from_str::<ModelOptions>(&config_options) {
-                request = request.options(options_json);
-            } else {
+        let model_options = if config_options.is_empty() || config_options == "{}" {
+            None
+        } else {
+            Some(
+                serde_json::from_str::<ModelOptions>(&config_options).map_err(|e| {
+                    AgentError::InvalidConfig(format!("Invalid JSON in options: {}", e))
+                })?,
+            )
+        };
+
+        if pin == PIN_STRING {
+            let text = value.as_str().unwrap_or_default();
+            if text.is_empty() {
                 return Err(AgentError::InvalidValue(
-                    "Invalid JSON in options".to_string(),
+                    "Input text is an empty string".to_string(),
                 ));
             }
+            let input: EmbeddingsInput = text.into();
+            let embeddings = self
+                .generate_embeddings(input, config_model.to_string(), model_options)
+                .await?;
+            if embeddings.len() != 1 {
+                return Err(AgentError::Other(
+                    "Expected exactly one embedding for single string input".to_string(),
+                ));
+            }
+            let embedding_value = AgentValue::from_serialize(&embeddings[0])?;
+            return self.try_output(ctx.clone(), PIN_EMBEDDING, embedding_value);
         }
 
-        let res = client
-            .generate_embeddings(request)
-            .await
-            .map_err(|e| AgentError::IoError(format!("Ollama Error: {}", e)))?;
-
-        let embeddings = if input_is_array {
-            AgentValue::from_serialize(&res.embeddings)?
-        } else {
-            if res.embeddings.is_empty() {
-                AgentValue::unit()
-            } else {
-                AgentValue::from_serialize(&res.embeddings[0])?
+        if pin == PIN_DOC {
+            if !value.is_object() {
+                return Err(AgentError::InvalidValue(
+                    "Input must be an object with 'text' or 'chunks' field".to_string(),
+                ));
             }
-        };
-        self.try_output(ctx.clone(), PIN_EMBEDDINGS, embeddings)?;
 
-        Ok(())
+            if let Some(chunks) = value.get_array("chunks") {
+                // input is chunks
+
+                if chunks.is_empty() {
+                    return self.try_output(ctx.clone(), PIN_DOC, value);
+                }
+
+                let first_chunk = &chunks[0];
+                if !first_chunk.is_array() {
+                    return Err(AgentError::InvalidValue(
+                        "Input chunks must be (offset, string) pairs".to_string(),
+                    ));
+                }
+                let first_chunk_arr = first_chunk.as_array().unwrap();
+                if first_chunk_arr.is_empty()
+                    || !first_chunk_arr[0].is_integer()
+                    || !first_chunk_arr[1].is_string()
+                {
+                    return Err(AgentError::InvalidValue(
+                        "Input chunks must be (offset, string) pairs".to_string(),
+                    ));
+                }
+
+                let mut offsets = vec![];
+                let mut inputs = vec![];
+                for item in chunks {
+                    let Some(chunk) = item.as_array() else {
+                        continue;
+                    };
+                    if chunk.len() != 2 {
+                        continue;
+                    }
+                    let Some(offset) = chunk[0].as_i64() else {
+                        continue;
+                    };
+                    let Some(s) = chunk[1].as_str() else {
+                        continue;
+                    };
+                    if !s.is_empty() {
+                        offsets.push(offset);
+                        inputs.push(s.to_string());
+                    }
+                }
+                if inputs.is_empty() {
+                    return self.try_output(ctx.clone(), PIN_DOC, value);
+                }
+
+                let embeddings = self
+                    .generate_embeddings(inputs.into(), config_model.to_string(), model_options)
+                    .await?;
+                let embedding_values = embeddings
+                    .iter()
+                    .map(|emb| AgentValue::from_serialize(emb))
+                    .collect::<Result<Vec<_>, _>>()?;
+                let embedding_values_with_offsets: Vec<AgentValue> = offsets
+                    .into_iter()
+                    .zip(embedding_values)
+                    .map(|(offset, emb)| AgentValue::array(vec![AgentValue::integer(offset), emb]))
+                    .collect();
+
+                let mut output = value.clone();
+                output.set(
+                    "embeddings".to_string(),
+                    AgentValue::array(embedding_values_with_offsets),
+                )?;
+                return self.try_output(ctx.clone(), PIN_DOC, output);
+            }
+
+            let text = value.get_str("text").unwrap_or("");
+            if text.is_empty() {
+                return self.try_output(ctx.clone(), PIN_DOC, value);
+            }
+            let input: EmbeddingsInput = text.into();
+            let embeddings = self
+                .generate_embeddings(input, config_model.to_string(), model_options)
+                .await?;
+            if embeddings.is_empty() {
+                return self.try_output(ctx.clone(), PIN_DOC, value);
+            }
+            let offsets = vec![0i64];
+            let embedding_values = embeddings
+                .iter()
+                .map(|emb| AgentValue::from_serialize(emb))
+                .collect::<Result<Vec<_>, _>>()?;
+            let embedding_values_with_offsets: Vec<AgentValue> = offsets
+                .into_iter()
+                .zip(embedding_values)
+                .map(|(offset, emb)| AgentValue::array(vec![AgentValue::integer(offset), emb]))
+                .collect();
+            let mut output = value.clone();
+            output.set(
+                "embeddings".to_string(),
+                AgentValue::array(embedding_values_with_offsets),
+            )?;
+            return self.try_output(ctx.clone(), PIN_DOC, output);
+        }
+
+        Err(AgentError::InvalidPin(format!("Unknown pin: {}", pin)))
     }
 }
 
 // Ollama List Local Models
 #[askit_agent(
-    title="Ollama List Local Models",
+    title="List Local Models",
     category=CATEGORY,
     inputs=[PIN_UNIT],
     outputs=[PIN_MODEL_LIST],
@@ -567,7 +664,7 @@ impl AsAgent for OllamaListLocalModelsAgent {
 
 // Ollama Show Model Info
 #[askit_agent(
-    title="Ollama Show Model Info",
+    title="Show Model Info",
     category=CATEGORY,
     inputs=[PIN_MODEL_NAME],
     outputs=[PIN_MODEL_INFO],
@@ -621,8 +718,8 @@ impl From<ChatMessage> for Message {
         if !msg.tool_calls.is_empty() {
             let mut calls = vec![];
             for call in msg.tool_calls {
-                let tool_call = crate::message::ToolCall {
-                    function: crate::message::ToolCallFunction {
+                let tool_call = ToolCall {
+                    function: ToolCallFunction {
                         id: None,
                         name: call.function.name,
                         parameters: call.function.arguments,
