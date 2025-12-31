@@ -11,6 +11,9 @@ pub enum AgentError {
     #[error("{0}: Agent definition \"{1}\" is invalid")]
     InvalidDefinition(String, String),
 
+    #[error("Invalid pin: {0}")]
+    InvalidPin(String),
+
     #[error("Invalid agent stream name: {0}")]
     InvalidStreamName(String),
 
