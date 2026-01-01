@@ -1,11 +1,13 @@
 use std::collections::VecDeque;
+use std::time::Duration;
 
 use agent_stream_kit::{
     ASKit, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
     askit_agent, async_trait,
 };
-
-use crate::ctx_utils::find_first_common_key;
+use mini_moka::sync::Cache;
+static CONFIG_TTL_SEC: &str = "ttl_sec";
+static CONFIG_CAPACITY: &str = "capacity";
 
 static CATEGORY: &str = "Std/Sequence";
 
@@ -91,25 +93,38 @@ impl AsAgent for SequenceAgent {
     outputs = [PIN_OUT1, PIN_OUT2],
     integer_config(name = CONFIG_N, default = 2),
     boolean_config(name = CONFIG_USE_CTX),
+    integer_config(name = CONFIG_TTL_SEC, default = 60), 
+    integer_config(name = CONFIG_CAPACITY, default = 1000),
 )]
 struct SyncAgent {
     data: AgentData,
     n: usize,
     use_ctx: bool,
-    input_values: Vec<Vec<AgentValue>>,
-    ctx_input_values: Vec<VecDeque<(String, AgentValue)>>,
+        ttl_sec: u64,
+    capacity: u64,
+
+    // Optimization: Pre-generate and store output pin names ("out1", "out2"...)
+    output_pins: Vec<String>,
+
+    // For simple mode
+    queues: Vec<VecDeque<AgentValue>>,
+
+    // For use_ctx mode: Cache with TTL
+    ctx_buffers: Cache<String, PendingSync>,
+}
+
+#[derive(Clone)]
+struct PendingSync {
+    values: Vec<Option<AgentValue>>,
+    count: usize,
 }
 
 impl SyncAgent {
-    fn update_spec(spec: &mut AgentSpec) -> Result<(usize, bool), AgentError> {
-        let mut n = spec
-            .configs
-            .as_ref()
+    fn update_spec(spec: &mut AgentSpec) -> Result<(usize, bool, u64, u64, Vec<String>), AgentError> {
+        let n = spec.configs.as_ref()
             .map(|cfg| cfg.get_integer_or(CONFIG_N, 2))
             .unwrap_or(2) as usize;
-        if n < 1 {
-            n = 1;
-        }
+        let n = if n < 1 { 1 } else { n };
 
         let use_ctx = spec
             .configs
@@ -117,29 +132,57 @@ impl SyncAgent {
             .map(|cfg| cfg.get_bool_or_default(CONFIG_USE_CTX))
             .unwrap_or(false);
 
-        spec.inputs = Some((1..=n).map(|i| format!("in{}", i)).collect());
-        spec.outputs = Some((1..=n).map(|i| format!("out{}", i)).collect());
+        let ttl_sec = spec
+            .configs
+            .as_ref()
+            .map(|c| c.get_integer_or(CONFIG_TTL_SEC, 60))
+            .unwrap_or(60) as u64;
 
-        Ok((n, use_ctx))
+        let capacity = spec
+            .configs
+            .as_ref()
+            .map(|c| c.get_integer_or(CONFIG_CAPACITY, 1000))
+            .unwrap_or(1000) as u64;
+
+        spec.inputs = Some((1..=n).map(|i| format!("in{}", i)).collect());
+
+        let output_pins: Vec<String> = (1..=n).map(|i| format!("out{}", i)).collect();
+        spec.outputs = Some(output_pins.clone());
+
+        Ok((n, use_ctx, ttl_sec, capacity, output_pins))
+    }
+
+    fn reset_state(&mut self) {
+        self.queues = vec![VecDeque::new(); self.n];
+        self.ctx_buffers.invalidate_all();
     }
 }
 
 #[async_trait]
 impl AsAgent for SyncAgent {
     fn new(askit: ASKit, id: String, mut spec: AgentSpec) -> Result<Self, AgentError> {
-        let (n, use_ctx) = Self::update_spec(&mut spec)?;
+        let (n, use_ctx, ttl_sec, capacity, output_pins) = Self::update_spec(&mut spec)?;
+
+        let cache = Cache::builder()
+            .max_capacity(capacity)
+            .time_to_live(Duration::from_secs(ttl_sec))
+            .build();
+
         let data = AgentData::new(askit, id, spec);
         Ok(Self {
             data,
             n,
             use_ctx,
-            input_values: vec![Vec::new(); n],
-            ctx_input_values: vec![VecDeque::new(); n],
+            ttl_sec,
+            capacity,
+            output_pins,
+            queues: vec![VecDeque::new(); n],
+            ctx_buffers: cache,
         })
     }
 
     fn configs_changed(&mut self) -> Result<(), AgentError> {
-        let (n, use_ctx) = Self::update_spec(&mut self.data.spec)?;
+        let (n, use_ctx, ttl_sec, capacity, output_pins) = Self::update_spec(&mut self.data.spec)?;
         let mut changed = false;
         if n != self.n {
             self.n = n;
@@ -149,9 +192,21 @@ impl AsAgent for SyncAgent {
             self.use_ctx = use_ctx;
             changed = true;
         }
+        if ttl_sec != self.ttl_sec {
+            self.ttl_sec = ttl_sec;
+            changed = true;
+        }
+        if capacity != self.capacity {
+            self.capacity = capacity;
+            changed = true;
+        }
         if changed {
-            self.input_values = vec![Vec::new(); self.n];
-            self.ctx_input_values = vec![VecDeque::new(); self.n];
+            self.reset_state();
+            self.output_pins = output_pins;
+            self.ctx_buffers = Cache::builder()
+                .max_capacity(capacity)
+                .time_to_live(Duration::from_secs(ttl_sec))
+                .build();
             self.emit_agent_spec_updated();
         }
         Ok(())
@@ -159,8 +214,7 @@ impl AsAgent for SyncAgent {
 
     async fn stop(&mut self) -> Result<(), AgentError> {
         // Clear input queues on stop
-        self.input_values = vec![Vec::new(); self.n];
-        self.ctx_input_values = vec![VecDeque::new(); self.n];
+        self.reset_state();
         Ok(())
     }
 
@@ -170,89 +224,58 @@ impl AsAgent for SyncAgent {
         pin: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
-        // Store the input value
-        let Some(i) = pin
+        // Parse pin number
+        let Some(idx) = pin
             .strip_prefix("in")
             .and_then(|s| s.parse::<usize>().ok())
-            .and_then(|idx| {
-                if idx >= 1 && idx <= self.n {
-                    Some(idx - 1)
-                } else {
-                    None
-                }
-            })
+            .filter(|&i| i >= 1 && i <= self.n)
+            .map(|i| i - 1)
         else {
-            return Err(AgentError::InvalidValue(format!(
-                "Invalid input pin: {}",
-                pin
-            )));
+            return Err(AgentError::InvalidValue(format!("Invalid input pin: {}", pin)));
         };
 
+        // Context Mode
         if self.use_ctx {
-            if self.ctx_input_values.len() != self.n {
-                self.ctx_input_values = vec![VecDeque::new(); self.n];
-            }
-
             let ctx_key = ctx.ctx_key()?;
-            self.ctx_input_values[i].push_back((ctx_key, value));
 
-            if self.ctx_input_values.iter().any(|q| q.is_empty()) {
-                return Ok(());
+            // Get from cache or create new
+            let mut entry = self.ctx_buffers.get(&ctx_key).unwrap_or_else(|| PendingSync {
+                values: vec![None; self.n],
+                count: 0,
+            });
+
+            if entry.values[idx].is_none() {
+                entry.count += 1;
             }
+            entry.values[idx] = Some(value);
 
-            let Some((_target_key, positions)) = find_first_common_key(&self.ctx_input_values)
-            else {
-                return Ok(());
-            };
+            if entry.count == self.n {
+                // All inputs collected, remove from cache
+                self.ctx_buffers.invalidate(&ctx_key);
 
-            for (queue, pos) in self.ctx_input_values.iter_mut().zip(positions) {
-                for _ in 0..pos {
-                    queue.pop_front();
+                // Output sequentially
+                for (i, val_opt) in entry.values.into_iter().enumerate() {
+                    if let Some(val) = val_opt {
+                        self.try_output(ctx.clone(), &self.output_pins[i], val)?;
+                    }
                 }
             }
+            return Ok(());
+        }
 
-            // Now all heads share target_key
-            let arr: Vec<AgentValue> = self
-                .ctx_input_values
-                .iter()
-                .map(|q| q.front().unwrap().1.clone())
+        // Simple FIFO Mode
+        self.queues[idx].push_back(value);
+
+        // Check if all queues have data
+        if self.queues.iter().all(|q| !q.is_empty()) {
+            let ready_values: Vec<AgentValue> = self.queues
+                .iter_mut()
+                .map(|q| q.pop_front().unwrap())
                 .collect();
-            for q in self.ctx_input_values.iter_mut() {
-                q.pop_front();
+
+            for (i, val) in ready_values.into_iter().enumerate() {
+                self.try_output(ctx.clone(), &self.output_pins[i], val)?;
             }
-
-            // output in order
-            for i in 0..self.n {
-                self.try_output(
-                    ctx.clone(),
-                    self.data.spec.outputs.as_ref().unwrap()[i].clone(),
-                    arr[i].clone(),
-                )?;
-            }
-
-            return Ok(());
-        }
-
-        self.input_values[i].push(value);
-
-        // Check if some input is still missing
-        if self.input_values.iter().any(|v| v.is_empty()) {
-            return Ok(());
-        }
-
-        // All inputs are present, emit the array
-        let arr: Vec<AgentValue> = self.input_values.iter().map(|v| v[0].clone()).collect();
-        for v in &mut self.input_values {
-            v.remove(0);
-        }
-
-        // output in order
-        for i in 0..self.n {
-            self.try_output(
-                ctx.clone(),
-                self.data.spec.outputs.as_ref().unwrap()[i].clone(),
-                arr[i].clone(),
-            )?;
         }
 
         Ok(())

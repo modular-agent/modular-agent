@@ -1,11 +1,12 @@
+use std::time::Duration;
 use std::{collections::VecDeque, vec};
 
 use agent_stream_kit::{
-    ASKit, Agent, AgentConfigSpec, AgentConfigSpecs, AgentConfigs, AgentContext, AgentData,
-    AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent, askit_agent, async_trait,
+    ASKit, AgentConfigSpec, AgentConfigSpecs, AgentConfigs, AgentContext, AgentData, AgentError,
+    AgentOutput, AgentSpec, AgentValue, AsAgent, askit_agent, async_trait,
 };
-
-use crate::ctx_utils::find_first_common_key;
+use im::{HashMap, Vector};
+use mini_moka::sync::Cache;
 
 static CATEGORY: &str = "Std/Data";
 
@@ -19,6 +20,8 @@ static CONFIG_KEY: &str = "key";
 static CONFIG_VALUE: &str = "value";
 static CONFIG_N: &str = "n";
 static CONFIG_USE_CTX: &str = "use_ctx";
+static CONFIG_TTL_SECONDS: &str = "ttl_sec";
+static CONFIG_CAPACITY: &str = "capacity";
 
 // Get Value
 #[askit_agent(
@@ -30,14 +33,38 @@ static CONFIG_USE_CTX: &str = "use_ctx";
 )]
 struct GetValueAgent {
     data: AgentData,
+    target_keys: Vec<String>,
+}
+
+impl GetValueAgent {
+    fn update_spec(spec: &mut AgentSpec) -> Result<Vec<String>, AgentError> {
+        let key_str = spec
+            .configs
+            .as_ref()
+            .map(|cfg| cfg.get_string_or_default(CONFIG_KEY))
+            .unwrap_or_default();
+        if key_str.is_empty() {
+            return Ok(Vec::new());
+        }
+        let target_keys = key_str.split('.').map(|s| s.to_string()).collect();
+        Ok(target_keys)
+    }
 }
 
 #[async_trait]
 impl AsAgent for GetValueAgent {
-    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(askit: ASKit, id: String, mut spec: AgentSpec) -> Result<Self, AgentError> {
+        let target_keys = Self::update_spec(&mut spec)?;
         Ok(Self {
             data: AgentData::new(askit, id, spec),
+            target_keys,
         })
+    }
+
+    fn configs_changed(&mut self) -> Result<(), AgentError> {
+        let target_keys = Self::update_spec(&mut self.data.spec)?;
+        self.target_keys = target_keys;
+        Ok(())
     }
 
     async fn process(
@@ -46,35 +73,31 @@ impl AsAgent for GetValueAgent {
         _pin: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
-        let key = self.configs()?.get_string(CONFIG_KEY)?;
-        if key.is_empty() {
+        if self.target_keys.is_empty() {
             return Ok(());
         }
-        let keys = key.split('.').collect::<Vec<_>>();
 
-        if value.is_object() {
-            if let Some(value) = get_nested_value(&value, &keys) {
-                self.try_output(ctx, PIN_VALUE, value.to_owned())?;
-            } else {
-                self.try_output(ctx, PIN_VALUE, AgentValue::unit())?;
+        let output_value = match value {
+            AgentValue::Array(arr) => {
+                let extracted: Vector<AgentValue> = arr
+                    .iter()
+                    .map(|item| {
+                        get_nested_value(item, &self.target_keys)
+                            .cloned()
+                            .unwrap_or(AgentValue::Unit)
+                    })
+                    .collect();
+                AgentValue::Array(extracted)
             }
-        } else if value.is_array() {
-            let mut out_arr = Vec::new();
-            for v in value
-                .as_array()
-                .ok_or_else(|| AgentError::InvalidValue("failed as_array".to_string()))?
-            {
-                let value = get_nested_value(v, &keys);
-                if let Some(v) = value {
-                    out_arr.push(v.to_owned());
-                } else {
-                    out_arr.push(AgentValue::unit());
-                }
-            }
-            self.try_output(ctx, PIN_VALUE, AgentValue::array(out_arr))?;
-        }
 
-        Ok(())
+            AgentValue::Object(_) => get_nested_value(&value, &self.target_keys)
+                .cloned()
+                .unwrap_or(AgentValue::Unit),
+
+            _ => AgentValue::Unit,
+        };
+
+        self.try_output(ctx, PIN_VALUE, output_value)
     }
 }
 
@@ -89,36 +112,57 @@ impl AsAgent for GetValueAgent {
 )]
 struct SetValueAgent {
     data: AgentData,
+    target_keys: Vec<String>,
+    target_value: AgentValue,
+}
+
+impl SetValueAgent {
+    fn update_spec(spec: &mut AgentSpec) -> Result<(Vec<String>, AgentValue), AgentError> {
+        let key_str = spec
+            .configs
+            .as_ref()
+            .map(|cfg| cfg.get_string_or_default(CONFIG_KEY))
+            .unwrap_or_default();
+        let target_keys = key_str.split('.').map(|s| s.to_string()).collect();
+        let target_value = spec
+            .configs
+            .as_ref()
+            .map(|cfg| cfg.get(CONFIG_VALUE).cloned().unwrap_or(AgentValue::Unit))
+            .unwrap_or(AgentValue::Unit);
+        Ok((target_keys, target_value))
+    }
 }
 
 #[async_trait]
 impl AsAgent for SetValueAgent {
-    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(askit: ASKit, id: String, mut spec: AgentSpec) -> Result<Self, AgentError> {
+        let (target_keys, target_value) = Self::update_spec(&mut spec)?;
         Ok(Self {
             data: AgentData::new(askit, id, spec),
+            target_keys,
+            target_value,
         })
+    }
+
+    fn configs_changed(&mut self) -> Result<(), AgentError> {
+        let (target_keys, target_value) = Self::update_spec(&mut self.data.spec)?;
+        self.target_keys = target_keys;
+        self.target_value = target_value;
+        Ok(())
     }
 
     async fn process(
         &mut self,
         ctx: AgentContext,
         _pin: String,
-        value: AgentValue,
+        mut value: AgentValue,
     ) -> Result<(), AgentError> {
-        // parse key
-        let key = self.configs()?.get_string(CONFIG_KEY)?;
-        if key.is_empty() {
+        if self.target_keys.is_empty() {
             return Ok(());
         }
-        let keys = key.split('.').collect::<Vec<_>>();
 
-        let v = self.configs()?.get(CONFIG_VALUE)?;
-        let mut value = value;
-        set_nested_value(&mut value, keys, v.clone());
-
-        self.try_output(ctx, PIN_VALUE, value)?;
-
-        Ok(())
+        set_nested_value(&mut value, &self.target_keys, self.target_value.clone());
+        self.try_output(ctx, PIN_VALUE, value)
     }
 }
 
@@ -132,14 +176,38 @@ impl AsAgent for SetValueAgent {
 )]
 struct ToObjectAgent {
     data: AgentData,
+    target_keys: Vec<String>,
+}
+
+impl ToObjectAgent {
+    fn update_spec(spec: &mut AgentSpec) -> Result<Vec<String>, AgentError> {
+        let key_str = spec
+            .configs
+            .as_ref()
+            .map(|cfg| cfg.get_string_or_default(CONFIG_KEY))
+            .unwrap_or_default();
+        if key_str.is_empty() {
+            return Ok(Vec::new());
+        }
+        let target_keys = key_str.split('.').map(|s| s.to_string()).collect();
+        Ok(target_keys)
+    }
 }
 
 #[async_trait]
 impl AsAgent for ToObjectAgent {
-    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(askit: ASKit, id: String, mut spec: AgentSpec) -> Result<Self, AgentError> {
+        let target_keys = Self::update_spec(&mut spec)?;
         Ok(Self {
             data: AgentData::new(askit, id, spec),
+            target_keys,
         })
+    }
+
+    fn configs_changed(&mut self) -> Result<(), AgentError> {
+        let target_keys = Self::update_spec(&mut self.data.spec)?;
+        self.target_keys = target_keys;
+        Ok(())
     }
 
     async fn process(
@@ -148,17 +216,14 @@ impl AsAgent for ToObjectAgent {
         _pin: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
-        let key = self.configs()?.get_string(CONFIG_KEY)?;
-        if key.is_empty() {
+        if self.target_keys.is_empty() {
             return Ok(());
         }
 
-        let keys = key.split('.').collect::<Vec<_>>();
         let mut new_value = AgentValue::object_default();
-        set_nested_value(&mut new_value, keys, value);
+        set_nested_value(&mut new_value, &self.target_keys, value);
 
-        self.try_output(ctx, PIN_VALUE, new_value)?;
-        Ok(())
+        self.try_output(ctx, PIN_VALUE, new_value)
     }
 }
 
@@ -230,42 +295,50 @@ impl AsAgent for FromJsonAgent {
     }
 }
 
-fn get_nested_value<'a>(value: &'a AgentValue, keys: &[&str]) -> Option<&'a AgentValue> {
+fn get_nested_value<'a, K: AsRef<str>>(
+    value: &'a AgentValue,
+    keys: &[K],
+) -> Option<&'a AgentValue> {
     let mut current_value = value;
     for key in keys {
         let obj = current_value.as_object()?;
-        current_value = obj.get(*key)?;
+        current_value = obj.get(key.as_ref())?;
     }
     Some(current_value)
 }
 
-fn set_nested_value<'a>(value: &'a mut AgentValue, keys: Vec<&str>, new_value: AgentValue) {
-    let mut current_value = value;
-
+fn set_nested_value<K: AsRef<str>>(root: &mut AgentValue, keys: &[K], new_value: AgentValue) {
     if keys.is_empty() {
         return;
     }
 
-    for key in keys[..keys.len() - 1].iter() {
-        if !current_value.is_object() {
-            return;
+    // Split into the last key and the path before it
+    // keys = ["a", "b", "c"] -> path=["a", "b"], last_key="c"
+    let (last_key, path) = keys.split_last().unwrap();
+
+    let mut current = root;
+
+    // Traverse down to just before the target
+    for key in path {
+        // If current position is not an Object, forcibly overwrite it with an empty Object
+        if !current.is_object() {
+            *current = AgentValue::object_default();
         }
 
-        if current_value.get(*key).is_none() {
-            let _ = current_value.set((*key).to_string(), AgentValue::object_default());
-        }
+        let obj = current.as_object_mut().unwrap();
 
-        if let Some(v) = current_value.get_mut(*key) {
-            current_value = v;
-        } else {
-            // just in case
-            return;
-        }
+        current = obj
+            .entry(key.as_ref().to_string())
+            .or_insert_with(AgentValue::object_default);
     }
 
-    let last_key = keys.last().unwrap();
-    if let Some(obj) = current_value.as_object_mut() {
-        obj.insert((*last_key).to_string(), new_value);
+    // Set the value for the last key
+    if !current.is_object() {
+        *current = AgentValue::object_default();
+    }
+
+    if let Some(obj) = current.as_object_mut() {
+        obj.insert(last_key.as_ref().to_string(), new_value);
     }
 }
 
@@ -288,25 +361,42 @@ fn set_nested_value<'a>(value: &'a mut AgentValue, keys: Vec<&str>, new_value: A
     outputs = [PIN_OBJECT],
     integer_config(name = CONFIG_N, default = 2),
     boolean_config(name = CONFIG_USE_CTX),
+    integer_config(name = CONFIG_TTL_SECONDS, default = 60),
+    integer_config(name = CONFIG_CAPACITY, default = 1000),
 )]
 struct ZipToObjectAgent {
     data: AgentData,
     n: usize,
     use_ctx: bool,
-    input_values: Vec<Vec<AgentValue>>,
-    ctx_input_values: Vec<VecDeque<(String, AgentValue)>>,
+    ttl_seconds: u64,
+    capacity: usize,
+
+    // Optimization: Pre-load and store key configuration (k1, k2...)
+    keys: Vec<String>,
+
+    // For simple mode: FIFO queues
+    queues: Vec<VecDeque<AgentValue>>,
+
+    // For use_ctx mode: Cache with TTL
+    ctx_buffers: Cache<String, PendingZip>,
+}
+
+#[derive(Clone)]
+struct PendingZip {
+    values: Vec<Option<AgentValue>>,
+    count: usize,
 }
 
 impl ZipToObjectAgent {
-    fn update_spec(spec: &mut AgentSpec) -> Result<(usize, bool), AgentError> {
-        let mut n = spec
+    fn update_spec(
+        spec: &mut AgentSpec,
+    ) -> Result<(usize, bool, u64, u64, Vec<String>), AgentError> {
+        let n = spec
             .configs
             .as_ref()
             .map(|cfg| cfg.get_integer_or(CONFIG_N, 2))
-            .unwrap_or(2);
-        if n < 1 {
-            n = 1;
-        }
+            .unwrap_or(2) as usize;
+        let n = if n < 1 { 1 } else { n };
 
         let use_ctx = spec
             .configs
@@ -314,10 +404,24 @@ impl ZipToObjectAgent {
             .map(|cfg| cfg.get_bool_or_default(CONFIG_USE_CTX))
             .unwrap_or(false);
 
+        let ttl_sec = spec
+            .configs
+            .as_ref()
+            .map(|c| c.get_integer_or("ttl_seconds", 60))
+            .unwrap_or(60) as u64;
+
+        let capacity = spec
+            .configs
+            .as_ref()
+            .map(|c| c.get_integer_or("capacity", 1000))
+            .unwrap_or(1000) as u64;
+
+        // Dynamic generation of config definitions (ConfigSpecs)
         let mut configs = AgentConfigs::new();
         let mut config_specs = AgentConfigSpecs::default();
 
-        configs.set(CONFIG_N.to_string(), AgentValue::integer(n));
+        // Re-set required configurations
+        configs.set(CONFIG_N.to_string(), AgentValue::integer(n as i64));
         let Some(n_spec) = spec
             .config_specs
             .as_ref()
@@ -340,16 +444,21 @@ impl ZipToObjectAgent {
         };
         config_specs.insert(CONFIG_USE_CTX.to_string(), use_ctx_spec);
 
+        let mut keys = Vec::with_capacity(n);
         for i in 1..=n {
-            let key_cfg = format!("k{}", i);
+            let key_name = format!("k{}", i);
+            let default_key = format!("in{}", i);
             let v = spec
                 .configs
                 .as_ref()
-                .map(|cfg| cfg.get_string_or_default(&key_cfg))
-                .unwrap_or_default();
-            configs.set(key_cfg.clone(), AgentValue::string(v));
+                .map(|cfg| cfg.get_string_or(&key_name, &default_key))
+                .unwrap_or(default_key);
+
+            keys.push(v.clone());
+
+            configs.set(key_name.clone(), AgentValue::string(v));
             config_specs.insert(
-                key_cfg,
+                key_name,
                 AgentConfigSpec {
                     value: AgentValue::string_default(),
                     type_: Some("string".to_string()),
@@ -363,26 +472,38 @@ impl ZipToObjectAgent {
 
         spec.inputs = Some((1..=n).map(|i| format!("in{}", i)).collect());
 
-        Ok((n as usize, use_ctx))
+        Ok((n as usize, use_ctx, ttl_sec, capacity, keys))
+    }
+
+    fn reset_state(&mut self) {
+        self.queues = vec![VecDeque::new(); self.n];
+        self.ctx_buffers.invalidate_all();
     }
 }
 
 #[async_trait]
 impl AsAgent for ZipToObjectAgent {
     fn new(askit: ASKit, id: String, mut spec: AgentSpec) -> Result<Self, AgentError> {
-        let (n, use_ctx) = Self::update_spec(&mut spec)?;
+        let (n, use_ctx, ttl_sec, capacity, keys) = Self::update_spec(&mut spec)?;
+        let cache = Cache::builder()
+            .max_capacity(capacity)
+            .time_to_live(Duration::from_secs(ttl_sec))
+            .build();
         let data = AgentData::new(askit, id, spec);
         Ok(Self {
             data,
             n,
-            input_values: vec![Vec::new(); n],
             use_ctx,
-            ctx_input_values: vec![VecDeque::new(); n],
+            ttl_seconds: ttl_sec,
+            capacity: capacity as usize,
+            keys,
+            queues: vec![VecDeque::new(); n],
+            ctx_buffers: cache,
         })
     }
 
     fn configs_changed(&mut self) -> Result<(), AgentError> {
-        let (n, use_ctx) = Self::update_spec(&mut self.data.spec)?;
+        let (n, use_ctx, ttl_sec, capacity, keys) = Self::update_spec(&mut self.data.spec)?;
         let mut changed = false;
         if n != self.n {
             self.n = n;
@@ -392,18 +513,32 @@ impl AsAgent for ZipToObjectAgent {
             self.use_ctx = use_ctx;
             changed = true;
         }
+        if ttl_sec != self.ttl_seconds {
+            self.ttl_seconds = ttl_sec;
+            changed = true;
+        }
+        if capacity != self.capacity as u64 {
+            self.capacity = capacity as usize;
+            changed = true;
+        }
+        if keys != self.keys {
+            self.keys = keys;
+            changed = true;
+        }
         if changed {
-            self.input_values = vec![Vec::new(); self.n];
-            self.ctx_input_values = vec![VecDeque::new(); self.n];
+            self.reset_state();
+            // Rebuild cache with new capacity and ttl
+            self.ctx_buffers = Cache::builder()
+                .max_capacity(capacity)
+                .time_to_live(Duration::from_secs(ttl_sec))
+                .build();
             self.emit_agent_spec_updated();
         }
         Ok(())
     }
 
     async fn stop(&mut self) -> Result<(), AgentError> {
-        // Clear input queues on stop
-        self.input_values = vec![Vec::new(); self.n];
-        self.ctx_input_values = vec![VecDeque::new(); self.n];
+        self.reset_state();
         Ok(())
     }
 
@@ -413,17 +548,12 @@ impl AsAgent for ZipToObjectAgent {
         pin: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
-        // Store the input value
-        let Some(i) = pin
+        // Parse pin number
+        let Some(idx) = pin
             .strip_prefix("in")
             .and_then(|s| s.parse::<usize>().ok())
-            .and_then(|idx| {
-                if idx >= 1 && idx <= self.n {
-                    Some(idx - 1)
-                } else {
-                    None
-                }
-            })
+            .filter(|&i| i >= 1 && i <= self.n)
+            .map(|i| i - 1)
         else {
             return Err(AgentError::InvalidValue(format!(
                 "Invalid input pin: {}",
@@ -431,60 +561,57 @@ impl AsAgent for ZipToObjectAgent {
             )));
         };
 
+        // Context Mode
         if self.use_ctx {
-            if self.ctx_input_values.len() != self.n {
-                self.ctx_input_values = vec![VecDeque::new(); self.n];
-            }
             let ctx_key = ctx.ctx_key()?;
-            self.ctx_input_values[i].push_back((ctx_key, value));
 
-            if self.ctx_input_values.iter().any(|q| q.is_empty()) {
-                return Ok(());
+            let mut entry = self
+                .ctx_buffers
+                .get(&ctx_key)
+                .unwrap_or_else(|| PendingZip {
+                    values: vec![None; self.n],
+                    count: 0,
+                });
+
+            if entry.values[idx].is_none() {
+                entry.count += 1;
             }
+            entry.values[idx] = Some(value);
 
-            let Some((_target_key, positions)) = find_first_common_key(&self.ctx_input_values)
-            else {
-                return Ok(());
-            };
+            if entry.count == self.n {
+                self.ctx_buffers.invalidate(&ctx_key);
 
-            for (queue, pos) in self.ctx_input_values.iter_mut().zip(positions) {
-                for _ in 0..pos {
-                    queue.pop_front();
-                }
+                // Zip keys and values, then collect
+                let map: HashMap<String, AgentValue> = self
+                    .keys
+                    .iter()
+                    .zip(entry.values.into_iter().map(|v| v.unwrap()))
+                    .map(|(k, v)| (k.clone(), v))
+                    .collect();
+
+                return self.try_output(ctx, PIN_OBJECT, AgentValue::Object(map));
+            } else {
+                self.ctx_buffers.insert(ctx_key, entry);
             }
-
-            let mut obj = AgentValue::object_default();
-            for j in 0..self.n {
-                let key_cfg = format!("k{}", j + 1);
-                let key = self.configs()?.get_string_or_default(&key_cfg);
-                let val = self.ctx_input_values[j]
-                    .front()
-                    .map(|(_, v)| v.clone())
-                    .ok_or_else(|| AgentError::InvalidValue("missing queued value".into()))?;
-                obj.set(key, val)?;
-            }
-            for q in self.ctx_input_values.iter_mut() {
-                q.pop_front();
-            }
-            return self.try_output(ctx, PIN_OBJECT, obj);
-        }
-
-        self.input_values[i].push(value);
-
-        // Check if some input is still missing
-        if self.input_values.iter().any(|v| v.is_empty()) {
             return Ok(());
         }
 
-        // All inputs are present, emit an object
-        let mut obj = AgentValue::object_default();
-        for j in 0..self.n {
-            let key_cfg = format!("k{}", j + 1);
-            let key = self.configs()?.get_string_or_default(&key_cfg);
-            let val = self.input_values[j].remove(0);
-            obj.set(key, val)?;
+        // Simple FIFO Mode
+        self.queues[idx].push_back(value);
+
+        if self.queues.iter().all(|q| !q.is_empty()) {
+            // Take from head and combine with keys to create Map
+            let map: HashMap<String, AgentValue> = self
+                .keys
+                .iter()
+                .zip(self.queues.iter_mut())
+                .map(|(k, q)| (k.clone(), q.pop_front().unwrap()))
+                .collect();
+
+            self.try_output(ctx, PIN_OBJECT, AgentValue::Object(map))
+        } else {
+            Ok(())
         }
-        self.try_output(ctx, PIN_OBJECT, obj)
     }
 }
 
@@ -535,7 +662,7 @@ mod tests {
         let keys = vec!["users", "admin", "name"];
         let value = AgentValue::string("Alice");
 
-        set_nested_value(&mut root, keys, value);
+        set_nested_value(&mut root, &keys, value);
 
         // Verify: root["users"]["admin"]["name"] == "Alice"
         if let Some(users) = root.get_mut("users") {
@@ -560,7 +687,7 @@ mod tests {
         let keys = vec!["config", "timeout"];
         let value = AgentValue::string("30s");
 
-        set_nested_value(&mut root, keys, value);
+        set_nested_value(&mut root, &keys, value);
 
         // Verify
         let config = root.get_mut("config").unwrap();
@@ -581,7 +708,7 @@ mod tests {
         // Execute overwrite
         let keys = vec!["app", "version"];
         let new_val = AgentValue::string("v2");
-        set_nested_value(&mut root, keys, new_val);
+        set_nested_value(&mut root, &keys, new_val);
 
         // Verify
         let app = root.get_mut("app").unwrap();
@@ -602,7 +729,7 @@ mod tests {
         let value = AgentValue::string("value");
 
         // Ensure it returns without crashing
-        set_nested_value(&mut root, keys, value);
+        set_nested_value(&mut root, &keys, value);
 
         // Verify that "tags" remains a string
         let tags = root.get_mut("tags").unwrap();

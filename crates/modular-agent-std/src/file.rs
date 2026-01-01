@@ -6,6 +6,7 @@ use agent_stream_kit::{
     askit_agent, async_trait,
 };
 use glob::glob;
+use im::hashmap;
 
 static CATEGORY: &str = "Std/File";
 
@@ -62,7 +63,7 @@ impl AsAgent for GlobAgent {
             }
         }
 
-        let out_value = AgentValue::array(files);
+        let out_value = AgentValue::array(files.into());
         self.try_output(ctx, PIN_FILES, out_value)
     }
 }
@@ -128,7 +129,7 @@ impl AsAgent for ListFilesAgent {
             files.push(file_name.into());
         }
 
-        let out_value = AgentValue::array(files);
+        let out_value = AgentValue::array(files.into());
         self.try_output(ctx, PIN_FILES, out_value)
     }
 }
@@ -184,16 +185,10 @@ impl AsAgent for ReadTextFileAgent {
         let text = AgentValue::string(content);
         self.try_output(ctx.clone(), PIN_STRING, text.clone())?;
 
-        let out_doc = AgentValue::object(
-            [
-                (
-                    "path".into(),
-                    AgentValue::string(path.to_string_lossy().to_string()),
-                ),
-                ("text".into(), text),
-            ]
-            .into(),
-        );
+        let out_doc = AgentValue::object(hashmap! {
+            "path".into() => AgentValue::string(path.to_string_lossy().to_string()),
+            "text".into() => text,
+        });
         self.try_output(ctx, PIN_DOC, out_doc)
     }
 }

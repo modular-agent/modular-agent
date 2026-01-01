@@ -1,10 +1,12 @@
+use std::collections::VecDeque;
+use std::time::Duration;
+
 use agent_stream_kit::{
     ASKit, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
     askit_agent, async_trait,
 };
-use std::collections::VecDeque;
-
-use crate::ctx_utils::find_first_common_key;
+use im::{Vector, vector};
+use mini_moka::sync::Cache;
 
 static CATEGORY: &str = "Std/Array";
 
@@ -17,6 +19,8 @@ static PIN_VALUE: &str = "value";
 
 static CONFIG_N: &str = "n";
 static CONFIG_USE_CTX: &str = "use_ctx";
+static CONFIG_TTL_SEC: &str = "ttl_sec";
+static CONFIG_CAPACITY: &str = "capacity";
 
 /// Check if an input is an array.
 #[askit_agent(
@@ -151,17 +155,17 @@ impl AsAgent for ArrayFirstAgent {
         _pin: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
-        if value.is_array() {
-            let arr = value.as_array().unwrap();
-            if arr.is_empty() {
-                return Err(AgentError::InvalidValue(
-                    "Input array is empty, no first item".into(),
-                ));
+        match value {
+            AgentValue::Array(mut arr) => {
+                if let Some(first_item) = arr.pop_front() {
+                    self.try_output(ctx, PIN_VALUE, first_item)
+                } else {
+                    Err(AgentError::InvalidValue(
+                        "Input array is empty, no first item".into(),
+                    ))
+                }
             }
-            let first_item = arr[0].clone();
-            self.try_output(ctx, PIN_VALUE, first_item)
-        } else {
-            self.try_output(ctx, PIN_VALUE, value)
+            other => self.try_output(ctx, PIN_VALUE, other),
         }
     }
 }
@@ -192,13 +196,12 @@ impl AsAgent for ArrayRestAgent {
         _pin: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
-        if value.is_array() {
-            let arr = value.as_array().unwrap();
+        if let Some(mut arr) = value.into_array() {
             if arr.is_empty() {
-                return self.try_output(ctx, PIN_ARRAY, AgentValue::array(Vec::new()));
+                return self.try_output(ctx, PIN_ARRAY, AgentValue::array_default());
             }
-            let rest_items = arr[1..].to_vec();
-            self.try_output(ctx, PIN_ARRAY, AgentValue::array(rest_items))
+            arr.pop_front();
+            self.try_output(ctx, PIN_ARRAY, AgentValue::array(arr))
         } else {
             self.try_output(ctx, PIN_ARRAY, AgentValue::array_default())
         }
@@ -231,17 +234,17 @@ impl AsAgent for ArrayLastAgent {
         _pin: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
-        if value.is_array() {
-            let arr = value.as_array().unwrap();
-            if arr.is_empty() {
-                return Err(AgentError::InvalidValue(
-                    "Input array is empty, no last item".into(),
-                ));
+        match value {
+            AgentValue::Array(mut arr) => {
+                if let Some(last_item) = arr.pop_back() {
+                    self.try_output(ctx, PIN_VALUE, last_item)
+                } else {
+                    Err(AgentError::InvalidValue(
+                        "Input array is empty, no last item".into(),
+                    ))
+                }
             }
-            let last_item = arr[arr.len() - 1].clone();
-            self.try_output(ctx, PIN_VALUE, last_item)
-        } else {
-            self.try_output(ctx, PIN_VALUE, value)
+            other => self.try_output(ctx, PIN_VALUE, other),
         }
     }
 }
@@ -285,24 +288,26 @@ impl AsAgent for ArrayNthAgent {
         }
         let n = n as usize;
 
-        if value.is_array() {
-            let arr = value.as_array().unwrap();
-            if n >= arr.len() {
-                return Err(AgentError::InvalidValue(format!(
-                    "Input array length {} is less than n+1={}",
-                    arr.len(),
-                    n + 1
-                )));
+        match value {
+            AgentValue::Array(arr) => {
+                if let Some(item) = arr.get(n) {
+                    self.try_output(ctx, PIN_VALUE, item.clone())
+                } else {
+                    Err(AgentError::InvalidValue(format!(
+                        "Input array length {} is less than n+1={}",
+                        arr.len(),
+                        n + 1
+                    )))
+                }
             }
-            let nth_item = arr[n].clone();
-            self.try_output(ctx, PIN_VALUE, nth_item)
-        } else {
-            if n == 0 {
-                self.try_output(ctx, PIN_VALUE, value)
-            } else {
-                Err(AgentError::InvalidValue(
-                    "Input is not an array and n != 0".into(),
-                ))
+            other => {
+                if n == 0 {
+                    self.try_output(ctx, PIN_VALUE, other)
+                } else {
+                    Err(AgentError::InvalidValue(
+                        "Input is not an array and n != 0".into(),
+                    ))
+                }
             }
         }
     }
@@ -353,10 +358,10 @@ impl AsAgent for ArrayTakeAgent {
             if n >= arr.len() {
                 return self.try_output(ctx, PIN_ARRAY, value);
             }
-            let taken_items = arr[..n].to_vec();
+            let taken_items = arr.take(n);
             self.try_output(ctx, PIN_ARRAY, AgentValue::array(taken_items))
         } else {
-            self.try_output(ctx, PIN_ARRAY, AgentValue::array(vec![value]))
+            self.try_output(ctx, PIN_ARRAY, AgentValue::array(vector![value]))
         }
     }
 }
@@ -386,19 +391,18 @@ impl AsAgent for MapAgent {
         _pin: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
-        if !value.is_array() {
-            let c = ctx.push_map_frame(0, 1)?;
-            return self.try_output(c, PIN_VALUE, value);
-        }
-
-        let arr = value
-            .as_array()
-            .ok_or_else(|| AgentError::InvalidValue("Failed to get array".into()))?;
-
-        let n = arr.len();
-        for (i, item) in arr.iter().cloned().enumerate() {
-            let c = ctx.push_map_frame(i, n)?;
-            self.try_output(c, PIN_VALUE, item)?;
+        match value {
+            AgentValue::Array(arr) => {
+                let n = arr.len();
+                for (i, item) in arr.into_iter().enumerate() {
+                    let c = ctx.push_map_frame(i, n)?;
+                    self.try_output(c, PIN_VALUE, item)?;
+                }
+            }
+            other => {
+                let c = ctx.push_map_frame(0, 1)?;
+                self.try_output(c, PIN_VALUE, other)?;
+            }
         }
         Ok(())
     }
@@ -420,15 +424,18 @@ impl AsAgent for MapAgent {
 )]
 struct CollectAgent {
     data: AgentData,
-    input_values: Vec<Option<AgentValue>>,
-    last_ctx: Option<AgentContext>,
-}
 
-fn drain_input_values(values: &mut Vec<Option<AgentValue>>) -> Vec<AgentValue> {
-    values
-        .drain(..)
-        .map(|v| v.unwrap_or_else(AgentValue::unit))
-        .collect()
+    // Records the context ID being processed to prevent other contexts from mixing
+    current_ctx_id: Option<usize>,
+
+    // Data buffer
+    input_values: Vec<Option<AgentValue>>,
+
+    // Expected size of the array
+    expected_size: usize,
+
+    // Number of items received (counter to avoid scanning input_values every time)
+    received_count: usize,
 }
 
 #[async_trait]
@@ -437,8 +444,10 @@ impl AsAgent for CollectAgent {
         let data = AgentData::new(askit, id, spec);
         Ok(Self {
             data,
+            current_ctx_id: None,
             input_values: Vec::new(),
-            last_ctx: None,
+            expected_size: 0,
+            received_count: 0,
         })
     }
 
@@ -448,53 +457,85 @@ impl AsAgent for CollectAgent {
         _pin: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
-        // Reset input values if context ID changes
-        let ctx_id = ctx.id();
-        if let Some(last_ctx) = &self.last_ctx {
-            if ctx_id != last_ctx.id() {
-                if !self.input_values.is_empty() {
-                    // Output incomplete array from previous context
-                    let arr = drain_input_values(&mut self.input_values);
-                    let next_ctx = last_ctx.pop_map_frame()?;
-                    self.try_output(next_ctx, PIN_ARRAY, AgentValue::array(arr))?;
-                }
-                self.input_values = Vec::new();
-            }
-        }
-        self.last_ctx = None;
-
-        let Some((idx_usize, n_usize)) = ctx.current_map_frame()? else {
-            self.input_values = Vec::new();
+        // Check for map frame
+        // If not within a map, pass the value through as-is.
+        let Some((idx, n)) = ctx.current_map_frame()? else {
             return self.try_output(ctx, PIN_ARRAY, value);
         };
 
-        if idx_usize >= n_usize {
+        // Detect context switch and flush processing
+        // If a new context ID arrives while the previous context hasn't finished processing
+        let ctx_id = ctx.id();
+        if let Some(last_id) = &self.current_ctx_id {
+            if last_id != &ctx_id {
+                log::warn!("Context changed before collection completed. Dropping partial data.");
+                self.reset_state();
+            }
+        }
+
+        // Initialize state (when the first item of this context arrives)
+        if self.input_values.is_empty() {
+            self.current_ctx_id = Some(ctx_id);
+            self.expected_size = n;
+            // Fill with None for the required size
+            self.input_values = vec![None; n];
+            self.received_count = 0;
+        }
+
+        // Validation
+        if n != self.expected_size {
+            // Size shouldn't change within the same context ID, but check just in case
             return Err(AgentError::InvalidValue(
-                "map frame index is out of bounds".into(),
+                "Map frame size mismatch within the same context".into(),
+            ));
+        }
+        if idx >= n {
+            return Err(AgentError::InvalidValue(
+                "Map frame index is out of bounds".into(),
             ));
         }
 
-        if self.input_values.len() != n_usize {
-            self.input_values = vec![None; n_usize];
+        // Store data
+        // Check if attempting to write to a position that's already filled (duplicate index)
+        if self.input_values[idx].is_some() {
+            // If duplicate data arrives, overwrite (could also error instead).
+        } else {
+            self.received_count += 1;
         }
+        self.input_values[idx] = Some(value);
 
-        self.input_values[idx_usize] = Some(value);
+        // Check for completion
+        if self.received_count == self.expected_size {
+            // All items collected, output the result
+            let arr = self.drain_buffer_to_vector();
 
-        // Check if some input is still missing
-        if self.input_values.iter().any(|v| v.is_none()) {
-            self.last_ctx = Some(ctx.clone());
-            return Ok(());
+            // Reset state
+            self.reset_state();
+
+            // Pop one map frame and output
+            let next_ctx = ctx.pop_map_frame()?;
+            self.try_output(next_ctx, PIN_ARRAY, AgentValue::array(arr))
+        } else {
+            // Not yet complete, keep waiting
+            Ok(())
         }
+    }
+}
 
-        // All inputs are present, emit the array
-        let arr: Vec<AgentValue> = self
-            .input_values
-            .iter()
-            .map(|v| v.clone().unwrap())
-            .collect();
-        self.input_values = Vec::new();
-        let next_ctx = ctx.pop_map_frame()?;
-        self.try_output(next_ctx, PIN_ARRAY, AgentValue::array(arr))
+impl CollectAgent {
+    fn reset_state(&mut self) {
+        self.current_ctx_id = None;
+        self.input_values.clear(); // Capacity is preserved for efficient reuse
+        self.expected_size = 0;
+        self.received_count = 0;
+    }
+
+    // Drain the buffer contents and convert to im::Vector
+    fn drain_buffer_to_vector(&mut self) -> Vector<AgentValue> {
+        self.input_values
+            .drain(..)
+            .map(|v| v.unwrap_or(AgentValue::Unit)) // Fill missing values with Unit
+            .collect()
     }
 }
 
@@ -517,17 +558,30 @@ impl AsAgent for CollectAgent {
     outputs = [PIN_ARRAY],
     integer_config(name = CONFIG_N, default = 2),
     boolean_config(name = CONFIG_USE_CTX),
+    integer_config(name = CONFIG_TTL_SEC, default = 60), 
+    integer_config(name = CONFIG_CAPACITY, default = 1000),
 )]
 struct ZipToArrayAgent {
     data: AgentData,
     n: usize,
     use_ctx: bool,
-    input_values: Vec<Vec<AgentValue>>,
-    ctx_input_values: Vec<VecDeque<(String, AgentValue)>>,
+
+    ttl_sec: u64,
+    capacity: u64,
+    queues: Vec<VecDeque<AgentValue>>, // for non-ctx mode
+
+    // Context Key -> PendingZip
+    ctx_buffers: Cache<String, PendingZip>,
+}
+
+#[derive(Clone)]
+struct PendingZip {
+    values: Vec<Option<AgentValue>>,
+    count: usize,
 }
 
 impl ZipToArrayAgent {
-    fn update_spec(spec: &mut AgentSpec) -> Result<(usize, bool), AgentError> {
+    fn update_spec(spec: &mut AgentSpec) -> Result<(usize, bool, u64, u64), AgentError> {
         let mut n = spec
             .configs
             .as_ref()
@@ -543,28 +597,54 @@ impl ZipToArrayAgent {
             .map(|cfg| cfg.get_bool_or_default(CONFIG_USE_CTX))
             .unwrap_or(false);
 
+        let ttl_sec = spec
+            .configs
+            .as_ref()
+            .map(|c| c.get_integer_or(CONFIG_TTL_SEC, 60))
+            .unwrap_or(60) as u64;
+
+        let capacity = spec
+            .configs
+            .as_ref()
+            .map(|c| c.get_integer_or(CONFIG_CAPACITY, 1000))
+            .unwrap_or(1000) as u64;
+
         spec.inputs = Some((1..=n).map(|i| format!("in{}", i)).collect());
 
-        Ok((n, use_ctx))
+        Ok((n, use_ctx, ttl_sec, capacity))
+    }
+
+    fn reset_state(&mut self) {
+        self.queues = vec![VecDeque::new(); self.n];
+        self.ctx_buffers.invalidate_all();
     }
 }
 
 #[async_trait]
 impl AsAgent for ZipToArrayAgent {
     fn new(askit: ASKit, id: String, mut spec: AgentSpec) -> Result<Self, AgentError> {
-        let (n, use_ctx) = Self::update_spec(&mut spec)?;
+        let (n, use_ctx, ttl_sec, capacity) = Self::update_spec(&mut spec)?;
+
+        let cache = Cache::builder()
+            .max_capacity(capacity) // Capacity limit (oldest entries are evicted on overflow)
+            .time_to_live(Duration::from_secs(ttl_sec)) // TTL (entries expire X seconds after write)
+            .build();
+
         let data = AgentData::new(askit, id, spec);
+
         Ok(Self {
             data,
             n,
             use_ctx,
-            input_values: vec![Vec::new(); n],
-            ctx_input_values: vec![VecDeque::new(); n],
+            ttl_sec,
+            capacity,
+            queues: vec![VecDeque::new(); n],
+            ctx_buffers: cache,
         })
     }
 
     fn configs_changed(&mut self) -> Result<(), AgentError> {
-        let (n, use_ctx) = Self::update_spec(&mut self.data.spec)?;
+        let (n, use_ctx, ttl_sec, capacity) = Self::update_spec(&mut self.data.spec)?;
         let mut changed = false;
         if n != self.n {
             self.n = n;
@@ -574,18 +654,28 @@ impl AsAgent for ZipToArrayAgent {
             self.use_ctx = use_ctx;
             changed = true;
         }
+        if ttl_sec != self.ttl_sec {
+            self.ttl_sec = ttl_sec;
+            changed = true;
+        }
+        if capacity != self.capacity {
+            self.capacity = capacity;
+            changed = true;
+        }
         if changed {
-            self.input_values = vec![Vec::new(); self.n];
-            self.ctx_input_values = vec![VecDeque::new(); self.n];
+            self.reset_state();
+            // Rebuild cache with new capacity and TTL
+            self.ctx_buffers = Cache::builder()
+                .max_capacity(capacity)
+                .time_to_live(Duration::from_secs(ttl_sec))
+                .build();
             self.emit_agent_spec_updated();
         }
         Ok(())
     }
 
     async fn stop(&mut self) -> Result<(), AgentError> {
-        // Clear input queues on stop
-        self.input_values = vec![Vec::new(); self.n];
-        self.ctx_input_values = vec![VecDeque::new(); self.n];
+        self.reset_state();
         Ok(())
     }
 
@@ -595,17 +685,12 @@ impl AsAgent for ZipToArrayAgent {
         pin: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
-        // Store the input value
-        let Some(i) = pin
+        // Parse pin number
+        let Some(idx) = pin
             .strip_prefix("in")
             .and_then(|s| s.parse::<usize>().ok())
-            .and_then(|idx| {
-                if idx >= 1 && idx <= self.n {
-                    Some(idx - 1)
-                } else {
-                    None
-                }
-            })
+            .filter(|&i| i >= 1 && i <= self.n)
+            .map(|i| i - 1)
         else {
             return Err(AgentError::InvalidValue(format!(
                 "Invalid input pin: {}",
@@ -614,52 +699,49 @@ impl AsAgent for ZipToArrayAgent {
         };
 
         if self.use_ctx {
-            if self.ctx_input_values.len() != self.n {
-                self.ctx_input_values = vec![VecDeque::new(); self.n];
-            }
-
             let ctx_key = ctx.ctx_key()?;
-            self.ctx_input_values[i].push_back((ctx_key, value));
 
-            if self.ctx_input_values.iter().any(|q| q.is_empty()) {
-                return Ok(());
+            // Get from cache (or create new if not present)
+            let mut entry = self.ctx_buffers.get(&ctx_key).unwrap_or_else(|| PendingZip {
+                values: vec![None; self.n],
+                count: 0,
+            });
+
+            // Update
+            if entry.values[idx].is_none() {
+                entry.count += 1;
+            }
+            entry.values[idx] = Some(value);
+
+            // Check for completion
+            if entry.count == self.n {
+                // All inputs collected, remove from cache (invalidate)
+                self.ctx_buffers.invalidate(&ctx_key);
+
+                let arr: Vector<AgentValue> = entry.values
+                    .into_iter()
+                    .map(|v| v.unwrap())
+                    .collect();
+
+                return self.try_output(ctx, PIN_ARRAY, AgentValue::array(arr));
             }
 
-            let Some((_target_key, positions)) = find_first_common_key(&self.ctx_input_values)
-            else {
-                return Ok(());
-            };
-
-            for (queue, pos) in self.ctx_input_values.iter_mut().zip(positions) {
-                for _ in 0..pos {
-                    queue.pop_front();
-                }
-            }
-
-            // Now all heads share target_key
-            let arr: Vec<AgentValue> = self
-                .ctx_input_values
-                .iter()
-                .map(|q| q.front().unwrap().1.clone())
-                .collect();
-            for q in self.ctx_input_values.iter_mut() {
-                q.pop_front();
-            }
-            return self.try_output(ctx, PIN_ARRAY, AgentValue::array(arr));
-        }
-
-        self.input_values[i].push(value);
-
-        // Check if some input is still missing
-        if self.input_values.iter().any(|v| v.is_empty()) {
             return Ok(());
         }
 
-        // All inputs are present, emit the array
-        let arr: Vec<AgentValue> = self.input_values.iter().map(|v| v[0].clone()).collect();
-        for v in &mut self.input_values {
-            v.remove(0);
+        // Simple FIFO mode processing
+        self.queues[idx].push_back(value);
+
+        // Check if all queues have data
+        if self.queues.iter().all(|q| !q.is_empty()) {
+            let arr: Vector<AgentValue> = self.queues
+                .iter_mut()
+                .map(|q| q.pop_front().unwrap())
+                .collect();
+
+            self.try_output(ctx, PIN_ARRAY, AgentValue::array(arr))
+        } else {
+            Ok(())
         }
-        self.try_output(ctx, PIN_ARRAY, AgentValue::array(arr))
     }
 }

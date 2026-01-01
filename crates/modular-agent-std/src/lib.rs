@@ -1,5 +1,6 @@
+#![recursion_limit = "256"]
+
 pub mod array;
-pub(crate) mod ctx_utils;
 pub mod data;
 pub mod display;
 pub mod file;

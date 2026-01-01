@@ -3,6 +3,7 @@ use agent_stream_kit::{
     askit_agent, async_trait,
 };
 use handlebars::Handlebars;
+use im::vector;
 use serde_json::json;
 
 static CATEGORY: &str = "Std/String";
@@ -222,7 +223,7 @@ impl AsAgent for StringLengthSplitAgent {
             }
             start = next_start;
         }
-        self.try_output(ctx, PIN_STRINGS, AgentValue::array(out))
+        self.try_output(ctx, PIN_STRINGS, AgentValue::array(out.into()))
     }
 }
 
@@ -273,7 +274,7 @@ impl AsAgent for TemplateStringAgent {
                 })?;
                 out_arr.push(rendered_string.into());
             }
-            self.try_output(ctx, PIN_STRING, AgentValue::array(out_arr))
+            self.try_output(ctx, PIN_STRING, AgentValue::array(out_arr.into()))
         } else {
             let data = json!({"value": value});
             let rendered_string = reg.render_template(&template, &data).map_err(|e| {
@@ -332,7 +333,7 @@ impl AsAgent for TemplateTextAgent {
                 })?;
                 out_arr.push(rendered_string.into());
             }
-            self.try_output(ctx, PIN_STRING, AgentValue::array(out_arr))
+            self.try_output(ctx, PIN_STRING, AgentValue::array(out_arr.into()))
         } else {
             let data = json!({"value": value});
             let rendered_string = reg.render_template(&template, &data).map_err(|e| {
@@ -385,7 +386,7 @@ impl AsAgent for TemplateArrayAgent {
             })?;
             self.try_output(ctx, PIN_STRING, AgentValue::string(rendered_string))
         } else {
-            let d = AgentValue::array(vec![value.clone()]);
+            let d = AgentValue::array(vector![value.clone()]);
             let rendered_string = reg.render_template(&template, &d).map_err(|e| {
                 AgentError::InvalidValue(format!("Failed to render template: {}", e))
             })?;

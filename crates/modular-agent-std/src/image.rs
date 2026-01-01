@@ -339,7 +339,7 @@ impl AsAgent for IsChangedImageAgent {
             };
 
             if is_changed {
-                self.last_image = Some(image.clone());
+                self.last_image = value.clone().into_image();
                 self.try_output(ctx, PIN_CHANGED, value)
             } else {
                 self.try_output(ctx, PIN_UNCHANGED, value)

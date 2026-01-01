@@ -4,6 +4,7 @@ use agent_stream_kit::{
     ASKit, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
     askit_agent, async_trait,
 };
+use im::hashmap;
 
 static CATEGORY: &str = "Std/Display";
 static DISPLAY_VALUE: &str = "value";
@@ -81,7 +82,7 @@ impl AsAgent for DebugValueAgent {
             serde_json::to_value(&ctx).map_err(|e| AgentError::InvalidValue(e.to_string()))?;
         let ctx = AgentValue::from_json(ctx_json)?;
         let debug_value =
-            AgentValue::object([("ctx".to_string(), ctx), ("value".to_string(), value)].into());
+            AgentValue::object(hashmap! { "ctx".into() => ctx, "value".into() => value });
         self.emit_config_updated(DISPLAY_VALUE, debug_value);
         Ok(())
     }
