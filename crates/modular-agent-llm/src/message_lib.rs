@@ -445,6 +445,8 @@ impl TryFrom<AgentValue> for MessageHistory {
 
 #[cfg(test)]
 mod tests {
+    use im::{hashmap, vector};
+
     use super::*;
 
     // Message tests
@@ -527,16 +529,11 @@ mod tests {
 
     #[test]
     fn test_message_from_object_value() {
-        let value = AgentValue::object(
-            [
-                ("role".to_string(), AgentValue::string("assistant")),
-                (
-                    "content".to_string(),
-                    AgentValue::string("Here is some information."),
-                ),
-            ]
-            .into(),
-        );
+        let value = AgentValue::object(hashmap! {
+            "role".into() => AgentValue::string("assistant"),
+                "content".into() =>
+                AgentValue::string("Here is some information."),
+        });
         let msg: Message = value.try_into().unwrap();
         assert_eq!(msg.role, "assistant");
         assert_eq!(msg.content, "Here is some information.");
@@ -552,7 +549,7 @@ mod tests {
     #[test]
     fn test_message_invalid_object() {
         let value =
-            AgentValue::object([("some_key".to_string(), AgentValue::string("some_value"))].into());
+            AgentValue::object(hashmap! {"some_key".into() => AgentValue::string("some_value")});
         let result: Result<Message, AgentError> = value.try_into();
         assert!(result.is_err());
     }
@@ -632,21 +629,15 @@ mod tests {
 
     #[test]
     fn test_message_history_from_value_array() {
-        let value = AgentValue::array(vec![
-            AgentValue::object(
-                [
-                    ("role".to_string(), AgentValue::string("user")),
-                    ("content".to_string(), AgentValue::string("Hello")),
-                ]
-                .into(),
-            ),
-            AgentValue::object(
-                [
-                    ("role".to_string(), AgentValue::string("assistant")),
-                    ("content".to_string(), AgentValue::string("Hi there!")),
-                ]
-                .into(),
-            ),
+        let value = AgentValue::array(vector![
+            AgentValue::object(hashmap! {
+                "role".into() => AgentValue::string("user"),
+                "content".into() => AgentValue::string("Hello"),
+            }),
+            AgentValue::object(hashmap! {
+                "role".into() => AgentValue::string("assistant"),
+                "content".into() => AgentValue::string("Hi there!"),
+            }),
         ]);
 
         let history = MessageHistory::from_value(value).unwrap();
@@ -657,13 +648,10 @@ mod tests {
 
     #[test]
     fn test_message_history_from_value_single_message_object() {
-        let value = AgentValue::object(
-            [
-                ("role".to_string(), AgentValue::string("user")),
-                ("content".to_string(), AgentValue::string("Solo message")),
-            ]
-            .into(),
-        );
+        let value = AgentValue::object(hashmap! {
+            "role".into() => AgentValue::string("user"),
+            "content".into() => AgentValue::string("Solo message"),
+        });
 
         let history = MessageHistory::from_value(value).unwrap();
         assert_eq!(history.messages.len(), 1);
@@ -673,34 +661,18 @@ mod tests {
 
     #[test]
     fn test_message_history_from_value_history_and_message_fields() {
-        let value = AgentValue::object(
-            [
-                (
-                    "history".to_string(),
-                    AgentValue::array(vec![AgentValue::object(
-                        [
-                            ("role".to_string(), AgentValue::string("system")),
-                            (
-                                "content".to_string(),
-                                AgentValue::string("You are a helpful assistant."),
-                            ),
-                        ]
-                        .into(),
-                    )]),
-                ),
-                (
-                    "message".to_string(),
-                    AgentValue::object(
-                        [
-                            ("role".to_string(), AgentValue::string("user")),
-                            ("content".to_string(), AgentValue::string("Hello")),
-                        ]
-                        .into(),
-                    ),
-                ),
-            ]
-            .into(),
-        );
+        let value = AgentValue::object(hashmap! {
+            "history".into() =>
+            AgentValue::array(vector![AgentValue::object(hashmap! {
+                "role".into() => AgentValue::string("system"),
+                "content".into() => AgentValue::string("You are a helpful assistant."),
+            })]),
+            "message".into() =>
+            AgentValue::object(hashmap! {
+                "role".into() => AgentValue::string("user"),
+                "content".into() => AgentValue::string("Hello"),
+            }),
+        });
 
         let history = MessageHistory::from_value(value).unwrap();
         assert_eq!(history.messages.len(), 2);

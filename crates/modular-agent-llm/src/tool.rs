@@ -8,6 +8,7 @@ use agent_stream_kit::{
     ASKit, Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
     askit_agent, async_trait,
 };
+use im::Vector;
 use regex::RegexSet;
 use tokio::sync::{Mutex as AsyncMutex, oneshot};
 
@@ -55,7 +56,7 @@ impl From<ToolInfo> for AgentValue {
                 obj.insert("parameters".to_string(), params_value);
             }
         }
-        AgentValue::object(obj)
+        AgentValue::object(obj.into())
     }
 }
 
@@ -244,7 +245,7 @@ impl AsAgent for ListToolsAgent {
         let tools = tools
             .into_iter()
             .map(|tool| tool.into())
-            .collect::<Vec<AgentValue>>();
+            .collect::<Vector<AgentValue>>();
         let tools_array = AgentValue::array(tools);
 
         self.try_output(ctx, PIN_TOOLS, tools_array)?;

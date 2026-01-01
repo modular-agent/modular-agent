@@ -1,3 +1,5 @@
+#![recursion_limit = "256"]
+
 pub mod doc;
 pub mod message;
 pub mod message_lib;

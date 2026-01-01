@@ -5,6 +5,7 @@ use agent_stream_kit::{
     askit_agent, async_trait,
 };
 use icu_normalizer::{ComposingNormalizer, ComposingNormalizerBorrowed};
+use im::{Vector, vector};
 use text_splitter::{ChunkConfig, TextSplitter};
 use tokenizers::Tokenizer;
 
@@ -105,16 +106,16 @@ pub struct SplitTextAgent {
 }
 
 impl SplitTextAgent {
-    fn split_into_chunks(&self, text: &str, max_characters: usize) -> Vec<AgentValue> {
+    fn split_into_chunks(&self, text: &str, max_characters: usize) -> Vector<AgentValue> {
         TextSplitter::new(max_characters)
             .chunk_indices(text)
             .map(|(start, t)| {
-                AgentValue::array(vec![
+                AgentValue::array(vector![
                     AgentValue::integer(start as i64),
                     AgentValue::string(t),
                 ])
             })
-            .collect::<Vec<_>>()
+            .collect::<Vector<_>>()
     }
 }
 
@@ -154,12 +155,12 @@ impl AsAgent for SplitTextAgent {
             if value.is_object() {
                 let text = value.get_str("text").unwrap_or("");
                 let chunks = if text.is_empty() {
-                    Vec::new()
+                    Vector::new()
                 } else {
                     self.split_into_chunks(text, max_characters)
                 };
                 let mut output = value.clone();
-                output.set("chunks".to_string(), AgentValue::array(chunks.clone()))?;
+                output.set("chunks".to_string(), AgentValue::array(chunks))?;
                 return self.try_output(ctx.clone(), PIN_DOC, output);
             }
         }
@@ -187,12 +188,11 @@ impl SplitTextByTokensAgent {
         text: &str,
         max_tokens: usize,
         tokenizer_model: &str,
-    ) -> Result<Vec<AgentValue>, AgentError> {
+    ) -> Result<Vector<AgentValue>, AgentError> {
         if self.splitter.is_none() {
             let tokenizer = Tokenizer::from_pretrained(tokenizer_model, None).map_err(|e| {
                 AgentError::InvalidConfig(format!("Failed to load tokenizer: {}", e))
             })?;
-
             let splitter = TextSplitter::new(ChunkConfig::new(max_tokens).with_sizer(tokenizer));
             self.splitter = Some(splitter);
         }
@@ -202,12 +202,12 @@ impl SplitTextByTokensAgent {
             .unwrap()
             .chunk_indices(text)
             .map(|(start, t)| {
-                AgentValue::array(vec![
+                AgentValue::array(vector![
                     AgentValue::integer(start as i64),
                     AgentValue::string(t),
                 ])
             })
-            .collect::<Vec<_>>())
+            .collect::<Vector<_>>())
     }
 }
 
@@ -263,7 +263,7 @@ impl AsAgent for SplitTextByTokensAgent {
         if pin == PIN_DOC {
             let text = value.get_str("text").unwrap_or("");
             let chunks = if text.is_empty() {
-                Vec::new()
+                Vector::new()
             } else {
                 self.split_into_chunks(text, max_tokens, &tokenizer_model)?
             };

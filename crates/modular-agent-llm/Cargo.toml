@@ -12,6 +12,7 @@ async-openai = { version = "0.30.1", optional = true }
 async-trait = "0.1"
 futures = { version = "0.3.31", optional = true }
 icu_normalizer = "2.1.1"
+im = "15.1.0"
 ollama-rs = { version = "0.3.2", default-features = false, features = ["macros", "rustls", "stream"], optional = true }
 photon-rs = { version = "0.3.3", optional = true }
 regex = "1.12.2"

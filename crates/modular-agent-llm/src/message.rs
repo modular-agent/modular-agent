@@ -2,6 +2,7 @@ use agent_stream_kit::{
     ASKit, Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
     askit_agent, async_trait,
 };
+use im::{hashmap, vector};
 
 use crate::message_lib::{Message, MessageHistory};
 
@@ -125,7 +126,7 @@ fn add_message(value: AgentValue, message: Message) -> AgentValue {
         let value = value.as_str().unwrap_or("");
         if !value.is_empty() {
             let in_message = Message::user(value.to_string());
-            return AgentValue::array(vec![in_message.into(), message.into()]);
+            return AgentValue::array(vector![in_message.into(), message.into()]);
         }
     }
 
@@ -137,15 +138,13 @@ fn add_message(value: AgentValue, message: Message) -> AgentValue {
 
     if value.is_object() {
         // Append the object without checking whether it is a message
-        let mut arr = vec![value];
-        arr.push(message.into());
-        return AgentValue::array(arr);
+        return AgentValue::array(vector![value, message.into()]);
     }
 
     if value.is_array() {
         // Append without verifying the array items are messages
-        let mut arr = value.as_array().unwrap_or(&vec![]).to_owned();
-        arr.push(message.into());
+        let mut arr = value.into_array().unwrap_or_default();
+        arr.push_back(message.into());
         return AgentValue::array(arr);
     }
 
@@ -218,23 +217,18 @@ impl AsAgent for MessageHistoryAgent {
             return Ok(());
         }
 
-        let messages: AgentValue = AgentValue::object(
-            [
-                ("message".to_string(), message.into()),
-                (
-                    "history".to_string(),
-                    AgentValue::array(
-                        self.history
-                            .messages()
-                            .iter()
-                            .cloned()
-                            .map(|m| m.into())
-                            .collect(),
-                    ),
+        let messages: AgentValue = AgentValue::object(hashmap! {
+            "message".into() => message.into(),
+                "history".into() =>
+                AgentValue::array(
+                    self.history
+                        .messages()
+                        .iter()
+                        .cloned()
+                        .map(|m| m.into())
+                        .collect(),
                 ),
-            ]
-            .into(),
-        );
+        });
         self.try_output(ctx, PIN_MESSAGE_HISTORY, messages)?;
 
         Ok(())
@@ -287,13 +281,10 @@ mod tests {
 
         // object + user
         // result should be an array with the original object and the new user message
-        let value = AgentValue::object(
-            [
-                ("role".to_string(), AgentValue::string("system")),
-                ("content".to_string(), AgentValue::string("I am fine.")),
-            ]
-            .into(),
-        );
+        let value = AgentValue::object(hashmap! {
+            "role".into() => AgentValue::string("system"),
+            "content".into() => AgentValue::string("I am fine."),
+        });
         let msg = Message::user("Hello".to_string());
         let result = add_message(value, msg);
         assert!(result.is_array());
@@ -306,21 +297,15 @@ mod tests {
 
         // array + user
         // result should be the original array with the new user message appended
-        let value = AgentValue::array(vec![
-            AgentValue::object(
-                [
-                    ("role".to_string(), AgentValue::string("system")),
-                    ("content".to_string(), AgentValue::string("Welcome!")),
-                ]
-                .into(),
-            ),
-            AgentValue::object(
-                [
-                    ("role".to_string(), AgentValue::string("assistant")),
-                    ("content".to_string(), AgentValue::string("Hello!")),
-                ]
-                .into(),
-            ),
+        let value = AgentValue::array(vector![
+            AgentValue::object(hashmap! {
+                "role".into() => AgentValue::string("system"),
+                "content".into() => AgentValue::string("Welcome!"),
+            }),
+            AgentValue::object(hashmap! {
+                "role".into() => AgentValue::string("assistant"),
+                "content".into() => AgentValue::string("Hello!"),
+            }),
         ]);
         let msg = Message::user("How are you?".to_string());
         let result = add_message(value, msg);

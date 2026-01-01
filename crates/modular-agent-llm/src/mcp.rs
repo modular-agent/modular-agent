@@ -194,7 +194,7 @@ fn call_tool_result_to_agent_value(result: CallToolResult) -> Result<AgentValue,
             }
         }
     }
-    let data = AgentValue::array(contents);
+    let data = AgentValue::array(contents.into());
     if result.is_error == Some(true) {
         return Err(AgentError::Other(
             serde_json::to_string(&data).map_err(|e| AgentError::InvalidValue(e.to_string()))?,
