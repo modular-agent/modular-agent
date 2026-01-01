@@ -45,7 +45,7 @@ impl AsAgent for HtmlToMarkdownAgent {
                 let markdown = html2markdown(html)?;
                 arr.push(AgentValue::string(markdown));
             }
-            return self.try_output(ctx, PORT_MARKDOWN, AgentValue::array(arr));
+            return self.try_output(ctx, PORT_MARKDOWN, AgentValue::array(arr.into()));
         }
 
         let html = value.as_str().ok_or_else(|| {

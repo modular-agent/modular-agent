@@ -43,7 +43,7 @@ impl AsAgent for HtmlScraperAgent {
         })?;
 
         if value.is_array() {
-            let mut arr = vec![];
+            let mut arr = Vec::new();
             for item in value.as_array().unwrap() {
                 let html = item.as_str().ok_or_else(|| {
                     AgentError::InvalidValue(
@@ -57,7 +57,7 @@ impl AsAgent for HtmlScraperAgent {
                     .collect();
                 arr.extend(selected);
             }
-            return self.try_output(ctx, PORT_HTML, AgentValue::array(arr));
+            return self.try_output(ctx, PORT_HTML, AgentValue::array(arr.into()));
         }
 
         let html = value.as_str().ok_or_else(|| {
@@ -69,6 +69,6 @@ impl AsAgent for HtmlScraperAgent {
             .select(&selector)
             .map(|elem| AgentValue::string(elem.html()))
             .collect();
-        self.try_output(ctx, PORT_HTML, AgentValue::array(selected))
+        self.try_output(ctx, PORT_HTML, AgentValue::array(selected.into()))
     }
 }

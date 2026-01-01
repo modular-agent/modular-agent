@@ -1,3 +1,5 @@
+#![recursion_limit = "256"]
+
 #[cfg(feature = "fetch-url")]
 pub mod fetch_url;
 
