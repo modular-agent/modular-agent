@@ -5,7 +5,7 @@ use askit::{
     test_utils::{TestProbeAgent, probe_receiver},
 };
 
-mod common;
+use crate::common;
 
 const COUNTER_DEF: &str = common::agents::CounterAgent::DEF_NAME;
 const PROBE_DEF: &str = TestProbeAgent::DEF_NAME;

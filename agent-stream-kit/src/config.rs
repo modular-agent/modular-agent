@@ -1,10 +1,9 @@
-use std::collections::BTreeMap;
-
+use im::Vector;
 use serde::{Deserialize, Serialize};
 
 use crate::FnvIndexMap;
 use crate::error::AgentError;
-use crate::value::AgentValue;
+use crate::value::{AgentValue, AgentValueMap};
 
 pub type AgentConfigsMap = FnvIndexMap<String, AgentConfigs>;
 
@@ -99,7 +98,7 @@ impl AgentConfigs {
             .unwrap_or_default()
     }
 
-    pub fn get_array(&self, key: &str) -> Result<&Vec<AgentValue>, AgentError> {
+    pub fn get_array(&self, key: &str) -> Result<&Vector<AgentValue>, AgentError> {
         self.0
             .get(key)
             .and_then(|v| v.as_array())
@@ -109,15 +108,15 @@ impl AgentConfigs {
     pub fn get_array_or<'a>(
         &'a self,
         key: &str,
-        default: &'a Vec<AgentValue>,
-    ) -> &'a Vec<AgentValue> {
+        default: &'a Vector<AgentValue>,
+    ) -> &'a Vector<AgentValue> {
         self.0
             .get(key)
             .and_then(|v| v.as_array())
             .unwrap_or(default)
     }
 
-    pub fn get_array_or_default(&self, key: &str) -> Vec<AgentValue> {
+    pub fn get_array_or_default(&self, key: &str) -> Vector<AgentValue> {
         self.0
             .get(key)
             .and_then(|v| v.as_array())
@@ -125,7 +124,7 @@ impl AgentConfigs {
             .unwrap_or_default()
     }
 
-    pub fn get_object(&self, key: &str) -> Result<&BTreeMap<String, AgentValue>, AgentError> {
+    pub fn get_object(&self, key: &str) -> Result<&AgentValueMap<String, AgentValue>, AgentError> {
         self.0
             .get(key)
             .and_then(|v| v.as_object())
@@ -135,15 +134,15 @@ impl AgentConfigs {
     pub fn get_object_or<'a>(
         &'a self,
         key: &str,
-        default: &'a BTreeMap<String, AgentValue>,
-    ) -> &'a BTreeMap<String, AgentValue> {
+        default: &'a AgentValueMap<String, AgentValue>,
+    ) -> &'a AgentValueMap<String, AgentValue> {
         self.0
             .get(key)
             .and_then(|v| v.as_object())
             .unwrap_or(default)
     }
 
-    pub fn get_object_or_default(&self, key: &str) -> BTreeMap<String, AgentValue> {
+    pub fn get_object_or_default(&self, key: &str) -> AgentValueMap<String, AgentValue> {
         self.0
             .get(key)
             .and_then(|v| v.as_object())

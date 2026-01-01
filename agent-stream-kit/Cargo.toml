@@ -22,27 +22,12 @@ tokio = { version = "1", features = ["rt", "rt-multi-thread", "sync", "time"] }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros"] }
+serial_test = "3"
 
 [features]
 default = ["image"]
 image = ["photon-rs"]
 
 [[test]]
-name = "askit_test"
-path = "tests/askit_test.rs"
-
-[[test]]
-name = "board_test"
-path = "tests/board_test.rs"
-
-[[test]]
-name = "counter_test"
-path = "tests/counter_test.rs"
-
-[[test]]
-name = "stream_test"
-path = "tests/stream_test.rs"
-
-[[test]]
-name = "var_test"
-path = "tests/var_test.rs"
+name = "main_test"
+path = "tests/main_test.rs"

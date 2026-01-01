@@ -2,7 +2,7 @@ extern crate agent_stream_kit as askit;
 
 use askit::ASKit;
 
-mod common;
+use crate::common;
 
 const COUNTER_DEF: &str = common::agents::CounterAgent::DEF_NAME;
 
@@ -20,7 +20,7 @@ fn test_init() {
         "agent_stream_kit::board_agent::VarInAgent",
         "agent_stream_kit::board_agent::VarOutAgent",
         "agent_stream_kit::test_utils::TestProbeAgent",
-        "askit_test::common::agents::CounterAgent",
+        "main_test::common::agents::CounterAgent",
     ];
     assert_eq!(keys, expected);
 

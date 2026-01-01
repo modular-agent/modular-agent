@@ -1,10 +1,10 @@
 extern crate agent_stream_kit as askit;
 
-mod common;
-
 use askit::{ASKit, AgentSpec, AgentStreamSpec};
 
-const COUNTER_DEF: &str = concat!(module_path!(), "::common::agents::CounterAgent");
+use crate::common;
+
+const COUNTER_DEF: &str = common::agents::CounterAgent::DEF_NAME;
 
 // AgentStreamNode
 

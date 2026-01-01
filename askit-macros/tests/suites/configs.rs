@@ -92,18 +92,20 @@ impl AsAgent for ConfigAgent {
 
 #[test]
 fn def_name_is_generated() {
-    assert_eq!(ConfigAgent::DEF_NAME, "configs::ConfigAgent");
-    assert_eq!(ConfigAgent::def_name(), "configs::ConfigAgent");
+    assert_eq!(
+        ConfigAgent::DEF_NAME,
+        "main_test::suites::configs::ConfigAgent"
+    );
+    assert_eq!(
+        ConfigAgent::def_name(),
+        "main_test::suites::configs::ConfigAgent"
+    );
 }
 
 #[test]
 fn config_entries_are_generated() {
     let def = ConfigAgent::agent_definition();
-    let configs: HashMap<_, _> = def
-        .configs
-        .expect("default configs")
-        .into_iter()
-        .collect();
+    let configs: HashMap<_, _> = def.configs.expect("default configs").into_iter().collect();
 
     assert_eq!(configs[UNIT_KEY].type_.as_deref(), Some("unit"));
     assert_eq!(configs[UNIT_KEY].value, AgentValue::unit());

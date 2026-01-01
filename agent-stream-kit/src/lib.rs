@@ -1,3 +1,4 @@
+#![recursion_limit = "256"]
 //! Agent Stream Kit - A framework for building and managing agents in Rust
 //!
 //! This crate provides a set of tools and abstractions to create, configure, and run agents

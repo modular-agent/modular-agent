@@ -1,5 +1,6 @@
+use std::cell::RefCell;
 use std::path::Path;
-use std::sync::{Arc, OnceLock};
+use std::sync::Arc;
 use std::time::Duration;
 
 use async_trait::async_trait;
@@ -42,8 +43,11 @@ pub async fn load_and_start_stream(askit: &ASKit, path: &str) -> Result<String, 
 
 // BoardObserver
 
-static BOARD_RX: OnceLock<AsyncMutex<mpsc::UnboundedReceiver<(String, AgentValue)>>> =
-    OnceLock::new();
+type BoardReceiver = Arc<AsyncMutex<mpsc::UnboundedReceiver<(String, AgentValue)>>>;
+
+thread_local! {
+    static BOARD_RX: RefCell<Option<BoardReceiver>> = RefCell::new(None);
+}
 
 #[derive(Clone)]
 pub struct BoardObserver {
@@ -74,17 +78,17 @@ pub fn subscribe_board_observer(askit: &ASKit) -> Result<(), AgentError> {
     let (tx, rx) = mpsc::unbounded_channel();
     let observer = BoardObserver::new(tx);
     askit.subscribe(Box::new(observer));
-    BOARD_RX
-        .set(AsyncMutex::new(rx))
-        .map_err(|_| AgentError::SendMessageFailed("board receiver already initialized".into()))
+    BOARD_RX.with(|slot| {
+        *slot.borrow_mut() = Some(Arc::new(AsyncMutex::new(rx)));
+    });
+    Ok(())
 }
 
 pub const DEFAULT_BOARD_TIMEOUT: Duration = Duration::from_secs(1);
 
-fn board_rx()
--> Result<&'static AsyncMutex<mpsc::UnboundedReceiver<(String, AgentValue)>>, AgentError> {
+fn board_rx() -> Result<BoardReceiver, AgentError> {
     BOARD_RX
-        .get()
+        .with(|slot| slot.borrow().clone())
         .ok_or_else(|| AgentError::SendMessageFailed("board receiver not initialized".into()))
 }
 

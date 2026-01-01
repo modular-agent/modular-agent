@@ -1,3 +1,4 @@
+#![recursion_limit = "256"]
 //! Procedural macros for agent-stream-kit.
 //!
 //! Provides an attribute to declare agent metadata alongside the agent type and

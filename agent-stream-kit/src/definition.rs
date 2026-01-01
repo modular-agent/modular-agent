@@ -455,6 +455,8 @@ impl AgentConfigSpec {
 
 #[cfg(test)]
 mod tests {
+    use im::hashmap;
+
     use super::*;
 
     #[test]
@@ -559,7 +561,7 @@ mod tests {
     #[test]
     fn test_default_config_helpers() {
         let custom_object_value =
-            AgentValue::object([("key".to_string(), AgentValue::string("value"))].into());
+            AgentValue::object(hashmap! {"key".into() => AgentValue::string("value")});
 
         let def = AgentDefinition::new("test", "helpers", None)
             .unit_config("unit_value")
@@ -636,7 +638,7 @@ mod tests {
     #[test]
     fn test_global_config_helpers() {
         let custom_object_value =
-            AgentValue::object([("key".to_string(), AgentValue::string("value"))].into());
+            AgentValue::object(hashmap! {"key".into() => AgentValue::string("value")});
 
         let def = AgentDefinition::new("test", "helpers", None)
             .unit_global_config("global_unit")

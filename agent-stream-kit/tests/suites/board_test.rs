@@ -1,7 +1,9 @@
 extern crate agent_stream_kit as askit;
 
 use askit::{AgentValue, test_utils};
+use serial_test::serial;
 
+#[serial(board_group)]
 #[tokio::test]
 async fn test_board_routing() {
     let askit = test_utils::setup_askit().await;
