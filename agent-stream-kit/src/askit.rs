@@ -735,14 +735,6 @@ impl ASKit {
         pin: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
-        let agent: Arc<AsyncMutex<Box<dyn Agent>>> = {
-            let agents = self.agents.lock().unwrap();
-            let Some(a) = agents.get(&agent_id) else {
-                return Err(AgentError::AgentNotFound(agent_id.to_string()));
-            };
-            a.clone()
-        };
-
         let message = if pin.starts_with("config:") {
             let config_key = pin[7..].to_string();
             AgentMessage::Config {
@@ -764,6 +756,13 @@ impl ASKit {
 
         let Some(tx) = tx else {
             // The agent is not running. If it's a config message, we can set it directly.
+            let agent: Arc<AsyncMutex<Box<dyn Agent>>> = {
+                let agents = self.agents.lock().unwrap();
+                let Some(a) = agents.get(&agent_id) else {
+                    return Err(AgentError::AgentNotFound(agent_id.to_string()));
+                };
+                a.clone()
+            };
             if let AgentMessage::Config { key, value } = message {
                 agent.lock().await.set_config(key, value)?;
             }
