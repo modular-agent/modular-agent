@@ -27,7 +27,9 @@ serial_test = "3"
 [features]
 default = ["image"]
 image = ["photon-rs"]
+test-utils = []
 
 [[test]]
 name = "main_test"
 path = "tests/main_test.rs"
+required-features = ["test-utils"]

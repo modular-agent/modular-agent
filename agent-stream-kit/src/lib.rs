@@ -19,8 +19,10 @@ mod registry;
 mod runtime;
 mod spec;
 mod stream;
-pub mod test_utils;
 mod value;
+
+#[cfg(feature = "test-utils")]
+pub mod test_utils;
 
 // re-export async_trait
 pub use async_trait::async_trait;

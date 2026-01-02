@@ -1,3 +1,5 @@
+#![cfg(feature = "test-utils")]
+
 use std::cell::RefCell;
 use std::path::Path;
 use std::sync::Arc;
