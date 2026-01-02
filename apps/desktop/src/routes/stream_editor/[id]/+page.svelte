@@ -26,10 +26,11 @@
     newAgentSpec,
     removeAgent,
     removeChannel,
+    setAgentStreamSpec,
     startAgent,
     stopAgent,
   } from "tauri-plugin-askit-api";
-  import type { AgentSpec, ChannelSpec } from "tauri-plugin-askit-api";
+  import type { AgentSpec, AgentStreamSpec, ChannelSpec } from "tauri-plugin-askit-api";
 
   import { goto } from "$app/navigation";
 
@@ -84,6 +85,10 @@
     }
 
     getCurrentWindow().setTitle(flow.name + " - Agent Stream App");
+
+    return async () => {
+      await syncStream();
+    };
   });
 
   const handleOnDelete: OnDelete<AgentStreamNode, AgentStreamEdge> = async ({
@@ -255,11 +260,19 @@
     };
   });
 
-  async function onSaveStream() {
-    if (!flow) return;
+  async function syncStream(): Promise<null | AgentStreamSpec> {
+    if (!flow) return null;
 
     const viewport = getViewport();
     const s = flowToStreamSpec(nodes, edges, flow.run_on_start, viewport);
+    await setAgentStreamSpec(flow.id, s);
+    return s;
+  }
+
+  async function onSaveStream() {
+    if (!flow) return;
+    const s = await syncStream();
+    if (!s) return;
     await saveAgentStream(flow.name, s);
   }
 
