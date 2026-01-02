@@ -613,6 +613,25 @@ impl ASKit {
     }
 
     pub async fn stop_agent(&self, agent_id: &str) -> Result<(), AgentError> {
+        {
+            // remove the sender first to prevent new messages being sent
+            let mut agent_txs = self.agent_txs.lock().unwrap();
+            if let Some(tx) = agent_txs.swap_remove(agent_id) {
+                match tx {
+                    AgentMessageSender::Sync(tx) => {
+                        tx.send(AgentMessage::Stop).unwrap_or_else(|e| {
+                            log::error!("Failed to send stop message to agent {}: {}", agent_id, e);
+                        });
+                    }
+                    AgentMessageSender::Async(tx) => {
+                        tx.try_send(AgentMessage::Stop).unwrap_or_else(|e| {
+                            log::error!("Failed to send stop message to agent {}: {}", agent_id, e);
+                        });
+                    }
+                }
+            }
+        }
+
         let agent = {
             let agents = self.agents.lock().unwrap();
             let Some(a) = agents.get(agent_id) else {
@@ -620,41 +639,10 @@ impl ASKit {
             };
             a.clone()
         };
-
-        let agent_status = {
-            let agent = agent.lock().await;
-            agent.status().clone()
-        };
-        if agent_status == AgentStatus::Start {
+        let mut agent_guard = agent.lock().await;
+        if *agent_guard.status() == AgentStatus::Start {
             log::info!("Stopping agent {}", agent_id);
-
-            {
-                let mut agent_txs = self.agent_txs.lock().unwrap();
-                if let Some(tx) = agent_txs.swap_remove(agent_id) {
-                    match tx {
-                        AgentMessageSender::Sync(tx) => {
-                            tx.send(AgentMessage::Stop).unwrap_or_else(|e| {
-                                log::error!(
-                                    "Failed to send stop message to agent {}: {}",
-                                    agent_id,
-                                    e
-                                );
-                            });
-                        }
-                        AgentMessageSender::Async(tx) => {
-                            tx.try_send(AgentMessage::Stop).unwrap_or_else(|e| {
-                                log::error!(
-                                    "Failed to send stop message to agent {}: {}",
-                                    agent_id,
-                                    e
-                                );
-                            });
-                        }
-                    }
-                }
-            }
-
-            agent.lock().await.stop().await?;
+            agent_guard.stop().await?;
         }
 
         Ok(())
@@ -665,14 +653,6 @@ impl ASKit {
         agent_id: String,
         configs: AgentConfigs,
     ) -> Result<(), AgentError> {
-        let agent = {
-            let agents = self.agents.lock().unwrap();
-            let Some(a) = agents.get(&agent_id) else {
-                return Err(AgentError::AgentNotFound(agent_id.to_string()));
-            };
-            a.clone()
-        };
-
         let tx = {
             let agent_txs = self.agent_txs.lock().unwrap();
             agent_txs.get(&agent_id).cloned()
@@ -680,6 +660,13 @@ impl ASKit {
 
         let Some(tx) = tx else {
             // The agent is not running. We can set the configs directly.
+            let agent = {
+                let agents = self.agents.lock().unwrap();
+                let Some(a) = agents.get(&agent_id) else {
+                    return Err(AgentError::AgentNotFound(agent_id.to_string()));
+                };
+                a.clone()
+            };
             agent.lock().await.set_configs(configs.clone())?;
             return Ok(());
         };
