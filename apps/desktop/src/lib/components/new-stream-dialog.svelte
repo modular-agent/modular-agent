@@ -1,28 +1,35 @@
 <script lang="ts">
-  import { goto } from "$app/navigation";
+  import type { Snippet } from "svelte";
 
-  import { Button, buttonVariants } from "$lib/components/ui/button/index.js";
+  import { Button } from "$lib/components/ui/button/index.js";
   import * as Dialog from "$lib/components/ui/dialog/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
   import { Label } from "$lib/components/ui/label/index.js";
-  import { newStream } from "$lib/shared.svelte";
+
+  type Props = {
+    onNewStream: (name: string) => void;
+    open?: boolean;
+    trigger?: Snippet;
+  };
+
+  let { onNewStream, open = $bindable(false), trigger }: Props = $props();
 
   let name = $state("");
 
   async function handleNewStream(e: Event) {
     e.preventDefault();
     if (!name) return;
-    const stream_id = await newStream(name);
+    await onNewStream(name);
+    open = false;
     name = "";
-    if (stream_id) {
-      goto(`/stream_editor/${stream_id}`);
-    }
   }
 </script>
 
-<Dialog.Root>
+<Dialog.Root bind:open>
   <form>
-    <Dialog.Trigger class={buttonVariants({ variant: "outline" })}>+ New</Dialog.Trigger>
+    {#if trigger}
+      {@render trigger()}
+    {/if}
     <Dialog.Content class="sm:max-w-[425px]">
       <Dialog.Header>
         <Dialog.Title>New Stream</Dialog.Title>

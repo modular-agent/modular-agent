@@ -8,16 +8,21 @@
   } from "@tanstack/table-core";
   import type { AgentStreamInfo } from "tauri-plugin-askit-api";
 
+  import { goto } from "$app/navigation";
+
   import FlowStatus from "$lib/components/flow-status.svelte";
+  import NewStreamDialog from "$lib/components/new-stream-dialog.svelte";
+  import { buttonVariants } from "$lib/components/ui/button/index.js";
   import {
     createSvelteTable,
     FlexRender,
     renderComponent,
   } from "$lib/components/ui/data-table/index.js";
+  import * as Dialog from "$lib/components/ui/dialog/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
   import * as Table from "$lib/components/ui/table/index.js";
+  import { newStream } from "$lib/shared.svelte";
 
-  import NewStreamDialog from "./new-stream-dialog.svelte";
   import StreamListActions from "./stream-list-actions.svelte";
   import StreamListName from "./stream-list-name.svelte";
 
@@ -120,6 +125,13 @@
       },
     },
   });
+
+  async function onNewStream(name: string) {
+    const new_id = await newStream(name);
+    if (new_id) {
+      goto(`/stream_editor/${new_id}`, { invalidateAll: true });
+    }
+  }
 </script>
 
 <div class="text-primary p-4 w-full">
@@ -136,7 +148,11 @@
         }}
       />
     </div>
-    <NewStreamDialog />
+    <NewStreamDialog {onNewStream}>
+      {#snippet trigger()}
+        <Dialog.Trigger class={buttonVariants({ variant: "outline" })}>+ New</Dialog.Trigger>
+      {/snippet}
+    </NewStreamDialog>
   </div>
   <div class="">
     <Table.Root>

@@ -42,12 +42,11 @@
     importAgentStream,
     nodeToAgentSpec,
     saveAgentStream,
-    streamToFlow,
   } from "$lib/agent";
   import FlowStatus from "$lib/components/flow-status.svelte";
   import { ScrollArea } from "$lib/components/ui/scroll-area/index.js";
-  import { agentDefs, coreSettings } from "$lib/shared.svelte";
-  import type { AgentStreamNode, AgentStreamEdge, AgentStreamFlow } from "$lib/types";
+  import { agentDefs, coreSettings, newStream } from "$lib/shared.svelte";
+  import type { AgentStreamNode, AgentStreamEdge } from "$lib/types";
 
   import AgentList from "./agent-list.svelte";
   import AgentNode from "./agent-node.svelte";
@@ -65,27 +64,20 @@
 
   let { data } = $props();
 
-  let flow = $state<AgentStreamFlow | null>(null);
+  let stream_id = $derived(data.stream_id);
+  let running = $derived(data.flow?.running ?? false);
 
   let nodes = $state.raw<AgentStreamNode[]>([]);
   let edges = $state.raw<AgentStreamEdge[]>([]);
 
   $effect.pre(() => {
-    flow = streamToFlow(data.info, data.spec);
+    nodes = [...data.flow.nodes];
+    edges = [...data.flow.edges];
+
+    getCurrentWindow().setTitle(data.flow.name + " - Agent Stream App");
   });
 
   onMount(() => {
-    if (!flow) return;
-
-    nodes = [...flow.nodes];
-    edges = [...flow.edges];
-    const viewport = flow.viewport;
-    if (viewport) {
-      setViewport(viewport);
-    }
-
-    getCurrentWindow().setTitle(flow.name + " - Agent Stream App");
-
     return async () => {
       await syncStream();
     };
@@ -104,31 +96,25 @@
   };
 
   async function deleteNodes(deletedNodes: AgentStreamNode[]) {
-    if (!flow) return;
-
     for (const n of deletedNodes) {
-      await removeAgent(flow.id, n.id);
+      await removeAgent(stream_id, n.id);
     }
   }
 
   async function deleteEdges(deletedEdges: AgentStreamEdge[]) {
-    if (!flow) return;
-
     for (const e of deletedEdges) {
       let ch = edgeToChannelSpec(e);
-      await removeChannel(flow.id, ch);
+      await removeChannel(stream_id, ch);
     }
   }
 
   async function handleOnConnect(connection: Connection) {
-    if (!flow) return;
-
     let edge = {
       id: crypto.randomUUID(),
       ...connection,
     } as AgentStreamEdge;
 
-    await addChannel(flow.id, edgeToChannelSpec(edge));
+    await addChannel(stream_id, edgeToChannelSpec(edge));
   }
 
   // cut, copy and paste
@@ -143,8 +129,6 @@
   }
 
   async function cutNodesAndEdges() {
-    if (!flow) return;
-
     const [selectedNodes, selectedEdges] = selectedNodesAndEdges();
     if (selectedNodes.length == 0 && selectedEdges.length == 0) {
       return;
@@ -154,10 +138,10 @@
 
     for (const edge of selectedEdges) {
       let ch = edgeToChannelSpec(edge);
-      await removeChannel(flow.id, ch);
+      await removeChannel(stream_id, ch);
     }
     for (const node of selectedNodes) {
-      await removeAgent(flow.id, node.id);
+      await removeAgent(stream_id, node.id);
     }
     nodes = nodes.filter((node) => !node.selected);
     edges = edges.filter((edge) => !edge.selected);
@@ -173,8 +157,6 @@
   }
 
   async function pasteNodesAndEdges() {
-    if (!flow) return;
-
     nodes.forEach((node) => {
       if (node.selected) {
         updateNode(node.id, { selected: false });
@@ -197,7 +179,7 @@
     for (const node of cnodes) {
       node.x += 80;
       node.y += 80;
-      await addAgent(flow.id, node);
+      await addAgent(stream_id, node);
       const new_node = agentSpecToNode(node);
       new_node.selected = true;
       new_nodes.push(new_node);
@@ -205,7 +187,7 @@
 
     let new_edges = [];
     for (const edge of cedges) {
-      await addChannel(flow.id, edge);
+      await addChannel(stream_id, edge);
       const new_edge = channelSpecToEdge(edge);
       new_edge.selected = true;
       new_edges.push(new_edge);
@@ -226,7 +208,7 @@
 
   // shortcuts
 
-  $effect(() => {
+  onMount(() => {
     hotkeys("ctrl+r", (event) => {
       event.preventDefault();
     });
@@ -261,32 +243,36 @@
   });
 
   async function syncStream(): Promise<null | AgentStreamSpec> {
-    if (!flow) return null;
-
     const viewport = getViewport();
-    const s = flowToStreamSpec(nodes, edges, flow.run_on_start, viewport);
-    await setAgentStreamSpec(flow.id, s);
+    const s = flowToStreamSpec(nodes, edges, data.flow.run_on_start, viewport);
+    await setAgentStreamSpec(stream_id, s);
     return s;
   }
 
+  async function onNewStream(name: string) {
+    await syncStream();
+
+    const new_id = await newStream(name);
+    if (new_id) {
+      goto(`/stream_editor/${new_id}`, { invalidateAll: true });
+    }
+  }
+
   async function onSaveStream() {
-    if (!flow) return;
     const s = await syncStream();
     if (!s) return;
-    await saveAgentStream(flow.name, s);
+    await saveAgentStream(data.flow.name, s);
   }
 
   function onExportStream() {
-    if (!flow) return;
-
     const viewport = getViewport();
-    const s = flowToStreamSpec(nodes, edges, flow.run_on_start, viewport);
+    const s = flowToStreamSpec(nodes, edges, data.flow.run_on_start, viewport);
     const jsonStr = JSON.stringify(s, null, 2);
     const blob = new Blob([jsonStr], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = flow.name + ".json";
+    a.download = data.flow.name + ".json";
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -330,8 +316,6 @@
   }
 
   async function onAddAgent(agent_name: string, position?: { x: number; y: number }) {
-    if (!flow) return;
-
     const snode = await newAgentSpec(agent_name);
     const xy =
       position !== undefined
@@ -342,11 +326,11 @@
           });
     snode.x = xy.x;
     snode.y = xy.y;
-    await addAgent(flow.id, snode);
+    await addAgent(stream_id, snode);
     const new_node = agentSpecToNode(snode);
     nodes = [...nodes, new_node];
 
-    if (flow.running) {
+    if (running) {
       await startAgent(new_node.id);
     }
   }
@@ -441,14 +425,14 @@
 <div class="flex flex-col w-full min-h-screen">
   <header class="grid grid-cols-[auto_1fr_100px] flex-none items-center pl-1 pr-2 gap-4">
     <div class="justify-self-start">
-      <Menubar {onImportStream} {onExportStream} />
+      <Menubar {onNewStream} {onImportStream} {onExportStream} />
     </div>
     <div class="flex flex-row items-center justify-center">
-      <StreamName name={flow?.name} class="mr-4" />
-      <StreamActions bind:flow />
+      <StreamName name={data.flow?.name} class="mr-4" />
+      <StreamActions {stream_id} bind:running />
     </div>
     <div class="justify-self-end">
-      <FlowStatus running={flow?.running ?? false} run_on_start={flow?.run_on_start} />
+      <FlowStatus {running} run_on_start={data.flow?.run_on_start} />
     </div>
   </header>
   <SvelteFlow
