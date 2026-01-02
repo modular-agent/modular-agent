@@ -12,11 +12,13 @@
   import { Label } from "$lib/components/ui/label/index.js";
   import {
     deleteStream,
+    newStream,
     reloadStreamInfos,
     renameStream,
     startStream,
     stopStream,
     streamInfos,
+    updateStreamSpec,
   } from "$lib/shared.svelte";
 
   type Props = {
@@ -50,6 +52,17 @@
     await renameStream(id, new_name);
     new_name = "";
     openRenameDialog = false;
+    await reloadStreamInfos();
+  }
+
+  async function handleDuplicateStream(e: Event) {
+    e.preventDefault();
+    const s = await getAgentStreamSpec(id);
+    if (!s) return;
+    const new_id = await newStream(name);
+    if (!new_id) return;
+    await updateStreamSpec(new_id, s);
+    await reloadStreamInfos();
   }
 
   async function handleDeleteStream(e: Event) {
@@ -90,6 +103,7 @@
     </DropdownMenu.Trigger>
     <DropdownMenu.Content>
       <DropdownMenu.Item onclick={() => (openRenameDialog = true)}>Rename</DropdownMenu.Item>
+      <DropdownMenu.Item onclick={handleDuplicateStream}>Duplicate</DropdownMenu.Item>
       <DropdownMenu.Item onclick={() => (openDeleteDialog = true)}>Delete</DropdownMenu.Item>
       <DropdownMenu.Separator />
       <DropdownMenu.Item onclick={handleRunOnStart}>Run on Start</DropdownMenu.Item>

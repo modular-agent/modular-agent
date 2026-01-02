@@ -5,11 +5,14 @@
 
   type Props = {
     onNewStream: (name: string) => void;
+    onSaveStream: () => void;
+    onDuplicateStream: () => void;
     onImportStream: () => void;
     onExportStream: () => void;
   };
 
-  let { onNewStream, onImportStream, onExportStream }: Props = $props();
+  let { onNewStream, onSaveStream, onDuplicateStream, onImportStream, onExportStream }: Props =
+    $props();
 
   let newStreamDialogOpen = $state(false);
 
@@ -25,6 +28,9 @@
     >
     <Menubar.Content>
       <Menubar.Item onclick={handleNewStream}>New</Menubar.Item>
+      <Menubar.Item onclick={onSaveStream}>Save</Menubar.Item>
+      <Menubar.Item onclick={onDuplicateStream}>Duplicate</Menubar.Item>
+      <Menubar.Separator />
       <Menubar.Item onclick={onImportStream}>Import</Menubar.Item>
       <Menubar.Item onclick={onExportStream}>Export</Menubar.Item>
     </Menubar.Content>

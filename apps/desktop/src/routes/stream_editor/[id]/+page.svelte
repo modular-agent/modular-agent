@@ -45,7 +45,7 @@
   } from "$lib/agent";
   import FlowStatus from "$lib/components/flow-status.svelte";
   import { ScrollArea } from "$lib/components/ui/scroll-area/index.js";
-  import { agentDefs, coreSettings, newStream } from "$lib/shared.svelte";
+  import { agentDefs, coreSettings, newStream, updateStreamSpec } from "$lib/shared.svelte";
   import type { AgentStreamNode, AgentStreamEdge } from "$lib/types";
 
   import AgentList from "./agent-list.svelte";
@@ -264,6 +264,16 @@
     await saveAgentStream(data.flow.name, s);
   }
 
+  async function onDuplicateStream() {
+    const s = await syncStream();
+    if (!s) return;
+    const new_id = await newStream(data.flow.name);
+    if (new_id) {
+      await updateStreamSpec(new_id, s);
+      goto(`/stream_editor/${new_id}`, { invalidateAll: true });
+    }
+  }
+
   function onExportStream() {
     const viewport = getViewport();
     const s = flowToStreamSpec(nodes, edges, data.flow.run_on_start, viewport);
@@ -425,7 +435,7 @@
 <div class="flex flex-col w-full min-h-screen">
   <header class="grid grid-cols-[auto_1fr_100px] flex-none items-center pl-1 pr-2 gap-4">
     <div class="justify-self-start">
-      <Menubar {onNewStream} {onImportStream} {onExportStream} />
+      <Menubar {onNewStream} {onSaveStream} {onDuplicateStream} {onImportStream} {onExportStream} />
     </div>
     <div class="flex flex-row items-center justify-center">
       <StreamName name={data.flow?.name} class="mr-4" />
