@@ -1,6 +1,6 @@
 extern crate agent_stream_kit as askit;
 
-use askit::{ASKit, AgentSpec, AgentStreamSpec};
+use askit::{ASKit, AgentStreamSpec};
 
 use crate::common;
 
@@ -14,11 +14,11 @@ fn test_agent_spec_from_def() {
 
     let def = askit.get_agent_definition(COUNTER_DEF).unwrap();
 
-    let spec = AgentSpec::from_def(&def);
+    let spec = def.to_spec();
 
     assert_eq!(spec.def_name, COUNTER_DEF);
 
-    let spec2 = AgentSpec::from_def(&def);
+    let spec2 = def.to_spec();
     assert_eq!(spec2.def_name, COUNTER_DEF);
     assert!(spec.id != spec2.id);
 }
@@ -33,7 +33,7 @@ fn test_agent_stream_add_agent() {
     assert_eq!(spec.agents.len(), 0);
 
     let def = askit.get_agent_definition(COUNTER_DEF).unwrap();
-    let agent_spec = AgentSpec::from_def(&def);
+    let agent_spec = def.to_spec();
 
     spec.add_agent(agent_spec);
 
@@ -48,7 +48,7 @@ fn test_agent_stream_remove_agent() {
     assert_eq!(spec.agents.len(), 0);
 
     let def = askit.get_agent_definition(COUNTER_DEF).unwrap();
-    let agent_spec = AgentSpec::from_def(&def);
+    let agent_spec = def.to_spec();
     let agent_id = agent_spec.id.clone();
 
     spec.add_agent(agent_spec);

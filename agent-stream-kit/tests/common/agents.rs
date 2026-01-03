@@ -22,7 +22,7 @@ static GLOBAL_STRING: &str = "global_string";
 )]
 pub struct CounterAgent {
     data: AgentData,
-    count: i64,
+    pub count: i64,
 }
 
 #[async_trait]

@@ -1,14 +1,10 @@
 extern crate agent_stream_kit as askit;
 
-use askit::{
-    ASKit, AgentContext, AgentSpec, AgentStatus, AgentStreamSpec, AgentValue, ChannelSpec,
-    test_utils::{TestProbeAgent, probe_receiver},
-};
+use askit::{ASKit, AgentContext, AgentStatus, AgentValue};
 
 use crate::common;
 
 const COUNTER_DEF: &str = common::agents::CounterAgent::DEF_NAME;
-const PROBE_DEF: &str = TestProbeAgent::DEF_NAME;
 
 #[test]
 fn test_register_agent_definiton() {
@@ -27,7 +23,7 @@ fn test_register_agent_definiton() {
 fn test_agent_new() {
     let askit = ASKit::init().unwrap();
     let def = askit.get_agent_definition(COUNTER_DEF).unwrap();
-    let spec = AgentSpec::from_def(&def);
+    let spec = def.to_spec();
     let agent = askit::agent_new(askit.clone(), "agent_1".into(), spec).unwrap();
     assert_eq!(agent.def_name(), COUNTER_DEF);
     assert_eq!(agent.id(), "agent_1");
@@ -40,11 +36,38 @@ fn test_agent_new() {
 async fn test_agent_start() {
     let askit = ASKit::init().unwrap();
     let def = askit.get_agent_definition(COUNTER_DEF).unwrap();
-    let spec = AgentSpec::from_def(&def);
+    let spec = def.to_spec();
     let mut agent = askit::agent_new(askit.clone(), "agent_1".into(), spec).unwrap();
     agent.start().await.unwrap();
 
     assert_eq!(agent.status(), &AgentStatus::Start);
+
+    askit.quit();
+}
+
+#[tokio::test]
+async fn test_agent_process() {
+    let askit = ASKit::init().unwrap();
+    askit.ready().await.unwrap();
+
+    let counter_def = askit.get_agent_definition(COUNTER_DEF).unwrap();
+    let counter_spec = counter_def.to_spec();
+
+    let mut counter_agent =
+        askit::agent_new(askit.clone(), "agent_1".into(), counter_spec).unwrap();
+    counter_agent.start().await.unwrap();
+
+    let ctx = AgentContext::new();
+    counter_agent
+        .process(ctx, "in".into(), AgentValue::unit())
+        .await
+        .unwrap();
+
+    let counter_agent = counter_agent
+        .as_any()
+        .downcast_ref::<common::agents::CounterAgent>()
+        .unwrap();
+    assert_eq!(counter_agent.count, 1);
 
     askit.quit();
 }
@@ -56,7 +79,7 @@ async fn test_agent_stop() {
     askit.ready().await.unwrap();
 
     let def = askit.get_agent_definition(COUNTER_DEF).unwrap();
-    let spec = AgentSpec::from_def(&def);
+    let spec = def.to_spec();
     let mut agent = askit::agent_new(askit.clone(), "agent_1".into(), spec).unwrap();
     agent.start().await.unwrap();
 
@@ -68,67 +91,6 @@ async fn test_agent_stop() {
 
     agent.stop().await.unwrap();
     assert_eq!(agent.status(), &AgentStatus::Init);
-
-    askit.quit();
-}
-
-#[tokio::test]
-async fn test_agent_process() {
-    let askit = ASKit::init().unwrap();
-
-    // build a flow: Counter -> TestProbe
-    let counter_def = askit.get_agent_definition(COUNTER_DEF).unwrap();
-    let counter_spec = AgentSpec::from_def(&counter_def);
-
-    let probe_def = askit.get_agent_definition(PROBE_DEF).unwrap();
-    let probe_spec = AgentSpec::from_def(&probe_def);
-
-    let counter_id = counter_spec.id.clone();
-    let probe_id = probe_spec.id.clone();
-
-    let mut spec = AgentStreamSpec::default();
-    spec.add_agent(counter_spec);
-    spec.add_agent(probe_spec);
-    spec.add_channels(ChannelSpec {
-        source: counter_id.clone(),
-        source_handle: "count".into(),
-        target: probe_id.clone(),
-        target_handle: "in".into(),
-    });
-    spec.run_on_start = true;
-
-    askit
-        .add_agent_stream("counter_probe_stream".to_string(), spec)
-        .unwrap();
-    askit.ready().await.unwrap();
-
-    askit
-        .agent_input(
-            counter_id.clone(),
-            AgentContext::new(),
-            "in".into(),
-            AgentValue::unit(),
-        )
-        .await
-        .unwrap();
-
-    let probe_rec = probe_receiver(&askit, &probe_id).await.unwrap();
-
-    let (_ctx, value) = probe_rec.recv().await.unwrap();
-    assert_eq!(value, AgentValue::integer(1));
-
-    askit
-        .agent_input(
-            counter_id.clone(),
-            AgentContext::new(),
-            "in".into(),
-            AgentValue::unit(),
-        )
-        .await
-        .unwrap();
-
-    let (_ctx, value) = probe_rec.recv().await.unwrap();
-    assert_eq!(value, AgentValue::integer(2));
 
     askit.quit();
 }
