@@ -5,9 +5,8 @@ use serde_json::Value;
 
 use crate::FnvIndexMap;
 use crate::config::AgentConfigs;
-use crate::definition::{AgentConfigSpecs, AgentDefinition};
+use crate::definition::AgentConfigSpecs;
 use crate::error::AgentError;
-use crate::id::new_id;
 
 pub type AgentStreamSpecs = FnvIndexMap<String, AgentStreamSpec>;
 
@@ -57,37 +56,6 @@ impl AgentStreamSpec {
     }
 }
 
-pub fn copy_sub_stream(
-    agents: &Vec<AgentSpec>,
-    channels: &Vec<ChannelSpec>,
-) -> (Vec<AgentSpec>, Vec<ChannelSpec>) {
-    let mut new_agents = Vec::new();
-    let mut agent_id_map = FnvIndexMap::default();
-    for agent in agents {
-        let new_id = new_id();
-        agent_id_map.insert(agent.id.clone(), new_id.clone());
-        let mut new_agent = agent.clone();
-        new_agent.id = new_id;
-        new_agents.push(new_agent);
-    }
-
-    let mut new_channels = Vec::new();
-    for channel in channels {
-        let Some(source) = agent_id_map.get(&channel.source) else {
-            continue;
-        };
-        let Some(target) = agent_id_map.get(&channel.target) else {
-            continue;
-        };
-        let mut new_channel = channel.clone();
-        new_channel.source = source.clone();
-        new_channel.target = target.clone();
-        new_channels.push(new_channel);
-    }
-
-    (new_agents, new_channels)
-}
-
 /// Information held by each agent.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentSpec {
@@ -123,14 +91,6 @@ pub struct AgentSpec {
 
     #[serde(flatten)]
     pub extensions: FnvIndexMap<String, serde_json::Value>,
-}
-
-impl AgentSpec {
-    pub fn from_def(def: &AgentDefinition) -> Self {
-        let mut spec = def.to_spec();
-        spec.id = new_id();
-        spec
-    }
 }
 
 // ChannelSpec

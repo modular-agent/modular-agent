@@ -1,6 +1,7 @@
 use std::sync::atomic::AtomicUsize;
 use std::sync::{Arc, Mutex};
 
+use im::Vector;
 use tokio::sync::{Mutex as AsyncMutex, mpsc};
 
 use crate::FnvIndexMap;
@@ -9,9 +10,10 @@ use crate::config::{AgentConfigs, AgentConfigsMap};
 use crate::context::AgentContext;
 use crate::definition::{AgentConfigSpecs, AgentDefinition, AgentDefinitions};
 use crate::error::AgentError;
+use crate::id::{new_id, update_ids};
 use crate::message::{self, AgentEventMessage};
 use crate::registry;
-use crate::spec::{self, AgentSpec, AgentStreamSpec, ChannelSpec};
+use crate::spec::{AgentSpec, AgentStreamSpec, ChannelSpec};
 use crate::stream::{AgentStream, AgentStreamInfo, AgentStreams};
 use crate::value::AgentValue;
 
@@ -74,6 +76,7 @@ impl ASKit {
             .ok_or(AgentError::TxNotInitialized)
     }
 
+    /// Initialize ASKit.
     pub fn init() -> Result<Self, AgentError> {
         let askit = Self::new();
         askit.register_agents();
@@ -84,17 +87,20 @@ impl ASKit {
         registry::register_inventory_agents(self);
     }
 
+    /// Prepare ASKit to be ready.
     pub async fn ready(&self) -> Result<(), AgentError> {
         self.spawn_message_loop().await?;
         self.start_agent_streams_on_start().await?;
         Ok(())
     }
 
+    /// Quit ASKit.
     pub fn quit(&self) {
         let mut tx_lock = self.tx.lock().unwrap();
         *tx_lock = None;
     }
 
+    /// Register an agent definition.
     pub fn register_agent_definiton(&self, def: AgentDefinition) {
         let def_name = def.name.clone();
         let def_global_configs = def.global_configs.clone();
@@ -112,16 +118,19 @@ impl ASKit {
         }
     }
 
+    /// Get all agent definitions.
     pub fn get_agent_definitions(&self) -> AgentDefinitions {
         let defs = self.defs.lock().unwrap();
         defs.clone()
     }
 
+    /// Get an agent definition by name.
     pub fn get_agent_definition(&self, def_name: &str) -> Option<AgentDefinition> {
         let defs = self.defs.lock().unwrap();
         defs.get(def_name).cloned()
     }
 
+    /// Get the config specs of an agent definition by name.
     pub fn get_agent_config_specs(&self, def_name: &str) -> Option<AgentConfigSpecs> {
         let defs = self.defs.lock().unwrap();
         let Some(def) = defs.get(def_name) else {
@@ -130,6 +139,7 @@ impl ASKit {
         def.configs.clone()
     }
 
+    /// Get the agent spec by id.
     pub fn get_agent_spec(&self, agent_id: &str) -> Option<AgentSpec> {
         let agents = self.agents.lock().unwrap();
         let Some(agent) = agents.get(agent_id) else {
@@ -182,6 +192,7 @@ impl ASKit {
         Ok(id)
     }
 
+    /// Rename an existing agent stream.
     pub fn rename_agent_stream(&self, id: &str, new_name: &str) -> Result<String, AgentError> {
         if !is_valid_stream_name(new_name) {
             return Err(AgentError::InvalidStreamName(new_name.into()));
@@ -203,6 +214,7 @@ impl ASKit {
         Ok(new_name)
     }
 
+    /// Generate a unique stream name by appending a number suffix if needed.
     pub fn unique_stream_name(&self, name: &str) -> String {
         let mut new_name = name.trim().to_string();
         let mut i = 2;
@@ -214,6 +226,9 @@ impl ASKit {
         new_name
     }
 
+    /// Add a new agent stream with the given name and spec, and returns the id of the new agent stream.
+    ///
+    /// The ids of the given spec, including agents and channels, are changed to new unique ids.
     pub fn add_agent_stream(
         &self,
         name: String,
@@ -247,6 +262,7 @@ impl ASKit {
         Ok(id)
     }
 
+    /// Remove an agent stream by id.
     pub async fn remove_agent_stream(&self, id: &str) -> Result<(), AgentError> {
         let mut stream = {
             let mut streams = self.streams.lock().unwrap();
@@ -275,14 +291,7 @@ impl ASKit {
         Ok(())
     }
 
-    pub fn copy_sub_stream(
-        &self,
-        agents: &Vec<AgentSpec>,
-        channels: &Vec<ChannelSpec>,
-    ) -> (Vec<AgentSpec>, Vec<ChannelSpec>) {
-        spec::copy_sub_stream(agents, channels)
-    }
-
+    /// Start an agent stream by id.
     pub async fn start_agent_stream(&self, id: &str) -> Result<(), AgentError> {
         let mut stream = {
             let mut streams = self.streams.lock().unwrap();
@@ -299,6 +308,7 @@ impl ASKit {
         Ok(())
     }
 
+    /// Stop an agent stream by id.
     pub async fn stop_agent_stream(&self, id: &str) -> Result<(), AgentError> {
         let mut stream = {
             let mut streams = self.streams.lock().unwrap();
@@ -322,18 +332,20 @@ impl ASKit {
         let def = self
             .get_agent_definition(def_name)
             .ok_or_else(|| AgentError::AgentDefinitionNotFound(def_name.to_string()))?;
-        Ok(AgentSpec::from_def(&def))
+        Ok(def.to_spec())
     }
 
-    /// Add an agent to the specified stream.
-    pub fn add_agent(&self, stream_id: String, spec: AgentSpec) -> Result<(), AgentError> {
+    /// Add an agent to the specified stream, and returns the id of the newly added agent.
+    pub fn add_agent(&self, stream_id: String, mut spec: AgentSpec) -> Result<String, AgentError> {
         let mut streams = self.streams.lock().unwrap();
         let Some(stream) = streams.get_mut(&stream_id) else {
             return Err(AgentError::StreamNotFound(stream_id.to_string()));
         };
+        let id = new_id();
+        spec.id = id.clone();
         self.add_agent_internal(stream_id, spec.clone())?;
         stream.spec_mut().add_agent(spec.clone());
-        Ok(())
+        Ok(id)
     }
 
     fn add_agent_internal(&self, stream_id: String, spec: AgentSpec) -> Result<(), AgentError> {
@@ -354,22 +366,16 @@ impl ASKit {
         agents.get(agent_id).cloned()
     }
 
+    /// Add a channel to the specified stream.
     pub fn add_channel(&self, stream_id: &str, channel: ChannelSpec) -> Result<(), AgentError> {
-        let mut streams = self.streams.lock().unwrap();
-        let Some(stream) = streams.get_mut(stream_id) else {
-            return Err(AgentError::StreamNotFound(stream_id.to_string()));
-        };
-        stream.spec_mut().add_channels(channel.clone());
-        self.add_channel_internal(channel)?;
-        Ok(())
-    }
-
-    fn add_channel_internal(&self, channel: ChannelSpec) -> Result<(), AgentError> {
-        // check if the source agent exists
+        // check if the source and target agents exist
         {
             let agents = self.agents.lock().unwrap();
             if !agents.contains_key(&channel.source) {
-                return Err(AgentError::SourceAgentNotFound(channel.source.to_string()));
+                return Err(AgentError::AgentNotFound(channel.source.to_string()));
+            }
+            if !agents.contains_key(&channel.target) {
+                return Err(AgentError::AgentNotFound(channel.target.to_string()));
             }
         }
 
@@ -381,6 +387,16 @@ impl ASKit {
             return Err(AgentError::EmptyTargetHandle);
         }
 
+        let mut streams = self.streams.lock().unwrap();
+        let Some(stream) = streams.get_mut(stream_id) else {
+            return Err(AgentError::StreamNotFound(stream_id.to_string()));
+        };
+        stream.spec_mut().add_channels(channel.clone());
+        self.add_channel_internal(channel)?;
+        Ok(())
+    }
+
+    fn add_channel_internal(&self, channel: ChannelSpec) -> Result<(), AgentError> {
         let mut channels = self.channels.lock().unwrap();
         if let Some(targets) = channels.get_mut(&channel.source) {
             if targets
@@ -403,6 +419,36 @@ impl ASKit {
         Ok(())
     }
 
+    /// Add agents and channels to the specified stream.
+    ///
+    /// The ids of the given agents and channels are changed to new unique ids.
+    pub fn add_agents_and_channels(
+        &self,
+        stream_id: &str,
+        agents: &Vector<AgentSpec>,
+        channels: &Vector<ChannelSpec>,
+    ) -> Result<(Vector<AgentSpec>, Vector<ChannelSpec>), AgentError> {
+        let (agents, channels) = update_ids(agents, channels);
+
+        let mut streams = self.streams.lock().unwrap();
+        let Some(stream) = streams.get_mut(stream_id) else {
+            return Err(AgentError::StreamNotFound(stream_id.to_string()));
+        };
+
+        for agent in &agents {
+            self.add_agent_internal(stream_id.to_string(), agent.clone())?;
+            stream.spec_mut().add_agent(agent.clone());
+        }
+
+        for channel in &channels {
+            self.add_channel_internal(channel.clone())?;
+            stream.spec_mut().add_channels(channel.clone());
+        }
+
+        Ok((agents, channels))
+    }
+
+    /// Remove an agent from the specified stream.
     pub async fn remove_agent(&self, stream_id: &str, agent_id: &str) -> Result<(), AgentError> {
         {
             let mut streams = self.streams.lock().unwrap();
@@ -445,6 +491,7 @@ impl ASKit {
         Ok(())
     }
 
+    /// Remove a channel from the specified stream.
     pub fn remove_channel(&self, stream_id: &str, channel: &ChannelSpec) -> Result<(), AgentError> {
         let mut stream = {
             let mut streams = self.streams.lock().unwrap();
@@ -483,6 +530,7 @@ impl ASKit {
         }
     }
 
+    /// Start an agent by id.
     pub async fn start_agent(&self, agent_id: &str) -> Result<(), AgentError> {
         let agent = {
             let agents = self.agents.lock().unwrap();
@@ -612,6 +660,7 @@ impl ASKit {
         Ok(())
     }
 
+    /// Stop an agent by id.
     pub async fn stop_agent(&self, agent_id: &str) -> Result<(), AgentError> {
         {
             // remove the sender first to prevent new messages being sent
@@ -648,6 +697,7 @@ impl ASKit {
         Ok(())
     }
 
+    /// Set configs for an agent by id.
     pub async fn set_agent_configs(
         &self,
         agent_id: String,
@@ -686,11 +736,13 @@ impl ASKit {
         Ok(())
     }
 
+    /// Get global configs for the agent definition by name.
     pub fn get_global_configs(&self, def_name: &str) -> Option<AgentConfigs> {
         let global_configs_map = self.global_configs_map.lock().unwrap();
         global_configs_map.get(def_name).cloned()
     }
 
+    /// Set global configs for the agent definition by name.
     pub fn set_global_configs(&self, def_name: String, configs: AgentConfigs) {
         let mut global_configs_map = self.global_configs_map.lock().unwrap();
 
@@ -704,18 +756,21 @@ impl ASKit {
         }
     }
 
+    /// Get the global configs map.
     pub fn get_global_configs_map(&self) -> AgentConfigsMap {
         let global_configs_map = self.global_configs_map.lock().unwrap();
         global_configs_map.clone()
     }
 
+    /// Set the global configs map.
     pub fn set_global_configs_map(&self, new_configs_map: AgentConfigsMap) {
         for (agent_name, new_configs) in new_configs_map {
             self.set_global_configs(agent_name, new_configs);
         }
     }
 
-    pub async fn agent_input(
+    /// Send input to an agent.
+    pub(crate) async fn agent_input(
         &self,
         agent_id: String,
         ctx: AgentContext,
@@ -773,6 +828,7 @@ impl ASKit {
         Ok(())
     }
 
+    /// Send output from an agent. (Async version)
     pub async fn send_agent_out(
         &self,
         agent_id: String,
@@ -783,6 +839,7 @@ impl ASKit {
         message::send_agent_out(self, agent_id, ctx, pin, value).await
     }
 
+    /// Send output from an agent.
     pub fn try_send_agent_out(
         &self,
         agent_id: String,
@@ -793,10 +850,12 @@ impl ASKit {
         message::try_send_agent_out(self, agent_id, ctx, pin, value)
     }
 
+    /// Write a value to the board.
     pub fn write_board_value(&self, name: String, value: AgentValue) -> Result<(), AgentError> {
         self.try_send_board_out(name, AgentContext::new(), value)
     }
 
+    /// Write a value to the variable board.
     pub fn write_var_value(
         &self,
         stream_id: &str,
@@ -870,6 +929,7 @@ impl ASKit {
         Ok(())
     }
 
+    /// Subscribe an observer to ASKit events.
     pub fn subscribe(&self, observer: Box<dyn ASKitObserver + Sync + Send>) -> usize {
         let mut observers = self.observers.lock().unwrap();
         let observer_id = new_observer_id();
@@ -877,6 +937,7 @@ impl ASKit {
         observer_id
     }
 
+    /// Unsubscribe an observer from ASKit events.
     pub fn unsubscribe(&self, observer_id: usize) {
         let mut observers = self.observers.lock().unwrap();
         observers.swap_remove(&observer_id);

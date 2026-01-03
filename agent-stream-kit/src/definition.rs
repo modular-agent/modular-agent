@@ -6,6 +6,7 @@ use crate::FnvIndexMap;
 use crate::agent::Agent;
 use crate::askit::ASKit;
 use crate::error::AgentError;
+use crate::id::new_id;
 use crate::spec::AgentSpec;
 use crate::value::AgentValue;
 
@@ -400,7 +401,7 @@ impl AgentDefinition {
 
     pub fn to_spec(&self) -> AgentSpec {
         AgentSpec {
-            id: String::new(),
+            id: new_id(),
             def_name: self.name.clone(),
             inputs: self.inputs.clone(),
             outputs: self.outputs.clone(),

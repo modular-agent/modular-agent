@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use crate::FnvIndexMap;
 use crate::askit::ASKit;
 use crate::error::AgentError;
-use crate::id::new_id;
+use crate::id::{new_id, update_ids};
 use crate::spec::AgentStreamSpec;
 
 pub type AgentStreams = FnvIndexMap<String, AgentStream>;
@@ -19,7 +19,14 @@ pub struct AgentStream {
 }
 
 impl AgentStream {
-    pub fn new(name: String, spec: AgentStreamSpec) -> Self {
+    /// Create a new agent stream with the given name and spec.
+    ///
+    /// The ids of the given spec, including agents and channels, are changed to new unique ids.
+    pub fn new(name: String, mut spec: AgentStreamSpec) -> Self {
+        let (agents, channels) = update_ids(&spec.agents, &spec.channels);
+        spec.agents = agents;
+        spec.channels = channels;
+
         Self {
             id: new_id(),
             name,
