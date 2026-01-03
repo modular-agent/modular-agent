@@ -39,13 +39,18 @@
     channelSpecToEdge,
     edgeToChannelSpec,
     flowToStreamSpec,
-    importAgentStream,
     nodeToAgentSpec,
     saveAgentStream,
   } from "$lib/agent";
   import FlowStatus from "$lib/components/flow-status.svelte";
   import { ScrollArea } from "$lib/components/ui/scroll-area/index.js";
-  import { agentDefs, coreSettings, newStream, updateStreamSpec } from "$lib/shared.svelte";
+  import {
+    agentDefs,
+    coreSettings,
+    importStream,
+    newStream,
+    updateStreamSpec,
+  } from "$lib/shared.svelte";
   import type { AgentStreamNode, AgentStreamEdge } from "$lib/types";
 
   import AgentList from "./agent-list.svelte";
@@ -276,9 +281,8 @@
     }
   }
 
-  function onExportStream() {
-    const viewport = getViewport();
-    const s = flowToStreamSpec(nodes, edges, data.flow.run_on_start, viewport);
+  async function onExportStream() {
+    const s = await syncStream();
     const jsonStr = JSON.stringify(s, null, 2);
     const blob = new Blob([jsonStr], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -293,10 +297,12 @@
   }
 
   async function onImportStream() {
+    await syncStream();
+
     const file = await open({ multiple: false, filter: "json" });
     if (!file) return;
-    const id = await importAgentStream(file);
-    goto(`/stream_editor/${id}`);
+    const id = await importStream(file);
+    goto(`/stream_editor/${id}`, { invalidateAll: true });
   }
 
   const AGENT_DRAG_FORMAT = "application/agent-name";

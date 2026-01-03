@@ -15,6 +15,7 @@ import {
 import { getCoreSettings } from "$lib/utils";
 
 import {
+  importAgentStream,
   newAgentStream,
   removeAgentStream,
   renameAgentStream,
@@ -61,6 +62,12 @@ export async function renameStream(id: string, newName: string): Promise<string>
 export async function deleteStream(id: string): Promise<void> {
   await removeAgentStream(id);
   await reloadStreamInfos();
+}
+
+export async function importStream(path: string): Promise<string> {
+  const id = await importAgentStream(path);
+  await reloadStreamInfos();
+  return id;
 }
 
 export async function startStream(id: string) {
