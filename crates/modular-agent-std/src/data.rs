@@ -617,6 +617,8 @@ impl AsAgent for ZipToObjectAgent {
 
 #[cfg(test)]
 mod tests {
+    use im::hashmap;
+
     use super::*;
 
     #[test]
@@ -654,8 +656,7 @@ mod tests {
         assert_eq!(result_root, Some(&root));
     }
 
-    /// Test 1: Verify if a deeply nested structure (a.b.c) can be auto-generated from an empty state.
-    /// This confirms the fix for the previous bug (failure to traverse down levels).
+    /// Verify if a deeply nested structure (a.b.c) can be auto-generated from an empty state.
     #[test]
     fn test_create_deeply_nested_structure() {
         let mut root = AgentValue::object_default();
@@ -676,7 +677,7 @@ mod tests {
         panic!("Nested structure was not created correctly: {:?}", root);
     }
 
-    /// Test 2: Verify if a new key can be added without breaking existing structures.
+    /// Verify if a new key can be added without breaking existing structures.
     #[test]
     fn test_add_to_existing_structure() {
         let mut root = AgentValue::object_default();
@@ -695,7 +696,7 @@ mod tests {
         assert_eq!(*timeout, AgentValue::string("30s"));
     }
 
-    /// Test 3: Verify if an existing value can be overwritten.
+    /// Verify if an existing value can be overwritten.
     #[test]
     fn test_overwrite_existing_value() {
         let mut root = AgentValue::object_default();
@@ -716,10 +717,10 @@ mod tests {
         assert_eq!(*version, AgentValue::string("v2"));
     }
 
-    /// Test 4: Verify if the operation stops safely when an intermediate path is not an object.
+    /// Verify if an intermediate path is not an Object, forcibly overwrite it with an empty Object.
     /// Example: Try setting ["tags", "new_key"] against { "tags": "immutable_string" }
     #[test]
-    fn test_stop_if_path_is_not_object() {
+    fn test_overwrite_if_path_is_not_object() {
         let mut root = AgentValue::object_default();
         // "tags" is a string, not an object
         root.set("tags".to_string(), AgentValue::string("some_string"))
@@ -733,6 +734,11 @@ mod tests {
 
         // Verify that "tags" remains a string
         let tags = root.get_mut("tags").unwrap();
-        assert_eq!(*tags, AgentValue::string("some_string"));
+        assert_eq!(
+            *tags,
+            AgentValue::object(hashmap! {
+                "new_key".to_string() => AgentValue::string("value")
+            })
+        );
     }
 }
