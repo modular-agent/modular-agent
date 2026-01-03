@@ -21,8 +21,8 @@
   import hotkeys from "hotkeys-js";
   import {
     addAgent,
+    addAgentsAndChannels,
     addChannel,
-    copySubStream,
     newAgentSpec,
     removeAgent,
     removeChannel,
@@ -55,7 +55,7 @@
   import StreamActions from "./stream-actions.svelte";
   import StreamName from "./stream-name.svelte";
 
-  const { getViewport, screenToFlowPosition, setViewport, updateEdge, updateNode, updateNodeData } =
+  const { getViewport, screenToFlowPosition, updateEdge, updateNode, updateNodeData } =
     $derived(useSvelteFlow());
 
   const nodeTypes: NodeTypes = {
@@ -172,22 +172,24 @@
       return;
     }
 
-    let [cnodes, cedges] = await copySubStream(copiedNodes, copiedEdges);
-    if (cnodes.length == 0 && cedges.length == 0) return;
+    let [added_agents, added_edges] = await addAgentsAndChannels(
+      stream_id,
+      copiedNodes,
+      copiedEdges,
+    );
+    if (added_agents.length == 0 && added_edges.length == 0) return;
 
     let new_nodes = [];
-    for (const node of cnodes) {
-      node.x += 80;
-      node.y += 80;
-      await addAgent(stream_id, node);
-      const new_node = agentSpecToNode(node);
+    for (const a of added_agents) {
+      a.x += 80;
+      a.y += 80;
+      const new_node = agentSpecToNode(a);
       new_node.selected = true;
       new_nodes.push(new_node);
     }
 
     let new_edges = [];
-    for (const edge of cedges) {
-      await addChannel(stream_id, edge);
+    for (const edge of added_edges) {
       const new_edge = channelSpecToEdge(edge);
       new_edge.selected = true;
       new_edges.push(new_edge);
@@ -336,7 +338,8 @@
           });
     snode.x = xy.x;
     snode.y = xy.y;
-    await addAgent(stream_id, snode);
+    const id = await addAgent(stream_id, snode);
+    snode.id = id;
     const new_node = agentSpecToNode(snode);
     nodes = [...nodes, new_node];
 

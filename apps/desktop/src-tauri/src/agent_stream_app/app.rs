@@ -13,23 +13,14 @@ static ASKIT_STREAMS_PATH: &'static str = ".askit/streams";
 
 pub struct ASApp {
     askit: ASKit,
-    // stream_infos: Mutex<Vec<AgentStreamInfo>>,
 }
 
 impl ASApp {
     pub fn new(askit: &ASKit) -> Self {
         Self {
             askit: askit.clone(),
-            // stream_infos: Mutex::new(Vec::new()),
         }
     }
-
-    // AgentStreamInfo
-
-    // pub fn get_agent_stream_infos(&self) -> Vec<AgentStreamInfo> {
-    //     let infos = self.stream_infos.lock().unwrap();
-    //     infos.clone()
-    // }
 
     // AgentStream
 
@@ -200,15 +191,7 @@ impl ASApp {
             bail!("Invalid file extension");
         }
         let content = std::fs::read_to_string(&path)?;
-        let mut spec = AgentStreamSpec::from_json(&content)?;
-
-        // Rename IDs in the spec
-        let agents_vec: Vec<_> = spec.agents.iter().cloned().collect();
-        let channels_vec: Vec<_> = spec.channels.iter().cloned().collect();
-        let (agents, edges) = self.askit.copy_sub_stream(&agents_vec, &channels_vec);
-        spec.agents = agents.into();
-        spec.channels = edges.into();
-
+        let spec = AgentStreamSpec::from_json(&content)?;
         Ok(spec)
     }
 }
@@ -251,11 +234,6 @@ fn agent_stream_path(stream_name: &str) -> Result<PathBuf> {
 
     Ok(stream_path)
 }
-
-// #[tauri::command]
-// pub fn get_agent_stream_infos_cmd(asapp: State<'_, ASApp>) -> Vec<AgentStreamInfo> {
-//     asapp.get_agent_stream_infos().clone()
-// }
 
 #[tauri::command]
 pub fn new_agent_stream_cmd(asapp: State<'_, ASApp>, name: String) -> Result<String, String> {
