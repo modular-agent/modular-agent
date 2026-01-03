@@ -6,7 +6,7 @@
       "id": "432",
       "def_name": "agent_stream_kit::board_agent::BoardInAgent",
       "inputs": [
-        "*"
+        "value"
       ],
       "configs": {
         "name": "out"
@@ -25,7 +25,7 @@
       "id": "433",
       "def_name": "agent_stream_kit::board_agent::BoardOutAgent",
       "outputs": [
-        "*"
+        "value"
       ],
       "configs": {
         "name": "board2"
@@ -43,11 +43,10 @@
   ],
   "channels": [
     {
-      "id": "xy-edge__433*-432*",
       "source": "433",
-      "source_handle": "*",
+      "source_handle": "value",
       "target": "432",
-      "target_handle": "*"
+      "target_handle": "value"
     }
   ],
   "viewport": {

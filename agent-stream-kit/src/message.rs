@@ -92,9 +92,8 @@ pub async fn agent_out(
     for target in targets.unwrap() {
         let (target_agent, source_pin, target_pin) = target;
 
-        if source_pin != pin && source_pin != "*" {
+        if source_pin != pin {
             // Skip if source_handle does not match with the given port.
-            // "*" is a wildcard, and outputs messages of all ports.
             continue;
         }
 
@@ -104,13 +103,6 @@ pub async fn agent_out(
                 continue;
             }
         }
-
-        let target_pin = if target_pin == "*" {
-            // If target_handle is "*", use the port specified by the source agent
-            pin.clone()
-        } else {
-            target_pin.clone()
-        };
 
         askit
             .agent_input(target_agent.clone(), ctx.clone(), target_pin, value.clone())
@@ -144,13 +136,7 @@ pub async fn board_out(askit: &ASKit, name: String, ctx: AgentContext, value: Ag
                 // edges not found
                 continue;
             };
-            for (target_agent, _source_handle, target_handle) in edges {
-                let target_pin = if target_handle == "*" {
-                    // If target_handle is "*", use the board name
-                    name.clone()
-                } else {
-                    target_handle.clone()
-                };
+            for (target_agent, _source_pin, target_pin) in edges {
                 askit
                     .agent_input(target_agent.clone(), ctx.clone(), target_pin, value.clone())
                     .await

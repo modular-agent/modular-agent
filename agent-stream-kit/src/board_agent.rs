@@ -11,13 +11,15 @@ use crate::error::AgentError;
 use crate::spec::AgentSpec;
 use crate::value::AgentValue;
 
+static PIN_VALUE: &str = "value";
+
 static CONFIG_NAME: &str = "name";
 
 #[askit_agent(
     kind = "Board",
     title = "->Board",
     category = "Core",
-    inputs = ["*"],
+    inputs = [PIN_VALUE],
     string_config(
         name = CONFIG_NAME,
     )
@@ -67,7 +69,7 @@ impl AsAgent for BoardInAgent {
     kind = "Board",
     title = "Board->",
     category = "Core",
-    outputs = ["*"],
+    outputs = [PIN_VALUE],
     string_config(
         name = CONFIG_NAME,
     )
@@ -143,7 +145,7 @@ impl AsAgent for BoardOutAgent {
     kind = "Board",
     title = "->Var",
     category = "Core",
-    inputs = ["*"],
+    inputs = [PIN_VALUE],
     string_config(
         name = CONFIG_NAME,
     )
@@ -194,7 +196,7 @@ impl AsAgent for VarInAgent {
     kind = "Board",
     title = "Var->",
     category = "Core",
-    outputs = ["*"],
+    outputs = [PIN_VALUE],
     string_config(
         name = CONFIG_NAME,
     )

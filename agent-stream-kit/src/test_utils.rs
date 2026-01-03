@@ -16,6 +16,8 @@ use crate::{
     AgentStreamSpec, AgentValue, AsAgent, askit_agent,
 };
 
+static PIN_VALUE: &str = "value";
+
 /// Setting up ASKit
 pub async fn setup_askit() -> ASKit {
     let askit = ASKit::init().unwrap();
@@ -155,7 +157,7 @@ impl ProbeReceiver {
 #[askit_agent(
     title = "TestProbeAgent",
     category = "Test",
-    inputs = ["*"],
+    inputs = [PIN_VALUE],
     outputs = []
 )]
 pub struct TestProbeAgent {
