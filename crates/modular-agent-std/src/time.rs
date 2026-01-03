@@ -16,6 +16,7 @@ use tokio::task::JoinHandle;
 static CATEGORY: &str = "Std/Time";
 
 static PIN_TIME: &str = "time";
+static PIN_VALUE: &str = "value";
 static PIN_UNIT: &str = "unit";
 
 static CONFIG_DELAY: &str = "delay";
@@ -34,8 +35,8 @@ static TIME_DEFAULT: &str = "1s";
     title = "Delay",
     description = "Delays output by a specified time",
     category = CATEGORY,
-    inputs = ["*"],
-    outputs = ["*"],
+    inputs = [PIN_VALUE],
+    outputs = [PIN_VALUE],
     integer_config(name = CONFIG_DELAY, default = DELAY_MS_DEFAULT, title = "delay (ms)"),
     integer_config(name = CONFIG_MAX_NUM_DATA, default = MAX_NUM_DATA_DEFAULT, title = "max num data")
 )]
@@ -399,8 +400,8 @@ impl AsAgent for ScheduleTimerAgent {
 #[askit_agent(
     title = "Throttle Time",
     category = CATEGORY,
-    inputs = ["*"],
-    outputs = ["*"],
+    inputs = [PIN_VALUE],
+    outputs = [PIN_VALUE],
     string_config(name = CONFIG_TIME, default = TIME_DEFAULT, description = "(ex. 10s, 5m, 100ms, 1h, 1d)"),
     integer_config(name = CONFIG_MAX_NUM_DATA, title = "max num data", description = "0: no data, -1: all data")
 )]

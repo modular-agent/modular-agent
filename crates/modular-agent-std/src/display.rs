@@ -7,13 +7,16 @@ use agent_stream_kit::{
 use im::hashmap;
 
 static CATEGORY: &str = "Std/Display";
+
+static PIN_VALUE: &str = "value";
+
 static DISPLAY_VALUE: &str = "value";
 
 // Display Value
 #[askit_agent(
     title = "Display Value",
     category = CATEGORY,
-    inputs = ["*"],
+    inputs = [PIN_VALUE],
     custom_config(
         name = DISPLAY_VALUE,
         readonly,
@@ -53,7 +56,7 @@ impl AsAgent for DisplayValueAgent {
 #[askit_agent(
     title = "Debug Value",
     category = CATEGORY,
-    inputs = ["*"],
+    inputs = [PIN_VALUE],
     object_config(
         name = DISPLAY_VALUE,
         readonly,
