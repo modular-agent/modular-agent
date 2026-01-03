@@ -151,14 +151,19 @@ export async function removeAgentStream(id: string): Promise<void> {
   await invoke<void>("plugin:askit|remove_agent_stream", { id });
 }
 
-export async function copySubStream(
+export async function addAgentsAndChannels(
+  streamId: string,
   agents: AgentSpec[],
   channels: ChannelSpec[]
 ): Promise<[AgentSpec[], ChannelSpec[]]> {
-  return await invoke<any>("plugin:askit|copy_sub_stream", {
-    agents,
-    channels,
-  });
+  return await invoke<[AgentSpec[], ChannelSpec[]]>(
+    "plugin:askit|add_agents_and_channels",
+    {
+      streamId,
+      agents,
+      channels,
+    }
+  );
 }
 
 export async function startAgentStream(id: string): Promise<void> {
@@ -178,8 +183,8 @@ export async function newAgentSpec(defName: string): Promise<AgentSpec> {
 export async function addAgent(
   streamId: string,
   spec: AgentSpec
-): Promise<void> {
-  await invoke<void>("plugin:askit|add_agent", {
+): Promise<string> {
+  return await invoke<string>("plugin:askit|add_agent", {
     streamId,
     spec,
   });

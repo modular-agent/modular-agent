@@ -9,11 +9,12 @@ exclude = ["/examples", "/dist-js", "/guest-js", "/node_modules"]
 links = "tauri-plugin-askit"
 
 [dependencies]
-tauri = { version = "2.8.5" }
+agent-stream-kit = "0.17.0"
+im = "15"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+tauri = { version = "2.8.5" }
 thiserror = "2"
-agent-stream-kit = "0.17.0"
 
 [build-dependencies]
 tauri-plugin = { version = "2.4.0", features = ["build"] }

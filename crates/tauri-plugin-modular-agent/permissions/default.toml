@@ -13,7 +13,7 @@ permissions = [
     "allow-unique-stream-name",
     "allow-add-agent-stream",
     "allow-remove-agent-stream",
-    "allow-copy-sub-stream",
+    "allow-add-agents-and-channels",
     "allow-start-agent-stream",
     "allow-stop-agent-stream",
     "allow-new-agent-spec",

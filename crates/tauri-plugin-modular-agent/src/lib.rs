@@ -41,7 +41,7 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             commands::unique_stream_name,
             commands::add_agent_stream,
             commands::remove_agent_stream,
-            commands::copy_sub_stream,
+            commands::add_agents_and_channels,
             commands::start_agent_stream,
             commands::stop_agent_stream,
             commands::new_agent_spec,

@@ -16,7 +16,7 @@ Default permissions for the plugin
 - `allow-unique-stream-name`
 - `allow-add-agent-stream`
 - `allow-remove-agent-stream`
-- `allow-copy-sub-stream`
+- `allow-add-agents-and-channels`
 - `allow-start-agent-stream`
 - `allow-stop-agent-stream`
 - `allow-new-agent-spec`
@@ -97,6 +97,32 @@ Denies the add_agent_stream command without any pre-configured scope.
 <tr>
 <td>
 
+`askit:allow-add-agents-and-channels`
+
+</td>
+<td>
+
+Enables the add_agents_and_channels command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`askit:deny-add-agents-and-channels`
+
+</td>
+<td>
+
+Denies the add_agents_and_channels command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
 `askit:allow-add-channel`
 
 </td>
@@ -116,32 +142,6 @@ Enables the add_channel command without any pre-configured scope.
 <td>
 
 Denies the add_channel command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`askit:allow-copy-sub-stream`
-
-</td>
-<td>
-
-Enables the copy_sub_stream command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`askit:deny-copy-sub-stream`
-
-</td>
-<td>
-
-Denies the copy_sub_stream command without any pre-configured scope.
 
 </td>
 </tr>

@@ -2,6 +2,7 @@ use agent_stream_kit::{
     AgentConfigs, AgentConfigsMap, AgentDefinition, AgentDefinitions, AgentSpec, AgentStreamSpec,
     AgentValue, ChannelSpec,
 };
+use im::Vector;
 use tauri::{AppHandle, Runtime};
 
 use crate::ASKitExt;
@@ -107,12 +108,15 @@ pub(crate) async fn remove_agent_stream<R: Runtime>(
 }
 
 #[tauri::command]
-pub(crate) fn copy_sub_stream<R: Runtime>(
+pub(crate) fn add_agents_and_channels<R: Runtime>(
     app: AppHandle<R>,
-    agents: Vec<AgentSpec>,
-    channels: Vec<ChannelSpec>,
-) -> (Vec<AgentSpec>, Vec<ChannelSpec>) {
-    app.askit().copy_sub_stream(&agents, &channels)
+    stream_id: &str,
+    agents: Vector<AgentSpec>,
+    channels: Vector<ChannelSpec>,
+) -> Result<(Vector<AgentSpec>, Vector<ChannelSpec>)> {
+    app.askit()
+        .add_agents_and_channels(stream_id, &agents, &channels)
+        .map_err(Into::into)
 }
 
 #[tauri::command]
@@ -140,7 +144,7 @@ pub(crate) fn add_agent<R: Runtime>(
     app: AppHandle<R>,
     stream_id: String,
     spec: AgentSpec,
-) -> Result<()> {
+) -> Result<String> {
     app.askit().add_agent(stream_id, spec).map_err(Into::into)
 }
 

@@ -11,7 +11,7 @@ const COMMANDS: &[&str] = &[
     "unique_stream_name",
     "add_agent_stream",
     "remove_agent_stream",
-    "copy_sub_stream",
+    "add_agents_and_channels",
     "start_agent_stream",
     "stop_agent_stream",
     "new_agent_spec",
