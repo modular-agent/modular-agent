@@ -107,6 +107,7 @@ impl AsAgent for FetchYtTranscriptAgent {
         let mut text = String::new();
         for snippet in &transcript.snippets {
             text.push_str(&snippet.text);
+            text.push(' ');
         }
 
         self.try_output(
