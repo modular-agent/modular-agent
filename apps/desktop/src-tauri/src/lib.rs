@@ -3,16 +3,21 @@ use tauri_plugin_window_state::{AppHandleExt, StateFlags};
 
 #[allow(unused_imports)]
 use askit_cozodb_agents;
+
 #[allow(unused_imports)]
 use askit_lifelog_agents;
+
 #[allow(unused_imports)]
 use askit_llm_agents;
-#[allow(unused_imports)]
-use askit_rhai_agents;
+
+// #[allow(unused_imports)]
+// use askit_rhai_agents;
+
 #[allow(unused_imports)]
 use askit_std_agents;
-// #[allow(unused_imports)]
-// use askit_web_agents;
+
+#[allow(unused_imports)]
+use askit_web_agents;
 
 mod agent_stream_app;
 
@@ -41,8 +46,6 @@ pub fn run() {
                 log::error!("Failed to show main window: {}", e);
             });
         }))
-        .plugin(tauri_plugin_shell::init())
-        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let app_handle = app.handle().clone();
             tauri::async_runtime::block_on(async move {
@@ -83,7 +86,6 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             exit_app_cmd,
-            // agent_stream_app::app::get_agent_stream_infos_cmd,
             agent_stream_app::app::new_agent_stream_cmd,
             agent_stream_app::app::rename_agent_stream_cmd,
             agent_stream_app::app::remove_agent_stream_cmd,
