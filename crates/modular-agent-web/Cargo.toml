@@ -1,13 +1,13 @@
 [package]
 name = "askit-web-agents"
-version = "0.1.1"
+version = "0.1.2"
 description = "Web Agents for Agent Stream Kit"
 authors = ["Akira Ishino <akira@lumilab.jp>"]
 edition = "2024"
 license = "Apache-2.0 OR MIT"
 
 [dependencies]
-agent-stream-kit = "0.17.0"
+agent-stream-kit = "0.18.0"
 html-to-markdown-rs = { version = "2.14.0", optional = true }
 reqwest = { version = "0.12.25", default-features = false, features = ["json"] }
 scraper = { version = "0.25.0", optional = true }
@@ -24,6 +24,5 @@ html-scraper = ["scraper"]
 html-to-markdown = ["html-to-markdown-rs"]
 yt-transcript = ["yt-transcript-rs"]
 
-#[patch.crates-io]
+# [patch.crates-io]
 # agent-stream-kit = { path = "../agent-stream-kit/agent-stream-kit" }
-# askit-macros = { path = "../agent-stream-kit/askit-macros" }
