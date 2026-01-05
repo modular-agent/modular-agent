@@ -18,24 +18,26 @@
   import { Button } from "$lib/components/ui/button/index.js";
   import * as HoverCard from "$lib/components/ui/hover-card/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
+  import { getAgentDefinitions } from "$lib/agent";
   import {
     subscribeAgentSpecUpdatedMessage,
     subscribeAgentConfigUpdatedMessage,
     subscribeAgentErrorMessage,
     subscribeAgentInMessage,
-    agentDefs,
   } from "$lib/shared.svelte";
 
   import AgentConfig from "./agent-config.svelte";
   import NodeBase from "./node-base.svelte";
 
   type Props = NodeProps & {
+    id: string;
     data: AgentSpec;
   };
 
   let { id, data, ...props }: Props = $props();
 
-  const agentDef = $derived(agentDefs[data.def_name]);
+  const agentDefs = getAgentDefinitions();
+  const agentDef = $derived(agentDefs[data?.def_name] ?? null);
   const description = $derived(agentDef.description);
 
   let errorMessages = $state<string[]>([]);

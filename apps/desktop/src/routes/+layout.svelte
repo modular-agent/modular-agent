@@ -1,3 +1,7 @@
+<script module lang="ts">
+  import "../app.css";
+</script>
+
 <script lang="ts">
   import { getCurrentWindow } from "@tauri-apps/api/window";
 
@@ -7,18 +11,25 @@
   import { ModeWatcher } from "mode-watcher";
   import { setMode } from "mode-watcher";
 
+  import { getCoreSettings } from "$lib/agent";
   import AppSidebar from "$lib/components/app-sidebar.svelte";
   import * as Sidebar from "$lib/components/ui/sidebar/index.js";
-  import { coreSettings } from "$lib/shared.svelte";
 
-  import "../app.css";
   import type { LayoutProps } from "./$types";
 
   const { children }: LayoutProps = $props();
 
-  const key_fullscreen = $derived(coreSettings.shortcut_keys?.["fullscreen"]);
+  onMount(() => {
+    const coreSettings = getCoreSettings();
 
-  $effect(() => {
+    const color_mode = coreSettings.color_mode;
+    if (color_mode === "light") {
+      setMode("light");
+    } else if (color_mode === "dark") {
+      setMode("dark");
+    }
+
+    const key_fullscreen = coreSettings.shortcut_keys?.["fullscreen"];
     if (key_fullscreen) {
       hotkeys(key_fullscreen, () => {
         getCurrentWindow()
@@ -31,21 +42,6 @@
             }
           });
       });
-    }
-
-    return () => {
-      if (key_fullscreen) {
-        hotkeys.unbind(key_fullscreen);
-      }
-    };
-  });
-
-  onMount(() => {
-    const color_mode = coreSettings.color_mode;
-    if (color_mode === "light") {
-      setMode("light");
-    } else if (color_mode === "dark") {
-      setMode("dark");
     }
   });
 </script>

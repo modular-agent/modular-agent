@@ -5,14 +5,10 @@ import { writable, type Writable } from "svelte/store";
 
 import type { AgentStreamInfo, AgentStreamSpec } from "tauri-plugin-askit-api";
 import {
-  getAgentDefinitions,
   getAgentStreamInfos,
   getAgentStreamSpec,
   setAgentStreamSpec,
-  getGlobalConfigsMap,
 } from "tauri-plugin-askit-api";
-
-import { getCoreSettings } from "$lib/utils";
 
 import {
   importAgentStream,
@@ -28,14 +24,6 @@ import type {
   AgentInMessage,
   AgentSpecUpdatedMessage,
 } from "./types";
-
-// AgentDefinitions
-
-export const agentDefs = await getAgentDefinitions();
-
-// Agent Global Configs Map
-
-export const agentGlobalConfigsMap = await getGlobalConfigsMap();
 
 // Agent Streams
 
@@ -233,7 +221,3 @@ $effect.root(() => {
     unlistenAgentSpecUpdated?.();
   };
 });
-
-// Core Settings
-
-export const coreSettings = await getCoreSettings();

@@ -3,10 +3,14 @@
 
   import { onMount } from "svelte";
 
-  import { agentDefs, agentGlobalConfigsMap, coreSettings } from "$lib/shared.svelte";
+  import { getAgentDefinitions, getCoreSettings, getGlobalConfigsMap } from "$lib/agent";
 
   import Agent from "./Agent.svelte";
   import Core from "./Core.svelte";
+
+  const coreSettings = getCoreSettings();
+  const agentDefs = getAgentDefinitions();
+  const globalConfigsMap = getGlobalConfigsMap();
 
   onMount(() => {
     getCurrentWindow().setTitle("Settings - Agent Stream App");
@@ -22,7 +26,7 @@
 
     <div class="flex flex-col mt-8 gap-6">
       <div class="flex-none text-xl font-semibold">Agents</div>
-      {#each Object.entries(agentGlobalConfigsMap) as [agentName, agentConfigs]}
+      {#each Object.entries(globalConfigsMap) as [agentName, agentConfigs]}
         <Agent {agentName} {agentConfigs} agentDef={agentDefs[agentName]} />
       {/each}
     </div>

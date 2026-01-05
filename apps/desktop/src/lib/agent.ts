@@ -1,15 +1,20 @@
 import { invoke } from "@tauri-apps/api/core";
 
-import type {
-  AgentConfigSpec,
-  AgentSpec,
-  AgentStreamSpec,
-  ChannelSpec,
-  Viewport,
-  AgentStreamInfo,
+import {
+  type AgentConfigSpec,
+  type AgentConfigsMap,
+  type AgentSpec,
+  type AgentStreamInfo,
+  type AgentStreamSpec,
+  type ChannelSpec,
+  type Viewport,
+  getAgentDefinitions as getAgentDefinitionsAPI,
+  getGlobalConfigsMap as getGlobalConfigsMapAPI,
+  type AgentDefinitions,
 } from "tauri-plugin-askit-api";
 
-import type { AgentStreamFlow, AgentStreamEdge, AgentStreamNode } from "./types";
+import type { AgentStreamFlow, AgentStreamEdge, AgentStreamNode, CoreSettings } from "./types";
+import { getCoreSettings as getCoreSettingsUtils } from "./utils";
 
 export async function newAgentStream(name: string): Promise<string> {
   return await invoke("new_agent_stream_cmd", { name });
@@ -198,4 +203,28 @@ export function inferTypeForDisplay(spec: AgentConfigSpec | undefined, value: an
     }
   }
   return "object";
+}
+
+// Globals
+
+let _coreSettings: CoreSettings | null = null;
+let _agentDefinitions: AgentDefinitions | null = null;
+let _globalConfigsMap: AgentConfigsMap | null = null;
+
+export function getCoreSettings(): CoreSettings {
+  return _coreSettings!;
+}
+
+export function getAgentDefinitions(): AgentDefinitions {
+  return _agentDefinitions!;
+}
+
+export function getGlobalConfigsMap(): AgentConfigsMap {
+  return _globalConfigsMap!;
+}
+
+export async function initGlobals() {
+  _coreSettings = await getCoreSettingsUtils();
+  _agentDefinitions = await getAgentDefinitionsAPI();
+  _globalConfigsMap = await getGlobalConfigsMapAPI();
 }

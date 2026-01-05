@@ -1,8 +1,7 @@
 <script lang="ts">
   import { type ComponentProps } from "svelte";
 
-  import type { AgentDefinitions } from "tauri-plugin-askit-api";
-
+  import { getAgentDefinitions } from "$lib/agent";
   import { Input } from "$lib/components/ui/input/index.js";
   import { Label } from "$lib/components/ui/label/index.js";
   import * as Sidebar from "$lib/components/ui/sidebar/index.js";
@@ -10,12 +9,13 @@
   import AgentListItems from "./agent-list-item.svelte";
 
   type Props = ComponentProps<typeof Sidebar.Root> & {
-    agentDefs: AgentDefinitions;
     onAddAgent: (agentName: string, position?: { x: number; y: number }) => Promise<void>;
     onDragAgentStart?: (event: DragEvent, agentName: string) => void;
   };
 
-  let { agentDefs, onAddAgent, onDragAgentStart, ...restProps }: Props = $props();
+  let { onAddAgent, onDragAgentStart, ...restProps }: Props = $props();
+
+  const agentDefs = getAgentDefinitions();
 
   let searchTerm = $state("");
 

@@ -8,7 +8,7 @@
   import StreamList from "./stream-list.svelte";
 
   let streams = $derived.by(() =>
-    Array.from(streamInfos.values()).sort((a, b) => a.name.localeCompare(b.name)),
+    Array.from(streamInfos?.values()).sort((a, b) => a.name.localeCompare(b.name)),
   );
 
   onMount(async () => {

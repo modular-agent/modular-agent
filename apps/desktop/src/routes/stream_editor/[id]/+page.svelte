@@ -41,18 +41,14 @@
     flowToStreamSpec,
     nodeToAgentSpec,
     saveAgentStream,
+    getCoreSettings,
   } from "$lib/agent";
   import FlowStatus from "$lib/components/flow-status.svelte";
   import { ScrollArea } from "$lib/components/ui/scroll-area/index.js";
-  import {
-    agentDefs,
-    coreSettings,
-    importStream,
-    newStream,
-    updateStreamSpec,
-  } from "$lib/shared.svelte";
+  import { importStream, newStream, updateStreamSpec } from "$lib/shared.svelte";
   import type { AgentStreamNode, AgentStreamEdge } from "$lib/types";
 
+  import type { PageProps } from "./$types";
   import AgentList from "./agent-list.svelte";
   import AgentNode from "./agent-node.svelte";
   import Menubar from "./menubar.svelte";
@@ -63,11 +59,13 @@
   const { getViewport, screenToFlowPosition, updateEdge, updateNode, updateNodeData } =
     $derived(useSvelteFlow());
 
+  const coreSettings = getCoreSettings();
+
   const nodeTypes: NodeTypes = {
     agent: AgentNode,
   };
 
-  let { data } = $props();
+  let { data }: PageProps = $props();
 
   let stream_id = $derived(data.stream_id);
   let running = $derived(data.flow?.running ?? false);
@@ -496,12 +494,7 @@
       class="absolute right-2 top-2 w-60 z-20 max-h-[calc(100vh-210px)] overflow-x-hidden rounded-md border shadow-lg"
     >
       <ScrollArea>
-        <AgentList
-          class="h-full"
-          {agentDefs}
-          {onAddAgent}
-          onDragAgentStart={handleAgentDragStart}
-        />
+        <AgentList class="h-full" {onAddAgent} onDragAgentStart={handleAgentDragStart} />
       </ScrollArea>
     </div>
   </SvelteFlow>
