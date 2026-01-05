@@ -52,7 +52,8 @@
         }
       }
       if (msg.thinking) {
-        html += `<br><p><details><summary>${truncate(msg.thinking, 30)}</summary><p>${msg.thinking}</p></details></p>`;
+        const open = content ? "" : "open";
+        html += `<br><p><details ${open}><summary>${truncate(msg.thinking, 30)}</summary><p>${msg.thinking}</p></details></p>`;
       }
       return { role, html };
     });
