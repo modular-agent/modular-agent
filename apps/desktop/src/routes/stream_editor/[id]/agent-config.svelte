@@ -78,6 +78,7 @@
   <Input
     type="text"
     class="nodrag nowheel flex-none text-wrap"
+    spellcheck="false"
     {value}
     onkeydown={(evt) => {
       if (evt.ctrlKey && (evt.key === "a" || evt.key === "c")) {
@@ -102,6 +103,7 @@
 {#snippet displayText(value: string)}
   <Textarea
     class="nodrag nowheel flex-1 text-wrap"
+    spellcheck="false"
     {value}
     onkeydown={(evt) => {
       if (evt.ctrlKey && (evt.key === "a" || evt.key === "c")) {
@@ -125,6 +127,7 @@
 {#snippet displayObject(value: any)}
   <Textarea
     class="nodrag nowheel flex-1 text-wrap"
+    spellcheck="false"
     value={JSON.stringify(value, null, 2)}
     onkeydown={(evt) => {
       if (evt.ctrlKey && (evt.key === "a" || evt.key === "c")) {
@@ -166,7 +169,7 @@
 {/snippet}
 
 {#snippet inputBoolean(key: string, v: boolean)}
-  <Switch class="flex-none" checked={v} onchange={() => updateConfig(key, !v)} />
+  <Switch class="flex-none" checked={v} onCheckedChange={() => updateConfig(key, !v)} />
 {/snippet}
 
 {#snippet inputInteger(key: string, v: number)}
@@ -178,14 +181,6 @@
       if (evt.key === "Enter") {
         let intValue = parseInt(evt.currentTarget.value);
         if (!isNaN(intValue)) {
-          updateConfig(key, intValue);
-        }
-      }
-    }}
-    onchange={(evt) => {
-      let intValue = parseInt(evt.currentTarget.value);
-      if (!isNaN(intValue)) {
-        if (intValue !== v) {
           updateConfig(key, intValue);
         }
       }
@@ -206,29 +201,17 @@
         }
       }
     }}
-    onchange={(evt) => {
-      let numValue = parseFloat(evt.currentTarget.value);
-      if (!isNaN(numValue)) {
-        if (numValue !== v) {
-          updateConfig(key, numValue);
-        }
-      }
-    }}
   />
 {/snippet}
 
 {#snippet inputString(key: string, v: string)}
   <Input
     class="nodrag flex-none"
+    spellcheck="false"
     type="text"
     value={v}
     onkeydown={(evt) => {
       if (evt.key === "Enter") {
-        updateConfig(key, evt.currentTarget.value);
-      }
-    }}
-    onchange={(evt) => {
-      if (evt.currentTarget.value !== v) {
         updateConfig(key, evt.currentTarget.value);
       }
     }}
@@ -245,26 +228,17 @@
         updateConfig(key, evt.currentTarget.value);
       }
     }}
-    onchange={(evt) => {
-      if (evt.currentTarget.value !== v) {
-        updateConfig(key, evt.currentTarget.value);
-      }
-    }}
   />
 {/snippet}
 
 {#snippet inputText(key: string, v: string)}
   <Textarea
     class="nodrag nowheel flex-1"
+    spellcheck="false"
     value={v}
     onkeydown={(evt) => {
       if (evt.ctrlKey && evt.key === "Enter") {
         evt.preventDefault();
-        updateConfig(key, evt.currentTarget.value);
-      }
-    }}
-    onchange={(evt) => {
-      if (evt.currentTarget.value !== v) {
         updateConfig(key, evt.currentTarget.value);
       }
     }}
@@ -274,6 +248,7 @@
 {#snippet inputObject(key: string, v: any)}
   <Textarea
     class="nodrag nowheel flex-1"
+    spellcheck="false"
     value={JSON.stringify(v, null, 2)}
     onkeydown={(evt) => {
       if (evt.ctrlKey && evt.key === "Enter") {
@@ -288,23 +263,16 @@
         }
       }
     }}
-    onchange={(evt) => {
-      if (evt.currentTarget.value !== v) {
-        let objValue;
-        try {
-          objValue = JSON.parse(evt.currentTarget.value);
-          updateConfig(key, objValue);
-        } catch (e) {
-          console.error("Invalid JSON:", e);
-          return;
-        }
-      }
-    }}
   />
 {/snippet}
 
 {#snippet inputDefault(key: string, v: any)}
-  <Textarea class="nodrag nowheel flex-1" value={JSON.stringify(v, null, 2)} disabled />
+  <Textarea
+    class="nodrag nowheel flex-1"
+    spellcheck="false"
+    value={JSON.stringify(v, null, 2)}
+    disabled
+  />
 {/snippet}
 
 {#if configSpec?.hidden === true}

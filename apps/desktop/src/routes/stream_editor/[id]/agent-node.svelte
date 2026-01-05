@@ -14,11 +14,11 @@
   import { getAgentSpec, setAgentConfigs } from "tauri-plugin-askit-api";
   import type { AgentSpec } from "tauri-plugin-askit-api";
 
+  import { getAgentDefinitions } from "$lib/agent";
   import * as Alert from "$lib/components/ui/alert/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
   import * as HoverCard from "$lib/components/ui/hover-card/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
-  import { getAgentDefinitions } from "$lib/agent";
   import {
     subscribeAgentSpecUpdatedMessage,
     subscribeAgentConfigUpdatedMessage,
@@ -104,7 +104,7 @@
 
   async function updateConfig(key: string, value: any) {
     // TODO: validate key and value
-    let currentValue = data.configs?.[key];
+    // let currentValue = data.configs?.[key];
     const newConfigs = { ...data.configs, [key]: value };
     updateNodeData(id, { ...data, configs: newConfigs });
     await setAgentConfigs(id, newConfigs);
