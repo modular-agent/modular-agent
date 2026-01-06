@@ -122,16 +122,16 @@
 
 {#snippet title()}
   <div class="flex-none mt-1">
-    <div class="flex flex-nowrap">
+    <div class="flex flex-col flex-nowrap items-start">
       {#if agentDef}
-        <div class="text-xs text-left font-light">
+        <div class="text-xs font-light">
           {#if agentDef.category}
             {agentDef.category}
           {/if}
         </div>
         {#if editTitle}
           <Input
-            class="mt-1"
+            class="text-left"
             type="text"
             value={data.title ?? agentDef.title ?? data.def_name}
             autofocus
