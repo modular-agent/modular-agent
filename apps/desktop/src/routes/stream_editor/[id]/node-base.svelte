@@ -9,7 +9,7 @@
 
   const DEFAULT_HANDLE_STYLE = "width: 12px; height: 12px;";
 
-  const HANDLE_OFFSET = 71;
+  const HANDLE_OFFSET = 87;
   const HANDLE_GAP = 25.5;
 </script>
 

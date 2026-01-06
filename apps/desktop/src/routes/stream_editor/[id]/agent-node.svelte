@@ -124,17 +124,22 @@
   <div class="flex-none mt-1">
     <div class="flex flex-nowrap">
       {#if agentDef}
+        <div class="text-xs text-left font-light">
+          {#if agentDef.category}
+            {agentDef.category}
+          {/if}
+        </div>
         {#if editTitle}
           <Input
             class="mt-1"
             type="text"
-            value={data.title ?? agentDef?.title ?? data.def_name}
+            value={data.title ?? agentDef.title ?? data.def_name}
             autofocus
             onblur={() => (editTitle = false)}
             onkeydown={(evt) => {
               if (evt.key === "Enter") {
                 const newTitle = evt.currentTarget.value;
-                if (newTitle === "" || newTitle === (agentDef?.title ?? data.def_name)) {
+                if (newTitle === "" || newTitle === (agentDef.title ?? data.def_name)) {
                   updateNodeData(id, { title: null });
                 } else if (newTitle !== data.title) {
                   updateNodeData(id, { title: newTitle });
@@ -144,34 +149,16 @@
             }}
           />
         {:else}
-          <HoverCard.Root>
-            <HoverCard.Trigger>
-              <button
-                type="button"
-                ondblclick={() => (editTitle = true)}
-                class="flex-none"
-                tabindex={-1}
-              >
-                <div class="text-xl">
-                  {data.title ?? agentDef?.title ?? data.def_name}
-                </div>
-              </button>
-            </HoverCard.Trigger>
-            <HoverCard.Content class="w-full max-w-xl">
-              <p class="text-sm font-semibold">
-                {data.def_name}<br />
-                {#if agentDef?.title}
-                  {agentDef.title}
-                {/if}
-                {#if agentDef?.category}
-                  ({agentDef.category})
-                {/if}
-              </p>
-              {#if description}
-                <p class="text-sm">{description}</p>
-              {/if}
-            </HoverCard.Content>
-          </HoverCard.Root>
+          <button
+            type="button"
+            ondblclick={() => (editTitle = true)}
+            class="flex-none"
+            tabindex={-1}
+          >
+            <div class="text-xl">
+              {data.title ?? agentDef.title ?? data.def_name}
+            </div>
+          </button>
         {/if}
       {:else}
         <h3 class="text-xl">
