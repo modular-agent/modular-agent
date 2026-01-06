@@ -453,28 +453,29 @@
     </div>
   </header>
   <SvelteFlow
-    bind:nodes
-    bind:edges
-    {nodeTypes}
-    onnodecontextmenu={handleNodeContextMenu}
-    onselectioncontextmenu={handleSelectionContextMenu}
-    onnodeclick={handleNodeClick}
-    onselectionclick={handleSelectionClick}
-    onpaneclick={handlePaneClick}
-    ondelete={handleOnDelete}
-    onconnect={handleOnConnect}
-    ondragover={handleDragOver}
-    ondrop={handleDrop}
-    deleteKey={["Delete"]}
-    connectionRadius={38}
+    attributionPosition="bottom-right"
+    class="flex-1 w-full"
     colorMode={(coreSettings.color_mode as "light" | "dark" | "system") || "system"}
+    connectionRadius={38}
+    deleteKey={["Delete"]}
+    bind:edges
     fitView
     maxZoom={2}
     minZoom={0.1}
-    attributionPosition="bottom-right"
-    class="flex-1 w-full"
+    bind:nodes
+    {nodeTypes}
+    onconnect={handleOnConnect}
+    ondelete={handleOnDelete}
+    ondragover={handleDragOver}
+    ondrop={handleDrop}
+    onnodeclick={handleNodeClick}
+    onnodecontextmenu={handleNodeContextMenu}
+    onpaneclick={handlePaneClick}
+    onselectionclick={handleSelectionClick}
+    onselectioncontextmenu={handleSelectionContextMenu}
+    snapGrid={[6, 6]}
   >
-    <Background variant={BackgroundVariant.Dots} gap={28} lineWidth={1} />
+    <Background variant={BackgroundVariant.Dots} gap={24} lineWidth={1} />
 
     <Controls />
     <MiniMap />
@@ -503,7 +504,7 @@
 <style>
   :root {
     --resize-control-size: 2px;
-    --resize-control-color: var(--color-red-500);
+    --resize-control-color: var(--color-teal-500);
   }
 
   :global(.svelte-flow__edge .svelte-flow__edge-path) {
