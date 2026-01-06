@@ -185,6 +185,14 @@
         }
       }
     }}
+    onchange={(evt) => {
+      let intValue = parseInt(evt.currentTarget.value);
+      if (!isNaN(intValue)) {
+        if (intValue !== v) {
+          updateConfig(key, intValue);
+        }
+      }
+    }}
   />
 {/snippet}
 
@@ -201,6 +209,14 @@
         }
       }
     }}
+    onchange={(evt) => {
+      let numValue = parseFloat(evt.currentTarget.value);
+      if (!isNaN(numValue)) {
+        if (numValue !== v) {
+          updateConfig(key, numValue);
+        }
+      }
+    }}
   />
 {/snippet}
 
@@ -212,6 +228,11 @@
     value={v}
     onkeydown={(evt) => {
       if (evt.key === "Enter") {
+        updateConfig(key, evt.currentTarget.value);
+      }
+    }}
+    onchange={(evt) => {
+      if (evt.currentTarget.value !== v) {
         updateConfig(key, evt.currentTarget.value);
       }
     }}
@@ -242,6 +263,11 @@
         updateConfig(key, evt.currentTarget.value);
       }
     }}
+    onchange={(evt) => {
+      if (evt.currentTarget.value !== v) {
+        updateConfig(key, evt.currentTarget.value);
+      }
+    }}
   />
 {/snippet}
 
@@ -253,6 +279,18 @@
     onkeydown={(evt) => {
       if (evt.ctrlKey && evt.key === "Enter") {
         evt.preventDefault();
+        let objValue;
+        try {
+          objValue = JSON.parse(evt.currentTarget.value);
+          updateConfig(key, objValue);
+        } catch (e) {
+          console.error("Invalid JSON:", e);
+          return;
+        }
+      }
+    }}
+    onchange={(evt) => {
+      if (evt.currentTarget.value !== v) {
         let objValue;
         try {
           objValue = JSON.parse(evt.currentTarget.value);
