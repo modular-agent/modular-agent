@@ -1,7 +1,7 @@
 use std::vec;
 
 use agent_stream_kit::{
-    ASKit, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
+    ASKit, Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
     askit_agent, async_trait,
 };
 use im::hashmap;
@@ -47,6 +47,7 @@ impl AsAgent for DisplayValueAgent {
         _pin: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
+        self.set_config(DISPLAY_VALUE.to_string(), value.clone())?;
         self.emit_config_updated(DISPLAY_VALUE, value);
         Ok(())
     }
@@ -86,6 +87,7 @@ impl AsAgent for DebugValueAgent {
         let ctx = AgentValue::from_json(ctx_json)?;
         let debug_value =
             AgentValue::object(hashmap! { "ctx".into() => ctx, "value".into() => value });
+        self.set_config(DISPLAY_VALUE.to_string(), debug_value.clone())?;
         self.emit_config_updated(DISPLAY_VALUE, debug_value);
         Ok(())
     }
