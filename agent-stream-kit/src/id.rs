@@ -1,7 +1,5 @@
 use std::sync::atomic::AtomicUsize;
 
-use im::Vector;
-
 use crate::{
     FnvIndexMap,
     spec::{AgentSpec, ChannelSpec},
@@ -16,20 +14,20 @@ pub(crate) fn new_id() -> String {
 }
 
 pub(crate) fn update_ids(
-    agents: &Vector<AgentSpec>,
-    channels: &Vector<ChannelSpec>,
-) -> (Vector<AgentSpec>, Vector<ChannelSpec>) {
-    let mut new_agents = Vector::new();
+    agents: &Vec<AgentSpec>,
+    channels: &Vec<ChannelSpec>,
+) -> (Vec<AgentSpec>, Vec<ChannelSpec>) {
+    let mut new_agents = Vec::new();
     let mut agent_id_map = FnvIndexMap::default();
     for agent in agents {
         let new_id = new_id();
         agent_id_map.insert(agent.id.clone(), new_id.clone());
         let mut new_agent = agent.clone();
         new_agent.id = new_id;
-        new_agents.push_back(new_agent);
+        new_agents.push(new_agent);
     }
 
-    let mut new_channels = Vector::new();
+    let mut new_channels = Vec::new();
     for channel in channels {
         let Some(source) = agent_id_map.get(&channel.source) else {
             continue;
@@ -40,7 +38,7 @@ pub(crate) fn update_ids(
         let mut new_channel = channel.clone();
         new_channel.source = source.clone();
         new_channel.target = target.clone();
-        new_channels.push_back(new_channel);
+        new_channels.push(new_channel);
     }
 
     (new_agents, new_channels)

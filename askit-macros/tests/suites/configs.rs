@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use agent_stream_kit::{
     AgentContext, AgentData, AgentError, AgentSpec, AgentValue, AsAgent, askit_agent, async_trait,
 };
+use im::vector;
 
 const UNIT_KEY: &str = "unit";
 const BOOLEAN_KEY: &str = "boolean";
@@ -10,6 +11,7 @@ const INTEGER_KEY: &str = "integer";
 const NUMBER_KEY: &str = "number";
 const STRING_KEY: &str = "string";
 const TEXT_KEY: &str = "text";
+const ARRAY_KEY: &str = "array";
 const OBJECT_KEY: &str = "object";
 const CUSTOM_KEY: &str = "custom";
 const GLOBAL_UNIT_KEY: &str = "global_unit";
@@ -18,6 +20,7 @@ const GLOBAL_INTEGER_KEY: &str = "global_integer";
 const GLOBAL_NUMBER_KEY: &str = "global_number";
 const GLOBAL_STRING_KEY: &str = "global_string";
 const GLOBAL_TEXT_KEY: &str = "global_text";
+const GLOBAL_ARRAY_KEY: &str = "global_array";
 const GLOBAL_OBJECT_KEY: &str = "global_object";
 const GLOBAL_CUSTOM_KEY: &str = "global_custom";
 
@@ -27,10 +30,15 @@ const GLOBAL_CUSTOM_KEY: &str = "global_custom";
     category = "Tests",
     unit_config(name = UNIT_KEY),
     boolean_config(name = BOOLEAN_KEY, default = true, title = "Bool Title"),
-    integer_config(name = INTEGER_KEY, default = 7),
+    integer_config(name = INTEGER_KEY, default = 7, hidden),
     number_config(name = NUMBER_KEY, default = 3.14, description = "pi"),
     string_config(name = STRING_KEY, default = "hello"),
     text_config(name = TEXT_KEY, default = "long"),
+    array_config(
+        name = ARRAY_KEY,
+        default = AgentValue::from(vector![AgentValue::integer(1), AgentValue::string("two")]),
+        title = "Arr"
+    ),
     object_config(
         name = OBJECT_KEY,
         default = AgentValue::object_default(),
@@ -47,9 +55,10 @@ const GLOBAL_CUSTOM_KEY: &str = "global_custom";
     unit_global_config(name = GLOBAL_UNIT_KEY),
     boolean_global_config(name = GLOBAL_BOOLEAN_KEY, title = "Global Bool"),
     integer_global_config(name = GLOBAL_INTEGER_KEY, default = -1),
-    number_global_config(name = GLOBAL_NUMBER_KEY, default = 2.71, description = "e"),
+    number_global_config(name = GLOBAL_NUMBER_KEY, default = 2.71, description = "e", hidden),
     string_global_config(name = GLOBAL_STRING_KEY, default = "gs"),
     text_global_config(name = GLOBAL_TEXT_KEY, default = "gt"),
+    array_global_config(name = GLOBAL_ARRAY_KEY),
     object_global_config(
         name = GLOBAL_OBJECT_KEY,
         default = AgentValue::object_default(),
@@ -107,6 +116,14 @@ fn config_entries_are_generated() {
     let def = ConfigAgent::agent_definition();
     let configs: HashMap<_, _> = def.configs.expect("default configs").into_iter().collect();
 
+    let array_entry = &configs[ARRAY_KEY];
+    assert_eq!(array_entry.type_.as_deref(), Some("array"));
+    assert_eq!(
+        array_entry.value,
+        AgentValue::array(vector![AgentValue::integer(1), AgentValue::string("two")])
+    );
+    assert_eq!(array_entry.title.as_deref(), Some("Arr"));
+
     assert_eq!(configs[UNIT_KEY].type_.as_deref(), Some("unit"));
     assert_eq!(configs[UNIT_KEY].value, AgentValue::unit());
 
@@ -116,6 +133,7 @@ fn config_entries_are_generated() {
     assert_eq!(bool_entry.title.as_deref(), Some("Bool Title"));
 
     assert_eq!(configs[INTEGER_KEY].value, AgentValue::integer(7));
+    assert!(configs[INTEGER_KEY].hidden);
     assert_eq!(configs[NUMBER_KEY].description.as_deref(), Some("pi"));
     assert_eq!(configs[STRING_KEY].value, AgentValue::string("hello"));
     assert_eq!(configs[TEXT_KEY].value, AgentValue::string("long"));
@@ -141,6 +159,10 @@ fn global_config_entries_are_generated() {
         .into_iter()
         .collect();
 
+    let array_entry = &configs[GLOBAL_ARRAY_KEY];
+    assert_eq!(array_entry.type_.as_deref(), Some("array"));
+    assert_eq!(array_entry.value, AgentValue::array_default());
+
     assert_eq!(configs[GLOBAL_UNIT_KEY].type_.as_deref(), Some("unit"));
 
     let bool_entry = &configs[GLOBAL_BOOLEAN_KEY];
@@ -150,6 +172,7 @@ fn global_config_entries_are_generated() {
 
     assert_eq!(configs[GLOBAL_INTEGER_KEY].value, AgentValue::integer(-1));
     assert_eq!(configs[GLOBAL_NUMBER_KEY].description.as_deref(), Some("e"));
+    assert!(configs[GLOBAL_NUMBER_KEY].hidden);
     assert_eq!(configs[GLOBAL_STRING_KEY].value, AgentValue::string("gs"));
     assert_eq!(configs[GLOBAL_TEXT_KEY].value, AgentValue::string("gt"));
 

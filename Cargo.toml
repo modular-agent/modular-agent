@@ -11,3 +11,4 @@ license = "Apache-2.0 OR MIT"
 
 [workspace.dependencies]
 askit-macros = { version = "0.18.0", path = "askit-macros" }
+im = { version = "15.1.0", features = ["serde"] }

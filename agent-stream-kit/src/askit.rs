@@ -1,7 +1,7 @@
 use std::sync::atomic::AtomicUsize;
 use std::sync::{Arc, Mutex};
 
-use im::Vector;
+use serde_json::Value;
 use tokio::sync::{Mutex as AsyncMutex, mpsc};
 
 use crate::FnvIndexMap;
@@ -149,6 +149,17 @@ impl ASKit {
         Some(agent.spec().clone())
     }
 
+    /// Update the agent spec by id.
+    pub fn update_agent_spec(&self, agent_id: &str, value: &Value) -> Result<(), AgentError> {
+        let agents = self.agents.lock().unwrap();
+        let Some(agent) = agents.get(agent_id) else {
+            return Err(AgentError::AgentNotFound(agent_id.to_string()));
+        };
+        let mut agent = agent.blocking_lock();
+        agent.update_spec(value)?;
+        Ok(())
+    }
+
     // streams
 
     /// Get info of the agent stream by id.
@@ -165,17 +176,35 @@ impl ASKit {
 
     /// Get the agent stream spec by id.
     pub fn get_agent_stream_spec(&self, id: &str) -> Option<AgentStreamSpec> {
-        let streams = self.streams.lock().unwrap();
-        streams.get(id).map(|stream| stream.spec().clone())
+        let stream_spec = {
+            let streams = self.streams.lock().unwrap();
+            streams.get(id).map(|stream| stream.spec().clone())
+        };
+        let Some(mut stream_spec) = stream_spec else {
+            return None;
+        };
+
+        // collect agent specs in the stream
+        let mut agent_specs = Vec::new();
+        for agent in &stream_spec.agents {
+            if let Some(spec) = self.get_agent_spec(&agent.id) {
+                agent_specs.push(spec);
+            }
+        }
+        stream_spec.agents = agent_specs;
+
+        // No need to change channels
+
+        Some(stream_spec)
     }
 
-    /// Set the agent stream spec by id.
-    pub fn set_agent_stream_spec(&self, id: &str, spec: AgentStreamSpec) -> Result<(), AgentError> {
+    /// Update the agent stream spec
+    pub fn update_agent_stream_spec(&self, id: &str, value: &Value) -> Result<(), AgentError> {
         let mut streams = self.streams.lock().unwrap();
         let Some(stream) = streams.get_mut(id) else {
             return Err(AgentError::StreamNotFound(id.to_string()));
         };
-        *stream.spec_mut() = spec;
+        stream.update_spec(value)?;
         Ok(())
     }
 
@@ -344,7 +373,7 @@ impl ASKit {
         let id = new_id();
         spec.id = id.clone();
         self.add_agent_internal(stream_id, spec.clone())?;
-        stream.spec_mut().add_agent(spec.clone());
+        stream.add_agent(spec.clone());
         Ok(id)
     }
 
@@ -391,7 +420,7 @@ impl ASKit {
         let Some(stream) = streams.get_mut(stream_id) else {
             return Err(AgentError::StreamNotFound(stream_id.to_string()));
         };
-        stream.spec_mut().add_channels(channel.clone());
+        stream.add_channel(channel.clone());
         self.add_channel_internal(channel)?;
         Ok(())
     }
@@ -422,12 +451,13 @@ impl ASKit {
     /// Add agents and channels to the specified stream.
     ///
     /// The ids of the given agents and channels are changed to new unique ids.
+    /// The agents are not started automatically, even if the stream is running.
     pub fn add_agents_and_channels(
         &self,
         stream_id: &str,
-        agents: &Vector<AgentSpec>,
-        channels: &Vector<ChannelSpec>,
-    ) -> Result<(Vector<AgentSpec>, Vector<ChannelSpec>), AgentError> {
+        agents: &Vec<AgentSpec>,
+        channels: &Vec<ChannelSpec>,
+    ) -> Result<(Vec<AgentSpec>, Vec<ChannelSpec>), AgentError> {
         let (agents, channels) = update_ids(agents, channels);
 
         let mut streams = self.streams.lock().unwrap();
@@ -437,25 +467,27 @@ impl ASKit {
 
         for agent in &agents {
             self.add_agent_internal(stream_id.to_string(), agent.clone())?;
-            stream.spec_mut().add_agent(agent.clone());
+            stream.add_agent(agent.clone());
         }
 
         for channel in &channels {
             self.add_channel_internal(channel.clone())?;
-            stream.spec_mut().add_channels(channel.clone());
+            stream.add_channel(channel.clone());
         }
 
         Ok((agents, channels))
     }
 
     /// Remove an agent from the specified stream.
+    ///
+    /// If the agent is running, it will be stopped first.
     pub async fn remove_agent(&self, stream_id: &str, agent_id: &str) -> Result<(), AgentError> {
         {
             let mut streams = self.streams.lock().unwrap();
             let Some(stream) = streams.get_mut(stream_id) else {
                 return Err(AgentError::StreamNotFound(stream_id.to_string()));
             };
-            stream.spec_mut().remove_agent(agent_id);
+            stream.remove_agent(agent_id);
         }
         if let Err(e) = self.remove_agent_internal(agent_id).await {
             return Err(e);
@@ -501,7 +533,7 @@ impl ASKit {
             stream
         };
 
-        let Some(channel) = stream.spec_mut().remove_channel(channel) else {
+        let Some(channel) = stream.remove_channel(channel) else {
             let mut streams = self.streams.lock().unwrap();
             streams.insert(stream_id.to_string(), stream);
             return Err(AgentError::ChannelNotFound(format!(

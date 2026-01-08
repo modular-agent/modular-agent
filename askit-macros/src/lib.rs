@@ -63,6 +63,7 @@ struct CommonConfig {
     title: Option<Expr>,
     description: Option<Expr>,
     hide_title: bool,
+    hidden: bool,
     readonly: bool,
 }
 
@@ -73,6 +74,7 @@ struct CustomConfig {
     title: Option<Expr>,
     description: Option<Expr>,
     hide_title: bool,
+    hidden: bool,
     readonly: bool,
 }
 
@@ -83,6 +85,7 @@ enum ConfigSpec {
     Number(CommonConfig),
     String(CommonConfig),
     Text(CommonConfig),
+    Array(CommonConfig),
     Object(CommonConfig),
     Custom(CustomConfig),
 }
@@ -159,6 +162,11 @@ fn expand_askit_agent(
                     .configs
                     .push(ConfigSpec::Text(parse_common_config(ml)?));
             }
+            Meta::List(ml) if ml.path.is_ident("array_config") => {
+                parsed
+                    .configs
+                    .push(ConfigSpec::Array(parse_common_config(ml)?));
+            }
             Meta::List(ml) if ml.path.is_ident("boolean_config") => {
                 parsed
                     .configs
@@ -203,6 +211,11 @@ fn expand_askit_agent(
                 parsed
                     .global_configs
                     .push(ConfigSpec::Boolean(parse_common_config(ml)?));
+            }
+            Meta::List(ml) if ml.path.is_ident("array_global_config") => {
+                parsed
+                    .global_configs
+                    .push(ConfigSpec::Array(parse_common_config(ml)?));
             }
             Meta::List(ml) if ml.path.is_ident("integer_global_config") => {
                 parsed
@@ -299,6 +312,11 @@ fn expand_askit_agent(
                 } else {
                     quote! {}
                 };
+                let hidden = if c.hidden {
+                    quote! { let entry = entry.hidden(); }
+                } else {
+                    quote! {}
+                };
                 let readonly = if c.readonly {
                     quote! { let entry = entry.readonly(); }
                 } else {
@@ -310,6 +328,7 @@ fn expand_askit_agent(
                         #title
                         #description
                         #hide_title
+                        #hidden
                         #readonly
                         entry
                     })
@@ -329,6 +348,11 @@ fn expand_askit_agent(
                 } else {
                     quote! {}
                 };
+                let hidden = if c.hidden {
+                    quote! { let entry = entry.hidden(); }
+                } else {
+                    quote! {}
+                };
                 let readonly = if c.readonly {
                     quote! { let entry = entry.readonly(); }
                 } else {
@@ -340,6 +364,7 @@ fn expand_askit_agent(
                         #title
                         #description
                         #hide_title
+                        #hidden
                         #readonly
                         entry
                     })
@@ -359,6 +384,11 @@ fn expand_askit_agent(
                 } else {
                     quote! {}
                 };
+                let hidden = if c.hidden {
+                    quote! { let entry = entry.hidden(); }
+                } else {
+                    quote! {}
+                };
                 let readonly = if c.readonly {
                     quote! { let entry = entry.readonly(); }
                 } else {
@@ -370,6 +400,7 @@ fn expand_askit_agent(
                         #title
                         #description
                         #hide_title
+                        #hidden
                         #readonly
                         entry
                     })
@@ -389,6 +420,11 @@ fn expand_askit_agent(
                 } else {
                     quote! {}
                 };
+                let hidden = if c.hidden {
+                    quote! { let entry = entry.hidden(); }
+                } else {
+                    quote! {}
+                };
                 let readonly = if c.readonly {
                     quote! { let entry = entry.readonly(); }
                 } else {
@@ -400,6 +436,7 @@ fn expand_askit_agent(
                         #title
                         #description
                         #hide_title
+                        #hidden
                         #readonly
                         entry
                     })
@@ -419,6 +456,11 @@ fn expand_askit_agent(
                 } else {
                     quote! {}
                 };
+                let hidden = if c.hidden {
+                    quote! { let entry = entry.hidden(); }
+                } else {
+                    quote! {}
+                };
                 let readonly = if c.readonly {
                     quote! { let entry = entry.readonly(); }
                 } else {
@@ -430,6 +472,7 @@ fn expand_askit_agent(
                         #title
                         #description
                         #hide_title
+                        #hidden
                         #readonly
                         entry
                     })
@@ -449,6 +492,11 @@ fn expand_askit_agent(
                 } else {
                     quote! {}
                 };
+                let hidden = if c.hidden {
+                    quote! { let entry = entry.hidden(); }
+                } else {
+                    quote! {}
+                };
                 let readonly = if c.readonly {
                     quote! { let entry = entry.readonly(); }
                 } else {
@@ -460,6 +508,45 @@ fn expand_askit_agent(
                         #title
                         #description
                         #hide_title
+                        #hidden
+                        #readonly
+                        entry
+                    })
+                })
+            }
+            ConfigSpec::Array(c) => {
+                let name = c.name.ok_or_else(|| {
+                    syn::Error::new(Span::call_site(), "array_config missing `name`")
+                })?;
+                let default = c.default.unwrap_or_else(|| {
+                    parse_quote! { ::agent_stream_kit::AgentValue::array_default() }
+                });
+                let title = c.title.map(|t| quote! { let entry = entry.title(#t); });
+                let description = c
+                    .description
+                    .map(|d| quote! { let entry = entry.description(#d); });
+                let hide_title = if c.hide_title {
+                    quote! { let entry = entry.hide_title(); }
+                } else {
+                    quote! {}
+                };
+                let hidden = if c.hidden {
+                    quote! { let entry = entry.hidden(); }
+                } else {
+                    quote! {}
+                };
+                let readonly = if c.readonly {
+                    quote! { let entry = entry.readonly(); }
+                } else {
+                    quote! {}
+                };
+                Ok(quote! {
+                    .array_config_with(#name, #default, |entry| {
+                        let entry = entry;
+                        #title
+                        #description
+                        #hide_title
+                        #hidden
                         #readonly
                         entry
                     })
@@ -481,6 +568,11 @@ fn expand_askit_agent(
                 } else {
                     quote! {}
                 };
+                let hidden = if c.hidden {
+                    quote! { let entry = entry.hidden(); }
+                } else {
+                    quote! {}
+                };
                 let readonly = if c.readonly {
                     quote! { let entry = entry.readonly(); }
                 } else {
@@ -492,6 +584,7 @@ fn expand_askit_agent(
                         #title
                         #description
                         #hide_title
+                        #hidden
                         #readonly
                         entry
                     })
@@ -518,6 +611,11 @@ fn expand_askit_agent(
                 } else {
                     quote! {}
                 };
+                let hidden = if c.hidden {
+                    quote! { let entry = entry.hidden(); }
+                } else {
+                    quote! {}
+                };
                 let readonly = if c.readonly {
                     quote! { let entry = entry.readonly(); }
                 } else {
@@ -529,6 +627,7 @@ fn expand_askit_agent(
                         #title
                         #description
                         #hide_title
+                        #hidden
                         #readonly
                         entry
                     })
@@ -548,6 +647,11 @@ fn expand_askit_agent(
                 } else {
                     quote! {}
                 };
+                let hidden = if c.hidden {
+                    quote! { let entry = entry.hidden(); }
+                } else {
+                    quote! {}
+                };
                 let readonly = if c.readonly {
                     quote! { let entry = entry.readonly(); }
                 } else {
@@ -559,6 +663,7 @@ fn expand_askit_agent(
                         #title
                         #description
                         #hide_title
+                        #hidden
                         #readonly
                         entry
                     })
@@ -578,6 +683,11 @@ fn expand_askit_agent(
                 } else {
                     quote! {}
                 };
+                let hidden = if c.hidden {
+                    quote! { let entry = entry.hidden(); }
+                } else {
+                    quote! {}
+                };
                 let readonly = if c.readonly {
                     quote! { let entry = entry.readonly(); }
                 } else {
@@ -589,6 +699,7 @@ fn expand_askit_agent(
                         #title
                         #description
                         #hide_title
+                        #hidden
                         #readonly
                         entry
                     })
@@ -608,6 +719,11 @@ fn expand_askit_agent(
                 } else {
                     quote! {}
                 };
+                let hidden = if c.hidden {
+                    quote! { let entry = entry.hidden(); }
+                } else {
+                    quote! {}
+                };
                 let readonly = if c.readonly {
                     quote! { let entry = entry.readonly(); }
                 } else {
@@ -619,6 +735,7 @@ fn expand_askit_agent(
                         #title
                         #description
                         #hide_title
+                        #hidden
                         #readonly
                         entry
                     })
@@ -638,6 +755,11 @@ fn expand_askit_agent(
                 } else {
                     quote! {}
                 };
+                let hidden = if c.hidden {
+                    quote! { let entry = entry.hidden(); }
+                } else {
+                    quote! {}
+                };
                 let readonly = if c.readonly {
                     quote! { let entry = entry.readonly(); }
                 } else {
@@ -649,6 +771,7 @@ fn expand_askit_agent(
                         #title
                         #description
                         #hide_title
+                        #hidden
                         #readonly
                         entry
                     })
@@ -668,6 +791,11 @@ fn expand_askit_agent(
                 } else {
                     quote! {}
                 };
+                let hidden = if c.hidden {
+                    quote! { let entry = entry.hidden(); }
+                } else {
+                    quote! {}
+                };
                 let readonly = if c.readonly {
                     quote! { let entry = entry.readonly(); }
                 } else {
@@ -679,6 +807,45 @@ fn expand_askit_agent(
                         #title
                         #description
                         #hide_title
+                        #hidden
+                        #readonly
+                        entry
+                    })
+                })
+            }
+            ConfigSpec::Array(c) => {
+                let name = c.name.ok_or_else(|| {
+                    syn::Error::new(Span::call_site(), "array_global_config missing `name`")
+                })?;
+                let default = c.default.unwrap_or_else(|| {
+                    parse_quote! { ::agent_stream_kit::AgentValue::array_default() }
+                });
+                let title = c.title.map(|t| quote! { let entry = entry.title(#t); });
+                let description = c
+                    .description
+                    .map(|d| quote! { let entry = entry.description(#d); });
+                let hide_title = if c.hide_title {
+                    quote! { let entry = entry.hide_title(); }
+                } else {
+                    quote! {}
+                };
+                let hidden = if c.hidden {
+                    quote! { let entry = entry.hidden(); }
+                } else {
+                    quote! {}
+                };
+                let readonly = if c.readonly {
+                    quote! { let entry = entry.readonly(); }
+                } else {
+                    quote! {}
+                };
+                Ok(quote! {
+                    .array_global_config_with(#name, #default, |entry| {
+                        let entry = entry;
+                        #title
+                        #description
+                        #hide_title
+                        #hidden
                         #readonly
                         entry
                     })
@@ -700,6 +867,11 @@ fn expand_askit_agent(
                 } else {
                     quote! {}
                 };
+                let hidden = if c.hidden {
+                    quote! { let entry = entry.hidden(); }
+                } else {
+                    quote! {}
+                };
                 let readonly = if c.readonly {
                     quote! { let entry = entry.readonly(); }
                 } else {
@@ -711,6 +883,7 @@ fn expand_askit_agent(
                         #title
                         #description
                         #hide_title
+                        #hidden
                         #readonly
                         entry
                     })
@@ -803,6 +976,7 @@ fn parse_custom_config(list: MetaList) -> syn::Result<CustomConfig> {
     let mut title = None;
     let mut description = None;
     let mut hide_title = false;
+    let mut hidden = false;
     let mut readonly = false;
     let nested = list.parse_args_with(Punctuated::<Meta, Comma>::parse_terminated)?;
 
@@ -824,13 +998,16 @@ fn parse_custom_config(list: MetaList) -> syn::Result<CustomConfig> {
             Meta::Path(p) if p.is_ident("hide_title") => {
                 hide_title = true;
             }
+            Meta::Path(p) if p.is_ident("hidden") => {
+                hidden = true;
+            }
             Meta::Path(p) if p.is_ident("readonly") => {
                 readonly = true;
             }
             other => {
                 return Err(syn::Error::new_spanned(
                     other,
-                    "custom_config supports name, default, type/type_, title, description, hide_title, readonly",
+                    "custom_config supports name, default, type/type_, title, description, hide_title, hidden, readonly",
                 ));
             }
         }
@@ -848,6 +1025,7 @@ fn parse_custom_config(list: MetaList) -> syn::Result<CustomConfig> {
         title,
         description,
         hide_title,
+        hidden,
         readonly,
     })
 }
@@ -889,13 +1067,16 @@ fn parse_common_config(list: MetaList) -> syn::Result<CommonConfig> {
             Meta::Path(p) if p.is_ident("hide_title") => {
                 cfg.hide_title = true;
             }
+            Meta::Path(p) if p.is_ident("hidden") => {
+                cfg.hidden = true;
+            }
             Meta::Path(p) if p.is_ident("readonly") => {
                 cfg.readonly = true;
             }
             other => {
                 return Err(syn::Error::new_spanned(
                     other,
-                    "config supports name, default, title, description, hide_title, readonly",
+                    "config supports name, default, title, description, hide_title, hidden, readonly",
                 ));
             }
         }
@@ -915,12 +1096,18 @@ fn custom_config_call(method: &str, cfg: CustomConfig) -> syn::Result<proc_macro
         title,
         description,
         hide_title,
+        hidden,
         readonly,
     } = cfg;
     let title = title.map(|t| quote! { let entry = entry.title(#t); });
     let description = description.map(|d| quote! { let entry = entry.description(#d); });
     let hide_title = if hide_title {
         quote! { let entry = entry.hide_title(); }
+    } else {
+        quote! {}
+    };
+    let hidden = if hidden {
+        quote! { let entry = entry.hidden(); }
     } else {
         quote! {}
     };
@@ -937,6 +1124,7 @@ fn custom_config_call(method: &str, cfg: CustomConfig) -> syn::Result<proc_macro
             #title
             #description
             #hide_title
+            #hidden
             #readonly
             entry
         })

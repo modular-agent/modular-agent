@@ -66,7 +66,7 @@ pub struct AgentConfigSpec {
     pub description: Option<String>,
 
     /// Indicates whether this configuration entry should be hidden from the user interface.
-    /// If set to `true`, the entry will be hidden. The default behavior is to show the entry.
+    /// If set to `true`, the entry will be hidden.
     #[serde(default, skip_serializing_if = "<&bool>::not")]
     pub hidden: bool,
 
@@ -212,6 +212,21 @@ impl AgentDefinition {
         self.text_config(key, "")
     }
 
+    pub fn array_config(self, key: &str, default: impl Into<AgentValue>) -> Self {
+        self.array_config_with(key, default, |entry| entry)
+    }
+
+    pub fn array_config_with<V: Into<AgentValue>, F>(self, key: &str, default: V, f: F) -> Self
+    where
+        F: FnOnce(AgentConfigSpec) -> AgentConfigSpec,
+    {
+        self.config_type_with(key, default, "array", f)
+    }
+
+    pub fn array_config_default(self, key: &str) -> Self {
+        self.array_config(key, AgentValue::array_default())
+    }
+
     pub fn object_config<V: Into<AgentValue>>(self, key: &str, default: V) -> Self {
         self.object_config_with(key, default, |entry| entry)
     }
@@ -340,6 +355,26 @@ impl AgentDefinition {
         self.global_config_type_with(key, AgentValue::string(default), "text", f)
     }
 
+    pub fn array_global_config(self, key: &str, default: impl Into<AgentValue>) -> Self {
+        self.array_global_config_with(key, default, |entry| entry)
+    }
+
+    pub fn array_global_config_with<V: Into<AgentValue>, F>(
+        self,
+        key: &str,
+        default: V,
+        f: F,
+    ) -> Self
+    where
+        F: FnOnce(AgentConfigSpec) -> AgentConfigSpec,
+    {
+        self.global_config_type_with(key, default, "array", f)
+    }
+
+    pub fn array_global_config_default(self, key: &str) -> Self {
+        self.array_global_config(key, AgentValue::array_default())
+    }
+
     pub fn object_global_config<V: Into<AgentValue>>(self, key: &str, default: V) -> Self {
         self.object_global_config_with(key, default, |entry| entry)
     }
@@ -456,7 +491,7 @@ impl AgentConfigSpec {
 
 #[cfg(test)]
 mod tests {
-    use im::hashmap;
+    use im::{hashmap, vector};
 
     use super::*;
 
@@ -563,6 +598,8 @@ mod tests {
     fn test_default_config_helpers() {
         let custom_object_value =
             AgentValue::object(hashmap! {"key".into() => AgentValue::string("value")});
+        let custom_array_value =
+            AgentValue::array(vector![AgentValue::integer(1), AgentValue::string("two")]);
 
         let def = AgentDefinition::new("test", "helpers", None)
             .unit_config("unit_value")
@@ -576,11 +613,13 @@ mod tests {
             .string_config("string_value", "value")
             .text_config_default("text_value")
             .text_config("text_custom", "custom")
+            .array_config_default("array_value")
+            .array_config("array_custom", custom_array_value.clone())
             .object_config_default("object_value")
             .object_config("object_custom", custom_object_value.clone());
 
         let configs = def.configs.clone().expect("default configs should exist");
-        assert_eq!(configs.len(), 13);
+        assert_eq!(configs.len(), 15);
         let config_map: std::collections::HashMap<_, _> = configs.into_iter().collect();
 
         let unit_entry = config_map.get("unit_value").unwrap();
@@ -627,6 +666,14 @@ mod tests {
         assert_eq!(text_custom_entry.type_.as_deref(), Some("text"));
         assert_eq!(text_custom_entry.value, AgentValue::string("custom"));
 
+        let array_entry = config_map.get("array_value").unwrap();
+        assert_eq!(array_entry.type_.as_deref(), Some("array"));
+        assert_eq!(array_entry.value, AgentValue::array_default());
+
+        let array_custom_entry = config_map.get("array_custom").unwrap();
+        assert_eq!(array_custom_entry.type_.as_deref(), Some("array"));
+        assert_eq!(array_custom_entry.value, custom_array_value);
+
         let object_entry = config_map.get("object_value").unwrap();
         assert_eq!(object_entry.type_.as_deref(), Some("object"));
         assert_eq!(object_entry.value, AgentValue::object_default());
@@ -640,6 +687,8 @@ mod tests {
     fn test_global_config_helpers() {
         let custom_object_value =
             AgentValue::object(hashmap! {"key".into() => AgentValue::string("value")});
+        let custom_array_value =
+            AgentValue::array(vector![AgentValue::integer(1), AgentValue::string("two")]);
 
         let def = AgentDefinition::new("test", "helpers", None)
             .unit_global_config("global_unit")
@@ -648,10 +697,12 @@ mod tests {
             .number_global_config("global_number", 1.5)
             .string_global_config("global_string", "value")
             .text_global_config("global_text", "global")
+            .array_global_config_default("global_array")
+            .array_global_config("global_array_custom", custom_array_value.clone())
             .object_global_config("global_object", custom_object_value.clone());
 
         let global_configs = def.global_configs.expect("global configs should exist");
-        assert_eq!(global_configs.len(), 7);
+        assert_eq!(global_configs.len(), 9);
         let config_map: std::collections::HashMap<_, _> = global_configs.into_iter().collect();
 
         let entry = config_map.get("global_unit").unwrap();
@@ -677,6 +728,14 @@ mod tests {
         let entry = config_map.get("global_text").unwrap();
         assert_eq!(entry.type_.as_deref(), Some("text"));
         assert_eq!(entry.value, AgentValue::string("global"));
+
+        let entry = config_map.get("global_array").unwrap();
+        assert_eq!(entry.type_.as_deref(), Some("array"));
+        assert_eq!(entry.value, AgentValue::array_default());
+
+        let entry = config_map.get("global_array_custom").unwrap();
+        assert_eq!(entry.type_.as_deref(), Some("array"));
+        assert_eq!(entry.value, custom_array_value);
 
         let entry = config_map.get("global_object").unwrap();
         assert_eq!(entry.type_.as_deref(), Some("object"));

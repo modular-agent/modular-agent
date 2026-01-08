@@ -1,10 +1,11 @@
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
-use crate::FnvIndexMap;
 use crate::askit::ASKit;
 use crate::error::AgentError;
 use crate::id::{new_id, update_ids};
 use crate::spec::AgentStreamSpec;
+use crate::{AgentSpec, ChannelSpec, FnvIndexMap};
 
 pub type AgentStreams = FnvIndexMap<String, AgentStream>;
 
@@ -43,8 +44,31 @@ impl AgentStream {
         &self.spec
     }
 
-    pub fn spec_mut(&mut self) -> &mut AgentStreamSpec {
-        &mut self.spec
+    pub fn update_spec(&mut self, value: &Value) -> Result<(), AgentError> {
+        let update_map = value
+            .as_object()
+            .ok_or_else(|| AgentError::SerializationError("Expected JSON object".to_string()))?;
+
+        for (k, v) in update_map {
+            match k.as_str() {
+                "agents" => {
+                    // just ignore
+                }
+                "channels" => {
+                    // just ignore
+                }
+                "run_on_start" => {
+                    if let Some(run_on_start_bool) = v.as_bool() {
+                        self.spec.run_on_start = run_on_start_bool;
+                    }
+                }
+                _ => {
+                    // Update extensions
+                    self.spec.extensions.insert(k.clone(), v.clone());
+                }
+            }
+        }
+        Ok(())
     }
 
     pub fn name(&self) -> &str {
@@ -53,6 +77,22 @@ impl AgentStream {
 
     pub fn set_name(&mut self, name: String) {
         self.name = name;
+    }
+
+    pub fn add_agent(&mut self, agent: AgentSpec) {
+        self.spec.add_agent(agent);
+    }
+
+    pub fn remove_agent(&mut self, agent_id: &str) {
+        self.spec.remove_agent(agent_id);
+    }
+
+    pub fn add_channel(&mut self, channel: ChannelSpec) {
+        self.spec.add_channel(channel);
+    }
+
+    pub fn remove_channel(&mut self, channel: &ChannelSpec) -> Option<ChannelSpec> {
+        self.spec.remove_channel(channel)
     }
 
     pub fn running(&self) -> bool {

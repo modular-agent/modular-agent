@@ -10,6 +10,7 @@ description = "Procedural macro helpers for agent-stream-kit"
 proc-macro = true
 
 [dependencies]
+im = { workspace = true }
 proc-macro2 = "1"
 quote = "1"
 syn = { version = "2", features = ["full"] }

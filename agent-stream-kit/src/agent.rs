@@ -2,6 +2,7 @@ use std::any::Any;
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use serde_json::Value;
 
 use crate::askit::ASKit;
 use crate::config::AgentConfigs;
@@ -49,6 +50,8 @@ pub trait Agent: Send + Sync + 'static {
     fn status(&self) -> &AgentStatus;
 
     fn spec(&self) -> &AgentSpec;
+
+    fn update_spec(&mut self, spec_update: &Value) -> Result<(), AgentError>;
 
     fn def_name(&self) -> &str;
 
@@ -181,6 +184,10 @@ impl<T: AsAgent> Agent for T {
         &self.data().spec
     }
 
+    fn update_spec(&mut self, value: &Value) -> Result<(), AgentError> {
+        self.mut_data().spec.update(value)
+    }
+
     fn status(&self) -> &AgentStatus {
         &self.data().status
     }
@@ -199,7 +206,7 @@ impl<T: AsAgent> Agent for T {
 
     fn set_config(&mut self, key: String, value: AgentValue) -> Result<(), AgentError> {
         if let Some(configs) = &mut self.mut_data().spec.configs {
-            configs.set(key.clone(), value.clone());
+            configs.set(key, value);
             self.configs_changed()?;
         }
         Ok(())
@@ -215,7 +222,7 @@ impl<T: AsAgent> Agent for T {
     }
 
     fn set_stream_id(&mut self, stream_id: String) {
-        self.mut_data().stream_id = stream_id.clone();
+        self.mut_data().stream_id = stream_id;
     }
 
     async fn start(&mut self) -> Result<(), AgentError> {
