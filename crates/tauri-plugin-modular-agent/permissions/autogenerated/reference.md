@@ -7,10 +7,11 @@ Default permissions for the plugin
 - `allow-get-agent-definition`
 - `allow-get-agent-definitions`
 - `allow-get-agent-spec`
+- `allow-update-agent-spec`
 - `allow-get-agent-stream-info`
 - `allow-get-agent-stream-infos`
 - `allow-get-agent-stream-spec`
-- `allow-set-agent-stream-spec`
+- `allow-update-agent-stream-spec`
 - `allow-new-agent-stream`
 - `allow-rename-agent-stream`
 - `allow-unique-stream-name`
@@ -539,32 +540,6 @@ Denies the set_agent_configs command without any pre-configured scope.
 <tr>
 <td>
 
-`askit:allow-set-agent-stream-spec`
-
-</td>
-<td>
-
-Enables the set_agent_stream_spec command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`askit:deny-set-agent-stream-spec`
-
-</td>
-<td>
-
-Denies the set_agent_stream_spec command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
 `askit:allow-set-global-configs`
 
 </td>
@@ -740,6 +715,58 @@ Enables the unique_stream_name command without any pre-configured scope.
 <td>
 
 Denies the unique_stream_name command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`askit:allow-update-agent-spec`
+
+</td>
+<td>
+
+Enables the update_agent_spec command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`askit:deny-update-agent-spec`
+
+</td>
+<td>
+
+Denies the update_agent_spec command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`askit:allow-update-agent-stream-spec`
+
+</td>
+<td>
+
+Enables the update_agent_stream_spec command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`askit:deny-update-agent-stream-spec`
+
+</td>
+<td>
+
+Denies the update_agent_stream_spec command without any pre-configured scope.
 
 </td>
 </tr>

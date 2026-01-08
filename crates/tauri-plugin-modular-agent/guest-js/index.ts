@@ -97,6 +97,16 @@ export async function getAgentSpec(agentId: string): Promise<AgentSpec | null> {
   return await invoke<any>("plugin:askit|get_agent_spec", { agentId });
 }
 
+export async function updateAgentSpec(
+  agentId: string,
+  value: Partial<AgentSpec>
+): Promise<void> {
+  await invoke<void>("plugin:askit|update_agent_spec", {
+    agentId,
+    value,
+  });
+}
+
 // stream
 
 export async function getAgentStreamInfo(
@@ -115,11 +125,11 @@ export async function getAgentStreamSpec(
   return await invoke<any>("plugin:askit|get_agent_stream_spec", { id });
 }
 
-export async function setAgentStreamSpec(
+export async function updateAgentStreamSpec(
   id: string,
-  spec: AgentStreamSpec
+  value: Partial<AgentStreamSpec>
 ): Promise<void> {
-  await invoke<void>("plugin:askit|set_agent_stream_spec", { id, spec });
+  await invoke<void>("plugin:askit|update_agent_stream_spec", { id, value });
 }
 
 export async function newAgentStream(name: string): Promise<[string, string]> {
