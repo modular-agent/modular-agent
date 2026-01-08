@@ -19,7 +19,7 @@
 
   import { Handle, NodeResizer, Position } from "@xyflow/svelte";
   import type { NodeProps, ResizeDragEvent, ResizeParams } from "@xyflow/svelte";
-  import type { AgentDefinition, AgentSpec } from "tauri-plugin-askit-api";
+  import { updateAgentSpec, type AgentDefinition, type AgentSpec } from "tauri-plugin-askit-api";
 
   import { ScrollArea } from "$lib/components/ui/scroll-area/index.js";
 
@@ -47,6 +47,11 @@
     ht = params.height;
   }
 
+  async function onResizeEnd(_ev: ResizeDragEvent, params: ResizeParams) {
+    if (!data.id) return;
+    await updateAgentSpec(data.id, { height: params.height, width: params.width });
+  }
+
   let lastInputCount = $state(0);
 
   let highlight = new Spring(0, {
@@ -64,7 +69,7 @@
   });
 </script>
 
-<NodeResizer isVisible={selected} {onResize} />
+<NodeResizer isVisible={selected} {onResize} {onResizeEnd} />
 <div
   class="{bgColor} flex flex-col p-0 border-primary border-3 rounded-xl"
   style:height={ht ? `${ht}px` : "auto"}

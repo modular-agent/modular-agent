@@ -3,14 +3,13 @@ import { invoke } from "@tauri-apps/api/core";
 import {
   type AgentConfigSpec,
   type AgentConfigsMap,
+  type AgentDefinitions,
   type AgentSpec,
   type AgentStreamInfo,
   type AgentStreamSpec,
   type ChannelSpec,
-  type Viewport,
   getAgentDefinitions as getAgentDefinitionsAPI,
   getGlobalConfigsMap as getGlobalConfigsMapAPI,
-  type AgentDefinitions,
 } from "tauri-plugin-askit-api";
 
 import type { AgentStreamFlow, AgentStreamEdge, AgentStreamNode, CoreSettings } from "./types";
@@ -110,38 +109,6 @@ export function channelSpecToEdge(channel: ChannelSpec): AgentStreamEdge {
     sourceHandle: channel.source_handle,
     target: channel.target,
     targetHandle: channel.target_handle,
-  };
-}
-
-export function flowToStreamSpec(
-  nodes: AgentStreamNode[],
-  edges: AgentStreamEdge[],
-  run_on_start: boolean | null,
-  viewport: Viewport | null,
-): AgentStreamSpec {
-  return {
-    agents: nodes.map((node) => nodeToAgentSpec(node)),
-    channels: edges.map((edge) => edgeToChannelSpec(edge)),
-    run_on_start,
-    viewport,
-  };
-}
-
-export function nodeToAgentSpec(node: AgentStreamNode): AgentSpec {
-  return {
-    id: node.id,
-    def_name: node.data.def_name,
-    inputs: node.data.inputs,
-    outputs: node.data.outputs,
-    configs: node.data.configs,
-    config_specs: node.data.config_specs,
-    disabled: node.data.disabled,
-    // extensions
-    x: node.position.x,
-    y: node.position.y,
-    width: node.width,
-    height: node.height,
-    show_err: node.data.show_err,
   };
 }
 

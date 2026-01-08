@@ -86,6 +86,7 @@
         return renderComponent(StreamListActions, {
           id: row.original.id,
           name: row.original.name,
+          run_on_start: row.original.run_on_start,
         });
       },
       meta: {

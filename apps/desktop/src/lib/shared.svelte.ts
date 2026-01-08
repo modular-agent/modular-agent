@@ -4,11 +4,7 @@ import { SvelteMap } from "svelte/reactivity";
 import { writable, type Writable } from "svelte/store";
 
 import type { AgentStreamInfo, AgentStreamSpec } from "tauri-plugin-askit-api";
-import {
-  getAgentStreamInfos,
-  getAgentStreamSpec,
-  setAgentStreamSpec,
-} from "tauri-plugin-askit-api";
+import { getAgentStreamInfos, updateAgentStreamSpec } from "tauri-plugin-askit-api";
 
 import {
   importAgentStream,
@@ -77,12 +73,7 @@ export async function stopStream(id: string) {
 }
 
 export async function updateStreamSpec(id: string, spec: Partial<AgentStreamSpec>): Promise<void> {
-  let existingSpec = await getAgentStreamSpec(id);
-  if (!existingSpec) {
-    return;
-  }
-  const updatedSpec: AgentStreamSpec = { ...existingSpec, ...spec };
-  await setAgentStreamSpec(id, updatedSpec);
+  await updateAgentStreamSpec(id, spec);
 }
 
 $effect.root(() => {

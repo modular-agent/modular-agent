@@ -5,16 +5,18 @@
   import { onMount } from "svelte";
 
   import {
-    useSvelteFlow,
     Background,
     BackgroundVariant,
     Controls,
     MiniMap,
     SvelteFlow,
+    useSvelteFlow,
+    type Connection,
     type NodeEventWithPointer,
+    type NodeTargetEventWithPointer,
     type NodeTypes,
     type OnDelete,
-    type Connection,
+    type OnMove,
   } from "@xyflow/svelte";
   // 👇 this is important! You need to import the styles for Svelte Flow to work
   import "@xyflow/svelte/dist/style.css";
@@ -23,14 +25,17 @@
     addAgent,
     addAgentsAndChannels,
     addChannel,
+    getAgentSpec,
+    getAgentStreamSpec,
     newAgentSpec,
     removeAgent,
     removeChannel,
-    setAgentStreamSpec,
     startAgent,
     stopAgent,
+    updateAgentSpec,
+    updateAgentStreamSpec,
   } from "tauri-plugin-askit-api";
-  import type { AgentSpec, AgentStreamSpec, ChannelSpec } from "tauri-plugin-askit-api";
+  import type { AgentSpec, ChannelSpec } from "tauri-plugin-askit-api";
 
   import { goto } from "$app/navigation";
 
@@ -38,8 +43,6 @@
     agentSpecToNode,
     channelSpecToEdge,
     edgeToChannelSpec,
-    flowToStreamSpec,
-    nodeToAgentSpec,
     saveAgentStream,
     getCoreSettings,
   } from "$lib/agent";
@@ -56,7 +59,7 @@
   import StreamActions from "./stream-actions.svelte";
   import StreamName from "./stream-name.svelte";
 
-  const { getViewport, screenToFlowPosition, updateEdge, updateNode, updateNodeData } =
+  const { screenToFlowPosition, updateEdge, updateNode, updateNodeData } =
     $derived(useSvelteFlow());
 
   const coreSettings = getCoreSettings();
@@ -78,12 +81,6 @@
     edges = [...data.flow.edges];
 
     getCurrentWindow().setTitle(data.flow.name + " - Agent Stream App");
-  });
-
-  onMount(() => {
-    return async () => {
-      await syncStream();
-    };
   });
 
   const handleOnDelete: OnDelete<AgentStreamNode, AgentStreamEdge> = async ({
@@ -136,7 +133,9 @@
     if (selectedNodes.length == 0 && selectedEdges.length == 0) {
       return;
     }
-    copiedNodes = selectedNodes.map((node) => nodeToAgentSpec(node));
+    copiedNodes = (
+      await Promise.all(selectedNodes.map(async (node) => await getAgentSpec(node.id)))
+    ).filter((spec) => spec !== null);
     copiedEdges = selectedEdges.map((edge) => edgeToChannelSpec(edge));
 
     for (const edge of selectedEdges) {
@@ -150,12 +149,14 @@
     edges = edges.filter((edge) => !edge.selected);
   }
 
-  function copyNodesAndEdges() {
+  async function copyNodesAndEdges() {
     const [selectedNodes, selectedEdges] = selectedNodesAndEdges();
     if (selectedNodes.length == 0) {
       return;
     }
-    copiedNodes = selectedNodes.map((node) => nodeToAgentSpec(node));
+    copiedNodes = (
+      await Promise.all(selectedNodes.map(async (node) => await getAgentSpec(node.id)))
+    ).filter((spec) => spec !== null);
     copiedEdges = selectedEdges.map((edge) => edgeToChannelSpec(edge));
   }
 
@@ -180,6 +181,7 @@
       copiedNodes,
       copiedEdges,
     );
+
     if (added_agents.length == 0 && added_edges.length == 0) return;
 
     let new_nodes = [];
@@ -200,6 +202,13 @@
 
     nodes = [...nodes, ...new_nodes];
     edges = [...edges, ...new_edges];
+
+    if (running) {
+      for (const node of new_nodes) {
+        if (node.data.disabled) continue;
+        await startAgent(node.id);
+      }
+    }
   }
 
   function selectAllNodesAndEdges() {
@@ -247,16 +256,7 @@
     };
   });
 
-  async function syncStream(): Promise<null | AgentStreamSpec> {
-    const viewport = getViewport();
-    const s = flowToStreamSpec(nodes, edges, data.flow.run_on_start, viewport);
-    await setAgentStreamSpec(stream_id, s);
-    return s;
-  }
-
   async function onNewStream(name: string) {
-    await syncStream();
-
     const new_id = await newStream(name);
     if (new_id) {
       goto(`/stream_editor/${new_id}`, { invalidateAll: true });
@@ -264,13 +264,13 @@
   }
 
   async function onSaveStream() {
-    const s = await syncStream();
+    const s = await getAgentStreamSpec(stream_id);
     if (!s) return;
     await saveAgentStream(data.flow.name, s);
   }
 
   async function onDuplicateStream() {
-    const s = await syncStream();
+    const s = await getAgentStreamSpec(stream_id);
     if (!s) return;
     const new_id = await newStream(data.flow.name);
     if (new_id) {
@@ -280,7 +280,7 @@
   }
 
   async function onExportStream() {
-    const s = await syncStream();
+    const s = await getAgentStreamSpec(stream_id);
     const jsonStr = JSON.stringify(s, null, 2);
     const blob = new Blob([jsonStr], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -295,8 +295,6 @@
   }
 
   async function onImportStream() {
-    await syncStream();
-
     const file = await open({ multiple: false, filter: "json" });
     if (!file) return;
     const id = await importStream(file);
@@ -430,6 +428,21 @@
     hideNodeContextMenu();
   }
 
+  const handleNodeDragStop: NodeTargetEventWithPointer<
+    MouseEvent | TouchEvent,
+    AgentStreamNode
+  > = async ({ targetNode }) => {
+    if (!targetNode) return;
+    await updateAgentSpec(targetNode.id, {
+      x: targetNode.position.x,
+      y: targetNode.position.y,
+    });
+  };
+
+  const handleOnMoveEnd: OnMove = async (_event, viewport) => {
+    await updateAgentStreamSpec(stream_id, { viewport });
+  };
+
   function handleSelectionClick() {
     hideNodeContextMenu();
   }
@@ -459,7 +472,7 @@
     connectionRadius={38}
     deleteKey={["Delete"]}
     bind:edges
-    fitView
+    initialViewport={data.flow?.viewport!}
     maxZoom={2}
     minZoom={0.1}
     bind:nodes
@@ -469,7 +482,9 @@
     ondragover={handleDragOver}
     ondrop={handleDrop}
     onnodeclick={handleNodeClick}
+    onnodedragstop={handleNodeDragStop}
     onnodecontextmenu={handleNodeContextMenu}
+    onmoveend={handleOnMoveEnd}
     onpaneclick={handlePaneClick}
     onselectionclick={handleSelectionClick}
     onselectioncontextmenu={handleSelectionContextMenu}

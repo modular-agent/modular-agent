@@ -2,9 +2,8 @@
   import EllipsisVerticalIcon from "@lucide/svelte/icons/ellipsis-vertical";
   import PlayIcon from "@lucide/svelte/icons/play";
   import SquareIcon from "@lucide/svelte/icons/square";
-  import { getAgentStreamSpec, setAgentStreamSpec } from "tauri-plugin-askit-api";
+  import { getAgentStreamSpec } from "tauri-plugin-askit-api";
 
-  import { saveAgentStream } from "$lib/agent";
   import { Button } from "$lib/components/ui/button/index.js";
   import * as Dialog from "$lib/components/ui/dialog/index.js";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu/index.js";
@@ -24,9 +23,10 @@
   type Props = {
     id: string;
     name: string;
+    run_on_start: boolean;
   };
 
-  let { id, name }: Props = $props();
+  let { id, name, run_on_start }: Props = $props();
 
   // start and stop
 
@@ -72,11 +72,7 @@
   }
 
   async function handleRunOnStart() {
-    let spec = await getAgentStreamSpec(id);
-    if (!spec) return;
-    spec.run_on_start = !spec.run_on_start;
-    await setAgentStreamSpec(id, spec);
-    await saveAgentStream(name, spec);
+    await updateStreamSpec(id, { run_on_start: !run_on_start });
     await reloadStreamInfos();
   }
 </script>
