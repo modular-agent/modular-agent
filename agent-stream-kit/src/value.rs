@@ -347,6 +347,124 @@ impl AgentValue {
         }
     }
 
+    /// Convert to Boolean.
+    pub fn to_boolean(&self) -> Option<bool> {
+        match self {
+            AgentValue::Boolean(b) => Some(*b),
+            AgentValue::Integer(i) => Some(*i != 0),
+            AgentValue::Number(n) => Some(*n != 0.0),
+            AgentValue::String(s) => s.parse().ok(),
+            _ => None,
+        }
+    }
+
+    /// Convert to AgentValue::Boolean or AgentValue::Array of booleans.
+    pub fn to_boolean_value(&self) -> Option<AgentValue> {
+        match self {
+            AgentValue::Boolean(_) => Some(self.clone()),
+            AgentValue::Array(arr) => {
+                if arr.iter().all(|v| v.is_boolean()) {
+                    return Some(self.clone());
+                }
+                let mut new_arr = Vector::new();
+                for item in arr {
+                    new_arr.push_back(item.to_boolean_value()?);
+                }
+                Some(AgentValue::Array(new_arr))
+            }
+            _ => self.to_boolean().map(AgentValue::boolean),
+        }
+    }
+
+    /// Convert to Integer (i64).
+    pub fn to_integer(&self) -> Option<i64> {
+        match self {
+            AgentValue::Integer(i) => Some(*i),
+            AgentValue::Boolean(b) => Some(if *b { 1 } else { 0 }),
+            AgentValue::Number(n) => Some(*n as i64),
+            AgentValue::String(s) => s.parse().ok(),
+            _ => None,
+        }
+    }
+
+    /// Convert to AgentValue::Integer or AgentValue::Array of integers.
+    pub fn to_integer_value(&self) -> Option<AgentValue> {
+        match self {
+            AgentValue::Integer(_) => Some(self.clone()),
+            AgentValue::Array(arr) => {
+                if arr.iter().all(|v| v.is_integer()) {
+                    return Some(self.clone());
+                }
+                let mut new_arr = Vector::new();
+                for item in arr {
+                    new_arr.push_back(item.to_integer_value()?);
+                }
+                Some(AgentValue::Array(new_arr))
+            }
+            _ => self.to_integer().map(AgentValue::integer),
+        }
+    }
+
+    /// Convert to Number (f64).
+    pub fn to_number(&self) -> Option<f64> {
+        match self {
+            AgentValue::Number(n) => Some(*n),
+            AgentValue::Boolean(b) => Some(if *b { 1.0 } else { 0.0 }),
+            AgentValue::Integer(i) => Some(*i as f64),
+            AgentValue::String(s) => s.parse().ok(),
+            _ => None,
+        }
+    }
+
+    /// Convert to AgentValue::Number or AgentValue::Array of numbers.
+    pub fn to_number_value(&self) -> Option<AgentValue> {
+        match self {
+            AgentValue::Number(_) => Some(self.clone()),
+            AgentValue::Array(arr) => {
+                if arr.iter().all(|v| v.is_number()) {
+                    return Some(self.clone());
+                }
+                let mut new_arr = Vector::new();
+                for item in arr {
+                    new_arr.push_back(item.to_number_value()?);
+                }
+                Some(AgentValue::Array(new_arr))
+            }
+            _ => self.to_number().map(AgentValue::number),
+        }
+    }
+
+    /// Convert to String.
+    #[allow(clippy::inherent_to_string)]
+    pub fn to_string(&self) -> Option<String> {
+        match self {
+            AgentValue::String(s) => Some(s.as_ref().clone()),
+            AgentValue::Boolean(b) => Some(b.to_string()),
+            AgentValue::Integer(i) => Some(i.to_string()),
+            AgentValue::Number(n) => Some(n.to_string()),
+            AgentValue::Message(m) => Some(m.content.clone()),
+            _ => None,
+        }
+    }
+
+    /// Convert to AgentValue::String or AgentValue::Array of strings.
+    pub fn to_string_value(&self) -> Option<AgentValue> {
+        match self {
+            AgentValue::String(_) => Some(self.clone()),
+            AgentValue::Array(arr) => {
+                if arr.iter().all(|v| v.is_string()) {
+                    return Some(self.clone());
+                }
+                let mut new_arr = Vector::new();
+                for item in arr {
+                    new_arr.push_back(item.to_string_value()?);
+                }
+                Some(AgentValue::Array(new_arr))
+            }
+            _ => self.to_string().map(AgentValue::string),
+        }
+    }
+
     /// Convert to Message.
     pub fn to_message(&self) -> Option<Message> {
         Message::try_from(self.clone()).ok()
@@ -1539,5 +1657,84 @@ mod tests {
 
         let restored: Person = agent_data.to_deserialize().unwrap();
         assert_eq!(restored, person);
+    }
+
+    #[test]
+    fn test_agent_value_conversions() {
+        // Boolean
+        assert_eq!(AgentValue::boolean(true).to_boolean(), Some(true));
+        assert_eq!(AgentValue::integer(1).to_boolean(), Some(true));
+        assert_eq!(AgentValue::integer(0).to_boolean(), Some(false));
+        assert_eq!(AgentValue::number(1.0).to_boolean(), Some(true));
+        assert_eq!(AgentValue::number(0.0).to_boolean(), Some(false));
+        assert_eq!(AgentValue::string("true").to_boolean(), Some(true));
+        assert_eq!(AgentValue::string("false").to_boolean(), Some(false));
+        assert_eq!(AgentValue::unit().to_boolean(), None);
+
+        let bool_arr = AgentValue::array(vector![AgentValue::integer(1), AgentValue::integer(0)]);
+        let converted = bool_arr.to_boolean_value().unwrap();
+        assert!(converted.is_array());
+        let arr = converted.as_array().unwrap();
+        assert_eq!(arr[0], AgentValue::boolean(true));
+        assert_eq!(arr[1], AgentValue::boolean(false));
+
+        // Integer
+        assert_eq!(AgentValue::integer(42).to_integer(), Some(42));
+        assert_eq!(AgentValue::boolean(true).to_integer(), Some(1));
+        assert_eq!(AgentValue::boolean(false).to_integer(), Some(0));
+        assert_eq!(AgentValue::number(42.9).to_integer(), Some(42));
+        assert_eq!(AgentValue::string("42").to_integer(), Some(42));
+        assert_eq!(AgentValue::unit().to_integer(), None);
+
+        let int_arr =
+            AgentValue::array(vector![AgentValue::string("10"), AgentValue::boolean(true)]);
+        let converted = int_arr.to_integer_value().unwrap();
+        assert!(converted.is_array());
+        let arr = converted.as_array().unwrap();
+        assert_eq!(arr[0], AgentValue::integer(10));
+        assert_eq!(arr[1], AgentValue::integer(1));
+
+        // Number
+        assert_eq!(AgentValue::number(3.14).to_number(), Some(3.14));
+        assert_eq!(AgentValue::integer(42).to_number(), Some(42.0));
+        assert_eq!(AgentValue::boolean(true).to_number(), Some(1.0));
+        assert_eq!(AgentValue::string("3.14").to_number(), Some(3.14));
+        assert_eq!(AgentValue::unit().to_number(), None);
+
+        let num_arr =
+            AgentValue::array(vector![AgentValue::integer(10), AgentValue::string("0.5")]);
+        let converted = num_arr.to_number_value().unwrap();
+        assert!(converted.is_array());
+        let arr = converted.as_array().unwrap();
+        assert_eq!(arr[0], AgentValue::number(10.0));
+        assert_eq!(arr[1], AgentValue::number(0.5));
+
+        // String
+        assert_eq!(
+            AgentValue::string("hello").to_string(),
+            Some("hello".to_string())
+        );
+        assert_eq!(AgentValue::integer(42).to_string(), Some("42".to_string()));
+        assert_eq!(
+            AgentValue::boolean(true).to_string(),
+            Some("true".to_string())
+        );
+        assert_eq!(
+            AgentValue::number(3.14).to_string(),
+            Some("3.14".to_string())
+        );
+        assert_eq!(
+            AgentValue::message(Message::user("content".to_string())).to_string(),
+            Some("content".to_string())
+        );
+        assert_eq!(AgentValue::unit().to_string(), None);
+
+        let str_arr =
+            AgentValue::array(vector![AgentValue::integer(42), AgentValue::boolean(false)]);
+        let converted = str_arr.to_string_value().unwrap();
+        assert!(converted.is_array());
+        let arr = converted.as_array().unwrap();
+        assert_eq!(arr[0], AgentValue::string("42"));
+        assert_eq!(arr[1], AgentValue::string("false"));
     }
 }
