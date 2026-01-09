@@ -10,6 +10,7 @@ use serde::{
 };
 
 use crate::error::AgentError;
+use crate::llm::Message;
 
 #[cfg(feature = "image")]
 const IMAGE_BASE64_PREFIX: &str = "data:image/png;base64,";
@@ -34,6 +35,9 @@ pub enum AgentValue {
 
     // Tensor Data (Embeddings, etc.)
     Tensor(Arc<Vec<f32>>),
+
+    // LLM Message
+    Message(Arc<Message>),
 
     // Error
     // special type to represent errors
@@ -83,6 +87,10 @@ impl AgentValue {
 
     pub fn tensor(value: Vec<f32>) -> Self {
         AgentValue::Tensor(Arc::new(value))
+    }
+
+    pub fn message(value: Message) -> Self {
+        AgentValue::Message(Arc::new(value))
     }
 
     pub fn boolean_default() -> Self {
@@ -197,6 +205,7 @@ impl AgentValue {
                     .collect();
                 serde_json::Value::Array(arr)
             }
+            AgentValue::Message(m) => serde_json::to_value(&**m).unwrap_or(serde_json::Value::Null),
             AgentValue::Error(_) => serde_json::Value::Null, // Errors are not serializable
         }
     }
@@ -252,6 +261,10 @@ impl AgentValue {
 
     pub fn is_tensor(&self) -> bool {
         matches!(self, AgentValue::Tensor(_))
+    }
+
+    pub fn is_message(&self) -> bool {
+        matches!(self, AgentValue::Message(_))
     }
 
     // Cast helpers
@@ -310,6 +323,53 @@ impl AgentValue {
         match self {
             AgentValue::Image(img) => Some(img),
             _ => None,
+        }
+    }
+
+    pub fn as_message(&self) -> Option<&Message> {
+        match self {
+            AgentValue::Message(m) => Some(m),
+            _ => None,
+        }
+    }
+
+    pub fn as_message_mut(&mut self) -> Option<&mut Message> {
+        match self {
+            AgentValue::Message(m) => Some(Arc::make_mut(m)),
+            _ => None,
+        }
+    }
+
+    pub fn into_message(self) -> Option<Arc<Message>> {
+        match self {
+            AgentValue::Message(m) => Some(m),
+            _ => None,
+        }
+    }
+
+    /// Convert to Message.
+    pub fn to_message(&self) -> Option<Message> {
+        Message::try_from(self.clone()).ok()
+    }
+
+    /// Convert to AgentValue::Message or AgentValue::Array of messages.
+    /// If the value is an array, it recursively converts its elements.
+    pub fn to_message_value(&self) -> Option<AgentValue> {
+        match self {
+            AgentValue::Message(_) => Some(self.clone()),
+            AgentValue::Array(arr) => {
+                if arr.iter().all(|v| v.is_message()) {
+                    return Some(self.clone());
+                }
+                let mut new_arr = Vector::new();
+                for item in arr {
+                    new_arr.push_back(item.to_message_value()?);
+                }
+                Some(AgentValue::Array(new_arr))
+            }
+            _ => Message::try_from(self.clone())
+                .ok()
+                .map(|m| AgentValue::Message(Arc::new(m))),
         }
     }
 
@@ -453,6 +513,14 @@ impl AgentValue {
         self.get_mut(key).and_then(|v| v.as_tensor_mut())
     }
 
+    pub fn get_message(&self, key: &str) -> Option<&Message> {
+        self.get(key).and_then(|v| v.as_message())
+    }
+
+    pub fn get_message_mut(&mut self, key: &str) -> Option<&mut Message> {
+        self.get_mut(key).and_then(|v| v.as_message_mut())
+    }
+
     // Setter by key
 
     pub fn set(&mut self, key: String, value: AgentValue) -> Result<(), AgentError> {
@@ -490,6 +558,7 @@ impl PartialEq for AgentValue {
             (AgentValue::Array(a1), AgentValue::Array(a2)) => a1 == a2,
             (AgentValue::Object(o1), AgentValue::Object(o2)) => o1 == o2,
             (AgentValue::Tensor(t1), AgentValue::Tensor(t2)) => t1 == t2,
+            (AgentValue::Message(m1), AgentValue::Message(m2)) => m1 == m2,
             _ => false,
         }
     }
@@ -517,7 +586,7 @@ impl Serialize for AgentValue {
             }
             AgentValue::Object(o) => {
                 let mut map = serializer.serialize_map(Some(o.len()))?;
-                // HashMapなので順序は保証されません。JSON出力の安定性のためキーでソートします。
+                // Sort the entries to ensure stable JSON output.
                 let mut entries: Vec<_> = o.iter().collect();
                 entries.sort_by(|a, b| a.0.cmp(b.0));
 
@@ -533,6 +602,7 @@ impl Serialize for AgentValue {
                 }
                 seq.end()
             }
+            AgentValue::Message(m) => m.serialize(serializer),
             AgentValue::Error(_) => serializer.serialize_none(), // Errors are not serializable
         }
     }
@@ -723,6 +793,10 @@ mod tests {
         let mixed_types_1 = AgentValue::boolean(true);
         let mixed_types_2 = AgentValue::integer(1);
         assert_ne!(mixed_types_1, mixed_types_2);
+
+        let msg1 = AgentValue::message(Message::user("hello".to_string()));
+        let msg2 = AgentValue::message(Message::user("hello".to_string()));
+        assert_eq!(msg1, msg2);
     }
 
     #[test]
@@ -770,6 +844,9 @@ mod tests {
         } else {
             panic!("Object was not deserialized correctly");
         }
+
+        let msg = AgentValue::message(Message::user("hello".to_string()));
+        assert!(matches!(msg, AgentValue::Message(_)));
     }
 
     #[test]
@@ -917,6 +994,18 @@ mod tests {
             assert_eq!(img.is_object(), false);
             assert_eq!(img.is_image(), true);
         }
+
+        let msg = AgentValue::message(Message::user("hello".to_string()));
+        assert_eq!(msg.is_unit(), false);
+        assert_eq!(msg.is_boolean(), false);
+        assert_eq!(msg.is_integer(), false);
+        assert_eq!(msg.is_number(), false);
+        assert_eq!(msg.is_string(), false);
+        assert_eq!(msg.is_array(), false);
+        assert_eq!(msg.is_object(), false);
+        #[cfg(feature = "image")]
+        assert_eq!(msg.is_image(), false);
+        assert_eq!(msg.is_message(), true);
     }
 
     #[test]
@@ -1018,6 +1107,16 @@ mod tests {
             assert_eq!(img.as_object(), None);
             assert!(img.as_image().is_some());
         }
+
+        let mut msg = AgentValue::message(Message::user("hello".to_string()));
+        assert!(msg.as_message().is_some());
+        assert_eq!(msg.as_message().unwrap().content, "hello");
+        assert!(msg.as_message_mut().is_some());
+        if let Some(m) = msg.as_message_mut() {
+            m.content = "world".to_string();
+        }
+        assert_eq!(msg.as_message().unwrap().content, "world");
+        assert!(msg.into_message().is_some());
     }
 
     #[test]
@@ -1054,6 +1153,7 @@ mod tests {
                 }),
                 #[cfg(feature = "image")]
                 "k_image".to_string() => AgentValue::image(PhotonImage::new(vec![0u8; 4], 1, 1)),
+                "k_message".to_string() => AgentValue::message(Message::user("hello".to_string())),
         });
         assert_eq!(obj.get(KEY), None);
         assert_eq!(obj.get_bool("k_boolean"), Some(true));
@@ -1066,6 +1166,8 @@ mod tests {
         assert!(obj.get_object_mut("k_object").is_some());
         #[cfg(feature = "image")]
         assert!(obj.get_image("k_image").is_some());
+        assert!(obj.get_message("k_message").is_some());
+        assert!(obj.get_message_mut("k_message").is_some());
 
         #[cfg(feature = "image")]
         {
@@ -1155,6 +1257,15 @@ mod tests {
                 )
             );
         }
+
+        let msg = AgentValue::message(Message::user("hello".to_string()));
+        assert_eq!(
+            msg.to_json(),
+            json!({
+                "role": "user",
+                "content": "hello",
+            })
+        );
     }
 
     #[test]
