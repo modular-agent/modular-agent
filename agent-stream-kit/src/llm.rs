@@ -19,6 +19,9 @@ pub struct Message {
     pub content: String,
 
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub tokens: Option<usize>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub thinking: Option<String>,
 
     #[serde(skip_serializing_if = "<&bool>::not")]
@@ -41,6 +44,7 @@ impl Message {
             id: None,
             role,
             content,
+            tokens: None,
             streaming: false,
             thinking: None,
             tool_calls: None,
@@ -78,40 +82,16 @@ impl Message {
 
 impl PartialEq for Message {
     fn eq(&self, other: &Self) -> bool {
-        let is_eq = self.id == other.id
-            && self.role == other.role
-            && self.content == other.content
-            && self.thinking == other.thinking
-            && self.streaming == other.streaming
-            && self.tool_calls == other.tool_calls
-            && self.tool_name == other.tool_name;
-
-        #[cfg(feature = "image")]
-        {
-            if !is_eq {
-                return false;
-            }
-            match (&self.image, &other.image) {
-                (Some(img1), Some(img2)) => {
-                    img1.get_width() == img2.get_width()
-                        && img1.get_height() == img2.get_height()
-                        && img1.get_raw_pixels() == img2.get_raw_pixels()
-                }
-                (None, None) => true,
-                _ => false,
-            }
-        }
-        #[cfg(not(feature = "image"))]
-        is_eq
+        self.id == other.id && self.role == other.role && self.content == other.content
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolCall {
     pub function: ToolCallFunction,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolCallFunction {
     pub name: String,
     pub parameters: serde_json::Value,
@@ -248,6 +228,13 @@ impl From<Message> for AgentValue {
     }
 }
 
+impl From<Vec<Message>> for AgentValue {
+    fn from(msgs: Vec<Message>) -> Self {
+        let agent_msgs: Vector<AgentValue> = msgs.into_iter().map(|m| m.into()).collect();
+        AgentValue::Array(agent_msgs)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use im::{hashmap, vector};
@@ -362,6 +349,7 @@ mod tests {
         let message = Message {
             role: "assistant".to_string(),
             content: "".to_string(),
+            tokens: None,
             thinking: None,
             streaming: false,
             tool_calls: Some(vector![ToolCall {

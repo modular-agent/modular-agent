@@ -487,7 +487,7 @@ impl AgentValue {
             }
             _ => Message::try_from(self.clone())
                 .ok()
-                .map(|m| AgentValue::Message(Arc::new(m))),
+                .map(|m| AgentValue::message(m)),
         }
     }
 
