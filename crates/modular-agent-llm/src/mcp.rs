@@ -16,17 +16,17 @@ use tokio::process::Command;
 
 use crate::tool::{Tool, ToolInfo, register_tool, unregister_tool};
 
-static CATEGORY: &str = "LLM/MCP";
+const CATEGORY: &str = "LLM/MCP";
 
-static PIN_UNIT: &str = "unit";
-static PIN_VALUE: &str = "value";
-static PIN_RESPONSE: &str = "response";
+const PIN_UNIT: &str = "unit";
+const PIN_VALUE: &str = "value";
+const PIN_RESPONSE: &str = "response";
 
-static CONFIG_ARGS: &str = "args";
-static CONFIG_COMMAND: &str = "command";
-static CONFIG_NAME: &str = "name";
-static CONFIG_TOOL: &str = "tool";
-static CONFIG_TOOL_REGEX: &str = "tool_regex";
+const CONFIG_ARGS: &str = "args";
+const CONFIG_COMMAND: &str = "command";
+const CONFIG_NAME: &str = "name";
+const CONFIG_TOOL: &str = "tool";
+const CONFIG_TOOL_REGEX: &str = "tool_regex";
 
 #[askit_agent(
     title="MCP Tools List",

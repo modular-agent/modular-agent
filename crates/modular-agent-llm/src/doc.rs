@@ -9,15 +9,15 @@ use im::{Vector, vector};
 use text_splitter::{ChunkConfig, TextSplitter};
 use tokenizers::Tokenizer;
 
-static CATEGORY: &str = "LLM/Doc";
+const CATEGORY: &str = "LLM/Doc";
 
-static PIN_CHUNKS: &str = "chunks";
-static PIN_DOC: &str = "doc";
-static PIN_STRING: &str = "string";
+const PIN_CHUNKS: &str = "chunks";
+const PIN_DOC: &str = "doc";
+const PIN_STRING: &str = "string";
 
-static CONFIG_MAX_CHARACTERS: &str = "max_characters";
-static CONFIG_MAX_TOKENS: &str = "max_tokens";
-static CONFIG_TOKENIZER: &str = "tokenizer";
+const CONFIG_MAX_CHARACTERS: &str = "max_characters";
+const CONFIG_MAX_TOKENS: &str = "max_tokens";
+const CONFIG_TOKENIZER: &str = "tokenizer";
 
 #[askit_agent(
     title="NFKC",

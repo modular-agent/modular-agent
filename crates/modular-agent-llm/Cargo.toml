@@ -16,24 +16,22 @@ im = "15.1.0"
 ollama-rs = { version = "0.3.2", default-features = false, features = ["macros", "rustls", "stream"], optional = true }
 photon-rs = { version = "0.3.3", optional = true }
 regex = "1.12.2"
-rmcp = { version = "0.8.5", features = ["client", "transport-child-process"], optional = true }
-sakura-ai-rs = { version = "0.1.2", features = ["stream"], optional = true }
+rmcp = { version = "0.12.0", features = ["client", "transport-child-process"], optional = true }
 schemars = "1.0"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-text-splitter = { version = "0.28.0", features = ["tokenizers"] }
+text-splitter = { version = "0.29.3", features = ["tokenizers"] }
 tokenizers = { version = "0.22.2", features = ["http"] }
 tokio = { version = "1.48.0", features = ["rt-multi-thread"] }
 tokio-stream = "0.1"
 uuid = { version = "1.18.1", features = ["v4"] }
 
 [features]
-default = ["image", "mcp", "ollama", "openai", "sakura"]
+default = ["image", "mcp", "ollama", "openai"]
 image = ["photon-rs"]
 mcp = ["rmcp"]
 ollama = ["ollama-rs" ]
 openai = ["async-openai", "futures"]
-sakura = ["sakura-ai-rs"]
 
 # [patch.crates-io]
 # agent-stream-kit = { path = "../agent-stream-kit/agent-stream-kit" }

@@ -1,27 +1,28 @@
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::{BTreeMap, HashMap, HashSet},
     sync::{Arc, Mutex, OnceLock, RwLock},
     time::Duration,
 };
 
 use agent_stream_kit::{
     ASKit, Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
-    askit_agent, async_trait,
+    Message, ToolCall, askit_agent, async_trait,
 };
-use im::Vector;
+use im::{Vector, vector};
 use regex::RegexSet;
 use tokio::sync::{Mutex as AsyncMutex, oneshot};
 
-use crate::message_lib::{Message, ToolCall};
-
 const CATEGORY: &str = "LLM/Tool";
 
+const PIN_MESSAGE: &str = "message";
 const PIN_PATTERNS: &str = "patterns";
 const PIN_TOOLS: &str = "tools";
-
+const PIN_TOOL_CALL: &str = "tool_call";
 const PIN_TOOL_IN: &str = "tool_in";
 const PIN_TOOL_OUT: &str = "tool_out";
+const PIN_VALUE: &str = "value";
 
+const CONFIG_TOOLS: &str = "tools";
 const CONFIG_TOOL_NAME: &str = "name";
 const CONFIG_TOOL_DESCRIPTION: &str = "description";
 const CONFIG_TOOL_PARAMETERS: &str = "parameters";
@@ -182,10 +183,10 @@ pub async fn call_tool(
 
 pub async fn call_tools(
     ctx: &AgentContext,
-    tool_calls: &Vec<ToolCall>,
-) -> Result<Vec<Message>, AgentError> {
+    tool_calls: &Vector<ToolCall>,
+) -> Result<Vector<Message>, AgentError> {
     if tool_calls.is_empty() {
-        return Ok(vec![]);
+        return Ok(vector![]);
     };
     let mut resp_messages = vec![];
 
@@ -201,7 +202,7 @@ pub async fn call_tools(
         ));
     }
 
-    Ok(resp_messages)
+    Ok(resp_messages.into())
 }
 
 // Agents
@@ -255,7 +256,7 @@ impl AsAgent for ListToolsAgent {
 }
 
 #[askit_agent(
-    title="Flow Tool",
+    title="Stream Tool",
     category=CATEGORY,
     inputs=[PIN_TOOL_OUT],
     outputs=[PIN_TOOL_IN],
@@ -263,7 +264,7 @@ impl AsAgent for ListToolsAgent {
     text_config(name=CONFIG_TOOL_DESCRIPTION),
     object_config(name=CONFIG_TOOL_PARAMETERS),
 )]
-pub struct FlowToolAgent {
+pub struct StreamToolAgent {
     data: AgentData,
     name: String,
     description: String,
@@ -271,7 +272,7 @@ pub struct FlowToolAgent {
     pending: Arc<Mutex<HashMap<usize, oneshot::Sender<AgentValue>>>>,
 }
 
-impl FlowToolAgent {
+impl StreamToolAgent {
     fn start_tool_call(
         &mut self,
         ctx: AgentContext,
@@ -287,7 +288,7 @@ impl FlowToolAgent {
 }
 
 #[async_trait]
-impl AsAgent for FlowToolAgent {
+impl AsAgent for StreamToolAgent {
     fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         let def_name = spec.def_name.clone();
         let configs = spec.configs.clone();
@@ -333,7 +334,7 @@ impl AsAgent for FlowToolAgent {
             .askit()
             .get_agent(self.id())
             .ok_or_else(|| AgentError::AgentNotFound(self.id().to_string()))?;
-        let tool = FlowTool::new(
+        let tool = StreamTool::new(
             self.name.clone(),
             self.description.clone(),
             self.parameters.clone(),
@@ -362,12 +363,12 @@ impl AsAgent for FlowToolAgent {
     }
 }
 
-struct FlowTool {
+struct StreamTool {
     info: ToolInfo,
     agent: Arc<AsyncMutex<Box<dyn Agent>>>,
 }
 
-impl FlowTool {
+impl StreamTool {
     fn new(
         name: String,
         description: String,
@@ -392,10 +393,12 @@ impl FlowTool {
         // Kick off the tool call while holding the lock, then drop it before awaiting the result
         let rx = {
             let mut guard = self.agent.lock().await;
-            let Some(flow_agent) = guard.as_agent_mut::<FlowToolAgent>() else {
-                return Err(AgentError::Other("Agent is not FlowToolAgent".to_string()));
+            let Some(stream_tool_agent) = guard.as_agent_mut::<StreamToolAgent>() else {
+                return Err(AgentError::Other(
+                    "Agent is not StreamToolAgent".to_string(),
+                ));
             };
-            flow_agent.start_tool_call(ctx, args)?
+            stream_tool_agent.start_tool_call(ctx, args)?
         };
 
         tokio::time::timeout(Duration::from_secs(60), rx)
@@ -406,7 +409,7 @@ impl FlowTool {
 }
 
 #[async_trait]
-impl Tool for FlowTool {
+impl Tool for StreamTool {
     fn info(&self) -> &ToolInfo {
         &self.info
     }
@@ -417,5 +420,104 @@ impl Tool for FlowTool {
         args: AgentValue,
     ) -> Result<AgentValue, AgentError> {
         self.tool_call(ctx, args).await
+    }
+}
+
+// Call Tool Message Agent
+#[askit_agent(
+    title="Call Tool Message",
+    category=CATEGORY,
+    inputs=[PIN_MESSAGE],
+    outputs=[PIN_MESSAGE],
+    string_config(name=CONFIG_TOOLS),
+)]
+pub struct CallToolMessageAgent {
+    data: AgentData,
+}
+
+#[async_trait]
+impl AsAgent for CallToolMessageAgent {
+    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+        Ok(Self {
+            data: AgentData::new(askit, id, spec),
+        })
+    }
+
+    async fn process(
+        &mut self,
+        ctx: AgentContext,
+        _pin: String,
+        value: AgentValue,
+    ) -> Result<(), AgentError> {
+        let Some(message) = value.as_message() else {
+            return Ok(());
+        };
+        let Some(mut tool_calls) = message.tool_calls.clone() else {
+            return Ok(());
+        };
+
+        // Filter tools
+        let config_tools = self.configs()?.get_string_or_default(CONFIG_TOOLS);
+        if !config_tools.is_empty() {
+            let tools = list_tool_infos_patterns(&config_tools)
+                .map_err(|e| AgentError::InvalidValue(format!("Invalid regex patterns: {}", e)))?;
+            // FIXME: cache allowed tool names
+            let allowed_tool_names: HashSet<String> = tools.into_iter().map(|t| t.name).collect();
+            tool_calls = tool_calls
+                .iter()
+                .filter(|call| allowed_tool_names.contains(&call.function.name))
+                .cloned()
+                .collect();
+        }
+
+        let resp_messages = call_tools(&ctx, &tool_calls).await?;
+        for resp_msg in resp_messages {
+            self.try_output(ctx.clone(), PIN_MESSAGE, AgentValue::message(resp_msg))?;
+        }
+        Ok(())
+    }
+}
+
+// Call Tool Agent
+#[askit_agent(
+    title="Call Tool",
+    category=CATEGORY,
+    inputs=[PIN_TOOL_CALL],
+    outputs=[PIN_VALUE],
+)]
+pub struct CallToolAgent {
+    data: AgentData,
+}
+
+#[async_trait]
+impl AsAgent for CallToolAgent {
+    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+        Ok(Self {
+            data: AgentData::new(askit, id, spec),
+        })
+    }
+
+    async fn process(
+        &mut self,
+        ctx: AgentContext,
+        _pin: String,
+        value: AgentValue,
+    ) -> Result<(), AgentError> {
+        dbg!(&value);
+        let obj = value.as_object().ok_or_else(|| {
+            AgentError::InvalidValue("tool_call input must be an object".to_string())
+        })?;
+        let tool_name = obj.get("name").and_then(|v| v.as_str()).ok_or_else(|| {
+            AgentError::InvalidValue("tool_call.name must be a string".to_string())
+        })?;
+        let tool_parameters = obj.get("parameters").cloned().unwrap_or(AgentValue::unit());
+
+        dbg!(&tool_name);
+        dbg!(&tool_parameters);
+
+        let resp = call_tool(ctx.clone(), tool_name, tool_parameters).await?;
+        self.try_output(ctx, PIN_VALUE, resp)?;
+
+        Ok(())
     }
 }
