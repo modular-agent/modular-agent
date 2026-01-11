@@ -59,7 +59,9 @@ impl AsAgent for BoardInAgent {
             return Ok(());
         }
         let askit = self.askit();
-        askit.try_send_board_out(board_name.clone(), ctx, value.clone())?;
+        askit
+            .send_board_out(board_name.clone(), ctx, value.clone())
+            .await?;
 
         Ok(())
     }
@@ -186,7 +188,9 @@ impl AsAgent for VarInAgent {
         }
         let board_name = board_name_for_var(self.stream_id(), &var_name);
         let askit = self.askit();
-        askit.try_send_board_out(board_name.clone(), ctx, value.clone())?;
+        askit
+            .send_board_out(board_name.clone(), ctx, value.clone())
+            .await?;
 
         Ok(())
     }

@@ -57,7 +57,7 @@ pub fn try_send_agent_out(
         })
 }
 
-pub fn try_send_board_out(
+pub async fn send_board_out(
     askit: &ASKit,
     name: String,
     ctx: AgentContext,
@@ -65,7 +65,8 @@ pub fn try_send_board_out(
 ) -> Result<(), AgentError> {
     askit
         .tx()?
-        .try_send(AgentEventMessage::BoardOut { name, ctx, value })
+        .send(AgentEventMessage::BoardOut { name, ctx, value })
+        .await
         .map_err(|_| {
             AgentError::SendMessageFailed("Failed to try_send BoardOut message".to_string())
         })

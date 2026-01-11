@@ -51,7 +51,8 @@ impl AsAgent for CounterAgent {
         } else if pin == PIN_IN {
             self.count += 1;
         }
-        self.try_output(ctx, PIN_COUNT, AgentValue::integer(self.count))?;
+        self.output(ctx, PIN_COUNT, AgentValue::integer(self.count))
+            .await?;
         // self.emit_display(DISPLAY_COUNT, AgentValue::integer(self.count))?;
         Ok(())
     }

@@ -75,7 +75,7 @@ async fn test_add_agent() {
     let spec = def.to_spec();
 
     let agent_id = askit.add_agent(stream_id.clone(), spec).unwrap();
-    let stream_spec = askit.get_agent_stream_spec(&stream_id).unwrap();
+    let stream_spec = askit.get_agent_stream_spec(&stream_id).await.unwrap();
     assert!(stream_spec.agents.iter().any(|a| a.id == agent_id));
 
     askit.quit();
@@ -93,7 +93,7 @@ async fn test_remove_agent() {
     let agent_id = askit.add_agent(stream_id.clone(), spec).unwrap();
 
     askit.remove_agent(&stream_id, &agent_id).await.unwrap();
-    let stream_spec = askit.get_agent_stream_spec(&stream_id).unwrap();
+    let stream_spec = askit.get_agent_stream_spec(&stream_id).await.unwrap();
     assert!(!stream_spec.agents.iter().any(|a| a.id == agent_id));
 
     askit.quit();
@@ -124,7 +124,7 @@ async fn test_remove_after_connect_agent() {
     askit.add_channel(&stream_id, channel_spec).unwrap();
 
     askit.remove_agent(&stream_id, &agent1_id).await.unwrap();
-    let stream_spec = askit.get_agent_stream_spec(&stream_id).unwrap();
+    let stream_spec = askit.get_agent_stream_spec(&stream_id).await.unwrap();
     assert!(!stream_spec.agents.iter().any(|a| a.id == agent1_id));
 
     askit.quit();

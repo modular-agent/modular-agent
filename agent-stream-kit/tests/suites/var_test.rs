@@ -15,6 +15,7 @@ async fn test_var_routing() {
 
     askit
         .write_var_value(&var_stream_id, "var1", AgentValue::string("hello"))
+        .await
         .unwrap();
 
     test_utils::expect_var_value(&var_stream_id, "var1", &AgentValue::string("hello"))

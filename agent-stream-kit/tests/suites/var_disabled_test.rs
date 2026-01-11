@@ -16,6 +16,7 @@ async fn test_var_disabled_routing() {
 
     askit
         .write_var_value(&var_stream_id, "var1", AgentValue::string("hello"))
+        .await
         .unwrap();
 
     // var1 is diabled, but we sent "hello" to it, so the notification should still sent.

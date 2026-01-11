@@ -140,22 +140,28 @@ impl ASKit {
     }
 
     /// Get the agent spec by id.
-    pub fn get_agent_spec(&self, agent_id: &str) -> Option<AgentSpec> {
-        let agents = self.agents.lock().unwrap();
-        let Some(agent) = agents.get(agent_id) else {
-            return None;
+    pub async fn get_agent_spec(&self, agent_id: &str) -> Option<AgentSpec> {
+        let agent = {
+            let agents = self.agents.lock().unwrap();
+            let Some(agent) = agents.get(agent_id) else {
+                return None;
+            };
+            agent.clone()
         };
-        let agent = agent.blocking_lock();
+        let agent = agent.lock().await;
         Some(agent.spec().clone())
     }
 
     /// Update the agent spec by id.
-    pub fn update_agent_spec(&self, agent_id: &str, value: &Value) -> Result<(), AgentError> {
-        let agents = self.agents.lock().unwrap();
-        let Some(agent) = agents.get(agent_id) else {
-            return Err(AgentError::AgentNotFound(agent_id.to_string()));
+    pub async fn update_agent_spec(&self, agent_id: &str, value: &Value) -> Result<(), AgentError> {
+        let agent = {
+            let agents = self.agents.lock().unwrap();
+            let Some(agent) = agents.get(agent_id) else {
+                return Err(AgentError::AgentNotFound(agent_id.to_string()));
+            };
+            agent.clone()
         };
-        let mut agent = agent.blocking_lock();
+        let mut agent = agent.lock().await;
         agent.update_spec(value)?;
         Ok(())
     }
@@ -175,7 +181,7 @@ impl ASKit {
     }
 
     /// Get the agent stream spec by id.
-    pub fn get_agent_stream_spec(&self, id: &str) -> Option<AgentStreamSpec> {
+    pub async fn get_agent_stream_spec(&self, id: &str) -> Option<AgentStreamSpec> {
         let stream_spec = {
             let streams = self.streams.lock().unwrap();
             streams.get(id).map(|stream| stream.spec().clone())
@@ -187,7 +193,7 @@ impl ASKit {
         // collect agent specs in the stream
         let mut agent_specs = Vec::new();
         for agent in &stream_spec.agents {
-            if let Some(spec) = self.get_agent_spec(&agent.id) {
+            if let Some(spec) = self.get_agent_spec(&agent.id).await {
                 agent_specs.push(spec);
             }
         }
@@ -883,28 +889,33 @@ impl ASKit {
     }
 
     /// Write a value to the board.
-    pub fn write_board_value(&self, name: String, value: AgentValue) -> Result<(), AgentError> {
-        self.try_send_board_out(name, AgentContext::new(), value)
+    pub async fn write_board_value(
+        &self,
+        name: String,
+        value: AgentValue,
+    ) -> Result<(), AgentError> {
+        self.send_board_out(name, AgentContext::new(), value).await
     }
 
     /// Write a value to the variable board.
-    pub fn write_var_value(
+    pub async fn write_var_value(
         &self,
         stream_id: &str,
         name: &str,
         value: AgentValue,
     ) -> Result<(), AgentError> {
         let var_name = format!("%{}/{}", stream_id, name);
-        self.try_send_board_out(var_name, AgentContext::new(), value)
+        self.send_board_out(var_name, AgentContext::new(), value)
+            .await
     }
 
-    pub(crate) fn try_send_board_out(
+    pub(crate) async fn send_board_out(
         &self,
         name: String,
         ctx: AgentContext,
         value: AgentValue,
     ) -> Result<(), AgentError> {
-        message::try_send_board_out(self, name, ctx, value)
+        message::send_board_out(self, name, ctx, value).await
     }
 
     async fn spawn_message_loop(&self) -> Result<(), AgentError> {

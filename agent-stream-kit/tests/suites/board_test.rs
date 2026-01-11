@@ -18,6 +18,7 @@ async fn test_board_routing() {
 
     askit
         .write_board_value("board1".to_string(), AgentValue::string("hello"))
+        .await
         .unwrap();
 
     test_utils::expect_board_value("board1", &AgentValue::string("hello"))

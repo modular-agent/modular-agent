@@ -2,8 +2,26 @@ use crate::agent::Agent;
 use crate::context::AgentContext;
 use crate::error::AgentError;
 use crate::value::AgentValue;
+use std::future::Future;
+use std::pin::Pin;
 
 pub trait AgentOutput {
+    fn output_raw(
+        &self,
+        ctx: AgentContext,
+        pin: String,
+        value: AgentValue,
+    ) -> Pin<Box<dyn Future<Output = Result<(), AgentError>> + Send + '_>>;
+
+    fn output<S: Into<String>>(
+        &self,
+        ctx: AgentContext,
+        pin: S,
+        value: AgentValue,
+    ) -> Pin<Box<dyn Future<Output = Result<(), AgentError>> + Send + '_>> {
+        self.output_raw(ctx, pin.into(), value)
+    }
+
     fn try_output_raw(
         &self,
         ctx: AgentContext,
@@ -41,6 +59,19 @@ pub trait AgentOutput {
 }
 
 impl<T: Agent> AgentOutput for T {
+    fn output_raw(
+        &self,
+        ctx: AgentContext,
+        pin: String,
+        value: AgentValue,
+    ) -> Pin<Box<dyn Future<Output = Result<(), AgentError>> + Send + '_>> {
+        Box::pin(async move {
+            self.askit()
+                .send_agent_out(self.id().into(), ctx, pin, value)
+                .await
+        })
+    }
+
     fn try_output_raw(
         &self,
         ctx: AgentContext,
