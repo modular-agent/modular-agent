@@ -8,10 +8,8 @@
   import * as Dialog from "$lib/components/ui/dialog/index.js";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
-  import { Label } from "$lib/components/ui/label/index.js";
   import {
     deleteStream,
-    newStream,
     reloadStreamInfos,
     renameStream,
     startStream,
@@ -48,9 +46,14 @@
 
   async function handleRenameStream(e: Event) {
     e.preventDefault();
+    new_name = name;
+    openRenameDialog = true;
+  }
+
+  async function handleRenameStreamSubmit(e: Event) {
+    e.preventDefault();
     if (!new_name) return;
     await renameStream(id, new_name);
-    new_name = "";
     openRenameDialog = false;
     await reloadStreamInfos();
   }
@@ -65,7 +68,7 @@
     await reloadStreamInfos();
   }
 
-  async function handleDeleteStream(e: Event) {
+  async function handleDeleteStreamSubmit(e: Event) {
     e.preventDefault();
     await deleteStream(id);
     openDeleteDialog = false;
@@ -98,7 +101,7 @@
       {/snippet}
     </DropdownMenu.Trigger>
     <DropdownMenu.Content>
-      <DropdownMenu.Item onclick={() => (openRenameDialog = true)}>Rename</DropdownMenu.Item>
+      <DropdownMenu.Item onclick={handleRenameStream}>Rename</DropdownMenu.Item>
       <DropdownMenu.Item onclick={handleDuplicateStream}>Duplicate</DropdownMenu.Item>
       <DropdownMenu.Item onclick={() => (openDeleteDialog = true)}>Delete</DropdownMenu.Item>
       <DropdownMenu.Separator />
@@ -108,34 +111,35 @@
 </div>
 
 <Dialog.Root bind:open={openRenameDialog}>
-  <form>
-    <Dialog.Content class="sm:max-w-[425px]">
+  <Dialog.Content class="sm:max-w-[425px]">
+    <form onsubmit={handleRenameStreamSubmit}>
       <Dialog.Header>
         <Dialog.Title>Rename Stream</Dialog.Title>
       </Dialog.Header>
-      <div class="grid gap-4">
-        <div class="grid gap-3">
-          <Label for="name-1">Name</Label>
-          <Input id="name-1" name="name" bind:value={new_name} />
-        </div>
+      <div class="mt-4 mb-4">
+        <Input id="name-1" name="name" bind:value={new_name} />
       </div>
       <Dialog.Footer>
-        <Button type="submit" onclick={handleRenameStream}>Rename</Button>
+        <Button type="submit">Rename</Button>
       </Dialog.Footer>
-    </Dialog.Content>
-  </form>
+    </form>
+  </Dialog.Content>
 </Dialog.Root>
 
 <Dialog.Root bind:open={openDeleteDialog}>
-  <form>
-    <Dialog.Content class="sm:max-w-[425px]">
+  <Dialog.Content class="sm:max-w-[425px]">
+    <form onsubmit={handleDeleteStreamSubmit}>
       <Dialog.Header>
         <Dialog.Title>Delete Stream</Dialog.Title>
-        <Dialog.Description>Are you sure?</Dialog.Description>
+        <Dialog.Description
+          ><div class="mt-8 text-center text-lg">
+            <strong>{name}</strong>
+          </div></Dialog.Description
+        >
       </Dialog.Header>
       <Dialog.Footer>
-        <Button type="submit" onclick={handleDeleteStream}>Delete</Button>
+        <Button type="submit">Delete</Button>
       </Dialog.Footer>
-    </Dialog.Content>
-  </form>
+    </form>
+  </Dialog.Content>
 </Dialog.Root>
