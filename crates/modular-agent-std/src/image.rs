@@ -86,9 +86,9 @@ impl AsAgent for IsBlankImageAgent {
 
             let is_blank = self.is_blank(&image, almost_black_threshold, blank_threshold);
             if is_blank {
-                self.try_output(ctx, PIN_BLANK, value)
+                self.output(ctx, PIN_BLANK, value).await
             } else {
-                self.try_output(ctx, PIN_NON_BLANK, value)
+                self.output(ctx, PIN_NON_BLANK, value).await
             }
         } else {
             Err(AgentError::InvalidValue(
@@ -138,10 +138,11 @@ impl AsAgent for ResampleImageAgent {
 
             let resampled_image = photon_rs::transform::resample(&*image, width, height);
 
-            self.try_output(ctx, PIN_IMAGE, AgentValue::image(resampled_image))
+            self.output(ctx, PIN_IMAGE, AgentValue::image(resampled_image))
+                .await
         } else {
             // Pass through non-image value
-            self.try_output(ctx, PIN_IMAGE, value)
+            self.output(ctx, PIN_IMAGE, value).await
         }
     }
 }
@@ -191,10 +192,11 @@ impl AsAgent for ResizeImageAgent {
                 photon_rs::transform::SamplingFilter::Nearest,
             );
 
-            self.try_output(ctx, PIN_IMAGE, AgentValue::image(resized_image))
+            self.output(ctx, PIN_IMAGE, AgentValue::image(resized_image))
+                .await
         } else {
             // Pass through non-image value
-            self.try_output(ctx, PIN_IMAGE, value)
+            self.output(ctx, PIN_IMAGE, value).await
         }
     }
 }
@@ -243,7 +245,7 @@ impl AsAgent for ScaleImageAgent {
 
             if scale == 1.0 {
                 // No scaling needed, pass through the original image
-                return self.try_output(ctx, PIN_IMAGE, value);
+                return self.output(ctx, PIN_IMAGE, value).await;
             }
 
             if scale < 1.0 {
@@ -256,17 +258,19 @@ impl AsAgent for ScaleImageAgent {
                     height,
                     photon_rs::transform::SamplingFilter::Nearest,
                 );
-                self.try_output(ctx, PIN_IMAGE, AgentValue::image(resized_image))
+                self.output(ctx, PIN_IMAGE, AgentValue::image(resized_image))
+                    .await
             } else {
                 // scale > 1.0
                 let width = ((image.get_width() as f64) * scale) as usize;
                 let height = ((image.get_height() as f64) * scale) as usize;
                 let resampled_image = photon_rs::transform::resample(&*image, width, height);
-                self.try_output(ctx, PIN_IMAGE, AgentValue::image(resampled_image))
+                self.output(ctx, PIN_IMAGE, AgentValue::image(resampled_image))
+                    .await
             }
         } else {
             // Pass through non-image value
-            self.try_output(ctx, PIN_IMAGE, value)
+            self.output(ctx, PIN_IMAGE, value).await
         }
     }
 }
@@ -340,9 +344,9 @@ impl AsAgent for IsChangedImageAgent {
 
             if is_changed {
                 self.last_image = value.clone().into_image();
-                self.try_output(ctx, PIN_CHANGED, value)
+                self.output(ctx, PIN_CHANGED, value).await
             } else {
-                self.try_output(ctx, PIN_UNCHANGED, value)
+                self.output(ctx, PIN_UNCHANGED, value).await
             }
         } else {
             Err(AgentError::InvalidValue(
@@ -387,7 +391,7 @@ impl AsAgent for OpenImageAgent {
             AgentError::InvalidValue(format!("Failed to open image {}: {}", filename, e))
         })?;
 
-        self.try_output(ctx, PIN_IMAGE, AgentValue::image(image))
+        self.output(ctx, PIN_IMAGE, AgentValue::image(image)).await
     }
 }
 
@@ -431,6 +435,6 @@ impl AsAgent for SaveImageAgent {
             |e| AgentError::InvalidValue(format!("Failed to save image {}: {}", filename, e)),
         )?;
 
-        self.try_output(ctx, PIN_RESULT, AgentValue::unit())
+        self.output(ctx, PIN_RESULT, AgentValue::unit()).await
     }
 }

@@ -76,7 +76,7 @@ impl AsAgent for DelayAgent {
 
         tokio::time::sleep(Duration::from_millis(delay_ms as u64)).await;
 
-        self.try_output(ctx.clone(), pin, value.clone())?;
+        self.output(ctx.clone(), pin, value.clone()).await?;
 
         let mut num_waiting_data = self.num_waiting_data.lock().unwrap();
         *num_waiting_data -= 1;
@@ -551,7 +551,7 @@ impl AsAgent for ThrottleTimeAgent {
         self.start_timer()?;
 
         // Output the data
-        self.try_output(ctx, pin, value)?;
+        self.output(ctx, pin, value).await?;
 
         Ok(())
     }

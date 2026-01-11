@@ -64,7 +64,7 @@ impl AsAgent for GlobAgent {
         }
 
         let out_value = AgentValue::array(files.into());
-        self.try_output(ctx, PIN_FILES, out_value)
+        self.output(ctx, PIN_FILES, out_value).await
     }
 }
 
@@ -130,7 +130,7 @@ impl AsAgent for ListFilesAgent {
         }
 
         let out_value = AgentValue::array(files.into());
-        self.try_output(ctx, PIN_FILES, out_value)
+        self.output(ctx, PIN_FILES, out_value).await
     }
 }
 
@@ -183,13 +183,13 @@ impl AsAgent for ReadTextFileAgent {
         })?;
 
         let text = AgentValue::string(content);
-        self.try_output(ctx.clone(), PIN_STRING, text.clone())?;
+        self.output(ctx.clone(), PIN_STRING, text.clone()).await?;
 
         let out_doc = AgentValue::object(hashmap! {
             "path".into() => AgentValue::string(path.to_string_lossy().to_string()),
             "text".into() => text,
         });
-        self.try_output(ctx, PIN_DOC, out_doc)
+        self.output(ctx, PIN_DOC, out_doc).await
     }
 }
 
@@ -249,6 +249,6 @@ impl AsAgent for WriteTextFileAgent {
             AgentError::InvalidValue(format!("Failed to write file {}: {}", path.display(), e))
         })?;
 
-        self.try_output(ctx, PIN_DATA, value)
+        self.output(ctx, PIN_DATA, value).await
     }
 }

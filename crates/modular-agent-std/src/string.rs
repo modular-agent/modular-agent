@@ -45,9 +45,9 @@ impl AsAgent for IsStringAgent {
         value: AgentValue,
     ) -> Result<(), AgentError> {
         if value.is_string() {
-            self.try_output(ctx, PIN_T, value)
+            self.output(ctx, PIN_T, value).await
         } else {
-            self.try_output(ctx, PIN_F, value)
+            self.output(ctx, PIN_F, value).await
         }
     }
 }
@@ -83,9 +83,9 @@ impl AsAgent for IsEmptyStringAgent {
             false
         };
         if is_empty {
-            self.try_output(ctx, PIN_T, value)
+            self.output(ctx, PIN_T, value).await
         } else {
-            self.try_output(ctx, PIN_F, value)
+            self.output(ctx, PIN_F, value).await
         }
     }
 }
@@ -148,9 +148,9 @@ impl AsAgent for StringJoinAgent {
             out = out.replace("\\r", "\r");
             out = out.replace("\\\\", "\\");
             let out_value = AgentValue::string(out);
-            self.try_output(ctx, PIN_STRING, out_value)
+            self.output(ctx, PIN_STRING, out_value).await
         } else {
-            self.try_output(ctx, PIN_STRING, value)
+            self.output(ctx, PIN_STRING, value).await
         }
     }
 }
@@ -223,7 +223,8 @@ impl AsAgent for StringLengthSplitAgent {
             }
             start = next_start;
         }
-        self.try_output(ctx, PIN_STRINGS, AgentValue::array(out.into()))
+        self.output(ctx, PIN_STRINGS, AgentValue::array(out.into()))
+            .await
     }
 }
 
@@ -274,14 +275,15 @@ impl AsAgent for TemplateStringAgent {
                 })?;
                 out_arr.push(rendered_string.into());
             }
-            self.try_output(ctx, PIN_STRING, AgentValue::array(out_arr.into()))
+            self.output(ctx, PIN_STRING, AgentValue::array(out_arr.into()))
+                .await
         } else {
             let data = json!({"value": value});
             let rendered_string = reg.render_template(&template, &data).map_err(|e| {
                 AgentError::InvalidValue(format!("Failed to render template: {}", e))
             })?;
             let out_value = AgentValue::string(rendered_string);
-            self.try_output(ctx, PIN_STRING, out_value)
+            self.output(ctx, PIN_STRING, out_value).await
         }
     }
 }
@@ -333,14 +335,15 @@ impl AsAgent for TemplateTextAgent {
                 })?;
                 out_arr.push(rendered_string.into());
             }
-            self.try_output(ctx, PIN_STRING, AgentValue::array(out_arr.into()))
+            self.output(ctx, PIN_STRING, AgentValue::array(out_arr.into()))
+                .await
         } else {
             let data = json!({"value": value});
             let rendered_string = reg.render_template(&template, &data).map_err(|e| {
                 AgentError::InvalidValue(format!("Failed to render template: {}", e))
             })?;
             let out_value = AgentValue::string(rendered_string);
-            self.try_output(ctx, PIN_STRING, out_value)
+            self.output(ctx, PIN_STRING, out_value).await
         }
     }
 }
@@ -384,14 +387,15 @@ impl AsAgent for TemplateArrayAgent {
             let rendered_string = reg.render_template(&template, &value).map_err(|e| {
                 AgentError::InvalidValue(format!("Failed to render template: {}", e))
             })?;
-            self.try_output(ctx, PIN_STRING, AgentValue::string(rendered_string))
+            self.output(ctx, PIN_STRING, AgentValue::string(rendered_string))
+                .await
         } else {
             let d = AgentValue::array(vector![value.clone()]);
             let rendered_string = reg.render_template(&template, &d).map_err(|e| {
                 AgentError::InvalidValue(format!("Failed to render template: {}", e))
             })?;
             let out_value = AgentValue::string(rendered_string);
-            self.try_output(ctx, PIN_STRING, out_value)
+            self.output(ctx, PIN_STRING, out_value).await
         }
     }
 }

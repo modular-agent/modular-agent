@@ -79,7 +79,7 @@ impl AsAgent for SequenceAgent {
     ) -> Result<(), AgentError> {
         for i in 0..self.n {
             let out_pin = format!("out{}", i + 1);
-            self.try_output(ctx.clone(), out_pin, value.clone())?;
+            self.output(ctx.clone(), out_pin, value.clone()).await?;
         }
         Ok(())
     }
@@ -256,7 +256,7 @@ impl AsAgent for SyncAgent {
                 // Output sequentially
                 for (i, val_opt) in entry.values.into_iter().enumerate() {
                     if let Some(val) = val_opt {
-                        self.try_output(ctx.clone(), &self.output_pins[i], val)?;
+                        self.output(ctx.clone(), &self.output_pins[i], val).await?;
                     }
                 }
             }
@@ -274,7 +274,7 @@ impl AsAgent for SyncAgent {
                 .collect();
 
             for (i, val) in ready_values.into_iter().enumerate() {
-                self.try_output(ctx.clone(), &self.output_pins[i], val)?;
+                self.output(ctx.clone(), &self.output_pins[i], val).await?;
             }
         }
 

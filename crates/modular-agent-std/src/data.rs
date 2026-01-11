@@ -97,7 +97,7 @@ impl AsAgent for GetValueAgent {
             _ => AgentValue::Unit,
         };
 
-        self.try_output(ctx, PIN_VALUE, output_value)
+        self.output(ctx, PIN_VALUE, output_value).await
     }
 }
 
@@ -162,7 +162,7 @@ impl AsAgent for SetValueAgent {
         }
 
         set_nested_value(&mut value, &self.target_keys, self.target_value.clone());
-        self.try_output(ctx, PIN_VALUE, value)
+        self.output(ctx, PIN_VALUE, value).await
     }
 }
 
@@ -223,7 +223,7 @@ impl AsAgent for ToObjectAgent {
         let mut new_value = AgentValue::object_default();
         set_nested_value(&mut new_value, &self.target_keys, value);
 
-        self.try_output(ctx, PIN_VALUE, new_value)
+        self.output(ctx, PIN_VALUE, new_value).await
     }
 }
 
@@ -254,7 +254,7 @@ impl AsAgent for ToJsonAgent {
     ) -> Result<(), AgentError> {
         let json = serde_json::to_string_pretty(&value)
             .map_err(|e| AgentError::InvalidValue(e.to_string()))?;
-        self.try_output(ctx, PIN_JSON, AgentValue::string(json))?;
+        self.output(ctx, PIN_JSON, AgentValue::string(json)).await?;
         Ok(())
     }
 }
@@ -290,7 +290,7 @@ impl AsAgent for FromJsonAgent {
         let json_value: serde_json::Value =
             serde_json::from_str(s).map_err(|e| AgentError::InvalidValue(e.to_string()))?;
         let value = AgentValue::from_json(json_value)?;
-        self.try_output(ctx, PIN_VALUE, value)?;
+        self.output(ctx, PIN_VALUE, value).await?;
         Ok(())
     }
 }
@@ -589,7 +589,7 @@ impl AsAgent for ZipToObjectAgent {
                     .map(|(k, v)| (k.clone(), v))
                     .collect();
 
-                return self.try_output(ctx, PIN_OBJECT, AgentValue::Object(map));
+                return self.output(ctx, PIN_OBJECT, AgentValue::Object(map)).await;
             } else {
                 self.ctx_buffers.insert(ctx_key, entry);
             }
@@ -608,7 +608,7 @@ impl AsAgent for ZipToObjectAgent {
                 .map(|(k, q)| (k.clone(), q.pop_front().unwrap()))
                 .collect();
 
-            self.try_output(ctx, PIN_OBJECT, AgentValue::Object(map))
+            self.output(ctx, PIN_OBJECT, AgentValue::Object(map)).await
         } else {
             Ok(())
         }

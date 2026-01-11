@@ -58,7 +58,8 @@ impl AsAgent for CounterAgent {
             self.count += 1;
         }
         self.set_config(DISPLAY_COUNT.to_string(), AgentValue::integer(self.count))?;
-        self.try_output(ctx, PIN_COUNT, AgentValue::integer(self.count))?;
+        self.output(ctx, PIN_COUNT, AgentValue::integer(self.count))
+            .await?;
         self.emit_config_updated(DISPLAY_COUNT, AgentValue::integer(self.count));
 
         Ok(())

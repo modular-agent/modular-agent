@@ -46,9 +46,9 @@ impl AsAgent for IsArrayAgent {
         value: AgentValue,
     ) -> Result<(), AgentError> {
         if value.is_array() {
-            self.try_output(ctx, PIN_T, value)
+            self.output(ctx, PIN_T, value).await
         } else {
-            self.try_output(ctx, PIN_F, value)
+            self.output(ctx, PIN_F, value).await
         }
     }
 }
@@ -86,9 +86,9 @@ impl AsAgent for IsEmptyArrayAgent {
             }
         }
         if is_empty {
-            self.try_output(ctx, PIN_T, value)
+            self.output(ctx, PIN_T, value).await
         } else {
-            self.try_output(ctx, PIN_F, value)
+            self.output(ctx, PIN_F, value).await
         }
     }
 }
@@ -125,7 +125,7 @@ impl AsAgent for ArrayLengthAgent {
         } else {
             1
         };
-        self.try_output(ctx, PIN_VALUE, AgentValue::integer(length))
+        self.output(ctx, PIN_VALUE, AgentValue::integer(length)).await
     }
 }
 
@@ -158,14 +158,14 @@ impl AsAgent for ArrayFirstAgent {
         match value {
             AgentValue::Array(mut arr) => {
                 if let Some(first_item) = arr.pop_front() {
-                    self.try_output(ctx, PIN_VALUE, first_item)
+                    self.output(ctx, PIN_VALUE, first_item).await
                 } else {
                     Err(AgentError::InvalidValue(
                         "Input array is empty, no first item".into(),
                     ))
                 }
             }
-            other => self.try_output(ctx, PIN_VALUE, other),
+            other => self.output(ctx, PIN_VALUE, other).await,
         }
     }
 }
@@ -198,12 +198,12 @@ impl AsAgent for ArrayRestAgent {
     ) -> Result<(), AgentError> {
         if let Some(mut arr) = value.into_array() {
             if arr.is_empty() {
-                return self.try_output(ctx, PIN_ARRAY, AgentValue::array_default());
+                return self.output(ctx, PIN_ARRAY, AgentValue::array_default()).await;
             }
             arr.pop_front();
-            self.try_output(ctx, PIN_ARRAY, AgentValue::array(arr))
+            self.output(ctx, PIN_ARRAY, AgentValue::array(arr)).await
         } else {
-            self.try_output(ctx, PIN_ARRAY, AgentValue::array_default())
+            self.output(ctx, PIN_ARRAY, AgentValue::array_default()).await
         }
     }
 }
@@ -237,14 +237,14 @@ impl AsAgent for ArrayLastAgent {
         match value {
             AgentValue::Array(mut arr) => {
                 if let Some(last_item) = arr.pop_back() {
-                    self.try_output(ctx, PIN_VALUE, last_item)
+                    self.output(ctx, PIN_VALUE, last_item).await
                 } else {
                     Err(AgentError::InvalidValue(
                         "Input array is empty, no last item".into(),
                     ))
                 }
             }
-            other => self.try_output(ctx, PIN_VALUE, other),
+            other => self.output(ctx, PIN_VALUE, other).await,
         }
     }
 }
@@ -291,7 +291,7 @@ impl AsAgent for ArrayNthAgent {
         match value {
             AgentValue::Array(arr) => {
                 if let Some(item) = arr.get(n) {
-                    self.try_output(ctx, PIN_VALUE, item.clone())
+                    self.output(ctx, PIN_VALUE, item.clone()).await
                 } else {
                     Err(AgentError::InvalidValue(format!(
                         "Input array length {} is less than n+1={}",
@@ -302,7 +302,7 @@ impl AsAgent for ArrayNthAgent {
             }
             other => {
                 if n == 0 {
-                    self.try_output(ctx, PIN_VALUE, other)
+                    self.output(ctx, PIN_VALUE, other).await
                 } else {
                     Err(AgentError::InvalidValue(
                         "Input is not an array and n != 0".into(),
@@ -349,19 +349,19 @@ impl AsAgent for ArrayTakeAgent {
             .unwrap_or(0);
         if n <= 0 {
             // output empty array
-            return self.try_output(ctx, PIN_ARRAY, AgentValue::array_default());
+            return self.output(ctx, PIN_ARRAY, AgentValue::array_default()).await;
         }
         let n = n as usize;
 
         if value.is_array() {
             let arr = value.as_array().unwrap();
             if n >= arr.len() {
-                return self.try_output(ctx, PIN_ARRAY, value);
+                return self.output(ctx, PIN_ARRAY, value).await;
             }
             let taken_items = arr.take(n);
-            self.try_output(ctx, PIN_ARRAY, AgentValue::array(taken_items))
+            self.output(ctx, PIN_ARRAY, AgentValue::array(taken_items)).await
         } else {
-            self.try_output(ctx, PIN_ARRAY, AgentValue::array(vector![value]))
+            self.output(ctx, PIN_ARRAY, AgentValue::array(vector![value])).await
         }
     }
 }
@@ -396,12 +396,12 @@ impl AsAgent for MapAgent {
                 let n = arr.len();
                 for (i, item) in arr.into_iter().enumerate() {
                     let c = ctx.push_map_frame(i, n)?;
-                    self.try_output(c, PIN_VALUE, item)?;
+                    self.output(c, PIN_VALUE, item).await?;
                 }
             }
             other => {
                 let c = ctx.push_map_frame(0, 1)?;
-                self.try_output(c, PIN_VALUE, other)?;
+                self.output(c, PIN_VALUE, other).await?;
             }
         }
         Ok(())
@@ -460,7 +460,7 @@ impl AsAgent for CollectAgent {
         // Check for map frame
         // If not within a map, pass the value through as-is.
         let Some((idx, n)) = ctx.current_map_frame()? else {
-            return self.try_output(ctx, PIN_ARRAY, value);
+            return self.output(ctx, PIN_ARRAY, value).await;
         };
 
         // Detect context switch and flush processing
@@ -514,7 +514,7 @@ impl AsAgent for CollectAgent {
 
             // Pop one map frame and output
             let next_ctx = ctx.pop_map_frame()?;
-            self.try_output(next_ctx, PIN_ARRAY, AgentValue::array(arr))
+            self.output(next_ctx, PIN_ARRAY, AgentValue::array(arr)).await
         } else {
             // Not yet complete, keep waiting
             Ok(())
@@ -723,7 +723,7 @@ impl AsAgent for ZipToArrayAgent {
                     .map(|v| v.unwrap())
                     .collect();
 
-                return self.try_output(ctx, PIN_ARRAY, AgentValue::array(arr));
+                return self.output(ctx, PIN_ARRAY, AgentValue::array(arr)).await;
             }
 
             return Ok(());
@@ -739,7 +739,7 @@ impl AsAgent for ZipToArrayAgent {
                 .map(|q| q.pop_front().unwrap())
                 .collect();
 
-            self.try_output(ctx, PIN_ARRAY, AgentValue::array(arr))
+            self.output(ctx, PIN_ARRAY, AgentValue::array(arr)).await
         } else {
             Ok(())
         }

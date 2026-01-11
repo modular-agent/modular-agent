@@ -39,7 +39,7 @@ impl AsAgent for ToYamlAgent {
     ) -> Result<(), AgentError> {
         let yaml = serde_yaml_ng::to_string(&value)
             .map_err(|e| AgentError::InvalidValue(e.to_string()))?;
-        self.try_output(ctx, PIN_YAML, AgentValue::string(yaml))?;
+        self.output(ctx, PIN_YAML, AgentValue::string(yaml)).await?;
         Ok(())
     }
 }
@@ -75,7 +75,7 @@ impl AsAgent for FromYamlAgent {
         let v: serde_json::Value =
             serde_yaml_ng::from_str(s).map_err(|e| AgentError::InvalidValue(e.to_string()))?;
         let value = AgentValue::from_json(v)?;
-        self.try_output(ctx, PIN_DATA, value)?;
+        self.output(ctx, PIN_DATA, value).await?;
         Ok(())
     }
 }

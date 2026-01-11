@@ -79,7 +79,7 @@ impl AsAgent for BooleanInputAgent {
         _value: AgentValue,
     ) -> Result<(), AgentError> {
         let value = self.configs()?.get(BOOLEAN)?;
-        self.try_output(ctx, BOOLEAN, value.clone())
+        self.output(ctx, BOOLEAN, value.clone()).await
     }
 }
 
@@ -118,7 +118,7 @@ impl AsAgent for IntegerInputAgent {
         _value: AgentValue,
     ) -> Result<(), AgentError> {
         let value = self.configs()?.get(INTEGER)?;
-        self.try_output(ctx, INTEGER, value.clone())
+        self.output(ctx, INTEGER, value.clone()).await
     }
 }
 
@@ -157,7 +157,7 @@ impl AsAgent for NumberInputAgent {
         _value: AgentValue,
     ) -> Result<(), AgentError> {
         let value = self.configs()?.get(NUMBER)?;
-        self.try_output(ctx, NUMBER, value.clone())
+        self.output(ctx, NUMBER, value.clone()).await
     }
 }
 
@@ -196,7 +196,7 @@ impl AsAgent for StringInputAgent {
         _value: AgentValue,
     ) -> Result<(), AgentError> {
         let value = self.configs()?.get(STRING)?;
-        self.try_output(ctx, STRING, value.clone())
+        self.output(ctx, STRING, value.clone()).await
     }
 }
 
@@ -235,7 +235,7 @@ impl AsAgent for TextInputAgent {
         _value: AgentValue,
     ) -> Result<(), AgentError> {
         let value = self.configs()?.get(TEXT)?;
-        self.try_output(ctx, TEXT, value.clone())
+        self.output(ctx, TEXT, value.clone()).await
     }
 }
 
@@ -274,6 +274,6 @@ impl AsAgent for ObjectInputAgent {
         _value: AgentValue,
     ) -> Result<(), AgentError> {
         let value = self.configs()?.get(OBJECT)?;
-        self.try_output(ctx, OBJECT, value.clone())
+        self.output(ctx, OBJECT, value.clone()).await
     }
 }
