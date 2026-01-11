@@ -2,7 +2,7 @@
   import EllipsisVerticalIcon from "@lucide/svelte/icons/ellipsis-vertical";
   import PlayIcon from "@lucide/svelte/icons/play";
   import SquareIcon from "@lucide/svelte/icons/square";
-  import { getAgentStreamSpec } from "tauri-plugin-askit-api";
+  import { addAgentStream, getAgentStreamSpec, uniqueStreamName } from "tauri-plugin-askit-api";
 
   import { Button } from "$lib/components/ui/button/index.js";
   import * as Dialog from "$lib/components/ui/dialog/index.js";
@@ -59,9 +59,9 @@
     e.preventDefault();
     const s = await getAgentStreamSpec(id);
     if (!s) return;
-    const new_id = await newStream(name);
+    const new_name = await uniqueStreamName(name);
+    const new_id = await addAgentStream(new_name, s);
     if (!new_id) return;
-    await updateStreamSpec(new_id, s);
     await reloadStreamInfos();
   }
 

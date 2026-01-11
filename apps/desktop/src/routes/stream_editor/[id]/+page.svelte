@@ -24,6 +24,7 @@
   import {
     addAgent,
     addAgentsAndChannels,
+    addAgentStream,
     addChannel,
     getAgentSpec,
     getAgentStreamSpec,
@@ -32,6 +33,7 @@
     removeChannel,
     startAgent,
     stopAgent,
+    uniqueStreamName,
     updateAgentSpec,
     updateAgentStreamSpec,
   } from "tauri-plugin-askit-api";
@@ -295,9 +297,9 @@
   async function onDuplicateStream() {
     const s = await getAgentStreamSpec(stream_id);
     if (!s) return;
-    const new_id = await newStream(data.flow.name);
+    const new_name = await uniqueStreamName(data.flow.name);
+    const new_id = await addAgentStream(new_name, s);
     if (new_id) {
-      await updateStreamSpec(new_id, s);
       goto(`/stream_editor/${new_id}`, { invalidateAll: true });
     }
   }
