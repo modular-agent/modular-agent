@@ -372,11 +372,7 @@ impl Tool for MCPTool {
         &self.info
     }
 
-    async fn call(
-        &mut self,
-        ctx: AgentContext,
-        args: AgentValue,
-    ) -> Result<AgentValue, AgentError> {
+    async fn call(&self, ctx: AgentContext, args: AgentValue) -> Result<AgentValue, AgentError> {
         self.tool_call(ctx, args).await
     }
 }

@@ -40,7 +40,7 @@ pub trait Tool {
     fn info(&self) -> &ToolInfo;
 
     /// Call the tool with the given context and arguments.
-    async fn call(&mut self, ctx: AgentContext, args: AgentValue)
+    async fn call(&self, ctx: AgentContext, args: AgentValue)
     -> Result<AgentValue, AgentError>;
 }
 
@@ -64,16 +64,14 @@ impl From<ToolInfo> for AgentValue {
 #[derive(Clone)]
 struct ToolEntry {
     info: ToolInfo,
-    tool: Arc<AsyncMutex<Box<dyn Tool + Send + Sync>>>,
+    tool: Arc<Box<dyn Tool + Send + Sync>>,
 }
 
 impl ToolEntry {
     fn new<T: Tool + Send + Sync + 'static>(tool: T) -> Self {
         Self {
             info: tool.info().clone(),
-            tool: Arc::new(AsyncMutex::new(
-                Box::new(tool) as Box<dyn Tool + Send + Sync>
-            )),
+            tool: Arc::new(Box::new(tool)),
         }
     }
 }
@@ -99,7 +97,7 @@ impl ToolRegistry {
         self.tools.remove(name);
     }
 
-    fn get_tool(&self, name: &str) -> Option<Arc<AsyncMutex<Box<dyn Tool + Send + Sync>>>> {
+    fn get_tool(&self, name: &str) -> Option<Arc<Box<dyn Tool + Send + Sync>>> {
         self.tools.get(name).map(|entry| entry.tool.clone())
     }
 }
@@ -158,7 +156,7 @@ pub fn list_tool_infos_patterns(patterns: &str) -> Result<Vec<ToolInfo>, regex::
 }
 
 /// Get a tool by name.
-pub fn get_tool(name: &str) -> Option<Arc<AsyncMutex<Box<dyn Tool + Send + Sync>>>> {
+pub fn get_tool(name: &str) -> Option<Arc<Box<dyn Tool + Send + Sync>>> {
     registry().read().unwrap().get_tool(name)
 }
 
@@ -177,8 +175,7 @@ pub async fn call_tool(
         return Err(AgentError::Other(format!("Tool '{}' not found", name)));
     };
 
-    let mut tool_guard = tool.lock().await;
-    tool_guard.call(ctx, args).await
+    tool.call(ctx, args).await
 }
 
 pub async fn call_tools(
@@ -415,7 +412,7 @@ impl Tool for StreamTool {
     }
 
     async fn call(
-        &mut self,
+        &self,
         ctx: AgentContext,
         args: AgentValue,
     ) -> Result<AgentValue, AgentError> {
