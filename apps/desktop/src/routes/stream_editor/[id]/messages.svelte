@@ -31,7 +31,6 @@
 
   let msgs = $derived.by(() => {
     let msgArray = Array.isArray(messages) ? messages : messages ? [messages] : [];
-    console.log("msgs", msgArray);
     return msgArray
       .map((msg) => {
         let role = msg.type || msg.role || "user";

@@ -48,7 +48,13 @@
   } from "$lib/agent";
   import FlowStatus from "$lib/components/flow-status.svelte";
   import { ScrollArea } from "$lib/components/ui/scroll-area/index.js";
-  import { importStream, newStream, updateStreamSpec } from "$lib/shared.svelte";
+  import {
+    importStream,
+    newStream,
+    startStream,
+    stopStream,
+    updateStreamSpec,
+  } from "$lib/shared.svelte";
   import type { AgentStreamNode, AgentStreamEdge } from "$lib/types";
 
   import type { PageProps } from "./$types";
@@ -246,6 +252,15 @@
       selectAllNodesAndEdges();
     });
 
+    hotkeys("ctrl+., command+.", (ev) => {
+      ev.preventDefault();
+      if (running) {
+        onStopStream();
+      } else {
+        onStartStream();
+      }
+    });
+
     return () => {
       hotkeys.unbind("ctrl+r");
       hotkeys.unbind("command+r");
@@ -259,6 +274,8 @@
       hotkeys.unbind("command+v");
       hotkeys.unbind("ctrl+a");
       hotkeys.unbind("command+a");
+      hotkeys.unbind("ctrl+.");
+      hotkeys.unbind("command+.");
     };
   });
 
@@ -305,6 +322,16 @@
     if (!file) return;
     const id = await importStream(file);
     goto(`/stream_editor/${id}`, { invalidateAll: true });
+  }
+
+  async function onStartStream() {
+    await startStream(stream_id);
+    running = true;
+  }
+
+  async function onStopStream() {
+    await stopStream(stream_id);
+    running = false;
   }
 
   const AGENT_DRAG_FORMAT = "application/agent-name";
@@ -465,7 +492,7 @@
     </div>
     <div class="flex flex-row items-center justify-center">
       <StreamName name={data.flow?.name} class="mr-4" />
-      <StreamActions {stream_id} bind:running />
+      <StreamActions {running} {onStartStream} {onStopStream} />
     </div>
     <div class="justify-self-end">
       <FlowStatus {running} run_on_start={data.flow?.run_on_start} />

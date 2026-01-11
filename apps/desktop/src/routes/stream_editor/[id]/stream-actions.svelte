@@ -3,23 +3,21 @@
   import SquareIcon from "@lucide/svelte/icons/square";
 
   import { Button } from "$lib/components/ui/button/index.js";
-  import { startStream, stopStream } from "$lib/shared.svelte";
 
   type Props = {
-    stream_id: string;
     running: boolean;
+    onStartStream?: () => Promise<void>;
+    onStopStream?: () => Promise<void>;
   };
 
-  let { stream_id, running = $bindable() }: Props = $props();
+  let { running, onStartStream, onStopStream }: Props = $props();
 
   async function handleStart() {
-    await startStream(stream_id);
-    running = true;
+    await onStartStream?.();
   }
 
   async function handleStop() {
-    await stopStream(stream_id);
-    running = false;
+    await onStopStream?.();
   }
 </script>
 
