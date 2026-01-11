@@ -50,6 +50,6 @@ impl AsAgent for FetchUrlAgent {
             .await
             .map_err(|e| AgentError::IoError(format!("HTTP Response Error: {}", e)))?;
 
-        self.try_output(ctx, PORT_TEXT, AgentValue::string(text))
+        self.output(ctx, PORT_TEXT, AgentValue::string(text)).await
     }
 }

@@ -45,14 +45,14 @@ impl AsAgent for HtmlToMarkdownAgent {
                 let markdown = html2markdown(html)?;
                 arr.push(AgentValue::string(markdown));
             }
-            return self.try_output(ctx, PORT_MARKDOWN, AgentValue::array(arr.into()));
+            return self.output(ctx, PORT_MARKDOWN, AgentValue::array(arr.into())).await;
         }
 
         let html = value.as_str().ok_or_else(|| {
             AgentError::InvalidValue("Input value for 'html' must be a string".to_string())
         })?;
         let markdown = html2markdown(html)?;
-        self.try_output(ctx, PORT_MARKDOWN, AgentValue::string(markdown))
+        self.output(ctx, PORT_MARKDOWN, AgentValue::string(markdown)).await
     }
 }
 

@@ -57,18 +57,24 @@ impl AsAgent for HtmlScraperAgent {
                     .collect();
                 arr.extend(selected);
             }
-            return self.try_output(ctx, PORT_HTML, AgentValue::array(arr.into()));
+            return self
+                .output(ctx, PORT_HTML, AgentValue::array(arr.into()))
+                .await;
         }
 
         let html = value.as_str().ok_or_else(|| {
             AgentError::InvalidValue("Input value for 'html' must be a string".to_string())
         })?;
 
-        let document = Html::parse_document(html);
-        let selected: Vec<AgentValue> = document
-            .select(&selector)
-            .map(|elem| AgentValue::string(elem.html()))
-            .collect();
-        self.try_output(ctx, PORT_HTML, AgentValue::array(selected.into()))
+        let selected = {
+            let document = Html::parse_document(html);
+            let selected: Vec<AgentValue> = document
+                .select(&selector)
+                .map(|elem| AgentValue::string(elem.html()))
+                .collect();
+            selected.clone()
+        };
+        self.output(ctx, PORT_HTML, AgentValue::array(selected.into()))
+            .await
     }
 }

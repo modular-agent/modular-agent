@@ -110,14 +110,14 @@ impl AsAgent for FetchYtTranscriptAgent {
             text.push(' ');
         }
 
-        self.try_output(
+        self.output(
             ctx.clone(),
             PORT_TRANSCRIPT,
             AgentValue::from_serialize(&transcript).map_err(|e| {
                 AgentError::IoError(format!("Transcript Serialization Error: {}", e))
             })?,
-        )?;
+        ).await?;
 
-        self.try_output(ctx, PORT_TEXT, text.into())
+        self.output(ctx, PORT_TEXT, text.into()).await
     }
 }
