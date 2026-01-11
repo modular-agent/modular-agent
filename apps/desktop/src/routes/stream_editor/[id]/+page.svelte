@@ -223,36 +223,42 @@
   // shortcuts
 
   onMount(() => {
-    hotkeys("ctrl+r", (event) => {
+    hotkeys("ctrl+r, command+r", (event) => {
       event.preventDefault();
     });
 
-    hotkeys("ctrl+s", (event) => {
+    hotkeys("ctrl+s, command+s", (event) => {
       event.preventDefault();
       onSaveStream();
     });
 
-    hotkeys("ctrl+x", () => {
+    hotkeys("ctrl+x, command+x", () => {
       /* await */ cutNodesAndEdges();
     });
-    hotkeys("ctrl+c", () => {
+    hotkeys("ctrl+c, command+c", () => {
       copyNodesAndEdges();
     });
-    hotkeys("ctrl+v", () => {
+    hotkeys("ctrl+v, command+v", () => {
       pasteNodesAndEdges();
     });
-    hotkeys("ctrl+a", (ev) => {
+    hotkeys("ctrl+a, command+a", (ev) => {
       ev.preventDefault();
       selectAllNodesAndEdges();
     });
 
     return () => {
       hotkeys.unbind("ctrl+r");
+      hotkeys.unbind("command+r");
       hotkeys.unbind("ctrl+s");
+      hotkeys.unbind("command+s");
       hotkeys.unbind("ctrl+x");
+      hotkeys.unbind("command+x");
       hotkeys.unbind("ctrl+c");
+      hotkeys.unbind("command+c");
       hotkeys.unbind("ctrl+v");
+      hotkeys.unbind("command+v");
       hotkeys.unbind("ctrl+a");
+      hotkeys.unbind("command+a");
     };
   });
 
@@ -470,7 +476,7 @@
     class="flex-1 w-full"
     colorMode={(coreSettings.color_mode as "light" | "dark" | "system") || "system"}
     connectionRadius={38}
-    deleteKey={["Delete"]}
+    deleteKey={["Delete", "Backspace"]}
     bind:edges
     initialViewport={data.flow?.viewport!}
     maxZoom={2}
