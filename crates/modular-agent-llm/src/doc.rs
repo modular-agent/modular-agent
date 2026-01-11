@@ -59,21 +59,21 @@ impl AsAgent for NFKCAgent {
         if pin == PIN_STRING {
             let s = value.as_str().unwrap_or("");
             if s.is_empty() {
-                return self.try_output(ctx.clone(), PIN_STRING, value);
+                return self.output(ctx.clone(), PIN_STRING, value).await;
             }
             let nfkc_text = self
                 .normalizer
                 .as_ref()
                 .map(|n| n.normalize(s))
                 .unwrap_or_default();
-            return self.try_output(ctx.clone(), PIN_STRING, AgentValue::string(nfkc_text));
+            return self.output(ctx.clone(), PIN_STRING, AgentValue::string(nfkc_text)).await;
         }
 
         if pin == PIN_DOC {
             if value.is_object() {
                 let text = value.get_str("text").unwrap_or_default();
                 if text.is_empty() {
-                    return self.try_output(ctx.clone(), PIN_DOC, value);
+                    return self.output(ctx.clone(), PIN_DOC, value).await;
                 }
                 let nfkc_text = self
                     .normalizer
@@ -82,7 +82,7 @@ impl AsAgent for NFKCAgent {
                     .unwrap_or_default();
                 let mut output = value.clone();
                 output.set("text".to_string(), AgentValue::string(nfkc_text))?;
-                return self.try_output(ctx.clone(), PIN_DOC, output);
+                return self.output(ctx.clone(), PIN_DOC, output).await;
             } else {
                 return Err(AgentError::InvalidValue(
                     "Input must be an object with a text field".to_string(),
@@ -145,10 +145,10 @@ impl AsAgent for SplitTextAgent {
         if pin == PIN_STRING {
             let text = value.as_str().unwrap_or("");
             if text.is_empty() {
-                return self.try_output(ctx.clone(), PIN_CHUNKS, AgentValue::array_default());
+                return self.output(ctx.clone(), PIN_CHUNKS, AgentValue::array_default()).await;
             }
             let chunks = self.split_into_chunks(text, max_characters);
-            return self.try_output(ctx.clone(), PIN_CHUNKS, AgentValue::array(chunks));
+            return self.output(ctx.clone(), PIN_CHUNKS, AgentValue::array(chunks)).await;
         }
 
         if pin == PIN_DOC {
@@ -161,7 +161,7 @@ impl AsAgent for SplitTextAgent {
                 };
                 let mut output = value.clone();
                 output.set("chunks".to_string(), AgentValue::array(chunks))?;
-                return self.try_output(ctx.clone(), PIN_DOC, output);
+                return self.output(ctx.clone(), PIN_DOC, output).await;
             }
         }
 
@@ -253,11 +253,11 @@ impl AsAgent for SplitTextByTokensAgent {
         if pin == PIN_STRING {
             let text = value.as_str().unwrap_or("");
             if text.is_empty() {
-                return self.try_output(ctx.clone(), PIN_CHUNKS, AgentValue::array_default());
+                return self.output(ctx.clone(), PIN_CHUNKS, AgentValue::array_default()).await;
             }
 
             let chunks = self.split_into_chunks(text, max_tokens, &tokenizer_model)?;
-            return self.try_output(ctx.clone(), PIN_CHUNKS, AgentValue::array(chunks));
+            return self.output(ctx.clone(), PIN_CHUNKS, AgentValue::array(chunks)).await;
         }
 
         if pin == PIN_DOC {
@@ -269,7 +269,7 @@ impl AsAgent for SplitTextByTokensAgent {
             };
             let mut output = value.clone();
             output.set("chunks".to_string(), AgentValue::array(chunks))?;
-            return self.try_output(ctx.clone(), PIN_DOC, output);
+            return self.output(ctx.clone(), PIN_DOC, output).await;
         }
 
         Err(AgentError::InvalidPin(pin))

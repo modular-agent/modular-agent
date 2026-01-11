@@ -189,10 +189,11 @@ impl AsAgent for OllamaCompletionAgent {
         }
 
         let message = Message::assistant(res.response.clone());
-        self.try_output(ctx.clone(), PIN_MESSAGE, message.into())?;
+        self.output(ctx.clone(), PIN_MESSAGE, message.into())
+            .await?;
 
         let out_response = AgentValue::from_serialize(&res)?;
-        self.try_output(ctx, PIN_RESPONSE, out_response)?;
+        self.output(ctx, PIN_RESPONSE, out_response).await?;
 
         Ok(())
     }
@@ -351,10 +352,11 @@ impl AsAgent for OllamaChatAgent {
                 }
                 message.id = Some(id.clone());
 
-                self.try_output(ctx.clone(), PIN_MESSAGE, message.clone().into())?;
+                self.output(ctx.clone(), PIN_MESSAGE, message.clone().into())
+                    .await?;
 
                 let out_response = AgentValue::from_serialize(&res)?;
-                self.try_output(ctx.clone(), PIN_RESPONSE, out_response)?;
+                self.output(ctx.clone(), PIN_RESPONSE, out_response).await?;
 
                 if res.done {
                     break;
@@ -371,10 +373,11 @@ impl AsAgent for OllamaChatAgent {
             let mut message: Message = message_from_ollama(res.message.clone());
             message.id = Some(id.clone());
 
-            self.try_output(ctx.clone(), PIN_MESSAGE, message.clone().into())?;
+            self.output(ctx.clone(), PIN_MESSAGE, message.clone().into())
+                .await?;
 
             let out_response = AgentValue::from_serialize(&res)?;
-            self.try_output(ctx.clone(), PIN_RESPONSE, out_response)?;
+            self.output(ctx.clone(), PIN_RESPONSE, out_response).await?;
 
             return Ok(());
         }
@@ -461,11 +464,13 @@ impl AsAgent for OllamaEmbeddingsAgent {
                     "Expected exactly one embedding for single string input".to_string(),
                 ));
             }
-            return self.try_output(
-                ctx.clone(),
-                PIN_EMBEDDING,
-                AgentValue::tensor(embeddings.into_iter().next().unwrap()),
-            );
+            return self
+                .output(
+                    ctx.clone(),
+                    PIN_EMBEDDING,
+                    AgentValue::tensor(embeddings.into_iter().next().unwrap()),
+                )
+                .await;
         }
 
         if pin == PIN_DOC {
@@ -479,7 +484,7 @@ impl AsAgent for OllamaEmbeddingsAgent {
                 // input is chunks
 
                 if chunks.is_empty() {
-                    return self.try_output(ctx.clone(), PIN_DOC, value);
+                    return self.output(ctx.clone(), PIN_DOC, value).await;
                 }
 
                 let first_chunk = &chunks[0];
@@ -519,7 +524,7 @@ impl AsAgent for OllamaEmbeddingsAgent {
                     }
                 }
                 if inputs.is_empty() {
-                    return self.try_output(ctx.clone(), PIN_DOC, value);
+                    return self.output(ctx.clone(), PIN_DOC, value).await;
                 }
 
                 let embeddings = self
@@ -541,19 +546,19 @@ impl AsAgent for OllamaEmbeddingsAgent {
                     "embeddings".to_string(),
                     AgentValue::array(embedding_values_with_offsets),
                 )?;
-                return self.try_output(ctx.clone(), PIN_DOC, output);
+                return self.output(ctx.clone(), PIN_DOC, output).await;
             }
 
             let text = value.get_str("text").unwrap_or("");
             if text.is_empty() {
-                return self.try_output(ctx.clone(), PIN_DOC, value);
+                return self.output(ctx.clone(), PIN_DOC, value).await;
             }
             let input: EmbeddingsInput = text.into();
             let embeddings = self
                 .generate_embeddings(input, config_model.to_string(), model_options)
                 .await?;
             if embeddings.is_empty() {
-                return self.try_output(ctx.clone(), PIN_DOC, value);
+                return self.output(ctx.clone(), PIN_DOC, value).await;
             }
             let offsets = vec![0i64];
             let embedding_values_with_offsets: Vector<AgentValue> = offsets
@@ -571,7 +576,7 @@ impl AsAgent for OllamaEmbeddingsAgent {
                 "embeddings".to_string(),
                 AgentValue::array(embedding_values_with_offsets),
             )?;
-            return self.try_output(ctx.clone(), PIN_DOC, output);
+            return self.output(ctx.clone(), PIN_DOC, output).await;
         }
 
         Err(AgentError::InvalidPin(pin))
@@ -612,7 +617,7 @@ impl AsAgent for OllamaListLocalModelsAgent {
             .map_err(|e| AgentError::IoError(format!("Ollama Error: {}", e)))?;
         let model_list = AgentValue::from_serialize(&model_list)?;
 
-        self.try_output(ctx.clone(), PIN_MODEL_LIST, model_list)?;
+        self.output(ctx.clone(), PIN_MODEL_LIST, model_list).await?;
         Ok(())
     }
 }
@@ -656,7 +661,7 @@ impl AsAgent for OllamaShowModelInfoAgent {
             .map_err(|e| AgentError::IoError(format!("Ollama Error: {}", e)))?;
         let model_info = AgentValue::from_serialize(&model_info)?;
 
-        self.try_output(ctx.clone(), PIN_MODEL_INFO, model_info)?;
+        self.output(ctx.clone(), PIN_MODEL_INFO, model_info).await?;
         Ok(())
     }
 }

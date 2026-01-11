@@ -196,10 +196,10 @@ impl AsAgent for OpenAICompletionAgent {
             .map_err(|e| AgentError::IoError(format!("OpenAI Error: {}", e)))?;
 
         let message = Message::assistant(res.choices[0].text.clone());
-        self.try_output(ctx.clone(), PIN_MESSAGE, message.into())?;
+        self.output(ctx.clone(), PIN_MESSAGE, message.into()).await?;
 
         let out_response = AgentValue::from_serialize(&res)?;
-        self.try_output(ctx, PIN_RESPONSE, out_response)?;
+        self.output(ctx, PIN_RESPONSE, out_response).await?;
 
         Ok(())
     }
@@ -368,10 +368,10 @@ impl AsAgent for OpenAIChatAgent {
                     message.tool_calls = Some(tool_calls.clone().into());
                 }
 
-                self.try_output(ctx.clone(), PIN_MESSAGE, message.clone().into())?;
+                self.output(ctx.clone(), PIN_MESSAGE, message.clone().into()).await?;
 
                 let out_response = AgentValue::from_serialize(&res)?;
-                self.try_output(ctx.clone(), PIN_RESPONSE, out_response)?;
+                self.output(ctx.clone(), PIN_RESPONSE, out_response).await?;
             }
 
             return Ok(());
@@ -386,10 +386,10 @@ impl AsAgent for OpenAIChatAgent {
                 let mut message: Message = message_from_openai_msg(c.message.clone());
                 message.id = Some(id.clone());
 
-                self.try_output(ctx.clone(), PIN_MESSAGE, message.clone().into())?;
+                self.output(ctx.clone(), PIN_MESSAGE, message.clone().into()).await?;
 
                 let out_response = AgentValue::from_serialize(&res)?;
-                self.try_output(ctx.clone(), PIN_RESPONSE, out_response)?;
+                self.output(ctx.clone(), PIN_RESPONSE, out_response).await?;
             }
 
             return Ok(());
@@ -470,7 +470,7 @@ impl AsAgent for OpenAIEmbeddingsAgent {
             .map_err(|e| AgentError::IoError(format!("OpenAI Error: {}", e)))?;
 
         let embedding = AgentValue::tensor(res.data[0].embedding.clone());
-        self.try_output(ctx.clone(), PIN_EMBEDDINGS, embedding)?;
+        self.output(ctx.clone(), PIN_EMBEDDINGS, embedding).await?;
 
         Ok(())
     }
@@ -630,7 +630,7 @@ impl AsAgent for OpenAIEmbeddingsAgent {
 //                     }
 //                     responses::ResponseEvent::ResponseCompleted(_) => {
 //                         let out_response = AgentValue::from_serialize(&res_event)?;
-//                         self.try_output(ctx.clone(), PIN_RESPONSE, out_response)?;
+//                         self.output(ctx.clone(), PIN_RESPONSE, out_response).await?;
 //                         break;
 //                     }
 //                     _ => {}
@@ -641,10 +641,10 @@ impl AsAgent for OpenAIEmbeddingsAgent {
 //                     message.tool_calls = Some(tool_calls.clone().into());
 //                 }
 
-//                 self.try_output(ctx.clone(), PIN_MESSAGE, message.clone().into())?;
+//                 self.output(ctx.clone(), PIN_MESSAGE, message.clone().into()).await?;
 
 //                 let out_response = AgentValue::from_serialize(&res_event)?;
-//                 self.try_output(ctx.clone(), PIN_RESPONSE, out_response)?;
+//                 self.output(ctx.clone(), PIN_RESPONSE, out_response).await?;
 //             }
 
 //             return Ok(());
@@ -659,10 +659,10 @@ impl AsAgent for OpenAIEmbeddingsAgent {
 //             let mut res_message: Message = Message::assistant(get_output_text(&res)); // TODO: better conversion
 //             res_message.id = Some(res.id.clone());
 
-//             self.try_output(ctx.clone(), PIN_MESSAGE, res_message.clone().into())?;
+//             self.output(ctx.clone(), PIN_MESSAGE, res_message.clone().into()).await?;
 
 //             let out_response = AgentValue::from_serialize(&res)?;
-//             self.try_output(ctx.clone(), PIN_RESPONSE, out_response)?;
+//             self.output(ctx.clone(), PIN_RESPONSE, out_response).await?;
 
 //             return Ok(());
 //         }

@@ -44,7 +44,7 @@ impl AsAgent for AssistantMessageAgent {
         let message = self.configs()?.get_string(CONFIG_MESSAGE)?;
         let message = Message::assistant(message);
         let messages = append_message(value, message);
-        self.try_output(ctx, PIN_MESSAGES, messages)?;
+        self.output(ctx, PIN_MESSAGES, messages).await?;
         Ok(())
     }
 }
@@ -80,7 +80,7 @@ impl AsAgent for SystemMessageAgent {
         let message = self.configs()?.get_string(CONFIG_MESSAGE)?;
         let message = Message::system(message);
         let messages = prepend_message(value, message);
-        self.try_output(ctx, PIN_MESSAGES, messages)?;
+        self.output(ctx, PIN_MESSAGES, messages).await?;
         Ok(())
     }
 }
@@ -114,7 +114,7 @@ impl AsAgent for UserMessageAgent {
         let message = self.configs()?.get_string(CONFIG_MESSAGE)?;
         let message = Message::user(message);
         let messages = append_message(value, message);
-        self.try_output(ctx, PIN_MESSAGES, messages)?;
+        self.output(ctx, PIN_MESSAGES, messages).await?;
         Ok(())
     }
 }
@@ -229,28 +229,28 @@ impl AsAgent for PreambleAgent {
         };
 
         if self.prepended {
-            self.try_output(
+            return self.output(
                 ctx,
                 PIN_MESSAGES,
                 AgentValue::array(vector![message.into()]),
-            )?;
-            return Ok(());
+            )
+            .await;
         }
 
         self.prepended = true;
 
         let Some(preamble) = &self.preamble else {
-            self.try_output(
+            return self.output(
                 ctx,
                 PIN_MESSAGES,
                 AgentValue::array(vector![message.into()]),
-            )?;
-            return Ok(());
+            )
+            .await;
         };
 
         let mut messages = preamble.clone();
         messages.push_back(message.into());
-        self.try_output(ctx, PIN_MESSAGES, AgentValue::array(messages))?;
+        self.output(ctx, PIN_MESSAGES, AgentValue::array(messages)).await?;
 
         Ok(())
     }
@@ -296,7 +296,7 @@ impl AsAgent for MessagesAgent {
     ) -> Result<(), AgentError> {
         if pin == PIN_RESET {
             self.reset_messages()?;
-            self.try_output(ctx, PIN_MESSAGES, AgentValue::array_default())?;
+            self.output(ctx, PIN_MESSAGES, AgentValue::array_default()).await?;
             return Ok(());
         }
 
@@ -342,7 +342,7 @@ impl AsAgent for MessagesAgent {
 
         let arr = AgentValue::array(messages);
         self.set_config(CONFIG_MESSAGES.to_string(), arr.clone())?;
-        self.try_output(ctx, PIN_MESSAGES, arr)?;
+        self.output(ctx, PIN_MESSAGES, arr).await?;
 
         Ok(())
     }
@@ -380,7 +380,7 @@ impl AsAgent for MessagesForPromptAgent {
         let max_size = self.configs()?.get_integer_or_default(CONFIG_MAX_SIZE);
         if max_size <= 0 {
             // Just output the input messages
-            self.try_output(ctx, PIN_MESSAGES, value)?;
+            self.output(ctx, PIN_MESSAGES, value).await?;
             return Ok(());
         }
 
@@ -452,7 +452,7 @@ impl AsAgent for MessagesForPromptAgent {
         }
 
         selected_messages.reverse();
-        self.try_output(ctx, PIN_MESSAGES, selected_messages.into())?;
+        self.output(ctx, PIN_MESSAGES, selected_messages.into()).await?;
 
         Ok(())
     }

@@ -40,8 +40,7 @@ pub trait Tool {
     fn info(&self) -> &ToolInfo;
 
     /// Call the tool with the given context and arguments.
-    async fn call(&self, ctx: AgentContext, args: AgentValue)
-    -> Result<AgentValue, AgentError>;
+    async fn call(&self, ctx: AgentContext, args: AgentValue) -> Result<AgentValue, AgentError>;
 }
 
 impl From<ToolInfo> for AgentValue {
@@ -246,7 +245,7 @@ impl AsAgent for ListToolsAgent {
             .collect::<Vector<AgentValue>>();
         let tools_array = AgentValue::array(tools);
 
-        self.try_output(ctx, PIN_TOOLS, tools_array)?;
+        self.output(ctx, PIN_TOOLS, tools_array).await?;
 
         Ok(())
     }
@@ -411,11 +410,7 @@ impl Tool for StreamTool {
         &self.info
     }
 
-    async fn call(
-        &self,
-        ctx: AgentContext,
-        args: AgentValue,
-    ) -> Result<AgentValue, AgentError> {
+    async fn call(&self, ctx: AgentContext, args: AgentValue) -> Result<AgentValue, AgentError> {
         self.tool_call(ctx, args).await
     }
 }
@@ -469,7 +464,8 @@ impl AsAgent for CallToolMessageAgent {
 
         let resp_messages = call_tools(&ctx, &tool_calls).await?;
         for resp_msg in resp_messages {
-            self.try_output(ctx.clone(), PIN_MESSAGE, AgentValue::message(resp_msg))?;
+            self.output(ctx.clone(), PIN_MESSAGE, AgentValue::message(resp_msg))
+                .await?;
         }
         Ok(())
     }
@@ -513,7 +509,7 @@ impl AsAgent for CallToolAgent {
         dbg!(&tool_parameters);
 
         let resp = call_tool(ctx.clone(), tool_name, tool_parameters).await?;
-        self.try_output(ctx, PIN_VALUE, resp)?;
+        self.output(ctx, PIN_VALUE, resp).await?;
 
         Ok(())
     }

@@ -86,7 +86,7 @@ impl AsAgent for MCPToolsListAgent {
             ))
         })?;
 
-        self.try_output(ctx, PIN_VALUE, tools_value)?;
+        self.output(ctx, PIN_VALUE, tools_value).await?;
 
         Ok(())
     }
@@ -165,18 +165,19 @@ impl AsAgent for MCPCallAgent {
             .await
             .map_err(|e| AgentError::Other(format!("Failed to cancel MCP service: {e}")))?;
 
-        self.try_output(
+        self.output(
             ctx.clone(),
             PIN_VALUE,
             call_tool_result_to_agent_value(tool_result.clone())?,
-        )?;
+        )
+        .await?;
 
         let response = serde_json::to_string_pretty(&tool_result).map_err(|e| {
             AgentError::Other(format!(
                 "Failed to serialize tool result content to JSON: {e}"
             ))
         })?;
-        self.try_output(ctx, PIN_RESPONSE, AgentValue::string(response))?;
+        self.output(ctx, PIN_RESPONSE, AgentValue::string(response)).await?;
 
         Ok(())
     }
