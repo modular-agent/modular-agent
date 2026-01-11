@@ -26,18 +26,22 @@ pub(crate) fn get_agent_definitions<R: Runtime>(app: AppHandle<R>) -> AgentDefin
 // agent spec
 
 #[tauri::command]
-pub(crate) fn get_agent_spec<R: Runtime>(app: AppHandle<R>, agent_id: String) -> Option<AgentSpec> {
-    app.askit().get_agent_spec(&agent_id)
+pub(crate) async fn get_agent_spec<R: Runtime>(
+    app: AppHandle<R>,
+    agent_id: String,
+) -> Option<AgentSpec> {
+    app.askit().get_agent_spec(&agent_id).await
 }
 
 #[tauri::command]
-pub(crate) fn update_agent_spec<R: Runtime>(
+pub(crate) async fn update_agent_spec<R: Runtime>(
     app: AppHandle<R>,
     agent_id: String,
     value: Value,
 ) -> Result<()> {
     app.askit()
         .update_agent_spec(&agent_id, &value)
+        .await
         .map_err(Into::into)
 }
 
@@ -59,11 +63,11 @@ pub(crate) fn get_agent_stream_infos<R: Runtime>(
 }
 
 #[tauri::command]
-pub(crate) fn get_agent_stream_spec<R: Runtime>(
+pub(crate) async fn get_agent_stream_spec<R: Runtime>(
     app: AppHandle<R>,
     id: String,
 ) -> Option<AgentStreamSpec> {
-    app.askit().get_agent_stream_spec(&id)
+    app.askit().get_agent_stream_spec(&id).await
 }
 
 #[tauri::command]
@@ -210,13 +214,14 @@ pub(crate) async fn stop_agent<R: Runtime>(app: AppHandle<R>, agent_id: String) 
 // board commands
 
 #[tauri::command]
-pub(crate) fn write_board<R: Runtime>(
+pub(crate) async fn write_board<R: Runtime>(
     app: AppHandle<R>,
     board: String,
     message: String,
 ) -> Result<()> {
     app.askit()
         .write_board_value(board, AgentValue::string(message))
+        .await
         .map_err(Into::into)
 }
 
