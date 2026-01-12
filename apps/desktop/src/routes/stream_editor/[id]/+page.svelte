@@ -1,5 +1,6 @@
 <script lang="ts">
   import { getCurrentWindow } from "@tauri-apps/api/window";
+  import { writeText, readText } from "@tauri-apps/plugin-clipboard-manager";
   import { open } from "@tauri-apps/plugin-dialog";
 
   import { onMount } from "svelte";
@@ -121,13 +122,35 @@
 
   // cut, copy and paste
 
-  let copiedNodes = $state.raw<AgentSpec[]>([]);
-  let copiedEdges = $state.raw<ChannelSpec[]>([]);
-
   function selectedNodesAndEdges(): [AgentStreamNode[], AgentStreamEdge[]] {
     const selectedNodes = nodes.filter((node) => node.selected);
     const selectedEdges = edges.filter((edge) => edge.selected);
     return [selectedNodes, selectedEdges];
+  }
+
+  async function copySelected() {
+    const [selectedNodes, selectedEdges] = selectedNodesAndEdges();
+
+    const agents = (
+      await Promise.all(selectedNodes.map(async (node) => await getAgentSpec(node.id)))
+    ).filter((spec) => spec !== null);
+    const channels = selectedEdges.map((edge) => edgeToChannelSpec(edge));
+
+    const clipboardData = { agents, channels };
+    await writeText(JSON.stringify(clipboardData));
+  }
+
+  async function readCopied(): Promise<[AgentSpec[], ChannelSpec[]]> {
+    const text = await readText();
+    if (!text) {
+      return [[], []];
+    }
+    try {
+      const clipboardData = JSON.parse(text);
+      return [clipboardData.agents || [], clipboardData.channels || []];
+    } catch (e) {
+      return [[], []];
+    }
   }
 
   async function cutNodesAndEdges() {
@@ -135,10 +158,8 @@
     if (selectedNodes.length == 0 && selectedEdges.length == 0) {
       return;
     }
-    copiedNodes = (
-      await Promise.all(selectedNodes.map(async (node) => await getAgentSpec(node.id)))
-    ).filter((spec) => spec !== null);
-    copiedEdges = selectedEdges.map((edge) => edgeToChannelSpec(edge));
+
+    await copySelected();
 
     for (const edge of selectedEdges) {
       let ch = edgeToChannelSpec(edge);
@@ -153,13 +174,11 @@
 
   async function copyNodesAndEdges() {
     const [selectedNodes, selectedEdges] = selectedNodesAndEdges();
-    if (selectedNodes.length == 0) {
+    if (selectedNodes.length == 0 && selectedEdges.length == 0) {
       return;
     }
-    copiedNodes = (
-      await Promise.all(selectedNodes.map(async (node) => await getAgentSpec(node.id)))
-    ).filter((spec) => spec !== null);
-    copiedEdges = selectedEdges.map((edge) => edgeToChannelSpec(edge));
+
+    await copySelected();
   }
 
   async function pasteNodesAndEdges() {
@@ -174,17 +193,19 @@
       }
     });
 
-    if (copiedNodes.length == 0) {
+    const [copiedAgents, copiedChannels] = await readCopied();
+
+    if (copiedAgents.length == 0) {
       return;
     }
 
-    let [added_agents, added_edges] = await addAgentsAndChannels(
+    let [added_agents, added_channels] = await addAgentsAndChannels(
       stream_id,
-      copiedNodes,
-      copiedEdges,
+      copiedAgents,
+      copiedChannels,
     );
 
-    if (added_agents.length == 0 && added_edges.length == 0) return;
+    if (added_agents.length == 0 && added_channels.length == 0) return;
 
     let new_nodes = [];
     for (const a of added_agents) {
@@ -196,8 +217,8 @@
     }
 
     let new_edges = [];
-    for (const edge of added_edges) {
-      const new_edge = channelSpecToEdge(edge);
+    for (const ch of added_channels) {
+      const new_edge = channelSpecToEdge(ch);
       new_edge.selected = true;
       new_edges.push(new_edge);
     }

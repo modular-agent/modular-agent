@@ -6,8 +6,8 @@
     "linux"
   ],
   "permissions": [
-    "global-shortcut:default",
     "autostart:default",
+    "global-shortcut:default",
     "window-state:default"
   ]
 }

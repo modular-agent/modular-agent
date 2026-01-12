@@ -7,6 +7,9 @@
   ],
   "permissions": [
     "askit:default",
+    "clipboard-manager:default",
+    "clipboard-manager:allow-read-text",
+    "clipboard-manager:allow-write-text",
     "core:default",
     "core:window:allow-close",
     "core:window:allow-set-fullscreen",
