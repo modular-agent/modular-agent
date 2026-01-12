@@ -1,5 +1,7 @@
 import type { Edge, Node } from "@xyflow/svelte";
-import type { AgentSpec, Viewport } from "tauri-plugin-askit-api";
+import type { AgentSpec, AgentStreamInfo, Viewport } from "tauri-plugin-askit-api";
+
+import type Agent from "@/routes/settings/Agent.svelte";
 
 // Messages
 
@@ -31,7 +33,6 @@ export type AgentStreamFlow = {
   nodes: AgentStreamNode[];
   edges: AgentStreamEdge[];
   running: boolean;
-  run_on_start: boolean;
   viewport: Viewport | null;
 };
 
@@ -48,4 +49,9 @@ export type CoreSettings = {
   autostart?: boolean;
   color_mode?: string | null;
   shortcut_keys?: Record<string, string> | null;
+  auto_start_streams: string[];
+};
+
+export type AgentStreamInfoExt = AgentStreamInfo & {
+  run_on_start?: boolean;
 };

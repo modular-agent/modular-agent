@@ -6,7 +6,6 @@
     getCoreRowModel,
     getFilteredRowModel,
   } from "@tanstack/table-core";
-  import type { AgentStreamInfo } from "tauri-plugin-askit-api";
 
   import { goto } from "$app/navigation";
 
@@ -22,6 +21,7 @@
   import { Input } from "$lib/components/ui/input/index.js";
   import * as Table from "$lib/components/ui/table/index.js";
   import { newStream } from "$lib/shared.svelte";
+  import type { AgentStreamInfoExt } from "$lib/types";
 
   import StreamListActions from "./stream-list-actions.svelte";
   import StreamListName from "./stream-list-name.svelte";
@@ -37,7 +37,7 @@
   const ACTIONS_COL_WIDTH = "w-[140px]";
 
   type Props = {
-    streams: AgentStreamInfo[];
+    streams: AgentStreamInfoExt[];
   };
 </script>
 
@@ -47,7 +47,7 @@
   let columnFilters = $state<ColumnFiltersState>([]);
   let columnVisibility = $state<VisibilityState>({});
 
-  const columns: ColumnDef<AgentStreamInfo>[] = [
+  const columns: ColumnDef<AgentStreamInfoExt>[] = [
     {
       id: "name",
       header: "Name",

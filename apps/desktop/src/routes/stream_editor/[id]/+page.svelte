@@ -519,7 +519,7 @@
       <StreamActions {running} {onStartStream} {onStopStream} />
     </div>
     <div class="justify-self-end">
-      <FlowStatus {running} run_on_start={data.flow?.run_on_start} />
+      <FlowStatus {running} />
     </div>
   </header>
   <SvelteFlow

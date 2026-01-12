@@ -1,13 +1,12 @@
 <script lang="ts">
-  import { cn } from "$lib/utils.js";
-
   import CirclePlayIcon from "@lucide/svelte/icons/circle-play";
 
   import Badge from "$lib/components/ui/badge/badge.svelte";
+  import { cn } from "$lib/utils.js";
 
   type Props = {
     running: boolean;
-    run_on_start?: boolean;
+    run_on_start?: boolean | undefined;
     class?: string;
   };
 

@@ -3,10 +3,11 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { SvelteMap } from "svelte/reactivity";
 import { writable, type Writable } from "svelte/store";
 
-import type { AgentStreamInfo, AgentStreamSpec } from "tauri-plugin-askit-api";
+import type { AgentStreamSpec } from "tauri-plugin-askit-api";
 import { getAgentStreamInfos, updateAgentStreamSpec } from "tauri-plugin-askit-api";
 
 import {
+  getCoreSettings,
   importAgentStream,
   newAgentStream,
   removeAgentStream,
@@ -19,16 +20,24 @@ import type {
   AgentErrorMessage,
   AgentInMessage,
   AgentSpecUpdatedMessage,
+  AgentStreamInfoExt,
 } from "./types";
 
 // Agent Streams
 
-export const streamInfos = new SvelteMap<string, AgentStreamInfo>();
+export const streamInfos = new SvelteMap<string, AgentStreamInfoExt>();
 
 export async function reloadStreamInfos() {
-  const streams = await getAgentStreamInfos();
+  const streams = (await getAgentStreamInfos()) as AgentStreamInfoExt[];
+  const coreSettings = await getCoreSettings();
+  const auto_start_streams = coreSettings.auto_start_streams || [];
   streamInfos.clear();
-  streams.forEach((s) => streamInfos.set(s.id, s));
+  streams.forEach((s) => {
+    if (auto_start_streams.includes(s.name)) {
+      s.run_on_start = true;
+    }
+    streamInfos.set(s.id, s);
+  });
 }
 
 export async function newStream(name: string): Promise<string> {

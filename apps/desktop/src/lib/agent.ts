@@ -13,7 +13,10 @@ import {
 } from "tauri-plugin-askit-api";
 
 import type { AgentStreamFlow, AgentStreamEdge, AgentStreamNode, CoreSettings } from "./types";
-import { getCoreSettings as getCoreSettingsUtils } from "./utils";
+import {
+  getCoreSettings as getCoreSettingsUtils,
+  setCoreSettings as setCoreSettingsUtils,
+} from "./utils";
 
 export async function newAgentStream(name: string): Promise<string> {
   return await invoke("new_agent_stream_cmd", { name });
@@ -83,7 +86,6 @@ export function streamToFlow(info: AgentStreamInfo, spec: AgentStreamSpec): Agen
     nodes: nodes,
     edges: validEdges.map((ch) => channelSpecToEdge(ch)),
     running: info.running,
-    run_on_start: spec.run_on_start ?? false,
     viewport: spec.viewport,
   };
 }
@@ -180,6 +182,11 @@ let _globalConfigsMap: AgentConfigsMap | null = null;
 
 export function getCoreSettings(): CoreSettings {
   return _coreSettings!;
+}
+
+export async function setCoreSettings(newSettings: CoreSettings) {
+  _coreSettings = newSettings;
+  await setCoreSettingsUtils(newSettings);
 }
 
 export function getAgentDefinitions(): AgentDefinitions {

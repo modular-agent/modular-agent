@@ -40,7 +40,7 @@ pub fn quit(_app: &AppHandle) {
     // save(app);
 }
 
-// core settings
+// Core Settings
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CoreSettings {
@@ -52,6 +52,9 @@ pub struct CoreSettings {
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub shortcut_keys: Option<HashMap<String, String>>,
+
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub auto_start_streams: Vec<String>,
 }
 
 impl Default for CoreSettings {
@@ -74,6 +77,7 @@ impl Default for CoreSettings {
             autostart: false,
             color_mode: None,
             shortcut_keys: Some(SHORTCUT_KEYS.clone()),
+            auto_start_streams: Vec::new(),
         }
     }
 }
@@ -171,6 +175,8 @@ pub fn set_core_settings_cmd(
 
     Ok(())
 }
+
+// Global Agent Configs
 
 #[tauri::command]
 pub(crate) fn set_global_configs_cmd(

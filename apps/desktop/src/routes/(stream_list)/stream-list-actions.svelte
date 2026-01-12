@@ -15,13 +15,14 @@
     startStream,
     stopStream,
     streamInfos,
-    updateStreamSpec,
   } from "$lib/shared.svelte";
+
+  import { getCoreSettings, setCoreSettings } from "@/lib/agent";
 
   type Props = {
     id: string;
     name: string;
-    run_on_start: boolean;
+    run_on_start?: boolean | undefined;
   };
 
   let { id, name, run_on_start }: Props = $props();
@@ -75,7 +76,22 @@
   }
 
   async function handleRunOnStart() {
-    await updateStreamSpec(id, { run_on_start: !run_on_start });
+    // update core setting
+    const coreSettings = await getCoreSettings();
+    const auto_start_streams = coreSettings.auto_start_streams || [];
+    if (run_on_start) {
+      // remove from streams_on_start
+      const index = auto_start_streams.indexOf(name);
+      if (index > -1) {
+        auto_start_streams.splice(index, 1);
+      }
+    } else {
+      // add to streams_on_start
+      auto_start_streams.push(name);
+    }
+    coreSettings.auto_start_streams = auto_start_streams;
+    await setCoreSettings(coreSettings);
+
     await reloadStreamInfos();
   }
 </script>

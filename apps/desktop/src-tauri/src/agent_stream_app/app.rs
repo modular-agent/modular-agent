@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, sync::Mutex};
 
 use anyhow::{anyhow, bail, Context as _, Result};
 use dirs;
@@ -6,6 +6,8 @@ use tauri::{AppHandle, Manager, State};
 
 use agent_stream_kit::{ASKit, AgentStreamSpec};
 use tauri_plugin_askit::ASKitExt;
+
+use crate::agent_stream_app::settings::CoreSettings;
 
 use super::observer::ASAppObserver;
 
@@ -94,9 +96,7 @@ impl ASApp {
             .to_string_lossy()
             .to_string();
 
-        let mut spec = self.read_agent_stream(path)?;
-        // When importing, set run_on_start to false to avoid auto-starting imported streams
-        spec.run_on_start = false;
+        let spec = self.read_agent_stream(path)?;
 
         let name = self.askit.unique_stream_name(&name);
 
@@ -209,7 +209,30 @@ pub async fn ready(app: &AppHandle) -> Result<()> {
     let askit = &asapp.askit;
     let observer = ASAppObserver { app: app.clone() };
     askit.subscribe(Box::new(observer));
+
+    run_auto_start_streams(app).await;
+
     Ok(())
+}
+
+async fn run_auto_start_streams(app: &AppHandle) {
+    let auto_start_streams = {
+        let core_settings = app.state::<Mutex<CoreSettings>>();
+        let guard = core_settings.lock().unwrap();
+        guard.auto_start_streams.clone()
+    };
+
+    let asapp = app.state::<ASApp>();
+    let stream_infos = asapp.askit.get_agent_stream_infos();
+
+    for info in stream_infos {
+        if auto_start_streams.contains(&info.name) {
+            log::info!("Auto-starting agent stream: {}", &info.name);
+            if let Err(e) = asapp.start_agent_stream(&info.id).await {
+                log::error!("Failed to auto-start agent stream '{}': {}", &info.name, e);
+            }
+        }
+    }
 }
 
 pub fn quit(_app: &AppHandle) {}
