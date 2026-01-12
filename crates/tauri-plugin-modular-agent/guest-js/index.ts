@@ -4,7 +4,6 @@ export type AgentStreamInfo = {
   id: string;
   name: string;
   running: boolean;
-  run_on_start: boolean;
 };
 
 export type AgentDefinitions = Record<string, AgentDefinition>;
@@ -39,7 +38,6 @@ export type AgentConfigSpec = {
 export type AgentStreamSpec = {
   agents: AgentSpec[];
   channels: ChannelSpec[];
-  run_on_start?: boolean | null;
   viewport: Viewport | null;
 };
 
