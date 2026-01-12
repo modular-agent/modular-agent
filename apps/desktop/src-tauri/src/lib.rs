@@ -1,6 +1,6 @@
 #![recursion_limit = "256"]
 
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 use tauri_plugin_window_state::{AppHandleExt, StateFlags};
 
 #[allow(unused_imports)]
@@ -109,10 +109,21 @@ pub fn run() {
                 }
                 #[cfg(target_os = "macos")]
                 {
-                    use tauri::Manager;
                     tauri::AppHandle::hide(window.app_handle()).unwrap();
                 }
                 api.prevent_close();
+
+                let run_in_background = {
+                    let app = window.app_handle();
+                    let core_settings =
+                        app.state::<std::sync::Mutex<agent_stream_app::settings::CoreSettings>>();
+                    let guard = core_settings.lock().unwrap();
+                    guard.run_in_background
+                };
+                if !run_in_background {
+                    log::info!("Exiting Agent Stream App...");
+                    window.app_handle().exit(0);
+                }
             }
             _ => {}
         })

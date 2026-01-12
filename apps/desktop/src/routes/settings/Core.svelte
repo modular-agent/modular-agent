@@ -22,11 +22,13 @@
 
   let autostart = $state(false);
   let color_mode = $state<string>("");
+  let run_in_background = $state(false);
   let shortcut_keys = $state<Record<string, string>>({});
 
   onMount(() => {
     autostart = settings["autostart"] ?? false;
     color_mode = settings["color_mode"] ?? "";
+    run_in_background = settings["run_in_background"] ?? false;
     shortcut_keys = settings["shortcut_keys"] ?? {};
   });
 
@@ -47,6 +49,7 @@
     await setCoreSettings({
       autostart,
       color_mode,
+      run_in_background,
       shortcut_keys,
     });
     // confirm restart
@@ -62,6 +65,11 @@
   <Card.Content class="px-2 pt-4">
     <form>
       <FieldGroup>
+        <Field orientation="horizontal">
+          <Switch bind:checked={run_in_background} />
+          <FieldLabel>Run in Background</FieldLabel>
+        </Field>
+
         <Field orientation="horizontal">
           <Switch bind:checked={autostart} />
           <FieldLabel>Auto Start on System Boot</FieldLabel>

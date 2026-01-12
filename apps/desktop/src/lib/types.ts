@@ -47,9 +47,10 @@ export type AgentStreamEdge = Edge;
 
 export type CoreSettings = {
   autostart?: boolean;
-  color_mode?: string | null;
-  shortcut_keys?: Record<string, string> | null;
   auto_start_streams: string[];
+  color_mode?: string | null;
+  run_in_background: boolean;
+  shortcut_keys?: Record<string, string> | null;
 };
 
 export type AgentStreamInfoExt = AgentStreamInfo & {

@@ -47,14 +47,17 @@ pub struct CoreSettings {
     #[serde(default, skip_serializing_if = "<&bool>::not")]
     pub autostart: bool,
 
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub auto_start_streams: Vec<String>,
+
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub color_mode: Option<String>,
 
+    #[serde(default, skip_serializing_if = "<&bool>::not")]
+    pub run_in_background: bool,
+
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub shortcut_keys: Option<HashMap<String, String>>,
-
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub auto_start_streams: Vec<String>,
 }
 
 impl Default for CoreSettings {
@@ -75,9 +78,10 @@ impl Default for CoreSettings {
 
         CoreSettings {
             autostart: false,
-            color_mode: None,
-            shortcut_keys: Some(SHORTCUT_KEYS.clone()),
             auto_start_streams: Vec::new(),
+            color_mode: None,
+            run_in_background: false,
+            shortcut_keys: Some(SHORTCUT_KEYS.clone()),
         }
     }
 }
