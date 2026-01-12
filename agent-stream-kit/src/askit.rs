@@ -25,7 +25,7 @@ pub struct ASKit {
     pub(crate) agents: Arc<Mutex<FnvIndexMap<String, Arc<AsyncMutex<Box<dyn Agent>>>>>>,
 
     // agent id -> sender
-    pub(crate) agent_txs: Arc<Mutex<FnvIndexMap<String, AgentMessageSender>>>,
+    pub(crate) agent_txs: Arc<Mutex<FnvIndexMap<String, mpsc::Sender<AgentMessage>>>>,
 
     // board name -> [board out agent id]
     pub(crate) board_out_agents: Arc<Mutex<FnvIndexMap<String, Vec<String>>>>,
@@ -595,103 +595,69 @@ impl ASKit {
         if agent_status == AgentStatus::Init {
             log::info!("Starting agent {}", agent_id);
 
-            if uses_native_thread {
-                let (tx, rx) = std::sync::mpsc::channel();
+            let (tx, mut rx) = mpsc::channel(MESSAGE_LIMIT);
 
+            {
+                let mut agent_txs = self.agent_txs.lock().unwrap();
+                agent_txs.insert(agent_id.to_string(), tx.clone());
+            };
+
+            let agent_clone = agent.clone();
+            let agent_id_clone = agent_id.to_string();
+
+            let agent_loop = async move {
                 {
-                    let mut agent_txs = self.agent_txs.lock().unwrap();
-                    agent_txs.insert(agent_id.to_string(), AgentMessageSender::Sync(tx.clone()));
-                };
-
-                let agent_id = agent_id.to_string();
-                std::thread::spawn(async move || {
-                    if let Err(e) = agent.lock().await.start().await {
-                        log::error!("Failed to start agent {}: {}", agent_id, e);
+                    let mut agent_guard = agent_clone.lock().await;
+                    if let Err(e) = agent_guard.start().await {
+                        log::error!("Failed to start agent {}: {}", agent_id_clone, e);
+                        return;
                     }
+                }
 
-                    while let Ok(message) = rx.recv() {
-                        match message {
-                            AgentMessage::Input { ctx, pin, value } => {
-                                agent
-                                    .lock()
-                                    .await
-                                    .process(ctx, pin, value)
-                                    .await
-                                    .unwrap_or_else(|e| {
-                                        log::error!("Process Error {}: {}", agent_id, e);
-                                    });
-                            }
-                            AgentMessage::Config { key, value } => {
-                                agent
-                                    .lock()
-                                    .await
-                                    .set_config(key, value)
-                                    .unwrap_or_else(|e| {
-                                        log::error!("Config Error {}: {}", agent_id, e);
-                                    });
-                            }
-                            AgentMessage::Configs { configs } => {
-                                agent.lock().await.set_configs(configs).unwrap_or_else(|e| {
-                                    log::error!("Configs Error {}: {}", agent_id, e);
+                while let Some(message) = rx.recv().await {
+                    match message {
+                        AgentMessage::Input { ctx, pin, value } => {
+                            agent_clone
+                                .lock()
+                                .await
+                                .process(ctx, pin, value)
+                                .await
+                                .unwrap_or_else(|e| {
+                                    log::error!("Process Error {}: {}", agent_id_clone, e);
                                 });
-                            }
-                            AgentMessage::Stop => {
-                                break;
-                            }
+                        }
+                        AgentMessage::Config { key, value } => {
+                            agent_clone
+                                .lock()
+                                .await
+                                .set_config(key, value)
+                                .unwrap_or_else(|e| {
+                                    log::error!("Config Error {}: {}", agent_id_clone, e);
+                                });
+                        }
+                        AgentMessage::Configs { configs } => {
+                            agent_clone.lock().await.set_configs(configs).unwrap_or_else(|e| {
+                                log::error!("Configs Error {}: {}", agent_id_clone, e);
+                            });
+                        }
+                        AgentMessage::Stop => {
+                            rx.close();
+                            break;
                         }
                     }
+                }
+            };
+
+            if uses_native_thread {
+                std::thread::spawn(move || {
+                    let rt = tokio::runtime::Builder::new_current_thread()
+                        .enable_all()
+                        .build()
+                        .unwrap();
+                    rt.block_on(agent_loop);
                 });
             } else {
-                let (tx, mut rx) = mpsc::channel(MESSAGE_LIMIT);
-
-                {
-                    let mut agent_txs = self.agent_txs.lock().unwrap();
-                    agent_txs.insert(agent_id.to_string(), AgentMessageSender::Async(tx.clone()));
-                };
-
-                let agent_id = agent_id.to_string();
-                tokio::spawn(async move {
-                    {
-                        let mut agent_guard = agent.lock().await;
-                        if let Err(e) = agent_guard.start().await {
-                            log::error!("Failed to start agent {}: {}", agent_id, e);
-                        }
-                    }
-
-                    while let Some(message) = rx.recv().await {
-                        match message {
-                            AgentMessage::Input { ctx, pin, value } => {
-                                agent
-                                    .lock()
-                                    .await
-                                    .process(ctx, pin, value)
-                                    .await
-                                    .unwrap_or_else(|e| {
-                                        log::error!("Process Error {}: {}", agent_id, e);
-                                    });
-                            }
-                            AgentMessage::Config { key, value } => {
-                                agent
-                                    .lock()
-                                    .await
-                                    .set_config(key, value)
-                                    .unwrap_or_else(|e| {
-                                        log::error!("Config Error {}: {}", agent_id, e);
-                                    });
-                            }
-                            AgentMessage::Configs { configs } => {
-                                agent.lock().await.set_configs(configs).unwrap_or_else(|e| {
-                                    log::error!("Configs Error {}: {}", agent_id, e);
-                                });
-                            }
-                            AgentMessage::Stop => {
-                                rx.close();
-                                return;
-                            }
-                        }
-                    }
-                });
-                tokio::task::yield_now().await;
+                tokio::spawn(agent_loop);
             }
         }
         Ok(())
@@ -702,21 +668,11 @@ impl ASKit {
         {
             // remove the sender first to prevent new messages being sent
             let mut agent_txs = self.agent_txs.lock().unwrap();
-            if let Some(tx) = agent_txs.swap_remove(agent_id) {
-                match tx {
-                    AgentMessageSender::Sync(tx) => {
-                        tx.send(AgentMessage::Stop).unwrap_or_else(|e| {
-                            log::error!("Failed to send stop message to agent {}: {}", agent_id, e);
-                        });
-                    }
-                    AgentMessageSender::Async(tx) => {
-                        tx.try_send(AgentMessage::Stop).unwrap_or_else(|e| {
-                            log::error!("Failed to send stop message to agent {}: {}", agent_id, e);
-                        });
-                    }
-                }
-            }
-        }
+                    if let Some(tx) = agent_txs.swap_remove(agent_id) {
+                        if let Err(e) = tx.try_send(AgentMessage::Stop) {
+                            log::warn!("Failed to send stop message to agent {}: {}", agent_id, e);
+                        }
+                    }        }
 
         let agent = {
             let agents = self.agents.lock().unwrap();
@@ -758,18 +714,9 @@ impl ASKit {
             return Ok(());
         };
         let message = AgentMessage::Configs { configs };
-        match tx {
-            AgentMessageSender::Sync(tx) => {
-                tx.send(message).map_err(|_| {
-                    AgentError::SendMessageFailed("Failed to send config message".to_string())
-                })?;
-            }
-            AgentMessageSender::Async(tx) => {
-                tx.send(message).await.map_err(|_| {
-                    AgentError::SendMessageFailed("Failed to send config message".to_string())
-                })?;
-            }
-        }
+        tx.send(message).await.map_err(|_| {
+            AgentError::SendMessageFailed("Failed to send config message".to_string())
+        })?;
         Ok(())
     }
 
@@ -847,18 +794,9 @@ impl ASKit {
             }
             return Ok(());
         };
-        match tx {
-            AgentMessageSender::Sync(tx) => {
-                tx.send(message).map_err(|_| {
-                    AgentError::SendMessageFailed("Failed to send input message".to_string())
-                })?;
-            }
-            AgentMessageSender::Async(tx) => {
-                tx.send(message).await.map_err(|_| {
-                    AgentError::SendMessageFailed("Failed to send input message".to_string())
-                })?;
-            }
-        }
+        tx.send(message).await.map_err(|_| {
+            AgentError::SendMessageFailed("Failed to send input message".to_string())
+        })?;
 
         self.emit_agent_input(agent_id.to_string(), pin);
 
@@ -1052,12 +990,4 @@ static OBSERVER_ID_COUNTER: AtomicUsize = AtomicUsize::new(1);
 
 fn new_observer_id() -> usize {
     OBSERVER_ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-}
-
-// Agent Message
-
-#[derive(Clone)]
-pub enum AgentMessageSender {
-    Sync(std::sync::mpsc::Sender<AgentMessage>),
-    Async(mpsc::Sender<AgentMessage>),
 }
