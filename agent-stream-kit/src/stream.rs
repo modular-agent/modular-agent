@@ -57,11 +57,6 @@ impl AgentStream {
                 "channels" => {
                     // just ignore
                 }
-                "run_on_start" => {
-                    if let Some(run_on_start_bool) = v.as_bool() {
-                        self.spec.run_on_start = run_on_start_bool;
-                    }
-                }
                 _ => {
                     // Update extensions
                     self.spec.extensions.insert(k.clone(), v.clone());
@@ -134,7 +129,6 @@ pub struct AgentStreamInfo {
     pub id: String,
     pub name: String,
     pub running: bool,
-    pub run_on_start: bool,
 }
 
 impl From<&AgentStream> for AgentStreamInfo {
@@ -143,7 +137,6 @@ impl From<&AgentStream> for AgentStreamInfo {
             id: stream.id.clone(),
             name: stream.name.clone(),
             running: stream.running,
-            run_on_start: stream.spec.run_on_start,
         }
     }
 }

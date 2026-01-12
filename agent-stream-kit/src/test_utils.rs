@@ -33,8 +33,7 @@ pub async fn setup_askit() -> ASKit {
 pub async fn load_and_start_stream(askit: &ASKit, path: &str) -> Result<String, AgentError> {
     let stream_json = std::fs::read_to_string(path)
         .map_err(|e| AgentError::IoError(format!("Failed to read stream file: {}", e)))?;
-    let mut spec = AgentStreamSpec::from_json(&stream_json)?;
-    spec.run_on_start = true;
+    let spec = AgentStreamSpec::from_json(&stream_json)?;
     let name = Path::new(path)
         .file_stem()
         .and_then(|s| s.to_str())

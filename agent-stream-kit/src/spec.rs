@@ -16,9 +16,6 @@ pub struct AgentStreamSpec {
 
     pub channels: Vec<ChannelSpec>,
 
-    #[serde(default, skip_serializing_if = "<&bool>::not")]
-    pub run_on_start: bool,
-
     #[serde(flatten)]
     pub extensions: FnvIndexMap<String, Value>,
 }

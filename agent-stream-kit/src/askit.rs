@@ -90,7 +90,6 @@ impl ASKit {
     /// Prepare ASKit to be ready.
     pub async fn ready(&self) -> Result<(), AgentError> {
         self.spawn_message_loop().await?;
-        self.start_agent_streams_on_start().await?;
         Ok(())
     }
 
@@ -950,25 +949,6 @@ impl ASKit {
 
         tokio::task::yield_now().await;
 
-        Ok(())
-    }
-
-    async fn start_agent_streams_on_start(&self) -> Result<(), AgentError> {
-        let run_on_start_stream_ids;
-        {
-            let agent_streams = self.streams.lock().unwrap();
-            run_on_start_stream_ids = agent_streams
-                .values()
-                .filter(|s| s.spec().run_on_start)
-                .map(|s| s.id().to_string())
-                .collect::<Vec<_>>();
-        }
-
-        for id in run_on_start_stream_ids {
-            self.start_agent_stream(&id).await.unwrap_or_else(|e| {
-                log::error!("Failed to start agent stream: {}", e);
-            });
-        }
         Ok(())
     }
 
