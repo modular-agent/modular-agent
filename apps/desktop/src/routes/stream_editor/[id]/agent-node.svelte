@@ -2,6 +2,8 @@
   const titleColorMap: Record<string, string> = {
     default: "bg-agent-1",
     Board: "bg-agent-2",
+    Display: "bg-agent-3",
+    Input: "bg-agent-3",
   };
 </script>
 

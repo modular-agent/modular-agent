@@ -576,7 +576,7 @@
 <style>
   :root {
     --resize-control-size: 2px;
-    --resize-control-color: var(--color-teal-500);
+    --resize-control-color: var(--color-ring);
   }
 
   :global(.svelte-flow__edge .svelte-flow__edge-path) {
