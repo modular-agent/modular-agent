@@ -83,7 +83,6 @@
   --agent-5: #414346;
   --agent-highlight: #fbf49e;
 }
-}
 
 @theme inline {
   --radius-sm: calc(var(--radius) - 4px);
