@@ -1,3 +1,5 @@
+#![recursion_limit = "256"]
+
 use agent_stream_kit::ASKit;
 use tauri::{
     plugin::{Builder, TauriPlugin},
@@ -6,13 +8,8 @@ use tauri::{
 
 mod commands;
 mod error;
-mod models;
-mod observer;
 
 pub use error::{Error, Result};
-pub use models::BoardMessage;
-
-use observer::BoardObserver;
 
 /// Extensions to [`tauri::App`], [`tauri::AppHandle`] and [`tauri::Window`] to access the askit APIs.
 pub trait ASKitExt<R: Runtime> {
@@ -61,7 +58,6 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
         ])
         .setup(|app, _api| {
             let askit = ASKit::init()?;
-            askit.subscribe(Box::new(BoardObserver { app: app.clone() }));
             app.manage(askit);
             Ok(())
         })
