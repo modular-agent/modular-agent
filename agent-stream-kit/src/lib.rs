@@ -46,7 +46,7 @@ pub type FnvIndexSet<T> = indexmap::IndexSet<T, fnv::FnvBuildHasher>;
 pub use askit_macros::askit_agent;
 
 pub use agent::{Agent, AgentData, AgentStatus, AsAgent, HasAgentData, agent_new, new_agent_boxed};
-pub use askit::{ASKit, ASKitEvent, ASKitObserver};
+pub use askit::{ASKit, ASKitEvent};
 pub use config::{AgentConfigs, AgentConfigsMap};
 pub use context::AgentContext;
 pub use definition::{AgentConfigSpec, AgentConfigSpecs, AgentDefinition, AgentDefinitions};

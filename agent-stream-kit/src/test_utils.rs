@@ -7,12 +7,12 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use tokio::{
-    sync::{Mutex as AsyncMutex, mpsc},
+    sync::{broadcast::error::RecvError, Mutex as AsyncMutex, mpsc},
     time::timeout,
 };
 
 use crate::{
-    ASKit, ASKitEvent, ASKitObserver, AgentContext, AgentData, AgentError, AgentSpec,
+    ASKit, ASKitEvent, AgentContext, AgentData, AgentError, AgentSpec,
     AgentStreamSpec, AgentValue, AsAgent, askit_agent,
 };
 
@@ -44,7 +44,7 @@ pub async fn load_and_start_stream(askit: &ASKit, path: &str) -> Result<String, 
     Ok(id)
 }
 
-// BoardObserver
+// Board Event Subscription
 
 type BoardReceiver = Arc<AsyncMutex<mpsc::UnboundedReceiver<(String, AgentValue)>>>;
 
@@ -52,40 +52,21 @@ thread_local! {
     static BOARD_RX: RefCell<Option<BoardReceiver>> = RefCell::new(None);
 }
 
-#[derive(Clone)]
-pub struct BoardObserver {
-    sender: mpsc::UnboundedSender<(String, AgentValue)>,
-}
-
-#[allow(dead_code)]
-impl BoardObserver {
-    pub fn new(sender: mpsc::UnboundedSender<(String, AgentValue)>) -> Self {
-        Self { sender }
-    }
-}
-
-impl ASKitObserver for BoardObserver {
-    fn notify(&self, event: &ASKitEvent) {
-        if let ASKitEvent::Board(name, value) = event {
-            self.sender
-                .send((name.to_string(), value.clone()))
-                .unwrap_or_else(|e| {
-                    eprintln!("BoardObserver failed to send board event: {}", e);
-                });
-        }
-    }
-}
-
 pub fn subscribe_board_observer(askit: &ASKit) -> Result<(), AgentError> {
-    // set an observer to receive board events
-    let (tx, rx) = mpsc::unbounded_channel();
-    let observer = BoardObserver::new(tx);
-    askit.subscribe(Box::new(observer));
+    let board_event_rx = askit.subscribe_to_event(|event| {
+        if let ASKitEvent::Board(name, value) = event {
+            Some((name, value))
+        } else {
+            None
+        }
+    });
+
     BOARD_RX.with(|slot| {
-        *slot.borrow_mut() = Some(Arc::new(AsyncMutex::new(rx)));
+        *slot.borrow_mut() = Some(Arc::new(AsyncMutex::new(board_event_rx)));
     });
     Ok(())
 }
+
 
 pub const DEFAULT_BOARD_TIMEOUT: Duration = Duration::from_secs(1);
 

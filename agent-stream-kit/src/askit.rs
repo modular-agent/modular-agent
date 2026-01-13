@@ -1,8 +1,7 @@
-use std::sync::atomic::AtomicUsize;
 use std::sync::{Arc, Mutex};
 
 use serde_json::Value;
-use tokio::sync::{Mutex as AsyncMutex, mpsc};
+use tokio::sync::{broadcast, broadcast::error::RecvError, Mutex as AsyncMutex, mpsc};
 
 use crate::FnvIndexMap;
 use crate::agent::{Agent, AgentMessage, AgentStatus, agent_new};
@@ -18,6 +17,7 @@ use crate::stream::{AgentStream, AgentStreamInfo, AgentStreams};
 use crate::value::AgentValue;
 
 const MESSAGE_LIMIT: usize = 1024;
+const EVENT_CHANNEL_CAPACITY: usize = 256;
 
 #[derive(Clone)]
 pub struct ASKit {
@@ -49,11 +49,12 @@ pub struct ASKit {
     pub(crate) tx: Arc<Mutex<Option<mpsc::Sender<AgentEventMessage>>>>,
 
     // observers
-    pub(crate) observers: Arc<Mutex<FnvIndexMap<usize, Box<dyn ASKitObserver + Sync + Send>>>>,
+    pub(crate) observers: broadcast::Sender<ASKitEvent>,
 }
 
 impl ASKit {
     pub fn new() -> Self {
+        let (tx, _rx) = broadcast::channel(EVENT_CHANNEL_CAPACITY);
         Self {
             agents: Default::default(),
             agent_txs: Default::default(),
@@ -64,7 +65,7 @@ impl ASKit {
             streams: Default::default(),
             global_configs_map: Default::default(),
             tx: Arc::new(Mutex::new(None)),
-            observers: Default::default(),
+            observers: tx,
         }
     }
 
@@ -890,18 +891,45 @@ impl ASKit {
         Ok(())
     }
 
-    /// Subscribe an observer to ASKit events.
-    pub fn subscribe(&self, observer: Box<dyn ASKitObserver + Sync + Send>) -> usize {
-        let mut observers = self.observers.lock().unwrap();
-        let observer_id = new_observer_id();
-        observers.insert(observer_id, observer);
-        observer_id
+    /// Subscribe to all ASKit events.
+    pub fn subscribe(&self) -> broadcast::Receiver<ASKitEvent> {
+        self.observers.subscribe()
     }
 
-    /// Unsubscribe an observer from ASKit events.
-    pub fn unsubscribe(&self, observer_id: usize) {
-        let mut observers = self.observers.lock().unwrap();
-        observers.swap_remove(&observer_id);
+    /// Subscribe to a specific type of `ASKitEvent`.
+    ///
+    /// It takes a closure that filters and maps the events, and returns an `mpsc::UnboundedReceiver`
+    /// that will receive only the successfully mapped events.
+    pub fn subscribe_to_event<F, T>(&self, mut filter_map: F) -> mpsc::UnboundedReceiver<T>
+    where
+        F: FnMut(ASKitEvent) -> Option<T> + Send + 'static,
+        T: Send + 'static,
+    {
+        let (tx, rx) = mpsc::unbounded_channel();
+        let mut event_rx = self.subscribe();
+
+        tokio::spawn(async move {
+            loop {
+                match event_rx.recv().await {
+                    Ok(event) => {
+                        if let Some(mapped_event) = filter_map(event) {
+                            if tx.send(mapped_event).is_err() {
+                                // Receiver dropped, task can exit
+                                break;
+                            }
+                        }
+                    }
+                    Err(RecvError::Lagged(n)) => {
+                        log::warn!("Event subscriber lagged by {} events", n);
+                    }
+                    Err(RecvError::Closed) => {
+                        // Sender dropped, task can exit
+                        break;
+                    }
+                }
+            }
+        });
+        rx
     }
 
     pub(crate) fn emit_agent_config_updated(
@@ -934,10 +962,7 @@ impl ASKit {
     }
 
     fn notify_observers(&self, event: ASKitEvent) {
-        let observers = self.observers.lock().unwrap();
-        for (_id, observer) in observers.iter() {
-            observer.notify(&event);
-        }
+        let _ = self.observers.send(event);
     }
 }
 
@@ -980,14 +1005,4 @@ pub enum ASKitEvent {
     AgentIn(String, String),                        // (agent_id, pin)
     AgentSpecUpdated(String),                       // (agent_id)
     Board(String, AgentValue),                      // (board name, value)
-}
-
-pub trait ASKitObserver {
-    fn notify(&self, event: &ASKitEvent);
-}
-
-static OBSERVER_ID_COUNTER: AtomicUsize = AtomicUsize::new(1);
-
-fn new_observer_id() -> usize {
-    OBSERVER_ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
 }
