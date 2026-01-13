@@ -5,7 +5,7 @@
     "bg-destructive dark:bg-destructive",
   ];
 
-  const highlightColor = "oklch(0.95 0.12 102)";
+  const highlightColor = "var(--color-agent-highlight)";
 
   const DEFAULT_HANDLE_STYLE = "width: 12px; height: 12px;";
 

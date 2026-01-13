@@ -1,7 +1,7 @@
 <script lang="ts" module>
   const titleColorMap: Record<string, string> = {
-    default: "bg-blue-500",
-    Board: "bg-green-500",
+    default: "bg-agent-1",
+    Board: "bg-agent-2",
   };
 </script>
 
