@@ -7,9 +7,7 @@ use tauri::{AppHandle, Manager, State};
 use agent_stream_kit::{ASKit, AgentStreamSpec};
 use tauri_plugin_askit::ASKitExt;
 
-use crate::agent_stream_app::settings::CoreSettings;
-
-use super::observer::ASAppObserver;
+use crate::agent_stream_app::{observer::start_askit_observer, settings::CoreSettings};
 
 static ASKIT_STREAMS_PATH: &'static str = ".askit/streams";
 
@@ -207,8 +205,7 @@ pub fn init(app: &AppHandle) -> Result<()> {
 pub async fn ready(app: &AppHandle) -> Result<()> {
     let asapp = app.state::<ASApp>();
     let askit = &asapp.askit;
-    let observer = ASAppObserver { app: app.clone() };
-    askit.subscribe(Box::new(observer));
+    start_askit_observer(&askit, app.clone());
 
     run_auto_start_streams(app).await;
 
