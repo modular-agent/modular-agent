@@ -7,13 +7,13 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use tokio::{
-    sync::{broadcast::error::RecvError, Mutex as AsyncMutex, mpsc},
+    sync::{Mutex as AsyncMutex, mpsc},
     time::timeout,
 };
 
 use crate::{
-    ASKit, ASKitEvent, AgentContext, AgentData, AgentError, AgentSpec,
-    AgentStreamSpec, AgentValue, AsAgent, askit_agent,
+    ASKit, ASKitEvent, AgentContext, AgentData, AgentError, AgentSpec, AgentStreamSpec, AgentValue,
+    AsAgent, askit_agent,
 };
 
 static PIN_VALUE: &str = "value";
@@ -66,7 +66,6 @@ pub fn subscribe_board_observer(askit: &ASKit) -> Result<(), AgentError> {
     });
     Ok(())
 }
-
 
 pub const DEFAULT_BOARD_TIMEOUT: Duration = Duration::from_secs(1);
 

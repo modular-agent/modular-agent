@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex};
 
 use serde_json::Value;
-use tokio::sync::{broadcast, broadcast::error::RecvError, Mutex as AsyncMutex, mpsc};
+use tokio::sync::{Mutex as AsyncMutex, broadcast, broadcast::error::RecvError, mpsc};
 
 use crate::FnvIndexMap;
 use crate::agent::{Agent, AgentMessage, AgentStatus, agent_new};
@@ -637,9 +637,13 @@ impl ASKit {
                                 });
                         }
                         AgentMessage::Configs { configs } => {
-                            agent_clone.lock().await.set_configs(configs).unwrap_or_else(|e| {
-                                log::error!("Configs Error {}: {}", agent_id_clone, e);
-                            });
+                            agent_clone
+                                .lock()
+                                .await
+                                .set_configs(configs)
+                                .unwrap_or_else(|e| {
+                                    log::error!("Configs Error {}: {}", agent_id_clone, e);
+                                });
                         }
                         AgentMessage::Stop => {
                             rx.close();
@@ -669,11 +673,12 @@ impl ASKit {
         {
             // remove the sender first to prevent new messages being sent
             let mut agent_txs = self.agent_txs.lock().unwrap();
-                    if let Some(tx) = agent_txs.swap_remove(agent_id) {
-                        if let Err(e) = tx.try_send(AgentMessage::Stop) {
-                            log::warn!("Failed to send stop message to agent {}: {}", agent_id, e);
-                        }
-                    }        }
+            if let Some(tx) = agent_txs.swap_remove(agent_id) {
+                if let Err(e) = tx.try_send(AgentMessage::Stop) {
+                    log::warn!("Failed to send stop message to agent {}: {}", agent_id, e);
+                }
+            }
+        }
 
         let agent = {
             let agents = self.agents.lock().unwrap();

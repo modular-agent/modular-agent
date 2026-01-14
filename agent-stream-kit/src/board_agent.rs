@@ -11,9 +11,9 @@ use crate::error::AgentError;
 use crate::spec::AgentSpec;
 use crate::value::AgentValue;
 
-static PIN_VALUE: &str = "value";
+const PIN_VALUE: &str = "value";
 
-static CONFIG_NAME: &str = "name";
+const CONFIG_NAME: &str = "name";
 
 #[askit_agent(
     kind = "Board",
