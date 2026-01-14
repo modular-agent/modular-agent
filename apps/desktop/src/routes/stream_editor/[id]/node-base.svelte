@@ -10,6 +10,7 @@
   const DEFAULT_HANDLE_STYLE = "width: 12px; height: 12px;";
 
   const HANDLE_OFFSET = 87;
+  const HANDLE_OFFSET_NO_TITLE = 16;
   const HANDLE_GAP = 25.5;
 </script>
 
@@ -39,7 +40,10 @@
   const outputs = $derived(data.outputs ?? []);
   const showErr = $derived(data.show_err ?? false);
 
+  let hideTitle = $derived(agentDef?.hide_title ?? false);
   let bgColor = $derived(bgColors[agentDef ? (data.disabled ? 0 : 1) : 2]);
+
+  let handleOffset = $derived(hideTitle ? HANDLE_OFFSET_NO_TITLE : HANDLE_OFFSET);
 
   let ht = $state<number | null>(null);
 
@@ -77,9 +81,17 @@
     ? `0 0 ${highlight.current * 40}px ${highlightColor}`
     : ""}
 >
-  <div class="w-full min-w-40 flex-none pl-4 pr-4 pb-2 {titleColor} rounded-t-lg">
-    {@render title()}
-  </div>
+  {#if hideTitle}
+    {#if agentDef?.title === "Router"}
+      <div class="w-full min-w-6 flex-none rounded-t-lg"></div>
+    {:else}
+      <div class="w-full min-w-40 flex-none rounded-t-lg"></div>
+    {/if}
+  {:else}
+    <div class="w-full min-w-40 flex-none pl-4 pr-4 pb-2 {titleColor} rounded-t-lg">
+      {@render title()}
+    </div>
+  {/if}
   <div class="w-full flex-none grid grid-cols-2 gap-1 mt-4 mb-2">
     <div>
       {#each inputs as input}
@@ -110,7 +122,7 @@
     id={input}
     type="target"
     position={Position.Left}
-    style="top: {idx * HANDLE_GAP + HANDLE_OFFSET}px; {DEFAULT_HANDLE_STYLE}"
+    style="top: {idx * HANDLE_GAP + handleOffset}px; {DEFAULT_HANDLE_STYLE}"
   />
 {/each}
 {#each outputs as output, idx}
@@ -118,7 +130,7 @@
     id={output}
     type="source"
     position={Position.Right}
-    style="top: {idx * HANDLE_GAP + HANDLE_OFFSET}px; {DEFAULT_HANDLE_STYLE}"
+    style="top: {idx * HANDLE_GAP + handleOffset}px; {DEFAULT_HANDLE_STYLE}"
   />
 {/each}
 {#if showErr}

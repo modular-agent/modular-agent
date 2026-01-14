@@ -26,7 +26,7 @@
   const CONFIG_HANDLE_STYLE =
     "width: 10px; height: 10px; background-color: #000; border: 2px solid #fff;";
 
-  const HANDLE_X_OFFSET = "-15px";
+  const HANDLE_X_OFFSET = "-12px";
 
   const displayRenderers: Record<string, Snippet<[any]>> = {
     undefined: displayEmpty,
