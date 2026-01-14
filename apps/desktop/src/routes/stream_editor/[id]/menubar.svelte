@@ -52,11 +52,9 @@
   }
 </script>
 
-<Menubar.Root class="border-none shadow-none">
+<Menubar.Root class="border-none shadow-none bg-transparent">
   <Menubar.Menu>
-    <Menubar.Trigger class="focus:bg-background data-[state=open]:bg-background"
-      >File</Menubar.Trigger
-    >
+    <Menubar.Trigger>File</Menubar.Trigger>
     <Menubar.Content>
       <Menubar.Item onclick={handleNewStream}>New</Menubar.Item>
       <Menubar.Item onclick={onSaveStream}>Save</Menubar.Item>

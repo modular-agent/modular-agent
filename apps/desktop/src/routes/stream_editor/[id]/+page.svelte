@@ -1,3 +1,7 @@
+<script lang="ts" module>
+  const bgColors = ["bg-background dark:bg-background", "bg-muted dark:bg-muted"];
+</script>
+
 <script lang="ts">
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { writeText, readText } from "@tauri-apps/plugin-clipboard-manager";
@@ -75,6 +79,7 @@
 
   let stream_id = $derived(data.stream_id);
   let running = $derived(data.flow?.running ?? false);
+  let bgColor = $derived(running ? bgColors[0] : bgColors[1]);
 
   let nodes = $state.raw<AgentStreamNode[]>([]);
   let edges = $state.raw<AgentStreamEdge[]>([]);
@@ -502,7 +507,7 @@
   }
 </script>
 
-<div class="flex flex-col w-full min-h-screen">
+<div class="flex flex-col w-full min-h-screen {bgColor}">
   <header class="grid grid-cols-[auto_1fr_100px] flex-none items-center pl-1 pr-2 gap-4">
     <div class="justify-self-start">
       <Menubar
@@ -547,7 +552,12 @@
     onselectioncontextmenu={handleSelectionContextMenu}
     snapGrid={[6, 6]}
   >
-    <Background variant={BackgroundVariant.Dots} gap={24} lineWidth={1} />
+    <Background
+      bgColor={running ? "var(--color-background)" : "var(--color-muted)"}
+      gap={24}
+      lineWidth={1}
+      variant={BackgroundVariant.Dots}
+    />
 
     <Controls />
     <MiniMap />
