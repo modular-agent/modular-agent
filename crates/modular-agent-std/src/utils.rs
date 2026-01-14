@@ -5,13 +5,13 @@ use agent_stream_kit::{
     askit_agent, async_trait,
 };
 
-static CATEGORY: &str = "Std/Utils";
+const CATEGORY: &str = "Std/Utils";
 
-static PIN_IN: &str = "in";
-static PIN_RESET: &str = "reset";
-static PIN_COUNT: &str = "count";
+const PIN_IN: &str = "in";
+const PIN_RESET: &str = "reset";
+const PIN_COUNT: &str = "count";
 
-static DISPLAY_COUNT: &str = "count";
+const DISPLAY_COUNT: &str = "count";
 
 /// Counter
 #[askit_agent(

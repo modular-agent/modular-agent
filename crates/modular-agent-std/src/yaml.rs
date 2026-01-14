@@ -7,10 +7,10 @@ use agent_stream_kit::{
     askit_agent, async_trait,
 };
 
-static CATEGORY: &str = "Std/Yaml";
+const CATEGORY: &str = "Std/Yaml";
 
-static PIN_DATA: &str = "data";
-static PIN_YAML: &str = "yaml";
+const PIN_DATA: &str = "data";
+const PIN_YAML: &str = "yaml";
 
 // To YAML
 #[askit_agent(

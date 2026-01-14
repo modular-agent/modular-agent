@@ -8,19 +8,19 @@ use agent_stream_kit::{
 use im::{Vector, vector};
 use mini_moka::sync::Cache;
 
-static CATEGORY: &str = "Std/Array";
+const CATEGORY: &str = "Std/Array";
 
-static PIN_ARRAY: &str = "array";
-static PIN_IN1: &str = "in1";
-static PIN_IN2: &str = "in2";
-static PIN_T: &str = "T";
-static PIN_F: &str = "F";
-static PIN_VALUE: &str = "value";
+const PIN_ARRAY: &str = "array";
+const PIN_IN1: &str = "in1";
+const PIN_IN2: &str = "in2";
+const PIN_T: &str = "T";
+const PIN_F: &str = "F";
+const PIN_VALUE: &str = "value";
 
-static CONFIG_N: &str = "n";
-static CONFIG_USE_CTX: &str = "use_ctx";
-static CONFIG_TTL_SEC: &str = "ttl_sec";
-static CONFIG_CAPACITY: &str = "capacity";
+const CONFIG_N: &str = "n";
+const CONFIG_USE_CTX: &str = "use_ctx";
+const CONFIG_TTL_SEC: &str = "ttl_sec";
+const CONFIG_CAPACITY: &str = "capacity";
 
 /// Check if an input is an array.
 #[askit_agent(

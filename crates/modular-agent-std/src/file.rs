@@ -8,13 +8,13 @@ use agent_stream_kit::{
 use glob::glob;
 use im::hashmap;
 
-static CATEGORY: &str = "Std/File";
+const CATEGORY: &str = "Std/File";
 
-static PIN_DATA: &str = "data";
-static PIN_DOC: &str = "doc";
-static PIN_FILES: &str = "files";
-static PIN_PATH: &str = "path";
-static PIN_STRING: &str = "string";
+const PIN_DATA: &str = "data";
+const PIN_DOC: &str = "doc";
+const PIN_FILES: &str = "files";
+const PIN_PATH: &str = "path";
+const PIN_STRING: &str = "string";
 
 // Glob Agent
 #[askit_agent(

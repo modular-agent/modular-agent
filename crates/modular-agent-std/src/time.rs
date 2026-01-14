@@ -13,22 +13,22 @@ use log;
 use regex::Regex;
 use tokio::task::JoinHandle;
 
-static CATEGORY: &str = "Std/Time";
+const CATEGORY: &str = "Std/Time";
 
-static PIN_TIME: &str = "time";
-static PIN_VALUE: &str = "value";
-static PIN_UNIT: &str = "unit";
+const PIN_TIME: &str = "time";
+const PIN_VALUE: &str = "value";
+const PIN_UNIT: &str = "unit";
 
-static CONFIG_DELAY: &str = "delay";
-static CONFIG_MAX_NUM_DATA: &str = "max_num_data";
-static CONFIG_INTERVAL: &str = "interval";
-static CONFIG_SCHEDULE: &str = "schedule";
-static CONFIG_TIME: &str = "time";
+const CONFIG_DELAY: &str = "delay";
+const CONFIG_MAX_NUM_DATA: &str = "max_num_data";
+const CONFIG_INTERVAL: &str = "interval";
+const CONFIG_SCHEDULE: &str = "schedule";
+const CONFIG_TIME: &str = "time";
 
 const DELAY_MS_DEFAULT: i64 = 1000; // 1 second in milliseconds
 const MAX_NUM_DATA_DEFAULT: i64 = 10;
-static INTERVAL_DEFAULT: &str = "10s";
-static TIME_DEFAULT: &str = "1s";
+const INTERVAL_DEFAULT: &str = "10s";
+const TIME_DEFAULT: &str = "1s";
 
 // Delay Agent
 #[askit_agent(

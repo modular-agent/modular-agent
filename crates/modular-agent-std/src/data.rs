@@ -8,20 +8,20 @@ use agent_stream_kit::{
 use im::{HashMap, Vector};
 use mini_moka::sync::Cache;
 
-static CATEGORY: &str = "Std/Data";
+const CATEGORY: &str = "Std/Data";
 
-static PIN_IN1: &str = "in1";
-static PIN_IN2: &str = "in2";
-static PIN_JSON: &str = "json";
-static PIN_OBJECT: &str = "object";
-static PIN_VALUE: &str = "value";
+const PIN_IN1: &str = "in1";
+const PIN_IN2: &str = "in2";
+const PIN_JSON: &str = "json";
+const PIN_OBJECT: &str = "object";
+const PIN_VALUE: &str = "value";
 
-static CONFIG_KEY: &str = "key";
-static CONFIG_VALUE: &str = "value";
-static CONFIG_N: &str = "n";
-static CONFIG_USE_CTX: &str = "use_ctx";
-static CONFIG_TTL_SECONDS: &str = "ttl_sec";
-static CONFIG_CAPACITY: &str = "capacity";
+const CONFIG_KEY: &str = "key";
+const CONFIG_VALUE: &str = "value";
+const CONFIG_N: &str = "n";
+const CONFIG_USE_CTX: &str = "use_ctx";
+const CONFIG_TTL_SECONDS: &str = "ttl_sec";
+const CONFIG_CAPACITY: &str = "capacity";
 
 // Get Value
 #[askit_agent(

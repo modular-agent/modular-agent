@@ -6,18 +6,18 @@ use handlebars::Handlebars;
 use im::vector;
 use serde_json::json;
 
-static CATEGORY: &str = "Std/String";
+const CATEGORY: &str = "Std/String";
 
-static PIN_STRING: &str = "string";
-static PIN_STRINGS: &str = "strings";
-static PIN_VALUE: &str = "value";
-static PIN_T: &str = "t";
-static PIN_F: &str = "f";
+const PIN_STRING: &str = "string";
+const PIN_STRINGS: &str = "strings";
+const PIN_VALUE: &str = "value";
+const PIN_T: &str = "t";
+const PIN_F: &str = "f";
 
-static CONFIG_LEN: &str = "len";
-static CONFIG_OVERLAP: &str = "overlap";
-static CONFIG_SEP: &str = "sep";
-static CONFIG_TEMPLATE: &str = "template";
+const CONFIG_LEN: &str = "len";
+const CONFIG_OVERLAP: &str = "overlap";
+const CONFIG_SEP: &str = "sep";
+const CONFIG_TEMPLATE: &str = "template";
 
 /// Check if the input is a string.
 #[askit_agent(

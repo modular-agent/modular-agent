@@ -6,19 +6,20 @@ use agent_stream_kit::{
     askit_agent, async_trait,
 };
 use mini_moka::sync::Cache;
-static CONFIG_TTL_SEC: &str = "ttl_sec";
-static CONFIG_CAPACITY: &str = "capacity";
 
-static CATEGORY: &str = "Std/Sequence";
+const CONFIG_TTL_SEC: &str = "ttl_sec";
+const CONFIG_CAPACITY: &str = "capacity";
 
-static PIN_IN: &str = "in";
-static PIN_IN1: &str = "in1";
-static PIN_IN2: &str = "in2";
-static PIN_OUT1: &str = "out1";
-static PIN_OUT2: &str = "out2";
+const CATEGORY: &str = "Std/Sequence";
 
-static CONFIG_N: &str = "n";
-static CONFIG_USE_CTX: &str = "use_ctx";
+const PIN_IN: &str = "in";
+const PIN_IN1: &str = "in1";
+const PIN_IN2: &str = "in2";
+const PIN_OUT1: &str = "out1";
+const PIN_OUT2: &str = "out2";
+
+const CONFIG_N: &str = "n";
+const CONFIG_USE_CTX: &str = "use_ctx";
 
 /// Receives an input and emits it sequentially to n outputs.
 #[askit_agent(

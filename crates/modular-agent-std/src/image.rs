@@ -8,23 +8,23 @@ use agent_stream_kit::{
     askit_agent, async_trait,
 };
 
-static CATEGORY: &str = "Std/Image";
+const CATEGORY: &str = "Std/Image";
 
-static PIN_FILENAME: &str = "filename";
-static PIN_IMAGE: &str = "image";
-static PIN_IMAGE_FILENAME: &str = "image_filename";
-static PIN_BLANK: &str = "blank";
-static PIN_NON_BLANK: &str = "non_blank";
-static PIN_CHANGED: &str = "changed";
-static PIN_UNCHANGED: &str = "unchanged";
-static PIN_RESULT: &str = "result";
+const PIN_FILENAME: &str = "filename";
+const PIN_IMAGE: &str = "image";
+const PIN_IMAGE_FILENAME: &str = "image_filename";
+const PIN_BLANK: &str = "blank";
+const PIN_NON_BLANK: &str = "non_blank";
+const PIN_CHANGED: &str = "changed";
+const PIN_UNCHANGED: &str = "unchanged";
+const PIN_RESULT: &str = "result";
 
-static CONFIG_ALMOST_BLACK_THRESHOLD: &str = "almost_black_threshold";
-static CONFIG_BLANK_THRESHOLD: &str = "blank_threshold";
-static CONFIG_SCALE: &str = "scale";
-static CONFIG_HEIGHT: &str = "height";
-static CONFIG_WIDTH: &str = "width";
-static CONFIG_THRESHOLD: &str = "threshold";
+const CONFIG_ALMOST_BLACK_THRESHOLD: &str = "almost_black_threshold";
+const CONFIG_BLANK_THRESHOLD: &str = "blank_threshold";
+const CONFIG_SCALE: &str = "scale";
+const CONFIG_HEIGHT: &str = "height";
+const CONFIG_WIDTH: &str = "width";
+const CONFIG_THRESHOLD: &str = "threshold";
 
 // IsBlankImageAgent
 #[askit_agent(
