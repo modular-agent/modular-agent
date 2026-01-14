@@ -22,6 +22,7 @@
     type NodeTypes,
     type OnDelete,
     type OnMove,
+    type OnSelectionDrag,
   } from "@xyflow/svelte";
   // 👇 this is important! You need to import the styles for Svelte Flow to work
   import "@xyflow/svelte/dist/style.css";
@@ -29,7 +30,6 @@
   import {
     addAgent,
     addAgentsAndChannels,
-    addAgentStream,
     addChannel,
     getAgentSpec,
     getAgentStreamSpec,
@@ -38,7 +38,6 @@
     removeChannel,
     startAgent,
     stopAgent,
-    uniqueStreamName,
     updateAgentSpec,
     updateAgentStreamSpec,
   } from "tauri-plugin-askit-api";
@@ -314,16 +313,6 @@
     await saveAgentStream(data.flow.name, s);
   }
 
-  async function onDuplicateStream() {
-    const s = await getAgentStreamSpec(stream_id);
-    if (!s) return;
-    const new_name = await uniqueStreamName(data.flow.name);
-    const new_id = await addAgentStream(new_name, s);
-    if (new_id) {
-      goto(`/stream_editor/${new_id}`, { invalidateAll: true });
-    }
-  }
-
   async function onExportStream() {
     const s = await getAgentStreamSpec(stream_id);
     const jsonStr = JSON.stringify(s, null, 2);
@@ -494,6 +483,15 @@
     });
   };
 
+  const handleSelectionDragStop: OnSelectionDrag = async (_event, draggedNodes) => {
+    draggedNodes.forEach(async (node) => {
+      await updateAgentSpec(node.id, {
+        x: node.position.x,
+        y: node.position.y,
+      });
+    });
+  };
+
   const handleOnMoveEnd: OnMove = async (_event, viewport) => {
     await updateAgentStreamSpec(stream_id, { viewport });
   };
@@ -550,6 +548,7 @@
     onpaneclick={handlePaneClick}
     onselectionclick={handleSelectionClick}
     onselectioncontextmenu={handleSelectionContextMenu}
+    onselectiondragstop={handleSelectionDragStop}
     snapGrid={[6, 6]}
   >
     <Background
