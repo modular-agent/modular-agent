@@ -5,18 +5,19 @@ use agent_stream_kit::{
     AgentValue, AsAgent, askit_agent, async_trait,
 };
 
-static CATEGORY: &str = "Std/Input";
+const CATEGORY: &str = "Std/Input";
 
-static UNIT: &str = "unit";
-static BOOLEAN: &str = "boolean";
-static INTEGER: &str = "integer";
-static NUMBER: &str = "number";
-static STRING: &str = "string";
-static TEXT: &str = "text";
-static OBJECT: &str = "object";
+const UNIT: &str = "unit";
+const BOOLEAN: &str = "boolean";
+const INTEGER: &str = "integer";
+const NUMBER: &str = "number";
+const STRING: &str = "string";
+const TEXT: &str = "text";
+const OBJECT: &str = "object";
 
 /// Unit Input
 #[askit_agent(
+    kind = "Input",
     title = "Unit Input",
     category = CATEGORY,
     outputs = [UNIT],
@@ -46,6 +47,7 @@ impl AsAgent for UnitInputAgent {
 
 // Boolean Input
 #[askit_agent(
+    kind = "Input",
     title = "Boolean Input",
     category = CATEGORY,
     inputs = [UNIT],
@@ -85,6 +87,7 @@ impl AsAgent for BooleanInputAgent {
 
 // Integer Input
 #[askit_agent(
+    kind = "Input",
     title = "Integer Input",
     category = CATEGORY,
     inputs = [UNIT],
@@ -124,6 +127,7 @@ impl AsAgent for IntegerInputAgent {
 
 // Number Input
 #[askit_agent(
+    kind = "Input",
     title = "Number Input",
     category = CATEGORY,
     inputs = [UNIT],
@@ -144,8 +148,8 @@ impl AsAgent for NumberInputAgent {
 
     fn configs_changed(&mut self) -> Result<(), AgentError> {
         if *self.status() == AgentStatus::Start {
-            let value = self.configs()?.get(NUMBER)?;
-            self.try_output(AgentContext::new(), NUMBER, value.clone())?;
+            let value = self.configs()?.get_number(NUMBER)?; // Should we use to_number here?
+            self.try_output(AgentContext::new(), NUMBER, AgentValue::number(value))?;
         }
         Ok(())
     }
@@ -156,13 +160,14 @@ impl AsAgent for NumberInputAgent {
         _pin: String,
         _value: AgentValue,
     ) -> Result<(), AgentError> {
-        let value = self.configs()?.get(NUMBER)?;
-        self.output(ctx, NUMBER, value.clone()).await
+        let value = self.configs()?.get_number(NUMBER)?;
+        self.output(ctx, NUMBER, AgentValue::number(value)).await
     }
 }
 
 // String Input
 #[askit_agent(
+    kind = "Input",
     title = "String Input",
     category = CATEGORY,
     inputs = [UNIT],
@@ -202,6 +207,7 @@ impl AsAgent for StringInputAgent {
 
 // Text Input
 #[askit_agent(
+    kind = "Input",
     title = "Text Input",
     category = CATEGORY,
     inputs = [UNIT],
@@ -241,6 +247,7 @@ impl AsAgent for TextInputAgent {
 
 // Object Input
 #[askit_agent(
+    kind = "Input",
     title = "Object Input",
     category = CATEGORY,
     inputs = [UNIT],
