@@ -48,6 +48,7 @@ struct AgentArgs {
     kind: Option<Expr>,
     name: Option<Expr>,
     title: Option<Expr>,
+    hide_title: bool,
     description: Option<Expr>,
     category: Option<Expr>,
     inputs: Vec<Expr>,
@@ -115,6 +116,7 @@ fn expand_askit_agent(
         kind: None,
         name: None,
         title: None,
+        hide_title: false,
         description: None,
         category: None,
         inputs: Vec::new(),
@@ -133,6 +135,9 @@ fn expand_askit_agent(
             }
             Meta::NameValue(nv) if nv.path.is_ident("title") => {
                 parsed.title = Some(nv.value);
+            }
+            Meta::Path(p) if p.is_ident("hide_title") => {
+                parsed.hide_title = true;
             }
             Meta::NameValue(nv) if nv.path.is_ident("description") => {
                 parsed.description = Some(nv.value);
@@ -278,6 +283,11 @@ fn expand_askit_agent(
         .category
         .ok_or_else(|| syn::Error::new(Span::call_site(), "askit_agent: missing `category`"))?;
     let title = quote! { .title(#title) };
+    let hide_title = if parsed.hide_title {
+        quote! { .hide_title() }
+    } else {
+        quote! {}
+    };
     let description = parsed.description.map(|d| quote! { .description(#d) });
     let category = quote! { .category(#category) };
 
@@ -900,6 +910,7 @@ fn expand_askit_agent(
             Some(::agent_stream_kit::new_agent_boxed::<#ident>),
         )
         #title
+        #hide_title
         #description
         #category
         #inputs

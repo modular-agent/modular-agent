@@ -21,6 +21,9 @@ pub struct AgentDefinition {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
 
+    #[serde(default, skip_serializing_if = "<&bool>::not")]
+    pub hide_title: bool,
+
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
 
@@ -94,6 +97,11 @@ impl AgentDefinition {
 
     pub fn title(mut self, title: &str) -> Self {
         self.title = Some(title.into());
+        self
+    }
+
+    pub fn hide_title(mut self) -> Self {
+        self.hide_title = true;
         self
     }
 
