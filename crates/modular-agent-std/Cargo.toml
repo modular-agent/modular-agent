@@ -21,11 +21,19 @@ serde_json = "1"
 serde_yaml_ng = { version = "0.10.0", optional = true }
 tokio = { version = "1", features = ["time"] }
 
+[dev-dependencies]
+serial_test = "3"
+
 [features]
 default = ["image", "yaml"]
 image = []
+test-utils = ["agent-stream-kit/test-utils", "tokio/macros"]
 yaml = ["serde_yaml_ng"]
+
+[[test]]
+name = "main_test"
+path = "tests/main_test.rs"
+required-features = ["test-utils"]
 
 # [patch.crates-io]
 # agent-stream-kit = { path = "../agent-stream-kit/agent-stream-kit" }
-# askit-macros = { path = "../agent-stream-kit/askit-macros" }

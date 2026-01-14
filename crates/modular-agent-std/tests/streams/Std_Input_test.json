@@ -1,0 +1,778 @@
+{
+  "agents": [
+    {
+      "id": "352",
+      "def_name": "askit_std_agents::input::BooleanInputAgent",
+      "inputs": [
+        "unit"
+      ],
+      "outputs": [
+        "boolean"
+      ],
+      "configs": {
+        "boolean": false
+      },
+      "config_specs": {
+        "boolean": {
+          "value": false,
+          "type": "boolean",
+          "hide_title": true
+        }
+      },
+      "x": 240,
+      "y": 72
+    },
+    {
+      "id": "353",
+      "def_name": "askit_std_agents::display::DisplayValueAgent",
+      "inputs": [
+        "value"
+      ],
+      "configs": {
+        "value": false
+      },
+      "config_specs": {
+        "value": {
+          "value": null,
+          "type": "*",
+          "hide_title": true,
+          "readonly": true
+        }
+      },
+      "x": 528,
+      "y": 72
+    },
+    {
+      "id": "354",
+      "def_name": "askit_std_agents::input::IntegerInputAgent",
+      "inputs": [
+        "unit"
+      ],
+      "outputs": [
+        "integer"
+      ],
+      "configs": {
+        "integer": 0
+      },
+      "config_specs": {
+        "integer": {
+          "value": 0,
+          "type": "integer",
+          "hide_title": true
+        }
+      },
+      "x": 240,
+      "y": 1032
+    },
+    {
+      "id": "355",
+      "def_name": "askit_std_agents::display::DisplayValueAgent",
+      "inputs": [
+        "value"
+      ],
+      "configs": {
+        "value": 0
+      },
+      "config_specs": {
+        "value": {
+          "value": null,
+          "type": "*",
+          "hide_title": true,
+          "readonly": true
+        }
+      },
+      "x": 456,
+      "y": 1032
+    },
+    {
+      "id": "356",
+      "def_name": "askit_std_agents::input::NumberInputAgent",
+      "inputs": [
+        "unit"
+      ],
+      "outputs": [
+        "number"
+      ],
+      "configs": {
+        "number": 0
+      },
+      "config_specs": {
+        "number": {
+          "value": 0,
+          "type": "number",
+          "hide_title": true
+        }
+      },
+      "x": 240,
+      "y": 552
+    },
+    {
+      "id": "357",
+      "def_name": "askit_std_agents::display::DisplayValueAgent",
+      "inputs": [
+        "value"
+      ],
+      "configs": {
+        "value": 0
+      },
+      "config_specs": {
+        "value": {
+          "value": null,
+          "type": "*",
+          "hide_title": true,
+          "readonly": true
+        }
+      },
+      "x": 456,
+      "y": 552
+    },
+    {
+      "id": "358",
+      "def_name": "askit_std_agents::input::ObjectInputAgent",
+      "inputs": [
+        "unit"
+      ],
+      "outputs": [
+        "object"
+      ],
+      "configs": {
+        "object": {}
+      },
+      "config_specs": {
+        "object": {
+          "value": {},
+          "type": "object",
+          "hide_title": true
+        }
+      },
+      "x": 1176,
+      "y": 1200
+    },
+    {
+      "id": "359",
+      "def_name": "askit_std_agents::display::DisplayValueAgent",
+      "inputs": [
+        "value"
+      ],
+      "configs": {
+        "value": {}
+      },
+      "config_specs": {
+        "value": {
+          "value": null,
+          "type": "*",
+          "hide_title": true,
+          "readonly": true
+        }
+      },
+      "x": 1392,
+      "y": 1200
+    },
+    {
+      "id": "360",
+      "def_name": "askit_std_agents::input::StringInputAgent",
+      "inputs": [
+        "unit"
+      ],
+      "outputs": [
+        "string"
+      ],
+      "configs": {
+        "string": ""
+      },
+      "config_specs": {
+        "string": {
+          "value": "",
+          "type": "string",
+          "hide_title": true
+        }
+      },
+      "x": 1152,
+      "y": 72
+    },
+    {
+      "id": "361",
+      "def_name": "askit_std_agents::input::TextInputAgent",
+      "inputs": [
+        "unit"
+      ],
+      "outputs": [
+        "text"
+      ],
+      "configs": {
+        "text": ""
+      },
+      "config_specs": {
+        "text": {
+          "value": "",
+          "type": "text",
+          "hide_title": true
+        }
+      },
+      "x": 1152,
+      "y": 648,
+      "height": 219,
+      "width": 237
+    },
+    {
+      "id": "362",
+      "def_name": "askit_std_agents::display::DisplayValueAgent",
+      "inputs": [
+        "value"
+      ],
+      "configs": {
+        "value": ""
+      },
+      "config_specs": {
+        "value": {
+          "value": null,
+          "type": "*",
+          "hide_title": true,
+          "readonly": true
+        }
+      },
+      "x": 1464,
+      "y": 648
+    },
+    {
+      "id": "363",
+      "def_name": "askit_std_agents::input::UnitInputAgent",
+      "outputs": [
+        "unit"
+      ],
+      "configs": {
+        "unit": {}
+      },
+      "config_specs": {
+        "unit": {
+          "value": null,
+          "type": "unit",
+          "hide_title": true
+        }
+      },
+      "x": 240,
+      "y": -144
+    },
+    {
+      "id": "364",
+      "def_name": "askit_std_agents::display::DisplayValueAgent",
+      "inputs": [
+        "value"
+      ],
+      "configs": {
+        "value": null
+      },
+      "config_specs": {
+        "value": {
+          "value": null,
+          "type": "*",
+          "hide_title": true,
+          "readonly": true
+        }
+      },
+      "x": 528,
+      "y": -144
+    },
+    {
+      "id": "365",
+      "def_name": "agent_stream_kit::board_agent::VarInAgent",
+      "inputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "boolean_out"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": 528,
+      "y": 264
+    },
+    {
+      "id": "366",
+      "def_name": "agent_stream_kit::board_agent::VarOutAgent",
+      "outputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "boolean_trig"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": -48,
+      "y": 72
+    },
+    {
+      "id": "367",
+      "def_name": "agent_stream_kit::board_agent::VarOutAgent",
+      "outputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "boolean_conf"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": -48,
+      "y": 312
+    },
+    {
+      "id": "368",
+      "def_name": "agent_stream_kit::board_agent::VarOutAgent",
+      "outputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "integer_trig"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": -48,
+      "y": 1032
+    },
+    {
+      "id": "369",
+      "def_name": "agent_stream_kit::board_agent::VarOutAgent",
+      "outputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "integer_conf"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": -48,
+      "y": 1248
+    },
+    {
+      "id": "370",
+      "def_name": "agent_stream_kit::board_agent::VarInAgent",
+      "inputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "integer_out"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": 456,
+      "y": 1248
+    },
+    {
+      "id": "371",
+      "def_name": "agent_stream_kit::board_agent::VarOutAgent",
+      "outputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "number_trig"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": -48,
+      "y": 552
+    },
+    {
+      "id": "372",
+      "def_name": "agent_stream_kit::board_agent::VarOutAgent",
+      "outputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "number_conf"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": -48,
+      "y": 768
+    },
+    {
+      "id": "373",
+      "def_name": "agent_stream_kit::board_agent::VarInAgent",
+      "inputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "number_out"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": 456,
+      "y": 768
+    },
+    {
+      "id": "374",
+      "def_name": "agent_stream_kit::board_agent::VarInAgent",
+      "inputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "string_out"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": 1368,
+      "y": 288
+    },
+    {
+      "id": "375",
+      "def_name": "agent_stream_kit::board_agent::VarOutAgent",
+      "outputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "string_trig"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": 864,
+      "y": 72
+    },
+    {
+      "id": "376",
+      "def_name": "agent_stream_kit::board_agent::VarOutAgent",
+      "outputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "string_conf"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": 864,
+      "y": 288
+    },
+    {
+      "id": "377",
+      "def_name": "askit_std_agents::display::DisplayValueAgent",
+      "inputs": [
+        "value"
+      ],
+      "configs": {
+        "value": null
+      },
+      "config_specs": {
+        "value": {
+          "value": null,
+          "type": "*",
+          "hide_title": true,
+          "readonly": true
+        }
+      },
+      "x": 1368,
+      "y": 72
+    },
+    {
+      "id": "378",
+      "def_name": "agent_stream_kit::board_agent::VarOutAgent",
+      "outputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "text_trig"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": 864,
+      "y": 648
+    },
+    {
+      "id": "379",
+      "def_name": "agent_stream_kit::board_agent::VarOutAgent",
+      "outputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "text_conf"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": 864,
+      "y": 888
+    },
+    {
+      "id": "380",
+      "def_name": "agent_stream_kit::board_agent::VarInAgent",
+      "inputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "text_out"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": 1464,
+      "y": 864
+    },
+    {
+      "id": "381",
+      "def_name": "agent_stream_kit::board_agent::VarOutAgent",
+      "outputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "object_trig"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": 888,
+      "y": 1200
+    },
+    {
+      "id": "382",
+      "def_name": "agent_stream_kit::board_agent::VarOutAgent",
+      "outputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "object_conf"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": 888,
+      "y": 1416
+    },
+    {
+      "id": "383",
+      "def_name": "agent_stream_kit::board_agent::VarInAgent",
+      "inputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "object_out"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": 1392,
+      "y": 1416
+    }
+  ],
+  "channels": [
+    {
+      "source": "352",
+      "source_handle": "boolean",
+      "target": "353",
+      "target_handle": "value"
+    },
+    {
+      "source": "354",
+      "source_handle": "integer",
+      "target": "355",
+      "target_handle": "value"
+    },
+    {
+      "source": "356",
+      "source_handle": "number",
+      "target": "357",
+      "target_handle": "value"
+    },
+    {
+      "source": "358",
+      "source_handle": "object",
+      "target": "359",
+      "target_handle": "value"
+    },
+    {
+      "source": "361",
+      "source_handle": "text",
+      "target": "362",
+      "target_handle": "value"
+    },
+    {
+      "source": "363",
+      "source_handle": "unit",
+      "target": "364",
+      "target_handle": "value"
+    },
+    {
+      "source": "366",
+      "source_handle": "value",
+      "target": "352",
+      "target_handle": "unit"
+    },
+    {
+      "source": "352",
+      "source_handle": "boolean",
+      "target": "365",
+      "target_handle": "value"
+    },
+    {
+      "source": "368",
+      "source_handle": "value",
+      "target": "354",
+      "target_handle": "unit"
+    },
+    {
+      "source": "354",
+      "source_handle": "integer",
+      "target": "370",
+      "target_handle": "value"
+    },
+    {
+      "source": "369",
+      "source_handle": "value",
+      "target": "354",
+      "target_handle": "config:integer"
+    },
+    {
+      "source": "367",
+      "source_handle": "value",
+      "target": "352",
+      "target_handle": "config:boolean"
+    },
+    {
+      "source": "356",
+      "source_handle": "number",
+      "target": "373",
+      "target_handle": "value"
+    },
+    {
+      "source": "371",
+      "source_handle": "value",
+      "target": "356",
+      "target_handle": "unit"
+    },
+    {
+      "source": "372",
+      "source_handle": "value",
+      "target": "356",
+      "target_handle": "config:number"
+    },
+    {
+      "source": "375",
+      "source_handle": "value",
+      "target": "360",
+      "target_handle": "unit"
+    },
+    {
+      "source": "376",
+      "source_handle": "value",
+      "target": "360",
+      "target_handle": "config:string"
+    },
+    {
+      "source": "360",
+      "source_handle": "string",
+      "target": "374",
+      "target_handle": "value"
+    },
+    {
+      "source": "360",
+      "source_handle": "string",
+      "target": "377",
+      "target_handle": "value"
+    },
+    {
+      "source": "378",
+      "source_handle": "value",
+      "target": "361",
+      "target_handle": "unit"
+    },
+    {
+      "source": "379",
+      "source_handle": "value",
+      "target": "361",
+      "target_handle": "config:text"
+    },
+    {
+      "source": "361",
+      "source_handle": "text",
+      "target": "380",
+      "target_handle": "value"
+    },
+    {
+      "source": "381",
+      "source_handle": "value",
+      "target": "358",
+      "target_handle": "unit"
+    },
+    {
+      "source": "358",
+      "source_handle": "object",
+      "target": "383",
+      "target_handle": "value"
+    },
+    {
+      "source": "382",
+      "source_handle": "value",
+      "target": "358",
+      "target_handle": "config:object"
+    }
+  ],
+  "viewport": {
+    "x": 438.4831810180053,
+    "y": 202.88219905692273,
+    "zoom": 0.3338017094132566
+  }
+}
