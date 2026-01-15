@@ -19,6 +19,7 @@ const OBJECT: &str = "object";
 #[askit_agent(
     kind = "Input",
     title = "Unit Input",
+    hide_title,
     category = CATEGORY,
     outputs = [UNIT],
     unit_config(name = UNIT, hide_title)
