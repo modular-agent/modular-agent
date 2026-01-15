@@ -65,21 +65,3 @@ impl AsAgent for CounterAgent {
         Ok(())
     }
 }
-
-/// Comment Agent
-/// Show a comment in the stream editor.
-#[askit_agent(
-    title = "Comment",
-    category = CATEGORY,
-    text_config(name = "comment", hide_title),
-)]
-struct CommentAgent {
-    data: AgentData,
-}
-
-impl AsAgent for CommentAgent {
-    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
-        let data = AgentData::new(askit, id, spec);
-        Ok(Self { data })
-    }
-}
