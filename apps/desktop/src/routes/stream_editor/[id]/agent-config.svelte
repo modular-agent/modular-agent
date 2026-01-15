@@ -59,25 +59,25 @@
 </script>
 
 {#snippet displayEmpty()}
-  <div class="flex-none border-1 p-2">&nbsp;</div>
+  <div class="flex-none border-none p-2">&nbsp;</div>
 {/snippet}
 
 {#snippet displayBoolean(value: boolean)}
   {#if value}
-    <div class="flex-none border-1 p-2">true</div>
+    <div class="flex-none border-none p-2">true</div>
   {:else}
-    <div class="flex-none border-1 p-2">false</div>
+    <div class="flex-none border-none p-2">false</div>
   {/if}
 {/snippet}
 
 {#snippet displayNumber(value: number)}
-  <div class="flex-none border-1 p-2">{value}</div>
+  <div class="flex-none border-none p-2">{value}</div>
 {/snippet}
 
 {#snippet displayString(value: string)}
   <Input
     type="text"
-    class="nodrag nowheel flex-none text-wrap"
+    class="nodrag nowheel flex-none border-none shadow-none text-wrap"
     spellcheck="false"
     {value}
     onkeydown={(evt) => {
@@ -91,7 +91,7 @@
 
 {#snippet displayPassword(value: string)}
   <Input
-    class="nodrag flex-none"
+    class="nodrag flex-none border-none shadow-none"
     type="password"
     {value}
     onkeydown={(evt) => {
@@ -102,7 +102,7 @@
 
 {#snippet displayText(value: string)}
   <Textarea
-    class="nodrag nowheel flex-1 text-wrap"
+    class="nodrag nowheel flex-1 border-none shadow-none text-wrap"
     spellcheck="false"
     {value}
     onkeydown={(evt) => {
@@ -115,7 +115,7 @@
 {/snippet}
 
 {#snippet displayHtml(value: any)}
-  <div class="nodrag nowheel flex-1 agent-config-html">
+  <div class="nodrag nowheel flex-1 border-none shadow-none agent-config-html">
     {@html typeof value === "string" ? value : String(value ?? "")}
   </div>
 {/snippet}
@@ -175,7 +175,7 @@
 {#snippet inputInteger(key: string, v: number)}
   <Input
     type="number"
-    class="nodrag flex-none"
+    class="nodrag flex-none shadow-none"
     value={v}
     onkeydown={(evt) => {
       if (evt.key === "Enter") {
@@ -198,7 +198,7 @@
 
 {#snippet inputNumber(key: string, v: number)}
   <Input
-    class="nodrag flex-none"
+    class="nodrag flex-none shadow-none"
     type="text"
     value={v}
     onkeydown={(evt) => {
@@ -222,7 +222,7 @@
 
 {#snippet inputString(key: string, v: string)}
   <Input
-    class="nodrag flex-none"
+    class="nodrag flex-none shadow-none"
     spellcheck="false"
     type="text"
     value={v}
@@ -241,7 +241,7 @@
 
 {#snippet inputPassword(key: string, v: string)}
   <Input
-    class="nodrag flex-none"
+    class="nodrag flex-none shadow-none"
     type="password"
     value={v}
     onkeydown={(evt) => {
@@ -254,7 +254,7 @@
 
 {#snippet inputText(key: string, v: string)}
   <Textarea
-    class="nodrag nowheel flex-1"
+    class="nodrag nowheel flex-1 shadow-none"
     spellcheck="false"
     value={v}
     onkeydown={(evt) => {
@@ -273,7 +273,7 @@
 
 {#snippet inputObject(key: string, v: any)}
   <Textarea
-    class="nodrag nowheel flex-1"
+    class="nodrag nowheel flex-1 shadow-none"
     spellcheck="false"
     value={JSON.stringify(v, null, 2)}
     onkeydown={(evt) => {
@@ -306,7 +306,7 @@
 
 {#snippet inputDefault(key: string, v: any)}
   <Textarea
-    class="nodrag nowheel flex-1"
+    class="nodrag nowheel flex-1 shadow-none"
     spellcheck="false"
     value={JSON.stringify(v, null, 2)}
     disabled
@@ -322,13 +322,13 @@
   <div class="flex-none relative flex items-center">
     {#if configSpec?.hide_title !== true}
       <h3>{configSpec?.title || name}</h3>
+      <Handle
+        id="config:{name}"
+        type="target"
+        position={Position.Left}
+        style={`top: 50%; transform: translate(${HANDLE_X_OFFSET}, -50%); ${CONFIG_HANDLE_STYLE}`}
+      />
     {/if}
-    <Handle
-      id="config:{name}"
-      type="target"
-      position={Position.Left}
-      style={`top: 50%; transform: translate(${HANDLE_X_OFFSET}, -50%); ${CONFIG_HANDLE_STYLE}`}
-    />
   </div>
   {#if configSpec?.description}
     <p class="flex-none text-xs text-gray-500">{configSpec?.description}</p>

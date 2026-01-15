@@ -10,7 +10,7 @@
   const DEFAULT_HANDLE_STYLE = "width: 12px; height: 12px;";
 
   const HANDLE_OFFSET = 87;
-  const HANDLE_OFFSET_NO_TITLE = 16;
+  const HANDLE_OFFSET_NO_TITLE = 32;
   const HANDLE_GAP = 25.5;
 </script>
 
@@ -43,9 +43,16 @@
   let hideTitle = $derived(agentDef?.hide_title ?? false);
   let bgColor = $derived(bgColors[agentDef ? (data.disabled ? 0 : 1) : 2]);
 
-  let handleOffset = $derived(hideTitle ? HANDLE_OFFSET_NO_TITLE : HANDLE_OFFSET);
+  let clientHeight = $state(0);
+  let handleOffset = $derived(
+    hideTitle
+      ? clientHeight > 0 && clientHeight < HANDLE_OFFSET_NO_TITLE * 2
+        ? clientHeight / 2 + 2
+        : HANDLE_OFFSET_NO_TITLE
+      : HANDLE_OFFSET,
+  );
 
-  let ht = $state<number | null>(null);
+  let ht = $derived<number | null>(height ?? null);
 
   function onResize(_ev: ResizeDragEvent, params: ResizeParams) {
     ht = params.height;
@@ -64,7 +71,6 @@
   });
 
   $effect(() => {
-    ht = height ?? ht;
     if (inputCount > lastInputCount) {
       highlight.set(1, { instant: true });
       highlight.target = 0;
@@ -75,6 +81,7 @@
 
 <NodeResizer isVisible={selected} {onResize} {onResizeEnd} />
 <div
+  bind:clientHeight
   class="{bgColor} flex flex-col p-0 border-primary border-3 rounded-xl"
   style:height={ht ? `${ht}px` : "auto"}
   style:box-shadow={highlight.current > 0.05

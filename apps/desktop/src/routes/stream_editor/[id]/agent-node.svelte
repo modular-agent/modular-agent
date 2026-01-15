@@ -40,7 +40,7 @@
 
   const agentDefs = getAgentDefinitions();
   const agentDef = $derived(agentDefs[data?.def_name] ?? null);
-  const description = $derived(agentDef.description);
+  // const description = $derived(agentDef.description);
 
   let errorMessages = $state<string[]>([]);
   let inputMessage = $state<string>("");
