@@ -196,7 +196,8 @@ impl AsAgent for OpenAICompletionAgent {
             .map_err(|e| AgentError::IoError(format!("OpenAI Error: {}", e)))?;
 
         let message = Message::assistant(res.choices[0].text.clone());
-        self.output(ctx.clone(), PIN_MESSAGE, message.into()).await?;
+        self.output(ctx.clone(), PIN_MESSAGE, message.into())
+            .await?;
 
         let out_response = AgentValue::from_serialize(&res)?;
         self.output(ctx, PIN_RESPONSE, out_response).await?;
@@ -298,7 +299,7 @@ impl AsAgent for OpenAIChatAgent {
                 messages
                     .iter()
                     .filter_map(|m| m.as_message())
-                    .map(message_to_openai_msg)
+                    .map(message_to_chat_completion_msg)
                     .collect::<Vec<ChatCompletionRequestMessage>>(),
             )
             .tools(tool_infos.clone())
@@ -368,7 +369,8 @@ impl AsAgent for OpenAIChatAgent {
                     message.tool_calls = Some(tool_calls.clone().into());
                 }
 
-                self.output(ctx.clone(), PIN_MESSAGE, message.clone().into()).await?;
+                self.output(ctx.clone(), PIN_MESSAGE, message.clone().into())
+                    .await?;
 
                 let out_response = AgentValue::from_serialize(&res)?;
                 self.output(ctx.clone(), PIN_RESPONSE, out_response).await?;
@@ -386,7 +388,8 @@ impl AsAgent for OpenAIChatAgent {
                 let mut message: Message = message_from_openai_msg(c.message.clone());
                 message.id = Some(id.clone());
 
-                self.output(ctx.clone(), PIN_MESSAGE, message.clone().into()).await?;
+                self.output(ctx.clone(), PIN_MESSAGE, message.clone().into())
+                    .await?;
 
                 let out_response = AgentValue::from_serialize(&res)?;
                 self.output(ctx.clone(), PIN_RESPONSE, out_response).await?;
@@ -717,18 +720,44 @@ fn message_from_openai_msg(msg: ChatCompletionResponseMessage) -> Message {
     message
 }
 
-fn message_to_openai_msg(msg: &Message) -> ChatCompletionRequestMessage {
+fn message_to_chat_completion_msg(msg: &Message) -> ChatCompletionRequestMessage {
     match msg.role.as_str() {
         "system" => ChatCompletionRequestSystemMessageArgs::default()
             .content(msg.content.clone())
             .build()
             .unwrap()
             .into(),
-        "user" => ChatCompletionRequestUserMessageArgs::default()
-            .content(msg.content.clone())
-            .build()
-            .unwrap()
-            .into(),
+        "user" => {
+            #[cfg(feature = "image")]
+            {
+                if let Some(image) = &msg.image {
+                    use async_openai::types::{
+                        ChatCompletionRequestMessageContentPartImage,
+                        ChatCompletionRequestMessageContentPartText, ImageUrl,
+                    };
+
+                    let image_url = ImageUrl {
+                        url: image.get_base64(),
+                        detail: Some(async_openai::types::ImageDetail::Auto),
+                    };
+                    let img = ChatCompletionRequestMessageContentPartImage { image_url };
+                    let text = ChatCompletionRequestMessageContentPartText {
+                        text: msg.content.clone(),
+                    };
+
+                    return ChatCompletionRequestUserMessageArgs::default()
+                        .content(vec![text.into(), img.into()])
+                        .build()
+                        .unwrap()
+                        .into();
+                }
+            }
+            ChatCompletionRequestUserMessageArgs::default()
+                .content(msg.content.clone())
+                .build()
+                .unwrap()
+                .into()
+        }
         "assistant" => ChatCompletionRequestAssistantMessageArgs::default()
             .content(msg.content.clone())
             .build()
