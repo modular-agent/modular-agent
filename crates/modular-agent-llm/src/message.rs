@@ -161,7 +161,7 @@ fn prepend_message(value: AgentValue, message: Message) -> AgentValue {
     category=CATEGORY,
     inputs=[PIN_MESSAGE, PIN_RESET],
     outputs=[PIN_MESSAGES],
-    text_config(name=CONFIG_PREAMBLE),
+    object_config(name=CONFIG_PREAMBLE),
 )]
 pub struct PreambleAgent {
     data: AgentData,
@@ -211,6 +211,11 @@ impl AsAgent for PreambleAgent {
         Ok(())
     }
 
+    async fn start(&mut self) -> Result<(), AgentError> {
+        self.prepended = false;
+        Ok(())
+    }
+
     async fn process(
         &mut self,
         ctx: AgentContext,
@@ -229,28 +234,31 @@ impl AsAgent for PreambleAgent {
         };
 
         if self.prepended {
-            return self.output(
-                ctx,
-                PIN_MESSAGES,
-                AgentValue::array(vector![message.into()]),
-            )
-            .await;
+            return self
+                .output(
+                    ctx,
+                    PIN_MESSAGES,
+                    AgentValue::array(vector![message.into()]),
+                )
+                .await;
         }
 
         self.prepended = true;
 
         let Some(preamble) = &self.preamble else {
-            return self.output(
-                ctx,
-                PIN_MESSAGES,
-                AgentValue::array(vector![message.into()]),
-            )
-            .await;
+            return self
+                .output(
+                    ctx,
+                    PIN_MESSAGES,
+                    AgentValue::array(vector![message.into()]),
+                )
+                .await;
         };
 
         let mut messages = preamble.clone();
         messages.push_back(message.into());
-        self.output(ctx, PIN_MESSAGES, AgentValue::array(messages)).await?;
+        self.output(ctx, PIN_MESSAGES, AgentValue::array(messages))
+            .await?;
 
         Ok(())
     }
@@ -296,7 +304,14 @@ impl AsAgent for MessagesAgent {
     ) -> Result<(), AgentError> {
         if pin == PIN_RESET {
             self.reset_messages()?;
-            self.output(ctx, PIN_MESSAGES, AgentValue::array_default()).await?;
+            self.output(ctx, PIN_MESSAGES, AgentValue::array_default())
+                .await?;
+            return Ok(());
+        }
+
+        if value.is_unit() {
+            let messages = self.configs()?.get(CONFIG_MESSAGES)?;
+            self.output(ctx, PIN_MESSAGES, messages.clone()).await?;
             return Ok(());
         }
 
@@ -452,7 +467,8 @@ impl AsAgent for MessagesForPromptAgent {
         }
 
         selected_messages.reverse();
-        self.output(ctx, PIN_MESSAGES, selected_messages.into()).await?;
+        self.output(ctx, PIN_MESSAGES, selected_messages.into())
+            .await?;
 
         Ok(())
     }
