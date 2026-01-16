@@ -20,7 +20,11 @@ mod registry;
 mod runtime;
 mod spec;
 mod stream;
+pub mod tool;
 mod value;
+
+#[cfg(feature = "mcp")]
+mod mcp;
 
 #[cfg(feature = "test-utils")]
 pub mod test_utils;
