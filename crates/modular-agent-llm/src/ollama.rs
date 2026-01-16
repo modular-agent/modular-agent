@@ -293,7 +293,7 @@ impl AsAgent for OllamaChatAgent {
             messages
                 .iter()
                 .cloned()
-                .map(|m| message_to_ollama(m.as_message().unwrap().clone()))
+                .map(|m| message_to_chat(m.as_message().unwrap().clone()))
                 .collect(),
         );
 
@@ -702,7 +702,7 @@ fn message_from_ollama(msg: ChatMessage) -> Message {
     // }
 }
 
-fn message_to_ollama(msg: Message) -> ChatMessage {
+fn message_to_chat(msg: Message) -> ChatMessage {
     let mut cmsg = match msg.role.as_str() {
         "user" => ChatMessage::user(msg.content),
         "assistant" => ChatMessage::assistant(msg.content),

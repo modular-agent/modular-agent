@@ -7,7 +7,7 @@ use agent_stream_kit::{
     ASKit, Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
     Message, ToolCall, ToolCallFunction, askit_agent, async_trait,
 };
-use async_openai::types::responses::{FunctionArgs, ToolDefinition};
+// use async_openai::types::responses::{FunctionArgs, ToolDefinition};
 use async_openai::types::{
     ChatCompletionMessageToolCall, ChatCompletionMessageToolCallChunk, ChatCompletionTool,
     ChatCompletionToolArgs, FunctionObjectArgs,
@@ -842,26 +842,26 @@ impl TryFrom<tool::ToolInfo> for ChatCompletionTool {
     }
 }
 
-impl TryFrom<tool::ToolInfo> for ToolDefinition {
-    type Error = AgentError;
+// impl TryFrom<tool::ToolInfo> for ToolDefinition {
+//     type Error = AgentError;
 
-    fn try_from(info: tool::ToolInfo) -> Result<Self, Self::Error> {
-        let mut function = FunctionArgs::default();
-        function.name(info.name);
-        if !info.description.is_empty() {
-            function.description(info.description);
-        }
-        if let Some(params) = info.parameters {
-            // function.parameters(serde_json::to_value(params).map_err(|e| {
-            //     AgentError::InvalidValue(format!("Failed to serialize tool parameters: {}", e))
-            // })?);
-            function.parameters(params);
-        }
-        Ok(ToolDefinition::Function(function.build().map_err(|e| {
-            AgentError::InvalidValue(format!("Failed to build tool function: {}", e))
-        })?))
-    }
-}
+//     fn try_from(info: tool::ToolInfo) -> Result<Self, Self::Error> {
+//         let mut function = FunctionArgs::default();
+//         function.name(info.name);
+//         if !info.description.is_empty() {
+//             function.description(info.description);
+//         }
+//         if let Some(params) = info.parameters {
+//             // function.parameters(serde_json::to_value(params).map_err(|e| {
+//             //     AgentError::InvalidValue(format!("Failed to serialize tool parameters: {}", e))
+//             // })?);
+//             function.parameters(params);
+//         }
+//         Ok(ToolDefinition::Function(function.build().map_err(|e| {
+//             AgentError::InvalidValue(format!("Failed to build tool function: {}", e))
+//         })?))
+//     }
+// }
 
 fn try_from_chat_completion_message_tool_call_chunk_to_tool_call(
     call: &ChatCompletionMessageToolCallChunk,
