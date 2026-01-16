@@ -24,7 +24,7 @@ pub mod tool;
 mod value;
 
 #[cfg(feature = "mcp")]
-mod mcp;
+pub mod mcp;
 
 #[cfg(feature = "test-utils")]
 pub mod test_utils;
