@@ -4,11 +4,14 @@ use anyhow::{anyhow, bail, Context as _, Result};
 use dirs;
 use tauri::{AppHandle, Manager, State};
 
+use agent_stream_kit::mcp::register_tools_from_mcp_json;
 use agent_stream_kit::{ASKit, AgentStreamSpec};
+
 use tauri_plugin_askit::ASKitExt;
 
 use crate::agent_stream_app::{observer::start_askit_observer, settings::CoreSettings};
 
+static ASKIT_PATH: &'static str = ".askit";
 static ASKIT_STREAMS_PATH: &'static str = ".askit/streams";
 
 pub struct ASApp {
@@ -207,8 +210,20 @@ pub async fn ready(app: &AppHandle) -> Result<()> {
     let askit = &asapp.askit;
     start_askit_observer(&askit, app.clone());
 
+    start_mcp_services().await?;
+
     run_auto_start_streams(app).await;
 
+    Ok(())
+}
+
+async fn start_mcp_services() -> Result<()> {
+    let askit_dir = askit_dir()?;
+    let tools = register_tools_from_mcp_json(askit_dir.join("mcp.json")).await?;
+    log::info!("Registered {} tools:", tools.len());
+    for tool in tools {
+        log::info!("  - {}", tool);
+    }
     Ok(())
 }
 
@@ -233,6 +248,12 @@ async fn run_auto_start_streams(app: &AppHandle) {
 }
 
 pub fn quit(_app: &AppHandle) {}
+
+fn askit_dir() -> Result<PathBuf> {
+    let home_dir = dirs::home_dir().with_context(|| "Failed to get home directory")?;
+    let askit_dir = home_dir.join(ASKIT_PATH);
+    Ok(askit_dir)
+}
 
 fn agent_streams_dir() -> Result<PathBuf> {
     let home_dir = dirs::home_dir().with_context(|| "Failed to get home directory")?;
