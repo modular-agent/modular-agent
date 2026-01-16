@@ -3,6 +3,7 @@
 use std::sync::{Arc, Mutex};
 use std::vec;
 
+use agent_stream_kit::tool::{self, list_tool_infos_patterns};
 use agent_stream_kit::{
     ASKit, Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
     Message, ToolCall, ToolCallFunction, askit_agent, async_trait,
@@ -34,8 +35,6 @@ use async_openai::{
 };
 use futures::StreamExt;
 use im::vector;
-
-use crate::tool::{self, list_tool_infos_patterns};
 
 const CATEGORY: &str = "LLM/OpenAI";
 
@@ -285,7 +284,7 @@ impl AsAgent for OpenAIChatAgent {
                     ))
                 })?
                 .into_iter()
-                .map(|tool| tool.try_into())
+                .map(|tool| try_from_tool_info_to_chat_completion_tool(tool))
                 .collect::<Result<Vec<ChatCompletionTool>, AgentError>>()?
         };
 
@@ -818,28 +817,31 @@ fn message_to_chat_completion_msg(msg: &Message) -> ChatCompletionRequestMessage
 //     message
 // }
 
-impl TryFrom<tool::ToolInfo> for ChatCompletionTool {
-    type Error = AgentError;
+// impl TryFrom<tool::ToolInfo> for ChatCompletionTool {
+//     type Error = AgentError;
 
-    fn try_from(info: tool::ToolInfo) -> Result<Self, Self::Error> {
-        let mut function = FunctionObjectArgs::default();
-        function.name(info.name);
-        if !info.description.is_empty() {
-            function.description(info.description);
-        }
-        if let Some(params) = info.parameters {
-            // function.parameters(serde_json::to_value(params).map_err(|e| {
-            //     AgentError::InvalidValue(format!("Failed to serialize tool parameters: {}", e))
-            // })?);
-            function.parameters(params);
-        }
-        Ok(ChatCompletionToolArgs::default()
-            .function(function.build().map_err(|e| {
-                AgentError::InvalidValue(format!("Failed to build tool function: {}", e))
-            })?)
-            .build()
-            .map_err(|e| AgentError::InvalidValue(format!("Failed to build tool: {}", e)))?)
+//     fn try_from(info: tool::ToolInfo) -> Result<Self, Self::Error> {
+
+fn try_from_tool_info_to_chat_completion_tool(
+    info: tool::ToolInfo,
+) -> Result<ChatCompletionTool, AgentError> {
+    let mut function = FunctionObjectArgs::default();
+    function.name(info.name);
+    if !info.description.is_empty() {
+        function.description(info.description);
     }
+    if let Some(params) = info.parameters {
+        // function.parameters(serde_json::to_value(params).map_err(|e| {
+        //     AgentError::InvalidValue(format!("Failed to serialize tool parameters: {}", e))
+        // })?);
+        function.parameters(params);
+    }
+    Ok(ChatCompletionToolArgs::default()
+        .function(function.build().map_err(|e| {
+            AgentError::InvalidValue(format!("Failed to build tool function: {}", e))
+        })?)
+        .build()
+        .map_err(|e| AgentError::InvalidValue(format!("Failed to build tool: {}", e)))?)
 }
 
 // impl TryFrom<tool::ToolInfo> for ToolDefinition {

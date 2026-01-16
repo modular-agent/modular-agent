@@ -2,10 +2,6 @@
 
 pub mod doc;
 pub mod message;
-pub mod tool;
-
-#[cfg(feature = "mcp")]
-pub mod mcp;
 
 #[cfg(feature = "ollama")]
 pub mod ollama;

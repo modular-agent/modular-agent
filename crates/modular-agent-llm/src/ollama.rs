@@ -3,6 +3,7 @@
 use std::sync::{Arc, Mutex};
 use std::vec;
 
+use agent_stream_kit::tool::{self, list_tool_infos_patterns};
 use agent_stream_kit::{
     ASKit, Agent, AgentConfigs, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec,
     AgentValue, AsAgent, Message, ToolCall, ToolCallFunction, askit_agent, async_trait,
@@ -22,8 +23,6 @@ use ollama_rs::{
 };
 use schemars::{Schema, json_schema};
 use tokio_stream::StreamExt;
-
-use crate::tool::{self, list_tool_infos_patterns};
 
 const CATEGORY: &str = "LLM/Ollama";
 
@@ -280,7 +279,7 @@ impl AsAgent for OllamaChatAgent {
                     ))
                 })?
                 .into_iter()
-                .map(|tool| tool.into())
+                .map(|tool| from_tool_info_to_ollama_tool_info(tool))
                 .collect::<Vec<ollama_rs::generation::tools::ToolInfo>>()
         };
 
@@ -723,20 +722,23 @@ fn message_to_chat(msg: Message) -> ChatMessage {
     cmsg
 }
 
-impl From<tool::ToolInfo> for ollama_rs::generation::tools::ToolInfo {
-    fn from(info: tool::ToolInfo) -> Self {
-        let schema: Schema = if let Some(params) = info.parameters {
-            Schema::try_from(params).unwrap_or_else(|_| json_schema!({}))
-        } else {
-            json_schema!({})
-        };
-        Self {
-            tool_type: ollama_rs::generation::tools::ToolType::Function,
-            function: ollama_rs::generation::tools::ToolFunctionInfo {
-                name: info.name,
-                description: info.description,
-                parameters: schema,
-            },
-        }
+// impl From<tool::ToolInfo> for ollama_rs::generation::tools::ToolInfo {
+//     fn from(info: tool::ToolInfo) -> Self {
+
+fn from_tool_info_to_ollama_tool_info(
+    info: tool::ToolInfo,
+) -> ollama_rs::generation::tools::ToolInfo {
+    let schema: Schema = if let Some(params) = info.parameters {
+        Schema::try_from(params).unwrap_or_else(|_| json_schema!({}))
+    } else {
+        json_schema!({})
+    };
+    ollama_rs::generation::tools::ToolInfo {
+        tool_type: ollama_rs::generation::tools::ToolType::Function,
+        function: ollama_rs::generation::tools::ToolFunctionInfo {
+            name: info.name,
+            description: info.description,
+            parameters: schema,
+        },
     }
 }

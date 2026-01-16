@@ -15,8 +15,6 @@ icu_normalizer = "2.1.1"
 im = "15.1.0"
 ollama-rs = { version = "0.3.2", default-features = false, features = ["macros", "rustls", "stream"], optional = true }
 photon-rs = { version = "0.3.3", optional = true }
-regex = "1.12.2"
-rmcp = { version = "0.12.0", features = ["client", "transport-child-process"], optional = true }
 schemars = "1.0"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -27,9 +25,8 @@ tokio-stream = "0.1"
 uuid = { version = "1.18.1", features = ["v4"] }
 
 [features]
-default = ["image", "mcp", "ollama", "openai"]
+default = ["image", "ollama", "openai"]
 image = ["photon-rs"]
-mcp = ["rmcp"]
 ollama = ["ollama-rs" ]
 openai = ["async-openai", "futures"]
 
