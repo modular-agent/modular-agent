@@ -1,6 +1,6 @@
 [package]
 name = "tauri-plugin-askit"
-version = "0.9.0"
+version = "0.10.0"
 authors = ["Akira Ishino <akira@lumilab.jp>"]
 license = "Apache-2.0 OR MIT"
 description = "Tauri plugin for Agent Stream Kit"
@@ -9,7 +9,7 @@ exclude = ["/examples", "/dist-js", "/guest-js", "/node_modules"]
 links = "tauri-plugin-askit"
 
 [dependencies]
-agent-stream-kit = "0.18.0"
+agent-stream-kit = "0.19.0"
 im = "15"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
