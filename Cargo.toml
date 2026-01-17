@@ -4,11 +4,11 @@ resolver = "2"
 
 [workspace.package]
 edition = "2024"
-version = "0.18.0"
+version = "0.19.0"
 description = "Agent Stream Kit"
 authors = ["Akira Ishino <akira@lumilab.jp>"]
 license = "Apache-2.0 OR MIT"
 
 [workspace.dependencies]
-askit-macros = { version = "0.18.0", path = "askit-macros" }
+askit-macros = { version = "0.19.0", path = "askit-macros" }
 im = { version = "15.1.0", features = ["serde"] }
