@@ -137,60 +137,62 @@
               {agentDef.category}
             {/if}
           </div>
-          {#if editTitle}
-            <Input
-              class="text-left"
-              type="text"
-              value={data.title ?? agentDef.title ?? data.def_name}
-              autofocus
-              onblur={() => (editTitle = false)}
-              onkeydown={(evt) => {
-                if (evt.key === "Enter") {
-                  const newTitle = evt.currentTarget.value;
-                  if (newTitle === "" || newTitle === (agentDef.title ?? data.def_name)) {
-                    updateNodeData(id, { title: null });
-                  } else if (newTitle !== data.title) {
-                    updateNodeData(id, { title: newTitle });
+          <div class="flex flex-row space-x-2">
+            {#if editTitle}
+              <Input
+                class="text-left"
+                type="text"
+                value={data.title ?? agentDef.title ?? data.def_name}
+                autofocus
+                onblur={() => (editTitle = false)}
+                onkeydown={(evt) => {
+                  if (evt.key === "Enter") {
+                    const newTitle = evt.currentTarget.value;
+                    if (newTitle === "" || newTitle === (agentDef.title ?? data.def_name)) {
+                      updateNodeData(id, { title: null });
+                    } else if (newTitle !== data.title) {
+                      updateNodeData(id, { title: newTitle });
+                    }
+                    editTitle = false;
                   }
-                  editTitle = false;
-                }
-              }}
-            />
-          {:else}
-            <button
-              type="button"
-              ondblclick={() => (editTitle = true)}
-              class="flex-none"
-              tabindex={-1}
-            >
-              <div class="text-xl">
-                {data.title ?? agentDef.title ?? data.def_name}
-              </div>
-            </button>
-          {/if}
+                }}
+              />
+            {:else}
+              <button
+                type="button"
+                ondblclick={() => (editTitle = true)}
+                class="flex-none"
+                tabindex={-1}
+              >
+                <div class="text-xl">
+                  {data.title ?? agentDef.title ?? data.def_name}
+                </div>
+              </button>
+              {#if errorMessages.length > 0}
+                <HoverCard.Root>
+                  <HoverCard.Trigger class="ml-4">
+                    <AlertCircleIcon color="red" />
+                  </HoverCard.Trigger>
+                  <HoverCard.Content class="w-full max-w-xl">
+                    <div class="flex flex-col gap-2 mb-2">
+                      {#each errorMessages as msg}
+                        <Alert.Root variant="destructive">
+                          <Alert.Description>
+                            <div>{msg}</div>
+                          </Alert.Description>
+                        </Alert.Root>
+                      {/each}
+                    </div>
+                    <Button onclick={clearError} variant="outline">Clear</Button>
+                  </HoverCard.Content>
+                </HoverCard.Root>
+              {/if}
+            {/if}
+          </div>
         {:else}
           <h3 class="text-xl">
             <s>{data.def_name}</s>
           </h3>
-        {/if}
-        {#if errorMessages.length > 0}
-          <HoverCard.Root>
-            <HoverCard.Trigger class="ml-4">
-              <AlertCircleIcon color="red" />
-            </HoverCard.Trigger>
-            <HoverCard.Content class="w-full max-w-xl">
-              <div class="flex flex-col gap-2 mb-2">
-                {#each errorMessages as msg}
-                  <Alert.Root variant="destructive">
-                    <Alert.Description>
-                      <div>{msg}</div>
-                    </Alert.Description>
-                  </Alert.Root>
-                {/each}
-              </div>
-              <Button onclick={clearError} variant="outline">Clear</Button>
-            </HoverCard.Content>
-          </HoverCard.Root>
         {/if}
       </div>
     </div>
