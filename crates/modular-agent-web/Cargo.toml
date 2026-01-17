@@ -1,20 +1,20 @@
 [package]
 name = "askit-web-agents"
-version = "0.1.2"
+version = "0.2.0"
 description = "Web Agents for Agent Stream Kit"
 authors = ["Akira Ishino <akira@lumilab.jp>"]
 edition = "2024"
 license = "Apache-2.0 OR MIT"
 
 [dependencies]
-agent-stream-kit = "0.18.0"
+agent-stream-kit = "0.19.0"
 html-to-markdown-rs = { version = "2.14.0", optional = true }
 reqwest = { version = "0.12.25", default-features = false, features = ["json"] }
 scraper = { version = "0.25.0", optional = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 url = "2.5.7"
-yt-transcript-rs = { version = "0.1.8", git = "https://github.com/stn/yt-transcript-rs", branch = "remove-cargo-husky", optional = true }
+yt-transcript-rs = { version = "0.1.8", optional = true }
 
 [features]
 default = ["fetch-url", "html-scraper", "html-to-markdown", "reqwest/default-tls", "yt-transcript"]
