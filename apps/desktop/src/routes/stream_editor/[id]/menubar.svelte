@@ -9,6 +9,7 @@
   import * as Menubar from "$lib/components/ui/menubar/index.js";
 
   import NewStreamDialog from "@/lib/components/new-stream-dialog.svelte";
+  import { reloadStreamInfos, startStream } from "@/lib/shared.svelte";
   import { exitApp } from "@/lib/utils";
 
   type Props = {
@@ -40,10 +41,16 @@
   async function handleSaveAsSubmit(e: Event) {
     openSaveAsDialog = false;
     if (!new_name) return;
+    if (new_name === name) {
+      // same name, just save
+      onSaveStream();
+      return;
+    }
     const s = await getAgentStreamSpec(stream_id);
     if (!s) return;
     const new_id = await addAgentStream(new_name, s);
     if (!new_id) return;
+    await reloadStreamInfos();
     goto(`/stream_editor/${new_id}`, { invalidateAll: true });
   }
 
