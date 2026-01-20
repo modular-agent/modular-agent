@@ -1,6 +1,6 @@
-use agent_stream_kit::{
-    ASKit, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
-    askit_agent, async_trait,
+use modular_agent_kit::{
+    MAK, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
+    mak_agent, async_trait,
 };
 use html_to_markdown_rs::{ConversionOptions, PreprocessingPreset, convert};
 
@@ -10,7 +10,7 @@ static PORT_HTML: &str = "html";
 static PORT_MARKDOWN: &str = "markdown";
 
 /// Convert HTML to Markdown
-#[askit_agent(
+#[mak_agent(
     title = "HTML to Markdown",
     category = CATEGORY,
     inputs = [PORT_HTML],
@@ -22,16 +22,16 @@ struct HtmlToMarkdownAgent {
 
 #[async_trait]
 impl AsAgent for HtmlToMarkdownAgent {
-    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(askit, id, spec),
+            data: AgentData::new(mak, id, spec),
         })
     }
 
     async fn process(
         &mut self,
         ctx: AgentContext,
-        _pin: String,
+        _port: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
         if value.is_array() {

@@ -1,6 +1,6 @@
-use agent_stream_kit::{
-    ASKit, Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
-    askit_agent, async_trait,
+use modular_agent_kit::{
+    MAK, Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
+    mak_agent, async_trait,
 };
 use url::Url;
 use yt_transcript_rs::api::YouTubeTranscriptApi;
@@ -15,7 +15,7 @@ static PORT_TEXT: &str = "text";
 static CONFIG_LANGUAGES: &str = "languages";
 
 /// Fetch YouTube video transcript from a given URL
-#[askit_agent(
+#[mak_agent(
     title = "Fetch YouTube Transcript",
     category = CATEGORY,
     inputs = [PORT_URL, PORT_VIDEO_ID],
@@ -31,20 +31,20 @@ struct FetchYtTranscriptAgent {
 
 #[async_trait]
 impl AsAgent for FetchYtTranscriptAgent {
-    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(askit, id, spec),
+            data: AgentData::new(mak, id, spec),
         })
     }
 
     async fn process(
         &mut self,
         ctx: AgentContext,
-        pin: String,
+        port: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
         let video_id;
-        if pin == PORT_URL {
+        if port == PORT_URL {
             let url_str = value.as_str().ok_or_else(|| {
                 AgentError::InvalidValue("Input value for 'url' must be a string".to_string())
             })?;
@@ -72,7 +72,7 @@ impl AsAgent for FetchYtTranscriptAgent {
                         ))
                     })?
             };
-        } else if pin == PORT_VIDEO_ID {
+        } else if port == PORT_VIDEO_ID {
             video_id = value
                 .as_str()
                 .ok_or_else(|| {
@@ -83,8 +83,8 @@ impl AsAgent for FetchYtTranscriptAgent {
                 .to_string();
         } else {
             return Err(AgentError::InvalidValue(format!(
-                "Unexpected input pin '{}'",
-                pin
+                "Unexpected input port '{}'",
+                port
             )));
         }
 
