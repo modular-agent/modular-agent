@@ -435,7 +435,6 @@ impl AgentValue {
     }
 
     /// Convert to String.
-    #[allow(clippy::inherent_to_string)]
     pub fn to_string(&self) -> Option<String> {
         match self {
             AgentValue::String(s) => Some(s.as_ref().clone()),
