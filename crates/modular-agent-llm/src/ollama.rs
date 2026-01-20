@@ -26,8 +26,10 @@ use tokio_stream::StreamExt;
 
 const CATEGORY: &str = "LLM/Ollama";
 
+const PIN_CHUNKS: &str = "chunks";
 const PIN_DOC: &str = "doc";
 const PIN_EMBEDDING: &str = "embedding";
+const PIN_EMBEDDINGS: &str = "embeddings";
 const PIN_MESSAGE: &str = "message";
 const PIN_MODEL_INFO: &str = "model_info";
 const PIN_MODEL_LIST: &str = "model_list";
@@ -386,8 +388,8 @@ impl AsAgent for OllamaChatAgent {
 #[askit_agent(
     title="Embeddings",
     category=CATEGORY,
-    inputs=[PIN_STRING, PIN_DOC],
-    outputs=[PIN_EMBEDDING, PIN_DOC],
+    inputs=[PIN_STRING, PIN_CHUNKS, PIN_DOC],
+    outputs=[PIN_EMBEDDING, PIN_EMBEDDINGS, PIN_DOC],
     string_config(name=CONFIG_MODEL, default=DEFAULT_CONFIG_EMBEDDINGS_MODEL),
     text_config(name=CONFIG_OPTIONS, default="{}")
 )]
@@ -465,101 +467,58 @@ impl AsAgent for OllamaEmbeddingsAgent {
             }
             return self
                 .output(
-                    ctx.clone(),
+                    ctx,
                     PIN_EMBEDDING,
                     AgentValue::tensor(embeddings.into_iter().next().unwrap()),
                 )
                 .await;
         }
 
-        if pin == PIN_DOC {
-            if !value.is_object() {
+        if pin == PIN_CHUNKS {
+            if !value.is_array() {
                 return Err(AgentError::InvalidValue(
-                    "Input must be an object with 'text' or 'chunks' field".to_string(),
+                    "Input must be an array of strings".to_string(),
                 ));
             }
-
-            if let Some(chunks) = value.get_array("chunks") {
-                // input is chunks
-
-                if chunks.is_empty() {
-                    return self.output(ctx.clone(), PIN_DOC, value).await;
-                }
-
-                let first_chunk = &chunks[0];
-                if !first_chunk.is_array() {
+            let mut offsets = vec![];
+            let mut texts = vec![];
+            for item in value.into_array().unwrap().into_iter() {
+                let arr = item.as_array().ok_or_else(|| {
+                    AgentError::InvalidValue(
+                        "Input chunks must be (offset, string) pairs".to_string(),
+                    )
+                })?;
+                if arr.len() != 2 {
                     return Err(AgentError::InvalidValue(
                         "Input chunks must be (offset, string) pairs".to_string(),
                     ));
                 }
-                let first_chunk_arr = first_chunk.as_array().unwrap();
-                if first_chunk_arr.is_empty()
-                    || !first_chunk_arr[0].is_integer()
-                    || !first_chunk_arr[1].is_string()
-                {
-                    return Err(AgentError::InvalidValue(
+                let offset = arr[0].as_i64().ok_or_else(|| {
+                    AgentError::InvalidValue(
                         "Input chunks must be (offset, string) pairs".to_string(),
-                    ));
+                    )
+                })?;
+                let text = arr[1]
+                    .as_str()
+                    .ok_or_else(|| {
+                        AgentError::InvalidValue(
+                            "Input chunks must be (offset, string) pairs".to_string(),
+                        )
+                    })?
+                    .to_string();
+                if !text.is_empty() {
+                    offsets.push(offset);
+                    texts.push(text);
                 }
-
-                let mut offsets = vec![];
-                let mut inputs = vec![];
-                for item in chunks {
-                    let Some(chunk) = item.as_array() else {
-                        continue;
-                    };
-                    if chunk.len() != 2 {
-                        continue;
-                    }
-                    let Some(offset) = chunk[0].as_i64() else {
-                        continue;
-                    };
-                    let Some(s) = chunk[1].as_str() else {
-                        continue;
-                    };
-                    if !s.is_empty() {
-                        offsets.push(offset);
-                        inputs.push(s.to_string());
-                    }
-                }
-                if inputs.is_empty() {
-                    return self.output(ctx.clone(), PIN_DOC, value).await;
-                }
-
-                let embeddings = self
-                    .generate_embeddings(inputs.into(), config_model.to_string(), model_options)
-                    .await?;
-                let embedding_values_with_offsets: Vector<AgentValue> = offsets
-                    .into_iter()
-                    .zip(embeddings)
-                    .map(|(offset, emb)| {
-                        AgentValue::array(vector![
-                            AgentValue::integer(offset),
-                            AgentValue::tensor(emb)
-                        ])
-                    })
-                    .collect();
-
-                let mut output = value.clone();
-                output.set(
-                    "embeddings".to_string(),
-                    AgentValue::array(embedding_values_with_offsets),
-                )?;
-                return self.output(ctx.clone(), PIN_DOC, output).await;
             }
-
-            let text = value.get_str("text").unwrap_or("");
-            if text.is_empty() {
-                return self.output(ctx.clone(), PIN_DOC, value).await;
+            if texts.is_empty() {
+                return self
+                    .output(ctx.clone(), PIN_EMBEDDINGS, AgentValue::array_default())
+                    .await;
             }
-            let input: EmbeddingsInput = text.into();
             let embeddings = self
-                .generate_embeddings(input, config_model.to_string(), model_options)
+                .generate_embeddings(texts.into(), config_model.to_string(), model_options)
                 .await?;
-            if embeddings.is_empty() {
-                return self.output(ctx.clone(), PIN_DOC, value).await;
-            }
-            let offsets = vec![0i64];
             let embedding_values_with_offsets: Vector<AgentValue> = offsets
                 .into_iter()
                 .zip(embeddings)
@@ -570,12 +529,75 @@ impl AsAgent for OllamaEmbeddingsAgent {
                     ])
                 })
                 .collect();
-            let mut output = value.clone();
-            output.set(
-                "embeddings".to_string(),
-                AgentValue::array(embedding_values_with_offsets),
-            )?;
-            return self.output(ctx.clone(), PIN_DOC, output).await;
+            return self
+                .output(
+                    ctx,
+                    PIN_EMBEDDINGS,
+                    AgentValue::array(embedding_values_with_offsets),
+                )
+                .await;
+        }
+
+        if pin == PIN_DOC {
+            let mut texts = vec![];
+            let mut indices = vec![];
+
+            if value.is_object() {
+                let text = value.get_str("text").unwrap_or_default();
+                if text.is_empty() {
+                    return Err(AgentError::InvalidValue(
+                        "No text found in the document".to_string(),
+                    ));
+                }
+                texts.push(text.to_string());
+                indices.push(0);
+            } else if value.is_array() {
+                for (index, item) in value.as_array().unwrap().iter().enumerate() {
+                    let text = item.get_str("text").unwrap_or_default();
+                    if !text.is_empty() {
+                        texts.push(text.to_string());
+                        indices.push(index as i64);
+                    }
+                }
+                if texts.is_empty() {
+                    return self
+                        .output(ctx.clone(), PIN_DOC, AgentValue::array_default())
+                        .await;
+                }
+            } else {
+                return Err(AgentError::InvalidValue(
+                    "Input must be a document object or an array of document objects".to_string(),
+                ));
+            }
+
+            let embeddings = self
+                .generate_embeddings(texts.into(), config_model.to_string(), model_options)
+                .await?;
+            if embeddings.len() != indices.len() {
+                return Err(AgentError::Other(
+                    "Mismatch between number of embeddings and texts".to_string(),
+                ));
+            }
+
+            if value.is_object() {
+                let embedding = embeddings.into_iter().next().unwrap();
+                let mut output = value.clone();
+                output.set("embedding".to_string(), AgentValue::tensor(embedding))?;
+                return self.output(ctx.clone(), PIN_DOC, output).await;
+            } else {
+                let mut arr = value.clone().into_array().unwrap();
+                for i in 0..embeddings.len() {
+                    let embedding = &embeddings[i];
+                    let index = indices[i];
+                    arr[index as usize].set(
+                        "embedding".to_string(),
+                        AgentValue::tensor(embedding.clone()),
+                    )?;
+                }
+                return self
+                    .output(ctx.clone(), PIN_DOC, AgentValue::array(arr))
+                    .await;
+            }
         }
 
         Err(AgentError::InvalidPin(pin))

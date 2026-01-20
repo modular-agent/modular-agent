@@ -5,7 +5,7 @@ use agent_stream_kit::{
     askit_agent, async_trait,
 };
 use icu_normalizer::{ComposingNormalizer, ComposingNormalizerBorrowed};
-use im::{Vector, vector};
+use im::vector;
 use text_splitter::{ChunkConfig, TextSplitter};
 use tokenizers::Tokenizer;
 
@@ -66,14 +66,18 @@ impl AsAgent for NFKCAgent {
                 .as_ref()
                 .map(|n| n.normalize(s))
                 .unwrap_or_default();
-            return self.output(ctx.clone(), PIN_STRING, AgentValue::string(nfkc_text)).await;
+            return self
+                .output(ctx.clone(), PIN_STRING, AgentValue::string(nfkc_text))
+                .await;
         }
 
         if pin == PIN_DOC {
             if value.is_object() {
                 let text = value.get_str("text").unwrap_or_default();
                 if text.is_empty() {
-                    return self.output(ctx.clone(), PIN_DOC, value).await;
+                    return self
+                        .output(ctx.clone(), PIN_DOC, AgentValue::string_default())
+                        .await;
                 }
                 let nfkc_text = self
                     .normalizer
@@ -106,16 +110,11 @@ pub struct SplitTextAgent {
 }
 
 impl SplitTextAgent {
-    fn split_into_chunks(&self, text: &str, max_characters: usize) -> Vector<AgentValue> {
+    fn split_into_chunks(&self, text: &str, max_characters: usize) -> Vec<(usize, String)> {
         TextSplitter::new(max_characters)
             .chunk_indices(text)
-            .map(|(start, t)| {
-                AgentValue::array(vector![
-                    AgentValue::integer(start as i64),
-                    AgentValue::string(t),
-                ])
-            })
-            .collect::<Vector<_>>()
+            .map(|(offset, chunk)| (offset, chunk.to_string()))
+            .collect()
     }
 }
 
@@ -145,24 +144,62 @@ impl AsAgent for SplitTextAgent {
         if pin == PIN_STRING {
             let text = value.as_str().unwrap_or("");
             if text.is_empty() {
-                return self.output(ctx.clone(), PIN_CHUNKS, AgentValue::array_default()).await;
+                return self
+                    .output(ctx.clone(), PIN_CHUNKS, AgentValue::array_default())
+                    .await;
             }
             let chunks = self.split_into_chunks(text, max_characters);
-            return self.output(ctx.clone(), PIN_CHUNKS, AgentValue::array(chunks)).await;
+            self.output(
+                ctx.clone(),
+                PIN_CHUNKS,
+                AgentValue::array(
+                    chunks
+                        .into_iter()
+                        .map(|(offset, chunk)| {
+                            AgentValue::array(vector![
+                                AgentValue::integer(offset as i64),
+                                AgentValue::string(chunk)
+                            ])
+                        })
+                        .collect::<Vec<_>>()
+                        .into(),
+                ),
+            )
+            .await?;
+            return Ok(());
         }
 
         if pin == PIN_DOC {
             if value.is_object() {
                 let text = value.get_str("text").unwrap_or("");
-                let chunks = if text.is_empty() {
-                    Vector::new()
-                } else {
-                    self.split_into_chunks(text, max_characters)
-                };
-                let mut output = value.clone();
-                output.set("chunks".to_string(), AgentValue::array(chunks))?;
-                return self.output(ctx.clone(), PIN_DOC, output).await;
+                if text.is_empty() {
+                    return self
+                        .output(ctx.clone(), PIN_DOC, AgentValue::array_default())
+                        .await;
+                }
+                let chunks = self.split_into_chunks(text, max_characters);
+                self.output(
+                    ctx,
+                    PIN_DOC,
+                    AgentValue::array(
+                        chunks
+                            .into_iter()
+                            .map(|(offset, chunk)| {
+                                let mut output = value.clone();
+                                output.set(
+                                    "offset".to_string(),
+                                    AgentValue::integer(offset as i64),
+                                )?;
+                                output.set("text".to_string(), AgentValue::string(chunk))?;
+                                Ok(output)
+                            })
+                            .collect::<Result<Vec<_>, AgentError>>()?
+                            .into(),
+                    ),
+                )
+                .await?;
             }
+            return Ok(());
         }
 
         Err(AgentError::InvalidPin(pin))
@@ -188,7 +225,7 @@ impl SplitTextByTokensAgent {
         text: &str,
         max_tokens: usize,
         tokenizer_model: &str,
-    ) -> Result<Vector<AgentValue>, AgentError> {
+    ) -> Result<Vec<(usize, String)>, AgentError> {
         if self.splitter.is_none() {
             let tokenizer = Tokenizer::from_pretrained(tokenizer_model, None).map_err(|e| {
                 AgentError::InvalidConfig(format!("Failed to load tokenizer: {}", e))
@@ -201,13 +238,8 @@ impl SplitTextByTokensAgent {
             .as_ref()
             .unwrap()
             .chunk_indices(text)
-            .map(|(start, t)| {
-                AgentValue::array(vector![
-                    AgentValue::integer(start as i64),
-                    AgentValue::string(t),
-                ])
-            })
-            .collect::<Vector<_>>())
+            .map(|(offset, chunk)| (offset, chunk.to_string()))
+            .collect())
     }
 }
 
@@ -253,23 +285,59 @@ impl AsAgent for SplitTextByTokensAgent {
         if pin == PIN_STRING {
             let text = value.as_str().unwrap_or("");
             if text.is_empty() {
-                return self.output(ctx.clone(), PIN_CHUNKS, AgentValue::array_default()).await;
+                return self
+                    .output(ctx.clone(), PIN_CHUNKS, AgentValue::array_default())
+                    .await;
             }
 
             let chunks = self.split_into_chunks(text, max_tokens, &tokenizer_model)?;
-            return self.output(ctx.clone(), PIN_CHUNKS, AgentValue::array(chunks)).await;
+            self.output(
+                ctx.clone(),
+                PIN_CHUNKS,
+                AgentValue::array(
+                    chunks
+                        .into_iter()
+                        .map(|(offset, chunk)| {
+                            AgentValue::array(vector![
+                                AgentValue::integer(offset as i64),
+                                AgentValue::string(chunk)
+                            ])
+                        })
+                        .collect::<Vec<_>>()
+                        .into(),
+                ),
+            )
+            .await?;
+            return Ok(());
         }
 
         if pin == PIN_DOC {
             let text = value.get_str("text").unwrap_or("");
-            let chunks = if text.is_empty() {
-                Vector::new()
-            } else {
-                self.split_into_chunks(text, max_tokens, &tokenizer_model)?
-            };
-            let mut output = value.clone();
-            output.set("chunks".to_string(), AgentValue::array(chunks))?;
-            return self.output(ctx.clone(), PIN_DOC, output).await;
+            if text.is_empty() {
+                return self
+                    .output(ctx.clone(), PIN_DOC, AgentValue::array_default())
+                    .await;
+            }
+
+            let chunks = self.split_into_chunks(text, max_tokens, &tokenizer_model)?;
+            self.output(
+                ctx,
+                PIN_DOC,
+                AgentValue::array(
+                    chunks
+                        .into_iter()
+                        .map(|(offset, chunk)| {
+                            let mut output = value.clone();
+                            output.set("offset".to_string(), AgentValue::integer(offset as i64))?;
+                            output.set("text".to_string(), AgentValue::string(chunk))?;
+                            Ok(output)
+                        })
+                        .collect::<Result<Vec<_>, AgentError>>()?
+                        .into(),
+                ),
+            )
+            .await?;
+            return Ok(());
         }
 
         Err(AgentError::InvalidPin(pin))
