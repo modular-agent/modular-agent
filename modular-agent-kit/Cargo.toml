@@ -1,0 +1,39 @@
+[package]
+name = "modular-agent-kit"
+version.workspace = true
+description.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+async-trait = "0.1"
+fnv = "1"
+im = { workspace = true }
+indexmap = { version = "2", features = ["serde"] }
+inventory = "0.3"
+log = "0.4"
+mak-macros = { workspace = true }
+photon-rs = { version = "0.3.3", optional = true }
+regex = { version = "1.12.2", optional = true }
+rmcp = { version = "0.13.0", features = ["client", "transport-child-process"], optional = true }
+serde = { version = "1", features = ["derive", "rc"] }
+serde_json = { version = "1" }
+thiserror = "2"
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "sync", "time"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros"] }
+serial_test = "3"
+
+[features]
+default = ["image", "llm", "mcp"]
+image = ["photon-rs"]
+llm = ["regex"]
+mcp = ["rmcp"]
+test-utils = []
+
+[[test]]
+name = "main_test"
+path = "tests/main_test.rs"
+required-features = ["test-utils"]

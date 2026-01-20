@@ -15,27 +15,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 
 [[package]]
-name = "agent-stream-kit"
-version = "0.19.0"
-dependencies = [
- "askit-macros",
- "async-trait",
- "fnv",
- "im",
- "indexmap",
- "inventory",
- "log",
- "photon-rs",
- "regex",
- "rmcp",
- "serde",
- "serde_json",
- "serial_test",
- "thiserror 2.0.17",
- "tokio",
-]
-
-[[package]]
 name = "aho-corasick"
 version = "1.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -60,17 +39,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cab112f0a86d568ea0e627cc1d6be74a1e9cd55214684db5561995f6dad897c6"
 dependencies = [
  "num-traits",
-]
-
-[[package]]
-name = "askit-macros"
-version = "0.19.0"
-dependencies = [
- "agent-stream-kit",
- "im",
- "proc-macro2",
- "quote",
- "syn 2.0.114",
 ]
 
 [[package]]
@@ -623,6 +591,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5e5032e24019045c762d3c0f28f5b6b8bbf38563a65908389bf7978758920897"
 
 [[package]]
+name = "mak-macros"
+version = "0.19.0"
+dependencies = [
+ "im",
+ "modular-agent-kit",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.114",
+]
+
+[[package]]
 name = "matrixmultiply"
 version = "0.3.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -657,6 +636,27 @@ dependencies = [
  "libc",
  "wasi 0.11.1+wasi-snapshot-preview1",
  "windows-sys",
+]
+
+[[package]]
+name = "modular-agent-kit"
+version = "0.19.0"
+dependencies = [
+ "async-trait",
+ "fnv",
+ "im",
+ "indexmap",
+ "inventory",
+ "log",
+ "mak-macros",
+ "photon-rs",
+ "regex",
+ "rmcp",
+ "serde",
+ "serde_json",
+ "serial_test",
+ "thiserror 2.0.17",
+ "tokio",
 ]
 
 [[package]]

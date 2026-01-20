@@ -1,0 +1,46 @@
+use modular_agent_kit::{
+    AgentContext, AgentData, AgentError, AgentSpec, AgentValue, AsAgent, async_trait, mak_agent,
+};
+
+#[mak_agent(
+    title = "Literal Name Agent",
+    category = "Tests",
+    string_config(name = "literal_config", default = "val"),
+    string_global_config(name = "literal_global", default = "global_val")
+)]
+struct LiteralNameAgent {
+    data: AgentData,
+}
+
+#[async_trait]
+impl AsAgent for LiteralNameAgent {
+    fn new(mak: modular_agent_kit::MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+        Ok(Self {
+            data: AgentData::new(mak, id, spec),
+        })
+    }
+
+    async fn process(
+        &mut self,
+        _ctx: AgentContext,
+        _port: String,
+        _value: AgentValue,
+    ) -> Result<(), AgentError> {
+        Ok(())
+    }
+}
+
+#[test]
+fn string_literal_names_are_kept() {
+    let def = LiteralNameAgent::agent_definition();
+
+    let cfgs = def.configs.expect("default configs exist");
+    let (cfg_key, cfg_entry) = cfgs.first().expect("config entry exists");
+    assert_eq!(cfg_key, "literal_config");
+    assert_eq!(cfg_entry.value, AgentValue::string("val"));
+
+    let global_cfgs = def.global_configs.expect("global configs exist");
+    let (g_key, g_entry) = global_cfgs.first().expect("global entry exists");
+    assert_eq!(g_key, "literal_global");
+    assert_eq!(g_entry.value, AgentValue::string("global_val"));
+}
