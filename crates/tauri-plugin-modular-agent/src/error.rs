@@ -8,7 +8,7 @@ pub enum Error {
   Io(#[from] std::io::Error),
 
   #[error(transparent)]
-  ASKit(#[from] agent_stream_kit::AgentError),
+  MAK(#[from] modular_agent_kit::AgentError),
 
   #[error(transparent)]
   SerdeJson(#[from] serde_json::error::Error),

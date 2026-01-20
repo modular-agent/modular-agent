@@ -1,6 +1,6 @@
 <script>
   import Greet from './lib/Greet.svelte'
-  import { writeBoard } from 'tauri-plugin-askit-api'
+  import { writeBoard } from 'tauri-plugin-mak-api'
 
 	let response = $state('')
 

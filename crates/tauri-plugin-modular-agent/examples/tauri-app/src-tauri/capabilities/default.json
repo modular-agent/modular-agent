@@ -7,6 +7,6 @@
   ],
   "permissions": [
     "core:default",
-    "askit:default"
+    "mak:default"
   ]
 }

@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 
-export type AgentStreamInfo = {
+export type PresetInfo = {
   id: string;
   name: string;
   running: boolean;
@@ -12,6 +12,7 @@ export type AgentDefinition = {
   kind: string;
   name: string;
   title?: string | null;
+  hide_title?: boolean | null;
   description?: string | null;
   category?: string | null;
   inputs?: string[] | null;
@@ -35,9 +36,9 @@ export type AgentConfigSpec = {
   readonly?: boolean | null;
 };
 
-export type AgentStreamSpec = {
+export type PresetSpec = {
   agents: AgentSpec[];
-  channels: ChannelSpec[];
+  connections: ConnectionSpec[];
   viewport: Viewport | null;
 };
 
@@ -59,7 +60,7 @@ export type AgentSpec = {
   disabled?: boolean | null;
 } & AgentSpecExtensions;
 
-export type ChannelSpec = {
+export type ConnectionSpec = {
   source: string;
   source_handle: string | null;
   target: string;
@@ -82,162 +83,162 @@ export type BoardMessage = {
 // agent definition
 
 export async function getAgentDefinition(): Promise<AgentDefinition | null> {
-  return await invoke<any>("plugin:askit|get_agent_definition", {});
+  return await invoke<any>("plugin:mak|get_agent_definition", {});
 }
 
 export async function getAgentDefinitions(): Promise<AgentDefinitions> {
-  return await invoke<any>("plugin:askit|get_agent_definitions", {});
+  return await invoke<any>("plugin:mak|get_agent_definitions", {});
 }
 
 // agent spec
 
 export async function getAgentSpec(agentId: string): Promise<AgentSpec | null> {
-  return await invoke<any>("plugin:askit|get_agent_spec", { agentId });
+  return await invoke<any>("plugin:mak|get_agent_spec", { agentId });
 }
 
 export async function updateAgentSpec(
   agentId: string,
   value: Partial<AgentSpec>
 ): Promise<void> {
-  await invoke<void>("plugin:askit|update_agent_spec", {
+  await invoke<void>("plugin:mak|update_agent_spec", {
     agentId,
     value,
   });
 }
 
-// stream
+// preset
 
-export async function getAgentStreamInfo(
+export async function getPresetInfo(
   id: string
-): Promise<AgentStreamInfo | null> {
-  return await invoke<any>("plugin:askit|get_agent_stream_info", { id });
+): Promise<PresetInfo | null> {
+  return await invoke<any>("plugin:mak|get_preset_info", { id });
 }
 
-export async function getAgentStreamInfos(): Promise<AgentStreamInfo[]> {
-  return await invoke<any>("plugin:askit|get_agent_stream_infos", {});
+export async function getPresetInfos(): Promise<PresetInfo[]> {
+  return await invoke<any>("plugin:mak|get_preset_infos", {});
 }
 
-export async function getAgentStreamSpec(
+export async function getPresetSpec(
   id: string
-): Promise<AgentStreamSpec | null> {
-  return await invoke<any>("plugin:askit|get_agent_stream_spec", { id });
+): Promise<PresetSpec | null> {
+  return await invoke<any>("plugin:mak|get_preset_spec", { id });
 }
 
-export async function updateAgentStreamSpec(
+export async function updatePresetSpec(
   id: string,
-  value: Partial<AgentStreamSpec>
+  value: Partial<PresetSpec>
 ): Promise<void> {
-  await invoke<void>("plugin:askit|update_agent_stream_spec", { id, value });
+  await invoke<void>("plugin:mak|update_preset_spec", { id, value });
 }
 
-export async function newAgentStream(name: string): Promise<[string, string]> {
-  return await invoke<any>("plugin:askit|new_agent_stream", { name });
+export async function newPreset(name: string): Promise<[string, string]> {
+  return await invoke<any>("plugin:mak|new_preset", { name });
 }
 
-export async function renameAgentStream(
+export async function renamePreset(
   id: string,
   name: string
 ): Promise<string> {
-  return await invoke<any>("plugin:askit|rename_agent_stream", {
+  return await invoke<any>("plugin:mak|rename_preset", {
     id,
     name,
   });
 }
 
-export async function uniqueStreamName(name: string): Promise<string> {
-  return await invoke<any>("plugin:askit|unique_stream_name", { name });
+export async function uniquePresetName(name: string): Promise<string> {
+  return await invoke<any>("plugin:mak|unique_preset_name", { name });
 }
 
-export async function addAgentStream(
+export async function addPreset(
   name: string,
-  spec: AgentStreamSpec
+  spec: PresetSpec
 ): Promise<string> {
-  return await invoke<any>("plugin:askit|add_agent_stream", { name, spec });
+  return await invoke<any>("plugin:mak|add_preset", { name, spec });
 }
 
-export async function removeAgentStream(id: string): Promise<void> {
-  await invoke<void>("plugin:askit|remove_agent_stream", { id });
+export async function removePreset(id: string): Promise<void> {
+  await invoke<void>("plugin:mak|remove_preset", { id });
 }
 
-export async function addAgentsAndChannels(
-  streamId: string,
+export async function addAgentsAndConnections(
+  presetId: string,
   agents: AgentSpec[],
-  channels: ChannelSpec[]
-): Promise<[AgentSpec[], ChannelSpec[]]> {
-  return await invoke<[AgentSpec[], ChannelSpec[]]>(
-    "plugin:askit|add_agents_and_channels",
+  connections: ConnectionSpec[]
+): Promise<[AgentSpec[], ConnectionSpec[]]> {
+  return await invoke<[AgentSpec[], ConnectionSpec[]]>(
+    "plugin:mak|add_agents_and_connections",
     {
-      streamId,
+      presetId,
       agents,
-      channels,
+      connections,
     }
   );
 }
 
-export async function startAgentStream(id: string): Promise<void> {
-  await invoke<void>("plugin:askit|start_agent_stream", { id });
+export async function startPreset(id: string): Promise<void> {
+  await invoke<void>("plugin:mak|start_preset", { id });
 }
 
-export async function stopAgentStream(id: string): Promise<void> {
-  await invoke<void>("plugin:askit|stop_agent_stream", { id });
+export async function stopPreset(id: string): Promise<void> {
+  await invoke<void>("plugin:mak|stop_preset", { id });
 }
 
 // agents
 
 export async function newAgentSpec(defName: string): Promise<AgentSpec> {
-  return await invoke<any>("plugin:askit|new_agent_spec", { defName });
+  return await invoke<any>("plugin:mak|new_agent_spec", { defName });
 }
 
 export async function addAgent(
-  streamId: string,
+  presetId: string,
   spec: AgentSpec
 ): Promise<string> {
-  return await invoke<string>("plugin:askit|add_agent", {
-    streamId,
+  return await invoke<string>("plugin:mak|add_agent", {
+    presetId,
     spec,
   });
 }
 
 export async function removeAgent(
-  streamId: string,
+  presetId: string,
   agentId: string
 ): Promise<void> {
-  await invoke<void>("plugin:askit|remove_agent", {
-    streamId,
+  await invoke<void>("plugin:mak|remove_agent", {
+    presetId,
     agentId,
   });
 }
 
-// channel
+// connection
 
-export async function addChannel(
-  streamId: string,
-  channel: ChannelSpec
+export async function addConnection(
+  presetId: string,
+  connection: ConnectionSpec
 ): Promise<void> {
-  await invoke<void>("plugin:askit|add_channel", {
-    streamId,
-    channel,
+  await invoke<void>("plugin:mak|add_connection", {
+    presetId,
+    connection,
   });
 }
 
-export async function removeChannel(
-  streamId: string,
-  channel: ChannelSpec
+export async function removeConnection(
+  presetId: string,
+  connection: ConnectionSpec
 ): Promise<void> {
-  await invoke<void>("plugin:askit|remove_channel", {
-    streamId,
-    channel,
+  await invoke<void>("plugin:mak|remove_connection", {
+    presetId,
+    connection,
   });
 }
 
 // agent
 
 export async function startAgent(agentId: string): Promise<void> {
-  await invoke<void>("plugin:askit|start_agent", { agentId });
+  await invoke<void>("plugin:mak|start_agent", { agentId });
 }
 
 export async function stopAgent(agentId: string): Promise<void> {
-  await invoke<void>("plugin:askit|stop_agent", { agentId });
+  await invoke<void>("plugin:mak|stop_agent", { agentId });
 }
 
 // board
@@ -246,7 +247,7 @@ export async function writeBoard(
   board: string,
   message: string
 ): Promise<void> {
-  await invoke<void>("plugin:askit|write_board", { board, message });
+  await invoke<void>("plugin:mak|write_board", { board, message });
 }
 
 // configs
@@ -255,28 +256,28 @@ export async function setAgentConfigs(
   agentId: string,
   configs: AgentConfigs
 ): Promise<void> {
-  await invoke<void>("plugin:askit|set_agent_configs", { agentId, configs });
+  await invoke<void>("plugin:mak|set_agent_configs", { agentId, configs });
 }
 
 export async function getGlobalConfigs(
   defName: string
 ): Promise<AgentConfigs | null> {
-  return await invoke<any>("plugin:askit|get_global_configs", { defName });
+  return await invoke<any>("plugin:mak|get_global_configs", { defName });
 }
 
 export async function getGlobalConfigsMap(): Promise<AgentConfigsMap> {
-  return await invoke<any>("plugin:askit|get_global_configs_map", {});
+  return await invoke<any>("plugin:mak|get_global_configs_map", {});
 }
 
 export async function setGlobalConfigs(
   defName: string,
   configs: AgentConfigs
 ): Promise<void> {
-  await invoke<void>("plugin:askit|set_global_configs", { defName, configs });
+  await invoke<void>("plugin:mak|set_global_configs", { defName, configs });
 }
 
 export async function setGlobalConfigsMap(
   configs: AgentConfigsMap
 ): Promise<void> {
-  await invoke<void>("plugin:askit|set_global_configs_map", { configs });
+  await invoke<void>("plugin:mak|set_global_configs_map", { configs });
 }

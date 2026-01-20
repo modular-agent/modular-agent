@@ -1,15 +1,15 @@
 [package]
-name = "tauri-plugin-askit"
-version = "0.10.0"
+name = "tauri-plugin-mak"
+version = "0.11.0"
 authors = ["Akira Ishino <akira@lumilab.jp>"]
 license = "Apache-2.0 OR MIT"
-description = "Tauri plugin for Agent Stream Kit"
+description = "Tauri plugin for Modular Agent Kit"
 edition = "2021"
 exclude = ["/examples", "/dist-js", "/guest-js", "/node_modules"]
-links = "tauri-plugin-askit"
+links = "tauri-plugin-mak"
 
 [dependencies]
-agent-stream-kit = "0.19.0"
+modular-agent-kit = "0.20.0"
 im = "15"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -20,4 +20,4 @@ thiserror = "2"
 tauri-plugin = { version = "2.4.0", features = ["build"] }
 
 # [patch.crates-io]
-# agent-stream-kit = { path = "../agent-stream-kit/agent-stream-kit" }
+# modular-agent-kit = { path = "../modular-agent-kit/modular-agent-kit" }

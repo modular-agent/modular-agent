@@ -179,31 +179,31 @@
         {
           "description": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-write-board`",
           "type": "string",
-          "const": "askit:default",
+          "const": "mak:default",
           "markdownDescription": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-write-board`"
         },
         {
           "description": "Enables the ping command without any pre-configured scope.",
           "type": "string",
-          "const": "askit:allow-ping",
+          "const": "mak:allow-ping",
           "markdownDescription": "Enables the ping command without any pre-configured scope."
         },
         {
           "description": "Enables the write_board command without any pre-configured scope.",
           "type": "string",
-          "const": "askit:allow-write-board",
+          "const": "mak:allow-write-board",
           "markdownDescription": "Enables the write_board command without any pre-configured scope."
         },
         {
           "description": "Denies the ping command without any pre-configured scope.",
           "type": "string",
-          "const": "askit:deny-ping",
+          "const": "mak:deny-ping",
           "markdownDescription": "Denies the ping command without any pre-configured scope."
         },
         {
           "description": "Denies the write_board command without any pre-configured scope.",
           "type": "string",
-          "const": "askit:deny-write-board",
+          "const": "mak:deny-write-board",
           "markdownDescription": "Denies the write_board command without any pre-configured scope."
         },
         {

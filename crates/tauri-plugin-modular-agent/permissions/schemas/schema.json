@@ -307,28 +307,40 @@
           "markdownDescription": "Denies the add_agent command without any pre-configured scope."
         },
         {
-          "description": "Enables the add_agent_stream command without any pre-configured scope.",
+          "description": "Enables the add_preset command without any pre-configured scope.",
           "type": "string",
-          "const": "allow-add-agent-stream",
-          "markdownDescription": "Enables the add_agent_stream command without any pre-configured scope."
+          "const": "allow-add-preset",
+          "markdownDescription": "Enables the add_preset command without any pre-configured scope."
         },
         {
-          "description": "Denies the add_agent_stream command without any pre-configured scope.",
+          "description": "Denies the add_preset command without any pre-configured scope.",
           "type": "string",
-          "const": "deny-add-agent-stream",
-          "markdownDescription": "Denies the add_agent_stream command without any pre-configured scope."
+          "const": "deny-add-preset",
+          "markdownDescription": "Denies the add_preset command without any pre-configured scope."
         },
         {
-          "description": "Enables the add_agents_and_channels command without any pre-configured scope.",
+          "description": "Enables the add_agents_and_connections command without any pre-configured scope.",
           "type": "string",
-          "const": "allow-add-agents-and-channels",
-          "markdownDescription": "Enables the add_agents_and_channels command without any pre-configured scope."
+          "const": "allow-add-agents-and-connections",
+          "markdownDescription": "Enables the add_agents_and_connections command without any pre-configured scope."
         },
         {
-          "description": "Denies the add_agents_and_channels command without any pre-configured scope.",
+          "description": "Denies the add_agents_and_connections command without any pre-configured scope.",
           "type": "string",
-          "const": "deny-add-agents-and-channels",
-          "markdownDescription": "Denies the add_agents_and_channels command without any pre-configured scope."
+          "const": "deny-add-agents-and-connections",
+          "markdownDescription": "Denies the add_agents_and_connections command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the add_agents_and_connections command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-add-agents-and-connections",
+          "markdownDescription": "Enables the add_agents_and_connections command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the add_agents_and_connections command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-add-agents-and-connections",
+          "markdownDescription": "Denies the add_agents_and_connections command without any pre-configured scope."
         },
         {
           "description": "Enables the add_channel command without any pre-configured scope.",
@@ -341,6 +353,30 @@
           "type": "string",
           "const": "deny-add-channel",
           "markdownDescription": "Denies the add_channel command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the add_connection command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-add-connection",
+          "markdownDescription": "Enables the add_connection command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the add_connection command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-add-connection",
+          "markdownDescription": "Denies the add_connection command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the add_preset command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-add-preset",
+          "markdownDescription": "Enables the add_preset command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the add_preset command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-add-preset",
+          "markdownDescription": "Denies the add_preset command without any pre-configured scope."
         },
         {
           "description": "Enables the get_agent_definition command without any pre-configured scope.",
@@ -379,40 +415,40 @@
           "markdownDescription": "Denies the get_agent_spec command without any pre-configured scope."
         },
         {
-          "description": "Enables the get_agent_stream_info command without any pre-configured scope.",
+          "description": "Enables the get_preset_info command without any pre-configured scope.",
           "type": "string",
-          "const": "allow-get-agent-stream-info",
-          "markdownDescription": "Enables the get_agent_stream_info command without any pre-configured scope."
+          "const": "allow-get-preset-info",
+          "markdownDescription": "Enables the get_preset_info command without any pre-configured scope."
         },
         {
-          "description": "Denies the get_agent_stream_info command without any pre-configured scope.",
+          "description": "Denies the get_preset_info command without any pre-configured scope.",
           "type": "string",
-          "const": "deny-get-agent-stream-info",
-          "markdownDescription": "Denies the get_agent_stream_info command without any pre-configured scope."
+          "const": "deny-get-preset-info",
+          "markdownDescription": "Denies the get_preset_info command without any pre-configured scope."
         },
         {
-          "description": "Enables the get_agent_stream_infos command without any pre-configured scope.",
+          "description": "Enables the get_preset_infos command without any pre-configured scope.",
           "type": "string",
-          "const": "allow-get-agent-stream-infos",
-          "markdownDescription": "Enables the get_agent_stream_infos command without any pre-configured scope."
+          "const": "allow-get-preset-infos",
+          "markdownDescription": "Enables the get_preset_infos command without any pre-configured scope."
         },
         {
-          "description": "Denies the get_agent_stream_infos command without any pre-configured scope.",
+          "description": "Denies the get_preset_infos command without any pre-configured scope.",
           "type": "string",
-          "const": "deny-get-agent-stream-infos",
-          "markdownDescription": "Denies the get_agent_stream_infos command without any pre-configured scope."
+          "const": "deny-get-preset-infos",
+          "markdownDescription": "Denies the get_preset_infos command without any pre-configured scope."
         },
         {
-          "description": "Enables the get_agent_stream_spec command without any pre-configured scope.",
+          "description": "Enables the get_preset_spec command without any pre-configured scope.",
           "type": "string",
-          "const": "allow-get-agent-stream-spec",
-          "markdownDescription": "Enables the get_agent_stream_spec command without any pre-configured scope."
+          "const": "allow-get-preset-spec",
+          "markdownDescription": "Enables the get_preset_spec command without any pre-configured scope."
         },
         {
-          "description": "Denies the get_agent_stream_spec command without any pre-configured scope.",
+          "description": "Denies the get_preset_spec command without any pre-configured scope.",
           "type": "string",
-          "const": "deny-get-agent-stream-spec",
-          "markdownDescription": "Denies the get_agent_stream_spec command without any pre-configured scope."
+          "const": "deny-get-preset-spec",
+          "markdownDescription": "Denies the get_preset_spec command without any pre-configured scope."
         },
         {
           "description": "Enables the get_global_configs command without any pre-configured scope.",
@@ -439,6 +475,42 @@
           "markdownDescription": "Denies the get_global_configs_map command without any pre-configured scope."
         },
         {
+          "description": "Enables the get_preset_info command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-preset-info",
+          "markdownDescription": "Enables the get_preset_info command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_preset_info command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-preset-info",
+          "markdownDescription": "Denies the get_preset_info command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the get_preset_infos command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-preset-infos",
+          "markdownDescription": "Enables the get_preset_infos command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_preset_infos command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-preset-infos",
+          "markdownDescription": "Denies the get_preset_infos command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the get_preset_spec command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-preset-spec",
+          "markdownDescription": "Enables the get_preset_spec command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_preset_spec command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-preset-spec",
+          "markdownDescription": "Denies the get_preset_spec command without any pre-configured scope."
+        },
+        {
           "description": "Enables the new_agent_spec command without any pre-configured scope.",
           "type": "string",
           "const": "allow-new-agent-spec",
@@ -451,16 +523,28 @@
           "markdownDescription": "Denies the new_agent_spec command without any pre-configured scope."
         },
         {
-          "description": "Enables the new_agent_stream command without any pre-configured scope.",
+          "description": "Enables the new_preset command without any pre-configured scope.",
           "type": "string",
-          "const": "allow-new-agent-stream",
-          "markdownDescription": "Enables the new_agent_stream command without any pre-configured scope."
+          "const": "allow-new-preset",
+          "markdownDescription": "Enables the new_preset command without any pre-configured scope."
         },
         {
-          "description": "Denies the new_agent_stream command without any pre-configured scope.",
+          "description": "Denies the new_preset command without any pre-configured scope.",
           "type": "string",
-          "const": "deny-new-agent-stream",
-          "markdownDescription": "Denies the new_agent_stream command without any pre-configured scope."
+          "const": "deny-new-preset",
+          "markdownDescription": "Denies the new_preset command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the new_preset command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-new-preset",
+          "markdownDescription": "Enables the new_preset command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the new_preset command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-new-preset",
+          "markdownDescription": "Denies the new_preset command without any pre-configured scope."
         },
         {
           "description": "Enables the remove_agent command without any pre-configured scope.",
@@ -475,16 +559,16 @@
           "markdownDescription": "Denies the remove_agent command without any pre-configured scope."
         },
         {
-          "description": "Enables the remove_agent_stream command without any pre-configured scope.",
+          "description": "Enables the remove_preset command without any pre-configured scope.",
           "type": "string",
-          "const": "allow-remove-agent-stream",
-          "markdownDescription": "Enables the remove_agent_stream command without any pre-configured scope."
+          "const": "allow-remove-preset",
+          "markdownDescription": "Enables the remove_preset command without any pre-configured scope."
         },
         {
-          "description": "Denies the remove_agent_stream command without any pre-configured scope.",
+          "description": "Denies the remove_preset command without any pre-configured scope.",
           "type": "string",
-          "const": "deny-remove-agent-stream",
-          "markdownDescription": "Denies the remove_agent_stream command without any pre-configured scope."
+          "const": "deny-remove-preset",
+          "markdownDescription": "Denies the remove_preset command without any pre-configured scope."
         },
         {
           "description": "Enables the remove_channel command without any pre-configured scope.",
@@ -499,16 +583,52 @@
           "markdownDescription": "Denies the remove_channel command without any pre-configured scope."
         },
         {
-          "description": "Enables the rename_agent_stream command without any pre-configured scope.",
+          "description": "Enables the remove_connection command without any pre-configured scope.",
           "type": "string",
-          "const": "allow-rename-agent-stream",
-          "markdownDescription": "Enables the rename_agent_stream command without any pre-configured scope."
+          "const": "allow-remove-connection",
+          "markdownDescription": "Enables the remove_connection command without any pre-configured scope."
         },
         {
-          "description": "Denies the rename_agent_stream command without any pre-configured scope.",
+          "description": "Denies the remove_connection command without any pre-configured scope.",
           "type": "string",
-          "const": "deny-rename-agent-stream",
-          "markdownDescription": "Denies the rename_agent_stream command without any pre-configured scope."
+          "const": "deny-remove-connection",
+          "markdownDescription": "Denies the remove_connection command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the remove_preset command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-remove-preset",
+          "markdownDescription": "Enables the remove_preset command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the remove_preset command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-remove-preset",
+          "markdownDescription": "Denies the remove_preset command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the rename_preset command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-rename-preset",
+          "markdownDescription": "Enables the rename_preset command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the rename_preset command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-rename-preset",
+          "markdownDescription": "Denies the rename_preset command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the rename_preset command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-rename-preset",
+          "markdownDescription": "Enables the rename_preset command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the rename_preset command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-rename-preset",
+          "markdownDescription": "Denies the rename_preset command without any pre-configured scope."
         },
         {
           "description": "Enables the set_agent_configs command without any pre-configured scope.",
@@ -559,16 +679,28 @@
           "markdownDescription": "Denies the start_agent command without any pre-configured scope."
         },
         {
-          "description": "Enables the start_agent_stream command without any pre-configured scope.",
+          "description": "Enables the start_preset command without any pre-configured scope.",
           "type": "string",
-          "const": "allow-start-agent-stream",
-          "markdownDescription": "Enables the start_agent_stream command without any pre-configured scope."
+          "const": "allow-start-preset",
+          "markdownDescription": "Enables the start_preset command without any pre-configured scope."
         },
         {
-          "description": "Denies the start_agent_stream command without any pre-configured scope.",
+          "description": "Denies the start_preset command without any pre-configured scope.",
           "type": "string",
-          "const": "deny-start-agent-stream",
-          "markdownDescription": "Denies the start_agent_stream command without any pre-configured scope."
+          "const": "deny-start-preset",
+          "markdownDescription": "Denies the start_preset command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the start_preset command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-start-preset",
+          "markdownDescription": "Enables the start_preset command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the start_preset command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-start-preset",
+          "markdownDescription": "Denies the start_preset command without any pre-configured scope."
         },
         {
           "description": "Enables the stop_agent command without any pre-configured scope.",
@@ -583,28 +715,52 @@
           "markdownDescription": "Denies the stop_agent command without any pre-configured scope."
         },
         {
-          "description": "Enables the stop_agent_stream command without any pre-configured scope.",
+          "description": "Enables the stop_preset command without any pre-configured scope.",
           "type": "string",
-          "const": "allow-stop-agent-stream",
-          "markdownDescription": "Enables the stop_agent_stream command without any pre-configured scope."
+          "const": "allow-stop-preset",
+          "markdownDescription": "Enables the stop_preset command without any pre-configured scope."
         },
         {
-          "description": "Denies the stop_agent_stream command without any pre-configured scope.",
+          "description": "Denies the stop_preset command without any pre-configured scope.",
           "type": "string",
-          "const": "deny-stop-agent-stream",
-          "markdownDescription": "Denies the stop_agent_stream command without any pre-configured scope."
+          "const": "deny-stop-preset",
+          "markdownDescription": "Denies the stop_preset command without any pre-configured scope."
         },
         {
-          "description": "Enables the unique_stream_name command without any pre-configured scope.",
+          "description": "Enables the stop_preset command without any pre-configured scope.",
           "type": "string",
-          "const": "allow-unique-stream-name",
-          "markdownDescription": "Enables the unique_stream_name command without any pre-configured scope."
+          "const": "allow-stop-preset",
+          "markdownDescription": "Enables the stop_preset command without any pre-configured scope."
         },
         {
-          "description": "Denies the unique_stream_name command without any pre-configured scope.",
+          "description": "Denies the stop_preset command without any pre-configured scope.",
           "type": "string",
-          "const": "deny-unique-stream-name",
-          "markdownDescription": "Denies the unique_stream_name command without any pre-configured scope."
+          "const": "deny-stop-preset",
+          "markdownDescription": "Denies the stop_preset command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the unique_preset_name command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-unique-preset-name",
+          "markdownDescription": "Enables the unique_preset_name command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the unique_preset_name command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-unique-preset-name",
+          "markdownDescription": "Denies the unique_preset_name command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the unique_preset_name command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-unique-preset-name",
+          "markdownDescription": "Enables the unique_preset_name command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the unique_preset_name command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-unique-preset-name",
+          "markdownDescription": "Denies the unique_preset_name command without any pre-configured scope."
         },
         {
           "description": "Enables the update_agent_spec command without any pre-configured scope.",
@@ -619,16 +775,28 @@
           "markdownDescription": "Denies the update_agent_spec command without any pre-configured scope."
         },
         {
-          "description": "Enables the update_agent_stream_spec command without any pre-configured scope.",
+          "description": "Enables the update_preset_spec command without any pre-configured scope.",
           "type": "string",
-          "const": "allow-update-agent-stream-spec",
-          "markdownDescription": "Enables the update_agent_stream_spec command without any pre-configured scope."
+          "const": "allow-update-preset-spec",
+          "markdownDescription": "Enables the update_preset_spec command without any pre-configured scope."
         },
         {
-          "description": "Denies the update_agent_stream_spec command without any pre-configured scope.",
+          "description": "Denies the update_preset_spec command without any pre-configured scope.",
           "type": "string",
-          "const": "deny-update-agent-stream-spec",
-          "markdownDescription": "Denies the update_agent_stream_spec command without any pre-configured scope."
+          "const": "deny-update-preset-spec",
+          "markdownDescription": "Denies the update_preset_spec command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the update_preset_spec command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-update-preset-spec",
+          "markdownDescription": "Enables the update_preset_spec command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the update_preset_spec command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-update-preset-spec",
+          "markdownDescription": "Denies the update_preset_spec command without any pre-configured scope."
         },
         {
           "description": "Enables the write_board command without any pre-configured scope.",
@@ -643,10 +811,10 @@
           "markdownDescription": "Denies the write_board command without any pre-configured scope."
         },
         {
-          "description": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-get-agent-definition`\n- `allow-get-agent-definitions`\n- `allow-get-agent-spec`\n- `allow-update-agent-spec`\n- `allow-get-agent-stream-info`\n- `allow-get-agent-stream-infos`\n- `allow-get-agent-stream-spec`\n- `allow-update-agent-stream-spec`\n- `allow-new-agent-stream`\n- `allow-rename-agent-stream`\n- `allow-unique-stream-name`\n- `allow-add-agent-stream`\n- `allow-remove-agent-stream`\n- `allow-add-agents-and-channels`\n- `allow-start-agent-stream`\n- `allow-stop-agent-stream`\n- `allow-new-agent-spec`\n- `allow-add-agent`\n- `allow-remove-agent`\n- `allow-add-channel`\n- `allow-remove-channel`\n- `allow-start-agent`\n- `allow-stop-agent`\n- `allow-write-board`\n- `allow-set-agent-configs`\n- `allow-get-global-configs`\n- `allow-get-global-configs-map`\n- `allow-set-global-configs`\n- `allow-set-global-configs-map`",
+          "description": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-get-agent-definition`\n- `allow-get-agent-definitions`\n- `allow-get-agent-spec`\n- `allow-update-agent-spec`\n- `allow-get-preset-info`\n- `allow-get-preset-infos`\n- `allow-get-preset-spec`\n- `allow-update-preset-spec`\n- `allow-new-preset`\n- `allow-rename-preset`\n- `allow-unique-preset-name`\n- `allow-add-preset`\n- `allow-remove-preset`\n- `allow-add-agents-and-connections`\n- `allow-start-preset`\n- `allow-stop-preset`\n- `allow-new-agent-spec`\n- `allow-add-agent`\n- `allow-remove-agent`\n- `allow-add-connection`\n- `allow-remove-connection`\n- `allow-start-agent`\n- `allow-stop-agent`\n- `allow-write-board`\n- `allow-set-agent-configs`\n- `allow-get-global-configs`\n- `allow-get-global-configs-map`\n- `allow-set-global-configs`\n- `allow-set-global-configs-map`",
           "type": "string",
           "const": "default",
-          "markdownDescription": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-get-agent-definition`\n- `allow-get-agent-definitions`\n- `allow-get-agent-spec`\n- `allow-update-agent-spec`\n- `allow-get-agent-stream-info`\n- `allow-get-agent-stream-infos`\n- `allow-get-agent-stream-spec`\n- `allow-update-agent-stream-spec`\n- `allow-new-agent-stream`\n- `allow-rename-agent-stream`\n- `allow-unique-stream-name`\n- `allow-add-agent-stream`\n- `allow-remove-agent-stream`\n- `allow-add-agents-and-channels`\n- `allow-start-agent-stream`\n- `allow-stop-agent-stream`\n- `allow-new-agent-spec`\n- `allow-add-agent`\n- `allow-remove-agent`\n- `allow-add-channel`\n- `allow-remove-channel`\n- `allow-start-agent`\n- `allow-stop-agent`\n- `allow-write-board`\n- `allow-set-agent-configs`\n- `allow-get-global-configs`\n- `allow-get-global-configs-map`\n- `allow-set-global-configs`\n- `allow-set-global-configs-map`"
+          "markdownDescription": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-get-agent-definition`\n- `allow-get-agent-definitions`\n- `allow-get-agent-spec`\n- `allow-update-agent-spec`\n- `allow-get-preset-info`\n- `allow-get-preset-infos`\n- `allow-get-preset-spec`\n- `allow-update-preset-spec`\n- `allow-new-preset`\n- `allow-rename-preset`\n- `allow-unique-preset-name`\n- `allow-add-preset`\n- `allow-remove-preset`\n- `allow-add-agents-and-connections`\n- `allow-start-preset`\n- `allow-stop-preset`\n- `allow-new-agent-spec`\n- `allow-add-agent`\n- `allow-remove-agent`\n- `allow-add-connection`\n- `allow-remove-connection`\n- `allow-start-agent`\n- `allow-stop-agent`\n- `allow-write-board`\n- `allow-set-agent-configs`\n- `allow-get-global-configs`\n- `allow-get-global-configs-map`\n- `allow-set-global-configs`\n- `allow-set-global-configs-map`"
         }
       ]
     }
