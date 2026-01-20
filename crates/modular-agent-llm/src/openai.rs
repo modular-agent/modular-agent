@@ -3,10 +3,10 @@
 use std::sync::{Arc, Mutex};
 use std::vec;
 
-use agent_stream_kit::tool::{self, list_tool_infos_patterns};
-use agent_stream_kit::{
-    ASKit, Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
-    Message, ToolCall, ToolCallFunction, askit_agent, async_trait,
+use modular_agent_kit::tool::{self, list_tool_infos_patterns};
+use modular_agent_kit::{
+    MAK, Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
+    Message, ToolCall, ToolCallFunction, mak_agent, async_trait,
 };
 // use async_openai::types::responses::{FunctionArgs, ToolDefinition};
 use async_openai::types::{
@@ -38,14 +38,14 @@ use im::vector;
 
 const CATEGORY: &str = "LLM/OpenAI";
 
-const PIN_CHUNKS: &str = "chunks";
-const PIN_DOC: &str = "doc";
-const PIN_EMBEDDING: &str = "embedding";
-const PIN_EMBEDDINGS: &str = "embeddings";
-const PIN_MESSAGE: &str = "message";
-const PIN_PROMPT: &str = "prompt";
-const PIN_RESPONSE: &str = "response";
-const PIN_STRING: &str = "string";
+const PORT_CHUNKS: &str = "chunks";
+const PORT_DOC: &str = "doc";
+const PORT_EMBEDDING: &str = "embedding";
+const PORT_EMBEDDINGS: &str = "embeddings";
+const PORT_MESSAGE: &str = "message";
+const PORT_PROMPT: &str = "prompt";
+const PORT_RESPONSE: &str = "response";
+const PORT_STRING: &str = "string";
 
 const CONFIG_MODEL: &str = "model";
 const CONFIG_OPENAI_API_KEY: &str = "openai_api_key";
@@ -69,7 +69,7 @@ impl OpenAIManager {
         }
     }
 
-    fn get_client(&self, askit: &ASKit) -> Result<Client<OpenAIConfig>, AgentError> {
+    fn get_client(&self, mak: &MAK) -> Result<Client<OpenAIConfig>, AgentError> {
         let mut client_guard = self.client.lock().unwrap();
 
         if let Some(client) = client_guard.as_ref() {
@@ -78,7 +78,7 @@ impl OpenAIManager {
 
         let mut config = OpenAIConfig::new();
 
-        if let Some(api_key) = askit
+        if let Some(api_key) = mak
             .get_global_configs(crate::openai::OpenAICompletionAgent::DEF_NAME)
             .and_then(|cfg| cfg.get_string(CONFIG_OPENAI_API_KEY).ok())
             .filter(|key| !key.is_empty())
@@ -86,7 +86,7 @@ impl OpenAIManager {
             config = config.with_api_key(&api_key);
         }
 
-        if let Some(api_base) = askit
+        if let Some(api_base) = mak
             .get_global_configs(crate::openai::OpenAICompletionAgent::DEF_NAME)
             .and_then(|cfg| cfg.get_string(CONFIG_OPENAI_API_BASE).ok())
             .filter(|key| !key.is_empty())
@@ -102,11 +102,11 @@ impl OpenAIManager {
 }
 
 // OpenAI Completion Agent
-#[askit_agent(
+#[mak_agent(
     title="Completion",
     category=CATEGORY,
-    inputs=[PIN_PROMPT],
-    outputs=[PIN_MESSAGE, PIN_RESPONSE],
+    inputs=[PORT_PROMPT],
+    outputs=[PORT_MESSAGE, PORT_RESPONSE],
     string_config(name=CONFIG_MODEL, default="gpt-3.5-turbo-instruct"),
     text_config(name=CONFIG_SYSTEM),
     object_config(name=CONFIG_OPTIONS),
@@ -120,9 +120,9 @@ pub struct OpenAICompletionAgent {
 
 #[async_trait]
 impl AsAgent for OpenAICompletionAgent {
-    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(askit, id, spec),
+            data: AgentData::new(mak, id, spec),
             manager: OpenAIManager::new(),
         })
     }
@@ -130,7 +130,7 @@ impl AsAgent for OpenAICompletionAgent {
     async fn process(
         &mut self,
         ctx: AgentContext,
-        _pin: String,
+        _port: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
         let config_model = &self.configs()?.get_string_or_default(CONFIG_MODEL);
@@ -190,7 +190,7 @@ impl AsAgent for OpenAICompletionAgent {
                 .map_err(|e| AgentError::InvalidValue(format!("Deserialization error: {}", e)))?;
         }
 
-        let client = self.manager.get_client(self.askit())?;
+        let client = self.manager.get_client(self.mak())?;
         let res = client
             .completions()
             .create(request)
@@ -198,22 +198,22 @@ impl AsAgent for OpenAICompletionAgent {
             .map_err(|e| AgentError::IoError(format!("OpenAI Error: {}", e)))?;
 
         let message = Message::assistant(res.choices[0].text.clone());
-        self.output(ctx.clone(), PIN_MESSAGE, message.into())
+        self.output(ctx.clone(), PORT_MESSAGE, message.into())
             .await?;
 
         let out_response = AgentValue::from_serialize(&res)?;
-        self.output(ctx, PIN_RESPONSE, out_response).await?;
+        self.output(ctx, PORT_RESPONSE, out_response).await?;
 
         Ok(())
     }
 }
 
 // OpenAI Chat Agent
-#[askit_agent(
+#[mak_agent(
     title="Chat",
     category=CATEGORY,
-    inputs=[PIN_MESSAGE],
-    outputs=[PIN_MESSAGE, PIN_RESPONSE],
+    inputs=[PORT_MESSAGE],
+    outputs=[PORT_MESSAGE, PORT_RESPONSE],
     boolean_config(name=CONFIG_STREAM, title="Stream"),
     string_config(name=CONFIG_MODEL, default=DEFAULT_CONFIG_MODEL),
     text_config(name=CONFIG_TOOLS),
@@ -226,9 +226,9 @@ pub struct OpenAIChatAgent {
 
 #[async_trait]
 impl AsAgent for OpenAIChatAgent {
-    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(askit, id, spec),
+            data: AgentData::new(mak, id, spec),
             manager: OpenAIManager::new(),
         })
     }
@@ -236,7 +236,7 @@ impl AsAgent for OpenAIChatAgent {
     async fn process(
         &mut self,
         ctx: AgentContext,
-        _pin: String,
+        _port: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
         let config_model = &self.configs()?.get_string_or_default(CONFIG_MODEL);
@@ -293,7 +293,7 @@ impl AsAgent for OpenAIChatAgent {
 
         let use_stream = self.configs()?.get_bool_or_default(CONFIG_STREAM);
 
-        let client = self.manager.get_client(self.askit())?;
+        let client = self.manager.get_client(self.mak())?;
 
         let mut request = CreateChatCompletionRequestArgs::default()
             .model(config_model)
@@ -371,11 +371,11 @@ impl AsAgent for OpenAIChatAgent {
                     message.tool_calls = Some(tool_calls.clone().into());
                 }
 
-                self.output(ctx.clone(), PIN_MESSAGE, message.clone().into())
+                self.output(ctx.clone(), PORT_MESSAGE, message.clone().into())
                     .await?;
 
                 let out_response = AgentValue::from_serialize(&res)?;
-                self.output(ctx.clone(), PIN_RESPONSE, out_response).await?;
+                self.output(ctx.clone(), PORT_RESPONSE, out_response).await?;
             }
 
             return Ok(());
@@ -390,11 +390,11 @@ impl AsAgent for OpenAIChatAgent {
                 let mut message: Message = message_from_openai_msg(c.message.clone());
                 message.id = Some(id.clone());
 
-                self.output(ctx.clone(), PIN_MESSAGE, message.clone().into())
+                self.output(ctx.clone(), PORT_MESSAGE, message.clone().into())
                     .await?;
 
                 let out_response = AgentValue::from_serialize(&res)?;
-                self.output(ctx.clone(), PIN_RESPONSE, out_response).await?;
+                self.output(ctx.clone(), PORT_RESPONSE, out_response).await?;
             }
 
             return Ok(());
@@ -403,11 +403,11 @@ impl AsAgent for OpenAIChatAgent {
 }
 
 // OpenAI Embeddings Agent
-#[askit_agent(
+#[mak_agent(
     title="Embeddings",
     category=CATEGORY,
-    inputs=[PIN_STRING, PIN_CHUNKS, PIN_DOC],
-    outputs=[PIN_EMBEDDING, PIN_EMBEDDINGS, PIN_DOC],
+    inputs=[PORT_STRING, PORT_CHUNKS, PORT_DOC],
+    outputs=[PORT_EMBEDDING, PORT_EMBEDDINGS, PORT_DOC],
     string_config(name=CONFIG_MODEL, default="text-embedding-3-small"),
     object_config(name=CONFIG_OPTIONS)
 )]
@@ -422,7 +422,7 @@ impl OpenAIEmbeddingsAgent {
         texts: Vec<String>,
         model_name: &str,
     ) -> Result<Vec<Vec<f32>>, AgentError> {
-        let client = self.manager.get_client(self.askit())?;
+        let client = self.manager.get_client(self.mak())?;
         let mut request = CreateEmbeddingRequestArgs::default()
             .model(model_name.to_string())
             .input(texts)
@@ -460,9 +460,9 @@ impl OpenAIEmbeddingsAgent {
 
 #[async_trait]
 impl AsAgent for OpenAIEmbeddingsAgent {
-    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(askit, id, spec),
+            data: AgentData::new(mak, id, spec),
             manager: OpenAIManager::new(),
         })
     }
@@ -470,7 +470,7 @@ impl AsAgent for OpenAIEmbeddingsAgent {
     async fn process(
         &mut self,
         ctx: AgentContext,
-        pin: String,
+        port: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
         let config_model = &self.configs()?.get_string_or_default(CONFIG_MODEL);
@@ -478,7 +478,7 @@ impl AsAgent for OpenAIEmbeddingsAgent {
             return Err(AgentError::InvalidConfig("model is not set".to_string()));
         }
 
-        if pin == PIN_STRING {
+        if port == PORT_STRING {
             let text = value.as_str().unwrap_or_default();
             if text.is_empty() {
                 return Err(AgentError::InvalidValue(
@@ -496,13 +496,13 @@ impl AsAgent for OpenAIEmbeddingsAgent {
             return self
                 .output(
                     ctx,
-                    PIN_EMBEDDING,
+                    PORT_EMBEDDING,
                     AgentValue::tensor(embeddings.into_iter().next().unwrap()),
                 )
                 .await;
         }
 
-        if pin == PIN_CHUNKS {
+        if port == PORT_CHUNKS {
             if !value.is_array() {
                 return Err(AgentError::InvalidValue(
                     "Input must be an array of strings".to_string(),
@@ -541,7 +541,7 @@ impl AsAgent for OpenAIEmbeddingsAgent {
             }
             if texts.is_empty() {
                 return self
-                    .output(ctx.clone(), PIN_EMBEDDINGS, AgentValue::array_default())
+                    .output(ctx.clone(), PORT_EMBEDDINGS, AgentValue::array_default())
                     .await;
             }
             let embeddings = self.generate_embeddings(texts, config_model).await?;
@@ -558,13 +558,13 @@ impl AsAgent for OpenAIEmbeddingsAgent {
             return self
                 .output(
                     ctx,
-                    PIN_EMBEDDINGS,
+                    PORT_EMBEDDINGS,
                     AgentValue::array(embedding_values_with_offsets),
                 )
                 .await;
         }
 
-        if pin == PIN_DOC {
+        if port == PORT_DOC {
             let mut texts = vec![];
             let mut indices = vec![];
 
@@ -587,7 +587,7 @@ impl AsAgent for OpenAIEmbeddingsAgent {
                 }
                 if texts.is_empty() {
                     return self
-                        .output(ctx.clone(), PIN_DOC, AgentValue::array_default())
+                        .output(ctx.clone(), PORT_DOC, AgentValue::array_default())
                         .await;
                 }
             } else {
@@ -607,7 +607,7 @@ impl AsAgent for OpenAIEmbeddingsAgent {
                 let embedding = embeddings.into_iter().next().unwrap();
                 let mut output = value.clone();
                 output.set("embedding".to_string(), AgentValue::tensor(embedding))?;
-                return self.output(ctx.clone(), PIN_DOC, output).await;
+                return self.output(ctx.clone(), PORT_DOC, output).await;
             } else {
                 let mut arr = value.clone().into_array().unwrap();
                 for i in 0..embeddings.len() {
@@ -619,22 +619,22 @@ impl AsAgent for OpenAIEmbeddingsAgent {
                     )?;
                 }
                 return self
-                    .output(ctx.clone(), PIN_DOC, AgentValue::array(arr))
+                    .output(ctx.clone(), PORT_DOC, AgentValue::array(arr))
                     .await;
             }
         }
 
-        Err(AgentError::InvalidPin(pin))
+        Err(AgentError::InvalidPin(port))
     }
 }
 
 // // OpenAI Responses Agent
 // // https://platform.openai.com/docs/api-reference/responses
-// #[askit_agent(
+// #[mak_agent(
 //     title="Responses",
 //     category=CATEGORY,
-//     inputs=[PIN_MESSAGE],
-//     outputs=[PIN_MESSAGE, PIN_RESPONSE],
+//     inputs=[PORT_MESSAGE],
+//     outputs=[PORT_MESSAGE, PORT_RESPONSE],
 //     boolean_config(name=CONFIG_STREAM),
 //     string_config(name=CONFIG_MODEL, default=DEFAULT_CONFIG_MODEL),
 //     text_config(name=CONFIG_TOOLS),
@@ -647,9 +647,9 @@ impl AsAgent for OpenAIEmbeddingsAgent {
 
 // #[async_trait]
 // impl AsAgent for OpenAIResponsesAgent {
-//     fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+//     fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
 //         Ok(Self {
-//             data: AgentData::new(askit, id, spec),
+//             data: AgentData::new(mak, id, spec),
 //             manager: OpenAIManager::new(),
 //         })
 //     }
@@ -657,7 +657,7 @@ impl AsAgent for OpenAIEmbeddingsAgent {
 //     async fn process(
 //         &mut self,
 //         ctx: AgentContext,
-//         pin: String,
+//         port: String,
 //         value: AgentValue,
 //     ) -> Result<(), AgentError> {
 //         let config_model = &self.configs()?.get_string_or_default(CONFIG_MODEL);
@@ -714,7 +714,7 @@ impl AsAgent for OpenAIEmbeddingsAgent {
 
 //         let use_stream = self.configs()?.get_bool_or_default(CONFIG_STREAM);
 
-//         let client = self.manager.get_client(self.askit())?;
+//         let client = self.manager.get_client(self.mak())?;
 
 //         let mut request = CreateResponseArgs::default()
 //             .model(config_model)
@@ -782,7 +782,7 @@ impl AsAgent for OpenAIEmbeddingsAgent {
 //                     }
 //                     responses::ResponseEvent::ResponseCompleted(_) => {
 //                         let out_response = AgentValue::from_serialize(&res_event)?;
-//                         self.output(ctx.clone(), PIN_RESPONSE, out_response).await?;
+//                         self.output(ctx.clone(), PORT_RESPONSE, out_response).await?;
 //                         break;
 //                     }
 //                     _ => {}
@@ -793,10 +793,10 @@ impl AsAgent for OpenAIEmbeddingsAgent {
 //                     message.tool_calls = Some(tool_calls.clone().into());
 //                 }
 
-//                 self.output(ctx.clone(), PIN_MESSAGE, message.clone().into()).await?;
+//                 self.output(ctx.clone(), PORT_MESSAGE, message.clone().into()).await?;
 
 //                 let out_response = AgentValue::from_serialize(&res_event)?;
-//                 self.output(ctx.clone(), PIN_RESPONSE, out_response).await?;
+//                 self.output(ctx.clone(), PORT_RESPONSE, out_response).await?;
 //             }
 
 //             return Ok(());
@@ -811,10 +811,10 @@ impl AsAgent for OpenAIEmbeddingsAgent {
 //             let mut res_message: Message = Message::assistant(get_output_text(&res)); // TODO: better conversion
 //             res_message.id = Some(res.id.clone());
 
-//             self.output(ctx.clone(), PIN_MESSAGE, res_message.clone().into()).await?;
+//             self.output(ctx.clone(), PORT_MESSAGE, res_message.clone().into()).await?;
 
 //             let out_response = AgentValue::from_serialize(&res)?;
-//             self.output(ctx.clone(), PIN_RESPONSE, out_response).await?;
+//             self.output(ctx.clone(), PORT_RESPONSE, out_response).await?;
 
 //             return Ok(());
 //         }

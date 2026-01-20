@@ -1,14 +1,14 @@
-use agent_stream_kit::{
-    ASKit, Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
-    Message, askit_agent, async_trait,
+use modular_agent_kit::{
+    MAK, Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
+    Message, mak_agent, async_trait,
 };
 use im::{Vector, vector};
 
 const CATEGORY: &str = "LLM/Message";
 
-const PIN_MESSAGE: &str = "message";
-const PIN_MESSAGES: &str = "messages";
-const PIN_RESET: &str = "reset";
+const PORT_MESSAGE: &str = "message";
+const PORT_MESSAGES: &str = "messages";
+const PORT_RESET: &str = "reset";
 
 const CONFIG_MAX_SIZE: &str = "max_size";
 const CONFIG_MESSAGE: &str = "message";
@@ -16,11 +16,11 @@ const CONFIG_MESSAGES: &str = "messages";
 const CONFIG_PREAMBLE: &str = "preamble";
 
 // Assistant Message Agent
-#[askit_agent(
+#[mak_agent(
     title="Assistant Message",
     category=CATEGORY,
-    inputs=[PIN_MESSAGES],
-    outputs=[PIN_MESSAGES],
+    inputs=[PORT_MESSAGES],
+    outputs=[PORT_MESSAGES],
     text_config(name=CONFIG_MESSAGE)
 )]
 pub struct AssistantMessageAgent {
@@ -29,22 +29,22 @@ pub struct AssistantMessageAgent {
 
 #[async_trait]
 impl AsAgent for AssistantMessageAgent {
-    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(askit, id, spec),
+            data: AgentData::new(mak, id, spec),
         })
     }
 
     async fn process(
         &mut self,
         ctx: AgentContext,
-        _pin: String,
+        _port: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
         let message = self.configs()?.get_string(CONFIG_MESSAGE)?;
         let message = Message::assistant(message);
         let messages = append_message(value, message);
-        self.output(ctx, PIN_MESSAGES, messages).await?;
+        self.output(ctx, PORT_MESSAGES, messages).await?;
         Ok(())
     }
 }
@@ -52,11 +52,11 @@ impl AsAgent for AssistantMessageAgent {
 /// Add a system message to the messages.
 ///
 /// The system message is always prepended to the messages.
-#[askit_agent(
+#[mak_agent(
     title="System Message",
     category=CATEGORY,
-    inputs=[PIN_MESSAGES],
-    outputs=[PIN_MESSAGES],
+    inputs=[PORT_MESSAGES],
+    outputs=[PORT_MESSAGES],
     text_config(name=CONFIG_MESSAGE)
 )]
 pub struct SystemMessageAgent {
@@ -65,32 +65,32 @@ pub struct SystemMessageAgent {
 
 #[async_trait]
 impl AsAgent for SystemMessageAgent {
-    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(askit, id, spec),
+            data: AgentData::new(mak, id, spec),
         })
     }
 
     async fn process(
         &mut self,
         ctx: AgentContext,
-        _pin: String,
+        _port: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
         let message = self.configs()?.get_string(CONFIG_MESSAGE)?;
         let message = Message::system(message);
         let messages = prepend_message(value, message);
-        self.output(ctx, PIN_MESSAGES, messages).await?;
+        self.output(ctx, PORT_MESSAGES, messages).await?;
         Ok(())
     }
 }
 
 // User Message Agent
-#[askit_agent(
+#[mak_agent(
     title="User Message",
     category=CATEGORY,
-    inputs=[PIN_MESSAGES],
-    outputs=[PIN_MESSAGES],
+    inputs=[PORT_MESSAGES],
+    outputs=[PORT_MESSAGES],
     text_config(name=CONFIG_MESSAGE)
 )]
 pub struct UserMessageAgent {
@@ -99,22 +99,22 @@ pub struct UserMessageAgent {
 
 #[async_trait]
 impl AsAgent for UserMessageAgent {
-    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(askit, id, spec),
+            data: AgentData::new(mak, id, spec),
         })
     }
 
     async fn process(
         &mut self,
         ctx: AgentContext,
-        _pin: String,
+        _port: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
         let message = self.configs()?.get_string(CONFIG_MESSAGE)?;
         let message = Message::user(message);
         let messages = append_message(value, message);
-        self.output(ctx, PIN_MESSAGES, messages).await?;
+        self.output(ctx, PORT_MESSAGES, messages).await?;
         Ok(())
     }
 }
@@ -156,11 +156,11 @@ fn prepend_message(value: AgentValue, message: Message) -> AgentValue {
 /// Prepend a preamble message to the first input message.
 ///
 //// The preamble message is added only once.
-#[askit_agent(
+#[mak_agent(
     title="Preamble",
     category=CATEGORY,
-    inputs=[PIN_MESSAGE, PIN_RESET],
-    outputs=[PIN_MESSAGES],
+    inputs=[PORT_MESSAGE, PORT_RESET],
+    outputs=[PORT_MESSAGES],
     object_config(name=CONFIG_PREAMBLE),
 )]
 pub struct PreambleAgent {
@@ -171,7 +171,7 @@ pub struct PreambleAgent {
 
 #[async_trait]
 impl AsAgent for PreambleAgent {
-    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         let preamble = spec
             .configs
             .as_ref()
@@ -188,7 +188,7 @@ impl AsAgent for PreambleAgent {
                 }
             }
         };
-        let data = AgentData::new(askit, id, spec);
+        let data = AgentData::new(mak, id, spec);
         Ok(Self {
             data,
             preamble,
@@ -219,10 +219,10 @@ impl AsAgent for PreambleAgent {
     async fn process(
         &mut self,
         ctx: AgentContext,
-        pin: String,
+        port: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
-        if pin == PIN_RESET {
+        if port == PORT_RESET {
             self.prepended = false;
             return Ok(());
         }
@@ -237,7 +237,7 @@ impl AsAgent for PreambleAgent {
             return self
                 .output(
                     ctx,
-                    PIN_MESSAGES,
+                    PORT_MESSAGES,
                     AgentValue::array(vector![message.into()]),
                 )
                 .await;
@@ -249,7 +249,7 @@ impl AsAgent for PreambleAgent {
             return self
                 .output(
                     ctx,
-                    PIN_MESSAGES,
+                    PORT_MESSAGES,
                     AgentValue::array(vector![message.into()]),
                 )
                 .await;
@@ -257,7 +257,7 @@ impl AsAgent for PreambleAgent {
 
         let mut messages = preamble.clone();
         messages.push_back(message.into());
-        self.output(ctx, PIN_MESSAGES, AgentValue::array(messages))
+        self.output(ctx, PORT_MESSAGES, AgentValue::array(messages))
             .await?;
 
         Ok(())
@@ -270,11 +270,11 @@ impl AsAgent for PreambleAgent {
 /// When max_size > 0, the number of stored messages is limited to max_size.
 /// The stored messages are retained even if the agent is stopped.
 /// When an input is received on reset, the stored messages are cleared.
-#[askit_agent(
+#[mak_agent(
     title="Messages",
     category=CATEGORY,
-    inputs=[PIN_MESSAGE, PIN_RESET],
-    outputs=[PIN_MESSAGES],
+    inputs=[PORT_MESSAGE, PORT_RESET],
+    outputs=[PORT_MESSAGES],
     integer_config(name=CONFIG_MAX_SIZE),
     array_config(name=CONFIG_MESSAGES, hidden),
 )]
@@ -290,28 +290,28 @@ impl MessagesAgent {
 
 #[async_trait]
 impl AsAgent for MessagesAgent {
-    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(askit, id, spec),
+            data: AgentData::new(mak, id, spec),
         })
     }
 
     async fn process(
         &mut self,
         ctx: AgentContext,
-        pin: String,
+        port: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
-        if pin == PIN_RESET {
+        if port == PORT_RESET {
             self.reset_messages()?;
-            self.output(ctx, PIN_MESSAGES, AgentValue::array_default())
+            self.output(ctx, PORT_MESSAGES, AgentValue::array_default())
                 .await?;
             return Ok(());
         }
 
         if value.is_unit() {
             let messages = self.configs()?.get(CONFIG_MESSAGES)?;
-            self.output(ctx, PIN_MESSAGES, messages.clone()).await?;
+            self.output(ctx, PORT_MESSAGES, messages.clone()).await?;
             return Ok(());
         }
 
@@ -357,7 +357,7 @@ impl AsAgent for MessagesAgent {
 
         let arr = AgentValue::array(messages);
         self.set_config(CONFIG_MESSAGES.to_string(), arr.clone())?;
-        self.output(ctx, PIN_MESSAGES, arr).await?;
+        self.output(ctx, PORT_MESSAGES, arr).await?;
 
         Ok(())
     }
@@ -367,11 +367,11 @@ impl AsAgent for MessagesAgent {
 ///
 /// It selects messages to fit within max_size.
 /// The prompt order is (system, ) user, (assistant, user)*.
-#[askit_agent(
+#[mak_agent(
     title="Messages for Prompt",
     category=CATEGORY,
-    inputs=[PIN_MESSAGES],
-    outputs=[PIN_MESSAGES],
+    inputs=[PORT_MESSAGES],
+    outputs=[PORT_MESSAGES],
     integer_config(name=CONFIG_MAX_SIZE),
 )]
 pub struct MessagesForPromptAgent {
@@ -380,22 +380,22 @@ pub struct MessagesForPromptAgent {
 
 #[async_trait]
 impl AsAgent for MessagesForPromptAgent {
-    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(askit, id, spec),
+            data: AgentData::new(mak, id, spec),
         })
     }
 
     async fn process(
         &mut self,
         ctx: AgentContext,
-        _pin: String,
+        _port: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
         let max_size = self.configs()?.get_integer_or_default(CONFIG_MAX_SIZE);
         if max_size <= 0 {
             // Just output the input messages
-            self.output(ctx, PIN_MESSAGES, value).await?;
+            self.output(ctx, PORT_MESSAGES, value).await?;
             return Ok(());
         }
 
@@ -467,7 +467,7 @@ impl AsAgent for MessagesForPromptAgent {
         }
 
         selected_messages.reverse();
-        self.output(ctx, PIN_MESSAGES, selected_messages.into())
+        self.output(ctx, PORT_MESSAGES, selected_messages.into())
             .await?;
 
         Ok(())
@@ -553,7 +553,7 @@ mod tests {
 
         // image + user
         #[cfg(feature = "image")]
-        let img = AgentValue::image(agent_stream_kit::PhotonImage::new(vec![0u8; 4], 1, 1));
+        let img = AgentValue::image(modular_agent_kit::PhotonImage::new(vec![0u8; 4], 1, 1));
         {
             let msg = Message::user("Check this image".to_string());
             let result = append_message(img, msg);

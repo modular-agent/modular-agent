@@ -1,18 +1,18 @@
 [package]
-name = "askit-llm-agents"
-version = "0.8.0"
-description = "LLM Agents for Agent Stream Kit"
+name = "mak-llm-agents"
+version = "0.9.0"
+description = "LLM Agents for Modular Agent Kit"
 authors = ["Akira Ishino <akira@lumilab.jp>"]
 edition = "2024"
 license = "Apache-2.0 OR MIT"
 
 [dependencies]
-agent-stream-kit = "0.19.0"
 async-openai = { version = "0.30.1", optional = true }
 async-trait = "0.1"
 futures = { version = "0.3.31", optional = true }
 icu_normalizer = "2.1.1"
 im = "15.1.0"
+modular-agent-kit = "0.20.0"
 ollama-rs = { version = "0.3.2", default-features = false, features = ["macros", "rustls", "stream"], optional = true }
 photon-rs = { version = "0.3.3", optional = true }
 schemars = "1.0"
@@ -31,4 +31,4 @@ ollama = ["ollama-rs" ]
 openai = ["async-openai", "futures"]
 
 # [patch.crates-io]
-# agent-stream-kit = { path = "../agent-stream-kit/agent-stream-kit" }
+# modular-agent-kit = { path = "../modular-agent-kit/modular-agent-kit" }

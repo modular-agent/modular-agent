@@ -1,8 +1,8 @@
 use std::vec;
 
-use agent_stream_kit::{
-    ASKit, Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
-    askit_agent, async_trait,
+use modular_agent_kit::{
+    MAK, Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
+    mak_agent, async_trait,
 };
 use icu_normalizer::{ComposingNormalizer, ComposingNormalizerBorrowed};
 use im::vector;
@@ -11,19 +11,19 @@ use tokenizers::Tokenizer;
 
 const CATEGORY: &str = "LLM/Doc";
 
-const PIN_CHUNKS: &str = "chunks";
-const PIN_DOC: &str = "doc";
-const PIN_STRING: &str = "string";
+const PORT_CHUNKS: &str = "chunks";
+const PORT_DOC: &str = "doc";
+const PORT_STRING: &str = "string";
 
 const CONFIG_MAX_CHARACTERS: &str = "max_characters";
 const CONFIG_MAX_TOKENS: &str = "max_tokens";
 const CONFIG_TOKENIZER: &str = "tokenizer";
 
-#[askit_agent(
+#[mak_agent(
     title="NFKC",
     category=CATEGORY,
-    inputs=[PIN_STRING, PIN_DOC],
-    outputs=[PIN_STRING, PIN_DOC],
+    inputs=[PORT_STRING, PORT_DOC],
+    outputs=[PORT_STRING, PORT_DOC],
 )]
 pub struct NFKCAgent {
     data: AgentData,
@@ -32,9 +32,9 @@ pub struct NFKCAgent {
 
 #[async_trait]
 impl AsAgent for NFKCAgent {
-    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(askit, id, spec),
+            data: AgentData::new(mak, id, spec),
             normalizer: None,
         })
     }
@@ -53,13 +53,13 @@ impl AsAgent for NFKCAgent {
     async fn process(
         &mut self,
         ctx: AgentContext,
-        pin: String,
+        port: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
-        if pin == PIN_STRING {
+        if port == PORT_STRING {
             let s = value.as_str().unwrap_or("");
             if s.is_empty() {
-                return self.output(ctx.clone(), PIN_STRING, value).await;
+                return self.output(ctx.clone(), PORT_STRING, value).await;
             }
             let nfkc_text = self
                 .normalizer
@@ -67,16 +67,16 @@ impl AsAgent for NFKCAgent {
                 .map(|n| n.normalize(s))
                 .unwrap_or_default();
             return self
-                .output(ctx.clone(), PIN_STRING, AgentValue::string(nfkc_text))
+                .output(ctx.clone(), PORT_STRING, AgentValue::string(nfkc_text))
                 .await;
         }
 
-        if pin == PIN_DOC {
+        if port == PORT_DOC {
             if value.is_object() {
                 let text = value.get_str("text").unwrap_or_default();
                 if text.is_empty() {
                     return self
-                        .output(ctx.clone(), PIN_DOC, AgentValue::string_default())
+                        .output(ctx.clone(), PORT_DOC, AgentValue::string_default())
                         .await;
                 }
                 let nfkc_text = self
@@ -86,7 +86,7 @@ impl AsAgent for NFKCAgent {
                     .unwrap_or_default();
                 let mut output = value.clone();
                 output.set("text".to_string(), AgentValue::string(nfkc_text))?;
-                return self.output(ctx.clone(), PIN_DOC, output).await;
+                return self.output(ctx.clone(), PORT_DOC, output).await;
             } else {
                 return Err(AgentError::InvalidValue(
                     "Input must be an object with a text field".to_string(),
@@ -94,15 +94,15 @@ impl AsAgent for NFKCAgent {
             }
         }
 
-        Err(AgentError::InvalidPin(pin))
+        Err(AgentError::InvalidPin(port))
     }
 }
 
-#[askit_agent(
+#[mak_agent(
     title="Split Text",
     category=CATEGORY,
-    inputs=[PIN_STRING, PIN_DOC],
-    outputs=[PIN_CHUNKS, PIN_DOC],
+    inputs=[PORT_STRING, PORT_DOC],
+    outputs=[PORT_CHUNKS, PORT_DOC],
     integer_config(name=CONFIG_MAX_CHARACTERS, default=512),
 )]
 pub struct SplitTextAgent {
@@ -120,16 +120,16 @@ impl SplitTextAgent {
 
 #[async_trait]
 impl AsAgent for SplitTextAgent {
-    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(askit, id, spec),
+            data: AgentData::new(mak, id, spec),
         })
     }
 
     async fn process(
         &mut self,
         ctx: AgentContext,
-        pin: String,
+        port: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
         let max_characters = self
@@ -141,17 +141,17 @@ impl AsAgent for SplitTextAgent {
             ));
         }
 
-        if pin == PIN_STRING {
+        if port == PORT_STRING {
             let text = value.as_str().unwrap_or("");
             if text.is_empty() {
                 return self
-                    .output(ctx.clone(), PIN_CHUNKS, AgentValue::array_default())
+                    .output(ctx.clone(), PORT_CHUNKS, AgentValue::array_default())
                     .await;
             }
             let chunks = self.split_into_chunks(text, max_characters);
             self.output(
                 ctx.clone(),
-                PIN_CHUNKS,
+                PORT_CHUNKS,
                 AgentValue::array(
                     chunks
                         .into_iter()
@@ -169,18 +169,18 @@ impl AsAgent for SplitTextAgent {
             return Ok(());
         }
 
-        if pin == PIN_DOC {
+        if port == PORT_DOC {
             if value.is_object() {
                 let text = value.get_str("text").unwrap_or("");
                 if text.is_empty() {
                     return self
-                        .output(ctx.clone(), PIN_DOC, AgentValue::array_default())
+                        .output(ctx.clone(), PORT_DOC, AgentValue::array_default())
                         .await;
                 }
                 let chunks = self.split_into_chunks(text, max_characters);
                 self.output(
                     ctx,
-                    PIN_DOC,
+                    PORT_DOC,
                     AgentValue::array(
                         chunks
                             .into_iter()
@@ -202,15 +202,15 @@ impl AsAgent for SplitTextAgent {
             return Ok(());
         }
 
-        Err(AgentError::InvalidPin(pin))
+        Err(AgentError::InvalidPin(port))
     }
 }
 
-#[askit_agent(
+#[mak_agent(
     title="Split Text by Tokens",
     category=CATEGORY,
-    inputs=[PIN_STRING, PIN_DOC],
-    outputs=[PIN_CHUNKS, PIN_DOC],
+    inputs=[PORT_STRING, PORT_DOC],
+    outputs=[PORT_CHUNKS, PORT_DOC],
     integer_config(name=CONFIG_MAX_TOKENS, default=500),
     string_config(name=CONFIG_TOKENIZER, default="nomic-ai/nomic-embed-text-v2-moe")
 )]
@@ -245,9 +245,9 @@ impl SplitTextByTokensAgent {
 
 #[async_trait]
 impl AsAgent for SplitTextByTokensAgent {
-    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(askit, id, spec),
+            data: AgentData::new(mak, id, spec),
             splitter: None,
         })
     }
@@ -265,7 +265,7 @@ impl AsAgent for SplitTextByTokensAgent {
     async fn process(
         &mut self,
         ctx: AgentContext,
-        pin: String,
+        port: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
         let max_tokens = self.configs()?.get_integer_or_default(CONFIG_MAX_TOKENS) as usize;
@@ -282,18 +282,18 @@ impl AsAgent for SplitTextByTokensAgent {
             ));
         }
 
-        if pin == PIN_STRING {
+        if port == PORT_STRING {
             let text = value.as_str().unwrap_or("");
             if text.is_empty() {
                 return self
-                    .output(ctx.clone(), PIN_CHUNKS, AgentValue::array_default())
+                    .output(ctx.clone(), PORT_CHUNKS, AgentValue::array_default())
                     .await;
             }
 
             let chunks = self.split_into_chunks(text, max_tokens, &tokenizer_model)?;
             self.output(
                 ctx.clone(),
-                PIN_CHUNKS,
+                PORT_CHUNKS,
                 AgentValue::array(
                     chunks
                         .into_iter()
@@ -311,18 +311,18 @@ impl AsAgent for SplitTextByTokensAgent {
             return Ok(());
         }
 
-        if pin == PIN_DOC {
+        if port == PORT_DOC {
             let text = value.get_str("text").unwrap_or("");
             if text.is_empty() {
                 return self
-                    .output(ctx.clone(), PIN_DOC, AgentValue::array_default())
+                    .output(ctx.clone(), PORT_DOC, AgentValue::array_default())
                     .await;
             }
 
             let chunks = self.split_into_chunks(text, max_tokens, &tokenizer_model)?;
             self.output(
                 ctx,
-                PIN_DOC,
+                PORT_DOC,
                 AgentValue::array(
                     chunks
                         .into_iter()
@@ -340,6 +340,6 @@ impl AsAgent for SplitTextByTokensAgent {
             return Ok(());
         }
 
-        Err(AgentError::InvalidPin(pin))
+        Err(AgentError::InvalidPin(port))
     }
 }

@@ -3,10 +3,10 @@
 use std::sync::{Arc, Mutex};
 use std::vec;
 
-use agent_stream_kit::tool::{self, list_tool_infos_patterns};
-use agent_stream_kit::{
-    ASKit, Agent, AgentConfigs, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec,
-    AgentValue, AsAgent, Message, ToolCall, ToolCallFunction, askit_agent, async_trait,
+use modular_agent_kit::tool::{self, list_tool_infos_patterns};
+use modular_agent_kit::{
+    MAK, Agent, AgentConfigs, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec,
+    AgentValue, AsAgent, Message, ToolCall, ToolCallFunction, mak_agent, async_trait,
 };
 
 use im::{Vector, vector};
@@ -26,19 +26,19 @@ use tokio_stream::StreamExt;
 
 const CATEGORY: &str = "LLM/Ollama";
 
-const PIN_CHUNKS: &str = "chunks";
-const PIN_DOC: &str = "doc";
-const PIN_EMBEDDING: &str = "embedding";
-const PIN_EMBEDDINGS: &str = "embeddings";
-const PIN_MESSAGE: &str = "message";
-const PIN_MODEL_INFO: &str = "model_info";
-const PIN_MODEL_LIST: &str = "model_list";
-const PIN_MODEL_NAME: &str = "model_name";
-const PIN_PROMPT: &str = "prompt";
-const PIN_RESET: &str = "reset";
-const PIN_RESPONSE: &str = "response";
-const PIN_STRING: &str = "string";
-const PIN_UNIT: &str = "unit";
+const PORT_CHUNKS: &str = "chunks";
+const PORT_DOC: &str = "doc";
+const PORT_EMBEDDING: &str = "embedding";
+const PORT_EMBEDDINGS: &str = "embeddings";
+const PORT_MESSAGE: &str = "message";
+const PORT_MODEL_INFO: &str = "model_info";
+const PORT_MODEL_LIST: &str = "model_list";
+const PORT_MODEL_NAME: &str = "model_name";
+const PORT_PROMPT: &str = "prompt";
+const PORT_RESET: &str = "reset";
+const PORT_RESPONSE: &str = "response";
+const PORT_STRING: &str = "string";
+const PORT_UNIT: &str = "unit";
 
 const CONFIG_MODEL: &str = "model";
 const CONFIG_OLLAMA_URL: &str = "ollama_url";
@@ -80,7 +80,7 @@ impl OllamaManager {
         DEFAULT_OLLAMA_URL.to_string()
     }
 
-    fn get_client(&self, askit: &ASKit) -> Result<Ollama, AgentError> {
+    fn get_client(&self, mak: &MAK) -> Result<Ollama, AgentError> {
         let mut client_guard = self.client.lock().unwrap();
 
         if let Some(client) = client_guard.as_ref() {
@@ -88,7 +88,7 @@ impl OllamaManager {
         }
 
         let global_config =
-            askit.get_global_configs(crate::ollama::OllamaCompletionAgent::DEF_NAME);
+            mak.get_global_configs(crate::ollama::OllamaCompletionAgent::DEF_NAME);
         let api_base_url = Self::get_ollama_url(global_config);
         let new_client = Ollama::try_new(api_base_url)
             .map_err(|e| AgentError::IoError(format!("Ollama Client Error: {}", e)))?;
@@ -99,11 +99,11 @@ impl OllamaManager {
 }
 
 // Ollama Completion Agent
-#[askit_agent(
+#[mak_agent(
     title="Completion",
     category=CATEGORY,
-    inputs=[PIN_PROMPT, PIN_RESET],
-    outputs=[PIN_MESSAGE, PIN_RESPONSE],
+    inputs=[PORT_PROMPT, PORT_RESET],
+    outputs=[PORT_MESSAGE, PORT_RESPONSE],
     string_config(name=CONFIG_MODEL, default=DEFAULT_CONFIG_MODEL),
     text_config(name=CONFIG_SYSTEM, default=""),
     boolean_config(name=CONFIG_USE_CONTEXT),
@@ -118,9 +118,9 @@ pub struct OllamaCompletionAgent {
 
 #[async_trait]
 impl AsAgent for OllamaCompletionAgent {
-    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(askit, id, spec),
+            data: AgentData::new(mak, id, spec),
             manager: OllamaManager::new(),
             context: None,
         })
@@ -134,10 +134,10 @@ impl AsAgent for OllamaCompletionAgent {
     async fn process(
         &mut self,
         ctx: AgentContext,
-        pin: String,
+        port: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
-        if pin == PIN_RESET {
+        if port == PORT_RESET {
             self.context = None;
             return Ok(());
         }
@@ -179,7 +179,7 @@ impl AsAgent for OllamaCompletionAgent {
             }
         }
 
-        let client = self.manager.get_client(self.askit())?;
+        let client = self.manager.get_client(self.mak())?;
         let res = client
             .generate(request)
             .await
@@ -190,22 +190,22 @@ impl AsAgent for OllamaCompletionAgent {
         }
 
         let message = Message::assistant(res.response.clone());
-        self.output(ctx.clone(), PIN_MESSAGE, message.into())
+        self.output(ctx.clone(), PORT_MESSAGE, message.into())
             .await?;
 
         let out_response = AgentValue::from_serialize(&res)?;
-        self.output(ctx, PIN_RESPONSE, out_response).await?;
+        self.output(ctx, PORT_RESPONSE, out_response).await?;
 
         Ok(())
     }
 }
 
 // Ollama Chat Agent
-#[askit_agent(
+#[mak_agent(
     title="Chat",
     category=CATEGORY,
-    inputs=[PIN_MESSAGE],
-    outputs=[PIN_MESSAGE, PIN_RESPONSE],
+    inputs=[PORT_MESSAGE],
+    outputs=[PORT_MESSAGE, PORT_RESPONSE],
     boolean_config(name=CONFIG_STREAM, title="Stream"),
     string_config(name=CONFIG_MODEL, default=DEFAULT_CONFIG_MODEL),
     text_config(name=CONFIG_TOOLS),
@@ -218,9 +218,9 @@ pub struct OllamaChatAgent {
 
 #[async_trait]
 impl AsAgent for OllamaChatAgent {
-    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(askit, id, spec),
+            data: AgentData::new(mak, id, spec),
             manager: OllamaManager::new(),
         })
     }
@@ -228,7 +228,7 @@ impl AsAgent for OllamaChatAgent {
     async fn process(
         &mut self,
         ctx: AgentContext,
-        _pin: String,
+        _port: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
         let config_model = &self.configs()?.get_string_or_default(CONFIG_MODEL);
@@ -287,7 +287,7 @@ impl AsAgent for OllamaChatAgent {
 
         let use_stream = self.configs()?.get_bool_or_default(CONFIG_STREAM);
 
-        let client = self.manager.get_client(self.askit())?;
+        let client = self.manager.get_client(self.mak())?;
 
         let mut request = ChatMessageRequest::new(
             config_model.to_string(),
@@ -353,11 +353,11 @@ impl AsAgent for OllamaChatAgent {
                 }
                 message.id = Some(id.clone());
 
-                self.output(ctx.clone(), PIN_MESSAGE, message.clone().into())
+                self.output(ctx.clone(), PORT_MESSAGE, message.clone().into())
                     .await?;
 
                 let out_response = AgentValue::from_serialize(&res)?;
-                self.output(ctx.clone(), PIN_RESPONSE, out_response).await?;
+                self.output(ctx.clone(), PORT_RESPONSE, out_response).await?;
 
                 if res.done {
                     break;
@@ -374,22 +374,22 @@ impl AsAgent for OllamaChatAgent {
             let mut message: Message = message_from_ollama(res.message.clone());
             message.id = Some(id.clone());
 
-            self.output(ctx.clone(), PIN_MESSAGE, message.clone().into())
+            self.output(ctx.clone(), PORT_MESSAGE, message.clone().into())
                 .await?;
 
             let out_response = AgentValue::from_serialize(&res)?;
-            self.output(ctx.clone(), PIN_RESPONSE, out_response).await?;
+            self.output(ctx.clone(), PORT_RESPONSE, out_response).await?;
 
             return Ok(());
         }
     }
 }
 
-#[askit_agent(
+#[mak_agent(
     title="Embeddings",
     category=CATEGORY,
-    inputs=[PIN_STRING, PIN_CHUNKS, PIN_DOC],
-    outputs=[PIN_EMBEDDING, PIN_EMBEDDINGS, PIN_DOC],
+    inputs=[PORT_STRING, PORT_CHUNKS, PORT_DOC],
+    outputs=[PORT_EMBEDDING, PORT_EMBEDDINGS, PORT_DOC],
     string_config(name=CONFIG_MODEL, default=DEFAULT_CONFIG_EMBEDDINGS_MODEL),
     text_config(name=CONFIG_OPTIONS, default="{}")
 )]
@@ -405,7 +405,7 @@ impl OllamaEmbeddingsAgent {
         model_name: String,
         model_options: Option<ModelOptions>,
     ) -> Result<Vec<Vec<f32>>, AgentError> {
-        let client = self.manager.get_client(self.askit())?;
+        let client = self.manager.get_client(self.mak())?;
         let mut request = GenerateEmbeddingsRequest::new(model_name, input);
         if let Some(options) = model_options {
             request = request.options(options);
@@ -420,9 +420,9 @@ impl OllamaEmbeddingsAgent {
 
 #[async_trait]
 impl AsAgent for OllamaEmbeddingsAgent {
-    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(askit, id, spec),
+            data: AgentData::new(mak, id, spec),
             manager: OllamaManager::new(),
         })
     }
@@ -430,7 +430,7 @@ impl AsAgent for OllamaEmbeddingsAgent {
     async fn process(
         &mut self,
         ctx: AgentContext,
-        pin: String,
+        port: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
         let config_model = &self.configs()?.get_string_or_default(CONFIG_MODEL);
@@ -449,7 +449,7 @@ impl AsAgent for OllamaEmbeddingsAgent {
             )
         };
 
-        if pin == PIN_STRING {
+        if port == PORT_STRING {
             let text = value.as_str().unwrap_or_default();
             if text.is_empty() {
                 return Err(AgentError::InvalidValue(
@@ -468,13 +468,13 @@ impl AsAgent for OllamaEmbeddingsAgent {
             return self
                 .output(
                     ctx,
-                    PIN_EMBEDDING,
+                    PORT_EMBEDDING,
                     AgentValue::tensor(embeddings.into_iter().next().unwrap()),
                 )
                 .await;
         }
 
-        if pin == PIN_CHUNKS {
+        if port == PORT_CHUNKS {
             if !value.is_array() {
                 return Err(AgentError::InvalidValue(
                     "Input must be an array of strings".to_string(),
@@ -513,7 +513,7 @@ impl AsAgent for OllamaEmbeddingsAgent {
             }
             if texts.is_empty() {
                 return self
-                    .output(ctx.clone(), PIN_EMBEDDINGS, AgentValue::array_default())
+                    .output(ctx.clone(), PORT_EMBEDDINGS, AgentValue::array_default())
                     .await;
             }
             let embeddings = self
@@ -532,13 +532,13 @@ impl AsAgent for OllamaEmbeddingsAgent {
             return self
                 .output(
                     ctx,
-                    PIN_EMBEDDINGS,
+                    PORT_EMBEDDINGS,
                     AgentValue::array(embedding_values_with_offsets),
                 )
                 .await;
         }
 
-        if pin == PIN_DOC {
+        if port == PORT_DOC {
             let mut texts = vec![];
             let mut indices = vec![];
 
@@ -561,7 +561,7 @@ impl AsAgent for OllamaEmbeddingsAgent {
                 }
                 if texts.is_empty() {
                     return self
-                        .output(ctx.clone(), PIN_DOC, AgentValue::array_default())
+                        .output(ctx.clone(), PORT_DOC, AgentValue::array_default())
                         .await;
                 }
             } else {
@@ -583,7 +583,7 @@ impl AsAgent for OllamaEmbeddingsAgent {
                 let embedding = embeddings.into_iter().next().unwrap();
                 let mut output = value.clone();
                 output.set("embedding".to_string(), AgentValue::tensor(embedding))?;
-                return self.output(ctx.clone(), PIN_DOC, output).await;
+                return self.output(ctx.clone(), PORT_DOC, output).await;
             } else {
                 let mut arr = value.clone().into_array().unwrap();
                 for i in 0..embeddings.len() {
@@ -595,21 +595,21 @@ impl AsAgent for OllamaEmbeddingsAgent {
                     )?;
                 }
                 return self
-                    .output(ctx.clone(), PIN_DOC, AgentValue::array(arr))
+                    .output(ctx.clone(), PORT_DOC, AgentValue::array(arr))
                     .await;
             }
         }
 
-        Err(AgentError::InvalidPin(pin))
+        Err(AgentError::InvalidPin(port))
     }
 }
 
 // Ollama List Local Models
-#[askit_agent(
+#[mak_agent(
     title="List Local Models",
     category=CATEGORY,
-    inputs=[PIN_UNIT],
-    outputs=[PIN_MODEL_LIST],
+    inputs=[PORT_UNIT],
+    outputs=[PORT_MODEL_LIST],
 )]
 pub struct OllamaListLocalModelsAgent {
     data: AgentData,
@@ -618,9 +618,9 @@ pub struct OllamaListLocalModelsAgent {
 
 #[async_trait]
 impl AsAgent for OllamaListLocalModelsAgent {
-    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(askit, id, spec),
+            data: AgentData::new(mak, id, spec),
             manager: OllamaManager::new(),
         })
     }
@@ -628,27 +628,27 @@ impl AsAgent for OllamaListLocalModelsAgent {
     async fn process(
         &mut self,
         ctx: AgentContext,
-        _pin: String,
+        _port: String,
         _value: AgentValue,
     ) -> Result<(), AgentError> {
-        let client = self.manager.get_client(self.askit())?;
+        let client = self.manager.get_client(self.mak())?;
         let model_list = client
             .list_local_models()
             .await
             .map_err(|e| AgentError::IoError(format!("Ollama Error: {}", e)))?;
         let model_list = AgentValue::from_serialize(&model_list)?;
 
-        self.output(ctx.clone(), PIN_MODEL_LIST, model_list).await?;
+        self.output(ctx.clone(), PORT_MODEL_LIST, model_list).await?;
         Ok(())
     }
 }
 
 // Ollama Show Model Info
-#[askit_agent(
+#[mak_agent(
     title="Show Model Info",
     category=CATEGORY,
-    inputs=[PIN_MODEL_NAME],
-    outputs=[PIN_MODEL_INFO],
+    inputs=[PORT_MODEL_NAME],
+    outputs=[PORT_MODEL_INFO],
 )]
 pub struct OllamaShowModelInfoAgent {
     data: AgentData,
@@ -657,9 +657,9 @@ pub struct OllamaShowModelInfoAgent {
 
 #[async_trait]
 impl AsAgent for OllamaShowModelInfoAgent {
-    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(askit, id, spec),
+            data: AgentData::new(mak, id, spec),
             manager: OllamaManager::new(),
         })
     }
@@ -667,7 +667,7 @@ impl AsAgent for OllamaShowModelInfoAgent {
     async fn process(
         &mut self,
         ctx: AgentContext,
-        _pin: String,
+        _port: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
         let model_name = value.as_str().unwrap_or(""); // TODO: other types
@@ -675,14 +675,14 @@ impl AsAgent for OllamaShowModelInfoAgent {
             return Ok(());
         }
 
-        let client = self.manager.get_client(self.askit())?;
+        let client = self.manager.get_client(self.mak())?;
         let model_info = client
             .show_model_info(model_name.to_string())
             .await
             .map_err(|e| AgentError::IoError(format!("Ollama Error: {}", e)))?;
         let model_info = AgentValue::from_serialize(&model_info)?;
 
-        self.output(ctx.clone(), PIN_MODEL_INFO, model_info).await?;
+        self.output(ctx.clone(), PORT_MODEL_INFO, model_info).await?;
         Ok(())
     }
 }
