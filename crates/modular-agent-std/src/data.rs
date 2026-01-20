@@ -1,20 +1,20 @@
 use std::time::Duration;
 use std::{collections::VecDeque, vec};
 
-use agent_stream_kit::{
-    ASKit, AgentConfigSpec, AgentConfigSpecs, AgentConfigs, AgentContext, AgentData, AgentError,
-    AgentOutput, AgentSpec, AgentValue, AsAgent, askit_agent, async_trait,
+use modular_agent_kit::{
+    MAK, AgentConfigSpec, AgentConfigSpecs, AgentConfigs, AgentContext, AgentData, AgentError,
+    AgentOutput, AgentSpec, AgentValue, AsAgent, mak_agent, async_trait,
 };
 use im::{HashMap, Vector};
 use mini_moka::sync::Cache;
 
 const CATEGORY: &str = "Std/Data";
 
-const PIN_IN1: &str = "in1";
-const PIN_IN2: &str = "in2";
-const PIN_JSON: &str = "json";
-const PIN_OBJECT: &str = "object";
-const PIN_VALUE: &str = "value";
+const PORT_IN1: &str = "in1";
+const PORT_IN2: &str = "in2";
+const PORT_JSON: &str = "json";
+const PORT_OBJECT: &str = "object";
+const PORT_VALUE: &str = "value";
 
 const CONFIG_KEY: &str = "key";
 const CONFIG_VALUE: &str = "value";
@@ -24,11 +24,11 @@ const CONFIG_TTL_SECONDS: &str = "ttl_sec";
 const CONFIG_CAPACITY: &str = "capacity";
 
 // Get Value
-#[askit_agent(
+#[mak_agent(
     title = "Get Value",
     category = CATEGORY,
-    inputs = [PIN_VALUE],
-    outputs = [PIN_VALUE],
+    inputs = [PORT_VALUE],
+    outputs = [PORT_VALUE],
     string_config(name = CONFIG_KEY)
 )]
 struct GetValueAgent {
@@ -53,10 +53,10 @@ impl GetValueAgent {
 
 #[async_trait]
 impl AsAgent for GetValueAgent {
-    fn new(askit: ASKit, id: String, mut spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(mak: MAK, id: String, mut spec: AgentSpec) -> Result<Self, AgentError> {
         let target_keys = Self::update_spec(&mut spec)?;
         Ok(Self {
-            data: AgentData::new(askit, id, spec),
+            data: AgentData::new(mak, id, spec),
             target_keys,
         })
     }
@@ -70,7 +70,7 @@ impl AsAgent for GetValueAgent {
     async fn process(
         &mut self,
         ctx: AgentContext,
-        _pin: String,
+        _port: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
         if self.target_keys.is_empty() {
@@ -97,16 +97,16 @@ impl AsAgent for GetValueAgent {
             _ => AgentValue::Unit,
         };
 
-        self.output(ctx, PIN_VALUE, output_value).await
+        self.output(ctx, PORT_VALUE, output_value).await
     }
 }
 
 // Set Value
-#[askit_agent(
+#[mak_agent(
     title = "Set Value",
     category = CATEGORY,
-    inputs = [PIN_VALUE],
-    outputs = [PIN_VALUE],
+    inputs = [PORT_VALUE],
+    outputs = [PORT_VALUE],
     string_config(name = CONFIG_KEY),
     object_config(name = CONFIG_VALUE),
 )]
@@ -135,10 +135,10 @@ impl SetValueAgent {
 
 #[async_trait]
 impl AsAgent for SetValueAgent {
-    fn new(askit: ASKit, id: String, mut spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(mak: MAK, id: String, mut spec: AgentSpec) -> Result<Self, AgentError> {
         let (target_keys, target_value) = Self::update_spec(&mut spec)?;
         Ok(Self {
-            data: AgentData::new(askit, id, spec),
+            data: AgentData::new(mak, id, spec),
             target_keys,
             target_value,
         })
@@ -154,7 +154,7 @@ impl AsAgent for SetValueAgent {
     async fn process(
         &mut self,
         ctx: AgentContext,
-        _pin: String,
+        _port: String,
         mut value: AgentValue,
     ) -> Result<(), AgentError> {
         if self.target_keys.is_empty() {
@@ -162,16 +162,16 @@ impl AsAgent for SetValueAgent {
         }
 
         set_nested_value(&mut value, &self.target_keys, self.target_value.clone());
-        self.output(ctx, PIN_VALUE, value).await
+        self.output(ctx, PORT_VALUE, value).await
     }
 }
 
 // To Object
-#[askit_agent(
+#[mak_agent(
     title = "To Object",
     category = CATEGORY,
-    inputs = [PIN_VALUE],
-    outputs = [PIN_VALUE],
+    inputs = [PORT_VALUE],
+    outputs = [PORT_VALUE],
     string_config(name = CONFIG_KEY)
 )]
 struct ToObjectAgent {
@@ -196,10 +196,10 @@ impl ToObjectAgent {
 
 #[async_trait]
 impl AsAgent for ToObjectAgent {
-    fn new(askit: ASKit, id: String, mut spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(mak: MAK, id: String, mut spec: AgentSpec) -> Result<Self, AgentError> {
         let target_keys = Self::update_spec(&mut spec)?;
         Ok(Self {
-            data: AgentData::new(askit, id, spec),
+            data: AgentData::new(mak, id, spec),
             target_keys,
         })
     }
@@ -213,7 +213,7 @@ impl AsAgent for ToObjectAgent {
     async fn process(
         &mut self,
         ctx: AgentContext,
-        _pin: String,
+        _port: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
         if self.target_keys.is_empty() {
@@ -223,16 +223,16 @@ impl AsAgent for ToObjectAgent {
         let mut new_value = AgentValue::object_default();
         set_nested_value(&mut new_value, &self.target_keys, value);
 
-        self.output(ctx, PIN_VALUE, new_value).await
+        self.output(ctx, PORT_VALUE, new_value).await
     }
 }
 
 // To JSON
-#[askit_agent(
+#[mak_agent(
     title = "To JSON",
     category = CATEGORY,
-    inputs = [PIN_VALUE],
-    outputs = [PIN_JSON]
+    inputs = [PORT_VALUE],
+    outputs = [PORT_JSON]
 )]
 struct ToJsonAgent {
     data: AgentData,
@@ -240,31 +240,31 @@ struct ToJsonAgent {
 
 #[async_trait]
 impl AsAgent for ToJsonAgent {
-    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(askit, id, spec),
+            data: AgentData::new(mak, id, spec),
         })
     }
 
     async fn process(
         &mut self,
         ctx: AgentContext,
-        _pin: String,
+        _port: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
         let json = serde_json::to_string_pretty(&value)
             .map_err(|e| AgentError::InvalidValue(e.to_string()))?;
-        self.output(ctx, PIN_JSON, AgentValue::string(json)).await?;
+        self.output(ctx, PORT_JSON, AgentValue::string(json)).await?;
         Ok(())
     }
 }
 
 // From JSON
-#[askit_agent(
+#[mak_agent(
     title = "From JSON",
     category = CATEGORY,
-    inputs = [PIN_JSON],
-    outputs = [PIN_VALUE]
+    inputs = [PORT_JSON],
+    outputs = [PORT_VALUE]
 )]
 struct FromJsonAgent {
     data: AgentData,
@@ -272,16 +272,16 @@ struct FromJsonAgent {
 
 #[async_trait]
 impl AsAgent for FromJsonAgent {
-    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(askit, id, spec),
+            data: AgentData::new(mak, id, spec),
         })
     }
 
     async fn process(
         &mut self,
         ctx: AgentContext,
-        _pin: String,
+        _port: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
         let s = value
@@ -290,7 +290,7 @@ impl AsAgent for FromJsonAgent {
         let json_value: serde_json::Value =
             serde_json::from_str(s).map_err(|e| AgentError::InvalidValue(e.to_string()))?;
         let value = AgentValue::from_json(json_value)?;
-        self.output(ctx, PIN_VALUE, value).await?;
+        self.output(ctx, PORT_VALUE, value).await?;
         Ok(())
     }
 }
@@ -354,11 +354,11 @@ fn set_nested_value<K: AsRef<str>>(root: &mut AgentValue, keys: &[K], new_value:
 ///
 /// When the `use_ctx` config is true, inputs are matched by context key (including map frames)
 /// so that mapped items zip correctly even when they interleave.
-#[askit_agent(
+#[mak_agent(
     title = "ZipToObject",
     category = CATEGORY,
-    inputs = [PIN_IN1, PIN_IN2],
-    outputs = [PIN_OBJECT],
+    inputs = [PORT_IN1, PORT_IN2],
+    outputs = [PORT_OBJECT],
     integer_config(name = CONFIG_N, default = 2),
     boolean_config(name = CONFIG_USE_CTX),
     integer_config(name = CONFIG_TTL_SECONDS, default = 60),
@@ -483,13 +483,13 @@ impl ZipToObjectAgent {
 
 #[async_trait]
 impl AsAgent for ZipToObjectAgent {
-    fn new(askit: ASKit, id: String, mut spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(mak: MAK, id: String, mut spec: AgentSpec) -> Result<Self, AgentError> {
         let (n, use_ctx, ttl_sec, capacity, keys) = Self::update_spec(&mut spec)?;
         let cache = Cache::builder()
             .max_capacity(capacity)
             .time_to_live(Duration::from_secs(ttl_sec))
             .build();
-        let data = AgentData::new(askit, id, spec);
+        let data = AgentData::new(mak, id, spec);
         Ok(Self {
             data,
             n,
@@ -545,19 +545,19 @@ impl AsAgent for ZipToObjectAgent {
     async fn process(
         &mut self,
         ctx: AgentContext,
-        pin: String,
+        port: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
-        // Parse pin number
-        let Some(idx) = pin
+        // Parse port number
+        let Some(idx) = port
             .strip_prefix("in")
             .and_then(|s| s.parse::<usize>().ok())
             .filter(|&i| i >= 1 && i <= self.n)
             .map(|i| i - 1)
         else {
             return Err(AgentError::InvalidValue(format!(
-                "Invalid input pin: {}",
-                pin
+                "Invalid input port: {}",
+                port
             )));
         };
 
@@ -589,7 +589,7 @@ impl AsAgent for ZipToObjectAgent {
                     .map(|(k, v)| (k.clone(), v))
                     .collect();
 
-                return self.output(ctx, PIN_OBJECT, AgentValue::Object(map)).await;
+                return self.output(ctx, PORT_OBJECT, AgentValue::Object(map)).await;
             } else {
                 self.ctx_buffers.insert(ctx_key, entry);
             }
@@ -608,7 +608,7 @@ impl AsAgent for ZipToObjectAgent {
                 .map(|(k, q)| (k.clone(), q.pop_front().unwrap()))
                 .collect();
 
-            self.output(ctx, PIN_OBJECT, AgentValue::Object(map)).await
+            self.output(ctx, PORT_OBJECT, AgentValue::Object(map)).await
         } else {
             Ok(())
         }

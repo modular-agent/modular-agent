@@ -1,9 +1,9 @@
 use std::collections::VecDeque;
 use std::time::Duration;
 
-use agent_stream_kit::{
-    ASKit, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
-    askit_agent, async_trait,
+use modular_agent_kit::{
+    MAK, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
+    mak_agent, async_trait,
 };
 use mini_moka::sync::Cache;
 
@@ -12,21 +12,21 @@ const CONFIG_CAPACITY: &str = "capacity";
 
 const CATEGORY: &str = "Std/Sequence";
 
-const PIN_IN: &str = "in";
-const PIN_IN1: &str = "in1";
-const PIN_IN2: &str = "in2";
-const PIN_OUT1: &str = "out1";
-const PIN_OUT2: &str = "out2";
+const PORT_IN: &str = "in";
+const PORT_IN1: &str = "in1";
+const PORT_IN2: &str = "in2";
+const PORT_OUT1: &str = "out1";
+const PORT_OUT2: &str = "out2";
 
 const CONFIG_N: &str = "n";
 const CONFIG_USE_CTX: &str = "use_ctx";
 
 /// Receives an input and emits it sequentially to n outputs.
-#[askit_agent(
+#[mak_agent(
     title = "Sequence",
     category = CATEGORY,
-    inputs = [PIN_IN],
-    outputs = [PIN_OUT1, PIN_OUT2],
+    inputs = [PORT_IN],
+    outputs = [PORT_OUT1, PORT_OUT2],
     integer_config(name = CONFIG_N, default = 2),
 )]
 struct SequenceAgent {
@@ -53,9 +53,9 @@ impl SequenceAgent {
 
 #[async_trait]
 impl AsAgent for SequenceAgent {
-    fn new(askit: ASKit, id: String, mut spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(mak: MAK, id: String, mut spec: AgentSpec) -> Result<Self, AgentError> {
         let n = Self::update_spec(&mut spec)?;
-        let data = AgentData::new(askit, id, spec);
+        let data = AgentData::new(mak, id, spec);
         Ok(Self { data, n })
     }
 
@@ -75,23 +75,23 @@ impl AsAgent for SequenceAgent {
     async fn process(
         &mut self,
         ctx: AgentContext,
-        _pin: String,
+        _port: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
         for i in 0..self.n {
-            let out_pin = format!("out{}", i + 1);
-            self.output(ctx.clone(), out_pin, value.clone()).await?;
+            let out_port = format!("out{}", i + 1);
+            self.output(ctx.clone(), out_port, value.clone()).await?;
         }
         Ok(())
     }
 }
 
 /// Receives inputs in any order and, once all are present, emits them sequentially.
-#[askit_agent(
+#[mak_agent(
     title = "Sync",
     category = CATEGORY,
-    inputs = [PIN_IN1, PIN_IN2],
-    outputs = [PIN_OUT1, PIN_OUT2],
+    inputs = [PORT_IN1, PORT_IN2],
+    outputs = [PORT_OUT1, PORT_OUT2],
     integer_config(name = CONFIG_N, default = 2),
     boolean_config(name = CONFIG_USE_CTX),
     integer_config(name = CONFIG_TTL_SEC, default = 60), 
@@ -104,8 +104,8 @@ struct SyncAgent {
         ttl_sec: u64,
     capacity: u64,
 
-    // Optimization: Pre-generate and store output pin names ("out1", "out2"...)
-    output_pins: Vec<String>,
+    // Optimization: Pre-generate and store output port names ("out1", "out2"...)
+    output_ports: Vec<String>,
 
     // For simple mode
     queues: Vec<VecDeque<AgentValue>>,
@@ -147,10 +147,10 @@ impl SyncAgent {
 
         spec.inputs = Some((1..=n).map(|i| format!("in{}", i)).collect());
 
-        let output_pins: Vec<String> = (1..=n).map(|i| format!("out{}", i)).collect();
-        spec.outputs = Some(output_pins.clone());
+        let output_ports: Vec<String> = (1..=n).map(|i| format!("out{}", i)).collect();
+        spec.outputs = Some(output_ports.clone());
 
-        Ok((n, use_ctx, ttl_sec, capacity, output_pins))
+        Ok((n, use_ctx, ttl_sec, capacity, output_ports))
     }
 
     fn reset_state(&mut self) {
@@ -161,29 +161,29 @@ impl SyncAgent {
 
 #[async_trait]
 impl AsAgent for SyncAgent {
-    fn new(askit: ASKit, id: String, mut spec: AgentSpec) -> Result<Self, AgentError> {
-        let (n, use_ctx, ttl_sec, capacity, output_pins) = Self::update_spec(&mut spec)?;
+    fn new(mak: MAK, id: String, mut spec: AgentSpec) -> Result<Self, AgentError> {
+        let (n, use_ctx, ttl_sec, capacity, output_ports) = Self::update_spec(&mut spec)?;
 
         let cache = Cache::builder()
             .max_capacity(capacity)
             .time_to_live(Duration::from_secs(ttl_sec))
             .build();
 
-        let data = AgentData::new(askit, id, spec);
+        let data = AgentData::new(mak, id, spec);
         Ok(Self {
             data,
             n,
             use_ctx,
             ttl_sec,
             capacity,
-            output_pins,
+            output_ports,
             queues: vec![VecDeque::new(); n],
             ctx_buffers: cache,
         })
     }
 
     fn configs_changed(&mut self) -> Result<(), AgentError> {
-        let (n, use_ctx, ttl_sec, capacity, output_pins) = Self::update_spec(&mut self.data.spec)?;
+        let (n, use_ctx, ttl_sec, capacity, output_ports) = Self::update_spec(&mut self.data.spec)?;
         let mut changed = false;
         if n != self.n {
             self.n = n;
@@ -203,7 +203,7 @@ impl AsAgent for SyncAgent {
         }
         if changed {
             self.reset_state();
-            self.output_pins = output_pins;
+            self.output_ports = output_ports;
             self.ctx_buffers = Cache::builder()
                 .max_capacity(capacity)
                 .time_to_live(Duration::from_secs(ttl_sec))
@@ -222,17 +222,17 @@ impl AsAgent for SyncAgent {
     async fn process(
         &mut self,
         ctx: AgentContext,
-        pin: String,
+        port: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
-        // Parse pin number
-        let Some(idx) = pin
+        // Parse port number
+        let Some(idx) = port
             .strip_prefix("in")
             .and_then(|s| s.parse::<usize>().ok())
             .filter(|&i| i >= 1 && i <= self.n)
             .map(|i| i - 1)
         else {
-            return Err(AgentError::InvalidValue(format!("Invalid input pin: {}", pin)));
+            return Err(AgentError::InvalidValue(format!("Invalid input port: {}", port)));
         };
 
         // Context Mode
@@ -257,7 +257,7 @@ impl AsAgent for SyncAgent {
                 // Output sequentially
                 for (i, val_opt) in entry.values.into_iter().enumerate() {
                     if let Some(val) = val_opt {
-                        self.output(ctx.clone(), &self.output_pins[i], val).await?;
+                        self.output(ctx.clone(), &self.output_ports[i], val).await?;
                     }
                 }
             }
@@ -275,7 +275,7 @@ impl AsAgent for SyncAgent {
                 .collect();
 
             for (i, val) in ready_values.into_iter().enumerate() {
-                self.output(ctx.clone(), &self.output_pins[i], val).await?;
+                self.output(ctx.clone(), &self.output_ports[i], val).await?;
             }
         }
 

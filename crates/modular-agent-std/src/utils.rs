@@ -1,24 +1,24 @@
 use std::vec;
 
-use agent_stream_kit::{
-    ASKit, Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
-    askit_agent, async_trait,
+use modular_agent_kit::{
+    MAK, Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
+    mak_agent, async_trait,
 };
 
 const CATEGORY: &str = "Std/Utils";
 
-const PIN_IN: &str = "in";
-const PIN_RESET: &str = "reset";
-const PIN_COUNT: &str = "count";
+const PORT_IN: &str = "in";
+const PORT_RESET: &str = "reset";
+const PORT_COUNT: &str = "count";
 
 const DISPLAY_COUNT: &str = "count";
 
 /// Counter
-#[askit_agent(
+#[mak_agent(
     title = "Counter",
     category = CATEGORY,
-    inputs = [PIN_IN, PIN_RESET],
-    outputs = [PIN_COUNT],
+    inputs = [PORT_IN, PORT_RESET],
+    outputs = [PORT_COUNT],
     integer_config(
         name = DISPLAY_COUNT,
         readonly,
@@ -32,9 +32,9 @@ struct CounterAgent {
 
 #[async_trait]
 impl AsAgent for CounterAgent {
-    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(askit, id, spec),
+            data: AgentData::new(mak, id, spec),
             count: 0,
         })
     }
@@ -49,16 +49,16 @@ impl AsAgent for CounterAgent {
     async fn process(
         &mut self,
         ctx: AgentContext,
-        pin: String,
+        port: String,
         _value: AgentValue,
     ) -> Result<(), AgentError> {
-        if pin == PIN_RESET {
+        if port == PORT_RESET {
             self.count = 0;
-        } else if pin == PIN_IN {
+        } else if port == PORT_IN {
             self.count += 1;
         }
         self.set_config(DISPLAY_COUNT.to_string(), AgentValue::integer(self.count))?;
-        self.output(ctx, PIN_COUNT, AgentValue::integer(self.count))
+        self.output(ctx, PORT_COUNT, AgentValue::integer(self.count))
             .await?;
         self.emit_config_updated(DISPLAY_COUNT, AgentValue::integer(self.count));
 

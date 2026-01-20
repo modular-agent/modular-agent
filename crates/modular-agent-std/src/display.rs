@@ -1,23 +1,23 @@
 use std::vec;
 
-use agent_stream_kit::{
-    ASKit, Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
-    askit_agent, async_trait,
+use modular_agent_kit::{
+    MAK, Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
+    mak_agent, async_trait,
 };
 use im::hashmap;
 
 const CATEGORY: &str = "Std/Display";
 
-const PIN_VALUE: &str = "value";
+const PORT_VALUE: &str = "value";
 
 const DISPLAY_VALUE: &str = "value";
 
 // Display Value
-#[askit_agent(
+#[mak_agent(
     kind = "Display",
     title = "Display Value",
     category = CATEGORY,
-    inputs = [PIN_VALUE],
+    inputs = [PORT_VALUE],
     custom_config(
         name = DISPLAY_VALUE,
         readonly,
@@ -32,9 +32,9 @@ struct DisplayValueAgent {
 
 #[async_trait]
 impl AsAgent for DisplayValueAgent {
-    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(askit, id, spec),
+            data: AgentData::new(mak, id, spec),
         })
     }
 
@@ -45,7 +45,7 @@ impl AsAgent for DisplayValueAgent {
     async fn process(
         &mut self,
         _ctx: AgentContext,
-        _pin: String,
+        _port: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
         self.set_config(DISPLAY_VALUE.to_string(), value.clone())?;
@@ -55,11 +55,11 @@ impl AsAgent for DisplayValueAgent {
 }
 
 // Debug Value
-#[askit_agent(
+#[mak_agent(
     kind = "Display",
     title = "Debug Value",
     category = CATEGORY,
-    inputs = [PIN_VALUE],
+    inputs = [PORT_VALUE],
     object_config(
         name = DISPLAY_VALUE,
         readonly,
@@ -72,16 +72,16 @@ struct DebugValueAgent {
 
 #[async_trait]
 impl AsAgent for DebugValueAgent {
-    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(askit, id, spec),
+            data: AgentData::new(mak, id, spec),
         })
     }
 
     async fn process(
         &mut self,
         ctx: AgentContext,
-        _pin: String,
+        _port: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
         let ctx_json =

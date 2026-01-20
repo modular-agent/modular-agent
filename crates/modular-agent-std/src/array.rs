@@ -1,21 +1,21 @@
 use std::collections::VecDeque;
 use std::time::Duration;
 
-use agent_stream_kit::{
-    ASKit, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
-    askit_agent, async_trait,
+use modular_agent_kit::{
+    MAK, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
+    mak_agent, async_trait,
 };
 use im::{Vector, vector};
 use mini_moka::sync::Cache;
 
 const CATEGORY: &str = "Std/Array";
 
-const PIN_ARRAY: &str = "array";
-const PIN_IN1: &str = "in1";
-const PIN_IN2: &str = "in2";
-const PIN_T: &str = "T";
-const PIN_F: &str = "F";
-const PIN_VALUE: &str = "value";
+const PORT_ARRAY: &str = "array";
+const PORT_IN1: &str = "in1";
+const PORT_IN2: &str = "in2";
+const PORT_T: &str = "T";
+const PORT_F: &str = "F";
+const PORT_VALUE: &str = "value";
 
 const CONFIG_N: &str = "n";
 const CONFIG_USE_CTX: &str = "use_ctx";
@@ -23,11 +23,11 @@ const CONFIG_TTL_SEC: &str = "ttl_sec";
 const CONFIG_CAPACITY: &str = "capacity";
 
 /// Check if an input is an array.
-#[askit_agent(
+#[mak_agent(
     title = "IsArray",
     category = CATEGORY,
-    inputs = [PIN_VALUE],
-    outputs = [PIN_T, PIN_F],
+    inputs = [PORT_VALUE],
+    outputs = [PORT_T, PORT_F],
 )]
 struct IsArrayAgent {
     data: AgentData,
@@ -35,31 +35,31 @@ struct IsArrayAgent {
 
 #[async_trait]
 impl AsAgent for IsArrayAgent {
-    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
-        let data = AgentData::new(askit, id, spec);
+    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+        let data = AgentData::new(mak, id, spec);
         Ok(Self { data })
     }
     async fn process(
         &mut self,
         ctx: AgentContext,
-        _pin: String,
+        _port: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
         if value.is_array() {
-            self.output(ctx, PIN_T, value).await
+            self.output(ctx, PORT_T, value).await
         } else {
-            self.output(ctx, PIN_F, value).await
+            self.output(ctx, PORT_F, value).await
         }
     }
 }
 
 /// Checks if an input array is empty, emitting to T or F accordingly.
 /// If the input is not an array, it is treated as non-empty.
-#[askit_agent(
+#[mak_agent(
     title = "IsEmptyArray",
     category = CATEGORY,
-    inputs = [PIN_ARRAY],
-    outputs = [PIN_T, PIN_F],
+    inputs = [PORT_ARRAY],
+    outputs = [PORT_T, PORT_F],
 )]
 struct IsEmptyArrayAgent {
     data: AgentData,
@@ -67,15 +67,15 @@ struct IsEmptyArrayAgent {
 
 #[async_trait]
 impl AsAgent for IsEmptyArrayAgent {
-    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
-        let data = AgentData::new(askit, id, spec);
+    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+        let data = AgentData::new(mak, id, spec);
         Ok(Self { data })
     }
 
     async fn process(
         &mut self,
         ctx: AgentContext,
-        _pin: String,
+        _port: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
         let mut is_empty = false;
@@ -86,9 +86,9 @@ impl AsAgent for IsEmptyArrayAgent {
             }
         }
         if is_empty {
-            self.output(ctx, PIN_T, value).await
+            self.output(ctx, PORT_T, value).await
         } else {
-            self.output(ctx, PIN_F, value).await
+            self.output(ctx, PORT_F, value).await
         }
     }
 }
@@ -96,11 +96,11 @@ impl AsAgent for IsEmptyArrayAgent {
 /// Outputs the length of the input array.
 /// If the input is not an array, outputs 1.
 /// This is different from IsEmpty, but is designed for consistency with Map.
-#[askit_agent(
+#[mak_agent(
     title = "ArrayLength",
     category = CATEGORY,
-    inputs = [PIN_ARRAY],
-    outputs = [PIN_VALUE],
+    inputs = [PORT_ARRAY],
+    outputs = [PORT_VALUE],
 )]
 struct ArrayLengthAgent {
     data: AgentData,
@@ -108,15 +108,15 @@ struct ArrayLengthAgent {
 
 #[async_trait]
 impl AsAgent for ArrayLengthAgent {
-    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
-        let data = AgentData::new(askit, id, spec);
+    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+        let data = AgentData::new(mak, id, spec);
         Ok(Self { data })
     }
 
     async fn process(
         &mut self,
         ctx: AgentContext,
-        _pin: String,
+        _port: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
         let length = if value.is_array() {
@@ -125,18 +125,18 @@ impl AsAgent for ArrayLengthAgent {
         } else {
             1
         };
-        self.output(ctx, PIN_VALUE, AgentValue::integer(length)).await
+        self.output(ctx, PORT_VALUE, AgentValue::integer(length)).await
     }
 }
 
 /// Output the first item of the input array.
 /// If the input is not an array, outputs the input itself.
 /// Errors if the input array is empty.
-#[askit_agent(
+#[mak_agent(
     title = "ArrayFirst",
     category = CATEGORY,
-    inputs = [PIN_ARRAY],
-    outputs = [PIN_VALUE],
+    inputs = [PORT_ARRAY],
+    outputs = [PORT_VALUE],
 )]
 struct ArrayFirstAgent {
     data: AgentData,
@@ -144,28 +144,28 @@ struct ArrayFirstAgent {
 
 #[async_trait]
 impl AsAgent for ArrayFirstAgent {
-    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
-        let data = AgentData::new(askit, id, spec);
+    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+        let data = AgentData::new(mak, id, spec);
         Ok(Self { data })
     }
 
     async fn process(
         &mut self,
         ctx: AgentContext,
-        _pin: String,
+        _port: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
         match value {
             AgentValue::Array(mut arr) => {
                 if let Some(first_item) = arr.pop_front() {
-                    self.output(ctx, PIN_VALUE, first_item).await
+                    self.output(ctx, PORT_VALUE, first_item).await
                 } else {
                     Err(AgentError::InvalidValue(
                         "Input array is empty, no first item".into(),
                     ))
                 }
             }
-            other => self.output(ctx, PIN_VALUE, other).await,
+            other => self.output(ctx, PORT_VALUE, other).await,
         }
     }
 }
@@ -173,11 +173,11 @@ impl AsAgent for ArrayFirstAgent {
 /// Output the rest of the input array after removing the first item.
 /// If the input is not an array, outputs an empty array.
 /// Output an empty array if the input array is empty.
-#[askit_agent(
+#[mak_agent(
     title = "ArrayRest",
     category = CATEGORY,
-    inputs = [PIN_ARRAY],
-    outputs = [PIN_ARRAY],
+    inputs = [PORT_ARRAY],
+    outputs = [PORT_ARRAY],
 )]
 struct ArrayRestAgent {
     data: AgentData,
@@ -185,25 +185,25 @@ struct ArrayRestAgent {
 
 #[async_trait]
 impl AsAgent for ArrayRestAgent {
-    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
-        let data = AgentData::new(askit, id, spec);
+    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+        let data = AgentData::new(mak, id, spec);
         Ok(Self { data })
     }
 
     async fn process(
         &mut self,
         ctx: AgentContext,
-        _pin: String,
+        _port: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
         if let Some(mut arr) = value.into_array() {
             if arr.is_empty() {
-                return self.output(ctx, PIN_ARRAY, AgentValue::array_default()).await;
+                return self.output(ctx, PORT_ARRAY, AgentValue::array_default()).await;
             }
             arr.pop_front();
-            self.output(ctx, PIN_ARRAY, AgentValue::array(arr)).await
+            self.output(ctx, PORT_ARRAY, AgentValue::array(arr)).await
         } else {
-            self.output(ctx, PIN_ARRAY, AgentValue::array_default()).await
+            self.output(ctx, PORT_ARRAY, AgentValue::array_default()).await
         }
     }
 }
@@ -211,11 +211,11 @@ impl AsAgent for ArrayRestAgent {
 //// Output the last item of the input array.
 /// If the input is not an array, outputs the input itself.
 /// Errors if the input array is empty.
-#[askit_agent(
+#[mak_agent(
     title = "ArrayLast",
     category = CATEGORY,
-    inputs = [PIN_ARRAY],
-    outputs = [PIN_VALUE],
+    inputs = [PORT_ARRAY],
+    outputs = [PORT_VALUE],
 )]
 struct ArrayLastAgent {
     data: AgentData,
@@ -223,28 +223,28 @@ struct ArrayLastAgent {
 
 #[async_trait]
 impl AsAgent for ArrayLastAgent {
-    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
-        let data = AgentData::new(askit, id, spec);
+    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+        let data = AgentData::new(mak, id, spec);
         Ok(Self { data })
     }
 
     async fn process(
         &mut self,
         ctx: AgentContext,
-        _pin: String,
+        _port: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
         match value {
             AgentValue::Array(mut arr) => {
                 if let Some(last_item) = arr.pop_back() {
-                    self.output(ctx, PIN_VALUE, last_item).await
+                    self.output(ctx, PORT_VALUE, last_item).await
                 } else {
                     Err(AgentError::InvalidValue(
                         "Input array is empty, no last item".into(),
                     ))
                 }
             }
-            other => self.output(ctx, PIN_VALUE, other).await,
+            other => self.output(ctx, PORT_VALUE, other).await,
         }
     }
 }
@@ -252,11 +252,11 @@ impl AsAgent for ArrayLastAgent {
 /// Output the nth-item of the input array.
 /// If the input is not an array, outputs the input itself if n=0, else errors.
 /// Errors if the input array is shorter than n+1.
-#[askit_agent(
+#[mak_agent(
     title = "ArrayNth",
     category = CATEGORY,
-    inputs = [PIN_ARRAY],
-    outputs = [PIN_VALUE],
+    inputs = [PORT_ARRAY],
+    outputs = [PORT_VALUE],
     integer_config(name = CONFIG_N, default = 0),
 )]
 struct ArrayNthAgent {
@@ -265,15 +265,15 @@ struct ArrayNthAgent {
 
 #[async_trait]
 impl AsAgent for ArrayNthAgent {
-    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
-        let data = AgentData::new(askit, id, spec);
+    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+        let data = AgentData::new(mak, id, spec);
         Ok(Self { data })
     }
 
     async fn process(
         &mut self,
         ctx: AgentContext,
-        _pin: String,
+        _port: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
         let n = self
@@ -291,7 +291,7 @@ impl AsAgent for ArrayNthAgent {
         match value {
             AgentValue::Array(arr) => {
                 if let Some(item) = arr.get(n) {
-                    self.output(ctx, PIN_VALUE, item.clone()).await
+                    self.output(ctx, PORT_VALUE, item.clone()).await
                 } else {
                     Err(AgentError::InvalidValue(format!(
                         "Input array length {} is less than n+1={}",
@@ -302,7 +302,7 @@ impl AsAgent for ArrayNthAgent {
             }
             other => {
                 if n == 0 {
-                    self.output(ctx, PIN_VALUE, other).await
+                    self.output(ctx, PORT_VALUE, other).await
                 } else {
                     Err(AgentError::InvalidValue(
                         "Input is not an array and n != 0".into(),
@@ -316,11 +316,11 @@ impl AsAgent for ArrayNthAgent {
 /// Takes the first n items from the input array.
 /// If the input is not an array, outputs an array with the input as the only item.
 /// If n is greater than the array length, outputs the entire array.
-#[askit_agent(
+#[mak_agent(
     title = "ArrayTake",
     category = CATEGORY,
-    inputs = [PIN_ARRAY],
-    outputs = [PIN_ARRAY],
+    inputs = [PORT_ARRAY],
+    outputs = [PORT_ARRAY],
     integer_config(name = CONFIG_N, default = 0),
 )]
 struct ArrayTakeAgent {
@@ -329,15 +329,15 @@ struct ArrayTakeAgent {
 
 #[async_trait]
 impl AsAgent for ArrayTakeAgent {
-    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
-        let data = AgentData::new(askit, id, spec);
+    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+        let data = AgentData::new(mak, id, spec);
         Ok(Self { data })
     }
 
     async fn process(
         &mut self,
         ctx: AgentContext,
-        _pin: String,
+        _port: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
         let n = self
@@ -349,30 +349,30 @@ impl AsAgent for ArrayTakeAgent {
             .unwrap_or(0);
         if n <= 0 {
             // output empty array
-            return self.output(ctx, PIN_ARRAY, AgentValue::array_default()).await;
+            return self.output(ctx, PORT_ARRAY, AgentValue::array_default()).await;
         }
         let n = n as usize;
 
         if value.is_array() {
             let arr = value.as_array().unwrap();
             if n >= arr.len() {
-                return self.output(ctx, PIN_ARRAY, value).await;
+                return self.output(ctx, PORT_ARRAY, value).await;
             }
             let taken_items = arr.take(n);
-            self.output(ctx, PIN_ARRAY, AgentValue::array(taken_items)).await
+            self.output(ctx, PORT_ARRAY, AgentValue::array(taken_items)).await
         } else {
-            self.output(ctx, PIN_ARRAY, AgentValue::array(vector![value])).await
+            self.output(ctx, PORT_ARRAY, AgentValue::array(vector![value])).await
         }
     }
 }
 
 /// Maps over an input array, emitting each item individually with a `map` frame that captures the index and length.
 /// Nested maps accumulate frames to preserve lineage. If the input is not an array, it is treated as a single-item array.
-#[askit_agent(
+#[mak_agent(
     title = "Map",
     category = CATEGORY,
-    inputs = [PIN_ARRAY],
-    outputs = [PIN_VALUE],
+    inputs = [PORT_ARRAY],
+    outputs = [PORT_VALUE],
 )]
 struct MapAgent {
     data: AgentData,
@@ -380,15 +380,15 @@ struct MapAgent {
 
 #[async_trait]
 impl AsAgent for MapAgent {
-    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
-        let data = AgentData::new(askit, id, spec);
+    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+        let data = AgentData::new(mak, id, spec);
         Ok(Self { data })
     }
 
     async fn process(
         &mut self,
         ctx: AgentContext,
-        _pin: String,
+        _port: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
         match value {
@@ -396,12 +396,12 @@ impl AsAgent for MapAgent {
                 let n = arr.len();
                 for (i, item) in arr.into_iter().enumerate() {
                     let c = ctx.push_map_frame(i, n)?;
-                    self.output(c, PIN_VALUE, item).await?;
+                    self.output(c, PORT_VALUE, item).await?;
                 }
             }
             other => {
                 let c = ctx.push_map_frame(0, 1)?;
-                self.output(c, PIN_VALUE, other).await?;
+                self.output(c, PORT_VALUE, other).await?;
             }
         }
         Ok(())
@@ -415,12 +415,12 @@ impl AsAgent for MapAgent {
 /// If a `map` frame is not present, the input value is emitted directly.
 ///
 /// Incomplete arrays are emitted when the context changes.
-#[askit_agent(
+#[mak_agent(
     title = "Collect",
     category = CATEGORY,
     description = "Collects input values into an array",
-    inputs = [PIN_VALUE],
-    outputs = [PIN_ARRAY],
+    inputs = [PORT_VALUE],
+    outputs = [PORT_ARRAY],
 )]
 struct CollectAgent {
     data: AgentData,
@@ -440,8 +440,8 @@ struct CollectAgent {
 
 #[async_trait]
 impl AsAgent for CollectAgent {
-    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
-        let data = AgentData::new(askit, id, spec);
+    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+        let data = AgentData::new(mak, id, spec);
         Ok(Self {
             data,
             current_ctx_id: None,
@@ -454,13 +454,13 @@ impl AsAgent for CollectAgent {
     async fn process(
         &mut self,
         ctx: AgentContext,
-        _pin: String,
+        _port: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
         // Check for map frame
         // If not within a map, pass the value through as-is.
         let Some((idx, n)) = ctx.current_map_frame()? else {
-            return self.output(ctx, PIN_ARRAY, value).await;
+            return self.output(ctx, PORT_ARRAY, value).await;
         };
 
         // Detect context switch and flush processing
@@ -514,7 +514,7 @@ impl AsAgent for CollectAgent {
 
             // Pop one map frame and output
             let next_ctx = ctx.pop_map_frame()?;
-            self.output(next_ctx, PIN_ARRAY, AgentValue::array(arr)).await
+            self.output(next_ctx, PORT_ARRAY, AgentValue::array(arr)).await
         } else {
             // Not yet complete, keep waiting
             Ok(())
@@ -551,11 +551,11 @@ impl CollectAgent {
 ///
 /// When the `use_ctx` config is true, inputs are matched by context key (including map frames)
 /// so that mapped items zip correctly even when they interleave.
-#[askit_agent(
+#[mak_agent(
     title = "ZipToArray",
     category = CATEGORY,
-    inputs = [PIN_IN1, PIN_IN2],
-    outputs = [PIN_ARRAY],
+    inputs = [PORT_IN1, PORT_IN2],
+    outputs = [PORT_ARRAY],
     integer_config(name = CONFIG_N, default = 2),
     boolean_config(name = CONFIG_USE_CTX),
     integer_config(name = CONFIG_TTL_SEC, default = 60), 
@@ -622,7 +622,7 @@ impl ZipToArrayAgent {
 
 #[async_trait]
 impl AsAgent for ZipToArrayAgent {
-    fn new(askit: ASKit, id: String, mut spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(mak: MAK, id: String, mut spec: AgentSpec) -> Result<Self, AgentError> {
         let (n, use_ctx, ttl_sec, capacity) = Self::update_spec(&mut spec)?;
 
         let cache = Cache::builder()
@@ -630,7 +630,7 @@ impl AsAgent for ZipToArrayAgent {
             .time_to_live(Duration::from_secs(ttl_sec)) // TTL (entries expire X seconds after write)
             .build();
 
-        let data = AgentData::new(askit, id, spec);
+        let data = AgentData::new(mak, id, spec);
 
         Ok(Self {
             data,
@@ -682,19 +682,19 @@ impl AsAgent for ZipToArrayAgent {
     async fn process(
         &mut self,
         ctx: AgentContext,
-        pin: String,
+        port: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
-        // Parse pin number
-        let Some(idx) = pin
+        // Parse port number
+        let Some(idx) = port
             .strip_prefix("in")
             .and_then(|s| s.parse::<usize>().ok())
             .filter(|&i| i >= 1 && i <= self.n)
             .map(|i| i - 1)
         else {
             return Err(AgentError::InvalidValue(format!(
-                "Invalid input pin: {}",
-                pin
+                "Invalid input port: {}",
+                port
             )));
         };
 
@@ -723,7 +723,7 @@ impl AsAgent for ZipToArrayAgent {
                     .map(|v| v.unwrap())
                     .collect();
 
-                return self.output(ctx, PIN_ARRAY, AgentValue::array(arr)).await;
+                return self.output(ctx, PORT_ARRAY, AgentValue::array(arr)).await;
             }
 
             return Ok(());
@@ -739,7 +739,7 @@ impl AsAgent for ZipToArrayAgent {
                 .map(|q| q.pop_front().unwrap())
                 .collect();
 
-            self.output(ctx, PIN_ARRAY, AgentValue::array(arr)).await
+            self.output(ctx, PORT_ARRAY, AgentValue::array(arr)).await
         } else {
             Ok(())
         }

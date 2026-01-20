@@ -1,27 +1,27 @@
 use std::fs;
 use std::path::Path;
 
-use agent_stream_kit::{
-    ASKit, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
-    askit_agent, async_trait,
+use modular_agent_kit::{
+    MAK, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
+    mak_agent, async_trait,
 };
 use glob::glob;
 use im::hashmap;
 
 const CATEGORY: &str = "Std/File";
 
-const PIN_DATA: &str = "data";
-const PIN_DOC: &str = "doc";
-const PIN_FILES: &str = "files";
-const PIN_PATH: &str = "path";
-const PIN_STRING: &str = "string";
+const PORT_DATA: &str = "data";
+const PORT_DOC: &str = "doc";
+const PORT_FILES: &str = "files";
+const PORT_PATH: &str = "path";
+const PORT_STRING: &str = "string";
 
 // Glob Agent
-#[askit_agent(
+#[mak_agent(
     title = "Glob",
     category = CATEGORY,
-    inputs = [PIN_PATH],
-    outputs = [PIN_FILES]
+    inputs = [PORT_PATH],
+    outputs = [PORT_FILES]
 )]
 struct GlobAgent {
     data: AgentData,
@@ -29,16 +29,16 @@ struct GlobAgent {
 
 #[async_trait]
 impl AsAgent for GlobAgent {
-    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(askit, id, spec),
+            data: AgentData::new(mak, id, spec),
         })
     }
 
     async fn process(
         &mut self,
         ctx: AgentContext,
-        _pin: String,
+        _port: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
         let pat = value
@@ -64,16 +64,16 @@ impl AsAgent for GlobAgent {
         }
 
         let out_value = AgentValue::array(files.into());
-        self.output(ctx, PIN_FILES, out_value).await
+        self.output(ctx, PORT_FILES, out_value).await
     }
 }
 
 // List Files Agent
-#[askit_agent(
+#[mak_agent(
     title = "List Files",
     category = CATEGORY,
-    inputs = [PIN_PATH],
-    outputs = [PIN_FILES]
+    inputs = [PORT_PATH],
+    outputs = [PORT_FILES]
 )]
 struct ListFilesAgent {
     data: AgentData,
@@ -81,16 +81,16 @@ struct ListFilesAgent {
 
 #[async_trait]
 impl AsAgent for ListFilesAgent {
-    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(askit, id, spec),
+            data: AgentData::new(mak, id, spec),
         })
     }
 
     async fn process(
         &mut self,
         ctx: AgentContext,
-        _pin: String,
+        _port: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
         let path = value
@@ -130,16 +130,16 @@ impl AsAgent for ListFilesAgent {
         }
 
         let out_value = AgentValue::array(files.into());
-        self.output(ctx, PIN_FILES, out_value).await
+        self.output(ctx, PORT_FILES, out_value).await
     }
 }
 
 // Read Text File Agent
-#[askit_agent(
+#[mak_agent(
     title = "Read Text File",
     category = CATEGORY,
-    inputs = [PIN_PATH],
-    outputs = [PIN_STRING, PIN_DOC]
+    inputs = [PORT_PATH],
+    outputs = [PORT_STRING, PORT_DOC]
 )]
 struct ReadTextFileAgent {
     data: AgentData,
@@ -147,16 +147,16 @@ struct ReadTextFileAgent {
 
 #[async_trait]
 impl AsAgent for ReadTextFileAgent {
-    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(askit, id, spec),
+            data: AgentData::new(mak, id, spec),
         })
     }
 
     async fn process(
         &mut self,
         ctx: AgentContext,
-        _pin: String,
+        _port: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
         let path = value
@@ -183,22 +183,22 @@ impl AsAgent for ReadTextFileAgent {
         })?;
 
         let text = AgentValue::string(content);
-        self.output(ctx.clone(), PIN_STRING, text.clone()).await?;
+        self.output(ctx.clone(), PORT_STRING, text.clone()).await?;
 
         let out_doc = AgentValue::object(hashmap! {
             "path".into() => AgentValue::string(path.to_string_lossy().to_string()),
             "text".into() => text,
         });
-        self.output(ctx, PIN_DOC, out_doc).await
+        self.output(ctx, PORT_DOC, out_doc).await
     }
 }
 
 // Write Text File Agent
-#[askit_agent(
+#[mak_agent(
     title = "Write Text File",
     category = CATEGORY,
-    inputs = [PIN_DATA],
-    outputs = [PIN_DATA]
+    inputs = [PORT_DATA],
+    outputs = [PORT_DATA]
 )]
 struct WriteTextFileAgent {
     data: AgentData,
@@ -206,16 +206,16 @@ struct WriteTextFileAgent {
 
 #[async_trait]
 impl AsAgent for WriteTextFileAgent {
-    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(askit, id, spec),
+            data: AgentData::new(mak, id, spec),
         })
     }
 
     async fn process(
         &mut self,
         ctx: AgentContext,
-        _pin: String,
+        _port: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
         let input = value
@@ -249,6 +249,6 @@ impl AsAgent for WriteTextFileAgent {
             AgentError::InvalidValue(format!("Failed to write file {}: {}", path.display(), e))
         })?;
 
-        self.output(ctx, PIN_DATA, value).await
+        self.output(ctx, PORT_DATA, value).await
     }
 }

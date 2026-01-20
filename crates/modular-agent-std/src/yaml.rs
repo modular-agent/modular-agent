@@ -2,22 +2,22 @@
 
 use std::vec;
 
-use agent_stream_kit::{
-    ASKit, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
-    askit_agent, async_trait,
+use modular_agent_kit::{
+    MAK, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
+    mak_agent, async_trait,
 };
 
 const CATEGORY: &str = "Std/Yaml";
 
-const PIN_DATA: &str = "data";
-const PIN_YAML: &str = "yaml";
+const PORT_DATA: &str = "data";
+const PORT_YAML: &str = "yaml";
 
 // To YAML
-#[askit_agent(
+#[mak_agent(
     title = "To YAML",
     category = CATEGORY,
-    inputs = [PIN_DATA],
-    outputs = [PIN_YAML]
+    inputs = [PORT_DATA],
+    outputs = [PORT_YAML]
 )]
 struct ToYamlAgent {
     data: AgentData,
@@ -25,31 +25,31 @@ struct ToYamlAgent {
 
 #[async_trait]
 impl AsAgent for ToYamlAgent {
-    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(askit, id, spec),
+            data: AgentData::new(mak, id, spec),
         })
     }
 
     async fn process(
         &mut self,
         ctx: AgentContext,
-        _pin: String,
+        _port: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
         let yaml = serde_yaml_ng::to_string(&value)
             .map_err(|e| AgentError::InvalidValue(e.to_string()))?;
-        self.output(ctx, PIN_YAML, AgentValue::string(yaml)).await?;
+        self.output(ctx, PORT_YAML, AgentValue::string(yaml)).await?;
         Ok(())
     }
 }
 
 // From YAML
-#[askit_agent(
+#[mak_agent(
     title = "From YAML",
     category = CATEGORY,
-    inputs = [PIN_YAML],
-    outputs = [PIN_DATA]
+    inputs = [PORT_YAML],
+    outputs = [PORT_DATA]
 )]
 struct FromYamlAgent {
     data: AgentData,
@@ -57,16 +57,16 @@ struct FromYamlAgent {
 
 #[async_trait]
 impl AsAgent for FromYamlAgent {
-    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(askit, id, spec),
+            data: AgentData::new(mak, id, spec),
         })
     }
 
     async fn process(
         &mut self,
         ctx: AgentContext,
-        _pin: String,
+        _port: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
         let s = value
@@ -75,7 +75,7 @@ impl AsAgent for FromYamlAgent {
         let v: serde_json::Value =
             serde_yaml_ng::from_str(s).map_err(|e| AgentError::InvalidValue(e.to_string()))?;
         let value = AgentValue::from_json(v)?;
-        self.output(ctx, PIN_DATA, value).await?;
+        self.output(ctx, PORT_DATA, value).await?;
         Ok(())
     }
 }

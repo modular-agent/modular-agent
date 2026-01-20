@@ -1,6 +1,6 @@
-use agent_stream_kit::{
-    ASKit, Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
-    askit_agent, async_trait,
+use modular_agent_kit::{
+    MAK, Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
+    mak_agent, async_trait,
 };
 use handlebars::Handlebars;
 use im::vector;
@@ -8,11 +8,11 @@ use serde_json::json;
 
 const CATEGORY: &str = "Std/String";
 
-const PIN_STRING: &str = "string";
-const PIN_STRINGS: &str = "strings";
-const PIN_VALUE: &str = "value";
-const PIN_T: &str = "t";
-const PIN_F: &str = "f";
+const PORT_STRING: &str = "string";
+const PORT_STRINGS: &str = "strings";
+const PORT_VALUE: &str = "value";
+const PORT_T: &str = "t";
+const PORT_F: &str = "f";
 
 const CONFIG_LEN: &str = "len";
 const CONFIG_OVERLAP: &str = "overlap";
@@ -20,11 +20,11 @@ const CONFIG_SEP: &str = "sep";
 const CONFIG_TEMPLATE: &str = "template";
 
 /// Check if the input is a string.
-#[askit_agent(
+#[mak_agent(
     title = "IsString",
     category = CATEGORY,
-    inputs = [PIN_VALUE],
-    outputs = [PIN_T, PIN_F],
+    inputs = [PORT_VALUE],
+    outputs = [PORT_T, PORT_F],
 )]
 struct IsStringAgent {
     data: AgentData,
@@ -32,32 +32,32 @@ struct IsStringAgent {
 
 #[async_trait]
 impl AsAgent for IsStringAgent {
-    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(askit, id, spec),
+            data: AgentData::new(mak, id, spec),
         })
     }
 
     async fn process(
         &mut self,
         ctx: AgentContext,
-        _pin: String,
+        _port: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
         if value.is_string() {
-            self.output(ctx, PIN_T, value).await
+            self.output(ctx, PORT_T, value).await
         } else {
-            self.output(ctx, PIN_F, value).await
+            self.output(ctx, PORT_F, value).await
         }
     }
 }
 
 /// Check if the input string is empty.
-#[askit_agent(
+#[mak_agent(
     title = "IsEmptyString",
     category = CATEGORY,
-    inputs = [PIN_STRING],
-    outputs = [PIN_T, PIN_F],
+    inputs = [PORT_STRING],
+    outputs = [PORT_T, PORT_F],
 )]
 struct IsEmptyStringAgent {
     data: AgentData,
@@ -65,16 +65,16 @@ struct IsEmptyStringAgent {
 
 #[async_trait]
 impl AsAgent for IsEmptyStringAgent {
-    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(askit, id, spec),
+            data: AgentData::new(mak, id, spec),
         })
     }
 
     async fn process(
         &mut self,
         ctx: AgentContext,
-        _pin: String,
+        _port: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
         let is_empty = if let Some(s) = value.as_str() {
@@ -83,9 +83,9 @@ impl AsAgent for IsEmptyStringAgent {
             false
         };
         if is_empty {
-            self.output(ctx, PIN_T, value).await
+            self.output(ctx, PORT_T, value).await
         } else {
-            self.output(ctx, PIN_F, value).await
+            self.output(ctx, PORT_F, value).await
         }
     }
 }
@@ -105,11 +105,11 @@ impl AsAgent for IsEmptyStringAgent {
 ///
 /// # Example
 /// Given the input `["Hello", "World"]` and `CONFIG_SEP` set to `" "`, the output will be `"Hello World"`.
-#[askit_agent(
+#[mak_agent(
     title = "String Join",
     category = CATEGORY,
-    inputs = [PIN_STRINGS],
-    outputs = [PIN_STRING],
+    inputs = [PORT_STRINGS],
+    outputs = [PORT_STRING],
     string_config(name = CONFIG_SEP, default = "\\n")
 )]
 struct StringJoinAgent {
@@ -118,16 +118,16 @@ struct StringJoinAgent {
 
 #[async_trait]
 impl AsAgent for StringJoinAgent {
-    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(askit, id, spec),
+            data: AgentData::new(mak, id, spec),
         })
     }
 
     async fn process(
         &mut self,
         ctx: AgentContext,
-        _pin: String,
+        _port: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
         let config = self.configs()?;
@@ -148,18 +148,18 @@ impl AsAgent for StringJoinAgent {
             out = out.replace("\\r", "\r");
             out = out.replace("\\\\", "\\");
             let out_value = AgentValue::string(out);
-            self.output(ctx, PIN_STRING, out_value).await
+            self.output(ctx, PORT_STRING, out_value).await
         } else {
-            self.output(ctx, PIN_STRING, value).await
+            self.output(ctx, PORT_STRING, value).await
         }
     }
 }
 
-#[askit_agent(
+#[mak_agent(
     title = "String Length Split",
     category = CATEGORY,
-    inputs = [PIN_STRING],
-    outputs = [PIN_STRINGS],
+    inputs = [PORT_STRING],
+    outputs = [PORT_STRINGS],
     integer_config(name = CONFIG_LEN, default = 65536),
     integer_config(name = CONFIG_OVERLAP, default = 1024),
 )]
@@ -169,16 +169,16 @@ struct StringLengthSplitAgent {
 
 #[async_trait]
 impl AsAgent for StringLengthSplitAgent {
-    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(askit, id, spec),
+            data: AgentData::new(mak, id, spec),
         })
     }
 
     async fn process(
         &mut self,
         ctx: AgentContext,
-        _pin: String,
+        _port: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
         let config = self.configs()?;
@@ -223,17 +223,17 @@ impl AsAgent for StringLengthSplitAgent {
             }
             start = next_start;
         }
-        self.output(ctx, PIN_STRINGS, AgentValue::array(out.into()))
+        self.output(ctx, PORT_STRINGS, AgentValue::array(out.into()))
             .await
     }
 }
 
 // Template String Agent
-#[askit_agent(
+#[mak_agent(
     title = "Template String",
     category = CATEGORY,
-    inputs = [PIN_VALUE],
-    outputs = [PIN_STRING],
+    inputs = [PORT_VALUE],
+    outputs = [PORT_STRING],
     string_config(name = CONFIG_TEMPLATE, default = "{{value}}")
 )]
 struct TemplateStringAgent {
@@ -242,16 +242,16 @@ struct TemplateStringAgent {
 
 #[async_trait]
 impl AsAgent for TemplateStringAgent {
-    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(askit, id, spec),
+            data: AgentData::new(mak, id, spec),
         })
     }
 
     async fn process(
         &mut self,
         ctx: AgentContext,
-        _pin: String,
+        _port: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
         let config = self.configs()?;
@@ -275,7 +275,7 @@ impl AsAgent for TemplateStringAgent {
                 })?;
                 out_arr.push(rendered_string.into());
             }
-            self.output(ctx, PIN_STRING, AgentValue::array(out_arr.into()))
+            self.output(ctx, PORT_STRING, AgentValue::array(out_arr.into()))
                 .await
         } else {
             let data = json!({"value": value});
@@ -283,17 +283,17 @@ impl AsAgent for TemplateStringAgent {
                 AgentError::InvalidValue(format!("Failed to render template: {}", e))
             })?;
             let out_value = AgentValue::string(rendered_string);
-            self.output(ctx, PIN_STRING, out_value).await
+            self.output(ctx, PORT_STRING, out_value).await
         }
     }
 }
 
 // Template Text Agent
-#[askit_agent(
+#[mak_agent(
     title = "Template Text",
     category = CATEGORY,
-    inputs = [PIN_VALUE],
-    outputs = [PIN_STRING],
+    inputs = [PORT_VALUE],
+    outputs = [PORT_STRING],
     text_config(name = CONFIG_TEMPLATE, default = "{{value}}")
 )]
 struct TemplateTextAgent {
@@ -302,16 +302,16 @@ struct TemplateTextAgent {
 
 #[async_trait]
 impl AsAgent for TemplateTextAgent {
-    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(askit, id, spec),
+            data: AgentData::new(mak, id, spec),
         })
     }
 
     async fn process(
         &mut self,
         ctx: AgentContext,
-        _pin: String,
+        _port: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
         let config = self.configs()?;
@@ -335,7 +335,7 @@ impl AsAgent for TemplateTextAgent {
                 })?;
                 out_arr.push(rendered_string.into());
             }
-            self.output(ctx, PIN_STRING, AgentValue::array(out_arr.into()))
+            self.output(ctx, PORT_STRING, AgentValue::array(out_arr.into()))
                 .await
         } else {
             let data = json!({"value": value});
@@ -343,17 +343,17 @@ impl AsAgent for TemplateTextAgent {
                 AgentError::InvalidValue(format!("Failed to render template: {}", e))
             })?;
             let out_value = AgentValue::string(rendered_string);
-            self.output(ctx, PIN_STRING, out_value).await
+            self.output(ctx, PORT_STRING, out_value).await
         }
     }
 }
 
 // Template Array Agent
-#[askit_agent(
+#[mak_agent(
     title = "Template Array",
     category = CATEGORY,
-    inputs = [PIN_VALUE],
-    outputs = [PIN_STRING],
+    inputs = [PORT_VALUE],
+    outputs = [PORT_STRING],
     text_config(name = CONFIG_TEMPLATE, default = "{{value}}")
 )]
 struct TemplateArrayAgent {
@@ -362,16 +362,16 @@ struct TemplateArrayAgent {
 
 #[async_trait]
 impl AsAgent for TemplateArrayAgent {
-    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(askit, id, spec),
+            data: AgentData::new(mak, id, spec),
         })
     }
 
     async fn process(
         &mut self,
         ctx: AgentContext,
-        _pin: String,
+        _port: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
         let config = self.configs()?;
@@ -387,7 +387,7 @@ impl AsAgent for TemplateArrayAgent {
             let rendered_string = reg.render_template(&template, &value).map_err(|e| {
                 AgentError::InvalidValue(format!("Failed to render template: {}", e))
             })?;
-            self.output(ctx, PIN_STRING, AgentValue::string(rendered_string))
+            self.output(ctx, PORT_STRING, AgentValue::string(rendered_string))
                 .await
         } else {
             let d = AgentValue::array(vector![value.clone()]);
@@ -395,7 +395,7 @@ impl AsAgent for TemplateArrayAgent {
                 AgentError::InvalidValue(format!("Failed to render template: {}", e))
             })?;
             let out_value = AgentValue::string(rendered_string);
-            self.output(ctx, PIN_STRING, out_value).await
+            self.output(ctx, PORT_STRING, out_value).await
         }
     }
 }

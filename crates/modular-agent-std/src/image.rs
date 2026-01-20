@@ -2,22 +2,22 @@
 
 use std::sync::Arc;
 
-use agent_stream_kit::photon_rs::{self, PhotonImage};
-use agent_stream_kit::{
-    ASKit, Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
-    askit_agent, async_trait,
+use modular_agent_kit::photon_rs::{self, PhotonImage};
+use modular_agent_kit::{
+    MAK, Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
+    mak_agent, async_trait,
 };
 
 const CATEGORY: &str = "Std/Image";
 
-const PIN_FILENAME: &str = "filename";
-const PIN_IMAGE: &str = "image";
-const PIN_IMAGE_FILENAME: &str = "image_filename";
-const PIN_BLANK: &str = "blank";
-const PIN_NON_BLANK: &str = "non_blank";
-const PIN_CHANGED: &str = "changed";
-const PIN_UNCHANGED: &str = "unchanged";
-const PIN_RESULT: &str = "result";
+const PORT_FILENAME: &str = "filename";
+const PORT_IMAGE: &str = "image";
+const PORT_IMAGE_FILENAME: &str = "image_filename";
+const PORT_BLANK: &str = "blank";
+const PORT_NON_BLANK: &str = "non_blank";
+const PORT_CHANGED: &str = "changed";
+const PORT_UNCHANGED: &str = "unchanged";
+const PORT_RESULT: &str = "result";
 
 const CONFIG_ALMOST_BLACK_THRESHOLD: &str = "almost_black_threshold";
 const CONFIG_BLANK_THRESHOLD: &str = "blank_threshold";
@@ -27,11 +27,11 @@ const CONFIG_WIDTH: &str = "width";
 const CONFIG_THRESHOLD: &str = "threshold";
 
 // IsBlankImageAgent
-#[askit_agent(
+#[mak_agent(
     title = "isBlank",
     category = CATEGORY,
-    inputs = [PIN_IMAGE],
-    outputs = [PIN_BLANK, PIN_NON_BLANK],
+    inputs = [PORT_IMAGE],
+    outputs = [PORT_BLANK, PORT_NON_BLANK],
     integer_config(name = CONFIG_ALMOST_BLACK_THRESHOLD, default = 20),
     integer_config(name = CONFIG_BLANK_THRESHOLD, default = 400)
 )]
@@ -61,16 +61,16 @@ impl IsBlankImageAgent {
 
 #[async_trait]
 impl AsAgent for IsBlankImageAgent {
-    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(askit, id, spec),
+            data: AgentData::new(mak, id, spec),
         })
     }
 
     async fn process(
         &mut self,
         ctx: AgentContext,
-        _pin: String,
+        _port: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
         let config = self.configs()?;
@@ -86,9 +86,9 @@ impl AsAgent for IsBlankImageAgent {
 
             let is_blank = self.is_blank(&image, almost_black_threshold, blank_threshold);
             if is_blank {
-                self.output(ctx, PIN_BLANK, value).await
+                self.output(ctx, PORT_BLANK, value).await
             } else {
-                self.output(ctx, PIN_NON_BLANK, value).await
+                self.output(ctx, PORT_NON_BLANK, value).await
             }
         } else {
             Err(AgentError::InvalidValue(
@@ -100,11 +100,11 @@ impl AsAgent for IsBlankImageAgent {
 
 // ResampleImageAgent
 
-#[askit_agent(
+#[mak_agent(
     title = "Resize Image",
     category = CATEGORY,
-    inputs = [PIN_IMAGE],
-    outputs = [PIN_IMAGE],
+    inputs = [PORT_IMAGE],
+    outputs = [PORT_IMAGE],
     integer_config(name = CONFIG_WIDTH, default = 512),
     integer_config(name = CONFIG_HEIGHT, default = 512)
 )]
@@ -114,16 +114,16 @@ struct ResampleImageAgent {
 
 #[async_trait]
 impl AsAgent for ResampleImageAgent {
-    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(askit, id, spec),
+            data: AgentData::new(mak, id, spec),
         })
     }
 
     async fn process(
         &mut self,
         ctx: AgentContext,
-        _pin: String,
+        _port: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
         let config = self.configs()?;
@@ -138,22 +138,22 @@ impl AsAgent for ResampleImageAgent {
 
             let resampled_image = photon_rs::transform::resample(&*image, width, height);
 
-            self.output(ctx, PIN_IMAGE, AgentValue::image(resampled_image))
+            self.output(ctx, PORT_IMAGE, AgentValue::image(resampled_image))
                 .await
         } else {
             // Pass through non-image value
-            self.output(ctx, PIN_IMAGE, value).await
+            self.output(ctx, PORT_IMAGE, value).await
         }
     }
 }
 
 // ResizeImageAgent
 
-#[askit_agent(
+#[mak_agent(
     title = "Resize Image",
     category = CATEGORY,
-    inputs = [PIN_IMAGE],
-    outputs = [PIN_IMAGE],
+    inputs = [PORT_IMAGE],
+    outputs = [PORT_IMAGE],
     integer_config(name = CONFIG_WIDTH, default = 512),
     integer_config(name = CONFIG_HEIGHT, default = 512)
 )]
@@ -163,16 +163,16 @@ struct ResizeImageAgent {
 
 #[async_trait]
 impl AsAgent for ResizeImageAgent {
-    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(askit, id, spec),
+            data: AgentData::new(mak, id, spec),
         })
     }
 
     async fn process(
         &mut self,
         ctx: AgentContext,
-        _pin: String,
+        _port: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
         let config = self.configs()?;
@@ -192,22 +192,22 @@ impl AsAgent for ResizeImageAgent {
                 photon_rs::transform::SamplingFilter::Nearest,
             );
 
-            self.output(ctx, PIN_IMAGE, AgentValue::image(resized_image))
+            self.output(ctx, PORT_IMAGE, AgentValue::image(resized_image))
                 .await
         } else {
             // Pass through non-image value
-            self.output(ctx, PIN_IMAGE, value).await
+            self.output(ctx, PORT_IMAGE, value).await
         }
     }
 }
 
 // ScaleImageAgent
 
-#[askit_agent(
+#[mak_agent(
     title = "Scale Image",
     category = CATEGORY,
-    inputs = [PIN_IMAGE],
-    outputs = [PIN_IMAGE],
+    inputs = [PORT_IMAGE],
+    outputs = [PORT_IMAGE],
     number_config(name = CONFIG_SCALE, default = 1.0)
 )]
 struct ScaleImageAgent {
@@ -216,16 +216,16 @@ struct ScaleImageAgent {
 
 #[async_trait]
 impl AsAgent for ScaleImageAgent {
-    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(askit, id, spec),
+            data: AgentData::new(mak, id, spec),
         })
     }
 
     async fn process(
         &mut self,
         ctx: AgentContext,
-        _pin: String,
+        _port: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
         let config = self.configs()?;
@@ -245,7 +245,7 @@ impl AsAgent for ScaleImageAgent {
 
             if scale == 1.0 {
                 // No scaling needed, pass through the original image
-                return self.output(ctx, PIN_IMAGE, value).await;
+                return self.output(ctx, PORT_IMAGE, value).await;
             }
 
             if scale < 1.0 {
@@ -258,29 +258,29 @@ impl AsAgent for ScaleImageAgent {
                     height,
                     photon_rs::transform::SamplingFilter::Nearest,
                 );
-                self.output(ctx, PIN_IMAGE, AgentValue::image(resized_image))
+                self.output(ctx, PORT_IMAGE, AgentValue::image(resized_image))
                     .await
             } else {
                 // scale > 1.0
                 let width = ((image.get_width() as f64) * scale) as usize;
                 let height = ((image.get_height() as f64) * scale) as usize;
                 let resampled_image = photon_rs::transform::resample(&*image, width, height);
-                self.output(ctx, PIN_IMAGE, AgentValue::image(resampled_image))
+                self.output(ctx, PORT_IMAGE, AgentValue::image(resampled_image))
                     .await
             }
         } else {
             // Pass through non-image value
-            self.output(ctx, PIN_IMAGE, value).await
+            self.output(ctx, PORT_IMAGE, value).await
         }
     }
 }
 
 // IsChangedImageAgent
-#[askit_agent(
+#[mak_agent(
     title = "isChanged",
     category = CATEGORY,
-    inputs = [PIN_IMAGE],
-    outputs = [PIN_CHANGED, PIN_UNCHANGED],
+    inputs = [PORT_IMAGE],
+    outputs = [PORT_CHANGED, PORT_UNCHANGED],
     number_config(name = CONFIG_THRESHOLD, default = 0.01)
 )]
 struct IsChangedImageAgent {
@@ -314,9 +314,9 @@ impl IsChangedImageAgent {
 
 #[async_trait]
 impl AsAgent for IsChangedImageAgent {
-    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(askit, id, spec),
+            data: AgentData::new(mak, id, spec),
             last_image: None,
         })
     }
@@ -324,7 +324,7 @@ impl AsAgent for IsChangedImageAgent {
     async fn process(
         &mut self,
         ctx: AgentContext,
-        _pin: String,
+        _port: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
         let config = self.configs()?;
@@ -344,9 +344,9 @@ impl AsAgent for IsChangedImageAgent {
 
             if is_changed {
                 self.last_image = value.clone().into_image();
-                self.output(ctx, PIN_CHANGED, value).await
+                self.output(ctx, PORT_CHANGED, value).await
             } else {
-                self.output(ctx, PIN_UNCHANGED, value).await
+                self.output(ctx, PORT_UNCHANGED, value).await
             }
         } else {
             Err(AgentError::InvalidValue(
@@ -358,11 +358,11 @@ impl AsAgent for IsChangedImageAgent {
 
 // native
 
-#[askit_agent(
+#[mak_agent(
     title = "Open Image",
     category = CATEGORY,
-    inputs = [PIN_FILENAME],
-    outputs = [PIN_IMAGE]
+    inputs = [PORT_FILENAME],
+    outputs = [PORT_IMAGE]
 )]
 struct OpenImageAgent {
     data: AgentData,
@@ -370,16 +370,16 @@ struct OpenImageAgent {
 
 #[async_trait]
 impl AsAgent for OpenImageAgent {
-    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(askit, id, spec),
+            data: AgentData::new(mak, id, spec),
         })
     }
 
     async fn process(
         &mut self,
         ctx: AgentContext,
-        _pin: String,
+        _port: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
         let filename = value
@@ -391,15 +391,15 @@ impl AsAgent for OpenImageAgent {
             AgentError::InvalidValue(format!("Failed to open image {}: {}", filename, e))
         })?;
 
-        self.output(ctx, PIN_IMAGE, AgentValue::image(image)).await
+        self.output(ctx, PORT_IMAGE, AgentValue::image(image)).await
     }
 }
 
-#[askit_agent(
+#[mak_agent(
     title = "Save Image",
     category = CATEGORY,
-    inputs = [PIN_IMAGE_FILENAME],
-    outputs = [PIN_RESULT]
+    inputs = [PORT_IMAGE_FILENAME],
+    outputs = [PORT_RESULT]
 )]
 struct SaveImageAgent {
     data: AgentData,
@@ -407,16 +407,16 @@ struct SaveImageAgent {
 
 #[async_trait]
 impl AsAgent for SaveImageAgent {
-    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(askit, id, spec),
+            data: AgentData::new(mak, id, spec),
         })
     }
 
     async fn process(
         &mut self,
         ctx: AgentContext,
-        _pin: String,
+        _port: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
         let Some(image) = value.get_image("image") else {
@@ -435,6 +435,6 @@ impl AsAgent for SaveImageAgent {
             |e| AgentError::InvalidValue(format!("Failed to save image {}: {}", filename, e)),
         )?;
 
-        self.output(ctx, PIN_RESULT, AgentValue::unit()).await
+        self.output(ctx, PORT_RESULT, AgentValue::unit()).await
     }
 }

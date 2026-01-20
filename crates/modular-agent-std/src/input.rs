@@ -1,8 +1,8 @@
 use std::vec;
 
-use agent_stream_kit::{
-    ASKit, Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentStatus,
-    AgentValue, AsAgent, askit_agent, async_trait,
+use modular_agent_kit::{
+    MAK, Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentStatus,
+    AgentValue, AsAgent, mak_agent, async_trait,
 };
 
 const CATEGORY: &str = "Std/Input";
@@ -16,7 +16,7 @@ const TEXT: &str = "text";
 const OBJECT: &str = "object";
 
 /// Unit Input
-#[askit_agent(
+#[mak_agent(
     kind = "Input",
     title = "Unit Input",
     hide_title,
@@ -29,9 +29,9 @@ struct UnitInputAgent {
 }
 
 impl AsAgent for UnitInputAgent {
-    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(askit, id, spec),
+            data: AgentData::new(mak, id, spec),
         })
     }
 
@@ -47,7 +47,7 @@ impl AsAgent for UnitInputAgent {
 }
 
 // Boolean Input
-#[askit_agent(
+#[mak_agent(
     kind = "Input",
     title = "Boolean Input",
     category = CATEGORY,
@@ -61,9 +61,9 @@ struct BooleanInputAgent {
 
 #[async_trait]
 impl AsAgent for BooleanInputAgent {
-    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(askit, id, spec),
+            data: AgentData::new(mak, id, spec),
         })
     }
 
@@ -78,7 +78,7 @@ impl AsAgent for BooleanInputAgent {
     async fn process(
         &mut self,
         ctx: AgentContext,
-        _pin: String,
+        _port: String,
         _value: AgentValue,
     ) -> Result<(), AgentError> {
         let value = self.configs()?.get(BOOLEAN)?;
@@ -87,7 +87,7 @@ impl AsAgent for BooleanInputAgent {
 }
 
 // Integer Input
-#[askit_agent(
+#[mak_agent(
     kind = "Input",
     title = "Integer Input",
     category = CATEGORY,
@@ -101,9 +101,9 @@ struct IntegerInputAgent {
 
 #[async_trait]
 impl AsAgent for IntegerInputAgent {
-    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(askit, id, spec),
+            data: AgentData::new(mak, id, spec),
         })
     }
 
@@ -118,7 +118,7 @@ impl AsAgent for IntegerInputAgent {
     async fn process(
         &mut self,
         ctx: AgentContext,
-        _pin: String,
+        _port: String,
         _value: AgentValue,
     ) -> Result<(), AgentError> {
         let value = self.configs()?.get(INTEGER)?;
@@ -127,7 +127,7 @@ impl AsAgent for IntegerInputAgent {
 }
 
 // Number Input
-#[askit_agent(
+#[mak_agent(
     kind = "Input",
     title = "Number Input",
     category = CATEGORY,
@@ -141,9 +141,9 @@ struct NumberInputAgent {
 
 #[async_trait]
 impl AsAgent for NumberInputAgent {
-    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(askit, id, spec),
+            data: AgentData::new(mak, id, spec),
         })
     }
 
@@ -158,7 +158,7 @@ impl AsAgent for NumberInputAgent {
     async fn process(
         &mut self,
         ctx: AgentContext,
-        _pin: String,
+        _port: String,
         _value: AgentValue,
     ) -> Result<(), AgentError> {
         let value = self.configs()?.get_number(NUMBER)?;
@@ -167,7 +167,7 @@ impl AsAgent for NumberInputAgent {
 }
 
 // String Input
-#[askit_agent(
+#[mak_agent(
     kind = "Input",
     title = "String Input",
     category = CATEGORY,
@@ -181,9 +181,9 @@ struct StringInputAgent {
 
 #[async_trait]
 impl AsAgent for StringInputAgent {
-    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(askit, id, spec),
+            data: AgentData::new(mak, id, spec),
         })
     }
 
@@ -198,7 +198,7 @@ impl AsAgent for StringInputAgent {
     async fn process(
         &mut self,
         ctx: AgentContext,
-        _pin: String,
+        _port: String,
         _value: AgentValue,
     ) -> Result<(), AgentError> {
         let value = self.configs()?.get(STRING)?;
@@ -207,7 +207,7 @@ impl AsAgent for StringInputAgent {
 }
 
 // Text Input
-#[askit_agent(
+#[mak_agent(
     kind = "Input",
     title = "Text Input",
     category = CATEGORY,
@@ -221,9 +221,9 @@ struct TextInputAgent {
 
 #[async_trait]
 impl AsAgent for TextInputAgent {
-    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(askit, id, spec),
+            data: AgentData::new(mak, id, spec),
         })
     }
 
@@ -238,7 +238,7 @@ impl AsAgent for TextInputAgent {
     async fn process(
         &mut self,
         ctx: AgentContext,
-        _pin: String,
+        _port: String,
         _value: AgentValue,
     ) -> Result<(), AgentError> {
         let value = self.configs()?.get(TEXT)?;
@@ -247,7 +247,7 @@ impl AsAgent for TextInputAgent {
 }
 
 // Object Input
-#[askit_agent(
+#[mak_agent(
     kind = "Input",
     title = "Object Input",
     category = CATEGORY,
@@ -261,9 +261,9 @@ struct ObjectInputAgent {
 
 #[async_trait]
 impl AsAgent for ObjectInputAgent {
-    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(askit, id, spec),
+            data: AgentData::new(mak, id, spec),
         })
     }
 
@@ -278,7 +278,7 @@ impl AsAgent for ObjectInputAgent {
     async fn process(
         &mut self,
         ctx: AgentContext,
-        _pin: String,
+        _port: String,
         _value: AgentValue,
     ) -> Result<(), AgentError> {
         let value = self.configs()?.get(OBJECT)?;

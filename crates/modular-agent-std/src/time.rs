@@ -3,9 +3,9 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use std::vec;
 
-use agent_stream_kit::{
-    ASKit, Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentStatus,
-    AgentValue, AsAgent, askit_agent, async_trait,
+use modular_agent_kit::{
+    MAK, Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentStatus,
+    AgentValue, AsAgent, mak_agent, async_trait,
 };
 use chrono::{DateTime, Local, Utc};
 use cron::Schedule;
@@ -15,9 +15,9 @@ use tokio::task::JoinHandle;
 
 const CATEGORY: &str = "Std/Time";
 
-const PIN_TIME: &str = "time";
-const PIN_VALUE: &str = "value";
-const PIN_UNIT: &str = "unit";
+const PORT_TIME: &str = "time";
+const PORT_VALUE: &str = "value";
+const PORT_UNIT: &str = "unit";
 
 const CONFIG_DELAY: &str = "delay";
 const CONFIG_MAX_NUM_DATA: &str = "max_num_data";
@@ -31,12 +31,12 @@ const INTERVAL_DEFAULT: &str = "10s";
 const TIME_DEFAULT: &str = "1s";
 
 // Delay Agent
-#[askit_agent(
+#[mak_agent(
     title = "Delay",
     description = "Delays output by a specified time",
     category = CATEGORY,
-    inputs = [PIN_VALUE],
-    outputs = [PIN_VALUE],
+    inputs = [PORT_VALUE],
+    outputs = [PORT_VALUE],
     integer_config(name = CONFIG_DELAY, default = DELAY_MS_DEFAULT, title = "delay (ms)"),
     integer_config(name = CONFIG_MAX_NUM_DATA, default = MAX_NUM_DATA_DEFAULT, title = "max num data")
 )]
@@ -47,9 +47,9 @@ struct DelayAgent {
 
 #[async_trait]
 impl AsAgent for DelayAgent {
-    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(askit, id, spec),
+            data: AgentData::new(mak, id, spec),
             num_waiting_data: Arc::new(Mutex::new(0)),
         })
     }
@@ -57,7 +57,7 @@ impl AsAgent for DelayAgent {
     async fn process(
         &mut self,
         ctx: AgentContext,
-        pin: String,
+        port: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
         let config = self.configs()?;
@@ -76,7 +76,7 @@ impl AsAgent for DelayAgent {
 
         tokio::time::sleep(Duration::from_millis(delay_ms as u64)).await;
 
-        self.output(ctx.clone(), pin, value.clone()).await?;
+        self.output(ctx.clone(), port, value.clone()).await?;
 
         let mut num_waiting_data = self.num_waiting_data.lock().unwrap();
         *num_waiting_data -= 1;
@@ -86,11 +86,11 @@ impl AsAgent for DelayAgent {
 }
 
 // Interval Timer Agent
-#[askit_agent(
+#[mak_agent(
     title = "Interval Timer",
     description = "Outputs a unit signal at specified intervals",
     category = CATEGORY,
-    outputs = [PIN_UNIT],
+    outputs = [PORT_UNIT],
     string_config(name = CONFIG_INTERVAL, default = INTERVAL_DEFAULT, description = "(ex. 10s, 5m, 100ms, 1h, 1d)")
 )]
 struct IntervalTimerAgent {
@@ -104,7 +104,7 @@ impl IntervalTimerAgent {
         let timer_handle = self.timer_handle.clone();
         let interval_ms = self.interval_ms;
 
-        let askit = self.askit().clone();
+        let mak = self.mak().clone();
         let agent_id = self.id().to_string();
         let handle = self.runtime().spawn(async move {
             loop {
@@ -119,10 +119,10 @@ impl IntervalTimerAgent {
                 }
 
                 // Create a unit output
-                if let Err(e) = askit.try_send_agent_out(
+                if let Err(e) = mak.try_send_agent_out(
                     agent_id.clone(),
                     AgentContext::new(),
-                    PIN_UNIT.to_string(),
+                    PORT_UNIT.to_string(),
                     AgentValue::unit(),
                 ) {
                     log::error!("Failed to send interval timer output: {}", e);
@@ -151,7 +151,7 @@ impl IntervalTimerAgent {
 
 #[async_trait]
 impl AsAgent for IntervalTimerAgent {
-    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         let interval = spec
             .configs
             .as_ref()
@@ -160,7 +160,7 @@ impl AsAgent for IntervalTimerAgent {
         let interval_ms = parse_duration_to_ms(&interval)?;
 
         Ok(Self {
-            data: AgentData::new(askit, id, spec),
+            data: AgentData::new(mak, id, spec),
             timer_handle: Default::default(),
             interval_ms,
         })
@@ -191,10 +191,10 @@ impl AsAgent for IntervalTimerAgent {
 }
 
 // OnStart
-#[askit_agent(
+#[mak_agent(
     title = "On Start",
     category = CATEGORY,
-    outputs = [PIN_UNIT],
+    outputs = [PORT_UNIT],
     integer_config(name = CONFIG_DELAY, default = DELAY_MS_DEFAULT, title = "delay (ms)")
 )]
 struct OnStartAgent {
@@ -203,9 +203,9 @@ struct OnStartAgent {
 
 #[async_trait]
 impl AsAgent for OnStartAgent {
-    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(askit, id, spec),
+            data: AgentData::new(mak, id, spec),
         })
     }
 
@@ -213,16 +213,16 @@ impl AsAgent for OnStartAgent {
         let config = self.configs()?;
         let delay_ms = config.get_integer_or(CONFIG_DELAY, DELAY_MS_DEFAULT);
 
-        let askit = self.askit().clone();
+        let mak = self.mak().clone();
         let agent_id = self.id().to_string();
 
         self.runtime().spawn(async move {
             tokio::time::sleep(Duration::from_millis(delay_ms as u64)).await;
 
-            if let Err(e) = askit.try_send_agent_out(
+            if let Err(e) = mak.try_send_agent_out(
                 agent_id,
                 AgentContext::new(),
-                PIN_UNIT.to_string(),
+                PORT_UNIT.to_string(),
                 AgentValue::unit(),
             ) {
                 log::error!("Failed to send delayed output: {}", e);
@@ -234,10 +234,10 @@ impl AsAgent for OnStartAgent {
 }
 
 // Schedule Timer Agent
-#[askit_agent(
+#[mak_agent(
     title = "Schedule Timer",
     category = CATEGORY,
-    outputs = [PIN_TIME],
+    outputs = [PORT_TIME],
     string_config(name = CONFIG_SCHEDULE, default = "0 0 * * * *", description = "sec min hour day month week year")
 )]
 struct ScheduleTimerAgent {
@@ -252,7 +252,7 @@ impl ScheduleTimerAgent {
             return Err(AgentError::InvalidConfig("No schedule defined".into()));
         };
 
-        let askit = self.askit().clone();
+        let mak = self.mak().clone();
         let agent_id = self.id().to_string();
         let timer_handle = self.timer_handle.clone();
         let schedule = schedule.clone();
@@ -302,10 +302,10 @@ impl ScheduleTimerAgent {
                 let current_local_time = Local::now().timestamp();
 
                 // Output the timestamp as an integer
-                if let Err(e) = askit.try_send_agent_out(
+                if let Err(e) = mak.try_send_agent_out(
                     agent_id.clone(),
                     AgentContext::new(),
-                    PIN_TIME.to_string(),
+                    PORT_TIME.to_string(),
                     AgentValue::integer(current_local_time),
                 ) {
                     log::error!("Failed to send schedule timer output: {}", e);
@@ -347,7 +347,7 @@ impl ScheduleTimerAgent {
 
 #[async_trait]
 impl AsAgent for ScheduleTimerAgent {
-    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         let schedule_str = spec
             .configs
             .as_ref()
@@ -355,7 +355,7 @@ impl AsAgent for ScheduleTimerAgent {
             .transpose()?;
 
         let mut agent = Self {
-            data: AgentData::new(askit, id, spec),
+            data: AgentData::new(mak, id, spec),
             cron_schedule: None,
             timer_handle: Default::default(),
         };
@@ -397,11 +397,11 @@ impl AsAgent for ScheduleTimerAgent {
 }
 
 // Throttle agent
-#[askit_agent(
+#[mak_agent(
     title = "Throttle Time",
     category = CATEGORY,
-    inputs = [PIN_VALUE],
-    outputs = [PIN_VALUE],
+    inputs = [PORT_VALUE],
+    outputs = [PORT_VALUE],
     string_config(name = CONFIG_TIME, default = TIME_DEFAULT, description = "(ex. 10s, 5m, 100ms, 1h, 1d)"),
     integer_config(name = CONFIG_MAX_NUM_DATA, title = "max num data", description = "0: no data, -1: all data")
 )]
@@ -419,7 +419,7 @@ impl ThrottleTimeAgent {
         let time_ms = self.time_ms;
 
         let waiting_data = self.waiting_data.clone();
-        let askit = self.askit().clone();
+        let mak = self.mak().clone();
         let agent_id = self.id().to_string();
 
         let handle = self.runtime().spawn(async move {
@@ -437,9 +437,9 @@ impl ThrottleTimeAgent {
                 let mut wd = waiting_data.lock().unwrap();
                 if wd.len() > 0 {
                     // If there are data waiting, output the first one
-                    let (ctx, pin, data) = wd.remove(0);
-                    askit
-                        .try_send_agent_out(agent_id.clone(), ctx, pin, data)
+                    let (ctx, port, data) = wd.remove(0);
+                    mak
+                        .try_send_agent_out(agent_id.clone(), ctx, port, data)
                         .unwrap_or_else(|e| {
                             log::error!("Failed to send delayed output: {}", e);
                         });
@@ -474,7 +474,7 @@ impl ThrottleTimeAgent {
 
 #[async_trait]
 impl AsAgent for ThrottleTimeAgent {
-    fn new(askit: ASKit, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         let time = spec
             .configs
             .as_ref()
@@ -489,7 +489,7 @@ impl AsAgent for ThrottleTimeAgent {
             .get_integer_or(CONFIG_MAX_NUM_DATA, 0);
 
         Ok(Self {
-            data: AgentData::new(askit, id, spec),
+            data: AgentData::new(mak, id, spec),
             timer_handle: Default::default(),
             time_ms,
             max_num_data,
@@ -526,7 +526,7 @@ impl AsAgent for ThrottleTimeAgent {
     async fn process(
         &mut self,
         ctx: AgentContext,
-        pin: String,
+        port: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
         if self.timer_handle.lock().unwrap().is_some() {
@@ -538,7 +538,7 @@ impl AsAgent for ThrottleTimeAgent {
                 return Ok(());
             }
 
-            wd.push((ctx, pin, value));
+            wd.push((ctx, port, value));
             if self.max_num_data > 0 && wd.len() > self.max_num_data as usize {
                 // If we have reached the max data to keep, we drop the oldest one
                 wd.remove(0);
@@ -551,7 +551,7 @@ impl AsAgent for ThrottleTimeAgent {
         self.start_timer()?;
 
         // Output the data
-        self.output(ctx, pin, value).await?;
+        self.output(ctx, port, value).await?;
 
         Ok(())
     }
