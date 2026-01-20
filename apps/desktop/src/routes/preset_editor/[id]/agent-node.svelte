@@ -13,8 +13,8 @@
 
   import AlertCircleIcon from "@lucide/svelte/icons/alert-circle";
   import { useSvelteFlow, useNodeConnections, type NodeProps } from "@xyflow/svelte";
-  import { getAgentSpec, setAgentConfigs } from "tauri-plugin-askit-api";
-  import type { AgentSpec } from "tauri-plugin-askit-api";
+  import { getAgentSpec, setAgentConfigs } from "tauri-plugin-mak-api";
+  import type { AgentSpec } from "tauri-plugin-mak-api";
 
   import { getAgentDefinitions } from "$lib/agent";
   import * as Alert from "$lib/components/ui/alert/index.js";
@@ -78,9 +78,9 @@
     );
 
     unsubscribers.push(
-      subscribeAgentInMessage(id, ({ ch, t }) => {
-        if (!ch || ch === "") return;
-        inputMessage = ch;
+      subscribeAgentInMessage(id, ({ port, t }) => {
+        if (!port || port === "") return;
+        inputMessage = port;
         inputCount += 1;
       }),
     );

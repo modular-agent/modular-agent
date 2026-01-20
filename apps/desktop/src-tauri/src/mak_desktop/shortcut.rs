@@ -4,8 +4,8 @@ use anyhow::Result;
 use tauri::{AppHandle, Manager};
 use tauri_plugin_global_shortcut::{Shortcut, ShortcutState};
 
-use crate::agent_stream_app;
-use crate::agent_stream_app::settings::CoreSettings;
+use crate::mak_desktop;
+use crate::mak_desktop::settings::CoreSettings;
 
 pub fn init(app: &AppHandle) -> Result<()> {
     let settings = app.state::<Mutex<CoreSettings>>();
@@ -32,7 +32,7 @@ pub fn init(app: &AppHandle) -> Result<()> {
                     log::info!("handle shortcut {:?} {:?}", key, event);
                     if event.state == ShortcutState::Pressed {
                         if key == &shortcut {
-                            agent_stream_app::window::show_main(app).unwrap_or_else(|e| {
+                            mak_desktop::window::show_main(app).unwrap_or_else(|e| {
                                 log::error!("Failed to show main window: {}", e);
                             });
                         }

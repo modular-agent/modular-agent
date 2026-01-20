@@ -5,50 +5,50 @@ import {
   type AgentConfigsMap,
   type AgentDefinitions,
   type AgentSpec,
-  type AgentStreamInfo,
-  type AgentStreamSpec,
-  type ChannelSpec,
+  type PresetInfo,
+  type PresetSpec,
+  type ConnectionSpec,
   getAgentDefinitions as getAgentDefinitionsAPI,
   getGlobalConfigsMap as getGlobalConfigsMapAPI,
-} from "tauri-plugin-askit-api";
+} from "tauri-plugin-mak-api";
 
-import type { AgentStreamFlow, AgentStreamEdge, AgentStreamNode, CoreSettings } from "./types";
+import type { PresetFlow, PresetEdge, PresetNode, CoreSettings } from "./types";
 import {
   getCoreSettings as getCoreSettingsUtils,
   setCoreSettings as setCoreSettingsUtils,
 } from "./utils";
 
-export async function newAgentStream(name: string): Promise<string> {
-  return await invoke("new_agent_stream_cmd", { name });
+export async function newPreset(name: string): Promise<string> {
+  return await invoke("new_preset_cmd", { name });
 }
 
-export async function renameAgentStream(id: string, name: string): Promise<string> {
-  return await invoke("rename_agent_stream_cmd", { id, name });
+export async function renamePreset(id: string, name: string): Promise<string> {
+  return await invoke("rename_preset_cmd", { id, name });
 }
 
-export async function removeAgentStream(id: string): Promise<void> {
-  await invoke("remove_agent_stream_cmd", { id });
+export async function removePreset(id: string): Promise<void> {
+  await invoke("remove_preset_cmd", { id });
 }
 
-export async function saveAgentStream(name: string, spec: AgentStreamSpec): Promise<void> {
-  await invoke("save_agent_stream_cmd", { name, spec });
+export async function savePreset(name: string, spec: PresetSpec): Promise<void> {
+  await invoke("save_preset_cmd", { name, spec });
 }
 
-export async function importAgentStream(path: string): Promise<string> {
-  return await invoke("import_agent_stream_cmd", { path });
+export async function importPreset(path: string): Promise<string> {
+  return await invoke("import_preset_cmd", { path });
 }
 
-export async function startAgentStream(id: string): Promise<void> {
-  await invoke("start_agent_stream_cmd", { id });
+export async function startPreset(id: string): Promise<void> {
+  await invoke("start_preset_cmd", { id });
 }
 
-export async function stopAgentStream(id: string): Promise<void> {
-  await invoke("stop_agent_stream_cmd", { id });
+export async function stopPreset(id: string): Promise<void> {
+  await invoke("stop_preset_cmd", { id });
 }
 
-// Agent Stream
+// Preset
 
-export function streamToFlow(info: AgentStreamInfo, spec: AgentStreamSpec): AgentStreamFlow {
+export function presetToFlow(info: PresetInfo, spec: PresetSpec): PresetFlow {
   // Deserialize agents first
   const nodes = spec.agents.map((agent) => agentSpecToNode(agent));
 
@@ -63,19 +63,19 @@ export function streamToFlow(info: AgentStreamInfo, spec: AgentStreamSpec): Agen
     nodeHandles.set(node.id, { inputs, outputs, configs });
   });
 
-  // Filter only valid edges
-  const validEdges = spec.channels.filter((ch) => {
-    const sourceNode = nodeHandles.get(ch.source);
-    const targetNode = nodeHandles.get(ch.target);
+  // Filter only valid connections
+  const validConnections = spec.connections.filter((conn) => {
+    const sourceNode = nodeHandles.get(conn.source);
+    const targetNode = nodeHandles.get(conn.target);
 
     if (!sourceNode || !targetNode) return false;
 
     // Ensure that the source and target handles actually exist
     const isSourceValid =
-      ch.source_handle === "err" || sourceNode.outputs.includes(ch.source_handle ?? "");
-    const isTargetValid = ch.target_handle?.startsWith("config:")
-      ? targetNode.configs.includes((ch.target_handle ?? "").substring(7))
-      : targetNode.inputs.includes(ch.target_handle ?? "");
+      conn.source_handle === "err" || sourceNode.outputs.includes(conn.source_handle ?? "");
+    const isTargetValid = conn.target_handle?.startsWith("config:")
+      ? targetNode.configs.includes((conn.target_handle ?? "").substring(7))
+      : targetNode.inputs.includes(conn.target_handle ?? "");
 
     return isSourceValid && isTargetValid;
   });
@@ -84,13 +84,13 @@ export function streamToFlow(info: AgentStreamInfo, spec: AgentStreamSpec): Agen
     id: info.id,
     name: info.name,
     nodes: nodes,
-    edges: validEdges.map((ch) => channelSpecToEdge(ch)),
+    edges: validConnections.map((conn) => connectionSpecToEdge(conn)),
     running: info.running,
     viewport: spec.viewport,
   };
 }
 
-export function agentSpecToNode(spec: AgentSpec): AgentStreamNode {
+export function agentSpecToNode(spec: AgentSpec): PresetNode {
   return {
     id: spec.id ?? crypto.randomUUID(),
     type: "agent",
@@ -104,17 +104,17 @@ export function agentSpecToNode(spec: AgentSpec): AgentStreamNode {
   };
 }
 
-export function channelSpecToEdge(channel: ChannelSpec): AgentStreamEdge {
+export function connectionSpecToEdge(connection: ConnectionSpec): PresetEdge {
   return {
     id: crypto.randomUUID(),
-    source: channel.source,
-    sourceHandle: channel.source_handle,
-    target: channel.target,
-    targetHandle: channel.target_handle,
+    source: connection.source,
+    sourceHandle: connection.source_handle,
+    target: connection.target,
+    targetHandle: connection.target_handle,
   };
 }
 
-export function edgeToChannelSpec(edge: AgentStreamEdge): ChannelSpec {
+export function edgeToConnectionSpec(edge: PresetEdge): ConnectionSpec {
   return {
     source: edge.source,
     source_handle: edge.sourceHandle ?? null,

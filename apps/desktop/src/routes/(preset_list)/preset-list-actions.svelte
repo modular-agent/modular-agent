@@ -2,22 +2,21 @@
   import EllipsisVerticalIcon from "@lucide/svelte/icons/ellipsis-vertical";
   import PlayIcon from "@lucide/svelte/icons/play";
   import SquareIcon from "@lucide/svelte/icons/square";
-  import { addAgentStream, getAgentStreamSpec, uniqueStreamName } from "tauri-plugin-askit-api";
+  import { addPreset, getPresetSpec, uniquePresetName } from "tauri-plugin-mak-api";
 
+  import { getCoreSettings, setCoreSettings } from "$lib/agent";
   import { Button } from "$lib/components/ui/button/index.js";
   import * as Dialog from "$lib/components/ui/dialog/index.js";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
   import {
-    deleteStream,
-    reloadStreamInfos,
-    renameStream,
-    startStream,
-    stopStream,
-    streamInfos,
+    deletePresetAndReload,
+    reloadPreseetInfos,
+    renamePresetAndReload,
+    startPresetAndReload,
+    stopPresetAndReload,
+    presetInfos,
   } from "$lib/shared.svelte";
-
-  import { getCoreSettings, setCoreSettings } from "@/lib/agent";
 
   type Props = {
     id: string;
@@ -29,14 +28,14 @@
 
   // start and stop
 
-  let running = $derived(streamInfos.get(id)?.running);
+  let running = $derived(presetInfos.get(id)?.running);
 
   async function handleStart() {
-    await startStream(id);
+    await startPresetAndReload(id);
   }
 
   async function handleStop() {
-    await stopStream(id);
+    await stopPresetAndReload(id);
   }
 
   // rename and delete
@@ -45,54 +44,54 @@
   let openRenameDialog = $state(false);
   let openDeleteDialog = $state(false);
 
-  async function handleRenameStream(e: Event) {
+  async function handleRenamePreset(e: Event) {
     e.preventDefault();
     new_name = name;
     openRenameDialog = true;
   }
 
-  async function handleRenameStreamSubmit(e: Event) {
+  async function handleRenamePresetSubmit(e: Event) {
     e.preventDefault();
     if (!new_name) return;
-    await renameStream(id, new_name);
+    await renamePresetAndReload(id, new_name);
     openRenameDialog = false;
-    await reloadStreamInfos();
+    await reloadPreseetInfos();
   }
 
-  async function handleDuplicateStream(e: Event) {
+  async function handleDuplicatePreset(e: Event) {
     e.preventDefault();
-    const s = await getAgentStreamSpec(id);
+    const s = await getPresetSpec(id);
     if (!s) return;
-    const new_name = await uniqueStreamName(name);
-    const new_id = await addAgentStream(new_name, s);
+    const new_name = await uniquePresetName(name);
+    const new_id = await addPreset(new_name, s);
     if (!new_id) return;
-    await reloadStreamInfos();
+    await reloadPreseetInfos();
   }
 
-  async function handleDeleteStreamSubmit(e: Event) {
+  async function handleDeletePresetSubmit(e: Event) {
     e.preventDefault();
-    await deleteStream(id);
+    await deletePresetAndReload(id);
     openDeleteDialog = false;
   }
 
   async function handleRunOnStart() {
     // update core setting
     const coreSettings = await getCoreSettings();
-    const auto_start_streams = coreSettings.auto_start_streams || [];
+    const auto_start_presets = coreSettings.auto_start_presets || [];
     if (run_on_start) {
-      // remove from streams_on_start
-      const index = auto_start_streams.indexOf(name);
+      // remove from auto_start_presets
+      const index = auto_start_presets.indexOf(name);
       if (index > -1) {
-        auto_start_streams.splice(index, 1);
+        auto_start_presets.splice(index, 1);
       }
     } else {
-      // add to streams_on_start
-      auto_start_streams.push(name);
+      // add to auto_start_presets
+      auto_start_presets.push(name);
     }
-    coreSettings.auto_start_streams = auto_start_streams;
+    coreSettings.auto_start_presets = auto_start_presets;
     await setCoreSettings(coreSettings);
 
-    await reloadStreamInfos();
+    await reloadPreseetInfos();
   }
 </script>
 
@@ -117,8 +116,8 @@
       {/snippet}
     </DropdownMenu.Trigger>
     <DropdownMenu.Content>
-      <DropdownMenu.Item onclick={handleRenameStream}>Rename</DropdownMenu.Item>
-      <DropdownMenu.Item onclick={handleDuplicateStream}>Duplicate</DropdownMenu.Item>
+      <DropdownMenu.Item onclick={handleRenamePreset}>Rename</DropdownMenu.Item>
+      <DropdownMenu.Item onclick={handleDuplicatePreset}>Duplicate</DropdownMenu.Item>
       <DropdownMenu.Item onclick={() => (openDeleteDialog = true)}>Delete</DropdownMenu.Item>
       <DropdownMenu.Separator />
       <DropdownMenu.Item onclick={handleRunOnStart}>Run on Start</DropdownMenu.Item>
@@ -128,9 +127,9 @@
 
 <Dialog.Root bind:open={openRenameDialog}>
   <Dialog.Content class="sm:max-w-[425px]">
-    <form onsubmit={handleRenameStreamSubmit}>
+    <form onsubmit={handleRenamePresetSubmit}>
       <Dialog.Header>
-        <Dialog.Title>Rename Stream</Dialog.Title>
+        <Dialog.Title>Rename Preset</Dialog.Title>
       </Dialog.Header>
       <div class="mt-4 mb-4">
         <Input id="name-1" name="name" bind:value={new_name} />
@@ -144,9 +143,9 @@
 
 <Dialog.Root bind:open={openDeleteDialog}>
   <Dialog.Content class="sm:max-w-[425px]">
-    <form onsubmit={handleDeleteStreamSubmit}>
+    <form onsubmit={handleDeletePresetSubmit}>
       <Dialog.Header>
-        <Dialog.Title>Delete Stream</Dialog.Title>
+        <Dialog.Title>Delete Preset</Dialog.Title>
         <Dialog.Description
           ><div class="mt-8 text-center text-lg">
             <strong>{name}</strong>

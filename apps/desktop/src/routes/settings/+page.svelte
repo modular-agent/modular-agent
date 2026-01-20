@@ -13,7 +13,7 @@
   const globalConfigsMap = getGlobalConfigsMap();
 
   onMount(() => {
-    getCurrentWindow().setTitle("Settings - Agent Stream App");
+    getCurrentWindow().setTitle("Settings - MAK Desktop");
   });
 </script>
 

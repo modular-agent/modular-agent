@@ -6,7 +6,7 @@
     "main"
   ],
   "permissions": [
-    "askit:default",
+    "mak:default",
     "clipboard-manager:default",
     "clipboard-manager:allow-read-text",
     "clipboard-manager:allow-write-text",

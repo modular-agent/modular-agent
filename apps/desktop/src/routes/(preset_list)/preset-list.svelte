@@ -9,8 +9,8 @@
 
   import { goto } from "$app/navigation";
 
-  import FlowStatus from "$lib/components/flow-status.svelte";
-  import NewStreamDialog from "$lib/components/new-stream-dialog.svelte";
+  import NewPresetDialog from "$lib/components/new-preset-dialog.svelte";
+  import PresetStatus from "$lib/components/preset-status.svelte";
   import { buttonVariants } from "$lib/components/ui/button/index.js";
   import {
     createSvelteTable,
@@ -20,41 +20,34 @@
   import * as Dialog from "$lib/components/ui/dialog/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
   import * as Table from "$lib/components/ui/table/index.js";
-  import { newStream } from "$lib/shared.svelte";
-  import type { AgentStreamInfoExt } from "$lib/types";
+  import { newPresetAndReload } from "$lib/shared.svelte";
+  import type { PresetInfoExt } from "$lib/types";
 
-  import StreamListActions from "./stream-list-actions.svelte";
-  import StreamListName from "./stream-list-name.svelte";
-
-  declare module "@tanstack/table-core" {
-    interface ColumnMeta<TData, TValue> {
-      headerClass?: string;
-      cellClass?: string;
-    }
-  }
+  import PresetListActions from "./preset-list-actions.svelte";
+  import PresetListName from "./preset-list-name.svelte";
 
   const STATUS_COL_WIDTH = "w-[220px]";
   const ACTIONS_COL_WIDTH = "w-[140px]";
 
   type Props = {
-    streams: AgentStreamInfoExt[];
+    presets: PresetInfoExt[];
   };
 </script>
 
 <script lang="ts">
-  let { streams }: Props = $props();
+  let { presets }: Props = $props();
 
   let columnFilters = $state<ColumnFiltersState>([]);
   let columnVisibility = $state<VisibilityState>({});
 
-  const columns: ColumnDef<AgentStreamInfoExt>[] = [
+  const columns: ColumnDef<PresetInfoExt>[] = [
     {
       id: "name",
       header: "Name",
       accessorFn: (row) => row.name,
       filterFn: "includesString",
       cell: ({ row }) => {
-        return renderComponent(StreamListName, {
+        return renderComponent(PresetListName, {
           id: row.original.id,
           name: row.original.name,
         });
@@ -68,7 +61,7 @@
       id: "status",
       header: "Status",
       cell: ({ row }) => {
-        return renderComponent(FlowStatus, {
+        return renderComponent(PresetStatus, {
           running: row.original.running,
           run_on_start: row.original.run_on_start,
           class: "w-full justify-end",
@@ -83,7 +76,7 @@
       id: "actions",
       header: "Actions",
       cell: ({ row }) => {
-        return renderComponent(StreamListActions, {
+        return renderComponent(PresetListActions, {
           id: row.original.id,
           name: row.original.name,
           run_on_start: row.original.run_on_start,
@@ -98,7 +91,7 @@
 
   const table = createSvelteTable({
     get data() {
-      return streams;
+      return presets;
     },
     columns,
     getCoreRowModel: getCoreRowModel(),
@@ -127,16 +120,16 @@
     },
   });
 
-  async function onNewStream(name: string) {
-    const new_id = await newStream(name);
+  async function onNewPreset(name: string) {
+    const new_id = await newPresetAndReload(name);
     if (new_id) {
-      goto(`/stream_editor/${new_id}`, { invalidateAll: true });
+      goto(`/preset_editor/${new_id}`, { invalidateAll: true });
     }
   }
 </script>
 
 <div class="text-primary p-4 w-full">
-  <div class="text-lg font-semibold">Streams</div>
+  <div class="text-lg font-semibold">Presets</div>
   <div class="flex items-center justify-between py-4">
     <div class="py-2 w-64">
       <Input
@@ -149,11 +142,11 @@
         }}
       />
     </div>
-    <NewStreamDialog {onNewStream}>
+    <NewPresetDialog {onNewPreset}>
       {#snippet trigger()}
         <Dialog.Trigger class={buttonVariants({ variant: "outline" })}>+ New</Dialog.Trigger>
       {/snippet}
-    </NewStreamDialog>
+    </NewPresetDialog>
   </div>
   <div class="">
     <Table.Root>

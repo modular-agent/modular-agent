@@ -29,41 +29,46 @@
   import hotkeys from "hotkeys-js";
   import {
     addAgent,
-    addAgentsAndChannels,
-    addChannel,
+    addAgentsAndConnections,
+    addConnection,
     getAgentSpec,
-    getAgentStreamSpec,
+    getPresetSpec,
     newAgentSpec,
     removeAgent,
-    removeChannel,
+    removeConnection,
     startAgent,
     stopAgent,
     updateAgentSpec,
-    updateAgentStreamSpec,
-  } from "tauri-plugin-askit-api";
-  import type { AgentSpec, ChannelSpec } from "tauri-plugin-askit-api";
+    updatePresetSpec,
+  } from "tauri-plugin-mak-api";
+  import type { AgentSpec, ConnectionSpec } from "tauri-plugin-mak-api";
 
   import { goto } from "$app/navigation";
 
   import {
     agentSpecToNode,
-    channelSpecToEdge,
-    edgeToChannelSpec,
-    saveAgentStream,
+    connectionSpecToEdge,
+    edgeToConnectionSpec,
+    savePreset,
     getCoreSettings,
   } from "$lib/agent";
-  import FlowStatus from "$lib/components/flow-status.svelte";
+  import PresetStatus from "$lib/components/preset-status.svelte";
   import { ScrollArea } from "$lib/components/ui/scroll-area/index.js";
-  import { importStream, newStream, startStream, stopStream } from "$lib/shared.svelte";
-  import type { AgentStreamNode, AgentStreamEdge } from "$lib/types";
+  import {
+    importPresetAndReload,
+    newPresetAndReload,
+    startPresetAndReload,
+    stopPresetAndReload,
+  } from "$lib/shared.svelte";
+  import type { PresetNode, PresetEdge } from "$lib/types";
 
   import type { PageProps } from "./$types";
   import AgentList from "./agent-list.svelte";
   import AgentNode from "./agent-node.svelte";
   import Menubar from "./menubar.svelte";
   import NodeContextMenu from "./node-context-menu.svelte";
-  import StreamActions from "./stream-actions.svelte";
-  import StreamName from "./stream-name.svelte";
+  import PresetActions from "./preset-actions.svelte";
+  import PresetName from "./preset-name.svelte";
 
   const { screenToFlowPosition, updateEdge, updateNode, updateNodeData } =
     $derived(useSvelteFlow());
@@ -76,21 +81,21 @@
 
   let { data }: PageProps = $props();
 
-  let stream_id = $derived(data.stream_id);
+  let preset_id = $derived(data.preset_id);
   let running = $derived(data.flow?.running ?? false);
   let bgColor = $derived(running ? bgColors[0] : bgColors[1]);
 
-  let nodes = $state.raw<AgentStreamNode[]>([]);
-  let edges = $state.raw<AgentStreamEdge[]>([]);
+  let nodes = $state.raw<PresetNode[]>([]);
+  let edges = $state.raw<PresetEdge[]>([]);
 
   $effect.pre(() => {
     nodes = [...data.flow.nodes];
     edges = [...data.flow.edges];
 
-    getCurrentWindow().setTitle(data.flow.name + " - Agent Stream App");
+    getCurrentWindow().setTitle(data.flow.name + " - MAK Desktop");
   });
 
-  const handleOnDelete: OnDelete<AgentStreamNode, AgentStreamEdge> = async ({
+  const handleOnDelete: OnDelete<PresetNode, PresetEdge> = async ({
     nodes: deletedNodes,
     edges: deletedEdges,
   }) => {
@@ -102,16 +107,16 @@
     }
   };
 
-  async function deleteNodes(deletedNodes: AgentStreamNode[]) {
+  async function deleteNodes(deletedNodes: PresetNode[]) {
     for (const n of deletedNodes) {
-      await removeAgent(stream_id, n.id);
+      await removeAgent(preset_id, n.id);
     }
   }
 
-  async function deleteEdges(deletedEdges: AgentStreamEdge[]) {
+  async function deleteEdges(deletedEdges: PresetEdge[]) {
     for (const e of deletedEdges) {
-      let ch = edgeToChannelSpec(e);
-      await removeChannel(stream_id, ch);
+      let ch = edgeToConnectionSpec(e);
+      await removeConnection(preset_id, ch);
     }
   }
 
@@ -119,14 +124,14 @@
     let edge = {
       id: crypto.randomUUID(),
       ...connection,
-    } as AgentStreamEdge;
+    } as PresetEdge;
 
-    await addChannel(stream_id, edgeToChannelSpec(edge));
+    await addConnection(preset_id, edgeToConnectionSpec(edge));
   }
 
   // cut, copy and paste
 
-  function selectedNodesAndEdges(): [AgentStreamNode[], AgentStreamEdge[]] {
+  function selectedNodesAndEdges(): [PresetNode[], PresetEdge[]] {
     const selectedNodes = nodes.filter((node) => node.selected);
     const selectedEdges = edges.filter((edge) => edge.selected);
     return [selectedNodes, selectedEdges];
@@ -138,20 +143,20 @@
     const agents = (
       await Promise.all(selectedNodes.map(async (node) => await getAgentSpec(node.id)))
     ).filter((spec) => spec !== null);
-    const channels = selectedEdges.map((edge) => edgeToChannelSpec(edge));
+    const connections = selectedEdges.map((edge) => edgeToConnectionSpec(edge));
 
-    const clipboardData = { agents, channels };
+    const clipboardData = { agents, connections };
     await writeText(JSON.stringify(clipboardData));
   }
 
-  async function readCopied(): Promise<[AgentSpec[], ChannelSpec[]]> {
+  async function readCopied(): Promise<[AgentSpec[], ConnectionSpec[]]> {
     const text = await readText();
     if (!text) {
       return [[], []];
     }
     try {
       const clipboardData = JSON.parse(text);
-      return [clipboardData.agents || [], clipboardData.channels || []];
+      return [clipboardData.agents || [], clipboardData.connections || []];
     } catch (e) {
       return [[], []];
     }
@@ -166,11 +171,11 @@
     await copySelected();
 
     for (const edge of selectedEdges) {
-      let ch = edgeToChannelSpec(edge);
-      await removeChannel(stream_id, ch);
+      let ch = edgeToConnectionSpec(edge);
+      await removeConnection(preset_id, ch);
     }
     for (const node of selectedNodes) {
-      await removeAgent(stream_id, node.id);
+      await removeAgent(preset_id, node.id);
     }
     nodes = nodes.filter((node) => !node.selected);
     edges = edges.filter((edge) => !edge.selected);
@@ -197,19 +202,19 @@
       }
     });
 
-    const [copiedAgents, copiedChannels] = await readCopied();
+    const [copiedAgents, copiedConnections] = await readCopied();
 
     if (copiedAgents.length == 0) {
       return;
     }
 
-    let [added_agents, added_channels] = await addAgentsAndChannels(
-      stream_id,
+    let [added_agents, added_connections] = await addAgentsAndConnections(
+      preset_id,
       copiedAgents,
-      copiedChannels,
+      copiedConnections,
     );
 
-    if (added_agents.length == 0 && added_channels.length == 0) return;
+    if (added_agents.length == 0 && added_connections.length == 0) return;
 
     let new_nodes = [];
     for (const a of added_agents) {
@@ -221,8 +226,8 @@
     }
 
     let new_edges = [];
-    for (const ch of added_channels) {
-      const new_edge = channelSpecToEdge(ch);
+    for (const conn of added_connections) {
+      const new_edge = connectionSpecToEdge(conn);
       new_edge.selected = true;
       new_edges.push(new_edge);
     }
@@ -256,7 +261,7 @@
 
     hotkeys("ctrl+s, command+s", (event) => {
       event.preventDefault();
-      onSaveStream();
+      onSavePreset();
     });
 
     hotkeys("ctrl+x, command+x", () => {
@@ -276,9 +281,9 @@
     hotkeys("ctrl+., command+.", (ev) => {
       ev.preventDefault();
       if (running) {
-        onStopStream();
+        onStopPreset();
       } else {
-        onStartStream();
+        onStartPreset();
       }
     });
 
@@ -300,21 +305,21 @@
     };
   });
 
-  async function onNewStream(name: string) {
-    const new_id = await newStream(name);
+  async function onNewPreset(name: string) {
+    const new_id = await newPresetAndReload(name);
     if (new_id) {
-      goto(`/stream_editor/${new_id}`, { invalidateAll: true });
+      goto(`/preset_editor/${new_id}`, { invalidateAll: true });
     }
   }
 
-  async function onSaveStream() {
-    const s = await getAgentStreamSpec(stream_id);
+  async function onSavePreset() {
+    const s = await getPresetSpec(preset_id);
     if (!s) return;
-    await saveAgentStream(data.flow.name, s);
+    await savePreset(data.flow.name, s);
   }
 
-  async function onExportStream() {
-    const s = await getAgentStreamSpec(stream_id);
+  async function onExportPreset() {
+    const s = await getPresetSpec(preset_id);
     const jsonStr = JSON.stringify(s, null, 2);
     const blob = new Blob([jsonStr], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -328,20 +333,20 @@
     // TODO: show a toast notification
   }
 
-  async function onImportStream() {
+  async function onImportPreset() {
     const file = await open({ multiple: false, filter: "json" });
     if (!file) return;
-    const id = await importStream(file);
-    goto(`/stream_editor/${id}`, { invalidateAll: true });
+    const id = await importPresetAndReload(file as string);
+    goto(`/preset_editor/${id}`, { invalidateAll: true });
   }
 
-  async function onStartStream() {
-    await startStream(stream_id);
+  async function onStartPreset() {
+    await startPresetAndReload(preset_id);
     running = true;
   }
 
-  async function onStopStream() {
-    await stopStream(stream_id);
+  async function onStopPreset() {
+    await stopPresetAndReload(preset_id);
     running = false;
   }
 
@@ -384,7 +389,7 @@
           });
     snode.x = xy.x;
     snode.y = xy.y;
-    const id = await addAgent(stream_id, snode);
+    const id = await addAgent(preset_id, snode);
     snode.id = id;
     const new_node = agentSpecToNode(snode);
     nodes = [...nodes, new_node];
@@ -446,10 +451,7 @@
     openNodeContextMenu = false;
   }
 
-  const handleNodeContextMenu: NodeEventWithPointer<MouseEvent, AgentStreamNode> = ({
-    event,
-    node,
-  }) => {
+  const handleNodeContextMenu: NodeEventWithPointer<MouseEvent, PresetNode> = ({ event, node }) => {
     event.preventDefault();
 
     const [selectedNodes, _] = selectedNodesAndEdges();
@@ -474,7 +476,7 @@
 
   const handleNodeDragStop: NodeTargetEventWithPointer<
     MouseEvent | TouchEvent,
-    AgentStreamNode
+    PresetNode
   > = async ({ targetNode }) => {
     if (!targetNode) return;
     await updateAgentSpec(targetNode.id, {
@@ -493,7 +495,7 @@
   };
 
   const handleOnMoveEnd: OnMove = async (_event, viewport) => {
-    await updateAgentStreamSpec(stream_id, { viewport });
+    await updatePresetSpec(preset_id, { viewport });
   };
 
   function handleSelectionClick() {
@@ -509,20 +511,20 @@
   <header class="grid grid-cols-[auto_1fr_100px] flex-none items-center pl-1 pr-2 gap-4">
     <div class="justify-self-start">
       <Menubar
-        {stream_id}
+        {preset_id}
         name={data.flow?.name}
-        {onNewStream}
-        {onSaveStream}
-        {onImportStream}
-        {onExportStream}
+        {onNewPreset}
+        {onSavePreset}
+        {onImportPreset}
+        {onExportPreset}
       />
     </div>
     <div class="flex flex-row items-center justify-center">
-      <StreamName name={data.flow?.name} class="mr-4" />
-      <StreamActions {running} {onStartStream} {onStopStream} />
+      <PresetName name={data.flow?.name} class="mr-4" />
+      <PresetActions {running} {onStartPreset} {onStopPreset} />
     </div>
     <div class="justify-self-end">
-      <FlowStatus {running} />
+      <PresetStatus {running} />
     </div>
   </header>
   <SvelteFlow

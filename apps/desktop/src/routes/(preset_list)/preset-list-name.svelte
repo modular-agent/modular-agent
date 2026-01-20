@@ -9,7 +9,7 @@
   let { id, name }: Props = $props();
 </script>
 
-<a href={`/stream_editor/${id}`}>
+<a href={`/preset_editor/${id}`}>
   <Button variant="link" class="p-0">
     {name}
   </Button>

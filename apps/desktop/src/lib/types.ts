@@ -1,7 +1,5 @@
 import type { Edge, Node } from "@xyflow/svelte";
-import type { AgentSpec, AgentStreamInfo, Viewport } from "tauri-plugin-askit-api";
-
-import type Agent from "@/routes/settings/Agent.svelte";
+import type { AgentSpec, PresetInfo, Viewport } from "tauri-plugin-mak-api";
 
 // Messages
 
@@ -18,7 +16,7 @@ export type AgentErrorMessage = {
 
 export type AgentInMessage = {
   agent_id: string;
-  ch: string;
+  port: string;
 };
 
 export type AgentSpecUpdatedMessage = {
@@ -27,32 +25,32 @@ export type AgentSpecUpdatedMessage = {
 
 // for SvelteFlow
 
-export type AgentStreamFlow = {
+export type PresetFlow = {
   id: string;
   name: string;
-  nodes: AgentStreamNode[];
-  edges: AgentStreamEdge[];
+  nodes: PresetNode[];
+  edges: PresetEdge[];
   running: boolean;
   viewport: Viewport | null;
 };
 
-export type AgentStreamNode = Node & {
+export type PresetNode = Node & {
   data: AgentSpec;
   extensions?: Record<string, any>;
 };
 
-export type AgentStreamEdge = Edge;
+export type PresetEdge = Edge;
 
 // Settings
 
 export type CoreSettings = {
   autostart?: boolean;
-  auto_start_streams: string[];
+  auto_start_presets: string[];
   color_mode?: string | null;
   run_in_background: boolean;
   shortcut_keys?: Record<string, string> | null;
 };
 
-export type AgentStreamInfoExt = AgentStreamInfo & {
+export type PresetInfoExt = PresetInfo & {
   run_on_start?: boolean;
 };

@@ -7,19 +7,19 @@
   import { Label } from "$lib/components/ui/label/index.js";
 
   type Props = {
-    onNewStream: (name: string) => void;
+    onNewPreset: (name: string) => void;
     open?: boolean;
     trigger?: Snippet;
   };
 
-  let { onNewStream, open = $bindable(false), trigger }: Props = $props();
+  let { onNewPreset, open = $bindable(false), trigger }: Props = $props();
 
   let name = $state("");
 
-  async function handleNewStream(e: Event) {
+  async function handleNewPreset(e: Event) {
     e.preventDefault();
     if (!name) return;
-    await onNewStream(name);
+    await onNewPreset(name);
     open = false;
     name = "";
   }
@@ -32,7 +32,7 @@
     {/if}
     <Dialog.Content class="sm:max-w-[425px]">
       <Dialog.Header>
-        <Dialog.Title>New Stream</Dialog.Title>
+        <Dialog.Title>New Preset</Dialog.Title>
       </Dialog.Header>
       <div class="grid gap-4">
         <div class="grid gap-3">
@@ -41,7 +41,7 @@
         </div>
       </div>
       <Dialog.Footer>
-        <Button type="submit" onclick={handleNewStream}>New</Button>
+        <Button type="submit" onclick={handleNewPreset}>New</Button>
       </Dialog.Footer>
     </Dialog.Content>
   </form>

@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
-import type { AgentConfigs } from "tauri-plugin-askit-api";
+import type { AgentConfigs } from "tauri-plugin-mak-api";
 
 import type { CoreSettings } from "./types";
 

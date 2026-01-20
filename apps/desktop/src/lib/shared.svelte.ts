@@ -3,90 +3,94 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { SvelteMap } from "svelte/reactivity";
 import { writable, type Writable } from "svelte/store";
 
-import type { AgentStreamSpec } from "tauri-plugin-askit-api";
-import { getAgentStreamInfos, updateAgentStreamSpec } from "tauri-plugin-askit-api";
+import type { PresetSpec } from "tauri-plugin-mak-api";
+import { getPresetInfos, updatePresetSpec } from "tauri-plugin-mak-api";
 
 import {
   getCoreSettings,
-  importAgentStream,
-  newAgentStream,
-  removeAgentStream,
-  renameAgentStream,
-  startAgentStream,
-  stopAgentStream,
+  importPreset,
+  newPreset,
+  removePreset,
+  renamePreset,
+  startPreset,
+  stopPreset,
 } from "./agent";
 import type {
   AgentConfigUpdatedMessage,
   AgentErrorMessage,
   AgentInMessage,
   AgentSpecUpdatedMessage,
-  AgentStreamInfoExt,
+  PresetInfoExt,
 } from "./types";
 
-// Agent Streams
+// Presets
 
-export const streamInfos = new SvelteMap<string, AgentStreamInfoExt>();
+export const presetInfos = new SvelteMap<string, PresetInfoExt>();
 
-export async function reloadStreamInfos() {
-  const streams = (await getAgentStreamInfos()) as AgentStreamInfoExt[];
+export async function reloadPreseetInfos() {
+  const presets = (await getPresetInfos()) as PresetInfoExt[];
   const coreSettings = await getCoreSettings();
-  const auto_start_streams = coreSettings.auto_start_streams || [];
-  streamInfos.clear();
-  streams.forEach((s) => {
-    if (auto_start_streams.includes(s.name)) {
+  const auto_start_presets = coreSettings.auto_start_presets || [];
+  presetInfos.clear();
+  presets.forEach((s) => {
+    if (auto_start_presets.includes(s.name)) {
       s.run_on_start = true;
     }
-    streamInfos.set(s.id, s);
+    presetInfos.set(s.id, s);
   });
 }
 
-export async function newStream(name: string): Promise<string> {
-  const id = await newAgentStream(name);
-  await reloadStreamInfos();
+export async function newPresetAndReload(name: string): Promise<string> {
+  const id = await newPreset(name);
+  await reloadPreseetInfos();
   return id;
 }
 
-export async function renameStream(id: string, newName: string): Promise<string> {
-  const name = await renameAgentStream(id, newName);
-  await reloadStreamInfos();
+export async function renamePresetAndReload(id: string, newName: string): Promise<string> {
+  const name = await renamePreset(id, newName);
+  await reloadPreseetInfos();
   return name;
 }
 
-export async function deleteStream(id: string): Promise<void> {
-  await removeAgentStream(id);
-  await reloadStreamInfos();
+export async function deletePresetAndReload(id: string): Promise<void> {
+  await removePreset(id);
+  await reloadPreseetInfos();
 }
 
-export async function importStream(path: string): Promise<string> {
-  const id = await importAgentStream(path);
-  await reloadStreamInfos();
+export async function importPresetAndReload(path: string): Promise<string> {
+  const id = await importPreset(path);
+  await reloadPreseetInfos();
   return id;
 }
 
-export async function startStream(id: string) {
-  let info = streamInfos.get(id);
+export async function startPresetAndReload(id: string) {
+  let info = presetInfos.get(id);
   if (!info || info.running) {
     return;
   }
-  await startAgentStream(id);
-  await reloadStreamInfos();
+  await startPreset(id);
+  await reloadPreseetInfos();
 }
 
-export async function stopStream(id: string) {
-  let info = streamInfos.get(id);
+export async function stopPresetAndReload(id: string) {
+  let info = presetInfos.get(id);
   if (!info || !info.running) {
     return;
   }
-  await stopAgentStream(id);
-  await reloadStreamInfos();
+  await stopPreset(id);
+  await reloadPreseetInfos();
 }
 
-export async function updateStreamSpec(id: string, spec: Partial<AgentStreamSpec>): Promise<void> {
-  await updateAgentStreamSpec(id, spec);
+export async function updatePresetSpecAndReload(
+  id: string,
+  spec: Partial<PresetSpec>,
+): Promise<void> {
+  await updatePresetSpec(id, spec);
+  await reloadPreseetInfos();
 }
 
 $effect.root(() => {
-  reloadStreamInfos();
+  reloadPreseetInfos();
 });
 
 // Agent Config Updated Message
@@ -128,18 +132,18 @@ export function subscribeAgentErrorMessage(
 let unlistenAgentError: UnlistenFn | null = null;
 
 // Agent-in Message
-let agentInMessageStore: Map<string, Writable<{ ch: string; t: number }>> = new Map<
+let agentInMessageStore: Map<string, Writable<{ port: string; t: number }>> = new Map<
   string,
-  Writable<{ ch: string; t: number }>
+  Writable<{ port: string; t: number }>
 >();
 
 export function subscribeAgentInMessage(
   agentId: string,
-  callback: (message: { ch: string; t: number }) => void,
+  callback: (message: { port: string; t: number }) => void,
 ): () => void {
   let store = agentInMessageStore.get(agentId);
   if (!store) {
-    store = writable({ ch: "", t: 0 });
+    store = writable({ port: "", t: 0 });
     agentInMessageStore.set(agentId, store);
   }
   return store.subscribe(callback);
@@ -168,7 +172,7 @@ let unlistenAgentSpecUpdated: UnlistenFn | null = null;
 //
 
 $effect.root(() => {
-  listen<AgentConfigUpdatedMessage>("askit:agent_config_updated", (event) => {
+  listen<AgentConfigUpdatedMessage>("mak:agent_config_updated", (event) => {
     const { agent_id, key, value } = event.payload;
     let store = agentConfigUpdatedMessageStore.get(agent_id);
     if (!store) {
@@ -180,7 +184,7 @@ $effect.root(() => {
   });
 
   // Listen for error messages
-  listen<AgentErrorMessage>("askit:agent_error", (event) => {
+  listen<AgentErrorMessage>("mak:agent_error", (event) => {
     const { agent_id, message } = event.payload;
     let store = agentErrorMessageStore.get(agent_id);
     if (!store) {
@@ -192,18 +196,18 @@ $effect.root(() => {
   });
 
   // Listen for input messages
-  listen<AgentInMessage>("askit:agent_in", (event) => {
-    const { agent_id, ch } = event.payload;
+  listen<AgentInMessage>("mak:agent_in", (event) => {
+    const { agent_id, port } = event.payload;
     let store = agentInMessageStore.get(agent_id);
     if (!store) {
       return;
     }
-    store.set({ ch, t: Date.now() });
+    store.set({ port, t: Date.now() });
   }).then((unlistenFn) => {
     unlistenAgentIn = unlistenFn;
   });
 
-  listen<AgentSpecUpdatedMessage>("askit:agent_spec_updated", (event) => {
+  listen<AgentSpecUpdatedMessage>("mak:agent_spec_updated", (event) => {
     const { agent_id } = event.payload;
     let store = agentSpecUpdatedMessageStore.get(agent_id);
     if (!store) {

@@ -1,16 +1,16 @@
-use agent_stream_kit::{ASKit, ASKitEvent, AgentValue};
+use modular_agent_kit::{MAK, MAKEvent, AgentValue};
 use anyhow::{Context as _, Result};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 use tokio::sync::broadcast::error::RecvError;
 
-const EMIT_AGENT_CONFIG_UPDATED: &str = "askit:agent_config_updated";
-const EMIT_AGENT_ERROR: &str = "askit:agent_error";
-const EMIT_AGENT_IN: &str = "askit:agent_in";
-const EMIT_AGENT_SPEC_UPDATED: &str = "askit:agent_spec_updated";
+const EMIT_AGENT_CONFIG_UPDATED: &str = "mak:agent_config_updated";
+const EMIT_AGENT_ERROR: &str = "mak:agent_error";
+const EMIT_AGENT_IN: &str = "mak:agent_in";
+const EMIT_AGENT_SPEC_UPDATED: &str = "mak:agent_spec_updated";
 
-pub fn start_askit_observer(askit: &ASKit, app: AppHandle) {
-    let mut rx = askit.subscribe();
+pub fn start_mak_observer(mak: &MAK, app: AppHandle) {
+    let mut rx = mak.subscribe();
 
     tokio::spawn(async move {
         loop {
@@ -21,7 +21,7 @@ pub fn start_askit_observer(askit: &ASKit, app: AppHandle) {
                     });
                 }
                 Err(RecvError::Lagged(n)) => {
-                    log::warn!("ASKit event listener lagged by {} events.", n);
+                    log::warn!("MAK event listener lagged by {} events.", n);
                 }
                 Err(RecvError::Closed) => {
                     break; // Channel closed, exit the loop
@@ -31,21 +31,21 @@ pub fn start_askit_observer(askit: &ASKit, app: AppHandle) {
     });
 }
 
-fn handle_event(app: &AppHandle, event: ASKitEvent) -> Result<()> {
+fn handle_event(app: &AppHandle, event: MAKEvent) -> Result<()> {
     match event {
-        ASKitEvent::AgentConfigUpdated(agent_id, key, value) => {
+        MAKEvent::AgentConfigUpdated(agent_id, key, value) => {
             emit_agent_config_updated(app, agent_id, key, value)?;
         }
-        ASKitEvent::AgentError(agent_id, message) => {
+        MAKEvent::AgentError(agent_id, message) => {
             emit_agent_error(app, agent_id, message)?;
         }
-        ASKitEvent::AgentIn(agent_id, channel) => {
-            emit_agent_in(app, agent_id, channel)?;
+        MAKEvent::AgentIn(agent_id, connection) => {
+            emit_agent_in(app, agent_id, connection)?;
         }
-        ASKitEvent::AgentSpecUpdated(agent_id) => {
+        MAKEvent::AgentSpecUpdated(agent_id) => {
             emit_agent_spec_updated(app, agent_id)?;
         }
-        ASKitEvent::Board(_, _) => {}
+        MAKEvent::Board(_, _) => {}
     }
     Ok(())
 }
@@ -85,14 +85,14 @@ fn emit_agent_error(app: &AppHandle, agent_id: String, message: String) -> Resul
         .context("Failed to emit agent error message")
 }
 
-fn emit_agent_in(app: &AppHandle, agent_id: String, ch: String) -> Result<()> {
+fn emit_agent_in(app: &AppHandle, agent_id: String, port: String) -> Result<()> {
     #[derive(Clone, Serialize)]
     struct AgentInMessage {
         agent_id: String,
-        ch: String,
+        port: String,
     }
 
-    app.emit(EMIT_AGENT_IN, AgentInMessage { agent_id, ch })
+    app.emit(EMIT_AGENT_IN, AgentInMessage { agent_id, port })
         .context("Failed to emit agent-in message")
 }
 

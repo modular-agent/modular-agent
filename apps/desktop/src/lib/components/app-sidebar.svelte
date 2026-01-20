@@ -16,7 +16,7 @@
   const data = {
     navMain: [
       {
-        title: "Streams",
+        title: "Presets",
         url: "/",
         icon: WorkflowIcon,
       },

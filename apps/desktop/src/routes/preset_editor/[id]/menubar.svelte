@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { addAgentStream, getAgentStreamSpec } from "tauri-plugin-askit-api";
+  import { addPreset, getPresetSpec } from "tauri-plugin-mak-api";
 
   import { goto } from "$app/navigation";
 
@@ -8,32 +8,32 @@
   import { Input } from "$lib/components/ui/input/index.js";
   import * as Menubar from "$lib/components/ui/menubar/index.js";
 
-  import NewStreamDialog from "@/lib/components/new-stream-dialog.svelte";
-  import { reloadStreamInfos, startStream } from "@/lib/shared.svelte";
+  import NewPresetDialog from "@/lib/components/new-preset-dialog.svelte";
+  import { reloadPreseetInfos, startPresetAndReload } from "@/lib/shared.svelte";
   import { exitApp } from "@/lib/utils";
 
   type Props = {
-    stream_id: string;
+    preset_id: string;
     name: string;
-    onNewStream: (name: string) => void;
-    onSaveStream: () => void;
-    onImportStream: () => void;
-    onExportStream: () => void;
+    onNewPreset: (name: string) => void;
+    onSavePreset: () => void;
+    onImportPreset: () => void;
+    onExportPreset: () => void;
   };
 
-  let { stream_id, name, onNewStream, onSaveStream, onImportStream, onExportStream }: Props =
+  let { preset_id, name, onNewPreset, onSavePreset, onImportPreset, onExportPreset }: Props =
     $props();
 
-  let openNewStreamDialog = $state(false);
+  let openNewPresetDialog = $state(false);
 
-  function handleNewStream() {
-    openNewStreamDialog = true;
+  function handleNewPreset() {
+    openNewPresetDialog = true;
   }
 
   let openSaveAsDialog = $state(false);
   let new_name = $state("");
 
-  async function handleSaveAsStream(e: Event) {
+  async function handleSaveAsPreset(e: Event) {
     new_name = name;
     openSaveAsDialog = true;
   }
@@ -43,15 +43,15 @@
     if (!new_name) return;
     if (new_name === name) {
       // same name, just save
-      onSaveStream();
+      onSavePreset();
       return;
     }
-    const s = await getAgentStreamSpec(stream_id);
+    const s = await getPresetSpec(preset_id);
     if (!s) return;
-    const new_id = await addAgentStream(new_name, s);
+    const new_id = await addPreset(new_name, s);
     if (!new_id) return;
-    await reloadStreamInfos();
-    goto(`/stream_editor/${new_id}`, { invalidateAll: true });
+    await reloadPreseetInfos();
+    goto(`/preset_editor/${new_id}`, { invalidateAll: true });
   }
 
   async function handleQuit() {
@@ -63,19 +63,19 @@
   <Menubar.Menu>
     <Menubar.Trigger>File</Menubar.Trigger>
     <Menubar.Content>
-      <Menubar.Item onclick={handleNewStream}>New</Menubar.Item>
-      <Menubar.Item onclick={onSaveStream}>Save</Menubar.Item>
-      <Menubar.Item onclick={handleSaveAsStream}>Save as...</Menubar.Item>
+      <Menubar.Item onclick={handleNewPreset}>New</Menubar.Item>
+      <Menubar.Item onclick={onSavePreset}>Save</Menubar.Item>
+      <Menubar.Item onclick={handleSaveAsPreset}>Save as...</Menubar.Item>
       <Menubar.Separator />
-      <Menubar.Item onclick={onImportStream}>Import</Menubar.Item>
-      <Menubar.Item onclick={onExportStream}>Export</Menubar.Item>
+      <Menubar.Item onclick={onImportPreset}>Import</Menubar.Item>
+      <Menubar.Item onclick={onExportPreset}>Export</Menubar.Item>
       <Menubar.Separator />
       <Menubar.Item onclick={handleQuit}>Quit</Menubar.Item>
     </Menubar.Content>
   </Menubar.Menu>
 </Menubar.Root>
 
-<NewStreamDialog {onNewStream} bind:open={openNewStreamDialog} />
+<NewPresetDialog {onNewPreset} bind:open={openNewPresetDialog} />
 
 <Dialog.Root bind:open={openSaveAsDialog}>
   <Dialog.Content class="sm:max-w-[425px]">

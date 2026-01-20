@@ -6,18 +6,18 @@
 
   type Props = {
     running: boolean;
-    onStartStream?: () => Promise<void>;
-    onStopStream?: () => Promise<void>;
+    onStartPreset?: () => Promise<void>;
+    onStopPreset?: () => Promise<void>;
   };
 
-  let { running, onStartStream, onStopStream }: Props = $props();
+  let { running, onStartPreset, onStopPreset }: Props = $props();
 
   async function handleStart() {
-    await onStartStream?.();
+    await onStartPreset?.();
   }
 
   async function handleStop() {
-    await onStopStream?.();
+    await onStopPreset?.();
   }
 </script>
 

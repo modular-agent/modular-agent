@@ -53,7 +53,7 @@
       shortcut_keys,
     });
     // confirm restart
-    await message("Agent Stream App will quit to apply changes.\n\nPlease restart.");
+    await message("MAK Desktop will quit to apply changes.\n\nPlease restart.");
     await exitApp();
   }
 </script>

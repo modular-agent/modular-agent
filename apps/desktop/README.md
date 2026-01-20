@@ -1,6 +1,6 @@
 <div align="center">
 
-<img alt="Agent Stream Kit" width="190" height="90" src="https://github.com/stn/agent-stream-kit/blob/main/docs/img/ask_title.png?raw=true">
+<img alt="Modular Agent Kit" width="190" height="90" src="https://github.com/modular-agent/modular-agent-kit/blob/main/docs/img/ask_title.png?raw=true">
 
 <br>
 <br>
@@ -10,11 +10,11 @@
 
 </div>
 
-# Agent Stream App
+# MAK Desktop
 
 
 
 <!----------------------------------{ Badges }--------------------------------->
 
-[Badge Language]: https://img.shields.io/github/languages/top/stn/agent-stream-kit
+[Badge Language]: https://img.shields.io/github/languages/top/modular-agent/modular-agent-kit
 [Badge License]: https://img.shields.io/badge/license-Apache%202-blue

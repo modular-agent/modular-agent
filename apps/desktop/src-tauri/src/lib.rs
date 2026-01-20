@@ -4,24 +4,24 @@ use tauri::{AppHandle, Manager};
 use tauri_plugin_window_state::{AppHandleExt, StateFlags};
 
 #[allow(unused_imports)]
-use askit_cozodb_agents;
+use mak_cozodb_agents;
 
 #[allow(unused_imports)]
-use askit_lifelog_agents;
+use mak_lancedb_agents;
 
 #[allow(unused_imports)]
-use askit_llm_agents;
-
-// #[allow(unused_imports)]
-// use askit_rhai_agents;
+use mak_lifelog_agents;
 
 #[allow(unused_imports)]
-use askit_std_agents;
+use mak_llm_agents;
 
 #[allow(unused_imports)]
-use askit_web_agents;
+use mak_std_agents;
 
-mod agent_stream_app;
+#[allow(unused_imports)]
+use mak_web_agents;
+
+mod mak_desktop;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -30,7 +30,7 @@ pub fn run() {
             tauri_plugin_log::Builder::new()
                 .level(log::LevelFilter::Info)
                 .level_for(
-                    "agent_stream_app_lib",
+                    "mak_desktop_lib",
                     if cfg!(debug_assertions) {
                         log::LevelFilter::Debug
                     } else {
@@ -42,38 +42,36 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_store::Builder::new().build())
-        .plugin(tauri_plugin_askit::init())
+        .plugin(tauri_plugin_mak::init())
         .plugin(tauri_plugin_window_state::Builder::new().build())
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             log::info!("show main window");
-            agent_stream_app::window::show_main(app).unwrap_or_else(|e| {
+            mak_desktop::window::show_main(app).unwrap_or_else(|e| {
                 log::error!("Failed to show main window: {}", e);
             });
         }))
         .setup(|app| {
             let app_handle = app.handle().clone();
             tauri::async_runtime::block_on(async move {
-                agent_stream_app::settings::init(&app_handle).unwrap_or_else(|e| {
+                mak_desktop::settings::init(&app_handle).unwrap_or_else(|e| {
                     panic!("Failed to initialize settings: {}", e);
                 });
-                agent_stream_app::tray::init(&app_handle).unwrap_or_else(|e| {
+                mak_desktop::tray::init(&app_handle).unwrap_or_else(|e| {
                     log::error!("Failed to initialize tray: {}", e);
                     app_handle.exit(1);
                 });
-                agent_stream_app::app::init(&app_handle).unwrap_or_else(|e| {
+                mak_desktop::app::init(&app_handle).unwrap_or_else(|e| {
                     log::error!("Failed to initialize agent: {}", e);
                     app_handle.exit(1);
                 });
-                agent_stream_app::settings::load_agent_global_configs(&app_handle).unwrap_or_else(
-                    |e| {
-                        log::error!("Failed to load agent global configs: {}", e);
-                        app_handle.exit(1);
-                    },
-                );
-                agent_stream_app::autostart::init(&app_handle).unwrap_or_else(|e| {
+                mak_desktop::settings::load_agent_global_configs(&app_handle).unwrap_or_else(|e| {
+                    log::error!("Failed to load agent global configs: {}", e);
+                    app_handle.exit(1);
+                });
+                mak_desktop::autostart::init(&app_handle).unwrap_or_else(|e| {
                     log::error!("Failed to initialize autostart: {}", e);
                 });
-                agent_stream_app::shortcut::init(&app_handle).unwrap_or_else(|e| {
+                mak_desktop::shortcut::init(&app_handle).unwrap_or_else(|e| {
                     log::error!("Failed to initialize shortcut: {}", e);
                 });
 
@@ -90,16 +88,16 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             exit_app_cmd,
-            agent_stream_app::app::new_agent_stream_cmd,
-            agent_stream_app::app::rename_agent_stream_cmd,
-            agent_stream_app::app::remove_agent_stream_cmd,
-            agent_stream_app::app::import_agent_stream_cmd,
-            agent_stream_app::app::save_agent_stream_cmd,
-            agent_stream_app::app::start_agent_stream_cmd,
-            agent_stream_app::app::stop_agent_stream_cmd,
-            agent_stream_app::settings::get_core_settings_cmd,
-            agent_stream_app::settings::set_core_settings_cmd,
-            agent_stream_app::settings::set_global_configs_cmd,
+            mak_desktop::app::new_preset_cmd,
+            mak_desktop::app::rename_preset_cmd,
+            mak_desktop::app::remove_preset_cmd,
+            mak_desktop::app::import_preset_cmd,
+            mak_desktop::app::save_preset_cmd,
+            mak_desktop::app::start_preset_cmd,
+            mak_desktop::app::stop_preset_cmd,
+            mak_desktop::settings::get_core_settings_cmd,
+            mak_desktop::settings::set_core_settings_cmd,
+            mak_desktop::settings::set_global_configs_cmd,
         ])
         .on_window_event(|window, event| match event {
             tauri::WindowEvent::CloseRequested { api, .. } => {
@@ -116,12 +114,12 @@ pub fn run() {
                 let run_in_background = {
                     let app = window.app_handle();
                     let core_settings =
-                        app.state::<std::sync::Mutex<agent_stream_app::settings::CoreSettings>>();
+                        app.state::<std::sync::Mutex<mak_desktop::settings::CoreSettings>>();
                     let guard = core_settings.lock().unwrap();
                     guard.run_in_background
                 };
                 if !run_in_background {
-                    log::info!("Exiting Agent Stream App...");
+                    log::info!("Exiting MAK Desktop...");
                     window.app_handle().exit(0);
                 }
             }
@@ -132,24 +130,24 @@ pub fn run() {
         .run(|app, event| match event {
             tauri::RunEvent::Ready => {
                 tauri::async_runtime::block_on(async move {
-                    agent_stream_app::app::ready(app).await.unwrap_or_else(|e| {
+                    mak_desktop::app::ready(app).await.unwrap_or_else(|e| {
                         log::error!("Failed to start agents: {}", e);
                     });
-                    log::info!("Agent Stream App is ready.");
+                    log::info!("MAK Desktop is ready.");
                 });
             }
             tauri::RunEvent::Exit => {
-                log::info!("Exiting Agent Stream App...");
+                log::info!("Exiting MAK Desktop...");
                 tauri::async_runtime::block_on(async move {
-                    agent_stream_app::window::hide_main(app).unwrap_or_else(|e| {
+                    mak_desktop::window::hide_main(app).unwrap_or_else(|e| {
                         log::error!("Failed to hide main window: {}", e);
                     });
                     app.save_window_state(StateFlags::all())
                         .unwrap_or_else(|e| {
                             log::error!("Failed to save window state: {}", e);
                         });
-                    agent_stream_app::app::quit(app);
-                    agent_stream_app::settings::quit(app);
+                    mak_desktop::app::quit(app);
+                    mak_desktop::settings::quit(app);
                 });
             }
             _ => {}
