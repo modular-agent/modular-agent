@@ -1,7 +1,6 @@
 #![cfg(feature = "test-utils")]
 
 use std::cell::RefCell;
-use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -12,8 +11,7 @@ use tokio::{
 };
 
 use crate::{
-    MAK, MAKEvent, AgentContext, AgentData, AgentError, AgentSpec, PresetSpec, AgentValue,
-    AsAgent, mak_agent,
+    AgentContext, AgentData, AgentError, AgentSpec, AgentValue, AsAgent, MAK, MAKEvent, mak_agent,
 };
 
 static PORT_VALUE: &str = "value";
@@ -30,16 +28,8 @@ pub async fn setup_mak() -> MAK {
 }
 
 /// Load and start an preset from a file.
-pub async fn load_and_start_preset(mak: &MAK, path: &str) -> Result<String, AgentError> {
-    let preset_json = std::fs::read_to_string(path)
-        .map_err(|e| AgentError::IoError(format!("Failed to read preset file: {}", e)))?;
-    let spec = PresetSpec::from_json(&preset_json)?;
-    let name = Path::new(path)
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or("preset")
-        .to_string();
-    let id = mak.add_preset(name, spec)?;
+pub async fn open_and_start_preset(mak: &MAK, path: &str) -> Result<String, AgentError> {
+    let id = mak.open_preset_from_file(path).await?;
     mak.start_preset(&id).await?;
     Ok(id)
 }
@@ -212,7 +202,7 @@ mod tests {
     use super::*;
 
     use modular_agent_kit::test_utils::TestProbeAgent;
-    use modular_agent_kit::{MAK, AgentContext, AgentError, AgentValue};
+    use modular_agent_kit::{AgentContext, AgentError, AgentValue, MAK};
     use tokio::time::Duration;
 
     #[tokio::test]

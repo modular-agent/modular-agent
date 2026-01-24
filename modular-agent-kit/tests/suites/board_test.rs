@@ -9,10 +9,10 @@ async fn test_board_routing() {
     let mak = test_utils::setup_mak().await;
 
     // load board presets
-    test_utils::load_and_start_preset(&mak, "tests/presets/Core_Board1.json")
+    test_utils::open_and_start_preset(&mak, "tests/presets/Core_Board1.json")
         .await
         .unwrap();
-    test_utils::load_and_start_preset(&mak, "tests/presets/Core_Board2.json")
+    test_utils::open_and_start_preset(&mak, "tests/presets/Core_Board2.json")
         .await
         .unwrap();
 

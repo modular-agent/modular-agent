@@ -1,38 +1,41 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::mak::MAK;
 use crate::error::AgentError;
 use crate::id::{new_id, update_ids};
+use crate::mak::MAK;
 use crate::spec::PresetSpec;
-use crate::{AgentSpec, ConnectionSpec, FnvIndexMap};
-
-pub type Presets = FnvIndexMap<String, Preset>;
+use crate::{AgentSpec, ConnectionSpec};
 
 pub struct Preset {
     id: String,
 
-    name: String,
+    name: Option<String>,
 
     running: bool,
 
     spec: PresetSpec,
+
+    #[cfg(feature = "file")]
+    dir: Option<String>,
 }
 
 impl Preset {
-    /// Create a new preset with the given name and spec.
+    /// Create a new preset with the given spec.
     ///
     /// The ids of the given spec, including agents and connections, are changed to new unique ids.
-    pub fn new(name: String, mut spec: PresetSpec) -> Self {
+    pub fn new(mut spec: PresetSpec) -> Self {
         let (agents, connections) = update_ids(&spec.agents, &spec.connections);
         spec.agents = agents;
         spec.connections = connections;
 
         Self {
             id: new_id(),
-            name,
+            name: None,
             running: false,
             spec,
+            #[cfg(feature = "file")]
+            dir: None,
         }
     }
 
@@ -66,12 +69,35 @@ impl Preset {
         Ok(())
     }
 
-    pub fn name(&self) -> &str {
-        &self.name
+    pub fn running(&self) -> bool {
+        self.running
+    }
+
+    pub fn name(&self) -> Option<&str> {
+        self.name.as_deref()
     }
 
     pub fn set_name(&mut self, name: String) {
-        self.name = name;
+        self.name = Some(name);
+    }
+
+    pub fn clear_name(&mut self) {
+        self.name = None;
+    }
+
+    #[cfg(feature = "file")]
+    pub fn dir(&self) -> Option<&str> {
+        self.dir.as_deref()
+    }
+
+    #[cfg(feature = "file")]
+    pub fn set_dir(&mut self, dir: String) {
+        self.dir = Some(dir);
+    }
+
+    #[cfg(feature = "file")]
+    pub fn clear_dir(&mut self) {
+        self.dir = None;
     }
 
     pub fn add_agent(&mut self, agent: AgentSpec) {
@@ -88,10 +114,6 @@ impl Preset {
 
     pub fn remove_connection(&mut self, connection: &ConnectionSpec) -> Option<ConnectionSpec> {
         self.spec.remove_connection(connection)
-    }
-
-    pub fn running(&self) -> bool {
-        self.running
     }
 
     pub async fn start(&mut self, mak: &MAK) -> Result<(), AgentError> {
@@ -127,8 +149,10 @@ impl Preset {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PresetInfo {
     pub id: String,
-    pub name: String,
+    pub name: Option<String>,
     pub running: bool,
+    #[cfg(feature = "file")]
+    pub dir: Option<String>,
 }
 
 impl From<&Preset> for PresetInfo {
@@ -137,6 +161,8 @@ impl From<&Preset> for PresetInfo {
             id: preset.id.clone(),
             name: preset.name.clone(),
             running: preset.running,
+            #[cfg(feature = "file")]
+            dir: preset.dir.clone(),
         }
     }
 }

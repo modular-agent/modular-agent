@@ -1,3 +1,5 @@
+#[cfg(feature = "file")]
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use serde_json::Value;
@@ -11,9 +13,9 @@ use crate::definition::{AgentConfigSpecs, AgentDefinition, AgentDefinitions};
 use crate::error::AgentError;
 use crate::id::{new_id, update_ids};
 use crate::message::{self, AgentEventMessage};
+use crate::preset::{Preset, PresetInfo};
 use crate::registry;
-use crate::spec::{AgentSpec, PresetSpec, ConnectionSpec};
-use crate::preset::{Preset, PresetInfo, Presets};
+use crate::spec::{AgentSpec, ConnectionSpec, PresetSpec};
 use crate::value::AgentValue;
 
 const MESSAGE_LIMIT: usize = 1024;
@@ -40,7 +42,7 @@ pub struct MAK {
     pub(crate) defs: Arc<Mutex<AgentDefinitions>>,
 
     // presets (preset id -> preset)
-    pub(crate) presets: Arc<Mutex<Presets>>,
+    pub(crate) presets: Arc<Mutex<FnvIndexMap<String, Arc<AsyncMutex<Preset>>>>>,
 
     // agent def name -> config
     pub(crate) global_configs_map: Arc<Mutex<FnvIndexMap<String, AgentConfigs>>>,
@@ -99,6 +101,275 @@ impl MAK {
         let mut tx_lock = self.tx.lock().unwrap();
         *tx_lock = None;
     }
+
+    // Preset management
+
+    /// Create a new preset.
+    /// Returns the id of the new preset.
+    pub fn new_preset(&self) -> Result<String, AgentError> {
+        let spec = PresetSpec::default();
+        let id = self.add_preset(spec)?;
+        Ok(id)
+    }
+
+    // /// Rename an existing preset.
+    // pub fn rename_preset(&self, id: &str, new_name: &str) -> Result<String, AgentError> {
+    //     if !is_valid_preseet_name(new_name) {
+    //         return Err(AgentError::InvalidPresetName(new_name.into()));
+    //     }
+
+    //     // check if the new name is already used
+    //     let new_name = self.unique_preset_name(new_name);
+
+    //     let mut presets = self.presets.lock().unwrap();
+
+    //     // remove the original preset
+    //     let Some(mut preset) = presets.swap_remove(id) else {
+    //         return Err(AgentError::RenamePresetFailed(id.into()));
+    //     };
+
+    //     // insert renamed preset
+    //     preset.set_name(new_name.clone());
+    //     presets.insert(preset.id().to_string(), preset);
+    //     Ok(new_name)
+    // }
+
+    // /// Generate a unique preset name by appending a number suffix if needed.
+    // pub fn unique_preset_name(&self, name: &str) -> String {
+    //     let mut new_name = name.trim().to_string();
+    //     let mut i = 2;
+    //     let presets = self.presets.lock().unwrap();
+    //     while presets.values().any(|preset| preset.name() == new_name) {
+    //         new_name = format!("{}{}", name, i);
+    //         i += 1;
+    //     }
+    //     new_name
+    // }
+
+    /// Get a preset by id.
+    pub fn get_preset(&self, id: &str) -> Option<Arc<AsyncMutex<Preset>>> {
+        let presets = self.presets.lock().unwrap();
+        presets.get(id).cloned()
+    }
+
+    /// Add a new preset with the given name and spec, and returns the id of the new preset.
+    ///
+    /// The ids of the given spec, including agents and connections, are changed to new unique ids.
+    pub fn add_preset(&self, spec: PresetSpec) -> Result<String, AgentError> {
+        let preset = Preset::new(spec);
+        let id = preset.id().to_string();
+
+        // add agents
+        for agent in &preset.spec().agents {
+            if let Err(e) = self.add_agent_internal(id.clone(), agent.clone()) {
+                log::error!("Failed to add_agent {}: {}", agent.id, e);
+            }
+        }
+
+        // add connections
+        for connection in &preset.spec().connections {
+            self.add_connection_internal(connection.clone())
+                .unwrap_or_else(|e| {
+                    log::error!("Failed to add_connection {}: {}", connection.source, e);
+                });
+        }
+
+        // add the given preset into presets
+        let mut presets = self.presets.lock().unwrap();
+        if presets.contains_key(&id) {
+            return Err(AgentError::DuplicateId(id.into()));
+        }
+        presets.insert(id.to_string(), Arc::new(AsyncMutex::new(preset)));
+
+        Ok(id)
+    }
+
+    /// Remove an preset by id.
+    pub async fn remove_preset(&self, id: &str) -> Result<(), AgentError> {
+        let preset = self
+            .get_preset(id)
+            .ok_or_else(|| AgentError::PresetNotFound(id.to_string()))?;
+
+        let mut preset = preset.lock().await;
+        preset.stop(self).await.unwrap_or_else(|e| {
+            log::error!("Failed to stop preset {}: {}", id, e);
+        });
+
+        // Remove all agents and connections associated with the preset
+        for agent in &preset.spec().agents {
+            self.remove_agent_internal(&agent.id)
+                .await
+                .unwrap_or_else(|e| {
+                    log::error!("Failed to remove_agent {}: {}", agent.id, e);
+                });
+        }
+        for connection in &preset.spec().connections {
+            self.remove_connection_internal(connection);
+        }
+
+        Ok(())
+    }
+
+    /// Start an preset by id.
+    pub async fn start_preset(&self, id: &str) -> Result<(), AgentError> {
+        let preset = self
+            .get_preset(id)
+            .ok_or_else(|| AgentError::PresetNotFound(id.to_string()))?;
+        let mut preset = preset.lock().await;
+        preset.start(self).await?;
+
+        Ok(())
+    }
+
+    /// Stop an preset by id.
+    pub async fn stop_preset(&self, id: &str) -> Result<(), AgentError> {
+        let preset = self
+            .get_preset(id)
+            .ok_or_else(|| AgentError::PresetNotFound(id.to_string()))?;
+        let mut preset = preset.lock().await;
+        preset.stop(self).await?;
+
+        Ok(())
+    }
+
+    /// Open a preset from a file.
+    #[cfg(feature = "file")]
+    pub async fn open_preset_from_file(&self, path: &str) -> Result<String, AgentError> {
+        let json_str =
+            std::fs::read_to_string(path).map_err(|e| AgentError::IoError(e.to_string()))?;
+        let spec = PresetSpec::from_json(&json_str)?;
+        let id = self.add_preset(spec)?;
+        self.set_preset_file_name(&id, path).await?;
+        Ok(id)
+    }
+
+    /// Save a preset.
+    #[cfg(feature = "file")]
+    pub async fn save_preset(&self, id: &str) -> Result<(), AgentError> {
+        let Some(preset_spec) = self.get_preset_spec(id).await else {
+            return Err(AgentError::PresetNotFound(id.to_string()));
+        };
+        let json_str = preset_spec.to_json()?;
+        let path = self
+            .get_preset_path(id)
+            .await
+            .ok_or_else(|| AgentError::EmptyFileName)?;
+        std::fs::write(&path, json_str).map_err(|e| AgentError::IoError(e.to_string()))?;
+        Ok(())
+    }
+
+    /// Save a preset to the given file name.
+    #[cfg(feature = "file")]
+    pub async fn save_preset_as(&self, id: &str, path: &str) -> Result<(), AgentError> {
+        self.set_preset_file_name(id, path).await?;
+        self.save_preset(id).await?;
+        Ok(())
+    }
+
+    /// Get the file name of a preset.
+    #[cfg(feature = "file")]
+    pub async fn get_preset_path(&self, id: &str) -> Option<PathBuf> {
+        let Some(preset) = self.get_preset(id) else {
+            return None;
+        };
+        let preset = preset.lock().await;
+        let Some(name) = preset.name() else {
+            return None;
+        };
+        let Some(dir) = preset.dir() else {
+            return None;
+        };
+        let path = std::path::Path::new(&dir).join(name);
+        Some(path)
+    }
+
+    /// Set the file name of a preset.
+    #[cfg(feature = "file")]
+    pub async fn set_preset_file_name(&self, id: &str, path: &str) -> Result<(), AgentError> {
+        let path = std::path::Path::new(path);
+        let name = path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .ok_or(AgentError::InvalidFileExtension)?;
+        let dir = path
+            .parent()
+            .and_then(|s| s.to_str())
+            .unwrap_or("")
+            .to_string();
+        let preset = {
+            let presets = self.presets.lock().unwrap();
+            let Some(preset) = presets.get(id) else {
+                return Err(AgentError::PresetNotFound(id.to_string()));
+            };
+            preset.clone()
+        };
+        let mut preset = preset.lock().await;
+        preset.set_name(name.to_string());
+        preset.set_dir(dir);
+        Ok(())
+    }
+
+    // PresetSpec
+
+    /// Get the current preset spec by id.
+    pub async fn get_preset_spec(&self, id: &str) -> Option<PresetSpec> {
+        let Some(preset) = self.get_preset(id) else {
+            return None;
+        };
+        let mut preset_spec = {
+            let preset = preset.lock().await;
+            preset.spec().clone()
+        };
+
+        // collect current agent specs in the preset
+        let mut agent_specs = Vec::new();
+        for agent in &preset_spec.agents {
+            if let Some(spec) = self.get_agent_spec(&agent.id).await {
+                agent_specs.push(spec);
+            }
+        }
+        preset_spec.agents = agent_specs;
+
+        // No need to change connections
+
+        Some(preset_spec)
+    }
+
+    /// Update the preset spec
+    pub async fn update_preset_spec(&self, id: &str, value: &Value) -> Result<(), AgentError> {
+        let preset = self
+            .get_preset(id)
+            .ok_or_else(|| AgentError::PresetNotFound(id.to_string()))?;
+        let mut preset = preset.lock().await;
+        preset.update_spec(value)?;
+        Ok(())
+    }
+
+    // PresetInfo
+
+    /// Get info of the preset by id.
+    pub async fn get_preset_info(&self, id: &str) -> Option<PresetInfo> {
+        let Some(preset) = self.get_preset(id) else {
+            return None;
+        };
+        Some(PresetInfo::from(&*preset.lock().await))
+    }
+
+    /// Get infos of all presets.
+    pub async fn get_preset_infos(&self) -> Vec<PresetInfo> {
+        let presets = {
+            let presets = self.presets.lock().unwrap();
+            presets.values().cloned().collect::<Vec<_>>()
+        };
+        let mut preset_infos = Vec::new();
+        for preset in presets {
+            let preset_guard = preset.lock().await;
+            preset_infos.push(PresetInfo::from(&*preset_guard));
+        }
+        preset_infos
+    }
+
+    // Agents
 
     /// Register an agent definition.
     pub fn register_agent_definiton(&self, def: AgentDefinition) {
@@ -166,202 +437,6 @@ impl MAK {
         Ok(())
     }
 
-    // presets
-
-    /// Get info of the preset by id.
-    pub fn get_preset_info(&self, id: &str) -> Option<PresetInfo> {
-        let presets = self.presets.lock().unwrap();
-        presets.get(id).map(|preset| preset.into())
-    }
-
-    /// Get infos of all presets.
-    pub fn get_preset_infos(&self) -> Vec<PresetInfo> {
-        let presets = self.presets.lock().unwrap();
-        presets.values().map(|p| p.into()).collect()
-    }
-
-    /// Get the preset spec by id.
-    pub async fn get_preset_spec(&self, id: &str) -> Option<PresetSpec> {
-        let preset_spec = {
-            let presets = self.presets.lock().unwrap();
-            presets.get(id).map(|preset| preset.spec().clone())
-        };
-        let Some(mut preset_spec) = preset_spec else {
-            return None;
-        };
-
-        // collect agent specs in the preset
-        let mut agent_specs = Vec::new();
-        for agent in &preset_spec.agents {
-            if let Some(spec) = self.get_agent_spec(&agent.id).await {
-                agent_specs.push(spec);
-            }
-        }
-        preset_spec.agents = agent_specs;
-
-        // No need to change connections
-
-        Some(preset_spec)
-    }
-
-    /// Update the preset spec
-    pub fn update_preset_spec(&self, id: &str, value: &Value) -> Result<(), AgentError> {
-        let mut presets = self.presets.lock().unwrap();
-        let Some(preset) = presets.get_mut(id) else {
-            return Err(AgentError::PresetNotFound(id.to_string()));
-        };
-        preset.update_spec(value)?;
-        Ok(())
-    }
-
-    /// Create a new preset with the given name.
-    /// If the name already exists, a unique name will be generated by appending a number suffix.
-    /// Returns the id of the new preset.
-    pub fn new_preset(&self, name: &str) -> Result<String, AgentError> {
-        if !is_valid_preseet_name(name) {
-            return Err(AgentError::InvalidPresetName(name.into()));
-        }
-        let new_name = self.unique_preset_name(name);
-        let spec = PresetSpec::default();
-        let id = self.add_preset(new_name, spec)?;
-        Ok(id)
-    }
-
-    /// Rename an existing preset.
-    pub fn rename_preset(&self, id: &str, new_name: &str) -> Result<String, AgentError> {
-        if !is_valid_preseet_name(new_name) {
-            return Err(AgentError::InvalidPresetName(new_name.into()));
-        }
-
-        // check if the new name is already used
-        let new_name = self.unique_preset_name(new_name);
-
-        let mut presets = self.presets.lock().unwrap();
-
-        // remove the original preset
-        let Some(mut preset) = presets.swap_remove(id) else {
-            return Err(AgentError::RenamePresetFailed(id.into()));
-        };
-
-        // insert renamed preset
-        preset.set_name(new_name.clone());
-        presets.insert(preset.id().to_string(), preset);
-        Ok(new_name)
-    }
-
-    /// Generate a unique preset name by appending a number suffix if needed.
-    pub fn unique_preset_name(&self, name: &str) -> String {
-        let mut new_name = name.trim().to_string();
-        let mut i = 2;
-        let presets = self.presets.lock().unwrap();
-        while presets.values().any(|preset| preset.name() == new_name) {
-            new_name = format!("{}{}", name, i);
-            i += 1;
-        }
-        new_name
-    }
-
-    /// Add a new preset with the given name and spec, and returns the id of the new preset.
-    ///
-    /// The ids of the given spec, including agents and connections, are changed to new unique ids.
-    pub fn add_preset(
-        &self,
-        name: String,
-        spec: PresetSpec,
-    ) -> Result<String, AgentError> {
-        let preset = Preset::new(name, spec);
-        let id = preset.id().to_string();
-
-        // add agents
-        for agent in &preset.spec().agents {
-            if let Err(e) = self.add_agent_internal(id.clone(), agent.clone()) {
-                log::error!("Failed to add_agent {}: {}", agent.id, e);
-            }
-        }
-
-        // add connections
-        for connection in &preset.spec().connections {
-            self.add_connection_internal(connection.clone())
-                .unwrap_or_else(|e| {
-                    log::error!("Failed to add_connection {}: {}", connection.source, e);
-                });
-        }
-
-        // add the given preset into presets
-        let mut presets = self.presets.lock().unwrap();
-        if presets.contains_key(&id) {
-            return Err(AgentError::DuplicateId(id.into()));
-        }
-        presets.insert(id.to_string(), preset);
-
-        Ok(id)
-    }
-
-    /// Remove an preset by id.
-    pub async fn remove_preset(&self, id: &str) -> Result<(), AgentError> {
-        let mut preset = {
-            let mut presets = self.presets.lock().unwrap();
-            let Some(preset) = presets.swap_remove(id) else {
-                return Err(AgentError::PresetNotFound(id.to_string()));
-            };
-            preset
-        };
-
-        preset.stop(self).await.unwrap_or_else(|e| {
-            log::error!("Failed to stop preset {}: {}", id, e);
-        });
-
-        // Remove all agents and connections associated with the preset
-        for agent in &preset.spec().agents {
-            self.remove_agent_internal(&agent.id)
-                .await
-                .unwrap_or_else(|e| {
-                    log::error!("Failed to remove_agent {}: {}", agent.id, e);
-                });
-        }
-        for connection in &preset.spec().connections {
-            self.remove_connection_internal(connection);
-        }
-
-        Ok(())
-    }
-
-    /// Start an preset by id.
-    pub async fn start_preset(&self, id: &str) -> Result<(), AgentError> {
-        let mut preset = {
-            let mut presets = self.presets.lock().unwrap();
-            let Some(preset) = presets.swap_remove(id) else {
-                return Err(AgentError::PresetNotFound(id.to_string()));
-            };
-            preset
-        };
-
-        preset.start(self).await?;
-
-        let mut presets = self.presets.lock().unwrap();
-        presets.insert(id.to_string(), preset);
-        Ok(())
-    }
-
-    /// Stop an preset by id.
-    pub async fn stop_preset(&self, id: &str) -> Result<(), AgentError> {
-        let mut preset = {
-            let mut presets = self.presets.lock().unwrap();
-            let Some(preset) = presets.swap_remove(id) else {
-                return Err(AgentError::PresetNotFound(id.to_string()));
-            };
-            preset
-        };
-
-        preset.stop(self).await?;
-
-        let mut presets = self.presets.lock().unwrap();
-        presets.insert(id.to_string(), preset);
-        Ok(())
-    }
-
-    // Agents
-
     /// Create a new agent spec from the given agent definition name.
     pub fn new_agent_spec(&self, def_name: &str) -> Result<AgentSpec, AgentError> {
         let def = self
@@ -371,15 +446,22 @@ impl MAK {
     }
 
     /// Add an agent to the specified preset, and returns the id of the newly added agent.
-    pub fn add_agent(&self, preset_id: String, mut spec: AgentSpec) -> Result<String, AgentError> {
-        let mut presets = self.presets.lock().unwrap();
-        let Some(preset) = presets.get_mut(&preset_id) else {
-            return Err(AgentError::PresetNotFound(preset_id.to_string()));
-        };
+    pub async fn add_agent(
+        &self,
+        preset_id: String,
+        mut spec: AgentSpec,
+    ) -> Result<String, AgentError> {
+        let preset = self
+            .get_preset(&preset_id)
+            .ok_or_else(|| AgentError::PresetNotFound(preset_id.to_string()))?;
+
         let id = new_id();
         spec.id = id.clone();
         self.add_agent_internal(preset_id, spec.clone())?;
+
+        let mut preset = preset.lock().await;
         preset.add_agent(spec.clone());
+
         Ok(id)
     }
 
@@ -402,7 +484,11 @@ impl MAK {
     }
 
     /// Add a connection to the specified preset.
-    pub fn add_connection(&self, preset_id: &str, connection: ConnectionSpec) -> Result<(), AgentError> {
+    pub async fn add_connection(
+        &self,
+        preset_id: &str,
+        connection: ConnectionSpec,
+    ) -> Result<(), AgentError> {
         // check if the source and target agents exist
         {
             let agents = self.agents.lock().unwrap();
@@ -422,10 +508,10 @@ impl MAK {
             return Err(AgentError::EmptyTargetHandle);
         }
 
-        let mut presets = self.presets.lock().unwrap();
-        let Some(preset) = presets.get_mut(preset_id) else {
-            return Err(AgentError::PresetNotFound(preset_id.to_string()));
-        };
+        let preset = self
+            .get_preset(preset_id)
+            .ok_or_else(|| AgentError::PresetNotFound(preset_id.to_string()))?;
+        let mut preset = preset.lock().await;
         preset.add_connection(connection.clone());
         self.add_connection_internal(connection)?;
         Ok(())
@@ -444,11 +530,19 @@ impl MAK {
             {
                 return Err(AgentError::ConnectionAlreadyExists);
             }
-            targets.push((connection.target, connection.source_handle, connection.target_handle));
+            targets.push((
+                connection.target,
+                connection.source_handle,
+                connection.target_handle,
+            ));
         } else {
             connections.insert(
                 connection.source,
-                vec![(connection.target, connection.source_handle, connection.target_handle)],
+                vec![(
+                    connection.target,
+                    connection.source_handle,
+                    connection.target_handle,
+                )],
             );
         }
         Ok(())
@@ -458,7 +552,7 @@ impl MAK {
     ///
     /// The ids of the given agents and connections are changed to new unique ids.
     /// The agents are not started automatically, even if the preset is running.
-    pub fn add_agents_and_connections(
+    pub async fn add_agents_and_connections(
         &self,
         preset_id: &str,
         agents: &Vec<AgentSpec>,
@@ -466,10 +560,10 @@ impl MAK {
     ) -> Result<(Vec<AgentSpec>, Vec<ConnectionSpec>), AgentError> {
         let (agents, connections) = update_ids(agents, connections);
 
-        let mut presets = self.presets.lock().unwrap();
-        let Some(preset) = presets.get_mut(preset_id) else {
-            return Err(AgentError::PresetNotFound(preset_id.to_string()));
-        };
+        let preset = self
+            .get_preset(preset_id)
+            .ok_or_else(|| AgentError::PresetNotFound(preset_id.to_string()))?;
+        let mut preset = preset.lock().await;
 
         for agent in &agents {
             self.add_agent_internal(preset_id.to_string(), agent.clone())?;
@@ -489,10 +583,10 @@ impl MAK {
     /// If the agent is running, it will be stopped first.
     pub async fn remove_agent(&self, preset_id: &str, agent_id: &str) -> Result<(), AgentError> {
         {
-            let mut presets = self.presets.lock().unwrap();
-            let Some(preset) = presets.get_mut(preset_id) else {
-                return Err(AgentError::PresetNotFound(preset_id.to_string()));
-            };
+            let preset = self
+                .get_preset(preset_id)
+                .ok_or_else(|| AgentError::PresetNotFound(preset_id.to_string()))?;
+            let mut preset = preset.lock().await;
             preset.remove_agent(agent_id);
         }
         if let Err(e) = self.remove_agent_internal(agent_id).await {
@@ -530,26 +624,24 @@ impl MAK {
     }
 
     /// Remove a connection from the specified preset.
-    pub fn remove_connection(&self, preset_id: &str, connection: &ConnectionSpec) -> Result<(), AgentError> {
-        let mut preset = {
-            let mut presets = self.presets.lock().unwrap();
-            let Some(preset) = presets.swap_remove(preset_id) else {
-                return Err(AgentError::PresetNotFound(preset_id.to_string()));
-            };
-            preset
-        };
-
+    pub async fn remove_connection(
+        &self,
+        preset_id: &str,
+        connection: &ConnectionSpec,
+    ) -> Result<(), AgentError> {
+        let preset = self
+            .get_preset(preset_id)
+            .ok_or_else(|| AgentError::PresetNotFound(preset_id.to_string()))?;
+        let mut preset = preset.lock().await;
         let Some(connection) = preset.remove_connection(connection) else {
-            let mut presets = self.presets.lock().unwrap();
-            presets.insert(preset_id.to_string(), preset);
             return Err(AgentError::ConnectionNotFound(format!(
                 "{}:{}->{}:{}",
-                connection.source, connection.source_handle, connection.target, connection.target_handle
+                connection.source,
+                connection.source_handle,
+                connection.target,
+                connection.target_handle
             )));
         };
-        let mut presets = self.presets.lock().unwrap();
-        presets.insert(preset_id.to_string(), preset);
-
         self.remove_connection_internal(&connection);
         Ok(())
     }
@@ -969,38 +1061,6 @@ impl MAK {
     fn notify_observers(&self, event: MAKEvent) {
         let _ = self.observers.send(event);
     }
-}
-
-fn is_valid_preseet_name(new_name: &str) -> bool {
-    // Check if the name is empty
-    if new_name.trim().is_empty() {
-        return false;
-    }
-
-    // Checks for path-like names:
-    if new_name.contains('/') {
-        // Disallow leading, trailing, or consecutive slashes
-        if new_name.starts_with('/') || new_name.ends_with('/') || new_name.contains("//") {
-            return false;
-        }
-        // Disallow segments that are "." or ".."
-        if new_name
-            .split('/')
-            .any(|segment| segment == "." || segment == "..")
-        {
-            return false;
-        }
-    }
-
-    // Check if the name contains invalid characters
-    let invalid_chars = ['\\', ':', '*', '?', '"', '<', '>', '|'];
-    for c in invalid_chars {
-        if new_name.contains(c) {
-            return false;
-        }
-    }
-
-    true
 }
 
 #[derive(Clone, Debug)]

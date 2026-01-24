@@ -9,12 +9,11 @@ async fn test_var_routing() {
     let mak = test_utils::setup_mak().await;
 
     // load var preset
-    let var_preset_id = test_utils::load_and_start_preset(&mak, "tests/presets/Core_Var.json")
+    let var_preset_id = test_utils::open_and_start_preset(&mak, "tests/presets/Core_Var.json")
         .await
         .unwrap();
 
-    mak
-        .write_var_value(&var_preset_id, "var1", AgentValue::string("hello"))
+    mak.write_var_value(&var_preset_id, "var1", AgentValue::string("hello"))
         .await
         .unwrap();
 

@@ -27,7 +27,8 @@ tokio = { version = "1", features = ["macros"] }
 serial_test = "3"
 
 [features]
-default = ["image", "llm", "mcp"]
+default = ["file", "image", "llm", "mcp"]
+file = []
 image = ["photon-rs"]
 llm = ["regex"]
 mcp = ["rmcp"]
