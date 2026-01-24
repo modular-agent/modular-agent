@@ -12,11 +12,11 @@ import {
   getGlobalConfigsMap as getGlobalConfigsMapAPI,
 } from "tauri-plugin-mak-api";
 
-import type { PresetFlow, PresetEdge, PresetNode, CoreSettings } from "./types";
 import {
   getCoreSettings as getCoreSettingsUtils,
   setCoreSettings as setCoreSettingsUtils,
-} from "./utils";
+} from "./mak";
+import type { PresetFlow, PresetEdge, PresetNode, CoreSettings } from "./types";
 
 export async function newPreset(name: string): Promise<string> {
   return await invoke("new_preset_cmd", { name });

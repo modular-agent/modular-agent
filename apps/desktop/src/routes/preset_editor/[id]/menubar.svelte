@@ -7,10 +7,10 @@
   import * as Dialog from "$lib/components/ui/dialog/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
   import * as Menubar from "$lib/components/ui/menubar/index.js";
+  import { exitApp } from "$lib/mak";
 
   import NewPresetDialog from "@/lib/components/new-preset-dialog.svelte";
   import { reloadPreseetInfos, startPresetAndReload } from "@/lib/shared.svelte";
-  import { exitApp } from "@/lib/utils";
 
   type Props = {
     preset_id: string;
@@ -48,7 +48,7 @@
     }
     const s = await getPresetSpec(preset_id);
     if (!s) return;
-    const new_id = await addPreset(new_name, s);
+    const new_id = await addPreset(s);
     if (!new_id) return;
     await reloadPreseetInfos();
     goto(`/preset_editor/${new_id}`, { invalidateAll: true });

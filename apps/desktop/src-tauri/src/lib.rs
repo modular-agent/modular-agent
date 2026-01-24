@@ -95,6 +95,8 @@ pub fn run() {
             mak_desktop::app::save_preset_cmd,
             mak_desktop::app::start_preset_cmd,
             mak_desktop::app::stop_preset_cmd,
+            mak_desktop::app::get_dir_entries_cmd,
+            mak_desktop::app::open_preset_cmd,
             mak_desktop::settings::get_core_settings_cmd,
             mak_desktop::settings::set_core_settings_cmd,
             mak_desktop::settings::set_global_configs_cmd,

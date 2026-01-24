@@ -10,14 +10,14 @@ export const load: PageLoad = async ({ params }) => {
   const info = await getPresetInfo(params.id);
   if (!info) {
     error(404, {
-      message: "Not preset info found",
+      message: "No preset info found",
     });
   }
 
   const spec = await getPresetSpec(params.id);
   if (!spec) {
     error(404, {
-      message: "Not preset spec found",
+      message: "No preset spec found",
     });
   }
 

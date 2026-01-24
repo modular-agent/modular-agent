@@ -25,7 +25,7 @@
 
   import * as Avatar from "$lib/components/ui/avatar/index.js";
   import * as Item from "$lib/components/ui/item/index.js";
-  import { truncate } from "$lib/utils";
+  import { truncate } from "$lib/mak";
 
   let { messages }: Props = $props();
 

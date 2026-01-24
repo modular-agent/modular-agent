@@ -341,6 +341,7 @@
   }
 
   async function onStartPreset() {
+    console.log("Starting preset...", preset_id);
     await startPresetAndReload(preset_id);
     running = true;
   }

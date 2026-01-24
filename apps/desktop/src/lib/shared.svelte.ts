@@ -65,7 +65,7 @@ export async function importPresetAndReload(path: string): Promise<string> {
 
 export async function startPresetAndReload(id: string) {
   let info = presetInfos.get(id);
-  if (!info || info.running) {
+  if (info?.running) {
     return;
   }
   await startPreset(id);

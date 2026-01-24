@@ -128,10 +128,9 @@
   }
 </script>
 
-<div class="text-primary p-4 w-full">
-  <div class="text-lg font-semibold">Presets</div>
-  <div class="flex items-center justify-between py-4">
-    <div class="py-2 w-64">
+<div class="text-primary w-full">
+  <div class="flex items-center justify-between pb-4">
+    <div class="w-64">
       <Input
         value={(table.getColumn("name")?.getFilterValue() as string) ?? ""}
         onchange={(e) => {

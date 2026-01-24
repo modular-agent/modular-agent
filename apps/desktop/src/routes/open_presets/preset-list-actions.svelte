@@ -2,7 +2,7 @@
   import EllipsisVerticalIcon from "@lucide/svelte/icons/ellipsis-vertical";
   import PlayIcon from "@lucide/svelte/icons/play";
   import SquareIcon from "@lucide/svelte/icons/square";
-  import { addPreset, getPresetSpec, uniquePresetName } from "tauri-plugin-mak-api";
+  import { addPreset, getPresetSpec } from "tauri-plugin-mak-api";
 
   import { getCoreSettings, setCoreSettings } from "$lib/agent";
   import { Button } from "$lib/components/ui/button/index.js";

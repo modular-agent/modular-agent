@@ -12,9 +12,13 @@
   );
 
   onMount(async () => {
-    getCurrentWindow().setTitle("Presets - MAK Desktop");
+    getCurrentWindow().setTitle("Preset List - MAK Desktop");
   });
 </script>
 
-<header class="flex-none h-14 items-center"></header>
-<PresetList {presets} />
+<div class="flex flex-col p-4 gap-4 w-full h-full">
+  <header class="flex-none">
+    <div class="text-lg font-semibold">Open Presets</div>
+  </header>
+  <PresetList {presets} />
+</div>

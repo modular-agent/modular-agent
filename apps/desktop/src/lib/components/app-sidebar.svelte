@@ -17,7 +17,12 @@
     navMain: [
       {
         title: "Presets",
-        url: "/",
+        url: "/presets",
+        icon: WorkflowIcon,
+      },
+      {
+        title: "Open Presets",
+        url: "/open_presets",
         icon: WorkflowIcon,
       },
     ],
