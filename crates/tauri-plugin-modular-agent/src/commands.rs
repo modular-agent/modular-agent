@@ -1,6 +1,8 @@
+use std::path::PathBuf;
+
 use modular_agent_kit::{
-    AgentConfigs, AgentConfigsMap, AgentDefinition, AgentDefinitions, AgentSpec, PresetSpec,
-    AgentValue, ConnectionSpec,
+    AgentConfigs, AgentConfigsMap, AgentDefinition, AgentDefinitions, AgentSpec, AgentValue,
+    ConnectionSpec, PresetSpec,
 };
 use serde_json::Value;
 use tauri::{AppHandle, Runtime};
@@ -8,10 +10,127 @@ use tauri::{AppHandle, Runtime};
 use crate::MAKExt;
 use crate::Result;
 
+// Preset management
+
+#[tauri::command]
+pub fn new_preset<R: Runtime>(app: AppHandle<R>) -> Result<String> {
+    app.mak().new_preset().map_err(Into::into)
+}
+
+// #[tauri::command]
+// pub fn rename_preset<R: Runtime>(
+//     app: AppHandle<R>,
+//     id: String,
+//     name: String,
+// ) -> Result<String> {
+//     app.mak()
+//         .rename_preset(&id, &name)
+//         .map_err(Into::into)
+// }
+
+// #[tauri::command]
+// pub fn unique_preset_name<R: Runtime>(app: tauri::AppHandle<R>, name: String) -> String {
+//     app.mak().unique_preset_name(&name)
+// }
+
+#[tauri::command]
+pub fn add_preset<R: Runtime>(app: AppHandle<R>, spec: PresetSpec) -> Result<String> {
+    app.mak().add_preset(spec).map_err(Into::into)
+}
+
+#[tauri::command]
+pub async fn remove_preset<R: Runtime>(app: tauri::AppHandle<R>, id: String) -> Result<()> {
+    app.mak().remove_preset(&id).await.map_err(Into::into)
+}
+
+#[tauri::command]
+pub async fn start_preset<R: Runtime>(app: AppHandle<R>, id: String) -> Result<()> {
+    app.mak().start_preset(&id).await.map_err(Into::into)
+}
+
+#[tauri::command]
+pub async fn stop_preset<R: Runtime>(app: AppHandle<R>, id: String) -> Result<()> {
+    app.mak().stop_preset(&id).await.map_err(Into::into)
+}
+
+#[tauri::command]
+pub async fn open_preset_from_file<R: Runtime>(app: AppHandle<R>, path: String) -> Result<String> {
+    app.mak()
+        .open_preset_from_file(&path)
+        .await
+        .map_err(Into::into)
+}
+
+#[tauri::command]
+pub async fn save_preset<R: Runtime>(app: AppHandle<R>, id: String) -> Result<()> {
+    app.mak().save_preset(&id).await.map_err(Into::into)
+}
+
+#[tauri::command]
+pub async fn save_preset_as<R: Runtime>(app: AppHandle<R>, id: String, path: String) -> Result<()> {
+    app.mak()
+        .save_preset_as(&id, &path)
+        .await
+        .map_err(Into::into)
+}
+
+#[tauri::command]
+pub async fn get_preset_path<R: Runtime>(app: AppHandle<R>, id: String) -> Option<PathBuf> {
+    app.mak().get_preset_path(&id).await
+}
+
+#[tauri::command]
+pub async fn set_preset_file_name<R: Runtime>(
+    app: AppHandle<R>,
+    id: String,
+    file_name: String,
+) -> Result<()> {
+    app.mak()
+        .set_preset_file_name(&id, &file_name)
+        .await
+        .map_err(Into::into)
+}
+
+// preset spec
+
+#[tauri::command]
+pub async fn get_preset_spec<R: Runtime>(app: AppHandle<R>, id: String) -> Option<PresetSpec> {
+    app.mak().get_preset_spec(&id).await
+}
+
+#[tauri::command]
+pub async fn update_preset_spec<R: Runtime>(
+    app: AppHandle<R>,
+    id: String,
+    value: Value,
+) -> Result<()> {
+    app.mak()
+        .update_preset_spec(&id, &value)
+        .await
+        .map_err(Into::into)
+}
+
+// preset info
+
+#[tauri::command]
+pub async fn get_preset_info<R: Runtime>(
+    app: AppHandle<R>,
+    id: String,
+) -> Option<modular_agent_kit::PresetInfo> {
+    app.mak().get_preset_info(&id).await
+}
+
+#[tauri::command]
+pub async fn get_preset_infos<R: Runtime>(app: AppHandle<R>) -> Vec<modular_agent_kit::PresetInfo> {
+    app.mak().get_preset_infos().await
+}
+
+// agent management
+
 // agent definition
 
 #[tauri::command]
-pub(crate) fn get_agent_definition<R: Runtime>(
+pub fn get_agent_definition<R: Runtime>(
     app: AppHandle<R>,
     def_name: String,
 ) -> Option<AgentDefinition> {
@@ -19,22 +138,19 @@ pub(crate) fn get_agent_definition<R: Runtime>(
 }
 
 #[tauri::command]
-pub(crate) fn get_agent_definitions<R: Runtime>(app: AppHandle<R>) -> AgentDefinitions {
+pub fn get_agent_definitions<R: Runtime>(app: AppHandle<R>) -> AgentDefinitions {
     app.mak().get_agent_definitions()
 }
 
 // agent spec
 
 #[tauri::command]
-pub(crate) async fn get_agent_spec<R: Runtime>(
-    app: AppHandle<R>,
-    agent_id: String,
-) -> Option<AgentSpec> {
+pub async fn get_agent_spec<R: Runtime>(app: AppHandle<R>, agent_id: String) -> Option<AgentSpec> {
     app.mak().get_agent_spec(&agent_id).await
 }
 
 #[tauri::command]
-pub(crate) async fn update_agent_spec<R: Runtime>(
+pub async fn update_agent_spec<R: Runtime>(
     app: AppHandle<R>,
     agent_id: String,
     value: Value,
@@ -45,126 +161,25 @@ pub(crate) async fn update_agent_spec<R: Runtime>(
         .map_err(Into::into)
 }
 
-// preset
-
-#[tauri::command]
-pub(crate) fn get_preset_info<R: Runtime>(
-    app: AppHandle<R>,
-    id: String,
-) -> Option<modular_agent_kit::PresetInfo> {
-    app.mak().get_preset_info(&id)
-}
-
-#[tauri::command]
-pub(crate) fn get_preset_infos<R: Runtime>(
-    app: AppHandle<R>,
-) -> Vec<modular_agent_kit::PresetInfo> {
-    app.mak().get_preset_infos()
-}
-
-#[tauri::command]
-pub(crate) async fn get_preset_spec<R: Runtime>(
-    app: AppHandle<R>,
-    id: String,
-) -> Option<PresetSpec> {
-    app.mak().get_preset_spec(&id).await
-}
-
-#[tauri::command]
-pub(crate) fn update_preset_spec<R: Runtime>(
-    app: AppHandle<R>,
-    id: String,
-    value: Value,
-) -> Result<()> {
-    app.mak()
-        .update_preset_spec(&id, &value)
-        .map_err(Into::into)
-}
-
-#[tauri::command]
-pub(crate) fn new_preset<R: Runtime>(app: AppHandle<R>, name: String) -> Result<String> {
-    app.mak().new_preset(&name).map_err(Into::into)
-}
-
-#[tauri::command]
-pub(crate) fn rename_preset<R: Runtime>(
-    app: AppHandle<R>,
-    id: String,
-    name: String,
-) -> Result<String> {
-    app.mak()
-        .rename_preset(&id, &name)
-        .map_err(Into::into)
-}
-
-#[tauri::command]
-pub(crate) fn unique_preset_name<R: Runtime>(app: tauri::AppHandle<R>, name: String) -> String {
-    app.mak().unique_preset_name(&name)
-}
-
-#[tauri::command]
-pub(crate) fn add_preset<R: Runtime>(
-    app: AppHandle<R>,
-    name: String,
-    spec: PresetSpec,
-) -> Result<String> {
-    app.mak().add_preset(name, spec).map_err(Into::into)
-}
-
-#[tauri::command]
-pub(crate) async fn remove_preset<R: Runtime>(
-    app: tauri::AppHandle<R>,
-    id: String,
-) -> Result<()> {
-    app.mak()
-        .remove_preset(&id)
-        .await
-        .map_err(Into::into)
-}
-
-#[tauri::command]
-pub(crate) fn add_agents_and_connections<R: Runtime>(
-    app: AppHandle<R>,
-    preset_id: &str,
-    agents: Vec<AgentSpec>,
-    connections: Vec<ConnectionSpec>,
-) -> Result<(Vec<AgentSpec>, Vec<ConnectionSpec>)> {
-    app.mak()
-        .add_agents_and_connections(preset_id, &agents, &connections)
-        .map_err(Into::into)
-}
-
-#[tauri::command]
-pub(crate) async fn start_preset<R: Runtime>(app: AppHandle<R>, id: String) -> Result<()> {
-    app.mak()
-        .start_preset(&id)
-        .await
-        .map_err(Into::into)
-}
-
-#[tauri::command]
-pub(crate) async fn stop_preset<R: Runtime>(app: AppHandle<R>, id: String) -> Result<()> {
-    app.mak().stop_preset(&id).await.map_err(Into::into)
-}
-
-// agent
-
 #[tauri::command]
 pub fn new_agent_spec<R: Runtime>(app: AppHandle<R>, def_name: String) -> Result<AgentSpec> {
     app.mak().new_agent_spec(&def_name).map_err(Into::into)
 }
 
 #[tauri::command]
-pub(crate) fn add_agent<R: Runtime>(
+pub async fn add_agent<R: Runtime>(
     app: AppHandle<R>,
     preset_id: String,
     spec: AgentSpec,
 ) -> Result<String> {
-    app.mak().add_agent(preset_id, spec).map_err(Into::into)
+    app.mak()
+        .add_agent(preset_id, spec)
+        .await
+        .map_err(Into::into)
 }
 
 #[tauri::command]
-pub(crate) async fn remove_agent<R: Runtime>(
+pub async fn remove_agent<R: Runtime>(
     app: AppHandle<R>,
     preset_id: String,
     agent_id: String,
@@ -178,57 +193,58 @@ pub(crate) async fn remove_agent<R: Runtime>(
 // connection
 
 #[tauri::command]
-pub(crate) fn add_connection<R: Runtime>(
+pub async fn add_connection<R: Runtime>(
     app: AppHandle<R>,
     preset_id: String,
     connection: ConnectionSpec,
 ) -> Result<()> {
     app.mak()
         .add_connection(&preset_id, connection)
+        .await
         .map_err(Into::into)
 }
 
 #[tauri::command]
-pub(crate) fn remove_connection<R: Runtime>(
+pub async fn remove_connection<R: Runtime>(
     app: AppHandle<R>,
     preset_id: String,
     connection: ConnectionSpec,
 ) -> Result<()> {
     app.mak()
         .remove_connection(&preset_id, &connection)
+        .await
+        .map_err(Into::into)
+}
+
+#[tauri::command]
+pub async fn add_agents_and_connections<R: Runtime>(
+    app: AppHandle<R>,
+    preset_id: &str,
+    agents: Vec<AgentSpec>,
+    connections: Vec<ConnectionSpec>,
+) -> Result<(Vec<AgentSpec>, Vec<ConnectionSpec>)> {
+    app.mak()
+        .add_agents_and_connections(preset_id, &agents, &connections)
+        .await
         .map_err(Into::into)
 }
 
 // agent
 
 #[tauri::command]
-pub(crate) async fn start_agent<R: Runtime>(app: AppHandle<R>, agent_id: String) -> Result<()> {
+pub async fn start_agent<R: Runtime>(app: AppHandle<R>, agent_id: String) -> Result<()> {
     app.mak().start_agent(&agent_id).await.map_err(Into::into)
 }
 
 #[tauri::command]
-pub(crate) async fn stop_agent<R: Runtime>(app: AppHandle<R>, agent_id: String) -> Result<()> {
+pub async fn stop_agent<R: Runtime>(app: AppHandle<R>, agent_id: String) -> Result<()> {
     app.mak().stop_agent(&agent_id).await.map_err(Into::into)
-}
-
-// board commands
-
-#[tauri::command]
-pub(crate) async fn write_board<R: Runtime>(
-    app: AppHandle<R>,
-    board: String,
-    message: String,
-) -> Result<()> {
-    app.mak()
-        .write_board_value(board, AgentValue::string(message))
-        .await
-        .map_err(Into::into)
 }
 
 // config
 
 #[tauri::command]
-pub(crate) async fn set_agent_configs<R: Runtime>(
+pub async fn set_agent_configs<R: Runtime>(
     app: AppHandle<R>,
     agent_id: String,
     configs: AgentConfigs,
@@ -240,28 +256,35 @@ pub(crate) async fn set_agent_configs<R: Runtime>(
 }
 
 #[tauri::command]
-pub(crate) fn get_global_configs<R: Runtime>(
-    app: AppHandle<R>,
-    def_name: String,
-) -> Option<AgentConfigs> {
+pub fn get_global_configs<R: Runtime>(app: AppHandle<R>, def_name: String) -> Option<AgentConfigs> {
     app.mak().get_global_configs(&def_name)
 }
 
 #[tauri::command]
-pub(crate) fn get_global_configs_map<R: Runtime>(app: AppHandle<R>) -> AgentConfigsMap {
+pub fn get_global_configs_map<R: Runtime>(app: AppHandle<R>) -> AgentConfigsMap {
     app.mak().get_global_configs_map()
 }
 
 #[tauri::command]
-pub(crate) fn set_global_configs<R: Runtime>(
-    app: AppHandle<R>,
-    def_name: String,
-    configs: AgentConfigs,
-) {
+pub fn set_global_configs<R: Runtime>(app: AppHandle<R>, def_name: String, configs: AgentConfigs) {
     app.mak().set_global_configs(def_name, configs);
 }
 
 #[tauri::command]
-pub(crate) fn set_global_configs_map<R: Runtime>(app: AppHandle<R>, configs: AgentConfigsMap) {
+pub fn set_global_configs_map<R: Runtime>(app: AppHandle<R>, configs: AgentConfigsMap) {
     app.mak().set_global_configs_map(configs)
+}
+
+// board commands
+
+#[tauri::command]
+pub async fn write_board<R: Runtime>(
+    app: AppHandle<R>,
+    board: String,
+    message: String,
+) -> Result<()> {
+    app.mak()
+        .write_board_value(board, AgentValue::string(message))
+        .await
+        .map_err(Into::into)
 }

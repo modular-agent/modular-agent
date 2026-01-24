@@ -4,35 +4,38 @@ Default permissions for the plugin
 
 #### This default permission set includes the following:
 
+- `allow-new-preset`
+- `allow-add-preset`
+- `allow-remove-preset`
+- `allow-start-preset`
+- `allow-stop-preset`
+- `allow-open-preset-from-file`
+- `allow-save-preset`
+- `allow-save-preset-as`
+- `allow-get-preset-file-name`
+- `allow-set-preset-file-name`
+- `allow-get-preset-spec`
+- `allow-update-preset-spec`
+- `allow-get-preset-info`
+- `allow-get-preset-infos`
 - `allow-get-agent-definition`
 - `allow-get-agent-definitions`
 - `allow-get-agent-spec`
 - `allow-update-agent-spec`
-- `allow-get-preset-info`
-- `allow-get-preset-infos`
-- `allow-get-preset-spec`
-- `allow-update-preset-spec`
-- `allow-new-preset`
-- `allow-rename-preset`
-- `allow-unique-preset-name`
-- `allow-add-preset`
-- `allow-remove-preset`
-- `allow-add-agents-and-connections`
-- `allow-start-preset`
-- `allow-stop-preset`
 - `allow-new-agent-spec`
 - `allow-add-agent`
 - `allow-remove-agent`
 - `allow-add-connection`
 - `allow-remove-connection`
+- `allow-add-agents-and-connections`
 - `allow-start-agent`
 - `allow-stop-agent`
-- `allow-write-board`
 - `allow-set-agent-configs`
 - `allow-get-global-configs`
 - `allow-get-global-configs-map`
 - `allow-set-global-configs`
 - `allow-set-global-configs-map`
+- `allow-write-board`
 
 ## Permission Table
 
@@ -72,32 +75,6 @@ Denies the add_agent command without any pre-configured scope.
 <tr>
 <td>
 
-`mak:allow-add-preset`
-
-</td>
-<td>
-
-Enables the add_preset command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`mak:deny-add-preset`
-
-</td>
-<td>
-
-Denies the add_preset command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
 `mak:allow-add-agents-and-connections`
 
 </td>
@@ -117,58 +94,6 @@ Enables the add_agents_and_connections command without any pre-configured scope.
 <td>
 
 Denies the add_agents_and_connections command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`mak:allow-add-agents-and-connections`
-
-</td>
-<td>
-
-Enables the add_agents_and_connections command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`mak:deny-add-agents-and-connections`
-
-</td>
-<td>
-
-Denies the add_agents_and_connections command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`mak:allow-add-channel`
-
-</td>
-<td>
-
-Enables the add_channel command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`mak:deny-add-channel`
-
-</td>
-<td>
-
-Denies the add_channel command without any pre-configured scope.
 
 </td>
 </tr>
@@ -306,84 +231,6 @@ Denies the get_agent_spec command without any pre-configured scope.
 <tr>
 <td>
 
-`mak:allow-get-preset-info`
-
-</td>
-<td>
-
-Enables the get_preset_info command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`mak:deny-get-preset-info`
-
-</td>
-<td>
-
-Denies the get_preset_info command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`mak:allow-get-preset-infos`
-
-</td>
-<td>
-
-Enables the get_preset_infos command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`mak:deny-get-preset-infos`
-
-</td>
-<td>
-
-Denies the get_preset_infos command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`mak:allow-get-preset-spec`
-
-</td>
-<td>
-
-Enables the get_preset_spec command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`mak:deny-get-preset-spec`
-
-</td>
-<td>
-
-Denies the get_preset_spec command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
 `mak:allow-get-global-configs`
 
 </td>
@@ -429,6 +276,32 @@ Enables the get_global_configs_map command without any pre-configured scope.
 <td>
 
 Denies the get_global_configs_map command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`mak:allow-get-preset-file-name`
+
+</td>
+<td>
+
+Enables the get_preset_file_name command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`mak:deny-get-preset-file-name`
+
+</td>
+<td>
+
+Denies the get_preset_file_name command without any pre-configured scope.
 
 </td>
 </tr>
@@ -566,12 +439,12 @@ Denies the new_preset command without any pre-configured scope.
 <tr>
 <td>
 
-`mak:allow-new-preset`
+`mak:allow-open-preset-from-file`
 
 </td>
 <td>
 
-Enables the new_preset command without any pre-configured scope.
+Enables the open_preset_from_file command without any pre-configured scope.
 
 </td>
 </tr>
@@ -579,12 +452,12 @@ Enables the new_preset command without any pre-configured scope.
 <tr>
 <td>
 
-`mak:deny-new-preset`
+`mak:deny-open-preset-from-file`
 
 </td>
 <td>
 
-Denies the new_preset command without any pre-configured scope.
+Denies the open_preset_from_file command without any pre-configured scope.
 
 </td>
 </tr>
@@ -611,58 +484,6 @@ Enables the remove_agent command without any pre-configured scope.
 <td>
 
 Denies the remove_agent command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`mak:allow-remove-preset`
-
-</td>
-<td>
-
-Enables the remove_preset command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`mak:deny-remove-preset`
-
-</td>
-<td>
-
-Denies the remove_preset command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`mak:allow-remove-channel`
-
-</td>
-<td>
-
-Enables the remove_channel command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`mak:deny-remove-channel`
-
-</td>
-<td>
-
-Denies the remove_channel command without any pre-configured scope.
 
 </td>
 </tr>
@@ -722,25 +543,12 @@ Denies the remove_preset command without any pre-configured scope.
 <tr>
 <td>
 
-`mak:allow-rename-preset`
+`mak:allow-save-preset`
 
 </td>
 <td>
 
-Enables the rename_preset command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`mak:deny-rename-preset`
-
-</td>
-<td>
-
-Denies the rename_preset command without any pre-configured scope.
+Enables the save_preset command without any pre-configured scope.
 
 </td>
 </tr>
@@ -748,12 +556,12 @@ Denies the rename_preset command without any pre-configured scope.
 <tr>
 <td>
 
-`mak:allow-rename-preset`
+`mak:deny-save-preset`
 
 </td>
 <td>
 
-Enables the rename_preset command without any pre-configured scope.
+Denies the save_preset command without any pre-configured scope.
 
 </td>
 </tr>
@@ -761,12 +569,25 @@ Enables the rename_preset command without any pre-configured scope.
 <tr>
 <td>
 
-`mak:deny-rename-preset`
+`mak:allow-save-preset-as`
 
 </td>
 <td>
 
-Denies the rename_preset command without any pre-configured scope.
+Enables the save_preset_as command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`mak:deny-save-preset-as`
+
+</td>
+<td>
+
+Denies the save_preset_as command without any pre-configured scope.
 
 </td>
 </tr>
@@ -852,6 +673,32 @@ Denies the set_global_configs_map command without any pre-configured scope.
 <tr>
 <td>
 
+`mak:allow-set-preset-file-name`
+
+</td>
+<td>
+
+Enables the set_preset_file_name command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`mak:deny-set-preset-file-name`
+
+</td>
+<td>
+
+Denies the set_preset_file_name command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
 `mak:allow-start-agent`
 
 </td>
@@ -871,32 +718,6 @@ Enables the start_agent command without any pre-configured scope.
 <td>
 
 Denies the start_agent command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`mak:allow-start-preset`
-
-</td>
-<td>
-
-Enables the start_preset command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`mak:deny-start-preset`
-
-</td>
-<td>
-
-Denies the start_preset command without any pre-configured scope.
 
 </td>
 </tr>
@@ -982,84 +803,6 @@ Denies the stop_preset command without any pre-configured scope.
 <tr>
 <td>
 
-`mak:allow-stop-preset`
-
-</td>
-<td>
-
-Enables the stop_preset command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`mak:deny-stop-preset`
-
-</td>
-<td>
-
-Denies the stop_preset command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`mak:allow-unique-preset-name`
-
-</td>
-<td>
-
-Enables the unique_preset_name command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`mak:deny-unique-preset-name`
-
-</td>
-<td>
-
-Denies the unique_preset_name command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`mak:allow-unique-preset-name`
-
-</td>
-<td>
-
-Enables the unique_preset_name command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`mak:deny-unique-preset-name`
-
-</td>
-<td>
-
-Denies the unique_preset_name command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
 `mak:allow-update-agent-spec`
 
 </td>
@@ -1079,32 +822,6 @@ Enables the update_agent_spec command without any pre-configured scope.
 <td>
 
 Denies the update_agent_spec command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`mak:allow-update-preset-spec`
-
-</td>
-<td>
-
-Enables the update_preset_spec command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`mak:deny-update-preset-spec`
-
-</td>
-<td>
-
-Denies the update_preset_spec command without any pre-configured scope.
 
 </td>
 </tr>

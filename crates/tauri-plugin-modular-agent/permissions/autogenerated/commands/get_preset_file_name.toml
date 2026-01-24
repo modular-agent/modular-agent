@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-get-preset-file-name"
+description = "Enables the get_preset_file_name command without any pre-configured scope."
+commands.allow = ["get_preset_file_name"]
+
+[[permission]]
+identifier = "deny-get-preset-file-name"
+description = "Denies the get_preset_file_name command without any pre-configured scope."
+commands.deny = ["get_preset_file_name"]

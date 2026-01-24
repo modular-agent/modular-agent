@@ -80,7 +80,85 @@ export type BoardMessage = {
   value: any;
 };
 
-// agent definition
+// preset
+
+export async function newPreset(): Promise<[string, string]> {
+  return await invoke<any>("plugin:mak|new_preset", {});
+}
+
+// export async function renamePreset(
+//   id: string,
+//   name: string
+// ): Promise<string> {
+//   return await invoke<any>("plugin:mak|rename_preset", {
+//     id,
+//     name,
+//   });
+// }
+
+// export async function uniquePresetName(name: string): Promise<string> {
+//   return await invoke<any>("plugin:mak|unique_preset_name", { name });
+// }
+
+export async function addPreset(spec: PresetSpec): Promise<string> {
+  return await invoke<any>("plugin:mak|add_preset", { spec });
+}
+
+export async function removePreset(id: string): Promise<void> {
+  await invoke<void>("plugin:mak|remove_preset", { id });
+}
+
+export async function startPreset(id: string): Promise<void> {
+  await invoke<void>("plugin:mak|start_preset", { id });
+}
+
+export async function stopPreset(id: string): Promise<void> {
+  await invoke<void>("plugin:mak|stop_preset", { id });
+}
+
+export async function openPresetFromFile(path: string): Promise<string> {
+  return await invoke<any>("plugin:mak|open_preset_from_file", { path });
+}
+
+export async function savePreset(id: string): Promise<void> {
+  await invoke<void>("plugin:mak|save_preset", { id });
+}
+
+export async function savePresetAs(id: string, path: string): Promise<void> {
+  await invoke<void>("plugin:mak|save_preset_as", { id, path });
+}
+
+export async function getPresetFileName(id: string): Promise<string | null> {
+  return await invoke<any>("plugin:mak|get_preset_file_name", { id });
+}
+
+export async function setPresetFileName(
+  id: string,
+  fileName: string,
+): Promise<void> {
+  await invoke<void>("plugin:mak|set_preset_file_name", { id, fileName });
+}
+
+export async function getPresetSpec(id: string): Promise<PresetSpec | null> {
+  return await invoke<any>("plugin:mak|get_preset_spec", { id });
+}
+
+export async function updatePresetSpec(
+  id: string,
+  value: Partial<PresetSpec>,
+): Promise<void> {
+  await invoke<void>("plugin:mak|update_preset_spec", { id, value });
+}
+
+export async function getPresetInfo(id: string): Promise<PresetInfo | null> {
+  return await invoke<any>("plugin:mak|get_preset_info", { id });
+}
+
+export async function getPresetInfos(): Promise<PresetInfo[]> {
+  return await invoke<any>("plugin:mak|get_preset_infos", {});
+}
+
+// agent
 
 export async function getAgentDefinition(): Promise<AgentDefinition | null> {
   return await invoke<any>("plugin:mak|get_agent_definition", {});
@@ -98,89 +176,12 @@ export async function getAgentSpec(agentId: string): Promise<AgentSpec | null> {
 
 export async function updateAgentSpec(
   agentId: string,
-  value: Partial<AgentSpec>
+  value: Partial<AgentSpec>,
 ): Promise<void> {
   await invoke<void>("plugin:mak|update_agent_spec", {
     agentId,
     value,
   });
-}
-
-// preset
-
-export async function getPresetInfo(
-  id: string
-): Promise<PresetInfo | null> {
-  return await invoke<any>("plugin:mak|get_preset_info", { id });
-}
-
-export async function getPresetInfos(): Promise<PresetInfo[]> {
-  return await invoke<any>("plugin:mak|get_preset_infos", {});
-}
-
-export async function getPresetSpec(
-  id: string
-): Promise<PresetSpec | null> {
-  return await invoke<any>("plugin:mak|get_preset_spec", { id });
-}
-
-export async function updatePresetSpec(
-  id: string,
-  value: Partial<PresetSpec>
-): Promise<void> {
-  await invoke<void>("plugin:mak|update_preset_spec", { id, value });
-}
-
-export async function newPreset(name: string): Promise<[string, string]> {
-  return await invoke<any>("plugin:mak|new_preset", { name });
-}
-
-export async function renamePreset(
-  id: string,
-  name: string
-): Promise<string> {
-  return await invoke<any>("plugin:mak|rename_preset", {
-    id,
-    name,
-  });
-}
-
-export async function uniquePresetName(name: string): Promise<string> {
-  return await invoke<any>("plugin:mak|unique_preset_name", { name });
-}
-
-export async function addPreset(
-  name: string,
-  spec: PresetSpec
-): Promise<string> {
-  return await invoke<any>("plugin:mak|add_preset", { name, spec });
-}
-
-export async function removePreset(id: string): Promise<void> {
-  await invoke<void>("plugin:mak|remove_preset", { id });
-}
-
-export async function addAgentsAndConnections(
-  presetId: string,
-  agents: AgentSpec[],
-  connections: ConnectionSpec[]
-): Promise<[AgentSpec[], ConnectionSpec[]]> {
-  return await invoke<[AgentSpec[], ConnectionSpec[]]>(
-    "plugin:mak|add_agents_and_connections",
-    {
-      presetId,
-      agents,
-      connections,
-    }
-  );
-}
-
-export async function startPreset(id: string): Promise<void> {
-  await invoke<void>("plugin:mak|start_preset", { id });
-}
-
-export async function stopPreset(id: string): Promise<void> {
-  await invoke<void>("plugin:mak|stop_preset", { id });
 }
 
 // agents
@@ -191,7 +192,7 @@ export async function newAgentSpec(defName: string): Promise<AgentSpec> {
 
 export async function addAgent(
   presetId: string,
-  spec: AgentSpec
+  spec: AgentSpec,
 ): Promise<string> {
   return await invoke<string>("plugin:mak|add_agent", {
     presetId,
@@ -201,7 +202,7 @@ export async function addAgent(
 
 export async function removeAgent(
   presetId: string,
-  agentId: string
+  agentId: string,
 ): Promise<void> {
   await invoke<void>("plugin:mak|remove_agent", {
     presetId,
@@ -213,7 +214,7 @@ export async function removeAgent(
 
 export async function addConnection(
   presetId: string,
-  connection: ConnectionSpec
+  connection: ConnectionSpec,
 ): Promise<void> {
   await invoke<void>("plugin:mak|add_connection", {
     presetId,
@@ -223,12 +224,27 @@ export async function addConnection(
 
 export async function removeConnection(
   presetId: string,
-  connection: ConnectionSpec
+  connection: ConnectionSpec,
 ): Promise<void> {
   await invoke<void>("plugin:mak|remove_connection", {
     presetId,
     connection,
   });
+}
+
+export async function addAgentsAndConnections(
+  presetId: string,
+  agents: AgentSpec[],
+  connections: ConnectionSpec[],
+): Promise<[AgentSpec[], ConnectionSpec[]]> {
+  return await invoke<[AgentSpec[], ConnectionSpec[]]>(
+    "plugin:mak|add_agents_and_connections",
+    {
+      presetId,
+      agents,
+      connections,
+    },
+  );
 }
 
 // agent
@@ -245,7 +261,7 @@ export async function stopAgent(agentId: string): Promise<void> {
 
 export async function writeBoard(
   board: string,
-  message: string
+  message: string,
 ): Promise<void> {
   await invoke<void>("plugin:mak|write_board", { board, message });
 }
@@ -254,13 +270,13 @@ export async function writeBoard(
 
 export async function setAgentConfigs(
   agentId: string,
-  configs: AgentConfigs
+  configs: AgentConfigs,
 ): Promise<void> {
   await invoke<void>("plugin:mak|set_agent_configs", { agentId, configs });
 }
 
 export async function getGlobalConfigs(
-  defName: string
+  defName: string,
 ): Promise<AgentConfigs | null> {
   return await invoke<any>("plugin:mak|get_global_configs", { defName });
 }
@@ -271,13 +287,13 @@ export async function getGlobalConfigsMap(): Promise<AgentConfigsMap> {
 
 export async function setGlobalConfigs(
   defName: string,
-  configs: AgentConfigs
+  configs: AgentConfigs,
 ): Promise<void> {
   await invoke<void>("plugin:mak|set_global_configs", { defName, configs });
 }
 
 export async function setGlobalConfigsMap(
-  configs: AgentConfigsMap
+  configs: AgentConfigsMap,
 ): Promise<void> {
   await invoke<void>("plugin:mak|set_global_configs_map", { configs });
 }
