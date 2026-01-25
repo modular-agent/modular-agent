@@ -49,7 +49,7 @@ Default permissions for the plugin
 <tr>
 <td>
 
-`mak:allow-add-agent`
+`modular-agent:allow-add-agent`
 
 </td>
 <td>
@@ -62,7 +62,7 @@ Enables the add_agent command without any pre-configured scope.
 <tr>
 <td>
 
-`mak:deny-add-agent`
+`modular-agent:deny-add-agent`
 
 </td>
 <td>
@@ -75,7 +75,7 @@ Denies the add_agent command without any pre-configured scope.
 <tr>
 <td>
 
-`mak:allow-add-agents-and-connections`
+`modular-agent:allow-add-agents-and-connections`
 
 </td>
 <td>
@@ -88,7 +88,7 @@ Enables the add_agents_and_connections command without any pre-configured scope.
 <tr>
 <td>
 
-`mak:deny-add-agents-and-connections`
+`modular-agent:deny-add-agents-and-connections`
 
 </td>
 <td>
@@ -101,7 +101,7 @@ Denies the add_agents_and_connections command without any pre-configured scope.
 <tr>
 <td>
 
-`mak:allow-add-connection`
+`modular-agent:allow-add-connection`
 
 </td>
 <td>
@@ -114,7 +114,7 @@ Enables the add_connection command without any pre-configured scope.
 <tr>
 <td>
 
-`mak:deny-add-connection`
+`modular-agent:deny-add-connection`
 
 </td>
 <td>
@@ -127,7 +127,7 @@ Denies the add_connection command without any pre-configured scope.
 <tr>
 <td>
 
-`mak:allow-add-preset`
+`modular-agent:allow-add-preset`
 
 </td>
 <td>
@@ -140,7 +140,7 @@ Enables the add_preset command without any pre-configured scope.
 <tr>
 <td>
 
-`mak:deny-add-preset`
+`modular-agent:deny-add-preset`
 
 </td>
 <td>
@@ -153,7 +153,7 @@ Denies the add_preset command without any pre-configured scope.
 <tr>
 <td>
 
-`mak:allow-get-agent-definition`
+`modular-agent:allow-get-agent-definition`
 
 </td>
 <td>
@@ -166,7 +166,7 @@ Enables the get_agent_definition command without any pre-configured scope.
 <tr>
 <td>
 
-`mak:deny-get-agent-definition`
+`modular-agent:deny-get-agent-definition`
 
 </td>
 <td>
@@ -179,7 +179,7 @@ Denies the get_agent_definition command without any pre-configured scope.
 <tr>
 <td>
 
-`mak:allow-get-agent-definitions`
+`modular-agent:allow-get-agent-definitions`
 
 </td>
 <td>
@@ -192,7 +192,7 @@ Enables the get_agent_definitions command without any pre-configured scope.
 <tr>
 <td>
 
-`mak:deny-get-agent-definitions`
+`modular-agent:deny-get-agent-definitions`
 
 </td>
 <td>
@@ -205,7 +205,7 @@ Denies the get_agent_definitions command without any pre-configured scope.
 <tr>
 <td>
 
-`mak:allow-get-agent-spec`
+`modular-agent:allow-get-agent-spec`
 
 </td>
 <td>
@@ -218,7 +218,7 @@ Enables the get_agent_spec command without any pre-configured scope.
 <tr>
 <td>
 
-`mak:deny-get-agent-spec`
+`modular-agent:deny-get-agent-spec`
 
 </td>
 <td>
@@ -231,7 +231,7 @@ Denies the get_agent_spec command without any pre-configured scope.
 <tr>
 <td>
 
-`mak:allow-get-global-configs`
+`modular-agent:allow-get-global-configs`
 
 </td>
 <td>
@@ -244,7 +244,7 @@ Enables the get_global_configs command without any pre-configured scope.
 <tr>
 <td>
 
-`mak:deny-get-global-configs`
+`modular-agent:deny-get-global-configs`
 
 </td>
 <td>
@@ -257,7 +257,7 @@ Denies the get_global_configs command without any pre-configured scope.
 <tr>
 <td>
 
-`mak:allow-get-global-configs-map`
+`modular-agent:allow-get-global-configs-map`
 
 </td>
 <td>
@@ -270,7 +270,7 @@ Enables the get_global_configs_map command without any pre-configured scope.
 <tr>
 <td>
 
-`mak:deny-get-global-configs-map`
+`modular-agent:deny-get-global-configs-map`
 
 </td>
 <td>
@@ -283,7 +283,7 @@ Denies the get_global_configs_map command without any pre-configured scope.
 <tr>
 <td>
 
-`mak:allow-get-preset-file-name`
+`modular-agent:allow-get-preset-file-name`
 
 </td>
 <td>
@@ -296,7 +296,7 @@ Enables the get_preset_file_name command without any pre-configured scope.
 <tr>
 <td>
 
-`mak:deny-get-preset-file-name`
+`modular-agent:deny-get-preset-file-name`
 
 </td>
 <td>
@@ -309,7 +309,7 @@ Denies the get_preset_file_name command without any pre-configured scope.
 <tr>
 <td>
 
-`mak:allow-get-preset-info`
+`modular-agent:allow-get-preset-info`
 
 </td>
 <td>
@@ -322,7 +322,7 @@ Enables the get_preset_info command without any pre-configured scope.
 <tr>
 <td>
 
-`mak:deny-get-preset-info`
+`modular-agent:deny-get-preset-info`
 
 </td>
 <td>
@@ -335,7 +335,7 @@ Denies the get_preset_info command without any pre-configured scope.
 <tr>
 <td>
 
-`mak:allow-get-preset-infos`
+`modular-agent:allow-get-preset-infos`
 
 </td>
 <td>
@@ -348,7 +348,7 @@ Enables the get_preset_infos command without any pre-configured scope.
 <tr>
 <td>
 
-`mak:deny-get-preset-infos`
+`modular-agent:deny-get-preset-infos`
 
 </td>
 <td>
@@ -361,7 +361,7 @@ Denies the get_preset_infos command without any pre-configured scope.
 <tr>
 <td>
 
-`mak:allow-get-preset-spec`
+`modular-agent:allow-get-preset-spec`
 
 </td>
 <td>
@@ -374,7 +374,7 @@ Enables the get_preset_spec command without any pre-configured scope.
 <tr>
 <td>
 
-`mak:deny-get-preset-spec`
+`modular-agent:deny-get-preset-spec`
 
 </td>
 <td>
@@ -387,7 +387,7 @@ Denies the get_preset_spec command without any pre-configured scope.
 <tr>
 <td>
 
-`mak:allow-new-agent-spec`
+`modular-agent:allow-new-agent-spec`
 
 </td>
 <td>
@@ -400,7 +400,7 @@ Enables the new_agent_spec command without any pre-configured scope.
 <tr>
 <td>
 
-`mak:deny-new-agent-spec`
+`modular-agent:deny-new-agent-spec`
 
 </td>
 <td>
@@ -413,7 +413,7 @@ Denies the new_agent_spec command without any pre-configured scope.
 <tr>
 <td>
 
-`mak:allow-new-preset`
+`modular-agent:allow-new-preset`
 
 </td>
 <td>
@@ -426,7 +426,7 @@ Enables the new_preset command without any pre-configured scope.
 <tr>
 <td>
 
-`mak:deny-new-preset`
+`modular-agent:deny-new-preset`
 
 </td>
 <td>
@@ -439,7 +439,7 @@ Denies the new_preset command without any pre-configured scope.
 <tr>
 <td>
 
-`mak:allow-open-preset-from-file`
+`modular-agent:allow-open-preset-from-file`
 
 </td>
 <td>
@@ -452,7 +452,7 @@ Enables the open_preset_from_file command without any pre-configured scope.
 <tr>
 <td>
 
-`mak:deny-open-preset-from-file`
+`modular-agent:deny-open-preset-from-file`
 
 </td>
 <td>
@@ -465,7 +465,7 @@ Denies the open_preset_from_file command without any pre-configured scope.
 <tr>
 <td>
 
-`mak:allow-remove-agent`
+`modular-agent:allow-remove-agent`
 
 </td>
 <td>
@@ -478,7 +478,7 @@ Enables the remove_agent command without any pre-configured scope.
 <tr>
 <td>
 
-`mak:deny-remove-agent`
+`modular-agent:deny-remove-agent`
 
 </td>
 <td>
@@ -491,7 +491,7 @@ Denies the remove_agent command without any pre-configured scope.
 <tr>
 <td>
 
-`mak:allow-remove-connection`
+`modular-agent:allow-remove-connection`
 
 </td>
 <td>
@@ -504,7 +504,7 @@ Enables the remove_connection command without any pre-configured scope.
 <tr>
 <td>
 
-`mak:deny-remove-connection`
+`modular-agent:deny-remove-connection`
 
 </td>
 <td>
@@ -517,7 +517,7 @@ Denies the remove_connection command without any pre-configured scope.
 <tr>
 <td>
 
-`mak:allow-remove-preset`
+`modular-agent:allow-remove-preset`
 
 </td>
 <td>
@@ -530,7 +530,7 @@ Enables the remove_preset command without any pre-configured scope.
 <tr>
 <td>
 
-`mak:deny-remove-preset`
+`modular-agent:deny-remove-preset`
 
 </td>
 <td>
@@ -543,7 +543,7 @@ Denies the remove_preset command without any pre-configured scope.
 <tr>
 <td>
 
-`mak:allow-save-preset`
+`modular-agent:allow-save-preset`
 
 </td>
 <td>
@@ -556,7 +556,7 @@ Enables the save_preset command without any pre-configured scope.
 <tr>
 <td>
 
-`mak:deny-save-preset`
+`modular-agent:deny-save-preset`
 
 </td>
 <td>
@@ -569,7 +569,7 @@ Denies the save_preset command without any pre-configured scope.
 <tr>
 <td>
 
-`mak:allow-save-preset-as`
+`modular-agent:allow-save-preset-as`
 
 </td>
 <td>
@@ -582,7 +582,7 @@ Enables the save_preset_as command without any pre-configured scope.
 <tr>
 <td>
 
-`mak:deny-save-preset-as`
+`modular-agent:deny-save-preset-as`
 
 </td>
 <td>
@@ -595,7 +595,7 @@ Denies the save_preset_as command without any pre-configured scope.
 <tr>
 <td>
 
-`mak:allow-set-agent-configs`
+`modular-agent:allow-set-agent-configs`
 
 </td>
 <td>
@@ -608,7 +608,7 @@ Enables the set_agent_configs command without any pre-configured scope.
 <tr>
 <td>
 
-`mak:deny-set-agent-configs`
+`modular-agent:deny-set-agent-configs`
 
 </td>
 <td>
@@ -621,7 +621,7 @@ Denies the set_agent_configs command without any pre-configured scope.
 <tr>
 <td>
 
-`mak:allow-set-global-configs`
+`modular-agent:allow-set-global-configs`
 
 </td>
 <td>
@@ -634,7 +634,7 @@ Enables the set_global_configs command without any pre-configured scope.
 <tr>
 <td>
 
-`mak:deny-set-global-configs`
+`modular-agent:deny-set-global-configs`
 
 </td>
 <td>
@@ -647,7 +647,7 @@ Denies the set_global_configs command without any pre-configured scope.
 <tr>
 <td>
 
-`mak:allow-set-global-configs-map`
+`modular-agent:allow-set-global-configs-map`
 
 </td>
 <td>
@@ -660,7 +660,7 @@ Enables the set_global_configs_map command without any pre-configured scope.
 <tr>
 <td>
 
-`mak:deny-set-global-configs-map`
+`modular-agent:deny-set-global-configs-map`
 
 </td>
 <td>
@@ -673,7 +673,7 @@ Denies the set_global_configs_map command without any pre-configured scope.
 <tr>
 <td>
 
-`mak:allow-set-preset-file-name`
+`modular-agent:allow-set-preset-file-name`
 
 </td>
 <td>
@@ -686,7 +686,7 @@ Enables the set_preset_file_name command without any pre-configured scope.
 <tr>
 <td>
 
-`mak:deny-set-preset-file-name`
+`modular-agent:deny-set-preset-file-name`
 
 </td>
 <td>
@@ -699,7 +699,7 @@ Denies the set_preset_file_name command without any pre-configured scope.
 <tr>
 <td>
 
-`mak:allow-start-agent`
+`modular-agent:allow-start-agent`
 
 </td>
 <td>
@@ -712,7 +712,7 @@ Enables the start_agent command without any pre-configured scope.
 <tr>
 <td>
 
-`mak:deny-start-agent`
+`modular-agent:deny-start-agent`
 
 </td>
 <td>
@@ -725,7 +725,7 @@ Denies the start_agent command without any pre-configured scope.
 <tr>
 <td>
 
-`mak:allow-start-preset`
+`modular-agent:allow-start-preset`
 
 </td>
 <td>
@@ -738,7 +738,7 @@ Enables the start_preset command without any pre-configured scope.
 <tr>
 <td>
 
-`mak:deny-start-preset`
+`modular-agent:deny-start-preset`
 
 </td>
 <td>
@@ -751,7 +751,7 @@ Denies the start_preset command without any pre-configured scope.
 <tr>
 <td>
 
-`mak:allow-stop-agent`
+`modular-agent:allow-stop-agent`
 
 </td>
 <td>
@@ -764,7 +764,7 @@ Enables the stop_agent command without any pre-configured scope.
 <tr>
 <td>
 
-`mak:deny-stop-agent`
+`modular-agent:deny-stop-agent`
 
 </td>
 <td>
@@ -777,7 +777,7 @@ Denies the stop_agent command without any pre-configured scope.
 <tr>
 <td>
 
-`mak:allow-stop-preset`
+`modular-agent:allow-stop-preset`
 
 </td>
 <td>
@@ -790,7 +790,7 @@ Enables the stop_preset command without any pre-configured scope.
 <tr>
 <td>
 
-`mak:deny-stop-preset`
+`modular-agent:deny-stop-preset`
 
 </td>
 <td>
@@ -803,7 +803,7 @@ Denies the stop_preset command without any pre-configured scope.
 <tr>
 <td>
 
-`mak:allow-update-agent-spec`
+`modular-agent:allow-update-agent-spec`
 
 </td>
 <td>
@@ -816,7 +816,7 @@ Enables the update_agent_spec command without any pre-configured scope.
 <tr>
 <td>
 
-`mak:deny-update-agent-spec`
+`modular-agent:deny-update-agent-spec`
 
 </td>
 <td>
@@ -829,7 +829,7 @@ Denies the update_agent_spec command without any pre-configured scope.
 <tr>
 <td>
 
-`mak:allow-update-preset-spec`
+`modular-agent:allow-update-preset-spec`
 
 </td>
 <td>
@@ -842,7 +842,7 @@ Enables the update_preset_spec command without any pre-configured scope.
 <tr>
 <td>
 
-`mak:deny-update-preset-spec`
+`modular-agent:deny-update-preset-spec`
 
 </td>
 <td>
@@ -855,7 +855,7 @@ Denies the update_preset_spec command without any pre-configured scope.
 <tr>
 <td>
 
-`mak:allow-write-board`
+`modular-agent:allow-write-board`
 
 </td>
 <td>
@@ -868,7 +868,7 @@ Enables the write_board command without any pre-configured scope.
 <tr>
 <td>
 
-`mak:deny-write-board`
+`modular-agent:deny-write-board`
 
 </td>
 <td>

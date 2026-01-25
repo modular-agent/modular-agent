@@ -24,7 +24,7 @@ impl<R: Runtime, T: Manager<R>> crate::MAKExt<R> for T {
 
 /// Initializes the plugin.
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
-    Builder::new("mak")
+    Builder::new("modular-agent")
         .invoke_handler(tauri::generate_handler![
             // Preset management
             commands::new_preset,

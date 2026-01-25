@@ -1,6 +1,6 @@
 {
-  "name": "tauri-plugin-mak-api",
-  "version": "0.11.0",
+  "name": "tauri-plugin-modular-agent-api",
+  "version": "0.12.0",
   "license": "MIT OR Apache-2.0",
   "author": "Akira Ishino",
   "description": "Tauri plugin for Modular Agent Kit",
