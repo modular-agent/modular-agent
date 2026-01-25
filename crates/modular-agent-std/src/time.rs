@@ -3,13 +3,13 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use std::vec;
 
-use modular_agent_kit::{
-    MAK, Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentStatus,
-    AgentValue, AsAgent, mak_agent, async_trait,
-};
 use chrono::{DateTime, Local, Utc};
 use cron::Schedule;
 use log;
+use modular_agent_kit::{
+    Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentStatus, AgentValue,
+    AsAgent, MAK, async_trait, modular_agent,
+};
 use regex::Regex;
 use tokio::task::JoinHandle;
 
@@ -31,7 +31,7 @@ const INTERVAL_DEFAULT: &str = "10s";
 const TIME_DEFAULT: &str = "1s";
 
 // Delay Agent
-#[mak_agent(
+#[modular_agent(
     title = "Delay",
     description = "Delays output by a specified time",
     category = CATEGORY,
@@ -86,7 +86,7 @@ impl AsAgent for DelayAgent {
 }
 
 // Interval Timer Agent
-#[mak_agent(
+#[modular_agent(
     title = "Interval Timer",
     description = "Outputs a unit signal at specified intervals",
     category = CATEGORY,
@@ -191,7 +191,7 @@ impl AsAgent for IntervalTimerAgent {
 }
 
 // OnStart
-#[mak_agent(
+#[modular_agent(
     title = "On Start",
     category = CATEGORY,
     outputs = [PORT_UNIT],
@@ -234,7 +234,7 @@ impl AsAgent for OnStartAgent {
 }
 
 // Schedule Timer Agent
-#[mak_agent(
+#[modular_agent(
     title = "Schedule Timer",
     category = CATEGORY,
     outputs = [PORT_TIME],
@@ -397,7 +397,7 @@ impl AsAgent for ScheduleTimerAgent {
 }
 
 // Throttle agent
-#[mak_agent(
+#[modular_agent(
     title = "Throttle Time",
     category = CATEGORY,
     inputs = [PORT_VALUE],
@@ -438,8 +438,7 @@ impl ThrottleTimeAgent {
                 if wd.len() > 0 {
                     // If there are data waiting, output the first one
                     let (ctx, port, data) = wd.remove(0);
-                    mak
-                        .try_send_agent_out(agent_id.clone(), ctx, port, data)
+                    mak.try_send_agent_out(agent_id.clone(), ctx, port, data)
                         .unwrap_or_else(|e| {
                             log::error!("Failed to send delayed output: {}", e);
                         });

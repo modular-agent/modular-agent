@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use modular_agent_kit::{
     MAK, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
-    mak_agent, async_trait,
+    modular_agent, async_trait,
 };
 use im::{Vector, vector};
 use mini_moka::sync::Cache;
@@ -23,7 +23,7 @@ const CONFIG_TTL_SEC: &str = "ttl_sec";
 const CONFIG_CAPACITY: &str = "capacity";
 
 /// Check if an input is an array.
-#[mak_agent(
+#[modular_agent(
     title = "IsArray",
     category = CATEGORY,
     inputs = [PORT_VALUE],
@@ -55,7 +55,7 @@ impl AsAgent for IsArrayAgent {
 
 /// Checks if an input array is empty, emitting to T or F accordingly.
 /// If the input is not an array, it is treated as non-empty.
-#[mak_agent(
+#[modular_agent(
     title = "IsEmptyArray",
     category = CATEGORY,
     inputs = [PORT_ARRAY],
@@ -96,7 +96,7 @@ impl AsAgent for IsEmptyArrayAgent {
 /// Outputs the length of the input array.
 /// If the input is not an array, outputs 1.
 /// This is different from IsEmpty, but is designed for consistency with Map.
-#[mak_agent(
+#[modular_agent(
     title = "ArrayLength",
     category = CATEGORY,
     inputs = [PORT_ARRAY],
@@ -132,7 +132,7 @@ impl AsAgent for ArrayLengthAgent {
 /// Output the first item of the input array.
 /// If the input is not an array, outputs the input itself.
 /// Errors if the input array is empty.
-#[mak_agent(
+#[modular_agent(
     title = "ArrayFirst",
     category = CATEGORY,
     inputs = [PORT_ARRAY],
@@ -173,7 +173,7 @@ impl AsAgent for ArrayFirstAgent {
 /// Output the rest of the input array after removing the first item.
 /// If the input is not an array, outputs an empty array.
 /// Output an empty array if the input array is empty.
-#[mak_agent(
+#[modular_agent(
     title = "ArrayRest",
     category = CATEGORY,
     inputs = [PORT_ARRAY],
@@ -211,7 +211,7 @@ impl AsAgent for ArrayRestAgent {
 //// Output the last item of the input array.
 /// If the input is not an array, outputs the input itself.
 /// Errors if the input array is empty.
-#[mak_agent(
+#[modular_agent(
     title = "ArrayLast",
     category = CATEGORY,
     inputs = [PORT_ARRAY],
@@ -252,7 +252,7 @@ impl AsAgent for ArrayLastAgent {
 /// Output the nth-item of the input array.
 /// If the input is not an array, outputs the input itself if n=0, else errors.
 /// Errors if the input array is shorter than n+1.
-#[mak_agent(
+#[modular_agent(
     title = "ArrayNth",
     category = CATEGORY,
     inputs = [PORT_ARRAY],
@@ -316,7 +316,7 @@ impl AsAgent for ArrayNthAgent {
 /// Takes the first n items from the input array.
 /// If the input is not an array, outputs an array with the input as the only item.
 /// If n is greater than the array length, outputs the entire array.
-#[mak_agent(
+#[modular_agent(
     title = "ArrayTake",
     category = CATEGORY,
     inputs = [PORT_ARRAY],
@@ -368,7 +368,7 @@ impl AsAgent for ArrayTakeAgent {
 
 /// Maps over an input array, emitting each item individually with a `map` frame that captures the index and length.
 /// Nested maps accumulate frames to preserve lineage. If the input is not an array, it is treated as a single-item array.
-#[mak_agent(
+#[modular_agent(
     title = "Map",
     category = CATEGORY,
     inputs = [PORT_ARRAY],
@@ -415,7 +415,7 @@ impl AsAgent for MapAgent {
 /// If a `map` frame is not present, the input value is emitted directly.
 ///
 /// Incomplete arrays are emitted when the context changes.
-#[mak_agent(
+#[modular_agent(
     title = "Collect",
     category = CATEGORY,
     description = "Collects input values into an array",
@@ -551,7 +551,7 @@ impl CollectAgent {
 ///
 /// When the `use_ctx` config is true, inputs are matched by context key (including map frames)
 /// so that mapped items zip correctly even when they interleave.
-#[mak_agent(
+#[modular_agent(
     title = "ZipToArray",
     category = CATEGORY,
     inputs = [PORT_IN1, PORT_IN2],

@@ -1,12 +1,12 @@
 use std::fs;
 use std::path::Path;
 
-use modular_agent_kit::{
-    MAK, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
-    mak_agent, async_trait,
-};
 use glob::glob;
 use im::hashmap;
+use modular_agent_kit::{
+    AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent, MAK,
+    async_trait, modular_agent,
+};
 
 const CATEGORY: &str = "Std/File";
 
@@ -17,7 +17,7 @@ const PORT_PATH: &str = "path";
 const PORT_STRING: &str = "string";
 
 // Glob Agent
-#[mak_agent(
+#[modular_agent(
     title = "Glob",
     category = CATEGORY,
     inputs = [PORT_PATH],
@@ -69,7 +69,7 @@ impl AsAgent for GlobAgent {
 }
 
 // List Files Agent
-#[mak_agent(
+#[modular_agent(
     title = "List Files",
     category = CATEGORY,
     inputs = [PORT_PATH],
@@ -135,7 +135,7 @@ impl AsAgent for ListFilesAgent {
 }
 
 // Read Text File Agent
-#[mak_agent(
+#[modular_agent(
     title = "Read Text File",
     category = CATEGORY,
     inputs = [PORT_PATH],
@@ -194,7 +194,7 @@ impl AsAgent for ReadTextFileAgent {
 }
 
 // Write Text File Agent
-#[mak_agent(
+#[modular_agent(
     title = "Write Text File",
     category = CATEGORY,
     inputs = [PORT_DATA],

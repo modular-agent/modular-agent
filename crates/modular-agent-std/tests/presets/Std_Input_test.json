@@ -2,7 +2,7 @@
   "agents": [
     {
       "id": "352",
-      "def_name": "mak_std_agents::input::BooleanInputAgent",
+      "def_name": "modular_agent_std::input::BooleanInputAgent",
       "inputs": [
         "unit"
       ],
@@ -24,7 +24,7 @@
     },
     {
       "id": "353",
-      "def_name": "mak_std_agents::display::DisplayValueAgent",
+      "def_name": "modular_agent_std::display::DisplayValueAgent",
       "inputs": [
         "value"
       ],
@@ -44,7 +44,7 @@
     },
     {
       "id": "354",
-      "def_name": "mak_std_agents::input::IntegerInputAgent",
+      "def_name": "modular_agent_std::input::IntegerInputAgent",
       "inputs": [
         "unit"
       ],
@@ -66,7 +66,7 @@
     },
     {
       "id": "355",
-      "def_name": "mak_std_agents::display::DisplayValueAgent",
+      "def_name": "modular_agent_std::display::DisplayValueAgent",
       "inputs": [
         "value"
       ],
@@ -86,7 +86,7 @@
     },
     {
       "id": "356",
-      "def_name": "mak_std_agents::input::NumberInputAgent",
+      "def_name": "modular_agent_std::input::NumberInputAgent",
       "inputs": [
         "unit"
       ],
@@ -108,7 +108,7 @@
     },
     {
       "id": "357",
-      "def_name": "mak_std_agents::display::DisplayValueAgent",
+      "def_name": "modular_agent_std::display::DisplayValueAgent",
       "inputs": [
         "value"
       ],
@@ -128,7 +128,7 @@
     },
     {
       "id": "358",
-      "def_name": "mak_std_agents::input::ObjectInputAgent",
+      "def_name": "modular_agent_std::input::ObjectInputAgent",
       "inputs": [
         "unit"
       ],
@@ -150,7 +150,7 @@
     },
     {
       "id": "359",
-      "def_name": "mak_std_agents::display::DisplayValueAgent",
+      "def_name": "modular_agent_std::display::DisplayValueAgent",
       "inputs": [
         "value"
       ],
@@ -170,7 +170,7 @@
     },
     {
       "id": "360",
-      "def_name": "mak_std_agents::input::StringInputAgent",
+      "def_name": "modular_agent_std::input::StringInputAgent",
       "inputs": [
         "unit"
       ],
@@ -192,7 +192,7 @@
     },
     {
       "id": "361",
-      "def_name": "mak_std_agents::input::TextInputAgent",
+      "def_name": "modular_agent_std::input::TextInputAgent",
       "inputs": [
         "unit"
       ],
@@ -216,7 +216,7 @@
     },
     {
       "id": "362",
-      "def_name": "mak_std_agents::display::DisplayValueAgent",
+      "def_name": "modular_agent_std::display::DisplayValueAgent",
       "inputs": [
         "value"
       ],
@@ -236,7 +236,7 @@
     },
     {
       "id": "363",
-      "def_name": "mak_std_agents::input::UnitInputAgent",
+      "def_name": "modular_agent_std::input::UnitInputAgent",
       "outputs": [
         "unit"
       ],
@@ -255,7 +255,7 @@
     },
     {
       "id": "364",
-      "def_name": "mak_std_agents::display::DisplayValueAgent",
+      "def_name": "modular_agent_std::display::DisplayValueAgent",
       "inputs": [
         "value"
       ],
@@ -491,7 +491,7 @@
     },
     {
       "id": "377",
-      "def_name": "mak_std_agents::display::DisplayValueAgent",
+      "def_name": "modular_agent_std::display::DisplayValueAgent",
       "inputs": [
         "value"
       ],

@@ -1,6 +1,6 @@
 #![recursion_limit = "256"]
 
-extern crate mak_std_agents;
+extern crate modular_agent_std;
 
 mod suites {
     mod input_test;

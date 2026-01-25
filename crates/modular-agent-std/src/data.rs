@@ -1,12 +1,12 @@
 use std::time::Duration;
 use std::{collections::VecDeque, vec};
 
-use modular_agent_kit::{
-    MAK, AgentConfigSpec, AgentConfigSpecs, AgentConfigs, AgentContext, AgentData, AgentError,
-    AgentOutput, AgentSpec, AgentValue, AsAgent, mak_agent, async_trait,
-};
 use im::{HashMap, Vector};
 use mini_moka::sync::Cache;
+use modular_agent_kit::{
+    AgentConfigSpec, AgentConfigSpecs, AgentConfigs, AgentContext, AgentData, AgentError,
+    AgentOutput, AgentSpec, AgentValue, AsAgent, MAK, async_trait, modular_agent,
+};
 
 const CATEGORY: &str = "Std/Data";
 
@@ -24,7 +24,7 @@ const CONFIG_TTL_SECONDS: &str = "ttl_sec";
 const CONFIG_CAPACITY: &str = "capacity";
 
 // Get Value
-#[mak_agent(
+#[modular_agent(
     title = "Get Value",
     category = CATEGORY,
     inputs = [PORT_VALUE],
@@ -102,7 +102,7 @@ impl AsAgent for GetValueAgent {
 }
 
 // Set Value
-#[mak_agent(
+#[modular_agent(
     title = "Set Value",
     category = CATEGORY,
     inputs = [PORT_VALUE],
@@ -167,7 +167,7 @@ impl AsAgent for SetValueAgent {
 }
 
 // To Object
-#[mak_agent(
+#[modular_agent(
     title = "To Object",
     category = CATEGORY,
     inputs = [PORT_VALUE],
@@ -228,7 +228,7 @@ impl AsAgent for ToObjectAgent {
 }
 
 // To JSON
-#[mak_agent(
+#[modular_agent(
     title = "To JSON",
     category = CATEGORY,
     inputs = [PORT_VALUE],
@@ -254,13 +254,14 @@ impl AsAgent for ToJsonAgent {
     ) -> Result<(), AgentError> {
         let json = serde_json::to_string_pretty(&value)
             .map_err(|e| AgentError::InvalidValue(e.to_string()))?;
-        self.output(ctx, PORT_JSON, AgentValue::string(json)).await?;
+        self.output(ctx, PORT_JSON, AgentValue::string(json))
+            .await?;
         Ok(())
     }
 }
 
 // From JSON
-#[mak_agent(
+#[modular_agent(
     title = "From JSON",
     category = CATEGORY,
     inputs = [PORT_JSON],
@@ -354,7 +355,7 @@ fn set_nested_value<K: AsRef<str>>(root: &mut AgentValue, keys: &[K], new_value:
 ///
 /// When the `use_ctx` config is true, inputs are matched by context key (including map frames)
 /// so that mapped items zip correctly even when they interleave.
-#[mak_agent(
+#[modular_agent(
     title = "ZipToObject",
     category = CATEGORY,
     inputs = [PORT_IN1, PORT_IN2],

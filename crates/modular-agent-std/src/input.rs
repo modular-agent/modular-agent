@@ -1,8 +1,8 @@
 use std::vec;
 
 use modular_agent_kit::{
-    MAK, Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentStatus,
-    AgentValue, AsAgent, mak_agent, async_trait,
+    Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentStatus, AgentValue,
+    AsAgent, MAK, async_trait, modular_agent,
 };
 
 const CATEGORY: &str = "Std/Input";
@@ -16,7 +16,7 @@ const TEXT: &str = "text";
 const OBJECT: &str = "object";
 
 /// Unit Input
-#[mak_agent(
+#[modular_agent(
     kind = "Input",
     title = "Unit Input",
     hide_title,
@@ -47,7 +47,7 @@ impl AsAgent for UnitInputAgent {
 }
 
 // Boolean Input
-#[mak_agent(
+#[modular_agent(
     kind = "Input",
     title = "Boolean Input",
     category = CATEGORY,
@@ -87,7 +87,7 @@ impl AsAgent for BooleanInputAgent {
 }
 
 // Integer Input
-#[mak_agent(
+#[modular_agent(
     kind = "Input",
     title = "Integer Input",
     category = CATEGORY,
@@ -127,7 +127,7 @@ impl AsAgent for IntegerInputAgent {
 }
 
 // Number Input
-#[mak_agent(
+#[modular_agent(
     kind = "Input",
     title = "Number Input",
     category = CATEGORY,
@@ -167,7 +167,7 @@ impl AsAgent for NumberInputAgent {
 }
 
 // String Input
-#[mak_agent(
+#[modular_agent(
     kind = "Input",
     title = "String Input",
     category = CATEGORY,
@@ -207,7 +207,7 @@ impl AsAgent for StringInputAgent {
 }
 
 // Text Input
-#[mak_agent(
+#[modular_agent(
     kind = "Input",
     title = "Text Input",
     category = CATEGORY,
@@ -247,7 +247,7 @@ impl AsAgent for TextInputAgent {
 }
 
 // Object Input
-#[mak_agent(
+#[modular_agent(
     kind = "Input",
     title = "Object Input",
     category = CATEGORY,

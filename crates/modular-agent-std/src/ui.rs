@@ -1,6 +1,6 @@
 use modular_agent_kit::{
-    MAK, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
-    mak_agent, async_trait,
+    AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent, MAK,
+    async_trait, modular_agent,
 };
 
 const CATEGORY: &str = "Std/UI";
@@ -8,7 +8,7 @@ const CATEGORY: &str = "Std/UI";
 const COMMENT: &str = "comment";
 const PORT_SP: &str = " ";
 
-#[mak_agent(
+#[modular_agent(
     kind = "UI",
     title = "Comment",
     hide_title,
@@ -27,7 +27,7 @@ impl AsAgent for CommentAgent {
     }
 }
 
-#[mak_agent(
+#[modular_agent(
     kind = "UI",
     title = "Router",
     hide_title,

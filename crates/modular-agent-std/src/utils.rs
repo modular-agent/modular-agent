@@ -1,8 +1,8 @@
 use std::vec;
 
 use modular_agent_kit::{
-    MAK, Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
-    mak_agent, async_trait,
+    Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent, MAK,
+    async_trait, modular_agent,
 };
 
 const CATEGORY: &str = "Std/Utils";
@@ -14,7 +14,7 @@ const PORT_COUNT: &str = "count";
 const DISPLAY_COUNT: &str = "count";
 
 /// Counter
-#[mak_agent(
+#[modular_agent(
     title = "Counter",
     category = CATEGORY,
     inputs = [PORT_IN, PORT_RESET],

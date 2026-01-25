@@ -1,10 +1,10 @@
 use std::vec;
 
-use modular_agent_kit::{
-    MAK, Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
-    mak_agent, async_trait,
-};
 use im::hashmap;
+use modular_agent_kit::{
+    Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent, MAK,
+    async_trait, modular_agent,
+};
 
 const CATEGORY: &str = "Std/Display";
 
@@ -13,7 +13,7 @@ const PORT_VALUE: &str = "value";
 const DISPLAY_VALUE: &str = "value";
 
 // Display Value
-#[mak_agent(
+#[modular_agent(
     kind = "Display",
     title = "Display Value",
     category = CATEGORY,
@@ -55,7 +55,7 @@ impl AsAgent for DisplayValueAgent {
 }
 
 // Debug Value
-#[mak_agent(
+#[modular_agent(
     kind = "Display",
     title = "Debug Value",
     category = CATEGORY,

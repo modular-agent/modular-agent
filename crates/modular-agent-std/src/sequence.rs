@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use modular_agent_kit::{
     MAK, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
-    mak_agent, async_trait,
+    modular_agent, async_trait,
 };
 use mini_moka::sync::Cache;
 
@@ -22,7 +22,7 @@ const CONFIG_N: &str = "n";
 const CONFIG_USE_CTX: &str = "use_ctx";
 
 /// Receives an input and emits it sequentially to n outputs.
-#[mak_agent(
+#[modular_agent(
     title = "Sequence",
     category = CATEGORY,
     inputs = [PORT_IN],
@@ -87,7 +87,7 @@ impl AsAgent for SequenceAgent {
 }
 
 /// Receives inputs in any order and, once all are present, emits them sequentially.
-#[mak_agent(
+#[modular_agent(
     title = "Sync",
     category = CATEGORY,
     inputs = [PORT_IN1, PORT_IN2],

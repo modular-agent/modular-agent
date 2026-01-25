@@ -1,9 +1,9 @@
-use modular_agent_kit::{
-    MAK, Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
-    mak_agent, async_trait,
-};
 use handlebars::Handlebars;
 use im::vector;
+use modular_agent_kit::{
+    Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent, MAK,
+    async_trait, modular_agent,
+};
 use serde_json::json;
 
 const CATEGORY: &str = "Std/String";
@@ -20,7 +20,7 @@ const CONFIG_SEP: &str = "sep";
 const CONFIG_TEMPLATE: &str = "template";
 
 /// Check if the input is a string.
-#[mak_agent(
+#[modular_agent(
     title = "IsString",
     category = CATEGORY,
     inputs = [PORT_VALUE],
@@ -53,7 +53,7 @@ impl AsAgent for IsStringAgent {
 }
 
 /// Check if the input string is empty.
-#[mak_agent(
+#[modular_agent(
     title = "IsEmptyString",
     category = CATEGORY,
     inputs = [PORT_STRING],
@@ -105,7 +105,7 @@ impl AsAgent for IsEmptyStringAgent {
 ///
 /// # Example
 /// Given the input `["Hello", "World"]` and `CONFIG_SEP` set to `" "`, the output will be `"Hello World"`.
-#[mak_agent(
+#[modular_agent(
     title = "String Join",
     category = CATEGORY,
     inputs = [PORT_STRINGS],
@@ -155,7 +155,7 @@ impl AsAgent for StringJoinAgent {
     }
 }
 
-#[mak_agent(
+#[modular_agent(
     title = "String Length Split",
     category = CATEGORY,
     inputs = [PORT_STRING],
@@ -229,7 +229,7 @@ impl AsAgent for StringLengthSplitAgent {
 }
 
 // Template String Agent
-#[mak_agent(
+#[modular_agent(
     title = "Template String",
     category = CATEGORY,
     inputs = [PORT_VALUE],
@@ -289,7 +289,7 @@ impl AsAgent for TemplateStringAgent {
 }
 
 // Template Text Agent
-#[mak_agent(
+#[modular_agent(
     title = "Template Text",
     category = CATEGORY,
     inputs = [PORT_VALUE],
@@ -349,7 +349,7 @@ impl AsAgent for TemplateTextAgent {
 }
 
 // Template Array Agent
-#[mak_agent(
+#[modular_agent(
     title = "Template Array",
     category = CATEGORY,
     inputs = [PORT_VALUE],

@@ -3,8 +3,8 @@
 use std::vec;
 
 use modular_agent_kit::{
-    MAK, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
-    mak_agent, async_trait,
+    AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent, MAK,
+    async_trait, modular_agent,
 };
 
 const CATEGORY: &str = "Std/Yaml";
@@ -13,7 +13,7 @@ const PORT_DATA: &str = "data";
 const PORT_YAML: &str = "yaml";
 
 // To YAML
-#[mak_agent(
+#[modular_agent(
     title = "To YAML",
     category = CATEGORY,
     inputs = [PORT_DATA],
@@ -39,13 +39,14 @@ impl AsAgent for ToYamlAgent {
     ) -> Result<(), AgentError> {
         let yaml = serde_yaml_ng::to_string(&value)
             .map_err(|e| AgentError::InvalidValue(e.to_string()))?;
-        self.output(ctx, PORT_YAML, AgentValue::string(yaml)).await?;
+        self.output(ctx, PORT_YAML, AgentValue::string(yaml))
+            .await?;
         Ok(())
     }
 }
 
 // From YAML
-#[mak_agent(
+#[modular_agent(
     title = "From YAML",
     category = CATEGORY,
     inputs = [PORT_YAML],

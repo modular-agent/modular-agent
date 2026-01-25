@@ -4,8 +4,8 @@ use std::sync::Arc;
 
 use modular_agent_kit::photon_rs::{self, PhotonImage};
 use modular_agent_kit::{
-    MAK, Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
-    mak_agent, async_trait,
+    Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent, MAK,
+    async_trait, modular_agent,
 };
 
 const CATEGORY: &str = "Std/Image";
@@ -27,7 +27,7 @@ const CONFIG_WIDTH: &str = "width";
 const CONFIG_THRESHOLD: &str = "threshold";
 
 // IsBlankImageAgent
-#[mak_agent(
+#[modular_agent(
     title = "isBlank",
     category = CATEGORY,
     inputs = [PORT_IMAGE],
@@ -100,7 +100,7 @@ impl AsAgent for IsBlankImageAgent {
 
 // ResampleImageAgent
 
-#[mak_agent(
+#[modular_agent(
     title = "Resize Image",
     category = CATEGORY,
     inputs = [PORT_IMAGE],
@@ -149,7 +149,7 @@ impl AsAgent for ResampleImageAgent {
 
 // ResizeImageAgent
 
-#[mak_agent(
+#[modular_agent(
     title = "Resize Image",
     category = CATEGORY,
     inputs = [PORT_IMAGE],
@@ -203,7 +203,7 @@ impl AsAgent for ResizeImageAgent {
 
 // ScaleImageAgent
 
-#[mak_agent(
+#[modular_agent(
     title = "Scale Image",
     category = CATEGORY,
     inputs = [PORT_IMAGE],
@@ -276,7 +276,7 @@ impl AsAgent for ScaleImageAgent {
 }
 
 // IsChangedImageAgent
-#[mak_agent(
+#[modular_agent(
     title = "isChanged",
     category = CATEGORY,
     inputs = [PORT_IMAGE],
@@ -358,7 +358,7 @@ impl AsAgent for IsChangedImageAgent {
 
 // native
 
-#[mak_agent(
+#[modular_agent(
     title = "Open Image",
     category = CATEGORY,
     inputs = [PORT_FILENAME],
@@ -395,7 +395,7 @@ impl AsAgent for OpenImageAgent {
     }
 }
 
-#[mak_agent(
+#[modular_agent(
     title = "Save Image",
     category = CATEGORY,
     inputs = [PORT_IMAGE_FILENAME],
