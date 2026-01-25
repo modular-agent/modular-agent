@@ -1,5 +1,4 @@
 #[cfg(feature = "file")]
-use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use serde_json::Value;
@@ -112,39 +111,13 @@ impl MAK {
         Ok(id)
     }
 
-    // /// Rename an existing preset.
-    // pub fn rename_preset(&self, id: &str, new_name: &str) -> Result<String, AgentError> {
-    //     if !is_valid_preseet_name(new_name) {
-    //         return Err(AgentError::InvalidPresetName(new_name.into()));
-    //     }
-
-    //     // check if the new name is already used
-    //     let new_name = self.unique_preset_name(new_name);
-
-    //     let mut presets = self.presets.lock().unwrap();
-
-    //     // remove the original preset
-    //     let Some(mut preset) = presets.swap_remove(id) else {
-    //         return Err(AgentError::RenamePresetFailed(id.into()));
-    //     };
-
-    //     // insert renamed preset
-    //     preset.set_name(new_name.clone());
-    //     presets.insert(preset.id().to_string(), preset);
-    //     Ok(new_name)
-    // }
-
-    // /// Generate a unique preset name by appending a number suffix if needed.
-    // pub fn unique_preset_name(&self, name: &str) -> String {
-    //     let mut new_name = name.trim().to_string();
-    //     let mut i = 2;
-    //     let presets = self.presets.lock().unwrap();
-    //     while presets.values().any(|preset| preset.name() == new_name) {
-    //         new_name = format!("{}{}", name, i);
-    //         i += 1;
-    //     }
-    //     new_name
-    // }
+    /// Create a new preset with the given name.
+    /// Returns the id of the new preset.
+    pub fn new_preset_with_name(&self, name: String) -> Result<String, AgentError> {
+        let spec = PresetSpec::default();
+        let id = self.add_preset_with_name(spec, name)?;
+        Ok(id)
+    }
 
     /// Get a preset by id.
     pub fn get_preset(&self, id: &str) -> Option<Arc<AsyncMutex<Preset>>> {
@@ -152,11 +125,29 @@ impl MAK {
         presets.get(id).cloned()
     }
 
-    /// Add a new preset with the given name and spec, and returns the id of the new preset.
+    /// Add a new preset with the given spec, and returns the id of the new preset.
     ///
     /// The ids of the given spec, including agents and connections, are changed to new unique ids.
     pub fn add_preset(&self, spec: PresetSpec) -> Result<String, AgentError> {
-        let preset = Preset::new(spec);
+        self.add_preset_raw(spec, None)
+    }
+
+    /// Add a new preset with the given name and spec, and returns the id of the new preset.
+    ///
+    /// The ids of the given spec, including agents and connections, are changed to new unique ids.
+    pub fn add_preset_with_name(
+        &self,
+        spec: PresetSpec,
+        name: String,
+    ) -> Result<String, AgentError> {
+        self.add_preset_raw(spec, Some(name))
+    }
+
+    fn add_preset_raw(&self, spec: PresetSpec, name: Option<String>) -> Result<String, AgentError> {
+        let mut preset = Preset::new(spec);
+        if let Some(name) = name {
+            preset.set_name(name);
+        }
         let id = preset.id().to_string();
 
         // add agents
@@ -210,7 +201,7 @@ impl MAK {
         Ok(())
     }
 
-    /// Start an preset by id.
+    /// Start a preset by id.
     pub async fn start_preset(&self, id: &str) -> Result<(), AgentError> {
         let preset = self
             .get_preset(id)
@@ -221,7 +212,7 @@ impl MAK {
         Ok(())
     }
 
-    /// Stop an preset by id.
+    /// Stop a preset by id.
     pub async fn stop_preset(&self, id: &str) -> Result<(), AgentError> {
         let preset = self
             .get_preset(id)
@@ -232,80 +223,28 @@ impl MAK {
         Ok(())
     }
 
-    /// Open a preset from a file.
+    /// Open a preset
     #[cfg(feature = "file")]
-    pub async fn open_preset_from_file(&self, path: &str) -> Result<String, AgentError> {
+    pub async fn open_preset_from_file(
+        &self,
+        path: &str,
+        name: Option<String>,
+    ) -> Result<String, AgentError> {
         let json_str =
             std::fs::read_to_string(path).map_err(|e| AgentError::IoError(e.to_string()))?;
         let spec = PresetSpec::from_json(&json_str)?;
-        let id = self.add_preset(spec)?;
-        self.set_preset_file_name(&id, path).await?;
+        let id = self.add_preset_raw(spec, name)?;
         Ok(id)
     }
 
     /// Save a preset.
     #[cfg(feature = "file")]
-    pub async fn save_preset(&self, id: &str) -> Result<(), AgentError> {
+    pub async fn save_preset(&self, id: &str, path: &str) -> Result<(), AgentError> {
         let Some(preset_spec) = self.get_preset_spec(id).await else {
             return Err(AgentError::PresetNotFound(id.to_string()));
         };
         let json_str = preset_spec.to_json()?;
-        let path = self
-            .get_preset_path(id)
-            .await
-            .ok_or_else(|| AgentError::EmptyFileName)?;
-        std::fs::write(&path, json_str).map_err(|e| AgentError::IoError(e.to_string()))?;
-        Ok(())
-    }
-
-    /// Save a preset to the given file name.
-    #[cfg(feature = "file")]
-    pub async fn save_preset_as(&self, id: &str, path: &str) -> Result<(), AgentError> {
-        self.set_preset_file_name(id, path).await?;
-        self.save_preset(id).await?;
-        Ok(())
-    }
-
-    /// Get the file name of a preset.
-    #[cfg(feature = "file")]
-    pub async fn get_preset_path(&self, id: &str) -> Option<PathBuf> {
-        let Some(preset) = self.get_preset(id) else {
-            return None;
-        };
-        let preset = preset.lock().await;
-        let Some(name) = preset.name() else {
-            return None;
-        };
-        let Some(dir) = preset.dir() else {
-            return None;
-        };
-        let path = std::path::Path::new(&dir).join(name);
-        Some(path)
-    }
-
-    /// Set the file name of a preset.
-    #[cfg(feature = "file")]
-    pub async fn set_preset_file_name(&self, id: &str, path: &str) -> Result<(), AgentError> {
-        let path = std::path::Path::new(path);
-        let name = path
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .ok_or(AgentError::InvalidFileExtension)?;
-        let dir = path
-            .parent()
-            .and_then(|s| s.to_str())
-            .unwrap_or("")
-            .to_string();
-        let preset = {
-            let presets = self.presets.lock().unwrap();
-            let Some(preset) = presets.get(id) else {
-                return Err(AgentError::PresetNotFound(id.to_string()));
-            };
-            preset.clone()
-        };
-        let mut preset = preset.lock().await;
-        preset.set_name(name.to_string());
-        preset.set_dir(dir);
+        std::fs::write(path, json_str).map_err(|e| AgentError::IoError(e.to_string()))?;
         Ok(())
     }
 

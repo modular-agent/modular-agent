@@ -11,7 +11,8 @@ use tokio::{
 };
 
 use crate::{
-    AgentContext, AgentData, AgentError, AgentSpec, AgentValue, AsAgent, MAK, MAKEvent, modular_agent,
+    AgentContext, AgentData, AgentError, AgentSpec, AgentValue, AsAgent, MAK, MAKEvent,
+    modular_agent,
 };
 
 static PORT_VALUE: &str = "value";
@@ -29,7 +30,7 @@ pub async fn setup_mak() -> MAK {
 
 /// Load and start an preset from a file.
 pub async fn open_and_start_preset(mak: &MAK, path: &str) -> Result<String, AgentError> {
-    let id = mak.open_preset_from_file(path).await?;
+    let id = mak.open_preset_from_file(path, None).await?;
     mak.start_preset(&id).await?;
     Ok(id)
 }

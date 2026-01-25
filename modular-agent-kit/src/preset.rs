@@ -15,9 +15,6 @@ pub struct Preset {
     running: bool,
 
     spec: PresetSpec,
-
-    #[cfg(feature = "file")]
-    dir: Option<String>,
 }
 
 impl Preset {
@@ -34,8 +31,6 @@ impl Preset {
             name: None,
             running: false,
             spec,
-            #[cfg(feature = "file")]
-            dir: None,
         }
     }
 
@@ -83,21 +78,6 @@ impl Preset {
 
     pub fn clear_name(&mut self) {
         self.name = None;
-    }
-
-    #[cfg(feature = "file")]
-    pub fn dir(&self) -> Option<&str> {
-        self.dir.as_deref()
-    }
-
-    #[cfg(feature = "file")]
-    pub fn set_dir(&mut self, dir: String) {
-        self.dir = Some(dir);
-    }
-
-    #[cfg(feature = "file")]
-    pub fn clear_dir(&mut self) {
-        self.dir = None;
     }
 
     pub fn add_agent(&mut self, agent: AgentSpec) {
@@ -151,8 +131,6 @@ pub struct PresetInfo {
     pub id: String,
     pub name: Option<String>,
     pub running: bool,
-    #[cfg(feature = "file")]
-    pub dir: Option<String>,
 }
 
 impl From<&Preset> for PresetInfo {
@@ -161,8 +139,6 @@ impl From<&Preset> for PresetInfo {
             id: preset.id.clone(),
             name: preset.name.clone(),
             running: preset.running,
-            #[cfg(feature = "file")]
-            dir: preset.dir.clone(),
         }
     }
 }
