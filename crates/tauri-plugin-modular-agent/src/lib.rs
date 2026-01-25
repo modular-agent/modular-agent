@@ -28,17 +28,13 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
         .invoke_handler(tauri::generate_handler![
             // Preset management
             commands::new_preset,
-            // commands::rename_preset,
-            // commands::unique_preset_name,
             commands::add_preset,
+            commands::add_preset_with_name,
             commands::remove_preset,
             commands::start_preset,
             commands::stop_preset,
             commands::open_preset_from_file,
             commands::save_preset,
-            commands::save_preset_as,
-            commands::get_preset_path,
-            commands::set_preset_file_name,
             commands::get_preset_spec,
             commands::update_preset_spec,
             commands::get_preset_info,

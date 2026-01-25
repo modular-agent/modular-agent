@@ -6,14 +6,12 @@ Default permissions for the plugin
 
 - `allow-new-preset`
 - `allow-add-preset`
+- `allow-add-preset-with-name`
 - `allow-remove-preset`
 - `allow-start-preset`
 - `allow-stop-preset`
 - `allow-open-preset-from-file`
 - `allow-save-preset`
-- `allow-save-preset-as`
-- `allow-get-preset-file-name`
-- `allow-set-preset-file-name`
 - `allow-get-preset-spec`
 - `allow-update-preset-spec`
 - `allow-get-preset-info`
@@ -153,6 +151,32 @@ Denies the add_preset command without any pre-configured scope.
 <tr>
 <td>
 
+`modular-agent:allow-add-preset-with-name`
+
+</td>
+<td>
+
+Enables the add_preset_with_name command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`modular-agent:deny-add-preset-with-name`
+
+</td>
+<td>
+
+Denies the add_preset_with_name command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
 `modular-agent:allow-get-agent-definition`
 
 </td>
@@ -276,32 +300,6 @@ Enables the get_global_configs_map command without any pre-configured scope.
 <td>
 
 Denies the get_global_configs_map command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`modular-agent:allow-get-preset-file-name`
-
-</td>
-<td>
-
-Enables the get_preset_file_name command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`modular-agent:deny-get-preset-file-name`
-
-</td>
-<td>
-
-Denies the get_preset_file_name command without any pre-configured scope.
 
 </td>
 </tr>
@@ -569,32 +567,6 @@ Denies the save_preset command without any pre-configured scope.
 <tr>
 <td>
 
-`modular-agent:allow-save-preset-as`
-
-</td>
-<td>
-
-Enables the save_preset_as command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`modular-agent:deny-save-preset-as`
-
-</td>
-<td>
-
-Denies the save_preset_as command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
 `modular-agent:allow-set-agent-configs`
 
 </td>
@@ -666,32 +638,6 @@ Enables the set_global_configs_map command without any pre-configured scope.
 <td>
 
 Denies the set_global_configs_map command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`modular-agent:allow-set-preset-file-name`
-
-</td>
-<td>
-
-Enables the set_preset_file_name command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`modular-agent:deny-set-preset-file-name`
-
-</td>
-<td>
-
-Denies the set_preset_file_name command without any pre-configured scope.
 
 </td>
 </tr>

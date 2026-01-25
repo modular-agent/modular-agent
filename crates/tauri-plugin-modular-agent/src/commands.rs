@@ -1,5 +1,3 @@
-use std::path::PathBuf;
-
 use modular_agent_kit::{
     AgentConfigs, AgentConfigsMap, AgentDefinition, AgentDefinitions, AgentSpec, AgentValue,
     ConnectionSpec, PresetSpec,
@@ -17,25 +15,14 @@ pub fn new_preset<R: Runtime>(app: AppHandle<R>) -> Result<String> {
     app.mak().new_preset().map_err(Into::into)
 }
 
-// #[tauri::command]
-// pub fn rename_preset<R: Runtime>(
-//     app: AppHandle<R>,
-//     id: String,
-//     name: String,
-// ) -> Result<String> {
-//     app.mak()
-//         .rename_preset(&id, &name)
-//         .map_err(Into::into)
-// }
-
-// #[tauri::command]
-// pub fn unique_preset_name<R: Runtime>(app: tauri::AppHandle<R>, name: String) -> String {
-//     app.mak().unique_preset_name(&name)
-// }
-
 #[tauri::command]
 pub fn add_preset<R: Runtime>(app: AppHandle<R>, spec: PresetSpec) -> Result<String> {
     app.mak().add_preset(spec).map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn add_preset_with_name<R: Runtime>(app: AppHandle<R>, spec: PresetSpec, name: String) -> Result<String> {
+    app.mak().add_preset_with_name(spec, name).map_err(Into::into)
 }
 
 #[tauri::command]
@@ -54,41 +41,16 @@ pub async fn stop_preset<R: Runtime>(app: AppHandle<R>, id: String) -> Result<()
 }
 
 #[tauri::command]
-pub async fn open_preset_from_file<R: Runtime>(app: AppHandle<R>, path: String) -> Result<String> {
+pub async fn open_preset_from_file<R: Runtime>(app: AppHandle<R>, path: String, name: Option<String>) -> Result<String> {
     app.mak()
-        .open_preset_from_file(&path)
+        .open_preset_from_file(&path, name)
         .await
         .map_err(Into::into)
 }
 
 #[tauri::command]
-pub async fn save_preset<R: Runtime>(app: AppHandle<R>, id: String) -> Result<()> {
-    app.mak().save_preset(&id).await.map_err(Into::into)
-}
-
-#[tauri::command]
-pub async fn save_preset_as<R: Runtime>(app: AppHandle<R>, id: String, path: String) -> Result<()> {
-    app.mak()
-        .save_preset_as(&id, &path)
-        .await
-        .map_err(Into::into)
-}
-
-#[tauri::command]
-pub async fn get_preset_path<R: Runtime>(app: AppHandle<R>, id: String) -> Option<PathBuf> {
-    app.mak().get_preset_path(&id).await
-}
-
-#[tauri::command]
-pub async fn set_preset_file_name<R: Runtime>(
-    app: AppHandle<R>,
-    id: String,
-    file_name: String,
-) -> Result<()> {
-    app.mak()
-        .set_preset_file_name(&id, &file_name)
-        .await
-        .map_err(Into::into)
+pub async fn save_preset<R: Runtime>(app: AppHandle<R>, id: String, path: String) -> Result<()> {
+    app.mak().save_preset(&id, &path).await.map_err(Into::into)
 }
 
 // preset spec

@@ -343,6 +343,18 @@
           "markdownDescription": "Denies the add_preset command without any pre-configured scope."
         },
         {
+          "description": "Enables the add_preset_with_name command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-add-preset-with-name",
+          "markdownDescription": "Enables the add_preset_with_name command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the add_preset_with_name command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-add-preset-with-name",
+          "markdownDescription": "Denies the add_preset_with_name command without any pre-configured scope."
+        },
+        {
           "description": "Enables the get_agent_definition command without any pre-configured scope.",
           "type": "string",
           "const": "allow-get-agent-definition",
@@ -401,18 +413,6 @@
           "type": "string",
           "const": "deny-get-global-configs-map",
           "markdownDescription": "Denies the get_global_configs_map command without any pre-configured scope."
-        },
-        {
-          "description": "Enables the get_preset_file_name command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-get-preset-file-name",
-          "markdownDescription": "Enables the get_preset_file_name command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the get_preset_file_name command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-get-preset-file-name",
-          "markdownDescription": "Denies the get_preset_file_name command without any pre-configured scope."
         },
         {
           "description": "Enables the get_preset_info command without any pre-configured scope.",
@@ -535,18 +535,6 @@
           "markdownDescription": "Denies the save_preset command without any pre-configured scope."
         },
         {
-          "description": "Enables the save_preset_as command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-save-preset-as",
-          "markdownDescription": "Enables the save_preset_as command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the save_preset_as command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-save-preset-as",
-          "markdownDescription": "Denies the save_preset_as command without any pre-configured scope."
-        },
-        {
           "description": "Enables the set_agent_configs command without any pre-configured scope.",
           "type": "string",
           "const": "allow-set-agent-configs",
@@ -581,18 +569,6 @@
           "type": "string",
           "const": "deny-set-global-configs-map",
           "markdownDescription": "Denies the set_global_configs_map command without any pre-configured scope."
-        },
-        {
-          "description": "Enables the set_preset_file_name command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-set-preset-file-name",
-          "markdownDescription": "Enables the set_preset_file_name command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the set_preset_file_name command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-set-preset-file-name",
-          "markdownDescription": "Denies the set_preset_file_name command without any pre-configured scope."
         },
         {
           "description": "Enables the start_agent command without any pre-configured scope.",
@@ -679,10 +655,10 @@
           "markdownDescription": "Denies the write_board command without any pre-configured scope."
         },
         {
-          "description": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-new-preset`\n- `allow-add-preset`\n- `allow-remove-preset`\n- `allow-start-preset`\n- `allow-stop-preset`\n- `allow-open-preset-from-file`\n- `allow-save-preset`\n- `allow-save-preset-as`\n- `allow-get-preset-file-name`\n- `allow-set-preset-file-name`\n- `allow-get-preset-spec`\n- `allow-update-preset-spec`\n- `allow-get-preset-info`\n- `allow-get-preset-infos`\n- `allow-get-agent-definition`\n- `allow-get-agent-definitions`\n- `allow-get-agent-spec`\n- `allow-update-agent-spec`\n- `allow-new-agent-spec`\n- `allow-add-agent`\n- `allow-remove-agent`\n- `allow-add-connection`\n- `allow-remove-connection`\n- `allow-add-agents-and-connections`\n- `allow-start-agent`\n- `allow-stop-agent`\n- `allow-set-agent-configs`\n- `allow-get-global-configs`\n- `allow-get-global-configs-map`\n- `allow-set-global-configs`\n- `allow-set-global-configs-map`\n- `allow-write-board`",
+          "description": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-new-preset`\n- `allow-add-preset`\n- `allow-add-preset-with-name`\n- `allow-remove-preset`\n- `allow-start-preset`\n- `allow-stop-preset`\n- `allow-open-preset-from-file`\n- `allow-save-preset`\n- `allow-get-preset-spec`\n- `allow-update-preset-spec`\n- `allow-get-preset-info`\n- `allow-get-preset-infos`\n- `allow-get-agent-definition`\n- `allow-get-agent-definitions`\n- `allow-get-agent-spec`\n- `allow-update-agent-spec`\n- `allow-new-agent-spec`\n- `allow-add-agent`\n- `allow-remove-agent`\n- `allow-add-connection`\n- `allow-remove-connection`\n- `allow-add-agents-and-connections`\n- `allow-start-agent`\n- `allow-stop-agent`\n- `allow-set-agent-configs`\n- `allow-get-global-configs`\n- `allow-get-global-configs-map`\n- `allow-set-global-configs`\n- `allow-set-global-configs-map`\n- `allow-write-board`",
           "type": "string",
           "const": "default",
-          "markdownDescription": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-new-preset`\n- `allow-add-preset`\n- `allow-remove-preset`\n- `allow-start-preset`\n- `allow-stop-preset`\n- `allow-open-preset-from-file`\n- `allow-save-preset`\n- `allow-save-preset-as`\n- `allow-get-preset-file-name`\n- `allow-set-preset-file-name`\n- `allow-get-preset-spec`\n- `allow-update-preset-spec`\n- `allow-get-preset-info`\n- `allow-get-preset-infos`\n- `allow-get-agent-definition`\n- `allow-get-agent-definitions`\n- `allow-get-agent-spec`\n- `allow-update-agent-spec`\n- `allow-new-agent-spec`\n- `allow-add-agent`\n- `allow-remove-agent`\n- `allow-add-connection`\n- `allow-remove-connection`\n- `allow-add-agents-and-connections`\n- `allow-start-agent`\n- `allow-stop-agent`\n- `allow-set-agent-configs`\n- `allow-get-global-configs`\n- `allow-get-global-configs-map`\n- `allow-set-global-configs`\n- `allow-set-global-configs-map`\n- `allow-write-board`"
+          "markdownDescription": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-new-preset`\n- `allow-add-preset`\n- `allow-add-preset-with-name`\n- `allow-remove-preset`\n- `allow-start-preset`\n- `allow-stop-preset`\n- `allow-open-preset-from-file`\n- `allow-save-preset`\n- `allow-get-preset-spec`\n- `allow-update-preset-spec`\n- `allow-get-preset-info`\n- `allow-get-preset-infos`\n- `allow-get-agent-definition`\n- `allow-get-agent-definitions`\n- `allow-get-agent-spec`\n- `allow-update-agent-spec`\n- `allow-new-agent-spec`\n- `allow-add-agent`\n- `allow-remove-agent`\n- `allow-add-connection`\n- `allow-remove-connection`\n- `allow-add-agents-and-connections`\n- `allow-start-agent`\n- `allow-stop-agent`\n- `allow-set-agent-configs`\n- `allow-get-global-configs`\n- `allow-get-global-configs-map`\n- `allow-set-global-configs`\n- `allow-set-global-configs-map`\n- `allow-write-board`"
         }
       ]
     }

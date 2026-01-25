@@ -86,22 +86,12 @@ export async function newPreset(): Promise<[string, string]> {
   return await invoke<any>("plugin:modular-agent|new_preset", {});
 }
 
-// export async function renamePreset(
-//   id: string,
-//   name: string
-// ): Promise<string> {
-//   return await invoke<any>("plugin:modular-agent|rename_preset", {
-//     id,
-//     name,
-//   });
-// }
-
-// export async function uniquePresetName(name: string): Promise<string> {
-//   return await invoke<any>("plugin:modular-agent|unique_preset_name", { name });
-// }
-
 export async function addPreset(spec: PresetSpec): Promise<string> {
   return await invoke<any>("plugin:modular-agent|add_preset", { spec });
+}
+
+export async function addPresetWithName(spec: PresetSpec, name: string): Promise<string> {
+  return await invoke<any>("plugin:modular-agent|add_preset_with_name", { spec, name });
 }
 
 export async function removePreset(id: string): Promise<void> {
@@ -116,27 +106,12 @@ export async function stopPreset(id: string): Promise<void> {
   await invoke<void>("plugin:modular-agent|stop_preset", { id });
 }
 
-export async function openPresetFromFile(path: string): Promise<string> {
-  return await invoke<any>("plugin:modular-agent|open_preset_from_file", { path });
+export async function openPresetFromFile(path: string, name?: string | null): Promise<string> {
+  return await invoke<any>("plugin:modular-agent|open_preset_from_file", { path, name });
 }
 
-export async function savePreset(id: string): Promise<void> {
-  await invoke<void>("plugin:modular-agent|save_preset", { id });
-}
-
-export async function savePresetAs(id: string, path: string): Promise<void> {
-  await invoke<void>("plugin:modular-agent|save_preset_as", { id, path });
-}
-
-export async function getPresetFileName(id: string): Promise<string | null> {
-  return await invoke<any>("plugin:modular-agent|get_preset_file_name", { id });
-}
-
-export async function setPresetFileName(
-  id: string,
-  fileName: string,
-): Promise<void> {
-  await invoke<void>("plugin:modular-agent|set_preset_file_name", { id, fileName });
+export async function savePreset(id: string, path: string): Promise<void> {
+  await invoke<void>("plugin:modular-agent|save_preset", { id, path });
 }
 
 export async function getPresetSpec(id: string): Promise<PresetSpec | null> {
