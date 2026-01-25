@@ -4,24 +4,24 @@ use tauri::{AppHandle, Manager};
 use tauri_plugin_window_state::{AppHandleExt, StateFlags};
 
 #[allow(unused_imports)]
-use mak_cozodb_agents;
+use modular_agent_cozodb;
 
 #[allow(unused_imports)]
-use mak_lancedb_agents;
+use modular_agent_lancedb;
 
 #[allow(unused_imports)]
-use mak_lifelog_agents;
+use modular_agent_lifelog;
 
 #[allow(unused_imports)]
-use mak_llm_agents;
+use modular_agent_llm;
 
 #[allow(unused_imports)]
-use mak_std_agents;
+use modular_agent_std;
 
 #[allow(unused_imports)]
-use mak_web_agents;
+use modular_agent_web;
 
-mod mak_desktop;
+mod modular_agent_desktop;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -30,7 +30,7 @@ pub fn run() {
             tauri_plugin_log::Builder::new()
                 .level(log::LevelFilter::Info)
                 .level_for(
-                    "mak_desktop_lib",
+                    "modular_agent_desktop_lib",
                     if cfg!(debug_assertions) {
                         log::LevelFilter::Debug
                     } else {
@@ -42,36 +42,37 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_store::Builder::new().build())
-        .plugin(tauri_plugin_mak::init())
+        .plugin(tauri_plugin_modular_agent::init())
         .plugin(tauri_plugin_window_state::Builder::new().build())
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             log::info!("show main window");
-            mak_desktop::window::show_main(app).unwrap_or_else(|e| {
+            modular_agent_desktop::window::show_main(app).unwrap_or_else(|e| {
                 log::error!("Failed to show main window: {}", e);
             });
         }))
         .setup(|app| {
             let app_handle = app.handle().clone();
             tauri::async_runtime::block_on(async move {
-                mak_desktop::settings::init(&app_handle).unwrap_or_else(|e| {
+                modular_agent_desktop::settings::init(&app_handle).unwrap_or_else(|e| {
                     panic!("Failed to initialize settings: {}", e);
                 });
-                mak_desktop::tray::init(&app_handle).unwrap_or_else(|e| {
+                modular_agent_desktop::tray::init(&app_handle).unwrap_or_else(|e| {
                     log::error!("Failed to initialize tray: {}", e);
                     app_handle.exit(1);
                 });
-                mak_desktop::app::init(&app_handle).unwrap_or_else(|e| {
+                modular_agent_desktop::app::init(&app_handle).unwrap_or_else(|e| {
                     log::error!("Failed to initialize agent: {}", e);
                     app_handle.exit(1);
                 });
-                mak_desktop::settings::load_agent_global_configs(&app_handle).unwrap_or_else(|e| {
-                    log::error!("Failed to load agent global configs: {}", e);
-                    app_handle.exit(1);
-                });
-                mak_desktop::autostart::init(&app_handle).unwrap_or_else(|e| {
+                modular_agent_desktop::settings::load_agent_global_configs(&app_handle)
+                    .unwrap_or_else(|e| {
+                        log::error!("Failed to load agent global configs: {}", e);
+                        app_handle.exit(1);
+                    });
+                modular_agent_desktop::autostart::init(&app_handle).unwrap_or_else(|e| {
                     log::error!("Failed to initialize autostart: {}", e);
                 });
-                mak_desktop::shortcut::init(&app_handle).unwrap_or_else(|e| {
+                modular_agent_desktop::shortcut::init(&app_handle).unwrap_or_else(|e| {
                     log::error!("Failed to initialize shortcut: {}", e);
                 });
 
@@ -88,18 +89,18 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             exit_app_cmd,
-            mak_desktop::app::new_preset_cmd,
-            mak_desktop::app::rename_preset_cmd,
-            mak_desktop::app::remove_preset_cmd,
-            mak_desktop::app::import_preset_cmd,
-            mak_desktop::app::save_preset_cmd,
-            mak_desktop::app::start_preset_cmd,
-            mak_desktop::app::stop_preset_cmd,
-            mak_desktop::app::get_dir_entries_cmd,
-            mak_desktop::app::open_preset_cmd,
-            mak_desktop::settings::get_core_settings_cmd,
-            mak_desktop::settings::set_core_settings_cmd,
-            mak_desktop::settings::set_global_configs_cmd,
+            modular_agent_desktop::app::new_preset_cmd,
+            modular_agent_desktop::app::rename_preset_cmd,
+            modular_agent_desktop::app::remove_preset_cmd,
+            modular_agent_desktop::app::import_preset_cmd,
+            modular_agent_desktop::app::save_preset_cmd,
+            modular_agent_desktop::app::start_preset_cmd,
+            modular_agent_desktop::app::stop_preset_cmd,
+            modular_agent_desktop::app::get_dir_entries_cmd,
+            modular_agent_desktop::app::open_preset_cmd,
+            modular_agent_desktop::settings::get_core_settings_cmd,
+            modular_agent_desktop::settings::set_core_settings_cmd,
+            modular_agent_desktop::settings::set_global_configs_cmd,
         ])
         .on_window_event(|window, event| match event {
             tauri::WindowEvent::CloseRequested { api, .. } => {
@@ -115,8 +116,8 @@ pub fn run() {
 
                 let run_in_background = {
                     let app = window.app_handle();
-                    let core_settings =
-                        app.state::<std::sync::Mutex<mak_desktop::settings::CoreSettings>>();
+                    let core_settings = app
+                        .state::<std::sync::Mutex<modular_agent_desktop::settings::CoreSettings>>();
                     let guard = core_settings.lock().unwrap();
                     guard.run_in_background
                 };
@@ -132,24 +133,26 @@ pub fn run() {
         .run(|app, event| match event {
             tauri::RunEvent::Ready => {
                 tauri::async_runtime::block_on(async move {
-                    mak_desktop::app::ready(app).await.unwrap_or_else(|e| {
-                        log::error!("Failed to start agents: {}", e);
-                    });
+                    modular_agent_desktop::app::ready(app)
+                        .await
+                        .unwrap_or_else(|e| {
+                            log::error!("Failed to start agents: {}", e);
+                        });
                     log::info!("MAK Desktop is ready.");
                 });
             }
             tauri::RunEvent::Exit => {
                 log::info!("Exiting MAK Desktop...");
                 tauri::async_runtime::block_on(async move {
-                    mak_desktop::window::hide_main(app).unwrap_or_else(|e| {
+                    modular_agent_desktop::window::hide_main(app).unwrap_or_else(|e| {
                         log::error!("Failed to hide main window: {}", e);
                     });
                     app.save_window_state(StateFlags::all())
                         .unwrap_or_else(|e| {
                             log::error!("Failed to save window state: {}", e);
                         });
-                    mak_desktop::app::quit(app);
-                    mak_desktop::settings::quit(app);
+                    modular_agent_desktop::app::quit(app);
+                    modular_agent_desktop::settings::quit(app);
                 });
             }
             _ => {}

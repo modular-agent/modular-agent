@@ -4,7 +4,7 @@ use anyhow::Result;
 use tauri::{AppHandle, Manager};
 use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
 
-use crate::mak_desktop::settings::CoreSettings;
+use crate::modular_agent_desktop::settings::CoreSettings;
 
 pub fn init(app: &AppHandle) -> Result<()> {
     let setting = app.state::<Mutex<CoreSettings>>();

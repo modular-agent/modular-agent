@@ -1,4 +1,4 @@
-import type { AgentConfigSpec } from "tauri-plugin-mak-api";
+import type { AgentConfigSpec } from "tauri-plugin-modular-agent-api";
 import { describe, expect, it } from "vitest";
 
 import { inferTypeForDisplay } from "./agent";

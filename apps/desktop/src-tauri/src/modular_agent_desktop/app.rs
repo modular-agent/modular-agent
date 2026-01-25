@@ -9,11 +9,11 @@ use tauri::{AppHandle, Manager, State};
 use modular_agent_kit::mcp::register_tools_from_mcp_json;
 use modular_agent_kit::{PresetSpec, MAK};
 
-use tauri_plugin_mak::MAKExt;
+use tauri_plugin_modular_agent::MAKExt;
 
-use crate::mak_desktop::{observer::start_mak_observer, settings::CoreSettings};
+use crate::modular_agent_desktop::{observer::start_mak_observer, settings::CoreSettings};
 
-static MAK_PATH: &'static str = ".mak";
+static MAK_PATH: &'static str = ".modular_agent";
 static MAK_PRESETS_PATH: &'static str = "presets";
 
 pub struct MakApp {

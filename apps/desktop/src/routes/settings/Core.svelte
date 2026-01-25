@@ -11,8 +11,7 @@
   import { Input } from "$lib/components/ui/input/index.js";
   import * as Select from "$lib/components/ui/select/index.js";
   import { Switch } from "$lib/components/ui/switch/index.js";
-
-  import { exitApp, setCoreSettings } from "@/lib/utils";
+  import { exitApp, setCoreSettings } from "$lib/mak";
 
   interface Props {
     settings: Record<string, any>;

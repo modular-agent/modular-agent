@@ -10,7 +10,7 @@ import {
   type ConnectionSpec,
   getAgentDefinitions as getAgentDefinitionsAPI,
   getGlobalConfigsMap as getGlobalConfigsMapAPI,
-} from "tauri-plugin-mak-api";
+} from "tauri-plugin-modular-agent-api";
 
 import {
   getCoreSettings as getCoreSettingsUtils,

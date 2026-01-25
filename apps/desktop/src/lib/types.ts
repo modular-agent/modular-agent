@@ -1,5 +1,5 @@
 import type { Edge, Node } from "@xyflow/svelte";
-import type { AgentSpec, PresetInfo, Viewport } from "tauri-plugin-mak-api";
+import type { AgentSpec, PresetInfo, Viewport } from "tauri-plugin-modular-agent-api";
 
 // Messages
 

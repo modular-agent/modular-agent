@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 
-import type { AgentConfigs } from "tauri-plugin-mak-api";
+import type { AgentConfigs } from "tauri-plugin-modular-agent-api";
 
 import type { CoreSettings } from "./types";
 

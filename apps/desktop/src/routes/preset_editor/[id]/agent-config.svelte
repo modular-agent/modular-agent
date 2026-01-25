@@ -2,7 +2,7 @@
   import type { Snippet } from "svelte";
 
   import { Handle, Position } from "@xyflow/svelte";
-  import type { AgentConfigSpec } from "tauri-plugin-mak-api";
+  import type { AgentConfigSpec } from "tauri-plugin-modular-agent-api";
 
   import { Button } from "$lib/components/ui/button/index.js";
   import { Input } from "$lib/components/ui/input/index.js";

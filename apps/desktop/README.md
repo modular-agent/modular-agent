@@ -10,11 +10,11 @@
 
 </div>
 
-# MAK Desktop
+# Modular Agent Desktop
 
 
 
 <!----------------------------------{ Badges }--------------------------------->
 
-[Badge Language]: https://img.shields.io/github/languages/top/modular-agent/modular-agent-kit
+[Badge Language]: https://img.shields.io/github/languages/top/modular-agent/modular-agent-desktop
 [Badge License]: https://img.shields.io/badge/license-Apache%202-blue

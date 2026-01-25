@@ -1,6 +1,6 @@
 import { error } from "@sveltejs/kit";
 
-import { getPresetInfo, getPresetSpec } from "tauri-plugin-mak-api";
+import { getPresetInfo, getPresetSpec } from "tauri-plugin-modular-agent-api";
 
 import { presetToFlow } from "$lib/agent";
 

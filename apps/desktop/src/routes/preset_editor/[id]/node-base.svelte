@@ -20,7 +20,11 @@
 
   import { Handle, NodeResizer, Position } from "@xyflow/svelte";
   import type { NodeProps, ResizeDragEvent, ResizeParams } from "@xyflow/svelte";
-  import { updateAgentSpec, type AgentDefinition, type AgentSpec } from "tauri-plugin-mak-api";
+  import {
+    updateAgentSpec,
+    type AgentDefinition,
+    type AgentSpec,
+  } from "tauri-plugin-modular-agent-api";
 
   import { ScrollArea } from "$lib/components/ui/scroll-area/index.js";
 

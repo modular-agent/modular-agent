@@ -3,8 +3,8 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { SvelteMap } from "svelte/reactivity";
 import { writable, type Writable } from "svelte/store";
 
-import type { PresetSpec } from "tauri-plugin-mak-api";
-import { getPresetInfos, updatePresetSpec } from "tauri-plugin-mak-api";
+import type { PresetSpec } from "tauri-plugin-modular-agent-api";
+import { getPresetInfos, updatePresetSpec } from "tauri-plugin-modular-agent-api";
 
 import {
   getCoreSettings,

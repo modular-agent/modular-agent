@@ -1,7 +1,7 @@
 <script lang="ts">
   import FileIcon from "@lucide/svelte/icons/file";
 
-  import { cn } from "$lib/utils.js";
+  import { cn } from "$lib/utils";
 
   import type { PresetFileListFileProps } from "./types";
 

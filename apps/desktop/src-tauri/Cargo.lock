@@ -223,11 +223,11 @@ dependencies = [
 
 [[package]]
 name = "ar_archive_writer"
-version = "0.2.0"
+version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f0c269894b6fe5e9d7ada0cf69b5bf847ff35bc25fc271f08e1d080fce80339a"
+checksum = "7eb93bbb63b9c227414f6eb3a0adfddca591a8ce1e9b60661bb08969b87e340b"
 dependencies = [
- "object 0.32.2",
+ "object",
 ]
 
 [[package]]
@@ -846,9 +846,9 @@ dependencies = [
 
 [[package]]
 name = "aws-lc-rs"
-version = "1.15.3"
+version = "1.15.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e84ce723ab67259cfeb9877c6a639ee9eb7a27b28123abd71db7f0d5d0cc9d86"
+checksum = "7b7b6141e96a8c160799cc2d5adecd5cbbe5054cb8c7c4af53da0f83bb7ad256"
 dependencies = [
  "aws-lc-sys",
  "zeroize",
@@ -856,9 +856,9 @@ dependencies = [
 
 [[package]]
 name = "aws-lc-sys"
-version = "0.36.0"
+version = "0.37.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "43a442ece363113bd4bd4c8b18977a7798dd4d3c3383f34fb61936960e8f4ad8"
+checksum = "5c34dda4df7017c8db52132f0f8a2e0f8161649d15723ed63fc00c82d0f2081a"
 dependencies = [
  "cc",
  "cmake",
@@ -892,9 +892,9 @@ dependencies = [
 
 [[package]]
 name = "aws-sdk-dynamodb"
-version = "1.102.0"
+version = "1.103.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f5f7e6a53cf5ee8b7041c73106d9a93480b47f8b955466262b043aab0b5bf489"
+checksum = "6df2a8b03419775bfaf4f3ebbb65a9772e9e69eed4467a1b33f22226722340fb"
 dependencies = [
  "aws-credential-types",
  "aws-runtime",
@@ -1220,7 +1220,7 @@ dependencies = [
  "cfg-if 1.0.4",
  "libc",
  "miniz_oxide 0.8.9",
- "object 0.37.3",
+ "object",
  "rustc-demangle",
  "windows-link 0.2.1",
 ]
@@ -1763,9 +1763,9 @@ dependencies = [
 
 [[package]]
 name = "cc"
-version = "1.2.53"
+version = "1.2.54"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "755d2fce177175ffca841e9a06afdb2c4ab0f593d53b4dee48147dfaade85932"
+checksum = "6354c81bbfd62d9cfa9cb3c773c2b7b2a3a482d569de977fd0e961f6e7c00583"
 dependencies = [
  "find-msvc-tools",
  "jobserver",
@@ -4989,9 +4989,9 @@ dependencies = [
 
 [[package]]
 name = "html-to-markdown-rs"
-version = "2.23.1"
+version = "2.23.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e1f4d6781ac8dd203853803d27054ca4153c7fd0f3956cb7fc95dc06f42a1c46"
+checksum = "ffbf49450676163bdf69fac2acf72674fcf2d2aaf690aa247368c567cc9afb2a"
 dependencies = [
  "astral-tl",
  "base64 0.22.1",
@@ -5244,7 +5244,7 @@ dependencies = [
  "libc",
  "percent-encoding",
  "pin-project-lite",
- "socket2 0.6.1",
+ "socket2 0.6.2",
  "system-configuration",
  "tokio",
  "tower-service",
@@ -6660,9 +6660,9 @@ dependencies = [
 
 [[package]]
 name = "libm"
-version = "0.2.15"
+version = "0.2.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f9fbbcab51052fe104eb5e5d351cf728d30a5be1fe14d9be8a3b097481fb97de"
+checksum = "b6d2cec3eae94f9f509c767b45932f1ada8350c4bdb85af2fcab4a3c14807981"
 
 [[package]]
 name = "libredox"
@@ -6888,155 +6888,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "670fdfda89751bc4a84ac13eaa63e205cf0fd22b4c9a5fbfa085b63c1f1d3a30"
 
 [[package]]
-name = "mak-cozodb-agents"
-version = "0.6.0"
-source = "git+https://github.com/modular-agent/mak-cozodb-agents.git?tag=v0.6.0#4f2076809861ce3ef4ae3367976e1fd0ac083c11"
-dependencies = [
- "cozo",
- "im",
- "modular-agent-kit",
- "rayon",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "mak-desktop"
-version = "0.11.0"
-dependencies = [
- "anyhow",
- "ctrlc",
- "dirs 6.0.0",
- "log",
- "mak-cozodb-agents",
- "mak-lancedb-agents",
- "mak-lifelog-agents",
- "mak-llm-agents",
- "mak-std-agents",
- "mak-web-agents",
- "modular-agent-kit",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-autostart",
- "tauri-plugin-clipboard-manager",
- "tauri-plugin-dialog",
- "tauri-plugin-global-shortcut",
- "tauri-plugin-log",
- "tauri-plugin-mak",
- "tauri-plugin-single-instance",
- "tauri-plugin-store",
- "tauri-plugin-window-state",
- "tokio",
- "tonic-build",
-]
-
-[[package]]
-name = "mak-lancedb-agents"
-version = "0.2.0"
-source = "git+https://github.com/modular-agent/mak-lancedb-agents.git?tag=v0.2.0#a6da068ac42c4fffd6baa64a62c30936fa2d10f5"
-dependencies = [
- "arrow-array",
- "arrow-json",
- "arrow-schema",
- "futures-util",
- "half",
- "im",
- "lancedb",
- "modular-agent-kit",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "mak-lifelog-agents"
-version = "0.4.0"
-source = "git+https://github.com/modular-agent/mak-lifelog-agents.git?tag=v0.4.0#5f4f98daf1ca6918ae1663dd94a0252645cfc394"
-dependencies = [
- "active-win-pos-rs",
- "base64 0.22.1",
- "bindgen 0.68.1",
- "chrono",
- "cocoa",
- "modular-agent-kit",
- "objc",
- "serde",
- "serde_json",
- "xcap",
-]
-
-[[package]]
-name = "mak-llm-agents"
-version = "0.9.0"
-source = "git+https://github.com/modular-agent/mak-llm-agents.git?tag=v0.9.0#445d9e9237842c8bdb8d95fc9136b2f823426b7c"
-dependencies = [
- "async-openai",
- "async-trait",
- "futures",
- "icu_normalizer",
- "im",
- "modular-agent-kit",
- "ollama-rs",
- "photon-rs",
- "schemars 1.2.0",
- "serde",
- "serde_json",
- "text-splitter",
- "tokenizers",
- "tokio",
- "tokio-stream",
- "uuid",
-]
-
-[[package]]
-name = "mak-macros"
-version = "0.20.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2d9cc50442287e6100d82433ec3e3e2a61b9ca988a1e97b6b38670409f7f15cb"
-dependencies = [
- "im",
- "proc-macro2",
- "quote",
- "syn 2.0.114",
-]
-
-[[package]]
-name = "mak-std-agents"
-version = "0.10.0"
-source = "git+https://github.com/modular-agent/mak-std-agents.git?tag=v0.10.0#560deb11acf75b56a3a437d40c377b08966a29a5"
-dependencies = [
- "chrono",
- "cron",
- "glob",
- "handlebars",
- "im",
- "log",
- "mini-moka",
- "modular-agent-kit",
- "regex",
- "serde",
- "serde_json",
- "serde_yaml_ng",
- "tokio",
-]
-
-[[package]]
-name = "mak-web-agents"
-version = "0.3.0"
-source = "git+https://github.com/modular-agent/mak-web-agents.git?tag=v0.3.0#dde7bbacbe6ae40890dbbe0789747a2f15447a1c"
-dependencies = [
- "html-to-markdown-rs",
- "modular-agent-kit",
- "reqwest",
- "scraper 0.25.0",
- "serde",
- "serde_json",
- "url",
- "yt-transcript-rs",
-]
-
-[[package]]
 name = "malloc_buf"
 version = "0.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7078,7 +6929,7 @@ checksum = "6c3294c4d74d0742910f8c7b466f44dda9eb2d5742c1e430138df290a1e8451c"
 dependencies = [
  "log",
  "tendril",
- "web_atoms 0.2.1",
+ "web_atoms 0.2.3",
 ]
 
 [[package]]
@@ -7301,10 +7152,55 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dce6dd36094cac388f119d2e9dc82dc730ef91c32a6222170d630e5414b956e6"
 
 [[package]]
+name = "modular-agent-cozodb"
+version = "0.7.0"
+source = "git+https://github.com/modular-agent/modular-agent-cozodb.git?tag=v0.7.0#585eed2730c3eca10b2c1c6ed03befa354846271"
+dependencies = [
+ "cozo",
+ "im",
+ "modular-agent-kit",
+ "rayon",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "modular-agent-desktop"
+version = "0.12.0"
+dependencies = [
+ "anyhow",
+ "ctrlc",
+ "dirs 6.0.0",
+ "log",
+ "modular-agent-cozodb",
+ "modular-agent-kit",
+ "modular-agent-lancedb",
+ "modular-agent-lifelog",
+ "modular-agent-llm",
+ "modular-agent-std",
+ "modular-agent-web",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-autostart",
+ "tauri-plugin-clipboard-manager",
+ "tauri-plugin-dialog",
+ "tauri-plugin-global-shortcut",
+ "tauri-plugin-log",
+ "tauri-plugin-modular-agent",
+ "tauri-plugin-single-instance",
+ "tauri-plugin-store",
+ "tauri-plugin-window-state",
+ "tokio",
+ "tonic-build",
+]
+
+[[package]]
 name = "modular-agent-kit"
-version = "0.20.0"
+version = "0.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "67d23b76594667e0b42d7b0087ae79850c52236a9f6556ddfdfa737d0cfce8aa"
+checksum = "43c064a2823761a616ed9d84a70385a875e31afc874cd365d9afb3c8dbbc3eb6"
 dependencies = [
  "async-trait",
  "fnv",
@@ -7312,7 +7208,7 @@ dependencies = [
  "indexmap 2.13.0",
  "inventory",
  "log",
- "mak-macros",
+ "modular-agent-macros",
  "photon-rs",
  "regex",
  "rmcp",
@@ -7320,6 +7216,110 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.18",
  "tokio",
+]
+
+[[package]]
+name = "modular-agent-lancedb"
+version = "0.3.0"
+source = "git+https://github.com/modular-agent/modular-agent-lancedb.git?tag=v0.3.0#ee03ef80840b58fd99a47635effa93c401370b88"
+dependencies = [
+ "arrow-array",
+ "arrow-json",
+ "arrow-schema",
+ "futures-util",
+ "half",
+ "im",
+ "lancedb",
+ "modular-agent-kit",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "modular-agent-lifelog"
+version = "0.5.0"
+source = "git+https://github.com/modular-agent/modular-agent-lifelog.git?tag=v0.5.0#de19d1cc47f938704c1c0c37d46b8067ca59b11b"
+dependencies = [
+ "active-win-pos-rs",
+ "base64 0.22.1",
+ "bindgen 0.68.1",
+ "chrono",
+ "cocoa",
+ "modular-agent-kit",
+ "objc",
+ "serde",
+ "serde_json",
+ "xcap",
+]
+
+[[package]]
+name = "modular-agent-llm"
+version = "0.10.0"
+source = "git+https://github.com/modular-agent/modular-agent-llm.git?tag=v0.10.0#2c396f894061b252c82c2fbaaed88fc4134be09c"
+dependencies = [
+ "async-openai",
+ "async-trait",
+ "futures",
+ "icu_normalizer",
+ "im",
+ "modular-agent-kit",
+ "ollama-rs",
+ "photon-rs",
+ "schemars 1.2.0",
+ "serde",
+ "serde_json",
+ "text-splitter",
+ "tokenizers",
+ "tokio",
+ "tokio-stream",
+ "uuid",
+]
+
+[[package]]
+name = "modular-agent-macros"
+version = "0.21.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "34536ff21d9aaf3fec0abf6e6590b4a929e225e612b22f0d47ff88b79f07fe61"
+dependencies = [
+ "im",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.114",
+]
+
+[[package]]
+name = "modular-agent-std"
+version = "0.11.0"
+source = "git+https://github.com/modular-agent/modular-agent-std.git?tag=v0.11.0#d346d861de8bfd5df1ca16370f5f7d019947184d"
+dependencies = [
+ "chrono",
+ "cron",
+ "glob",
+ "handlebars",
+ "im",
+ "log",
+ "mini-moka",
+ "modular-agent-kit",
+ "regex",
+ "serde",
+ "serde_json",
+ "serde_yaml_ng",
+ "tokio",
+]
+
+[[package]]
+name = "modular-agent-web"
+version = "0.4.0"
+source = "git+https://github.com/modular-agent/modular-agent-web.git?tag=v0.4.0#14fdf0ce979818ee5d40abd4d4b162c4c672db01"
+dependencies = [
+ "html-to-markdown-rs",
+ "modular-agent-kit",
+ "reqwest",
+ "scraper 0.25.0",
+ "serde",
+ "serde_json",
+ "url",
+ "yt-transcript-rs",
 ]
 
 [[package]]
@@ -7631,9 +7631,9 @@ dependencies = [
 
 [[package]]
 name = "num-conv"
-version = "0.1.0"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "51d515d32fb182ee37cda2ccdcb92950d6a3c2893aa280e540671c2cd0f3b1d9"
+checksum = "cf97ec579c3c42f953ef76dbf8d55ac91fb219dde70e49aa4a6b7d74e9919050"
 
 [[package]]
 name = "num-format"
@@ -8082,15 +8082,6 @@ dependencies = [
 
 [[package]]
 name = "object"
-version = "0.32.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a6a622008b6e321afc04970976f62ee297fdbaa6f95318ca343e3eebb9648441"
-dependencies = [
- "memchr",
-]
-
-[[package]]
-name = "object"
 version = "0.37.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ff76201f031d8863c38aa7f905eca4f53abbfa15f609db4277d44cd8938f33fe"
@@ -8287,9 +8278,9 @@ checksum = "d05e27ee213611ffe7d6348b942e8f942b37114c00cc03cec254295a4a17852e"
 
 [[package]]
 name = "openssl-probe"
-version = "0.2.0"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9f50d9b3dabb09ecd771ad0aa242ca6894994c130308ca3d7684634df8037391"
+checksum = "7c87def4c32ab89d880effc9e097653c8da5d6ef28e6b539d313baaacfbafcbe"
 
 [[package]]
 name = "openssl-sys"
@@ -9197,9 +9188,9 @@ checksum = "dc375e1527247fe1a97d8b7156678dfe7c1af2fc075c9a4db3690ecd2a148068"
 
 [[package]]
 name = "proc-macro2"
-version = "1.0.105"
+version = "1.0.106"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "535d180e0ecab6268a3e718bb9fd44db66bbbc256257165fc699dadf70d16fe7"
+checksum = "8fd00f0bb2e90d81d1044c2b32617f68fcb9fa3bb7640c23e9c748e53fb30934"
 dependencies = [
  "unicode-ident",
 ]
@@ -9278,9 +9269,9 @@ checksum = "33cb294fe86a74cbcf50d4445b37da762029549ebeea341421c7c70370f86cac"
 
 [[package]]
 name = "psm"
-version = "0.1.28"
+version = "0.1.29"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d11f2fedc3b7dafdc2851bc52f277377c5473d378859be234bc7ebb593144d01"
+checksum = "1fa96cb91275ed31d6da3e983447320c4eb219ac180fa1679a0889ff32861e2d"
 dependencies = [
  "ar_archive_writer",
  "cc",
@@ -9390,7 +9381,7 @@ dependencies = [
  "quinn-udp",
  "rustc-hash 2.1.1",
  "rustls 0.23.36",
- "socket2 0.6.1",
+ "socket2 0.6.2",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
@@ -9427,16 +9418,16 @@ dependencies = [
  "cfg_aliases",
  "libc",
  "once_cell",
- "socket2 0.6.1",
+ "socket2 0.6.2",
  "tracing",
  "windows-sys 0.60.2",
 ]
 
 [[package]]
 name = "quote"
-version = "1.0.43"
+version = "1.0.44"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dc74d9a594b72ae6656596548f56f667211f8a97b3d4c3d467150794690dc40a"
+checksum = "21b2ebcf727b7760c461f091f9f0f539b77b8e87f2fd88131e7f1b433b3cece4"
 dependencies = [
  "proc-macro2",
 ]
@@ -10189,7 +10180,7 @@ version = "0.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "612460d5f7bea540c490b2b6395d8e34a953e52b491accd6c86c8164c5932a63"
 dependencies = [
- "openssl-probe 0.2.0",
+ "openssl-probe 0.2.1",
  "rustls-pki-types",
  "schannel",
  "security-framework 3.5.1",
@@ -10970,9 +10961,9 @@ dependencies = [
 
 [[package]]
 name = "socket2"
-version = "0.6.1"
+version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "17129e116933cf371d018bb80ae557e889637989d8638274fb25622827b03881"
+checksum = "86f4aa3ad99f2088c990dfa82d367e19cb29268ed67c574d10d0a4bfe71f07e0"
 dependencies = [
  "libc",
  "windows-sys 0.60.2",
@@ -11851,10 +11842,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "tauri-plugin-mak"
-version = "0.11.0"
+name = "tauri-plugin-modular-agent"
+version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7bf4a556eb613ad91d33129ed241bffc18731f34f86a634b29108fcca9ede470"
+checksum = "ef3dad7d1d0167d538ec00361252638151cade42c65a9bb8e6c52dad6516c563"
 dependencies = [
  "im",
  "modular-agent-kit",
@@ -12180,9 +12171,9 @@ dependencies = [
 
 [[package]]
 name = "time"
-version = "0.3.45"
+version = "0.3.46"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f9e442fc33d7fdb45aa9bfeb312c095964abdf596f7567261062b2a7107aaabd"
+checksum = "9da98b7d9b7dad93488a84b8248efc35352b0b2657397d4167e7ad67e5d535e5"
 dependencies = [
  "deranged",
  "itoa",
@@ -12197,15 +12188,15 @@ dependencies = [
 
 [[package]]
 name = "time-core"
-version = "0.1.7"
+version = "0.1.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8b36ee98fd31ec7426d599183e8fe26932a8dc1fb76ddb6214d05493377d34ca"
+checksum = "7694e1cfe791f8d31026952abf09c69ca6f6fa4e1a1229e18988f06a04a12dca"
 
 [[package]]
 name = "time-macros"
-version = "0.2.25"
+version = "0.2.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "71e552d1249bf61ac2a52db88179fd0673def1e1ad8243a00d9ec9ed71fee3dd"
+checksum = "78cc610bac2dcee56805c99642447d4c5dbde4d01f752ffea0199aee1f601dc4"
 dependencies = [
  "num-conv",
  "time-core",
@@ -12293,7 +12284,7 @@ dependencies = [
  "parking_lot",
  "pin-project-lite",
  "signal-hook-registry",
- "socket2 0.6.1",
+ "socket2 0.6.2",
  "tokio-macros",
  "windows-sys 0.61.2",
 ]
@@ -12900,9 +12891,9 @@ checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
 
 [[package]]
 name = "uuid"
-version = "1.19.0"
+version = "1.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e2e054861b4bd027cd373e18e8d8d8e6548085000e41290d95ce0c373a654b4a"
+checksum = "ee48d38b119b0cd71fe4141b30f5ba9c7c5d9f4e7a3a8b4a674e4b6ef789976f"
 dependencies = [
  "atomic 0.6.1",
  "getrandom 0.3.4",
@@ -13201,9 +13192,9 @@ dependencies = [
 
 [[package]]
 name = "web_atoms"
-version = "0.2.1"
+version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "30e588f10c7bc3465f5fc1ab087fc97877ec1064a7ec89fb685ac4ee998dac4a"
+checksum = "57a9779e9f04d2ac1ce317aee707aa2f6b773afba7b931222bff6983843b1576"
 dependencies = [
  "phf 0.13.1",
  "phf_codegen 0.13.1",

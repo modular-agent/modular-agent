@@ -3,7 +3,7 @@
   import FolderOpenIcon from "@lucide/svelte/icons/folder-open";
 
   import * as Collapsible from "$lib/components/ui/collapsible/index.js";
-  import { cn } from "$lib/utils.js";
+  import { cn } from "$lib/utils";
 
   import type { PresetFileListFolderProps } from "./types";
 

@@ -1,5 +1,5 @@
-use modular_agent_kit::{MAK, MAKEvent, AgentValue};
 use anyhow::{Context as _, Result};
+use modular_agent_kit::{AgentValue, MAKEvent, MAK};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 use tokio::sync::broadcast::error::RecvError;

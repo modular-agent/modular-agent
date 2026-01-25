@@ -3,7 +3,7 @@
   import { open } from "@tauri-apps/plugin-shell";
 
   function onclick() {
-    open("https://github.com/modular-agent-kit/mak-desktop");
+    open("https://github.com/modular-agent/modular-agent-desktop");
   }
 </script>
 

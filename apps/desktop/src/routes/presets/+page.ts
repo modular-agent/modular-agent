@@ -1,4 +1,4 @@
-import { getDirEntries } from "$lib/mak.js";
+import { getDirEntries } from "$lib/mak";
 
 import type { PageLoad } from "./$types";
 

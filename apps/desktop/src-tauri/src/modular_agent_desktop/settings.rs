@@ -1,5 +1,5 @@
-use modular_agent_kit::{AgentConfigs, AgentValue};
 use anyhow::{Context as _, Result};
+use modular_agent_kit::{AgentConfigs, AgentValue};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{
@@ -8,7 +8,7 @@ use std::{
     sync::{LazyLock, Mutex},
 };
 use tauri::{AppHandle, Manager, State};
-use tauri_plugin_mak::MAKExt;
+use tauri_plugin_modular_agent::MAKExt;
 use tauri_plugin_store::StoreExt;
 
 const SETTINGS_JSON: &str = "settings.json";

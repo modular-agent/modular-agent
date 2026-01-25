@@ -1,14 +1,14 @@
 <script lang="ts">
-  import type { AgentConfigs, AgentDefinition } from "tauri-plugin-mak-api";
+  import type { AgentConfigs, AgentDefinition } from "tauri-plugin-modular-agent-api";
 
   import { Button } from "$lib/components/ui/button/index.js";
   import * as Card from "$lib/components/ui/card/index.js";
   import { FieldGroup, Field, FieldLabel } from "$lib/components/ui/field/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
   import { Switch } from "$lib/components/ui/switch/index.js";
+  import { setGlobalConfigs } from "$lib/mak";
 
   import FieldDescription from "@/lib/components/ui/field/field-description.svelte";
-  import { setGlobalConfigs } from "@/lib/utils";
 
   interface Props {
     agentName: string;

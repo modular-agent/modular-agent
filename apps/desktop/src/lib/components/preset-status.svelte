@@ -2,7 +2,7 @@
   import CirclePlayIcon from "@lucide/svelte/icons/circle-play";
 
   import Badge from "$lib/components/ui/badge/badge.svelte";
-  import { cn } from "$lib/utils.js";
+  import { cn } from "$lib/utils";
 
   type Props = {
     running: boolean;

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { addPreset, getPresetSpec } from "tauri-plugin-mak-api";
+  import { addPreset, getPresetSpec } from "tauri-plugin-modular-agent-api";
 
   import { goto } from "$app/navigation";
 

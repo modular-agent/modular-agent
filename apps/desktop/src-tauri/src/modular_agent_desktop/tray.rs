@@ -5,7 +5,7 @@ use tauri::{
     tray::TrayIconBuilder,
 };
 
-use crate::mak_desktop;
+use crate::modular_agent_desktop;
 
 pub fn init(app: &AppHandle) -> Result<()> {
     let quit = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
@@ -22,7 +22,7 @@ pub fn init(app: &AppHandle) -> Result<()> {
             "quit" => {
                 app.exit(0);
             }
-            "show" => mak_desktop::window::show_main(app).unwrap_or_else(|e| {
+            "show" => modular_agent_desktop::window::show_main(app).unwrap_or_else(|e| {
                 log::error!("Failed to show main window: {}", e);
             }),
             _ => {}

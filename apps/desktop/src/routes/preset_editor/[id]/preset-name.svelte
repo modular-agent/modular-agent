@@ -4,7 +4,7 @@
   import SlashIcon from "@lucide/svelte/icons/slash";
 
   import * as Breadcrumb from "$lib/components/ui/breadcrumb/index.js";
-  import type { WithElementRef } from "$lib/utils.js";
+  import type { WithElementRef } from "$lib/utils";
 
   let {
     name,

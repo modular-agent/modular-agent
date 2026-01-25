@@ -40,8 +40,8 @@
     stopAgent,
     updateAgentSpec,
     updatePresetSpec,
-  } from "tauri-plugin-mak-api";
-  import type { AgentSpec, ConnectionSpec } from "tauri-plugin-mak-api";
+  } from "tauri-plugin-modular-agent-api";
+  import type { AgentSpec, ConnectionSpec } from "tauri-plugin-modular-agent-api";
 
   import { goto } from "$app/navigation";
 

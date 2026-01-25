@@ -1,6 +1,6 @@
 <script lang="ts">
   import ChevronRightIcon from "@lucide/svelte/icons/chevron-right";
-  import type { AgentDefinitions } from "tauri-plugin-mak-api";
+  import type { AgentDefinitions } from "tauri-plugin-modular-agent-api";
 
   import * as Collapsible from "$lib/components/ui/collapsible/index.js";
   import * as Sidebar from "$lib/components/ui/sidebar/index.js";
