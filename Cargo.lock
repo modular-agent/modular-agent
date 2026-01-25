@@ -591,17 +591,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5e5032e24019045c762d3c0f28f5b6b8bbf38563a65908389bf7978758920897"
 
 [[package]]
-name = "mak-macros"
-version = "0.20.0"
-dependencies = [
- "im",
- "modular-agent-kit",
- "proc-macro2",
- "quote",
- "syn 2.0.114",
-]
-
-[[package]]
 name = "matrixmultiply"
 version = "0.3.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -640,7 +629,7 @@ dependencies = [
 
 [[package]]
 name = "modular-agent-kit"
-version = "0.20.0"
+version = "0.21.0"
 dependencies = [
  "async-trait",
  "fnv",
@@ -648,7 +637,7 @@ dependencies = [
  "indexmap",
  "inventory",
  "log",
- "mak-macros",
+ "modular-agent-macros",
  "photon-rs",
  "regex",
  "rmcp",
@@ -657,6 +646,17 @@ dependencies = [
  "serial_test",
  "thiserror 2.0.17",
  "tokio",
+]
+
+[[package]]
+name = "modular-agent-macros"
+version = "0.21.0"
+dependencies = [
+ "im",
+ "modular-agent-kit",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.114",
 ]
 
 [[package]]

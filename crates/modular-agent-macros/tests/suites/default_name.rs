@@ -1,10 +1,10 @@
 use modular_agent_kit::{
-    AgentContext, AgentData, AgentError, AgentSpec, AgentValue, AsAgent, mak_agent, async_trait,
+    AgentContext, AgentData, AgentError, AgentSpec, AgentValue, AsAgent, modular_agent, async_trait,
 };
 
 static CONFIG_KEY: &str = "config_key";
 
-#[mak_agent(kind = "Test", title = "DefaultName", category = "Tests")]
+#[modular_agent(kind = "Test", title = "DefaultName", category = "Tests")]
 struct MyAgent {
     data: AgentData,
 }
@@ -37,7 +37,7 @@ fn default_name_uses_module_path_and_ident() {
     assert_eq!(def.name, concat!(module_path!(), "::", stringify!(MyAgent)));
 }
 
-#[mak_agent(
+#[modular_agent(
     kind = "CustomAgent",
     name = "custom_name",
     title = "Custom Title",

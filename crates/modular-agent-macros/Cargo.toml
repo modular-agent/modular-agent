@@ -1,5 +1,5 @@
 [package]
-name = "mak-macros"
+name = "modular-agent-macros"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true

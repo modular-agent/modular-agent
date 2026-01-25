@@ -1,8 +1,8 @@
 use modular_agent_kit::{
-    AgentContext, AgentData, AgentError, AgentSpec, AgentValue, AsAgent, async_trait, mak_agent,
+    AgentContext, AgentData, AgentError, AgentSpec, AgentValue, AsAgent, async_trait, modular_agent,
 };
 
-#[mak_agent(
+#[modular_agent(
     title = "Literal Name Agent",
     category = "Tests",
     string_config(name = "literal_config", default = "val"),

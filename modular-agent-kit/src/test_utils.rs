@@ -11,7 +11,7 @@ use tokio::{
 };
 
 use crate::{
-    AgentContext, AgentData, AgentError, AgentSpec, AgentValue, AsAgent, MAK, MAKEvent, mak_agent,
+    AgentContext, AgentData, AgentError, AgentSpec, AgentValue, AsAgent, MAK, MAKEvent, modular_agent,
 };
 
 static PORT_VALUE: &str = "value";
@@ -123,7 +123,7 @@ impl ProbeReceiver {
     }
 }
 
-#[mak_agent(
+#[modular_agent(
     title = "TestProbeAgent",
     category = "Test",
     inputs = [PORT_VALUE],

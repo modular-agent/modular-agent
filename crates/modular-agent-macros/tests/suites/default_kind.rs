@@ -1,8 +1,8 @@
 use modular_agent_kit::{
-    AgentContext, AgentData, AgentError, AgentSpec, AgentValue, AsAgent, mak_agent, async_trait,
+    AgentContext, AgentData, AgentError, AgentSpec, AgentValue, AsAgent, modular_agent, async_trait,
 };
 
-#[mak_agent(title = "No Kind", category = "Tests")]
+#[modular_agent(title = "No Kind", category = "Tests")]
 struct NoKindAgent {
     data: AgentData,
 }

@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use im::vector;
 use modular_agent_kit::{
-    AgentContext, AgentData, AgentError, AgentSpec, AgentValue, AsAgent, async_trait, mak_agent,
+    AgentContext, AgentData, AgentError, AgentSpec, AgentValue, AsAgent, async_trait, modular_agent,
 };
 
 const UNIT_KEY: &str = "unit";
@@ -24,7 +24,7 @@ const GLOBAL_ARRAY_KEY: &str = "global_array";
 const GLOBAL_OBJECT_KEY: &str = "global_object";
 const GLOBAL_CUSTOM_KEY: &str = "global_custom";
 
-#[mak_agent(
+#[modular_agent(
     kind = "Test",
     title = "Config Agent",
     category = "Tests",

@@ -1,14 +1,14 @@
 [workspace]
-members = ["modular-agent-kit", "mak-macros"]
+members = ["modular-agent-kit", "modular-agent-macros"]
 resolver = "2"
 
 [workspace.package]
 edition = "2024"
-version = "0.20.0"
+version = "0.21.0"
 description = "Modular Agent Kit"
 authors = ["Akira Ishino <akira@lumilab.jp>"]
 license = "Apache-2.0 OR MIT"
 
 [workspace.dependencies]
-mak-macros = { version = "0.20.0", path = "mak-macros" }
+modular-agent-macros = { version = "0.21.0", path = "modular-agent-macros" }
 im = { version = "15.1.0", features = ["serde"] }

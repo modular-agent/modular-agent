@@ -16,7 +16,7 @@ use syn::{
 ///
 /// Example:
 /// ```rust,ignore
-/// #[mak_agent(
+/// #[modular_agent(
 ///     title = "Add Int",
 ///     category = "Utils",
 ///     inputs = ["int"],
@@ -29,11 +29,11 @@ use syn::{
 /// struct AdderAgent { /* ... */ }
 /// ```
 #[proc_macro_attribute]
-pub fn mak_agent(attr: TokenStream, item: TokenStream) -> TokenStream {
+pub fn modular_agent(attr: TokenStream, item: TokenStream) -> TokenStream {
     let args = parse_macro_input!(attr with Punctuated<Meta, Comma>::parse_terminated);
     let item_struct = parse_macro_input!(item as ItemStruct);
 
-    match expand_mak_agent(args, item_struct) {
+    match expand_modular_agent(args, item_struct) {
         Ok(tokens) => tokens.into(),
         Err(err) => err.into_compile_error().into(),
     }
@@ -86,7 +86,7 @@ enum ConfigSpec {
     Custom(CustomConfig),
 }
 
-fn expand_mak_agent(
+fn expand_modular_agent(
     args: Punctuated<Meta, Comma>,
     item: ItemStruct,
 ) -> syn::Result<proc_macro2::TokenStream> {
@@ -103,7 +103,7 @@ fn expand_mak_agent(
     if !has_data_field {
         return Err(syn::Error::new(
             item.span(),
-            "#[mak_agent] expects the struct to have a `data: AgentData` field",
+            "#[modular_agent] expects the struct to have a `data: AgentData` field",
         ));
     }
 
@@ -245,7 +245,7 @@ fn expand_mak_agent(
             other => {
                 return Err(syn::Error::new_spanned(
                     other,
-                    "unsupported mak_agent argument",
+                    "unsupported modular_agent argument",
                 ));
             }
         }
@@ -273,10 +273,10 @@ fn expand_mak_agent(
 
     let title = parsed
         .title
-        .ok_or_else(|| syn::Error::new(Span::call_site(), "mak_agent: missing `title`"))?;
+        .ok_or_else(|| syn::Error::new(Span::call_site(), "modular_agent: missing `title`"))?;
     let category = parsed
         .category
-        .ok_or_else(|| syn::Error::new(Span::call_site(), "mak_agent: missing `category`"))?;
+        .ok_or_else(|| syn::Error::new(Span::call_site(), "modular_agent: missing `category`"))?;
     let title = quote! { .title(#title) };
     let hide_title = if parsed.hide_title {
         quote! { .hide_title() }

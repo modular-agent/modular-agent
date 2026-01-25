@@ -53,8 +53,8 @@ pub type FnvIndexSet<T> = indexmap::IndexSet<T, fnv::FnvBuildHasher>;
 // Re-export the crate under its canonical name for proc-macros.
 pub extern crate self as modular_agent_kit;
 
-// Re-exports mak_macros
-pub use mak_macros::mak_agent;
+// Re-exports modular_agent_macros
+pub use modular_agent_macros::modular_agent;
 
 pub use agent::{Agent, AgentData, AgentStatus, AsAgent, HasAgentData, agent_new, new_agent_boxed};
 pub use config::{AgentConfigs, AgentConfigsMap};

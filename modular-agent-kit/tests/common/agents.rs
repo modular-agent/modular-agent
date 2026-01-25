@@ -1,6 +1,6 @@
 use modular_agent_kit::{
     MAK, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
-    mak_agent, async_trait,
+    modular_agent, async_trait,
 };
 
 const CATEGORY: &str = "Core/Utils";
@@ -12,7 +12,7 @@ const CONFIG_INITIAL_COUNT: &str = "initial_count";
 const GLOBAL_STRING: &str = "global_string";
 
 /// Counter
-#[mak_agent(
+#[modular_agent(
     title = "Counter",
     category = CATEGORY,
     inputs = [PORT_IN, PORT_RESET],

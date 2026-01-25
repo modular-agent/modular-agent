@@ -2,7 +2,7 @@ use std::vec;
 
 use async_trait::async_trait;
 
-use mak_macros::mak_agent;
+use modular_agent_macros::modular_agent;
 
 use crate::agent::{Agent, AgentData, AsAgent};
 use crate::context::AgentContext;
@@ -17,7 +17,7 @@ const PORT_VALUE: &str = "value";
 
 const CONFIG_NAME: &str = "name";
 
-#[mak_agent(
+#[modular_agent(
     kind = "Board",
     title = "->Board",
     category = CATEGORY,
@@ -68,7 +68,7 @@ impl AsAgent for BoardInAgent {
     }
 }
 
-#[mak_agent(
+#[modular_agent(
     kind = "Board",
     title = "Board->",
     category = CATEGORY,
@@ -144,7 +144,7 @@ impl AsAgent for BoardOutAgent {
     }
 }
 
-#[mak_agent(
+#[modular_agent(
     kind = "Board",
     title = "->Var",
     category = CATEGORY,
@@ -196,7 +196,7 @@ impl AsAgent for VarInAgent {
     }
 }
 
-#[mak_agent(
+#[modular_agent(
     kind = "Board",
     title = "Var->",
     category = CATEGORY,

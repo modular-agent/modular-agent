@@ -13,7 +13,6 @@ im = { workspace = true }
 indexmap = { version = "2", features = ["serde"] }
 inventory = "0.3"
 log = "0.4"
-mak-macros = { workspace = true }
 photon-rs = { version = "0.3.3", optional = true }
 regex = { version = "1.12.2", optional = true }
 rmcp = { version = "0.13.0", features = ["client", "transport-child-process"], optional = true }
@@ -21,6 +20,8 @@ serde = { version = "1", features = ["derive", "rc"] }
 serde_json = { version = "1" }
 thiserror = "2"
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "sync", "time"] }
+
+modular-agent-macros = { workspace = true }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros"] }

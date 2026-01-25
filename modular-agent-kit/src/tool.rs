@@ -6,7 +6,7 @@ use std::{
 
 use crate::{
     MAK, Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
-    Message, ToolCall, async_trait, mak_agent,
+    Message, ToolCall, async_trait, modular_agent,
 };
 use im::{Vector, vector};
 use regex::RegexSet;
@@ -203,7 +203,7 @@ pub async fn call_tools(
 
 // Agents
 
-#[mak_agent(
+#[modular_agent(
     title="List Tools",
     category=CATEGORY,
     inputs=[PORT_PATTERNS],
@@ -251,7 +251,7 @@ impl AsAgent for ListToolsAgent {
     }
 }
 
-#[mak_agent(
+#[modular_agent(
     title="Preset Tool",
     category=CATEGORY,
     inputs=[PORT_TOOL_OUT],
@@ -416,7 +416,7 @@ impl Tool for PresetTool {
 }
 
 // Call Tool Message Agent
-#[mak_agent(
+#[modular_agent(
     title="Call Tool Message",
     category=CATEGORY,
     inputs=[PORT_MESSAGE],
@@ -472,7 +472,7 @@ impl AsAgent for CallToolMessageAgent {
 }
 
 // Call Tool Agent
-#[mak_agent(
+#[modular_agent(
     title="Call Tool",
     category=CATEGORY,
     inputs=[PORT_TOOL_CALL],
