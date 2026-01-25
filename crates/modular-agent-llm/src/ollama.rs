@@ -5,8 +5,8 @@ use std::vec;
 
 use modular_agent_kit::tool::{self, list_tool_infos_patterns};
 use modular_agent_kit::{
-    MAK, Agent, AgentConfigs, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec,
-    AgentValue, AsAgent, Message, ToolCall, ToolCallFunction, mak_agent, async_trait,
+    Agent, AgentConfigs, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue,
+    AsAgent, MAK, Message, ToolCall, ToolCallFunction, async_trait, modular_agent,
 };
 
 use im::{Vector, vector};
@@ -87,8 +87,7 @@ impl OllamaManager {
             return Ok(client.clone());
         }
 
-        let global_config =
-            mak.get_global_configs(crate::ollama::OllamaCompletionAgent::DEF_NAME);
+        let global_config = mak.get_global_configs(crate::ollama::OllamaCompletionAgent::DEF_NAME);
         let api_base_url = Self::get_ollama_url(global_config);
         let new_client = Ollama::try_new(api_base_url)
             .map_err(|e| AgentError::IoError(format!("Ollama Client Error: {}", e)))?;
@@ -99,7 +98,7 @@ impl OllamaManager {
 }
 
 // Ollama Completion Agent
-#[mak_agent(
+#[modular_agent(
     title="Completion",
     category=CATEGORY,
     inputs=[PORT_PROMPT, PORT_RESET],
@@ -201,7 +200,7 @@ impl AsAgent for OllamaCompletionAgent {
 }
 
 // Ollama Chat Agent
-#[mak_agent(
+#[modular_agent(
     title="Chat",
     category=CATEGORY,
     inputs=[PORT_MESSAGE],
@@ -357,7 +356,8 @@ impl AsAgent for OllamaChatAgent {
                     .await?;
 
                 let out_response = AgentValue::from_serialize(&res)?;
-                self.output(ctx.clone(), PORT_RESPONSE, out_response).await?;
+                self.output(ctx.clone(), PORT_RESPONSE, out_response)
+                    .await?;
 
                 if res.done {
                     break;
@@ -378,14 +378,15 @@ impl AsAgent for OllamaChatAgent {
                 .await?;
 
             let out_response = AgentValue::from_serialize(&res)?;
-            self.output(ctx.clone(), PORT_RESPONSE, out_response).await?;
+            self.output(ctx.clone(), PORT_RESPONSE, out_response)
+                .await?;
 
             return Ok(());
         }
     }
 }
 
-#[mak_agent(
+#[modular_agent(
     title="Embeddings",
     category=CATEGORY,
     inputs=[PORT_STRING, PORT_CHUNKS, PORT_DOC],
@@ -605,7 +606,7 @@ impl AsAgent for OllamaEmbeddingsAgent {
 }
 
 // Ollama List Local Models
-#[mak_agent(
+#[modular_agent(
     title="List Local Models",
     category=CATEGORY,
     inputs=[PORT_UNIT],
@@ -638,13 +639,14 @@ impl AsAgent for OllamaListLocalModelsAgent {
             .map_err(|e| AgentError::IoError(format!("Ollama Error: {}", e)))?;
         let model_list = AgentValue::from_serialize(&model_list)?;
 
-        self.output(ctx.clone(), PORT_MODEL_LIST, model_list).await?;
+        self.output(ctx.clone(), PORT_MODEL_LIST, model_list)
+            .await?;
         Ok(())
     }
 }
 
 // Ollama Show Model Info
-#[mak_agent(
+#[modular_agent(
     title="Show Model Info",
     category=CATEGORY,
     inputs=[PORT_MODEL_NAME],
@@ -682,7 +684,8 @@ impl AsAgent for OllamaShowModelInfoAgent {
             .map_err(|e| AgentError::IoError(format!("Ollama Error: {}", e)))?;
         let model_info = AgentValue::from_serialize(&model_info)?;
 
-        self.output(ctx.clone(), PORT_MODEL_INFO, model_info).await?;
+        self.output(ctx.clone(), PORT_MODEL_INFO, model_info)
+            .await?;
         Ok(())
     }
 }

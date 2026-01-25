@@ -5,8 +5,8 @@ use std::vec;
 
 use modular_agent_kit::tool::{self, list_tool_infos_patterns};
 use modular_agent_kit::{
-    MAK, Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
-    Message, ToolCall, ToolCallFunction, mak_agent, async_trait,
+    Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent, MAK,
+    Message, ToolCall, ToolCallFunction, async_trait, modular_agent,
 };
 // use async_openai::types::responses::{FunctionArgs, ToolDefinition};
 use async_openai::types::{
@@ -102,7 +102,7 @@ impl OpenAIManager {
 }
 
 // OpenAI Completion Agent
-#[mak_agent(
+#[modular_agent(
     title="Completion",
     category=CATEGORY,
     inputs=[PORT_PROMPT],
@@ -209,7 +209,7 @@ impl AsAgent for OpenAICompletionAgent {
 }
 
 // OpenAI Chat Agent
-#[mak_agent(
+#[modular_agent(
     title="Chat",
     category=CATEGORY,
     inputs=[PORT_MESSAGE],
@@ -375,7 +375,8 @@ impl AsAgent for OpenAIChatAgent {
                     .await?;
 
                 let out_response = AgentValue::from_serialize(&res)?;
-                self.output(ctx.clone(), PORT_RESPONSE, out_response).await?;
+                self.output(ctx.clone(), PORT_RESPONSE, out_response)
+                    .await?;
             }
 
             return Ok(());
@@ -394,7 +395,8 @@ impl AsAgent for OpenAIChatAgent {
                     .await?;
 
                 let out_response = AgentValue::from_serialize(&res)?;
-                self.output(ctx.clone(), PORT_RESPONSE, out_response).await?;
+                self.output(ctx.clone(), PORT_RESPONSE, out_response)
+                    .await?;
             }
 
             return Ok(());
@@ -403,7 +405,7 @@ impl AsAgent for OpenAIChatAgent {
 }
 
 // OpenAI Embeddings Agent
-#[mak_agent(
+#[modular_agent(
     title="Embeddings",
     category=CATEGORY,
     inputs=[PORT_STRING, PORT_CHUNKS, PORT_DOC],
@@ -630,7 +632,7 @@ impl AsAgent for OpenAIEmbeddingsAgent {
 
 // // OpenAI Responses Agent
 // // https://platform.openai.com/docs/api-reference/responses
-// #[mak_agent(
+// #[modular_agent(
 //     title="Responses",
 //     category=CATEGORY,
 //     inputs=[PORT_MESSAGE],

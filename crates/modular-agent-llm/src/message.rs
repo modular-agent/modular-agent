@@ -1,8 +1,8 @@
-use modular_agent_kit::{
-    MAK, Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
-    Message, mak_agent, async_trait,
-};
 use im::{Vector, vector};
+use modular_agent_kit::{
+    Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent, MAK,
+    Message, async_trait, modular_agent,
+};
 
 const CATEGORY: &str = "LLM/Message";
 
@@ -16,7 +16,7 @@ const CONFIG_MESSAGES: &str = "messages";
 const CONFIG_PREAMBLE: &str = "preamble";
 
 // Assistant Message Agent
-#[mak_agent(
+#[modular_agent(
     title="Assistant Message",
     category=CATEGORY,
     inputs=[PORT_MESSAGES],
@@ -52,7 +52,7 @@ impl AsAgent for AssistantMessageAgent {
 /// Add a system message to the messages.
 ///
 /// The system message is always prepended to the messages.
-#[mak_agent(
+#[modular_agent(
     title="System Message",
     category=CATEGORY,
     inputs=[PORT_MESSAGES],
@@ -86,7 +86,7 @@ impl AsAgent for SystemMessageAgent {
 }
 
 // User Message Agent
-#[mak_agent(
+#[modular_agent(
     title="User Message",
     category=CATEGORY,
     inputs=[PORT_MESSAGES],
@@ -156,7 +156,7 @@ fn prepend_message(value: AgentValue, message: Message) -> AgentValue {
 /// Prepend a preamble message to the first input message.
 ///
 //// The preamble message is added only once.
-#[mak_agent(
+#[modular_agent(
     title="Preamble",
     category=CATEGORY,
     inputs=[PORT_MESSAGE, PORT_RESET],
@@ -270,7 +270,7 @@ impl AsAgent for PreambleAgent {
 /// When max_size > 0, the number of stored messages is limited to max_size.
 /// The stored messages are retained even if the agent is stopped.
 /// When an input is received on reset, the stored messages are cleared.
-#[mak_agent(
+#[modular_agent(
     title="Messages",
     category=CATEGORY,
     inputs=[PORT_MESSAGE, PORT_RESET],
@@ -367,7 +367,7 @@ impl AsAgent for MessagesAgent {
 ///
 /// It selects messages to fit within max_size.
 /// The prompt order is (system, ) user, (assistant, user)*.
-#[mak_agent(
+#[modular_agent(
     title="Messages for Prompt",
     category=CATEGORY,
     inputs=[PORT_MESSAGES],

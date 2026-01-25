@@ -1,11 +1,11 @@
 use std::vec;
 
-use modular_agent_kit::{
-    MAK, Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
-    mak_agent, async_trait,
-};
 use icu_normalizer::{ComposingNormalizer, ComposingNormalizerBorrowed};
 use im::vector;
+use modular_agent_kit::{
+    Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent, MAK,
+    async_trait, modular_agent,
+};
 use text_splitter::{ChunkConfig, TextSplitter};
 use tokenizers::Tokenizer;
 
@@ -19,7 +19,7 @@ const CONFIG_MAX_CHARACTERS: &str = "max_characters";
 const CONFIG_MAX_TOKENS: &str = "max_tokens";
 const CONFIG_TOKENIZER: &str = "tokenizer";
 
-#[mak_agent(
+#[modular_agent(
     title="NFKC",
     category=CATEGORY,
     inputs=[PORT_STRING, PORT_DOC],
@@ -98,7 +98,7 @@ impl AsAgent for NFKCAgent {
     }
 }
 
-#[mak_agent(
+#[modular_agent(
     title="Split Text",
     category=CATEGORY,
     inputs=[PORT_STRING, PORT_DOC],
@@ -206,7 +206,7 @@ impl AsAgent for SplitTextAgent {
     }
 }
 
-#[mak_agent(
+#[modular_agent(
     title="Split Text by Tokens",
     category=CATEGORY,
     inputs=[PORT_STRING, PORT_DOC],
