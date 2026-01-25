@@ -1,6 +1,6 @@
 use modular_agent_kit::{
-    MAK, Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
-    mak_agent, async_trait,
+    Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent, MAK,
+    async_trait, modular_agent,
 };
 use url::Url;
 use yt_transcript_rs::api::YouTubeTranscriptApi;
@@ -15,7 +15,7 @@ static PORT_TEXT: &str = "text";
 static CONFIG_LANGUAGES: &str = "languages";
 
 /// Fetch YouTube video transcript from a given URL
-#[mak_agent(
+#[modular_agent(
     title = "Fetch YouTube Transcript",
     category = CATEGORY,
     inputs = [PORT_URL, PORT_VIDEO_ID],
@@ -116,7 +116,8 @@ impl AsAgent for FetchYtTranscriptAgent {
             AgentValue::from_serialize(&transcript).map_err(|e| {
                 AgentError::IoError(format!("Transcript Serialization Error: {}", e))
             })?,
-        ).await?;
+        )
+        .await?;
 
         self.output(ctx, PORT_TEXT, text.into()).await
     }

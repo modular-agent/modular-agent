@@ -1,6 +1,6 @@
 [package]
-name = "mak-web-agents"
-version = "0.3.0"
+name = "modular-agent-web"
+version = "0.4.0"
 description = "Web Agents for Modular Agent Kit"
 authors = ["Akira Ishino <akira@lumilab.jp>"]
 edition = "2024"
@@ -8,13 +8,14 @@ license = "Apache-2.0 OR MIT"
 
 [dependencies]
 html-to-markdown-rs = { version = "2.14.0", optional = true }
-modular-agent-kit = "0.20.0"
 reqwest = { version = "0.12.25", default-features = false, features = ["json"] }
 scraper = { version = "0.25.0", optional = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 url = "2.5.7"
 yt-transcript-rs = { version = "0.1.8", optional = true }
+
+modular-agent-kit = "0.21.0"
 
 [features]
 default = ["fetch-url", "html-scraper", "html-to-markdown", "reqwest/default-tls", "yt-transcript"]

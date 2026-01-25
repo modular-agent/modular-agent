@@ -1,8 +1,8 @@
-use modular_agent_kit::{
-    MAK, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
-    mak_agent, async_trait,
-};
 use html_to_markdown_rs::{ConversionOptions, PreprocessingPreset, convert};
+use modular_agent_kit::{
+    AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent, MAK,
+    async_trait, modular_agent,
+};
 
 static CATEGORY: &str = "Web";
 
@@ -10,7 +10,7 @@ static PORT_HTML: &str = "html";
 static PORT_MARKDOWN: &str = "markdown";
 
 /// Convert HTML to Markdown
-#[mak_agent(
+#[modular_agent(
     title = "HTML to Markdown",
     category = CATEGORY,
     inputs = [PORT_HTML],
@@ -45,14 +45,17 @@ impl AsAgent for HtmlToMarkdownAgent {
                 let markdown = html2markdown(html)?;
                 arr.push(AgentValue::string(markdown));
             }
-            return self.output(ctx, PORT_MARKDOWN, AgentValue::array(arr.into())).await;
+            return self
+                .output(ctx, PORT_MARKDOWN, AgentValue::array(arr.into()))
+                .await;
         }
 
         let html = value.as_str().ok_or_else(|| {
             AgentError::InvalidValue("Input value for 'html' must be a string".to_string())
         })?;
         let markdown = html2markdown(html)?;
-        self.output(ctx, PORT_MARKDOWN, AgentValue::string(markdown)).await
+        self.output(ctx, PORT_MARKDOWN, AgentValue::string(markdown))
+            .await
     }
 }
 

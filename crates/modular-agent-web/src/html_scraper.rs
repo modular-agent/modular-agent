@@ -1,6 +1,6 @@
 use modular_agent_kit::{
-    MAK, Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
-    mak_agent, async_trait,
+    Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent, MAK,
+    async_trait, modular_agent,
 };
 use scraper::{Html, Selector};
 
@@ -9,7 +9,7 @@ static CATEGORY: &str = "Web";
 static PORT_HTML: &str = "html";
 
 /// Extract text content from HTML by CSS selector
-#[mak_agent(
+#[modular_agent(
     title = "HTML Scraper",
     category = CATEGORY,
     inputs = [PORT_HTML],

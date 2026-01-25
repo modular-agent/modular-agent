@@ -1,6 +1,6 @@
 use modular_agent_kit::{
-    MAK, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
-    mak_agent, async_trait,
+    AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent, MAK,
+    async_trait, modular_agent,
 };
 use reqwest::Client;
 
@@ -10,7 +10,7 @@ static PORT_URL: &str = "url";
 static PORT_TEXT: &str = "text";
 
 /// Fetch text content from a given URL
-#[mak_agent(
+#[modular_agent(
     title = "Fetch URL",
     category = CATEGORY,
     inputs = [PORT_URL],
