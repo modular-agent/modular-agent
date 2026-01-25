@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { addPreset, getPresetSpec } from "tauri-plugin-modular-agent-api";
+  import { addPresetWithName, getPresetSpec } from "tauri-plugin-modular-agent-api";
 
   import { goto } from "$app/navigation";
 
@@ -29,6 +29,10 @@
     openNewPresetDialog = true;
   }
 
+  async function handleSavePreset(e: Event) {
+    await onSavePreset();
+  }
+
   let openSaveAsDialog = $state(false);
   let new_name = $state("");
 
@@ -42,12 +46,12 @@
     if (!new_name) return;
     if (new_name === name) {
       // same name, just save
-      onSavePreset();
+      await onSavePreset();
       return;
     }
     const s = await getPresetSpec(preset_id);
     if (!s) return;
-    const new_id = await addPreset(s);
+    const new_id = await addPresetWithName(s, new_name);
     if (!new_id) return;
     goto(`/preset_editor/${new_id}`, { invalidateAll: true });
   }
@@ -62,7 +66,7 @@
     <Menubar.Trigger>File</Menubar.Trigger>
     <Menubar.Content>
       <Menubar.Item onclick={handleNewPreset}>New</Menubar.Item>
-      <Menubar.Item onclick={onSavePreset}>Save</Menubar.Item>
+      <Menubar.Item onclick={handleSavePreset}>Save</Menubar.Item>
       <Menubar.Item onclick={handleSaveAsPreset}>Save as...</Menubar.Item>
       <Menubar.Separator />
       <Menubar.Item onclick={onImportPreset}>Import</Menubar.Item>
