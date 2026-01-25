@@ -37,7 +37,9 @@
     removeAgent,
     removeConnection,
     startAgent,
+    startPreset,
     stopAgent,
+    stopPreset,
     updateAgentSpec,
     updatePresetSpec,
   } from "tauri-plugin-modular-agent-api";
@@ -51,15 +53,10 @@
     edgeToConnectionSpec,
     savePreset,
     getCoreSettings,
+    newPresetWithName,
   } from "$lib/agent";
   import PresetStatus from "$lib/components/preset-status.svelte";
   import { ScrollArea } from "$lib/components/ui/scroll-area/index.js";
-  import {
-    importPresetAndReload,
-    newPresetAndReload,
-    startPresetAndReload,
-    stopPresetAndReload,
-  } from "$lib/shared.svelte";
   import type { PresetNode, PresetEdge } from "$lib/types";
 
   import type { PageProps } from "./$types";
@@ -306,7 +303,7 @@
   });
 
   async function onNewPreset(name: string) {
-    const new_id = await newPresetAndReload(name);
+    const new_id = await newPresetWithName(name);
     if (new_id) {
       goto(`/preset_editor/${new_id}`, { invalidateAll: true });
     }
@@ -334,20 +331,19 @@
   }
 
   async function onImportPreset() {
-    const file = await open({ multiple: false, filter: "json" });
-    if (!file) return;
-    const id = await importPresetAndReload(file as string);
-    goto(`/preset_editor/${id}`, { invalidateAll: true });
+    // const file = await open({ multiple: false, filter: "json" });
+    // if (!file) return;
+    // const id = await importPreset(file as string);
+    // goto(`/preset_editor/${id}`, { invalidateAll: true });
   }
 
   async function onStartPreset() {
-    console.log("Starting preset...", preset_id);
-    await startPresetAndReload(preset_id);
+    await startPreset(preset_id);
     running = true;
   }
 
   async function onStopPreset() {
-    await stopPresetAndReload(preset_id);
+    await stopPreset(preset_id);
     running = false;
   }
 

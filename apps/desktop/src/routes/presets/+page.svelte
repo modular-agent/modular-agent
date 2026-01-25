@@ -5,11 +5,11 @@
 
   import { goto } from "$app/navigation";
 
+  import { newPresetWithName } from "$lib/agent";
   import * as PresetFileList from "$lib/components/preset-file-list";
   import { buttonVariants } from "$lib/components/ui/button";
   import * as Dialog from "$lib/components/ui/dialog";
   import { getDirEntries, openPreset } from "$lib/mak";
-  import { newPresetAndReload } from "$lib/shared.svelte";
 
   import NewPresetDialog from "@/lib/components/new-preset-dialog.svelte";
 
@@ -28,13 +28,13 @@
     all_entries = { ...all_entries, [path]: e };
   }
 
-  async function onFileClick(path: string) {
-    let id = await openPreset(path);
+  async function onFileClick(name: string) {
+    let id = await openPreset(name);
     goto(`/preset_editor/${id}`);
   }
 
   async function onNewPreset(name: string) {
-    const new_id = await newPresetAndReload(name);
+    const new_id = await newPresetWithName(name);
     if (new_id) {
       goto(`/preset_editor/${new_id}`, { invalidateAll: true });
     }

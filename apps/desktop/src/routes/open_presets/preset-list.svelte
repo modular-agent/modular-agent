@@ -9,6 +9,7 @@
 
   import { goto } from "$app/navigation";
 
+  import { newPresetWithName } from "$lib/agent";
   import NewPresetDialog from "$lib/components/new-preset-dialog.svelte";
   import PresetStatus from "$lib/components/preset-status.svelte";
   import { buttonVariants } from "$lib/components/ui/button/index.js";
@@ -20,7 +21,6 @@
   import * as Dialog from "$lib/components/ui/dialog/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
   import * as Table from "$lib/components/ui/table/index.js";
-  import { newPresetAndReload } from "$lib/shared.svelte";
   import type { PresetInfoExt } from "$lib/types";
 
   import PresetListActions from "./preset-list-actions.svelte";
@@ -79,6 +79,7 @@
         return renderComponent(PresetListActions, {
           id: row.original.id,
           name: row.original.name,
+          running: row.original.running,
           run_on_start: row.original.run_on_start,
         });
       },
@@ -121,7 +122,7 @@
   });
 
   async function onNewPreset(name: string) {
-    const new_id = await newPresetAndReload(name);
+    const new_id = await newPresetWithName(name);
     if (new_id) {
       goto(`/preset_editor/${new_id}`, { invalidateAll: true });
     }

@@ -1,97 +1,13 @@
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
-import { SvelteMap } from "svelte/reactivity";
 import { writable, type Writable } from "svelte/store";
 
-import type { PresetSpec } from "tauri-plugin-modular-agent-api";
-import { getPresetInfos, updatePresetSpec } from "tauri-plugin-modular-agent-api";
-
-import {
-  getCoreSettings,
-  importPreset,
-  newPreset,
-  removePreset,
-  renamePreset,
-  startPreset,
-  stopPreset,
-} from "./agent";
 import type {
   AgentConfigUpdatedMessage,
   AgentErrorMessage,
   AgentInMessage,
   AgentSpecUpdatedMessage,
-  PresetInfoExt,
 } from "./types";
-
-// Presets
-
-export const presetInfos = new SvelteMap<string, PresetInfoExt>();
-
-export async function reloadPreseetInfos() {
-  const presets = (await getPresetInfos()) as PresetInfoExt[];
-  const coreSettings = await getCoreSettings();
-  const auto_start_presets = coreSettings.auto_start_presets || [];
-  presetInfos.clear();
-  presets.forEach((s) => {
-    if (auto_start_presets.includes(s.name)) {
-      s.run_on_start = true;
-    }
-    presetInfos.set(s.id, s);
-  });
-}
-
-export async function newPresetAndReload(name: string): Promise<string> {
-  const id = await newPreset(name);
-  await reloadPreseetInfos();
-  return id;
-}
-
-export async function renamePresetAndReload(id: string, newName: string): Promise<string> {
-  const name = await renamePreset(id, newName);
-  await reloadPreseetInfos();
-  return name;
-}
-
-export async function deletePresetAndReload(id: string): Promise<void> {
-  await removePreset(id);
-  await reloadPreseetInfos();
-}
-
-export async function importPresetAndReload(path: string): Promise<string> {
-  const id = await importPreset(path);
-  await reloadPreseetInfos();
-  return id;
-}
-
-export async function startPresetAndReload(id: string) {
-  let info = presetInfos.get(id);
-  if (info?.running) {
-    return;
-  }
-  await startPreset(id);
-  await reloadPreseetInfos();
-}
-
-export async function stopPresetAndReload(id: string) {
-  let info = presetInfos.get(id);
-  if (!info || !info.running) {
-    return;
-  }
-  await stopPreset(id);
-  await reloadPreseetInfos();
-}
-
-export async function updatePresetSpecAndReload(
-  id: string,
-  spec: Partial<PresetSpec>,
-): Promise<void> {
-  await updatePresetSpec(id, spec);
-  await reloadPreseetInfos();
-}
-
-$effect.root(() => {
-  reloadPreseetInfos();
-});
 
 // Agent Config Updated Message
 

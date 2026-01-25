@@ -2,40 +2,33 @@
   import EllipsisVerticalIcon from "@lucide/svelte/icons/ellipsis-vertical";
   import PlayIcon from "@lucide/svelte/icons/play";
   import SquareIcon from "@lucide/svelte/icons/square";
-  import { addPreset, getPresetSpec } from "tauri-plugin-modular-agent-api";
+  import { startPreset, stopPreset } from "tauri-plugin-modular-agent-api";
 
   import { getCoreSettings, setCoreSettings } from "$lib/agent";
   import { Button } from "$lib/components/ui/button/index.js";
   import * as Dialog from "$lib/components/ui/dialog/index.js";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
-  import {
-    deletePresetAndReload,
-    reloadPreseetInfos,
-    renamePresetAndReload,
-    startPresetAndReload,
-    stopPresetAndReload,
-    presetInfos,
-  } from "$lib/shared.svelte";
 
   type Props = {
     id: string;
     name: string;
+    running: boolean | undefined;
     run_on_start?: boolean | undefined;
   };
 
-  let { id, name, run_on_start }: Props = $props();
+  let { id, name, running, run_on_start }: Props = $props();
 
   // start and stop
 
-  let running = $derived(presetInfos.get(id)?.running);
-
   async function handleStart() {
-    await startPresetAndReload(id);
+    await startPreset(id);
+    running = true;
   }
 
   async function handleStop() {
-    await stopPresetAndReload(id);
+    await stopPreset(id);
+    running = false;
   }
 
   // rename and delete
@@ -53,24 +46,13 @@
   async function handleRenamePresetSubmit(e: Event) {
     e.preventDefault();
     if (!new_name) return;
-    await renamePresetAndReload(id, new_name);
+    await renamePreset(id, new_name);
     openRenameDialog = false;
-    await reloadPreseetInfos();
-  }
-
-  async function handleDuplicatePreset(e: Event) {
-    e.preventDefault();
-    const s = await getPresetSpec(id);
-    if (!s) return;
-    const new_name = await uniquePresetName(name);
-    const new_id = await addPreset(new_name, s);
-    if (!new_id) return;
-    await reloadPreseetInfos();
   }
 
   async function handleDeletePresetSubmit(e: Event) {
     e.preventDefault();
-    await deletePresetAndReload(id);
+    await deletePreset(id);
     openDeleteDialog = false;
   }
 
@@ -90,8 +72,6 @@
     }
     coreSettings.auto_start_presets = auto_start_presets;
     await setCoreSettings(coreSettings);
-
-    await reloadPreseetInfos();
   }
 </script>
 
@@ -117,7 +97,6 @@
     </DropdownMenu.Trigger>
     <DropdownMenu.Content>
       <DropdownMenu.Item onclick={handleRenamePreset}>Rename</DropdownMenu.Item>
-      <DropdownMenu.Item onclick={handleDuplicatePreset}>Duplicate</DropdownMenu.Item>
       <DropdownMenu.Item onclick={() => (openDeleteDialog = true)}>Delete</DropdownMenu.Item>
       <DropdownMenu.Separator />
       <DropdownMenu.Item onclick={handleRunOnStart}>Run on Start</DropdownMenu.Item>

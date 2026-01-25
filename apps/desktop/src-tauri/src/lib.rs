@@ -89,7 +89,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             exit_app_cmd,
-            modular_agent_desktop::app::new_preset_cmd,
+            modular_agent_desktop::app::new_preset_with_name_cmd,
             modular_agent_desktop::app::rename_preset_cmd,
             modular_agent_desktop::app::remove_preset_cmd,
             modular_agent_desktop::app::import_preset_cmd,
@@ -138,11 +138,11 @@ pub fn run() {
                         .unwrap_or_else(|e| {
                             log::error!("Failed to start agents: {}", e);
                         });
-                    log::info!("MAK Desktop is ready.");
+                    log::info!("Module Agent Desktop is ready.");
                 });
             }
             tauri::RunEvent::Exit => {
-                log::info!("Exiting MAK Desktop...");
+                log::info!("Exiting Module Agent Desktop...");
                 tauri::async_runtime::block_on(async move {
                     modular_agent_desktop::window::hide_main(app).unwrap_or_else(|e| {
                         log::error!("Failed to hide main window: {}", e);

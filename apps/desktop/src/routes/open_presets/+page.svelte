@@ -3,13 +3,10 @@
 
   import { onMount } from "svelte";
 
-  import { presetInfos } from "$lib/shared.svelte";
-
+  import type { PageData } from "./$types";
   import PresetList from "./preset-list.svelte";
 
-  let presets = $derived.by(() =>
-    Array.from(presetInfos?.values()).sort((a, b) => a.name.localeCompare(b.name)),
-  );
+  let { data }: PageData = $props();
 
   onMount(async () => {
     getCurrentWindow().setTitle("Preset List - MAK Desktop");
@@ -20,5 +17,5 @@
   <header class="flex-none">
     <div class="text-lg font-semibold">Open Presets</div>
   </header>
-  <PresetList {presets} />
+  <PresetList presets={data.presetInfos} />
 </div>

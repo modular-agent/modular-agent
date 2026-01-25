@@ -18,8 +18,8 @@ import {
 } from "./mak";
 import type { PresetFlow, PresetEdge, PresetNode, CoreSettings } from "./types";
 
-export async function newPreset(name: string): Promise<string> {
-  return await invoke("new_preset_cmd", { name });
+export async function newPresetWithName(name: string): Promise<string> {
+  return await invoke("new_preset_with_name_cmd", { name });
 }
 
 export async function renamePreset(id: string, name: string): Promise<string> {

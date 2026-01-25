@@ -34,18 +34,17 @@ impl MakApp {
     // Preset
 
     /// Create a new preset.
-    pub async fn new_preset(&self, name: &str) -> Result<String> {
-        if !is_valid_preset_name(name) {
+    pub fn new_preset_with_name(&self, name: String) -> Result<String> {
+        if !is_valid_preset_name(&name) {
             return Err(anyhow!("Invalid preset name: {}", name));
         }
-        let id = self.mak.new_preset()?;
-        self.mak.set_preset_file_name(&id, name).await?;
+        let id = self.mak.new_preset_with_name(name.clone())?;
         let mut presets = self.presets.lock().unwrap();
-        presets.insert(name.to_string(), id.clone());
+        presets.insert(name, id.clone());
         Ok(id)
     }
 
-    pub async fn open_preset(&self, name: &str) -> Result<String> {
+    pub async fn open_preset(&self, name: String) -> Result<String> {
         if !is_valid_preset_name(&name) {
             return Err(anyhow!("Invalid preset name: {}", name));
         }
@@ -53,22 +52,22 @@ impl MakApp {
         // Check if the preset already exists
         {
             let presets = self.presets.lock().unwrap();
-            if let Some(id) = presets.get(name) {
+            if let Some(id) = presets.get(&name) {
                 return Ok(id.clone());
             }
         }
 
         // open the preset file
-        let path = preset_path(name)?;
+        let path = preset_path(&name)?;
         let id = self
             .mak
-            .open_preset_from_file(path.to_string_lossy().as_ref())
+            .open_preset_from_file(path.to_string_lossy().as_ref(), Some(name.clone()))
             .await?;
 
         // Store into the presets map
         {
             let mut presets = self.presets.lock().unwrap();
-            presets.insert(name.to_string(), id.clone());
+            presets.insert(name, id.clone());
         }
 
         Ok(id)
@@ -109,7 +108,9 @@ impl MakApp {
         //         .with_context(|| "Failed to rename old preset file")?;
         // }
 
-        Ok(new_name.to_string())
+        // Ok(new_name.to_string())
+
+        Err(anyhow!("Not implemented"))
     }
 
     pub fn save_preset(&self, name: String, spec: PresetSpec) -> Result<()> {
@@ -158,87 +159,11 @@ impl MakApp {
         self.mak.stop_preset(preset_id).await?;
         Ok(())
     }
-
-    fn read_presets_dir(&mut self) -> Result<()> {
-        let presets_dir = presets_dir()?;
-        if !presets_dir.exists() {
-            std::fs::create_dir_all(&presets_dir)
-                .with_context(|| "Failed to create presets directory")?;
-            return Ok(());
-        }
-        // self.read_presets_dir_recursive(&presets_dir, "")?;
-        Ok(())
-    }
-
-    // fn read_presets_dir_recursive(&mut self, dir: &PathBuf, name_prefix: &str) -> Result<()> {
-    //     if !dir.exists() || !dir.is_dir() {
-    //         return Ok(());
-    //     }
-
-    //     let entries = std::fs::read_dir(dir)
-    //         .with_context(|| format!("Failed to read directory: {:?}", dir))?;
-
-    //     for entry in entries {
-    //         if let Err(err) = entry {
-    //             log::warn!("Failed to read directory entry: {}", err);
-    //             continue;
-    //         };
-    //         let path = entry?.path();
-    //         if path.is_dir() {
-    //             let dir_name = path
-    //                 .file_name()
-    //                 .context("Failed to get directory name")?
-    //                 .to_string_lossy();
-    //             let new_prefix = if name_prefix.is_empty() {
-    //                 dir_name.to_string()
-    //             } else {
-    //                 format!("{}/{}", name_prefix, dir_name)
-    //             };
-    //             self.read_presets_dir_recursive(&path, &new_prefix)?;
-    //         } else if path.is_file() && path.extension().unwrap_or_default() == "json" {
-    //             // Get the base name from the file name
-    //             let base_name = path
-    //                 .file_stem()
-    //                 .context("Failed to get file stem")?
-    //                 .to_string_lossy()
-    //                 .trim()
-    //                 .to_string();
-    //             let name = if name_prefix.is_empty() {
-    //                 base_name
-    //             } else {
-    //                 format!("{}/{}", name_prefix, base_name)
-    //             };
-    //             let spec = match self.read_preset(path) {
-    //                 Ok(spec) => spec,
-    //                 Err(e) => {
-    //                     log::error!("Failed to read preset: {}", e);
-    //                     continue;
-    //                 }
-    //             };
-    //             if let Err(e) = self.mak.add_preset(name, spec) {
-    //                 log::error!("Failed to add preset: {}", e);
-    //                 continue;
-    //             }
-    //         }
-    //     }
-
-    //     Ok(())
-    // }
-
-    // fn read_preset(&self, path: PathBuf) -> Result<PresetSpec> {
-    //     if !path.is_file() || path.extension().unwrap_or_default() != "json" {
-    //         bail!("Invalid file extension");
-    //     }
-    //     let content = std::fs::read_to_string(&path)?;
-    //     let spec = PresetSpec::from_json(&content)?;
-    //     Ok(spec)
-    // }
 }
 
 pub fn init(app: &AppHandle) -> Result<()> {
     let mak = app.mak();
-    let mut asapp = MakApp::new(mak);
-    asapp.read_presets_dir()?;
+    let asapp = MakApp::new(mak);
     app.manage(asapp);
     Ok(())
 }
@@ -279,16 +204,20 @@ async fn run_auto_start_presets(app: &AppHandle) {
     };
 
     let asapp = app.state::<MakApp>();
-    let preset_infos = asapp.mak.get_preset_infos();
-
-    // for info in preset_infos {
-    //     if auto_start_presets.contains(&info.name) {
-    //         log::info!("Auto-starting preset: {}", &info.name);
-    //         if let Err(e) = asapp.start_preset(&info.id).await {
-    //             log::error!("Failed to auto-start preset '{}': {}", &info.name, e);
-    //         }
-    //     }
-    // }
+    for name in auto_start_presets {
+        log::info!("Auto-starting preset: {}", name);
+        match asapp.open_preset(name.clone()).await {
+            Ok(id) => {
+                if let Err(e) = asapp.start_preset(&id).await {
+                    log::error!("Failed to start preset {}: {}", name, e);
+                }
+            }
+            Err(e) => {
+                log::error!("Failed to open preset {}: {}", name, e);
+                continue;
+            }
+        }
+    }
 }
 
 pub fn quit(_app: &AppHandle) {}
@@ -411,8 +340,8 @@ fn is_valid_preset_name(new_name: &str) -> bool {
 // }
 
 #[tauri::command]
-pub async fn new_preset_cmd(asapp: State<'_, MakApp>, name: String) -> Result<String, String> {
-    asapp.new_preset(&name).await.map_err(|e| e.to_string())
+pub fn new_preset_with_name_cmd(asapp: State<'_, MakApp>, name: String) -> Result<String, String> {
+    asapp.new_preset_with_name(name).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -460,5 +389,5 @@ pub async fn get_dir_entries_cmd(path: String) -> Result<Vec<String>, String> {
 
 #[tauri::command]
 pub async fn open_preset_cmd(asapp: State<'_, MakApp>, name: String) -> Result<String, String> {
-    asapp.open_preset(&name).await.map_err(|e| e.to_string())
+    asapp.open_preset(name).await.map_err(|e| e.to_string())
 }
