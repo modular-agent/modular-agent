@@ -44,3 +44,7 @@ export async function getDirEntries(path: string): Promise<string[]> {
 export async function openPreset(name: string): Promise<string> {
   return await invoke("open_preset_cmd", { name });
 }
+
+export async function deletePreset(name: string): Promise<string> {
+  return await invoke("delete_preset_cmd", { name });
+}

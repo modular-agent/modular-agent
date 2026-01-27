@@ -6,12 +6,11 @@
   import { goto } from "$app/navigation";
 
   import { newPresetWithName } from "$lib/agent";
-  import * as PresetFileList from "$lib/components/preset-file-list";
-  import { buttonVariants } from "$lib/components/ui/button";
-  import * as Dialog from "$lib/components/ui/dialog";
-  import { getDirEntries, openPreset } from "$lib/mak";
+  import * as PresetFileList from "$lib/components/preset-file-list/index.js";
+  import * as ContextMenu from "$lib/components/ui/context-menu/index.js";
+  import { deletePreset, getDirEntries, openPreset } from "$lib/mak";
 
-  import NewPresetDialog from "@/lib/components/new-preset-dialog.svelte";
+  import PresetActionDialog from "@/lib/components/preset-action-dialog.svelte";
 
   import type { PageProps } from "./$types";
 
@@ -19,16 +18,20 @@
 
   let all_entries: Record<string, string[]> = $derived({ "": data.entries });
 
+  let dialog_name = $state("");
+  let openNewPresetDialog = $state(false);
+  let openDeletePresetDialog = $state(false);
+
   onMount(async () => {
     getCurrentWindow().setTitle(`Presets - Modular Agent`);
   });
 
   async function onFolderClick(path: string) {
-    let e = await getDirEntries(path);
-    all_entries = { ...all_entries, [path]: e };
+    let es = await getDirEntries(path);
+    all_entries = { ...all_entries, [path]: es };
   }
 
-  async function onFileClick(name: string) {
+  async function handleFileClick(name: string) {
     let id = await openPreset(name);
     goto(`/preset_editor/${id}`);
   }
@@ -39,6 +42,20 @@
       goto(`/preset_editor/${new_id}`, { invalidateAll: true });
     }
   }
+
+  async function onDeletePreset(name: string) {
+    await deletePreset(name);
+  }
+
+  async function handleNew(path: string) {
+    dialog_name = path;
+    openNewPresetDialog = true;
+  }
+
+  async function handleDelete(path: string) {
+    dialog_name = path;
+    openDeletePresetDialog = true;
+  }
 </script>
 
 {#snippet folder({ name, path, open = false }: { name: string; path: string; open?: boolean })}
@@ -48,20 +65,56 @@
       {#if entry.endsWith("/")}
         {@const fn = entry.slice(0, -1)}
         {@const fp = path ? `${path}/${fn}` : fn}
-        {@render folder({ name: fn, path: fp })}
+        <ContextMenu.Root>
+          <ContextMenu.Trigger>
+            {@render folder({ name: fn, path: fp })}
+          </ContextMenu.Trigger>
+          <ContextMenu.Content>
+            <ContextMenu.Item onclick={() => handleNew(fp + "/")}>New</ContextMenu.Item>
+            <ContextMenu.Item onclick={() => handleDelete(fp)}>Delete</ContextMenu.Item>
+          </ContextMenu.Content>
+        </ContextMenu.Root>
       {:else}
         {@const fp = path ? `${path}/${entry}` : entry}
-        <PresetFileList.File name={entry} onclick={() => onFileClick(fp)} />
+        <ContextMenu.Root>
+          <ContextMenu.Trigger>
+            <PresetFileList.File name={entry} onclick={() => handleFileClick(fp)} />
+          </ContextMenu.Trigger>
+          <ContextMenu.Content>
+            <ContextMenu.Item onclick={() => handleNew(fp)}>New</ContextMenu.Item>
+            <ContextMenu.Item onclick={() => handleDelete(fp)}>Delete</ContextMenu.Item>
+          </ContextMenu.Content>
+        </ContextMenu.Root>
       {/if}
     {/each}
   </PresetFileList.Folder>
 {/snippet}
 
-<div class="flex flex-col gap-8 p-4">
-  <NewPresetDialog {onNewPreset}>
-    {#snippet trigger()}
-      <Dialog.Trigger class={buttonVariants({ variant: "outline" })}>+ New</Dialog.Trigger>
-    {/snippet}
-  </NewPresetDialog>
-  {@render folder({ name: "presets", path: "", open: true })}
-</div>
+{#if data.entries.length === 0}
+  <div class="flex flex-col items-center justify-center h-full text-center gap-4">
+    <p class="text-muted-foreground">No presets found.</p>
+    <button onclick={() => handleNew("")}> New Preset </button>
+  </div>
+{:else}
+  <div class="flex flex-col gap-8 p-4">
+    {@render folder({ name: "presets", path: "", open: true })}
+  </div>
+{/if}
+
+{#if openNewPresetDialog}
+  <PresetActionDialog
+    action="New"
+    name={dialog_name}
+    bind:open={openNewPresetDialog}
+    onAction={onNewPreset}
+  />
+{/if}
+
+{#if openDeletePresetDialog}
+  <PresetActionDialog
+    action="Delete"
+    name={dialog_name}
+    bind:open={openDeletePresetDialog}
+    onAction={onDeletePreset}
+  />
+{/if}

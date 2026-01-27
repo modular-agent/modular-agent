@@ -7,18 +7,12 @@
     getFilteredRowModel,
   } from "@tanstack/table-core";
 
-  import { goto } from "$app/navigation";
-
-  import { newPresetWithName } from "$lib/agent";
-  import NewPresetDialog from "$lib/components/new-preset-dialog.svelte";
   import PresetStatus from "$lib/components/preset-status.svelte";
-  import { buttonVariants } from "$lib/components/ui/button/index.js";
   import {
     createSvelteTable,
     FlexRender,
     renderComponent,
   } from "$lib/components/ui/data-table/index.js";
-  import * as Dialog from "$lib/components/ui/dialog/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
   import * as Table from "$lib/components/ui/table/index.js";
   import type { PresetInfoExt } from "$lib/types";
@@ -120,13 +114,6 @@
       },
     },
   });
-
-  async function onNewPreset(name: string) {
-    const new_id = await newPresetWithName(name);
-    if (new_id) {
-      goto(`/preset_editor/${new_id}`, { invalidateAll: true });
-    }
-  }
 </script>
 
 <div class="text-primary w-full">
@@ -142,11 +129,6 @@
         }}
       />
     </div>
-    <NewPresetDialog {onNewPreset}>
-      {#snippet trigger()}
-        <Dialog.Trigger class={buttonVariants({ variant: "outline" })}>+ New</Dialog.Trigger>
-      {/snippet}
-    </NewPresetDialog>
   </div>
   <div class="">
     <Table.Root>

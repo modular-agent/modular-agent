@@ -50,11 +50,8 @@ impl MakApp {
         }
 
         // Check if the preset already exists
-        {
-            let presets = self.presets.lock().unwrap();
-            if let Some(id) = presets.get(&name) {
-                return Ok(id.clone());
-            }
+        if let Some(id) = self.get_preset_id(&name) {
+            return Ok(id);
         }
 
         // open the preset file
@@ -73,45 +70,33 @@ impl MakApp {
         Ok(id)
     }
 
-    /// Remove an preset by its ID, and delete its file.
-    pub async fn remove_preset(&self, preset_id: &str) -> Result<()> {
-        // let info = self
-        //     .mak
-        //     .get_preset_info(preset_id)
-        //     .await
-        //     .ok_or_else(|| anyhow!("Preset not found: {}", preset_id))?;
-        // self.mak.remove_preset(preset_id).await?;
-        // let preset_path = preset_path(&info.name)?;
-        // if preset_path.exists() {
-        //     std::fs::remove_file(preset_path).with_context(|| "Failed to remove preset file")?;
-        // }
+    /// Delete a preset by the given name, and delete its file.
+    pub async fn delete_preset(&self, name: &str) -> Result<()> {
+        let preset_id = self
+            .get_preset_id(name)
+            .ok_or_else(|| anyhow!("Preset not found: {}", name))?;
+
+        self.mak.remove_preset(&preset_id).await?;
+
+        let preset_path = preset_path(name)?;
+        if preset_path.exists() {
+            std::fs::remove_file(preset_path).with_context(|| "Failed to remove preset file")?;
+        }
         Ok(())
     }
 
-    /// Rename an preset by its ID, and rename its file.
-    pub fn rename_preset(&self, preset_id: &str, new_name: &str) -> Result<String> {
-        // let old_info = self
-        //     .mak
-        //     .get_preset_info(preset_id)
-        //     .ok_or_else(|| anyhow!("Preset not found: {}", preset_id))?;
-        // let old_name = old_info.name.clone();
-        // let new_preset_path = preset_path(new_name)?;
-        // if new_preset_path.exists() {
-        //     bail!("Preset file already exists: {:?}", new_preset_path);
-        // }
+    // /// Rename an preset by its ID, and rename its file.
+    // pub fn rename_preset(&self, old_name: &str, new_name: &str) -> Result<String> {
+    //     let old_id = self
+    //         .get_preset_id(old_name)
+    //         .ok_or_else(|| anyhow!("Preset not found: {}", old_name))?;
 
-        // self.mak.rename_preset(preset_id, new_name)?;
+    //     if !is_valid_preset_name(new_name) {
+    //         return Err(anyhow!("Invalid preset name: {}", new_name));
+    //     }
 
-        // let old_preset_path = preset_path(&old_name)?;
-        // if old_preset_path.exists() {
-        //     std::fs::rename(old_preset_path, new_preset_path)
-        //         .with_context(|| "Failed to rename old preset file")?;
-        // }
-
-        // Ok(new_name.to_string())
-
-        Err(anyhow!("Not implemented"))
-    }
+    //     Err(anyhow!("Not implemented"))
+    // }
 
     pub fn save_preset(&self, name: String, spec: PresetSpec) -> Result<()> {
         let preset_path = preset_path(&name)?;
@@ -158,6 +143,11 @@ impl MakApp {
     pub async fn stop_preset(&self, preset_id: &str) -> Result<()> {
         self.mak.stop_preset(preset_id).await?;
         Ok(())
+    }
+
+    fn get_preset_id(&self, name: &str) -> Option<String> {
+        let presets = self.presets.lock().unwrap();
+        presets.get(name).cloned()
     }
 }
 
@@ -344,18 +334,20 @@ pub fn new_preset_with_name_cmd(asapp: State<'_, MakApp>, name: String) -> Resul
     asapp.new_preset_with_name(name).map_err(|e| e.to_string())
 }
 
-#[tauri::command]
-pub fn rename_preset_cmd(
-    asapp: State<'_, MakApp>,
-    id: String,
-    name: String,
-) -> Result<String, String> {
-    asapp.rename_preset(&id, &name).map_err(|e| e.to_string())
-}
+// #[tauri::command]
+// pub fn rename_preset_cmd(
+//     asapp: State<'_, MakApp>,
+//     old_name: String,
+//     new_name: String,
+// ) -> Result<String, String> {
+//     asapp
+//         .rename_preset(&old_name, &new_name)
+//         .map_err(|e| e.to_string())
+// }
 
 #[tauri::command]
-pub async fn remove_preset_cmd(asapp: State<'_, MakApp>, id: String) -> Result<(), String> {
-    asapp.remove_preset(&id).await.map_err(|e| e.to_string())
+pub async fn delete_preset_cmd(asapp: State<'_, MakApp>, name: String) -> Result<(), String> {
+    asapp.delete_preset(&name).await.map_err(|e| e.to_string())
 }
 
 #[tauri::command]

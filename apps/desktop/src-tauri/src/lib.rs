@@ -90,8 +90,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             exit_app_cmd,
             modular_agent_desktop::app::new_preset_with_name_cmd,
-            modular_agent_desktop::app::rename_preset_cmd,
-            modular_agent_desktop::app::remove_preset_cmd,
+            // modular_agent_desktop::app::rename_preset_cmd,
+            modular_agent_desktop::app::delete_preset_cmd,
             modular_agent_desktop::app::import_preset_cmd,
             modular_agent_desktop::app::save_preset_cmd,
             modular_agent_desktop::app::start_preset_cmd,

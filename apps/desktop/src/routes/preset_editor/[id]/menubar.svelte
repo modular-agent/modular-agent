@@ -9,7 +9,7 @@
   import * as Menubar from "$lib/components/ui/menubar/index.js";
   import { exitApp } from "$lib/mak";
 
-  import NewPresetDialog from "@/lib/components/new-preset-dialog.svelte";
+  import PresetActionDialog from "@/lib/components/preset-action-dialog.svelte";
 
   type Props = {
     preset_id: string;
@@ -77,7 +77,7 @@
   </Menubar.Menu>
 </Menubar.Root>
 
-<NewPresetDialog {onNewPreset} bind:open={openNewPresetDialog} />
+<PresetActionDialog action="New" {name} onAction={onNewPreset} bind:open={openNewPresetDialog} />
 
 <Dialog.Root bind:open={openSaveAsDialog}>
   <Dialog.Content class="sm:max-w-[425px]">
