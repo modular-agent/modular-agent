@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Modular Agent Desktop",
+  "productName": "Modular Agent",
   "version": "0.12.0",
   "identifier": "jp.lumilab.modular-agent-desktop",
   "build": {
