@@ -1,11 +1,11 @@
 [workspace]
-members = ["modular-agent-kit", "modular-agent-macros"]
+members = ["modular-agent-core", "modular-agent-macros"]
 resolver = "2"
 
 [workspace.package]
 edition = "2024"
 version = "0.21.0"
-description = "Modular Agent Kit"
+description = "Modular Agent Core"
 authors = ["Akira Ishino <akira@lumilab.jp>"]
 license = "Apache-2.0 OR MIT"
 

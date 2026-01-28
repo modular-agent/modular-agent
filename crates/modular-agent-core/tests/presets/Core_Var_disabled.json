@@ -1,15 +1,15 @@
 {
-  "id": "10",
-  "name": "Core/Board2",
+  "id": "14",
+  "name": "Core/Var",
   "agents": [
     {
-      "id": "432",
-      "def_name": "modular_agent_kit::board_agent::BoardInAgent",
+      "id": "434",
+      "def_name": "modular_agent_core::board_agent::VarInAgent",
       "inputs": [
         "value"
       ],
       "configs": {
-        "name": "out"
+        "name": "var2"
       },
       "config_specs": {
         "name": {
@@ -17,17 +17,18 @@
           "type": "string"
         }
       },
-      "x": 4599.6755598828695,
-      "y": 294.31749787094986
+      "disabled": true,
+      "x": 4584.503622522021,
+      "y": 370.17718467519427
     },
     {
-      "id": "433",
-      "def_name": "modular_agent_kit::board_agent::BoardOutAgent",
+      "id": "435",
+      "def_name": "modular_agent_core::board_agent::VarOutAgent",
       "outputs": [
         "value"
       ],
       "configs": {
-        "name": "board2"
+        "name": "var1"
       },
       "config_specs": {
         "name": {
@@ -35,21 +36,22 @@
           "type": "string"
         }
       },
-      "x": 4201.95405906633,
-      "y": 295.40120768243906
+      "disabled": true,
+      "x": 4181.363572648034,
+      "y": 370.1771846751944
     }
   ],
   "connections": [
     {
-      "source": "433",
+      "source": "435",
       "source_handle": "value",
-      "target": "432",
+      "target": "434",
       "target_handle": "value"
     }
   ],
   "viewport": {
-    "x": -3247.37936347749,
-    "y": -71.58331017277237,
+    "x": -3245.37936347749,
+    "y": -74.58331017277237,
     "zoom": 0.9227562483962616
   }
 }

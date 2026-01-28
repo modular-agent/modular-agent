@@ -7,7 +7,7 @@ use modular_agent_macros::modular_agent;
 use crate::agent::{Agent, AgentData, AsAgent};
 use crate::context::AgentContext;
 use crate::error::AgentError;
-use crate::mak::MAK;
+use crate::modular_agent::ModularAgent;
 use crate::spec::AgentSpec;
 use crate::value::AgentValue;
 
@@ -33,13 +33,13 @@ struct BoardInAgent {
 
 #[async_trait]
 impl AsAgent for BoardInAgent {
-    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         let board_name = spec
             .configs
             .as_ref()
             .and_then(|c| c.get_string(CONFIG_NAME).ok());
         Ok(Self {
-            data: AgentData::new(mak, id, spec),
+            data: AgentData::new(ma, id, spec),
             board_name,
         })
     }
@@ -60,8 +60,8 @@ impl AsAgent for BoardInAgent {
             // if board_name is not set, stop processing
             return Ok(());
         }
-        let mak = self.mak();
-        mak.send_board_out(board_name.clone(), ctx, value.clone())
+        let ma = self.ma();
+        ma.send_board_out(board_name.clone(), ctx, value.clone())
             .await?;
 
         Ok(())
@@ -84,21 +84,21 @@ struct BoardOutAgent {
 
 #[async_trait]
 impl AsAgent for BoardOutAgent {
-    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         let board_name = spec
             .configs
             .as_ref()
             .and_then(|c| c.get_string(CONFIG_NAME).ok());
         Ok(Self {
-            data: AgentData::new(mak, id, spec),
+            data: AgentData::new(ma, id, spec),
             board_name,
         })
     }
 
     async fn start(&mut self) -> Result<(), AgentError> {
         if let Some(board_name) = &self.board_name {
-            let mak = self.mak();
-            let mut board_out_agents = mak.board_out_agents.lock().unwrap();
+            let ma = self.ma();
+            let mut board_out_agents = ma.board_out_agents.lock().unwrap();
             if let Some(nodes) = board_out_agents.get_mut(board_name) {
                 nodes.push(self.data.id.clone());
             } else {
@@ -110,8 +110,8 @@ impl AsAgent for BoardOutAgent {
 
     async fn stop(&mut self) -> Result<(), AgentError> {
         if let Some(board_name) = &self.board_name {
-            let mak = self.mak();
-            let mut board_out_agents = mak.board_out_agents.lock().unwrap();
+            let ma = self.ma();
+            let mut board_out_agents = ma.board_out_agents.lock().unwrap();
             if let Some(nodes) = board_out_agents.get_mut(board_name) {
                 nodes.retain(|x| x != &self.data.id);
             }
@@ -123,15 +123,15 @@ impl AsAgent for BoardOutAgent {
         let board_name = self.configs()?.get_string(CONFIG_NAME).ok();
         if self.board_name != board_name {
             if let Some(board_name) = &self.board_name {
-                let mak = self.mak();
-                let mut board_out_agents = mak.board_out_agents.lock().unwrap();
+                let ma = self.ma();
+                let mut board_out_agents = ma.board_out_agents.lock().unwrap();
                 if let Some(nodes) = board_out_agents.get_mut(board_name) {
                     nodes.retain(|x| x != &self.data.id);
                 }
             }
             if let Some(board_name) = &board_name {
-                let mak = self.mak();
-                let mut board_out_agents = mak.board_out_agents.lock().unwrap();
+                let ma = self.ma();
+                let mut board_out_agents = ma.board_out_agents.lock().unwrap();
                 if let Some(nodes) = board_out_agents.get_mut(board_name) {
                     nodes.push(self.data.id.clone());
                 } else {
@@ -160,13 +160,13 @@ struct VarInAgent {
 
 #[async_trait]
 impl AsAgent for VarInAgent {
-    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         let var_name = spec
             .configs
             .as_ref()
             .and_then(|c| c.get_string(CONFIG_NAME).ok());
         Ok(Self {
-            data: AgentData::new(mak, id, spec),
+            data: AgentData::new(ma, id, spec),
             var_name,
         })
     }
@@ -188,8 +188,8 @@ impl AsAgent for VarInAgent {
             return Ok(());
         }
         let board_name = board_name_for_var(self.preset_id(), &var_name);
-        let mak = self.mak();
-        mak.send_board_out(board_name.clone(), ctx, value.clone())
+        let ma = self.ma();
+        ma.send_board_out(board_name.clone(), ctx, value.clone())
             .await?;
 
         Ok(())
@@ -212,13 +212,13 @@ struct VarOutAgent {
 
 #[async_trait]
 impl AsAgent for VarOutAgent {
-    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         let var_name = spec
             .configs
             .as_ref()
             .and_then(|c| c.get_string(CONFIG_NAME).ok());
         Ok(Self {
-            data: AgentData::new(mak, id, spec),
+            data: AgentData::new(ma, id, spec),
             var_name,
         })
     }
@@ -226,8 +226,8 @@ impl AsAgent for VarOutAgent {
     async fn start(&mut self) -> Result<(), AgentError> {
         if let Some(var_name) = &self.var_name {
             let board_name = board_name_for_var(self.preset_id(), var_name);
-            let mak = self.mak();
-            let mut board_out_agents = mak.board_out_agents.lock().unwrap();
+            let ma = self.ma();
+            let mut board_out_agents = ma.board_out_agents.lock().unwrap();
             if let Some(nodes) = board_out_agents.get_mut(&board_name) {
                 nodes.push(self.data.id.clone());
             } else {
@@ -240,8 +240,8 @@ impl AsAgent for VarOutAgent {
     async fn stop(&mut self) -> Result<(), AgentError> {
         if let Some(var_name) = &self.var_name {
             let board_name = board_name_for_var(self.preset_id(), var_name);
-            let mak = self.mak();
-            let mut board_out_agents = mak.board_out_agents.lock().unwrap();
+            let ma = self.ma();
+            let mut board_out_agents = ma.board_out_agents.lock().unwrap();
             if let Some(nodes) = board_out_agents.get_mut(&board_name) {
                 nodes.retain(|x| x != &self.data.id);
             }
@@ -254,16 +254,16 @@ impl AsAgent for VarOutAgent {
         if self.var_name != new_var_name {
             if let Some(var_name) = &self.var_name {
                 let board_name = board_name_for_var(self.preset_id(), var_name);
-                let mak = self.mak();
-                let mut board_out_agents = mak.board_out_agents.lock().unwrap();
+                let ma = self.ma();
+                let mut board_out_agents = ma.board_out_agents.lock().unwrap();
                 if let Some(nodes) = board_out_agents.get_mut(&board_name) {
                     nodes.retain(|x| x != &self.data.id);
                 }
             }
             if let Some(var_name) = &new_var_name {
                 let board_name = board_name_for_var(self.preset_id(), var_name);
-                let mak = self.mak();
-                let mut board_out_agents = mak.board_out_agents.lock().unwrap();
+                let ma = self.ma();
+                let mut board_out_agents = ma.board_out_agents.lock().unwrap();
                 if let Some(nodes) = board_out_agents.get_mut(&board_name) {
                     nodes.push(self.data.id.clone());
                 } else {

@@ -1,4 +1,4 @@
-use modular_agent_kit::{
+use modular_agent_core::{
     AgentContext, AgentData, AgentError, AgentSpec, AgentValue, AsAgent, async_trait, modular_agent,
 };
 
@@ -14,9 +14,9 @@ struct LiteralNameAgent {
 
 #[async_trait]
 impl AsAgent for LiteralNameAgent {
-    fn new(mak: modular_agent_kit::MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(ma: modular_agent_core::ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(mak, id, spec),
+            data: AgentData::new(ma, id, spec),
         })
     }
 

@@ -66,7 +66,7 @@ impl<T: Agent> AgentOutput for T {
         value: AgentValue,
     ) -> Pin<Box<dyn Future<Output = Result<(), AgentError>> + Send + '_>> {
         Box::pin(async move {
-            self.mak()
+            self.ma()
                 .send_agent_out(self.id().into(), ctx, port, value)
                 .await
         })
@@ -78,21 +78,21 @@ impl<T: Agent> AgentOutput for T {
         port: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
-        self.mak()
+        self.ma()
             .try_send_agent_out(self.id().into(), ctx, port, value)
     }
 
     fn emit_config_updated_raw(&self, key: String, value: AgentValue) {
-        self.mak()
+        self.ma()
             .emit_agent_config_updated(self.id().to_string(), key, value);
     }
 
     fn emit_agent_spec_updated_raw(&self) {
-        self.mak().emit_agent_spec_updated(self.id().to_string());
+        self.ma().emit_agent_spec_updated(self.id().to_string());
     }
 
     fn emit_error_raw(&self, message: String) {
-        self.mak()
+        self.ma()
             .emit_agent_error(self.id().to_string(), message);
     }
 }

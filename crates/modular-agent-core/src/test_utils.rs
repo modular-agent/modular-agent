@@ -11,27 +11,27 @@ use tokio::{
 };
 
 use crate::{
-    AgentContext, AgentData, AgentError, AgentSpec, AgentValue, AsAgent, MAK, MAKEvent,
+    AgentContext, AgentData, AgentError, AgentSpec, AgentValue, AsAgent, ModularAgent, MAKEvent,
     modular_agent,
 };
 
 static PORT_VALUE: &str = "value";
 
-/// Setting up MAK
-pub async fn setup_mak() -> MAK {
-    let mak = MAK::init().unwrap();
-    mak.ready().await.unwrap();
+/// Setting up ModularAgent
+pub async fn setup_mak() -> ModularAgent {
+    let ma = ModularAgent::init().unwrap();
+    ma.ready().await.unwrap();
 
     // set an observer to receive board events
-    subscribe_board_observer(&mak).unwrap();
+    subscribe_board_observer(&ma).unwrap();
 
-    mak
+    ma
 }
 
 /// Load and start an preset from a file.
-pub async fn open_and_start_preset(mak: &MAK, path: &str) -> Result<String, AgentError> {
-    let id = mak.open_preset_from_file(path, None).await?;
-    mak.start_preset(&id).await?;
+pub async fn open_and_start_preset(ma: &ModularAgent, path: &str) -> Result<String, AgentError> {
+    let id = ma.open_preset_from_file(path, None).await?;
+    ma.start_preset(&id).await?;
     Ok(id)
 }
 
@@ -43,8 +43,8 @@ thread_local! {
     static BOARD_RX: RefCell<Option<BoardReceiver>> = RefCell::new(None);
 }
 
-pub fn subscribe_board_observer(mak: &MAK) -> Result<(), AgentError> {
-    let board_event_rx = mak.subscribe_to_event(|event| {
+pub fn subscribe_board_observer(ma: &ModularAgent) -> Result<(), AgentError> {
+    let board_event_rx = ma.subscribe_to_event(|event| {
         if let MAKEvent::Board(name, value) = event {
             Some((name, value))
         } else {
@@ -149,8 +149,8 @@ impl TestProbeAgent {
 }
 
 /// Helper to fetch the probe receiver for a TestProbeAgent by id.
-pub async fn probe_receiver(mak: &MAK, agent_id: &str) -> Result<ProbeReceiver, AgentError> {
-    let probe = mak
+pub async fn probe_receiver(ma: &ModularAgent, agent_id: &str) -> Result<ProbeReceiver, AgentError> {
+    let probe = ma
         .get_agent(agent_id)
         .ok_or_else(|| AgentError::AgentNotFound(agent_id.to_string()))?;
     let probe_guard = probe.lock().await;
@@ -175,12 +175,12 @@ pub async fn recv_probe(probe_rec: &ProbeReceiver) -> Result<ProbeEvent, AgentEr
 
 #[async_trait]
 impl AsAgent for TestProbeAgent {
-    fn new(mak: crate::MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(ma: crate::ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         let (tx, rx) = mpsc::unbounded_channel();
         let rx = ProbeReceiver(Arc::new(AsyncMutex::new(rx)));
 
         Ok(Self {
-            data: AgentData::new(mak, id, spec),
+            data: AgentData::new(ma, id, spec),
             tx,
             rx,
         })
@@ -202,16 +202,16 @@ impl AsAgent for TestProbeAgent {
 mod tests {
     use super::*;
 
-    use modular_agent_kit::test_utils::TestProbeAgent;
-    use modular_agent_kit::{AgentContext, AgentError, AgentValue, MAK};
+    use modular_agent_core::test_utils::TestProbeAgent;
+    use modular_agent_core::{AgentContext, AgentError, AgentValue, ModularAgent};
     use tokio::time::Duration;
 
     #[tokio::test]
     async fn probe_receives_in_order() {
-        let mak = MAK::new();
+        let ma = ModularAgent::new();
         let def = TestProbeAgent::agent_definition();
         let spec = def.to_spec();
-        let mut probe = TestProbeAgent::new(mak, "p1".into(), spec).unwrap();
+        let mut probe = TestProbeAgent::new(ma, "p1".into(), spec).unwrap();
 
         probe
             .process(AgentContext::new(), "in".into(), AgentValue::integer(1))
@@ -230,10 +230,10 @@ mod tests {
 
     #[tokio::test]
     async fn probe_times_out() {
-        let mak = MAK::new();
+        let ma = ModularAgent::new();
         let def = TestProbeAgent::agent_definition();
         let spec = def.to_spec();
-        let probe = TestProbeAgent::new(mak, "p1".into(), spec).unwrap();
+        let probe = TestProbeAgent::new(ma, "p1".into(), spec).unwrap();
         let err = probe
             .recv_with_timeout(Duration::from_millis(10))
             .await
@@ -243,10 +243,10 @@ mod tests {
 
     #[tokio::test]
     async fn probe_receiver_clone_works() {
-        let mak = MAK::new();
+        let ma = ModularAgent::new();
         let def = TestProbeAgent::agent_definition();
         let spec = def.to_spec();
-        let mut probe = TestProbeAgent::new(mak, "p1".into(), spec).unwrap();
+        let mut probe = TestProbeAgent::new(ma, "p1".into(), spec).unwrap();
         let rx1 = probe.probe_receiver();
         let rx2 = probe.probe_receiver();
 

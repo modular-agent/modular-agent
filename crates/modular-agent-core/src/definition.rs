@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::FnvIndexMap;
 use crate::agent::Agent;
-use crate::mak::MAK;
+use crate::modular_agent::ModularAgent;
 use crate::error::AgentError;
 use crate::id::new_id;
 use crate::spec::AgentSpec;
@@ -79,7 +79,7 @@ pub struct AgentConfigSpec {
 }
 
 pub type AgentNewBoxedFn =
-    fn(mak: MAK, id: String, spec: AgentSpec) -> Result<Box<dyn Agent>, AgentError>;
+    fn(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Box<dyn Agent>, AgentError>;
 
 impl AgentDefinition {
     pub fn new(

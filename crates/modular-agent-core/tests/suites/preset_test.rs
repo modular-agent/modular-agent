@@ -1,6 +1,6 @@
-extern crate modular_agent_kit as mak;
+extern crate modular_agent_core as ma;
 
-use mak::{MAK, PresetSpec};
+use ma::{ModularAgent, PresetSpec};
 
 use crate::common;
 
@@ -10,9 +10,9 @@ const COUNTER_DEF: &str = common::agents::CounterAgent::DEF_NAME;
 
 #[test]
 fn test_agent_spec_from_def() {
-    let mak = MAK::init().unwrap();
+    let ma = ModularAgent::init().unwrap();
 
-    let def = mak.get_agent_definition(COUNTER_DEF).unwrap();
+    let def = ma.get_agent_definition(COUNTER_DEF).unwrap();
 
     let spec = def.to_spec();
 
@@ -27,12 +27,12 @@ fn test_agent_spec_from_def() {
 
 #[test]
 fn test_preset_add_agent() {
-    let mak = MAK::init().unwrap();
+    let ma = ModularAgent::init().unwrap();
 
     let mut spec = PresetSpec::default();
     assert_eq!(spec.agents.len(), 0);
 
-    let def = mak.get_agent_definition(COUNTER_DEF).unwrap();
+    let def = ma.get_agent_definition(COUNTER_DEF).unwrap();
     let agent_spec = def.to_spec();
 
     spec.add_agent(agent_spec);
@@ -42,12 +42,12 @@ fn test_preset_add_agent() {
 
 #[test]
 fn test_preset_remove_agent() {
-    let mak = MAK::init().unwrap();
+    let ma = ModularAgent::init().unwrap();
 
     let mut spec = PresetSpec::default();
     assert_eq!(spec.agents.len(), 0);
 
-    let def = mak.get_agent_definition(COUNTER_DEF).unwrap();
+    let def = ma.get_agent_definition(COUNTER_DEF).unwrap();
     let agent_spec = def.to_spec();
     let agent_id = agent_spec.id.clone();
 

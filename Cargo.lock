@@ -628,7 +628,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "modular-agent-kit"
+name = "modular-agent-core"
 version = "0.21.0"
 dependencies = [
  "async-trait",
@@ -653,7 +653,7 @@ name = "modular-agent-macros"
 version = "0.21.0"
 dependencies = [
  "im",
- "modular-agent-kit",
+ "modular-agent-core",
  "proc-macro2",
  "quote",
  "syn 2.0.114",

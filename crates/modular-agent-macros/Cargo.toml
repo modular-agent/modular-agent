@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
-description = "Procedural macro helpers for modular-agent-kit"
+description = "Procedural macro helpers for modular-agent-core"
 
 [lib]
 proc-macro = true
@@ -16,4 +16,4 @@ quote = "1"
 syn = { version = "2", features = ["full"] }
 
 [dev-dependencies]
-modular-agent-kit = { path = "../modular-agent-kit" }
+modular-agent-core = { path = "../modular-agent-core" }

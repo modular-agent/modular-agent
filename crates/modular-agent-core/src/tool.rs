@@ -5,7 +5,7 @@ use std::{
 };
 
 use crate::{
-    MAK, Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
+    ModularAgent, Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
     Message, ToolCall, async_trait, modular_agent,
 };
 use im::{Vector, vector};
@@ -215,9 +215,9 @@ pub struct ListToolsAgent {
 
 #[async_trait]
 impl AsAgent for ListToolsAgent {
-    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(mak, id, spec),
+            data: AgentData::new(ma, id, spec),
         })
     }
 
@@ -285,7 +285,7 @@ impl PresetToolAgent {
 
 #[async_trait]
 impl AsAgent for PresetToolAgent {
-    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         let def_name = spec.def_name.clone();
         let configs = spec.configs.clone();
         let name = configs
@@ -301,7 +301,7 @@ impl AsAgent for PresetToolAgent {
             .and_then(|c| c.get(CONFIG_TOOL_PARAMETERS).ok())
             .and_then(|v| serde_json::to_value(v).ok());
         Ok(Self {
-            data: AgentData::new(mak, id, spec),
+            data: AgentData::new(ma, id, spec),
             name,
             description,
             parameters,
@@ -327,7 +327,7 @@ impl AsAgent for PresetToolAgent {
 
     async fn start(&mut self) -> Result<(), AgentError> {
         let agent_handle = self
-            .mak()
+            .ma()
             .get_agent(self.id())
             .ok_or_else(|| AgentError::AgentNotFound(self.id().to_string()))?;
         let tool = PresetTool::new(
@@ -429,9 +429,9 @@ pub struct CallToolMessageAgent {
 
 #[async_trait]
 impl AsAgent for CallToolMessageAgent {
-    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(mak, id, spec),
+            data: AgentData::new(ma, id, spec),
         })
     }
 
@@ -484,9 +484,9 @@ pub struct CallToolAgent {
 
 #[async_trait]
 impl AsAgent for CallToolAgent {
-    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(mak, id, spec),
+            data: AgentData::new(ma, id, spec),
         })
     }
 

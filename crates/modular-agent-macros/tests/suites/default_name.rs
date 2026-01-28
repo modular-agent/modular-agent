@@ -1,4 +1,4 @@
-use modular_agent_kit::{
+use modular_agent_core::{
     AgentContext, AgentData, AgentError, AgentSpec, AgentValue, AsAgent, modular_agent, async_trait,
 };
 
@@ -12,12 +12,12 @@ struct MyAgent {
 #[async_trait]
 impl AsAgent for MyAgent {
     fn new(
-        mak: modular_agent_kit::MAK,
+        ma: modular_agent_core::ModularAgent,
         id: String,
         spec: AgentSpec,
     ) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(mak, id, spec),
+            data: AgentData::new(ma, id, spec),
         })
     }
 
@@ -58,12 +58,12 @@ struct MyAgentExplicit {
 #[async_trait]
 impl AsAgent for MyAgentExplicit {
     fn new(
-        mak: modular_agent_kit::MAK,
+        ma: modular_agent_core::ModularAgent,
         id: String,
         spec: AgentSpec,
     ) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(mak, id, spec),
+            data: AgentData::new(ma, id, spec),
         })
     }
 

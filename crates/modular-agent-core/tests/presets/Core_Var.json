@@ -4,7 +4,7 @@
   "agents": [
     {
       "id": "434",
-      "def_name": "modular_agent_kit::board_agent::VarInAgent",
+      "def_name": "modular_agent_core::board_agent::VarInAgent",
       "inputs": [
         "value"
       ],
@@ -17,13 +17,12 @@
           "type": "string"
         }
       },
-      "disabled": true,
       "x": 4584.503622522021,
       "y": 370.17718467519427
     },
     {
       "id": "435",
-      "def_name": "modular_agent_kit::board_agent::VarOutAgent",
+      "def_name": "modular_agent_core::board_agent::VarOutAgent",
       "outputs": [
         "value"
       ],
@@ -36,7 +35,6 @@
           "type": "string"
         }
       },
-      "disabled": true,
       "x": 4181.363572648034,
       "y": 370.1771846751944
     }

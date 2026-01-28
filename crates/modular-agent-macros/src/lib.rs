@@ -1,5 +1,5 @@
 #![recursion_limit = "256"]
-//! Procedural macros for modular-agent-kit.
+//! Procedural macros for modular-agent-core.
 //!
 //! Provides an attribute to declare agent metadata alongside the agent type and
 //! generate the registration boilerplate.
@@ -255,12 +255,12 @@ fn expand_modular_agent(
     let generics = item.generics.clone();
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
     let data_impl = quote! {
-        impl #impl_generics ::modular_agent_kit::HasAgentData for #ident #ty_generics #where_clause {
-            fn data(&self) -> &::modular_agent_kit::AgentData {
+        impl #impl_generics ::modular_agent_core::HasAgentData for #ident #ty_generics #where_clause {
+            fn data(&self) -> &::modular_agent_core::AgentData {
                 &self.data
             }
 
-            fn mut_data(&mut self) -> &mut ::modular_agent_kit::AgentData {
+            fn mut_data(&mut self) -> &mut ::modular_agent_core::AgentData {
                 &mut self.data
             }
         }
@@ -524,7 +524,7 @@ fn expand_modular_agent(
                     syn::Error::new(Span::call_site(), "array_config missing `name`")
                 })?;
                 let default = c.default.unwrap_or_else(|| {
-                    parse_quote! { ::modular_agent_kit::AgentValue::array_default() }
+                    parse_quote! { ::modular_agent_core::AgentValue::array_default() }
                 });
                 let title = c.title.map(|t| quote! { let entry = entry.title(#t); });
                 let description = c
@@ -562,7 +562,7 @@ fn expand_modular_agent(
                     syn::Error::new(Span::call_site(), "object_config missing `name`")
                 })?;
                 let default = c.default.unwrap_or_else(|| {
-                    parse_quote! { ::modular_agent_kit::AgentValue::object_default() }
+                    parse_quote! { ::modular_agent_core::AgentValue::object_default() }
                 });
                 let title = c.title.map(|t| quote! { let entry = entry.title(#t); });
                 let description = c
@@ -823,7 +823,7 @@ fn expand_modular_agent(
                     syn::Error::new(Span::call_site(), "array_global_config missing `name`")
                 })?;
                 let default = c.default.unwrap_or_else(|| {
-                    parse_quote! { ::modular_agent_kit::AgentValue::array_default() }
+                    parse_quote! { ::modular_agent_core::AgentValue::array_default() }
                 });
                 let title = c.title.map(|t| quote! { let entry = entry.title(#t); });
                 let description = c
@@ -861,7 +861,7 @@ fn expand_modular_agent(
                     syn::Error::new(Span::call_site(), "object_global_config missing `name`")
                 })?;
                 let default = c.default.unwrap_or_else(|| {
-                    parse_quote! { ::modular_agent_kit::AgentValue::object_default() }
+                    parse_quote! { ::modular_agent_core::AgentValue::object_default() }
                 });
                 let title = c.title.map(|t| quote! { let entry = entry.title(#t); });
                 let description = c
@@ -899,10 +899,10 @@ fn expand_modular_agent(
         .collect::<syn::Result<Vec<_>>>()?;
 
     let definition_builder = quote! {
-        ::modular_agent_kit::AgentDefinition::new(
+        ::modular_agent_core::AgentDefinition::new(
             #kind,
             #name_tokens,
-            Some(::modular_agent_kit::new_agent_boxed::<#ident>),
+            Some(::modular_agent_core::new_agent_boxed::<#ident>),
         )
         #title
         #hide_title
@@ -924,17 +924,17 @@ fn expand_modular_agent(
 
             pub fn def_name() -> &'static str { Self::DEF_NAME }
 
-            pub fn agent_definition() -> ::modular_agent_kit::AgentDefinition {
+            pub fn agent_definition() -> ::modular_agent_core::AgentDefinition {
                 #definition_builder
             }
 
-            pub fn register(mak: &::modular_agent_kit::MAK) {
-                mak.register_agent_definiton(Self::agent_definition());
+            pub fn register(ma: &::modular_agent_core::ModularAgent) {
+                ma.register_agent_definiton(Self::agent_definition());
             }
         }
 
-        ::modular_agent_kit::inventory::submit! {
-            ::modular_agent_kit::AgentRegistration {
+        ::modular_agent_core::inventory::submit! {
+            ::modular_agent_core::AgentRegistration {
                 build: || #definition_builder,
             }
         }

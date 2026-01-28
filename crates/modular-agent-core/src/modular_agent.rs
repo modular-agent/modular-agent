@@ -21,7 +21,7 @@ const MESSAGE_LIMIT: usize = 1024;
 const EVENT_CHANNEL_CAPACITY: usize = 256;
 
 #[derive(Clone)]
-pub struct MAK {
+pub struct ModularAgent {
     // agent id -> agent
     pub(crate) agents: Arc<Mutex<FnvIndexMap<String, Arc<AsyncMutex<Box<dyn Agent>>>>>>,
 
@@ -53,7 +53,7 @@ pub struct MAK {
     pub(crate) observers: broadcast::Sender<MAKEvent>,
 }
 
-impl MAK {
+impl ModularAgent {
     pub fn new() -> Self {
         let (tx, _rx) = broadcast::channel(EVENT_CHANNEL_CAPACITY);
         Self {
@@ -78,24 +78,24 @@ impl MAK {
             .ok_or(AgentError::TxNotInitialized)
     }
 
-    /// Initialize MAK.
+    /// Initialize ModularAgent.
     pub fn init() -> Result<Self, AgentError> {
-        let mak = Self::new();
-        mak.register_agents();
-        Ok(mak)
+        let ma = Self::new();
+        ma.register_agents();
+        Ok(ma)
     }
 
     fn register_agents(&self) {
         registry::register_inventory_agents(self);
     }
 
-    /// Prepare MAK to be ready.
+    /// Prepare ModularAgent to be ready.
     pub async fn ready(&self) -> Result<(), AgentError> {
         self.spawn_message_loop().await?;
         Ok(())
     }
 
-    /// Quit MAK.
+    /// Quit ModularAgent.
     pub fn quit(&self) {
         let mut tx_lock = self.tx.lock().unwrap();
         *tx_lock = None;
@@ -901,7 +901,7 @@ impl MAK {
         }
 
         // spawn the main loop
-        let mak = self.clone();
+        let ma = self.clone();
         tokio::spawn(async move {
             while let Some(message) = rx.recv().await {
                 use AgentEventMessage::*;
@@ -913,10 +913,10 @@ impl MAK {
                         port,
                         value,
                     } => {
-                        message::agent_out(&mak, agent, ctx, port, value).await;
+                        message::agent_out(&ma, agent, ctx, port, value).await;
                     }
                     BoardOut { name, ctx, value } => {
-                        message::board_out(&mak, name, ctx, value).await;
+                        message::board_out(&ma, name, ctx, value).await;
                     }
                 }
             }
@@ -927,7 +927,7 @@ impl MAK {
         Ok(())
     }
 
-    /// Subscribe to all MAK events.
+    /// Subscribe to all ModularAgent events.
     pub fn subscribe(&self) -> broadcast::Receiver<MAKEvent> {
         self.observers.subscribe()
     }

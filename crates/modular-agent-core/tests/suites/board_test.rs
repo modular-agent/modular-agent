@@ -1,22 +1,22 @@
-extern crate modular_agent_kit as mak;
+extern crate modular_agent_core as ma;
 
-use mak::{AgentValue, test_utils};
+use ma::{AgentValue, test_utils};
 use serial_test::serial;
 
 #[serial(board_group)]
 #[tokio::test]
 async fn test_board_routing() {
-    let mak = test_utils::setup_mak().await;
+    let ma = test_utils::setup_mak().await;
 
     // load board presets
-    test_utils::open_and_start_preset(&mak, "tests/presets/Core_Board1.json")
+    test_utils::open_and_start_preset(&ma, "tests/presets/Core_Board1.json")
         .await
         .unwrap();
-    test_utils::open_and_start_preset(&mak, "tests/presets/Core_Board2.json")
+    test_utils::open_and_start_preset(&ma, "tests/presets/Core_Board2.json")
         .await
         .unwrap();
 
-    mak
+    ma
         .write_board_value("board1".to_string(), AgentValue::string("hello"))
         .await
         .unwrap();
@@ -33,5 +33,5 @@ async fn test_board_routing() {
         .await
         .unwrap();
 
-    mak.quit();
+    ma.quit();
 }

@@ -1,5 +1,5 @@
-use modular_agent_kit::{
-    MAK, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
+use modular_agent_core::{
+    ModularAgent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
     modular_agent, async_trait,
 };
 
@@ -27,9 +27,9 @@ pub struct CounterAgent {
 
 #[async_trait]
 impl AsAgent for CounterAgent {
-    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(mak, id, spec),
+            data: AgentData::new(ma, id, spec),
             count: 0,
         })
     }

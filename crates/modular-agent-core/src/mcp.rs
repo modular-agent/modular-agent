@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::{Arc, OnceLock};
 
-use modular_agent_kit::{AgentContext, AgentError, AgentValue, async_trait};
+use modular_agent_core::{AgentContext, AgentError, AgentValue, async_trait};
 use rmcp::{
     model::{CallToolRequestParam, CallToolResult},
     service::ServiceExt,
@@ -304,7 +304,7 @@ async fn register_tools_from_server(
 ///
 /// # Example
 /// ```no_run
-/// use modular_agent_kit::mcp::register_tools_from_mcp_json;
+/// use modular_agent_core::mcp::register_tools_from_mcp_json;
 ///
 /// #[tokio::main]
 /// async fn main() -> Result<(), Box<dyn std::error::Error>> {

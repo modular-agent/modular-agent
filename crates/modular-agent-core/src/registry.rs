@@ -1,4 +1,4 @@
-use crate::{AgentDefinition, MAK};
+use crate::{AgentDefinition, ModularAgent};
 
 /// Registration entry emitted by the `#[modular_agent]` macro.
 pub struct AgentRegistration {
@@ -8,8 +8,8 @@ pub struct AgentRegistration {
 inventory::collect!(AgentRegistration);
 
 /// Register all agents collected via the `#[modular_agent]` macro.
-pub fn register_inventory_agents(mak: &MAK) {
+pub fn register_inventory_agents(ma: &ModularAgent) {
     for reg in inventory::iter::<AgentRegistration> {
-        mak.register_agent_definiton((reg.build)());
+        ma.register_agent_definiton((reg.build)());
     }
 }

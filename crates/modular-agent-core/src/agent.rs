@@ -7,7 +7,7 @@ use serde_json::Value;
 use crate::config::AgentConfigs;
 use crate::context::AgentContext;
 use crate::error::AgentError;
-use crate::mak::MAK;
+use crate::modular_agent::ModularAgent;
 use crate::runtime::runtime;
 use crate::spec::AgentSpec;
 use crate::value::AgentValue;
@@ -39,11 +39,11 @@ pub enum AgentMessage {
 /// The core trait for all agents.
 #[async_trait]
 pub trait Agent: Send + Sync + 'static {
-    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError>
+    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError>
     where
         Self: Sized;
 
-    fn mak(&self) -> &MAK;
+    fn ma(&self) -> &ModularAgent;
 
     fn id(&self) -> &str;
 
@@ -62,7 +62,7 @@ pub trait Agent: Send + Sync + 'static {
     fn set_configs(&mut self, configs: AgentConfigs) -> Result<(), AgentError>;
 
     fn get_global_configs(&self) -> Option<AgentConfigs> {
-        self.mak().get_global_configs(self.def_name())
+        self.ma().get_global_configs(self.def_name())
     }
 
     fn preset_id(&self) -> &str;
@@ -101,8 +101,8 @@ impl dyn Agent {
 
 /// The core data structure for an agent.
 pub struct AgentData {
-    /// The MAK instance.
-    pub mak: MAK,
+    /// The ModularAgent instance.
+    pub ma: ModularAgent,
 
     /// The unique identifier for the agent.
     pub id: String,
@@ -119,9 +119,9 @@ pub struct AgentData {
 }
 
 impl AgentData {
-    pub fn new(mak: MAK, id: String, spec: AgentSpec) -> Self {
+    pub fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Self {
         Self {
-            mak,
+            ma,
             id,
             spec,
             preset_id: String::new(),
@@ -138,7 +138,7 @@ pub trait HasAgentData {
 
 #[async_trait]
 pub trait AsAgent: HasAgentData + Send + Sync + 'static {
-    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError>
+    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError>
     where
         Self: Sized;
 
@@ -166,14 +166,14 @@ pub trait AsAgent: HasAgentData + Send + Sync + 'static {
 
 #[async_trait]
 impl<T: AsAgent> Agent for T {
-    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
-        let mut agent = T::new(mak, id, spec)?;
+    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+        let mut agent = T::new(ma, id, spec)?;
         agent.mut_data().status = AgentStatus::Init;
         Ok(agent)
     }
 
-    fn mak(&self) -> &MAK {
-        &self.data().mak
+    fn ma(&self) -> &ModularAgent {
+        &self.data().ma
     }
 
     fn id(&self) -> &str {
@@ -229,7 +229,7 @@ impl<T: AsAgent> Agent for T {
         self.mut_data().status = AgentStatus::Start;
 
         if let Err(e) = self.start().await {
-            self.mak()
+            self.ma()
                 .emit_agent_error(self.id().to_string(), e.to_string());
             return Err(e);
         }
@@ -251,9 +251,9 @@ impl<T: AsAgent> Agent for T {
         value: AgentValue,
     ) -> Result<(), AgentError> {
         if let Err(e) = self.process(ctx.clone(), port, value).await {
-            self.mak()
+            self.ma()
                 .emit_agent_error(self.id().to_string(), e.to_string());
-            self.mak()
+            self.ma()
                 .send_agent_out(
                     self.id().to_string(),
                     ctx,
@@ -270,7 +270,7 @@ impl<T: AsAgent> Agent for T {
     }
 
     fn get_global_configs(&self) -> Option<AgentConfigs> {
-        self.mak().get_global_configs(self.def_name())
+        self.ma().get_global_configs(self.def_name())
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -283,22 +283,22 @@ impl<T: AsAgent> Agent for T {
 }
 
 pub fn new_agent_boxed<T: Agent>(
-    mak: MAK,
+    ma: ModularAgent,
     id: String,
     spec: AgentSpec,
 ) -> Result<Box<dyn Agent>, AgentError> {
-    Ok(Box::new(T::new(mak, id, spec)?))
+    Ok(Box::new(T::new(ma, id, spec)?))
 }
 
 pub fn agent_new(
-    mak: MAK,
+    ma: ModularAgent,
     agent_id: String,
     spec: AgentSpec,
 ) -> Result<Box<dyn Agent>, AgentError> {
     let def;
     {
         let def_name = &spec.def_name;
-        let defs = mak.defs.lock().unwrap();
+        let defs = ma.defs.lock().unwrap();
         def = defs
             .get(def_name)
             .ok_or_else(|| AgentError::UnknownDefName(def_name.to_string()))?
@@ -306,13 +306,13 @@ pub fn agent_new(
     }
 
     if let Some(new_boxed) = def.new_boxed {
-        return new_boxed(mak, agent_id, spec);
+        return new_boxed(ma, agent_id, spec);
     }
 
     match def.kind.as_str() {
         // "Command" => {
         //     return new_boxed::<super::builtins::CommandAgent>(
-        //         mak,
+        //         ma,
         //         agent_id,
         //         def_name.to_string(),
         //         config,

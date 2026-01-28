@@ -1,5 +1,5 @@
 #![recursion_limit = "256"]
-//! Modular Agent Kit - A modular multi-agent kit for building intelligent systems.
+//! Modular Agent Core - A crate for building modular multi-agents intelligent systems.
 //!
 //! This crate provides a set of tools and abstractions to create, configure, and run agents
 //! in a stream-based architecture. It includes support for defining agent behaviors, managing
@@ -12,7 +12,7 @@ mod context;
 mod definition;
 mod error;
 mod id;
-mod mak;
+mod modular_agent;
 mod message;
 mod output;
 mod preset;
@@ -51,7 +51,7 @@ pub type FnvIndexMap<K, V> = indexmap::IndexMap<K, V, fnv::FnvBuildHasher>;
 pub type FnvIndexSet<T> = indexmap::IndexSet<T, fnv::FnvBuildHasher>;
 
 // Re-export the crate under its canonical name for proc-macros.
-pub extern crate self as modular_agent_kit;
+pub extern crate self as modular_agent_core;
 
 // Re-exports modular_agent_macros
 pub use modular_agent_macros::modular_agent;
@@ -62,7 +62,7 @@ pub use context::AgentContext;
 pub use definition::{AgentConfigSpec, AgentConfigSpecs, AgentDefinition, AgentDefinitions};
 pub use error::AgentError;
 pub use llm::{Message, ToolCall, ToolCallFunction};
-pub use mak::{MAK, MAKEvent};
+pub use modular_agent::{ModularAgent, MAKEvent};
 pub use output::AgentOutput;
 pub use preset::{Preset, PresetInfo};
 pub use registry::AgentRegistration;

@@ -1,19 +1,19 @@
-extern crate modular_agent_kit as mak;
+extern crate modular_agent_core as ma;
 
-use mak::{AgentValue, test_utils};
+use ma::{AgentValue, test_utils};
 use serial_test::serial;
 
 #[serial(board_group)]
 #[tokio::test]
 async fn test_var_routing() {
-    let mak = test_utils::setup_mak().await;
+    let ma = test_utils::setup_mak().await;
 
     // load var preset
-    let var_preset_id = test_utils::open_and_start_preset(&mak, "tests/presets/Core_Var.json")
+    let var_preset_id = test_utils::open_and_start_preset(&ma, "tests/presets/Core_Var.json")
         .await
         .unwrap();
 
-    mak.write_var_value(&var_preset_id, "var1", AgentValue::string("hello"))
+    ma.write_var_value(&var_preset_id, "var1", AgentValue::string("hello"))
         .await
         .unwrap();
 
@@ -25,5 +25,5 @@ async fn test_var_routing() {
         .await
         .unwrap();
 
-    mak.quit();
+    ma.quit();
 }

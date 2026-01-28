@@ -3,7 +3,7 @@ use serde_json::Value;
 
 use crate::error::AgentError;
 use crate::id::{new_id, update_ids};
-use crate::mak::MAK;
+use crate::modular_agent::ModularAgent;
 use crate::spec::PresetSpec;
 use crate::{AgentSpec, ConnectionSpec};
 
@@ -96,7 +96,7 @@ impl Preset {
         self.spec.remove_connection(connection)
     }
 
-    pub async fn start(&mut self, mak: &MAK) -> Result<(), AgentError> {
+    pub async fn start(&mut self, ma: &ModularAgent) -> Result<(), AgentError> {
         if self.running {
             // Already running
             return Ok(());
@@ -107,7 +107,7 @@ impl Preset {
             if agent.disabled {
                 continue;
             }
-            mak.start_agent(&agent.id).await.unwrap_or_else(|e| {
+            ma.start_agent(&agent.id).await.unwrap_or_else(|e| {
                 log::error!("Failed to start agent {}: {}", agent.id, e);
             });
         }
@@ -115,9 +115,9 @@ impl Preset {
         Ok(())
     }
 
-    pub async fn stop(&mut self, mak: &MAK) -> Result<(), AgentError> {
+    pub async fn stop(&mut self, ma: &ModularAgent) -> Result<(), AgentError> {
         for agent in self.spec.agents.iter() {
-            mak.stop_agent(&agent.id).await.unwrap_or_else(|e| {
+            ma.stop_agent(&agent.id).await.unwrap_or_else(|e| {
                 log::error!("Failed to stop agent {}: {}", agent.id, e);
             });
         }

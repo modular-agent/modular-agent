@@ -1,4 +1,4 @@
-use crate::mak::MAK;
+use crate::modular_agent::ModularAgent;
 use crate::context::AgentContext;
 use crate::error::AgentError;
 use crate::value::AgentValue;
@@ -19,13 +19,13 @@ pub enum AgentEventMessage {
 }
 
 pub async fn send_agent_out(
-    mak: &MAK,
+    ma: &ModularAgent,
     agent: String,
     ctx: AgentContext,
     port: String,
     value: AgentValue,
 ) -> Result<(), AgentError> {
-    mak
+    ma
         .tx()?
         .send(AgentEventMessage::AgentOut {
             agent,
@@ -38,13 +38,13 @@ pub async fn send_agent_out(
 }
 
 pub fn try_send_agent_out(
-    mak: &MAK,
+    ma: &ModularAgent,
     agent: String,
     ctx: AgentContext,
     port: String,
     value: AgentValue,
 ) -> Result<(), AgentError> {
-    mak
+    ma
         .tx()?
         .try_send(AgentEventMessage::AgentOut {
             agent,
@@ -58,12 +58,12 @@ pub fn try_send_agent_out(
 }
 
 pub async fn send_board_out(
-    mak: &MAK,
+    ma: &ModularAgent,
     name: String,
     ctx: AgentContext,
     value: AgentValue,
 ) -> Result<(), AgentError> {
-    mak
+    ma
         .tx()?
         .send(AgentEventMessage::BoardOut { name, ctx, value })
         .await
@@ -74,7 +74,7 @@ pub async fn send_board_out(
 
 // Processing AgentOut message
 pub async fn agent_out(
-    mak: &MAK,
+    ma: &ModularAgent,
     source_agent: String,
     ctx: AgentContext,
     port: String,
@@ -82,7 +82,7 @@ pub async fn agent_out(
 ) {
     let targets;
     {
-        let env_edges = mak.connections.lock().unwrap();
+        let env_edges = ma.connections.lock().unwrap();
         targets = env_edges.get(&source_agent).cloned();
     }
 
@@ -99,13 +99,13 @@ pub async fn agent_out(
         }
 
         {
-            let env_agents = mak.agents.lock().unwrap();
+            let env_agents = ma.agents.lock().unwrap();
             if !env_agents.contains_key(&target_agent) {
                 continue;
             }
         }
 
-        mak
+        ma
             .agent_input(target_agent.clone(), ctx.clone(), target_port, value.clone())
             .await
             .unwrap_or_else(|e| {
@@ -114,14 +114,14 @@ pub async fn agent_out(
     }
 }
 
-pub async fn board_out(mak: &MAK, name: String, ctx: AgentContext, value: AgentValue) {
+pub async fn board_out(ma: &ModularAgent, name: String, ctx: AgentContext, value: AgentValue) {
     {
-        let mut board_value = mak.board_value.lock().unwrap();
+        let mut board_value = ma.board_value.lock().unwrap();
         board_value.insert(name.clone(), value.clone());
     }
     let board_nodes;
     {
-        let env_board_nodes = mak.board_out_agents.lock().unwrap();
+        let env_board_nodes = ma.board_out_agents.lock().unwrap();
         board_nodes = env_board_nodes.get(&name).cloned();
     }
     if let Some(board_nodes) = board_nodes {
@@ -130,7 +130,7 @@ pub async fn board_out(mak: &MAK, name: String, ctx: AgentContext, value: AgentV
 
             let edges;
             {
-                let env_edges = mak.connections.lock().unwrap();
+                let env_edges = ma.connections.lock().unwrap();
                 edges = env_edges.get(&node).cloned();
             }
             let Some(edges) = edges else {
@@ -138,7 +138,7 @@ pub async fn board_out(mak: &MAK, name: String, ctx: AgentContext, value: AgentV
                 continue;
             };
             for (target_agent, _source_port, target_port) in edges {
-                mak
+                ma
                     .agent_input(target_agent.clone(), ctx.clone(), target_port, value.clone())
                     .await
                     .unwrap_or_else(|e| {
@@ -148,5 +148,5 @@ pub async fn board_out(mak: &MAK, name: String, ctx: AgentContext, value: AgentV
         }
     }
 
-    mak.emit_board(name, value);
+    ma.emit_board(name, value);
 }

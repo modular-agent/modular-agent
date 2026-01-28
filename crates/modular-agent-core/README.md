@@ -1,1 +1,1 @@
-# Modular Agent Kit
+# Modular Agent Core
