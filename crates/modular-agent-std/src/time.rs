@@ -6,9 +6,9 @@ use std::vec;
 use chrono::{DateTime, Local, Utc};
 use cron::Schedule;
 use log;
-use modular_agent_kit::{
+use modular_agent_core::{
     Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentStatus, AgentValue,
-    AsAgent, MAK, async_trait, modular_agent,
+    AsAgent, ModularAgent, async_trait, modular_agent,
 };
 use regex::Regex;
 use tokio::task::JoinHandle;
@@ -47,9 +47,9 @@ struct DelayAgent {
 
 #[async_trait]
 impl AsAgent for DelayAgent {
-    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(mak, id, spec),
+            data: AgentData::new(ma, id, spec),
             num_waiting_data: Arc::new(Mutex::new(0)),
         })
     }
@@ -104,7 +104,7 @@ impl IntervalTimerAgent {
         let timer_handle = self.timer_handle.clone();
         let interval_ms = self.interval_ms;
 
-        let mak = self.mak().clone();
+        let ma = self.ma().clone();
         let agent_id = self.id().to_string();
         let handle = self.runtime().spawn(async move {
             loop {
@@ -119,7 +119,7 @@ impl IntervalTimerAgent {
                 }
 
                 // Create a unit output
-                if let Err(e) = mak.try_send_agent_out(
+                if let Err(e) = ma.try_send_agent_out(
                     agent_id.clone(),
                     AgentContext::new(),
                     PORT_UNIT.to_string(),
@@ -151,7 +151,7 @@ impl IntervalTimerAgent {
 
 #[async_trait]
 impl AsAgent for IntervalTimerAgent {
-    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         let interval = spec
             .configs
             .as_ref()
@@ -160,7 +160,7 @@ impl AsAgent for IntervalTimerAgent {
         let interval_ms = parse_duration_to_ms(&interval)?;
 
         Ok(Self {
-            data: AgentData::new(mak, id, spec),
+            data: AgentData::new(ma, id, spec),
             timer_handle: Default::default(),
             interval_ms,
         })
@@ -203,9 +203,9 @@ struct OnStartAgent {
 
 #[async_trait]
 impl AsAgent for OnStartAgent {
-    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(mak, id, spec),
+            data: AgentData::new(ma, id, spec),
         })
     }
 
@@ -213,13 +213,13 @@ impl AsAgent for OnStartAgent {
         let config = self.configs()?;
         let delay_ms = config.get_integer_or(CONFIG_DELAY, DELAY_MS_DEFAULT);
 
-        let mak = self.mak().clone();
+        let ma = self.ma().clone();
         let agent_id = self.id().to_string();
 
         self.runtime().spawn(async move {
             tokio::time::sleep(Duration::from_millis(delay_ms as u64)).await;
 
-            if let Err(e) = mak.try_send_agent_out(
+            if let Err(e) = ma.try_send_agent_out(
                 agent_id,
                 AgentContext::new(),
                 PORT_UNIT.to_string(),
@@ -252,7 +252,7 @@ impl ScheduleTimerAgent {
             return Err(AgentError::InvalidConfig("No schedule defined".into()));
         };
 
-        let mak = self.mak().clone();
+        let ma = self.ma().clone();
         let agent_id = self.id().to_string();
         let timer_handle = self.timer_handle.clone();
         let schedule = schedule.clone();
@@ -302,7 +302,7 @@ impl ScheduleTimerAgent {
                 let current_local_time = Local::now().timestamp();
 
                 // Output the timestamp as an integer
-                if let Err(e) = mak.try_send_agent_out(
+                if let Err(e) = ma.try_send_agent_out(
                     agent_id.clone(),
                     AgentContext::new(),
                     PORT_TIME.to_string(),
@@ -347,7 +347,7 @@ impl ScheduleTimerAgent {
 
 #[async_trait]
 impl AsAgent for ScheduleTimerAgent {
-    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         let schedule_str = spec
             .configs
             .as_ref()
@@ -355,7 +355,7 @@ impl AsAgent for ScheduleTimerAgent {
             .transpose()?;
 
         let mut agent = Self {
-            data: AgentData::new(mak, id, spec),
+            data: AgentData::new(ma, id, spec),
             cron_schedule: None,
             timer_handle: Default::default(),
         };
@@ -419,7 +419,7 @@ impl ThrottleTimeAgent {
         let time_ms = self.time_ms;
 
         let waiting_data = self.waiting_data.clone();
-        let mak = self.mak().clone();
+        let ma = self.ma().clone();
         let agent_id = self.id().to_string();
 
         let handle = self.runtime().spawn(async move {
@@ -438,7 +438,7 @@ impl ThrottleTimeAgent {
                 if wd.len() > 0 {
                     // If there are data waiting, output the first one
                     let (ctx, port, data) = wd.remove(0);
-                    mak.try_send_agent_out(agent_id.clone(), ctx, port, data)
+                    ma.try_send_agent_out(agent_id.clone(), ctx, port, data)
                         .unwrap_or_else(|e| {
                             log::error!("Failed to send delayed output: {}", e);
                         });
@@ -473,7 +473,7 @@ impl ThrottleTimeAgent {
 
 #[async_trait]
 impl AsAgent for ThrottleTimeAgent {
-    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         let time = spec
             .configs
             .as_ref()
@@ -488,7 +488,7 @@ impl AsAgent for ThrottleTimeAgent {
             .get_integer_or(CONFIG_MAX_NUM_DATA, 0);
 
         Ok(Self {
-            data: AgentData::new(mak, id, spec),
+            data: AgentData::new(ma, id, spec),
             timer_handle: Default::default(),
             time_ms,
             max_num_data,

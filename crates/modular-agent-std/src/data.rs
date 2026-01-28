@@ -3,9 +3,9 @@ use std::{collections::VecDeque, vec};
 
 use im::{HashMap, Vector};
 use mini_moka::sync::Cache;
-use modular_agent_kit::{
+use modular_agent_core::{
     AgentConfigSpec, AgentConfigSpecs, AgentConfigs, AgentContext, AgentData, AgentError,
-    AgentOutput, AgentSpec, AgentValue, AsAgent, MAK, async_trait, modular_agent,
+    AgentOutput, AgentSpec, AgentValue, AsAgent, ModularAgent, async_trait, modular_agent,
 };
 
 const CATEGORY: &str = "Std/Data";
@@ -53,10 +53,10 @@ impl GetValueAgent {
 
 #[async_trait]
 impl AsAgent for GetValueAgent {
-    fn new(mak: MAK, id: String, mut spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(ma: ModularAgent, id: String, mut spec: AgentSpec) -> Result<Self, AgentError> {
         let target_keys = Self::update_spec(&mut spec)?;
         Ok(Self {
-            data: AgentData::new(mak, id, spec),
+            data: AgentData::new(ma, id, spec),
             target_keys,
         })
     }
@@ -135,10 +135,10 @@ impl SetValueAgent {
 
 #[async_trait]
 impl AsAgent for SetValueAgent {
-    fn new(mak: MAK, id: String, mut spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(ma: ModularAgent, id: String, mut spec: AgentSpec) -> Result<Self, AgentError> {
         let (target_keys, target_value) = Self::update_spec(&mut spec)?;
         Ok(Self {
-            data: AgentData::new(mak, id, spec),
+            data: AgentData::new(ma, id, spec),
             target_keys,
             target_value,
         })
@@ -196,10 +196,10 @@ impl ToObjectAgent {
 
 #[async_trait]
 impl AsAgent for ToObjectAgent {
-    fn new(mak: MAK, id: String, mut spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(ma: ModularAgent, id: String, mut spec: AgentSpec) -> Result<Self, AgentError> {
         let target_keys = Self::update_spec(&mut spec)?;
         Ok(Self {
-            data: AgentData::new(mak, id, spec),
+            data: AgentData::new(ma, id, spec),
             target_keys,
         })
     }
@@ -240,9 +240,9 @@ struct ToJsonAgent {
 
 #[async_trait]
 impl AsAgent for ToJsonAgent {
-    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(mak, id, spec),
+            data: AgentData::new(ma, id, spec),
         })
     }
 
@@ -273,9 +273,9 @@ struct FromJsonAgent {
 
 #[async_trait]
 impl AsAgent for FromJsonAgent {
-    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(mak, id, spec),
+            data: AgentData::new(ma, id, spec),
         })
     }
 
@@ -484,13 +484,13 @@ impl ZipToObjectAgent {
 
 #[async_trait]
 impl AsAgent for ZipToObjectAgent {
-    fn new(mak: MAK, id: String, mut spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(ma: ModularAgent, id: String, mut spec: AgentSpec) -> Result<Self, AgentError> {
         let (n, use_ctx, ttl_sec, capacity, keys) = Self::update_spec(&mut spec)?;
         let cache = Cache::builder()
             .max_capacity(capacity)
             .time_to_live(Duration::from_secs(ttl_sec))
             .build();
-        let data = AgentData::new(mak, id, spec);
+        let data = AgentData::new(ma, id, spec);
         Ok(Self {
             data,
             n,

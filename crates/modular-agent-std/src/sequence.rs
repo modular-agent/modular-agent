@@ -1,8 +1,8 @@
 use std::collections::VecDeque;
 use std::time::Duration;
 
-use modular_agent_kit::{
-    MAK, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
+use modular_agent_core::{
+    ModularAgent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
     modular_agent, async_trait,
 };
 use mini_moka::sync::Cache;
@@ -53,9 +53,9 @@ impl SequenceAgent {
 
 #[async_trait]
 impl AsAgent for SequenceAgent {
-    fn new(mak: MAK, id: String, mut spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(ma: ModularAgent, id: String, mut spec: AgentSpec) -> Result<Self, AgentError> {
         let n = Self::update_spec(&mut spec)?;
-        let data = AgentData::new(mak, id, spec);
+        let data = AgentData::new(ma, id, spec);
         Ok(Self { data, n })
     }
 
@@ -161,7 +161,7 @@ impl SyncAgent {
 
 #[async_trait]
 impl AsAgent for SyncAgent {
-    fn new(mak: MAK, id: String, mut spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(ma: ModularAgent, id: String, mut spec: AgentSpec) -> Result<Self, AgentError> {
         let (n, use_ctx, ttl_sec, capacity, output_ports) = Self::update_spec(&mut spec)?;
 
         let cache = Cache::builder()
@@ -169,7 +169,7 @@ impl AsAgent for SyncAgent {
             .time_to_live(Duration::from_secs(ttl_sec))
             .build();
 
-        let data = AgentData::new(mak, id, spec);
+        let data = AgentData::new(ma, id, spec);
         Ok(Self {
             data,
             n,

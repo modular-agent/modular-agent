@@ -1,8 +1,8 @@
 use std::collections::VecDeque;
 use std::time::Duration;
 
-use modular_agent_kit::{
-    MAK, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
+use modular_agent_core::{
+    ModularAgent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
     modular_agent, async_trait,
 };
 use im::{Vector, vector};
@@ -35,8 +35,8 @@ struct IsArrayAgent {
 
 #[async_trait]
 impl AsAgent for IsArrayAgent {
-    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
-        let data = AgentData::new(mak, id, spec);
+    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+        let data = AgentData::new(ma, id, spec);
         Ok(Self { data })
     }
     async fn process(
@@ -67,8 +67,8 @@ struct IsEmptyArrayAgent {
 
 #[async_trait]
 impl AsAgent for IsEmptyArrayAgent {
-    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
-        let data = AgentData::new(mak, id, spec);
+    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+        let data = AgentData::new(ma, id, spec);
         Ok(Self { data })
     }
 
@@ -108,8 +108,8 @@ struct ArrayLengthAgent {
 
 #[async_trait]
 impl AsAgent for ArrayLengthAgent {
-    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
-        let data = AgentData::new(mak, id, spec);
+    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+        let data = AgentData::new(ma, id, spec);
         Ok(Self { data })
     }
 
@@ -144,8 +144,8 @@ struct ArrayFirstAgent {
 
 #[async_trait]
 impl AsAgent for ArrayFirstAgent {
-    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
-        let data = AgentData::new(mak, id, spec);
+    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+        let data = AgentData::new(ma, id, spec);
         Ok(Self { data })
     }
 
@@ -185,8 +185,8 @@ struct ArrayRestAgent {
 
 #[async_trait]
 impl AsAgent for ArrayRestAgent {
-    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
-        let data = AgentData::new(mak, id, spec);
+    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+        let data = AgentData::new(ma, id, spec);
         Ok(Self { data })
     }
 
@@ -223,8 +223,8 @@ struct ArrayLastAgent {
 
 #[async_trait]
 impl AsAgent for ArrayLastAgent {
-    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
-        let data = AgentData::new(mak, id, spec);
+    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+        let data = AgentData::new(ma, id, spec);
         Ok(Self { data })
     }
 
@@ -265,8 +265,8 @@ struct ArrayNthAgent {
 
 #[async_trait]
 impl AsAgent for ArrayNthAgent {
-    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
-        let data = AgentData::new(mak, id, spec);
+    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+        let data = AgentData::new(ma, id, spec);
         Ok(Self { data })
     }
 
@@ -329,8 +329,8 @@ struct ArrayTakeAgent {
 
 #[async_trait]
 impl AsAgent for ArrayTakeAgent {
-    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
-        let data = AgentData::new(mak, id, spec);
+    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+        let data = AgentData::new(ma, id, spec);
         Ok(Self { data })
     }
 
@@ -380,8 +380,8 @@ struct MapAgent {
 
 #[async_trait]
 impl AsAgent for MapAgent {
-    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
-        let data = AgentData::new(mak, id, spec);
+    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+        let data = AgentData::new(ma, id, spec);
         Ok(Self { data })
     }
 
@@ -440,8 +440,8 @@ struct CollectAgent {
 
 #[async_trait]
 impl AsAgent for CollectAgent {
-    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
-        let data = AgentData::new(mak, id, spec);
+    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+        let data = AgentData::new(ma, id, spec);
         Ok(Self {
             data,
             current_ctx_id: None,
@@ -622,7 +622,7 @@ impl ZipToArrayAgent {
 
 #[async_trait]
 impl AsAgent for ZipToArrayAgent {
-    fn new(mak: MAK, id: String, mut spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(ma: ModularAgent, id: String, mut spec: AgentSpec) -> Result<Self, AgentError> {
         let (n, use_ctx, ttl_sec, capacity) = Self::update_spec(&mut spec)?;
 
         let cache = Cache::builder()
@@ -630,7 +630,7 @@ impl AsAgent for ZipToArrayAgent {
             .time_to_live(Duration::from_secs(ttl_sec)) // TTL (entries expire X seconds after write)
             .build();
 
-        let data = AgentData::new(mak, id, spec);
+        let data = AgentData::new(ma, id, spec);
 
         Ok(Self {
             data,
