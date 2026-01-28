@@ -2,9 +2,9 @@ use std::vec;
 
 use icu_normalizer::{ComposingNormalizer, ComposingNormalizerBorrowed};
 use im::vector;
-use modular_agent_kit::{
-    Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent, MAK,
-    async_trait, modular_agent,
+use modular_agent_core::{
+    Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
+    ModularAgent, async_trait, modular_agent,
 };
 use text_splitter::{ChunkConfig, TextSplitter};
 use tokenizers::Tokenizer;
@@ -32,9 +32,9 @@ pub struct NFKCAgent {
 
 #[async_trait]
 impl AsAgent for NFKCAgent {
-    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(mak, id, spec),
+            data: AgentData::new(ma, id, spec),
             normalizer: None,
         })
     }
@@ -120,9 +120,9 @@ impl SplitTextAgent {
 
 #[async_trait]
 impl AsAgent for SplitTextAgent {
-    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(mak, id, spec),
+            data: AgentData::new(ma, id, spec),
         })
     }
 
@@ -245,9 +245,9 @@ impl SplitTextByTokensAgent {
 
 #[async_trait]
 impl AsAgent for SplitTextByTokensAgent {
-    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(mak, id, spec),
+            data: AgentData::new(ma, id, spec),
             splitter: None,
         })
     }

@@ -1,7 +1,7 @@
 use im::{Vector, vector};
-use modular_agent_kit::{
-    Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent, MAK,
-    Message, async_trait, modular_agent,
+use modular_agent_core::{
+    Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
+    Message, ModularAgent, async_trait, modular_agent,
 };
 
 const CATEGORY: &str = "LLM/Message";
@@ -29,9 +29,9 @@ pub struct AssistantMessageAgent {
 
 #[async_trait]
 impl AsAgent for AssistantMessageAgent {
-    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(mak, id, spec),
+            data: AgentData::new(ma, id, spec),
         })
     }
 
@@ -65,9 +65,9 @@ pub struct SystemMessageAgent {
 
 #[async_trait]
 impl AsAgent for SystemMessageAgent {
-    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(mak, id, spec),
+            data: AgentData::new(ma, id, spec),
         })
     }
 
@@ -99,9 +99,9 @@ pub struct UserMessageAgent {
 
 #[async_trait]
 impl AsAgent for UserMessageAgent {
-    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(mak, id, spec),
+            data: AgentData::new(ma, id, spec),
         })
     }
 
@@ -171,7 +171,7 @@ pub struct PreambleAgent {
 
 #[async_trait]
 impl AsAgent for PreambleAgent {
-    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         let preamble = spec
             .configs
             .as_ref()
@@ -188,7 +188,7 @@ impl AsAgent for PreambleAgent {
                 }
             }
         };
-        let data = AgentData::new(mak, id, spec);
+        let data = AgentData::new(ma, id, spec);
         Ok(Self {
             data,
             preamble,
@@ -290,9 +290,9 @@ impl MessagesAgent {
 
 #[async_trait]
 impl AsAgent for MessagesAgent {
-    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(mak, id, spec),
+            data: AgentData::new(ma, id, spec),
         })
     }
 
@@ -380,9 +380,9 @@ pub struct MessagesForPromptAgent {
 
 #[async_trait]
 impl AsAgent for MessagesForPromptAgent {
-    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(mak, id, spec),
+            data: AgentData::new(ma, id, spec),
         })
     }
 
@@ -553,7 +553,7 @@ mod tests {
 
         // image + user
         #[cfg(feature = "image")]
-        let img = AgentValue::image(modular_agent_kit::PhotonImage::new(vec![0u8; 4], 1, 1));
+        let img = AgentValue::image(modular_agent_core::PhotonImage::new(vec![0u8; 4], 1, 1));
         {
             let msg = Message::user("Check this image".to_string());
             let result = append_message(img, msg);

@@ -3,10 +3,10 @@
 use std::sync::{Arc, Mutex};
 use std::vec;
 
-use modular_agent_kit::tool::{self, list_tool_infos_patterns};
-use modular_agent_kit::{
-    Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent, MAK,
-    Message, ToolCall, ToolCallFunction, async_trait, modular_agent,
+use modular_agent_core::tool::{self, list_tool_infos_patterns};
+use modular_agent_core::{
+    Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
+    Message, ModularAgent, ToolCall, ToolCallFunction, async_trait, modular_agent,
 };
 // use async_openai::types::responses::{FunctionArgs, ToolDefinition};
 use async_openai::types::{
@@ -69,7 +69,7 @@ impl OpenAIManager {
         }
     }
 
-    fn get_client(&self, mak: &MAK) -> Result<Client<OpenAIConfig>, AgentError> {
+    fn get_client(&self, ma: &ModularAgent) -> Result<Client<OpenAIConfig>, AgentError> {
         let mut client_guard = self.client.lock().unwrap();
 
         if let Some(client) = client_guard.as_ref() {
@@ -78,7 +78,7 @@ impl OpenAIManager {
 
         let mut config = OpenAIConfig::new();
 
-        if let Some(api_key) = mak
+        if let Some(api_key) = ma
             .get_global_configs(crate::openai::OpenAICompletionAgent::DEF_NAME)
             .and_then(|cfg| cfg.get_string(CONFIG_OPENAI_API_KEY).ok())
             .filter(|key| !key.is_empty())
@@ -86,7 +86,7 @@ impl OpenAIManager {
             config = config.with_api_key(&api_key);
         }
 
-        if let Some(api_base) = mak
+        if let Some(api_base) = ma
             .get_global_configs(crate::openai::OpenAICompletionAgent::DEF_NAME)
             .and_then(|cfg| cfg.get_string(CONFIG_OPENAI_API_BASE).ok())
             .filter(|key| !key.is_empty())
@@ -120,9 +120,9 @@ pub struct OpenAICompletionAgent {
 
 #[async_trait]
 impl AsAgent for OpenAICompletionAgent {
-    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(mak, id, spec),
+            data: AgentData::new(ma, id, spec),
             manager: OpenAIManager::new(),
         })
     }
@@ -190,7 +190,7 @@ impl AsAgent for OpenAICompletionAgent {
                 .map_err(|e| AgentError::InvalidValue(format!("Deserialization error: {}", e)))?;
         }
 
-        let client = self.manager.get_client(self.mak())?;
+        let client = self.manager.get_client(self.ma())?;
         let res = client
             .completions()
             .create(request)
@@ -226,9 +226,9 @@ pub struct OpenAIChatAgent {
 
 #[async_trait]
 impl AsAgent for OpenAIChatAgent {
-    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(mak, id, spec),
+            data: AgentData::new(ma, id, spec),
             manager: OpenAIManager::new(),
         })
     }
@@ -293,7 +293,7 @@ impl AsAgent for OpenAIChatAgent {
 
         let use_stream = self.configs()?.get_bool_or_default(CONFIG_STREAM);
 
-        let client = self.manager.get_client(self.mak())?;
+        let client = self.manager.get_client(self.ma())?;
 
         let mut request = CreateChatCompletionRequestArgs::default()
             .model(config_model)
@@ -424,7 +424,7 @@ impl OpenAIEmbeddingsAgent {
         texts: Vec<String>,
         model_name: &str,
     ) -> Result<Vec<Vec<f32>>, AgentError> {
-        let client = self.manager.get_client(self.mak())?;
+        let client = self.manager.get_client(self.ma())?;
         let mut request = CreateEmbeddingRequestArgs::default()
             .model(model_name.to_string())
             .input(texts)
@@ -462,9 +462,9 @@ impl OpenAIEmbeddingsAgent {
 
 #[async_trait]
 impl AsAgent for OpenAIEmbeddingsAgent {
-    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(mak, id, spec),
+            data: AgentData::new(ma, id, spec),
             manager: OpenAIManager::new(),
         })
     }
@@ -649,9 +649,9 @@ impl AsAgent for OpenAIEmbeddingsAgent {
 
 // #[async_trait]
 // impl AsAgent for OpenAIResponsesAgent {
-//     fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+//     fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
 //         Ok(Self {
-//             data: AgentData::new(mak, id, spec),
+//             data: AgentData::new(ma, id, spec),
 //             manager: OpenAIManager::new(),
 //         })
 //     }
@@ -716,7 +716,7 @@ impl AsAgent for OpenAIEmbeddingsAgent {
 
 //         let use_stream = self.configs()?.get_bool_or_default(CONFIG_STREAM);
 
-//         let client = self.manager.get_client(self.mak())?;
+//         let client = self.manager.get_client(self.ma())?;
 
 //         let mut request = CreateResponseArgs::default()
 //             .model(config_model)

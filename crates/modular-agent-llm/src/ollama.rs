@@ -3,10 +3,10 @@
 use std::sync::{Arc, Mutex};
 use std::vec;
 
-use modular_agent_kit::tool::{self, list_tool_infos_patterns};
-use modular_agent_kit::{
+use modular_agent_core::tool::{self, list_tool_infos_patterns};
+use modular_agent_core::{
     Agent, AgentConfigs, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue,
-    AsAgent, MAK, Message, ToolCall, ToolCallFunction, async_trait, modular_agent,
+    AsAgent, Message, ModularAgent, ToolCall, ToolCallFunction, async_trait, modular_agent,
 };
 
 use im::{Vector, vector};
@@ -80,14 +80,14 @@ impl OllamaManager {
         DEFAULT_OLLAMA_URL.to_string()
     }
 
-    fn get_client(&self, mak: &MAK) -> Result<Ollama, AgentError> {
+    fn get_client(&self, ma: &ModularAgent) -> Result<Ollama, AgentError> {
         let mut client_guard = self.client.lock().unwrap();
 
         if let Some(client) = client_guard.as_ref() {
             return Ok(client.clone());
         }
 
-        let global_config = mak.get_global_configs(crate::ollama::OllamaCompletionAgent::DEF_NAME);
+        let global_config = ma.get_global_configs(crate::ollama::OllamaCompletionAgent::DEF_NAME);
         let api_base_url = Self::get_ollama_url(global_config);
         let new_client = Ollama::try_new(api_base_url)
             .map_err(|e| AgentError::IoError(format!("Ollama Client Error: {}", e)))?;
@@ -117,9 +117,9 @@ pub struct OllamaCompletionAgent {
 
 #[async_trait]
 impl AsAgent for OllamaCompletionAgent {
-    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(mak, id, spec),
+            data: AgentData::new(ma, id, spec),
             manager: OllamaManager::new(),
             context: None,
         })
@@ -178,7 +178,7 @@ impl AsAgent for OllamaCompletionAgent {
             }
         }
 
-        let client = self.manager.get_client(self.mak())?;
+        let client = self.manager.get_client(self.ma())?;
         let res = client
             .generate(request)
             .await
@@ -217,9 +217,9 @@ pub struct OllamaChatAgent {
 
 #[async_trait]
 impl AsAgent for OllamaChatAgent {
-    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(mak, id, spec),
+            data: AgentData::new(ma, id, spec),
             manager: OllamaManager::new(),
         })
     }
@@ -286,7 +286,7 @@ impl AsAgent for OllamaChatAgent {
 
         let use_stream = self.configs()?.get_bool_or_default(CONFIG_STREAM);
 
-        let client = self.manager.get_client(self.mak())?;
+        let client = self.manager.get_client(self.ma())?;
 
         let mut request = ChatMessageRequest::new(
             config_model.to_string(),
@@ -406,7 +406,7 @@ impl OllamaEmbeddingsAgent {
         model_name: String,
         model_options: Option<ModelOptions>,
     ) -> Result<Vec<Vec<f32>>, AgentError> {
-        let client = self.manager.get_client(self.mak())?;
+        let client = self.manager.get_client(self.ma())?;
         let mut request = GenerateEmbeddingsRequest::new(model_name, input);
         if let Some(options) = model_options {
             request = request.options(options);
@@ -421,9 +421,9 @@ impl OllamaEmbeddingsAgent {
 
 #[async_trait]
 impl AsAgent for OllamaEmbeddingsAgent {
-    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(mak, id, spec),
+            data: AgentData::new(ma, id, spec),
             manager: OllamaManager::new(),
         })
     }
@@ -619,9 +619,9 @@ pub struct OllamaListLocalModelsAgent {
 
 #[async_trait]
 impl AsAgent for OllamaListLocalModelsAgent {
-    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(mak, id, spec),
+            data: AgentData::new(ma, id, spec),
             manager: OllamaManager::new(),
         })
     }
@@ -632,7 +632,7 @@ impl AsAgent for OllamaListLocalModelsAgent {
         _port: String,
         _value: AgentValue,
     ) -> Result<(), AgentError> {
-        let client = self.manager.get_client(self.mak())?;
+        let client = self.manager.get_client(self.ma())?;
         let model_list = client
             .list_local_models()
             .await
@@ -659,9 +659,9 @@ pub struct OllamaShowModelInfoAgent {
 
 #[async_trait]
 impl AsAgent for OllamaShowModelInfoAgent {
-    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(mak, id, spec),
+            data: AgentData::new(ma, id, spec),
             manager: OllamaManager::new(),
         })
     }
@@ -677,7 +677,7 @@ impl AsAgent for OllamaShowModelInfoAgent {
             return Ok(());
         }
 
-        let client = self.manager.get_client(self.mak())?;
+        let client = self.manager.get_client(self.ma())?;
         let model_info = client
             .show_model_info(model_name.to_string())
             .await
