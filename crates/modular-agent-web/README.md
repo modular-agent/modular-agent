@@ -1,1 +1,1 @@
-# Web Agents for Modular Agent Kit
+# Web Agents for Modular Agent

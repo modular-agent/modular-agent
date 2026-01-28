@@ -1,6 +1,6 @@
-use modular_agent_kit::{
-    Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent, MAK,
-    async_trait, modular_agent,
+use modular_agent_core::{
+    Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
+    ModularAgent, async_trait, modular_agent,
 };
 use url::Url;
 use yt_transcript_rs::api::YouTubeTranscriptApi;
@@ -31,9 +31,9 @@ struct FetchYtTranscriptAgent {
 
 #[async_trait]
 impl AsAgent for FetchYtTranscriptAgent {
-    fn new(mak: MAK, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
-            data: AgentData::new(mak, id, spec),
+            data: AgentData::new(ma, id, spec),
         })
     }
 

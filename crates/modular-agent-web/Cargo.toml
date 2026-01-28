@@ -1,7 +1,7 @@
 [package]
 name = "modular-agent-web"
-version = "0.4.0"
-description = "Web Agents for Modular Agent Kit"
+version = "0.5.0"
+description = "Web Agents for Modular Agent"
 authors = ["Akira Ishino <akira@lumilab.jp>"]
 edition = "2024"
 license = "Apache-2.0 OR MIT"
@@ -15,7 +15,7 @@ serde_json = "1"
 url = "2.5.7"
 yt-transcript-rs = { version = "0.1.8", optional = true }
 
-modular-agent-kit = "0.21.0"
+modular-agent-core = "0.22.0"
 
 [features]
 default = ["fetch-url", "html-scraper", "html-to-markdown", "reqwest/default-tls", "yt-transcript"]
@@ -26,4 +26,4 @@ html-to-markdown = ["html-to-markdown-rs"]
 yt-transcript = ["yt-transcript-rs"]
 
 # [patch.crates-io]
-# modular-agent-kit = { path = "../modular-agent-kit/modular-agent-kit" }
+# modular-agent-core = { path = "../modular-agent-core/modular-agent-core" }
