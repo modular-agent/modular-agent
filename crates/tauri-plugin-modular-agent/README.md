@@ -1,1 +1,1 @@
-# Tauri Plugin for Modular Agent Kit
+# Tauri Plugin for Modular Agent

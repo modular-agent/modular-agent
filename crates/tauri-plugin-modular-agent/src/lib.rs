@@ -1,6 +1,6 @@
 #![recursion_limit = "256"]
 
-use modular_agent_kit::MAK;
+use modular_agent_core::ModularAgent;
 use tauri::{
     plugin::{Builder, TauriPlugin},
     Manager, RunEvent, Runtime,
@@ -11,14 +11,14 @@ mod error;
 
 pub use error::{Error, Result};
 
-/// Extensions to [`tauri::App`], [`tauri::AppHandle`] and [`tauri::Window`] to access the mak APIs.
+/// Extensions to [`tauri::App`], [`tauri::AppHandle`] and [`tauri::Window`] to access the ma APIs.
 pub trait MAKExt<R: Runtime> {
-    fn mak(&self) -> &MAK;
+    fn ma(&self) -> &ModularAgent;
 }
 
 impl<R: Runtime, T: Manager<R>> crate::MAKExt<R> for T {
-    fn mak(&self) -> &MAK {
-        self.state::<MAK>().inner()
+    fn ma(&self) -> &ModularAgent {
+        self.state::<ModularAgent>().inner()
     }
 }
 
@@ -60,20 +60,20 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             commands::write_board,
         ])
         .setup(|app, _api| {
-            let mak = MAK::init()?;
-            app.manage(mak);
+            let ma = ModularAgent::init()?;
+            app.manage(ma);
             Ok(())
         })
         .on_event(|app, event| match event {
             RunEvent::Ready => {
                 tauri::async_runtime::block_on(async move {
-                    let mak = app.state::<MAK>();
-                    mak.ready().await.unwrap();
+                    let ma = app.state::<ModularAgent>();
+                    ma.ready().await.unwrap();
                 });
             }
             RunEvent::Exit => {
-                let mak = app.state::<MAK>();
-                mak.quit();
+                let ma = app.state::<ModularAgent>();
+                ma.quit();
             }
             _ => {}
         })

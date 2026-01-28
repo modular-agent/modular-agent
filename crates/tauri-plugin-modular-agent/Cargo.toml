@@ -3,13 +3,13 @@ name = "tauri-plugin-modular-agent"
 version = "0.12.0"
 authors = ["Akira Ishino <akira@lumilab.jp>"]
 license = "Apache-2.0 OR MIT"
-description = "Tauri plugin for Modular Agent Kit"
+description = "Tauri plugin for Modular Agent"
 edition = "2021"
 exclude = ["/examples", "/dist-js", "/guest-js", "/node_modules"]
 links = "tauri-plugin-modular-agent"
 
 [dependencies]
-modular-agent-kit = "0.21.0"
+modular-agent-core = "0.21.0"
 im = "15"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -19,5 +19,5 @@ thiserror = "2"
 [build-dependencies]
 tauri-plugin = { version = "2.4.0", features = ["build"] }
 
-# [patch.crates-io]
-# modular-agent-kit = { path = "../modular-agent-kit/modular-agent-kit" }
+[patch.crates-io]
+modular-agent-core = { path = "../modular-agent-core/modular-agent-core" }
