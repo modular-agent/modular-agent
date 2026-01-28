@@ -1,6 +1,6 @@
 [package]
 name = "modular-agent-desktop"
-version = "0.12.0"
+version = "0.13.0"
 description = "Modular Agent Desktop Application"
 authors = ["Akira Ishino <akira@lumilab.jp>"]
 edition = "2021"
@@ -34,20 +34,20 @@ tauri-plugin-log = "2"
 tauri-plugin-store = "2"
 tokio = { version = "1", features = ["full"] }
 
-modular-agent-kit = "0.21.0"
-tauri-plugin-modular-agent = "0.12.0"
+modular-agent-core = "0.22.0"
+tauri-plugin-modular-agent = "0.13.0"
 
-modular-agent-cozodb = { git = "https://github.com/modular-agent/modular-agent-cozodb.git", tag = "v0.7.0" }
-modular-agent-lancedb = { git = "https://github.com/modular-agent/modular-agent-lancedb.git", tag = "v0.3.0" }
-modular-agent-lifelog = { git = "https://github.com/modular-agent/modular-agent-lifelog.git", tag = "v0.5.0" }
-modular-agent-llm = { git = "https://github.com/modular-agent/modular-agent-llm.git", tag = "v0.10.0" }
-modular-agent-std = { git = "https://github.com/modular-agent/modular-agent-std.git", tag = "v0.11.0" }
-modular-agent-web = { git = "https://github.com/modular-agent/modular-agent-web.git", tag = "v0.4.0" }
-# modular-agent-cozodb = { path = "../../modular-agent-cozodb" }
-# modular-agent-lancedb = { path = "../../modular-agent-lancedb" }
+modular-agent-lifelog = { git = "https://github.com/modular-agent/modular-agent-lifelog.git", tag = "v0.6.0" }
+modular-agent-llm = { git = "https://github.com/modular-agent/modular-agent-llm.git", tag = "v0.11.0" }
+modular-agent-slack = { git = "https://github.com/modular-agent/modular-agent-slack.git", tag = "v0.2.0" }
+modular-agent-std = { git = "https://github.com/modular-agent/modular-agent-std.git", tag = "v0.12.0" }
+modular-agent-sqlx = { git = "https://github.com/modular-agent/modular-agent-sqlx.git", tag = "v0.2.0" }
+modular-agent-web = { git = "https://github.com/modular-agent/modular-agent-web.git", tag = "v0.5.0" }
 # modular-agent-lifelog = { path = "../../modular-agent-lifelog" }
 # modular-agent-llm = { path = "../../modular-agent-llm" }
+# modular-agent-slack = { path = "../../modular-agent-slack" }
 # modular-agent-std = { path = "../../modular-agent-std" }
+# modular-agent-sqlx = { path = "../../modular-agent-sqlx" }
 # modular-agent-web = { path = "../../modular-agent-web" }
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
@@ -57,5 +57,5 @@ tauri-plugin-single-instance = "2.3"
 tauri-plugin-window-state = "2"
 
 # [patch.crates-io]
-# modular-agent-kit = { path = "../../modular-agent-kit/modular-agent-kit" }
+# modular-agent-core = { path = "../../modular-agent-core/modular-agent-core" }
 # tauri-plugin-modular-agent = { path = "../../tauri-plugin-modular-agent" }

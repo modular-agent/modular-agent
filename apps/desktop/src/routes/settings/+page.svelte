@@ -13,7 +13,7 @@
   const globalConfigsMap = getGlobalConfigsMap();
 
   onMount(() => {
-    getCurrentWindow().setTitle("Settings - MAK Desktop");
+    getCurrentWindow().setTitle("Settings - Modular Agent");
   });
 </script>
 

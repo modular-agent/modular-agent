@@ -11,7 +11,7 @@
   import { Input } from "$lib/components/ui/input/index.js";
   import * as Select from "$lib/components/ui/select/index.js";
   import { Switch } from "$lib/components/ui/switch/index.js";
-  import { exitApp, setCoreSettings } from "$lib/mak";
+  import { exitApp, setCoreSettings } from "$lib/modular_agent";
 
   interface Props {
     settings: Record<string, any>;
@@ -52,7 +52,7 @@
       shortcut_keys,
     });
     // confirm restart
-    await message("MAK Desktop will quit to apply changes.\n\nPlease restart.");
+    await message("Modular Agent will quit to apply changes.\n\nPlease restart.");
     await exitApp();
   }
 </script>

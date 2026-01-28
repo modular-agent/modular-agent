@@ -6,8 +6,8 @@ use anyhow::{anyhow, bail, Context as _, Result};
 use dirs;
 use tauri::{AppHandle, Manager, State};
 
-use modular_agent_kit::mcp::register_tools_from_mcp_json;
-use modular_agent_kit::{PresetSpec, MAK};
+use modular_agent_core::mcp::register_tools_from_mcp_json;
+use modular_agent_core::{ModularAgent, PresetSpec};
 
 use tauri_plugin_modular_agent::MAKExt;
 
@@ -17,16 +17,16 @@ static MAK_PATH: &'static str = ".modular_agent";
 static MAK_PRESETS_PATH: &'static str = "presets";
 
 pub struct MakApp {
-    mak: MAK,
+    ma: ModularAgent,
 
     /// Map of preset name to preset ID.
     presets: Arc<Mutex<HashMap<String, String>>>,
 }
 
 impl MakApp {
-    pub fn new(mak: &MAK) -> Self {
+    pub fn new(ma: &ModularAgent) -> Self {
         Self {
-            mak: mak.clone(),
+            ma: ma.clone(),
             presets: Arc::new(Mutex::new(HashMap::new())),
         }
     }
@@ -38,7 +38,7 @@ impl MakApp {
         if !is_valid_preset_name(&name) {
             return Err(anyhow!("Invalid preset name: {}", name));
         }
-        let id = self.mak.new_preset_with_name(name.clone())?;
+        let id = self.ma.new_preset_with_name(name.clone())?;
         let mut presets = self.presets.lock().unwrap();
         presets.insert(name, id.clone());
         Ok(id)
@@ -57,7 +57,7 @@ impl MakApp {
         // open the preset file
         let path = preset_path(&name)?;
         let id = self
-            .mak
+            .ma
             .open_preset_from_file(path.to_string_lossy().as_ref(), Some(name.clone()))
             .await?;
 
@@ -76,7 +76,7 @@ impl MakApp {
             .get_preset_id(name)
             .ok_or_else(|| anyhow!("Preset not found: {}", name))?;
 
-        self.mak.remove_preset(&preset_id).await?;
+        self.ma.remove_preset(&preset_id).await?;
 
         let preset_path = preset_path(name)?;
         if preset_path.exists() {
@@ -122,10 +122,10 @@ impl MakApp {
 
         // let spec = self.read_preset(path)?;
 
-        // let name = self.mak.unique_preset_name(&name);
+        // let name = self.ma.unique_preset_name(&name);
 
         // let id = self
-        //     .mak
+        //     .ma
         //     .add_preset(name.clone(), spec.clone())
         //     .context("Failed to add preset")?;
 
@@ -136,12 +136,12 @@ impl MakApp {
     }
 
     pub async fn start_preset(&self, preset_id: &str) -> Result<()> {
-        self.mak.start_preset(preset_id).await?;
+        self.ma.start_preset(preset_id).await?;
         Ok(())
     }
 
     pub async fn stop_preset(&self, preset_id: &str) -> Result<()> {
-        self.mak.stop_preset(preset_id).await?;
+        self.ma.stop_preset(preset_id).await?;
         Ok(())
     }
 
@@ -152,16 +152,16 @@ impl MakApp {
 }
 
 pub fn init(app: &AppHandle) -> Result<()> {
-    let mak = app.mak();
-    let asapp = MakApp::new(mak);
+    let ma = app.ma();
+    let asapp = MakApp::new(ma);
     app.manage(asapp);
     Ok(())
 }
 
 pub async fn ready(app: &AppHandle) -> Result<()> {
     let asapp = app.state::<MakApp>();
-    let mak = &asapp.mak;
-    start_mak_observer(&mak, app.clone());
+    let ma = &asapp.ma;
+    start_mak_observer(&ma, app.clone());
 
     start_mcp_services().await?;
 

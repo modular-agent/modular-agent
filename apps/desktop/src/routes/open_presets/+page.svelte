@@ -9,7 +9,7 @@
   let { data }: PageData = $props();
 
   onMount(async () => {
-    getCurrentWindow().setTitle("Preset List - MAK Desktop");
+    getCurrentWindow().setTitle("Preset List - Modular Agent");
   });
 </script>
 

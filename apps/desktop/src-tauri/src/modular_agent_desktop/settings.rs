@@ -1,5 +1,5 @@
 use anyhow::{Context as _, Result};
-use modular_agent_kit::{AgentConfigs, AgentValue};
+use modular_agent_core::{AgentConfigs, AgentValue};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{
@@ -29,7 +29,7 @@ pub fn save(app: &AppHandle) -> Result<()> {
     }
     store.set("core", settings_json);
 
-    let agent_settings = app.mak().get_global_configs_map();
+    let agent_settings = app.ma().get_global_configs_map();
     let agent_settings_json = serde_json::to_value(agent_settings)?;
     store.set("agents", agent_settings_json);
 
@@ -112,7 +112,7 @@ pub fn load_agent_global_configs(app: &AppHandle) -> Result<()> {
     let store = app.store(SETTINGS_JSON)?;
 
     if let Some(store_value) = store.get("agents") {
-        let mut global_configs_map = app.mak().get_global_configs_map();
+        let mut global_configs_map = app.ma().get_global_configs_map();
         for (agent_name, configs) in store_value.as_object().unwrap_or(&Default::default()) {
             if let Some(agent_configs) = global_configs_map.get_mut(agent_name) {
                 for (key, value) in configs.as_object().unwrap_or(&Default::default()) {
@@ -124,7 +124,7 @@ pub fn load_agent_global_configs(app: &AppHandle) -> Result<()> {
                 }
             }
         }
-        app.mak().set_global_configs_map(global_configs_map);
+        app.ma().set_global_configs_map(global_configs_map);
     }
 
     Ok(())
@@ -188,7 +188,7 @@ pub(crate) fn set_global_configs_cmd(
     def_name: String,
     configs: AgentConfigs,
 ) -> Result<(), String> {
-    app.mak().set_global_configs(def_name, configs);
+    app.ma().set_global_configs(def_name, configs);
 
     save(&app).map_err(|e| e.to_string())?;
 

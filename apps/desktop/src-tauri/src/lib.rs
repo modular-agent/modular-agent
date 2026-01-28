@@ -4,19 +4,19 @@ use tauri::{AppHandle, Manager};
 use tauri_plugin_window_state::{AppHandleExt, StateFlags};
 
 #[allow(unused_imports)]
-use modular_agent_cozodb;
-
-#[allow(unused_imports)]
-use modular_agent_lancedb;
-
-#[allow(unused_imports)]
 use modular_agent_lifelog;
 
 #[allow(unused_imports)]
 use modular_agent_llm;
 
 #[allow(unused_imports)]
+use modular_agent_slack;
+
+#[allow(unused_imports)]
 use modular_agent_std;
+
+#[allow(unused_imports)]
+use modular_agent_sqlx;
 
 #[allow(unused_imports)]
 use modular_agent_web;
@@ -122,7 +122,7 @@ pub fn run() {
                     guard.run_in_background
                 };
                 if !run_in_background {
-                    log::info!("Exiting MAK Desktop...");
+                    log::info!("Exiting ModularAgent Desktop...");
                     window.app_handle().exit(0);
                 }
             }

@@ -88,7 +88,7 @@ let unlistenAgentSpecUpdated: UnlistenFn | null = null;
 //
 
 $effect.root(() => {
-  listen<AgentConfigUpdatedMessage>("mak:agent_config_updated", (event) => {
+  listen<AgentConfigUpdatedMessage>("ma:agent_config_updated", (event) => {
     const { agent_id, key, value } = event.payload;
     let store = agentConfigUpdatedMessageStore.get(agent_id);
     if (!store) {
@@ -100,7 +100,7 @@ $effect.root(() => {
   });
 
   // Listen for error messages
-  listen<AgentErrorMessage>("mak:agent_error", (event) => {
+  listen<AgentErrorMessage>("ma:agent_error", (event) => {
     const { agent_id, message } = event.payload;
     let store = agentErrorMessageStore.get(agent_id);
     if (!store) {
@@ -112,7 +112,7 @@ $effect.root(() => {
   });
 
   // Listen for input messages
-  listen<AgentInMessage>("mak:agent_in", (event) => {
+  listen<AgentInMessage>("ma:agent_in", (event) => {
     const { agent_id, port } = event.payload;
     let store = agentInMessageStore.get(agent_id);
     if (!store) {
@@ -123,7 +123,7 @@ $effect.root(() => {
     unlistenAgentIn = unlistenFn;
   });
 
-  listen<AgentSpecUpdatedMessage>("mak:agent_spec_updated", (event) => {
+  listen<AgentSpecUpdatedMessage>("ma:agent_spec_updated", (event) => {
     const { agent_id } = event.payload;
     let store = agentSpecUpdatedMessageStore.get(agent_id);
     if (!store) {

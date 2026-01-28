@@ -1,4 +1,4 @@
-import { getDirEntries } from "$lib/mak";
+import { getDirEntries } from "$lib/modular_agent";
 
 import type { PageLoad } from "./$types";
 

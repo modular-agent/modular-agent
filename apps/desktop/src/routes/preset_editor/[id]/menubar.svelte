@@ -7,7 +7,7 @@
   import * as Dialog from "$lib/components/ui/dialog/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
   import * as Menubar from "$lib/components/ui/menubar/index.js";
-  import { exitApp } from "$lib/mak";
+  import { exitApp } from "$lib/modular_agent";
 
   import PresetActionDialog from "@/lib/components/preset-action-dialog.svelte";
 

@@ -89,7 +89,7 @@
     nodes = [...data.flow.nodes];
     edges = [...data.flow.edges];
 
-    getCurrentWindow().setTitle(data.flow.name + " - MAK Desktop");
+    getCurrentWindow().setTitle(data.flow.name + " - Modular Agent");
   });
 
   const handleOnDelete: OnDelete<PresetNode, PresetEdge> = async ({

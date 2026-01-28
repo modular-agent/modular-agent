@@ -15,7 +15,7 @@ import {
 import {
   getCoreSettings as getCoreSettingsUtils,
   setCoreSettings as setCoreSettingsUtils,
-} from "./mak";
+} from "./modular_agent";
 import type { PresetFlow, PresetEdge, PresetNode, CoreSettings } from "./types";
 
 export async function newPresetWithName(name: string): Promise<string> {

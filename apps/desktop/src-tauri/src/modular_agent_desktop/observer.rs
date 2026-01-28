@@ -1,16 +1,16 @@
 use anyhow::{Context as _, Result};
-use modular_agent_kit::{AgentValue, MAKEvent, MAK};
+use modular_agent_core::{AgentValue, MAKEvent, ModularAgent};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 use tokio::sync::broadcast::error::RecvError;
 
-const EMIT_AGENT_CONFIG_UPDATED: &str = "mak:agent_config_updated";
-const EMIT_AGENT_ERROR: &str = "mak:agent_error";
-const EMIT_AGENT_IN: &str = "mak:agent_in";
-const EMIT_AGENT_SPEC_UPDATED: &str = "mak:agent_spec_updated";
+const EMIT_AGENT_CONFIG_UPDATED: &str = "ma:agent_config_updated";
+const EMIT_AGENT_ERROR: &str = "ma:agent_error";
+const EMIT_AGENT_IN: &str = "ma:agent_in";
+const EMIT_AGENT_SPEC_UPDATED: &str = "ma:agent_spec_updated";
 
-pub fn start_mak_observer(mak: &MAK, app: AppHandle) {
-    let mut rx = mak.subscribe();
+pub fn start_mak_observer(ma: &ModularAgent, app: AppHandle) {
+    let mut rx = ma.subscribe();
 
     tokio::spawn(async move {
         loop {
@@ -21,7 +21,7 @@ pub fn start_mak_observer(mak: &MAK, app: AppHandle) {
                     });
                 }
                 Err(RecvError::Lagged(n)) => {
-                    log::warn!("MAK event listener lagged by {} events.", n);
+                    log::warn!("ModularAgent event listener lagged by {} events.", n);
                 }
                 Err(RecvError::Closed) => {
                     break; // Channel closed, exit the loop

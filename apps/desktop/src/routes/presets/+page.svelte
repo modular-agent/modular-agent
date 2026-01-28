@@ -8,7 +8,7 @@
   import { newPresetWithName } from "$lib/agent";
   import * as PresetFileList from "$lib/components/preset-file-list/index.js";
   import * as ContextMenu from "$lib/components/ui/context-menu/index.js";
-  import { deletePreset, getDirEntries, openPreset } from "$lib/mak";
+  import { deletePreset, getDirEntries, openPreset } from "$lib/modular_agent";
 
   import PresetActionDialog from "@/lib/components/preset-action-dialog.svelte";
 
