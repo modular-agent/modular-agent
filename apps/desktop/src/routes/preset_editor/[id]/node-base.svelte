@@ -31,13 +31,13 @@
   type Props = NodeProps & {
     data: AgentSpec;
     agentDef: AgentDefinition | null;
-    titleColor: string;
     inputCount: number;
     title: Snippet;
+    titleColor: string;
     contents: Snippet;
   };
 
-  let { data, agentDef, selected, height, titleColor, inputCount, title, contents }: Props =
+  let { data, agentDef, selected, height, inputCount, title, titleColor, contents }: Props =
     $props();
 
   const inputs = $derived(data.inputs ?? []);
@@ -99,7 +99,9 @@
       <div class="w-full min-w-40 flex-none rounded-t-lg"></div>
     {/if}
   {:else}
-    <div class="w-full min-w-40 flex-none pl-4 pr-4 pb-2 {titleColor} rounded-t-lg">
+    <div
+      class="w-full min-w-40 flex-none pl-4 pr-4 pb-2 rounded-t-lg {titleColor} text-primary-foreground"
+    >
       {@render title()}
     </div>
   {/if}

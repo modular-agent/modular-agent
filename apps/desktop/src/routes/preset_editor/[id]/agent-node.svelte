@@ -132,7 +132,7 @@
     <div class="flex-none mt-1">
       <div class="flex flex-col flex-nowrap items-start">
         {#if agentDef}
-          <div class="text-xs font-light">
+          <div class="text-xs">
             {#if agentDef.category}
               {agentDef.category}
             {/if}
@@ -164,7 +164,7 @@
                 class="flex-none"
                 tabindex={-1}
               >
-                <div class="text-xl">
+                <div class="text-xl font-semibold">
                   {data.title ?? agentDef.title ?? data.def_name}
                 </div>
               </button>
@@ -215,4 +215,4 @@
   {/if}
 {/snippet}
 
-<NodeBase {id} {data} {agentDef} {titleColor} {inputCount} {title} {contents} {...props} />
+<NodeBase {id} {data} {agentDef} {inputCount} {title} {titleColor} {contents} {...props} />
