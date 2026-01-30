@@ -1,4 +1,4 @@
-use std::{ops::Not, sync::Arc, vec};
+use std::{sync::Arc, vec};
 
 use im::Vector;
 use serde::{Deserialize, Serialize};
@@ -9,32 +9,25 @@ use crate::value::AgentValue;
 #[cfg(feature = "image")]
 use photon_rs::PhotonImage;
 
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone)]
 pub struct Message {
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
 
     pub role: String,
 
     pub content: String,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub tokens: Option<usize>,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub thinking: Option<String>,
 
-    #[serde(skip_serializing_if = "<&bool>::not")]
     pub streaming: bool,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_calls: Option<Vector<ToolCall>>,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_name: Option<String>,
 
     #[cfg(feature = "image")]
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub image: Option<Arc<PhotonImage>>,
 }
 
@@ -83,6 +76,119 @@ impl Message {
 impl PartialEq for Message {
     fn eq(&self, other: &Self) -> bool {
         self.id == other.id && self.role == other.role && self.content == other.content
+    }
+}
+
+impl Serialize for Message {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let mut map = serde_json::Map::new();
+        if let Some(id) = &self.id {
+            map.insert("id".to_string(), serde_json::Value::String(id.clone()));
+        }
+        map.insert(
+            "role".to_string(),
+            serde_json::Value::String(self.role.clone()),
+        );
+        map.insert(
+            "content".to_string(),
+            serde_json::Value::String(self.content.clone()),
+        );
+        if let Some(tokens) = &self.tokens {
+            map.insert(
+                "tokens".to_string(),
+                serde_json::Value::Number((*tokens).into()),
+            );
+        }
+        if let Some(thinking) = &self.thinking {
+            map.insert(
+                "thinking".to_string(),
+                serde_json::Value::String(thinking.clone()),
+            );
+        }
+        if self.streaming {
+            map.insert("streaming".to_string(), serde_json::Value::Bool(true));
+        }
+        if let Some(tool_calls) = &self.tool_calls {
+            let mut tool_calls_vec = vec![];
+            for call in tool_calls {
+                tool_calls_vec.push(serde_json::to_value(call).map_err(serde::ser::Error::custom)?);
+            }
+            map.insert(
+                "tool_calls".to_string(),
+                serde_json::Value::Array(tool_calls_vec),
+            );
+        }
+        if let Some(tool_name) = &self.tool_name {
+            map.insert(
+                "tool_name".to_string(),
+                serde_json::Value::String(tool_name.clone()),
+            );
+        }
+        #[cfg(feature = "image")]
+        {
+            if let Some(image) = &self.image {
+                map.insert(
+                    "image".to_string(),
+                    serde_json::Value::String(image.get_base64()),
+                );
+            }
+        }
+        map.serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for Message {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let mut message = Message::user(String::default());
+        let map = serde_json::Map::deserialize(deserializer)?;
+
+        if let Some(id) = map.get("id") {
+            message.id = id.as_str().map(|s| s.to_string());
+        }
+        if let Some(role) = map.get("role") {
+            message.role = role
+                .as_str()
+                .ok_or_else(|| serde::de::Error::custom("role must be a string"))?
+                .to_string();
+        }
+        if let Some(content) = map.get("content") {
+            message.content = content
+                .as_str()
+                .ok_or_else(|| serde::de::Error::custom("content must be a string"))?
+                .to_string();
+        }
+        if let Some(tokens) = map.get("tokens") {
+            message.tokens = tokens.as_u64().map(|u| u as usize);
+        }
+        if let Some(thinking) = map.get("thinking") {
+            message.thinking = thinking.as_str().map(|s| s.to_string());
+        }
+        if let Some(streaming) = map.get("streaming") {
+            message.streaming = streaming.as_bool().unwrap_or(false);
+        }
+        if let Some(tool_calls) = map.get("tool_calls") {
+            let tool_calls = serde_json::from_value::<Vec<ToolCall>>(tool_calls.clone())
+                .map_err(|e| serde::de::Error::custom(e.to_string()))?;
+            message.tool_calls = Some(tool_calls.into());
+        }
+        if let Some(tool_name) = map.get("tool_name") {
+            message.tool_name = tool_name.as_str().map(|s| s.to_string());
+        }
+        #[cfg(feature = "image")]
+        if let Some(image) = map.get("image") {
+            let image_str = image
+                .as_str()
+                .ok_or_else(|| serde::de::Error::custom("image must be a string"))?;
+            let image = Arc::new(PhotonImage::new_from_base64(image_str));
+            message.image = Some(image);
+        }
+        Ok(message)
     }
 }
 
