@@ -6,6 +6,7 @@
     thinking?: string;
     tool_calls?: any[];
     tool_name?: string;
+    image?: string;
     data?: {
       content: string | string[];
     };
@@ -71,7 +72,7 @@
             html += DOMPurify.sanitize(JSON.stringify(content.join("\n\n"), null, 2));
           }
         }
-        return { role, html };
+        return { role, html, image: msg.image };
       })
       .filter(({ role }) => role !== "system");
   });
@@ -107,6 +108,11 @@
             {@html message.html}
           {:else}
             {message.html}
+          {/if}
+          {#if message.image}
+            <div class="mt-2">
+              <img src={message.image} alt="" class="max-w-full p-2" />
+            </div>
           {/if}
         </Item.Description>
       </Item.Content>
