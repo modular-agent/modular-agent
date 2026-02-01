@@ -5,21 +5,20 @@ use modular_agent_core::{
 
 const CATEGORY: &str = "Std/UI";
 
-const COMMENT: &str = "comment";
+const NOTE: &str = "note";
 const PORT_SP: &str = " ";
 
 #[modular_agent(
     kind = "UI",
-    title = "Comment",
-    hide_title,
+    title = "Note",
     category = CATEGORY,
-    text_config(name = COMMENT, hide_title)
+    text_config(name = NOTE, hide_title)
 )]
-struct CommentAgent {
+struct NoteAgent {
     data: AgentData,
 }
 
-impl AsAgent for CommentAgent {
+impl AsAgent for NoteAgent {
     fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
             data: AgentData::new(ma, id, spec),
