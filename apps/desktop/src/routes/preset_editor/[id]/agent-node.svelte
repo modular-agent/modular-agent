@@ -4,6 +4,7 @@
     Board: "bg-agent-2",
     Display: "bg-agent-3",
     Input: "bg-agent-3",
+    UI: "bg-agent-4",
   };
 </script>
 
