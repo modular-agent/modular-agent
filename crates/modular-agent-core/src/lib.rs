@@ -1,9 +1,91 @@
 #![recursion_limit = "256"]
-//! Modular Agent Core - A crate for building modular multi-agents intelligent systems.
+//! # Modular Agent Core
 //!
-//! This crate provides a set of tools and abstractions to create, configure, and run agents
-//! in a stream-based architecture. It includes support for defining agent behaviors, managing
-//! agent flows, handling agent input and output.
+//! A Rust framework for building modular multi-agent orchestration systems.
+//!
+//! This crate provides tools and abstractions to create, configure, and run agents
+//! in a stream-based architecture. It supports defining agent behaviors, managing
+//! agent flows, and handling agent input/output through a board-based messaging system.
+//!
+//! ## Quick Start
+//!
+//! ```rust,no_run
+//! use modular_agent_core::{AgentError, AgentValue, ModularAgent, ModularAgentEvent};
+//!
+//! #[tokio::main]
+//! async fn main() -> Result<(), AgentError> {
+//!     // 1. Initialize and prepare ModularAgent
+//!     let ma = ModularAgent::init()?;
+//!     ma.ready().await?;
+//!
+//!     // 2. Subscribe to board events BEFORE starting preset (avoid race condition)
+//!     let output_board = "output".to_string();
+//!     let mut board_rx = ma.subscribe_to_event(move |event| {
+//!         if let ModularAgentEvent::Board(name, value) = event {
+//!             if name == output_board {
+//!                 return Some(value);
+//!             }
+//!         }
+//!         None
+//!     });
+//!
+//!     // 3. Load and start a preset from file
+//!     let preset_id = ma.open_preset_from_file("preset.json", None).await?;
+//!     ma.start_preset(&preset_id).await?;
+//!
+//!     // 4. Send input to the agent network via a board
+//!     ma.write_board_value("input".to_string(), AgentValue::string("Hello")).await?;
+//!
+//!     // 5. Receive output from the agent network
+//!     if let Some(value) = board_rx.recv().await {
+//!         println!("Output: {:?}", value);
+//!     }
+//!
+//!     // 6. Cleanup
+//!     ma.stop_preset(&preset_id).await?;
+//!     ma.quit();
+//!
+//!     Ok(())
+//! }
+//! ```
+//!
+//! ## Core Concepts
+//!
+//! ### ModularAgent
+//!
+//! [`ModularAgent`] is the central orchestrator that manages agent lifecycle, connections,
+//! and message routing. It maintains agent instances, connection maps, and handles events.
+//!
+//! ### Agents
+//!
+//! Agents are processing units that receive messages via channels and process them
+//! asynchronously. Implement the [`AsAgent`] trait to create custom agents, or use the
+//! `#[modular_agent]` macro for declarative agent definitions.
+//!
+//! ### Boards
+//!
+//! Boards provide external I/O to the agent network:
+//!
+//! - **BoardOutAgent** (`Board->`): Entry point for external input. When you call
+//!   [`ModularAgent::write_board_value`], the value is delivered to all `BoardOutAgent`
+//!   instances listening to that board name, which then forward it to connected agents.
+//!
+//! - **BoardInAgent** (`->Board`): Exit point for external output. When an agent sends
+//!   a value to a `BoardInAgent`, it broadcasts to that board, triggering a
+//!   [`ModularAgentEvent::Board`] event.
+//!
+//! ### Presets
+//!
+//! Presets are collections of agents and their connections, defined in JSON format.
+//! They can be loaded from files and managed via [`ModularAgent`] methods.
+//!
+//! ## Feature Flags
+//!
+//! - `file` - File handling support (enabled by default)
+//! - `image` - Image processing with photon-rs (enabled by default)
+//! - `llm` - LLM integration with Message/ToolCall types (enabled by default)
+//! - `mcp` - Model Context Protocol integration (enabled by default)
+//! - `test-utils` - Testing utilities including TestProbeAgent
 
 mod agent;
 mod board_agent;

@@ -20,6 +20,35 @@ use crate::value::AgentValue;
 const MESSAGE_LIMIT: usize = 1024;
 const EVENT_CHANNEL_CAPACITY: usize = 256;
 
+/// The central orchestrator for the modular agent system.
+///
+/// `ModularAgent` manages agent lifecycle, connections, and message routing.
+/// It maintains agent instances, connection maps, and handles [`ModularAgentEvent`]s.
+///
+/// # Example
+///
+/// ```rust,no_run
+/// use modular_agent_core::{ModularAgent, AgentValue, ModularAgentEvent};
+///
+/// #[tokio::main]
+/// async fn main() -> Result<(), Box<dyn std::error::Error>> {
+///     // Initialize and start
+///     let ma = ModularAgent::init()?;
+///     ma.ready().await?;
+///
+///     // Load a preset
+///     let preset_id = ma.open_preset_from_file("my_preset.json", None).await?;
+///     ma.start_preset(&preset_id).await?;
+///
+///     // Send input to a board
+///     ma.write_board_value("input".to_string(), AgentValue::string("hello")).await?;
+///
+///     // Cleanup
+///     ma.stop_preset(&preset_id).await?;
+///     ma.quit();
+///     Ok(())
+/// }
+/// ```
 #[derive(Clone)]
 pub struct ModularAgent {
     // agent id -> agent
@@ -78,7 +107,18 @@ impl ModularAgent {
             .ok_or(AgentError::TxNotInitialized)
     }
 
-    /// Initialize ModularAgent.
+    /// Initialize a new `ModularAgent` instance.
+    ///
+    /// This creates a new `ModularAgent` and registers all available agent definitions
+    /// from the inventory. Call [`ready`](Self::ready) after this to start the message loop.
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// use modular_agent_core::ModularAgent;
+    ///
+    /// let ma = ModularAgent::init().unwrap();
+    /// ```
     pub fn init() -> Result<Self, AgentError> {
         let ma = Self::new();
         ma.register_agents();
@@ -89,13 +129,43 @@ impl ModularAgent {
         registry::register_inventory_agents(self);
     }
 
-    /// Prepare ModularAgent to be ready.
+    /// Start the internal message loop.
+    ///
+    /// This must be called after [`init`](Self::init) before loading presets or sending messages.
+    /// The message loop handles routing between agents and board events.
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// use modular_agent_core::ModularAgent;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let ma = ModularAgent::init().unwrap();
+    ///     ma.ready().await.unwrap(); // Start the message loop
+    /// }
+    /// ```
     pub async fn ready(&self) -> Result<(), AgentError> {
         self.spawn_message_loop().await?;
         Ok(())
     }
 
-    /// Quit ModularAgent.
+    /// Shut down the `ModularAgent`.
+    ///
+    /// This stops the internal message loop. Call [`stop_preset`](Self::stop_preset)
+    /// for each running preset before calling this method for graceful shutdown.
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// # use modular_agent_core::ModularAgent;
+    /// # async fn example(ma: ModularAgent, preset_id: &str) {
+    /// // Stop all presets first
+    /// ma.stop_preset(preset_id).await.unwrap();
+    /// // Then quit
+    /// ma.quit();
+    /// # }
+    /// ```
     pub fn quit(&self) {
         let mut tx_lock = self.tx.lock().unwrap();
         *tx_lock = None;
@@ -862,7 +932,30 @@ impl ModularAgent {
         message::try_send_agent_out(self, agent_id, ctx, port, value)
     }
 
-    /// Write a value to the board.
+    /// Write a value to a named board.
+    ///
+    /// This is the primary method for sending external input into the agent network.
+    /// The value will be delivered to all [`BoardOutAgent`](crate::board_agent::BoardOutAgent)
+    /// instances listening to the specified board name, which will then forward it to
+    /// their connected agents.
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - The board name to write to. Must match the `name` config of a `BoardOutAgent`.
+    /// * `value` - The value to send.
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// # use modular_agent_core::{ModularAgent, AgentValue};
+    /// # async fn example(ma: ModularAgent) {
+    /// // Send a string to the "input" board
+    /// ma.write_board_value("input".to_string(), AgentValue::string("hello")).await.unwrap();
+    ///
+    /// // Send an integer
+    /// ma.write_board_value("numbers".to_string(), AgentValue::integer(42)).await.unwrap();
+    /// # }
+    /// ```
     pub async fn write_board_value(
         &self,
         name: String,
@@ -932,10 +1025,47 @@ impl ModularAgent {
         self.observers.subscribe()
     }
 
-    /// Subscribe to a specific type of `ModularAgentEvent`.
+    /// Subscribe to filtered [`ModularAgentEvent`]s.
     ///
-    /// It takes a closure that filters and maps the events, and returns an `mpsc::UnboundedReceiver`
-    /// that will receive only the successfully mapped events.
+    /// This method creates a filtered subscription to events. The provided closure
+    /// filters and maps events, and only successfully mapped events are forwarded
+    /// to the returned receiver.
+    ///
+    /// **Important**: Subscribe to events BEFORE starting presets to avoid missing
+    /// events due to race conditions.
+    ///
+    /// # Arguments
+    ///
+    /// * `filter_map` - A closure that receives each event and returns `Some(T)` for
+    ///   events you want to receive, or `None` to skip them.
+    ///
+    /// # Returns
+    ///
+    /// An unbounded receiver that will receive the filtered and mapped events.
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// use modular_agent_core::{ModularAgent, ModularAgentEvent, AgentValue};
+    ///
+    /// # async fn example(ma: &ModularAgent) {
+    /// // Subscribe to a specific board's output
+    /// let output_board = "output".to_string();
+    /// let mut board_rx = ma.subscribe_to_event(move |event| {
+    ///     if let ModularAgentEvent::Board(name, value) = event {
+    ///         if name == output_board {
+    ///             return Some(value);
+    ///         }
+    ///     }
+    ///     None
+    /// });
+    ///
+    /// // Now start the preset and receive events
+    /// while let Some(value) = board_rx.recv().await {
+    ///     println!("Received: {:?}", value);
+    /// }
+    /// # }
+    /// ```
     pub fn subscribe_to_event<F, T>(&self, mut filter_map: F) -> mpsc::UnboundedReceiver<T>
     where
         F: FnMut(ModularAgentEvent) -> Option<T> + Send + 'static,
@@ -1002,11 +1132,55 @@ impl ModularAgent {
     }
 }
 
+/// Events emitted by [`ModularAgent`] during operation.
+///
+/// Subscribe to these events using [`ModularAgent::subscribe`] or
+/// [`ModularAgent::subscribe_to_event`].
+///
+/// # Example
+///
+/// ```rust,no_run
+/// use modular_agent_core::{ModularAgent, ModularAgentEvent};
+///
+/// # fn example(ma: &ModularAgent) {
+/// // Subscribe to all board events
+/// let mut rx = ma.subscribe_to_event(|event| {
+///     if let ModularAgentEvent::Board(name, value) = event {
+///         Some((name, value))
+///     } else {
+///         None
+///     }
+/// });
+/// # }
+/// ```
 #[derive(Clone, Debug)]
 pub enum ModularAgentEvent {
-    AgentConfigUpdated(String, String, AgentValue), // (agent_id, key, value)
-    AgentError(String, String),                     // (agent_id, message)
-    AgentIn(String, String),                        // (agent_id, port)
-    AgentSpecUpdated(String),                       // (agent_id)
-    Board(String, AgentValue),                      // (board name, value)
+    /// An agent's configuration was updated.
+    ///
+    /// Fields: `(agent_id, config_key, new_value)`
+    AgentConfigUpdated(String, String, AgentValue),
+
+    /// An agent encountered an error.
+    ///
+    /// Fields: `(agent_id, error_message)`
+    AgentError(String, String),
+
+    /// An agent received input on a port.
+    ///
+    /// Fields: `(agent_id, port_name)`
+    AgentIn(String, String),
+
+    /// An agent's spec was updated.
+    ///
+    /// Fields: `(agent_id)`
+    AgentSpecUpdated(String),
+
+    /// A value was written to a board.
+    ///
+    /// This event is emitted when:
+    /// - [`ModularAgent::write_board_value`] is called
+    /// - A [`BoardInAgent`](crate::board_agent::BoardInAgent) receives a value
+    ///
+    /// Fields: `(board_name, value)`
+    Board(String, AgentValue),
 }

@@ -1,3 +1,61 @@
+//! Board agents for external I/O with the agent network.
+//!
+//! This module provides agents that bridge external input/output with the internal
+//! agent network through named "boards".
+//!
+//! # Board System Overview
+//!
+//! Boards are named channels for external communication:
+//!
+//! ```text
+//! External Input                         Agent Network                        External Output
+//!       │                                                                           ▲
+//!       │  write_board_value("input", value)                                        │
+//!       ▼                                                                           │
+//! ┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐      │
+//! │ BoardOut    │────▶│   Agent A   │────▶│   Agent B   │────▶│ BoardIn     │──────┘
+//! │ (Board->)   │     │             │     │             │     │ (->Board)   │
+//! │ name="input"│     └─────────────┘     └─────────────┘     │ name="output│
+//! └─────────────┘                                             └─────────────┘
+//!                                                                    │
+//!                                                                    ▼
+//!                                                    ModularAgentEvent::Board("output", value)
+//! ```
+//!
+//! # Agent Types
+//!
+//! - [`BoardOutAgent`] (`Board->`): Entry point for external input. Listens to
+//!   [`ModularAgent::write_board_value`](crate::ModularAgent::write_board_value) calls
+//!   and forwards values to connected agents.
+//!
+//! - [`BoardInAgent`] (`->Board`): Exit point for external output. When it receives
+//!   a value, it broadcasts to the named board, triggering a
+//!   [`ModularAgentEvent::Board`](crate::ModularAgentEvent::Board) event.
+//!
+//! # Preset Example
+//!
+//! ```json
+//! {
+//!   "agents": [
+//!     {
+//!       "id": "in",
+//!       "def_name": "modular_agent_core::board_agent::BoardOutAgent",
+//!       "outputs": ["value"],
+//!       "configs": { "name": "input" }
+//!     },
+//!     {
+//!       "id": "out",
+//!       "def_name": "modular_agent_core::board_agent::BoardInAgent",
+//!       "inputs": ["value"],
+//!       "configs": { "name": "output" }
+//!     }
+//!   ],
+//!   "connections": [
+//!     { "source": "in", "source_handle": "value", "target": "out", "target_handle": "value" }
+//!   ]
+//! }
+//! ```
+
 use std::vec;
 
 use async_trait::async_trait;
@@ -17,6 +75,23 @@ const PORT_VALUE: &str = "value";
 
 const CONFIG_NAME: &str = "name";
 
+/// Receives values INTO a named board FROM connected agents.
+///
+/// When this agent receives a value on its input port, it broadcasts the value
+/// to the named board, which:
+/// 1. Stores the value in the board's value cache
+/// 2. Emits a [`ModularAgentEvent::Board`](crate::ModularAgentEvent::Board) event
+/// 3. Forwards the value to any [`BoardOutAgent`] instances listening to the same board
+///
+/// # Configuration
+///
+/// - `name`: The board name to write to (required)
+///
+/// # Data Flow
+///
+/// ```text
+/// Agent Output ──▶ BoardInAgent ──▶ Board "output" ──▶ ModularAgentEvent::Board
+/// ```
 #[modular_agent(
     kind = "Board",
     title = "->Board",
@@ -68,6 +143,27 @@ impl AsAgent for BoardInAgent {
     }
 }
 
+/// Outputs values FROM a named board TO connected agents.
+///
+/// This agent is the entry point for external input into the agent network.
+/// When [`ModularAgent::write_board_value`](crate::ModularAgent::write_board_value)
+/// is called with a matching board name, this agent receives the value and
+/// forwards it to all connected agents via its output port.
+///
+/// # Configuration
+///
+/// - `name`: The board name to listen to (required)
+///
+/// # Data Flow
+///
+/// ```text
+/// write_board_value("input", value) ──▶ BoardOutAgent ──▶ Connected Agents
+/// ```
+///
+/// # Note on Naming
+///
+/// The name "BoardOutAgent" refers to data flowing OUT of the board system
+/// INTO the agent network. Think of it as "Board -> Agents".
 #[modular_agent(
     kind = "Board",
     title = "Board->",
@@ -144,6 +240,15 @@ impl AsAgent for BoardOutAgent {
     }
 }
 
+/// Receives values INTO a preset-scoped variable.
+///
+/// Similar to [`BoardInAgent`], but the board name is scoped to the preset,
+/// using the format `%{preset_id}/{var_name}`. This allows variables to be
+/// isolated between different preset instances.
+///
+/// # Configuration
+///
+/// - `name`: The variable name (required)
 #[modular_agent(
     kind = "Board",
     title = "->Var",
@@ -196,6 +301,15 @@ impl AsAgent for VarInAgent {
     }
 }
 
+/// Outputs values FROM a preset-scoped variable TO connected agents.
+///
+/// Similar to [`BoardOutAgent`], but the board name is scoped to the preset,
+/// using the format `%{preset_id}/{var_name}`. This allows variables to be
+/// isolated between different preset instances.
+///
+/// # Configuration
+///
+/// - `name`: The variable name (required)
 #[modular_agent(
     kind = "Board",
     title = "Var->",
