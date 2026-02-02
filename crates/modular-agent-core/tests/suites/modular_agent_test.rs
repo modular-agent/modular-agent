@@ -16,10 +16,10 @@ fn test_init() {
     keys.sort();
     let expected = vec![
         "main_test::common::agents::CounterAgent",
-        "modular_agent_core::board_agent::BoardInAgent",
-        "modular_agent_core::board_agent::BoardOutAgent",
-        "modular_agent_core::board_agent::VarInAgent",
-        "modular_agent_core::board_agent::VarOutAgent",
+        "modular_agent_core::external_agent::ExternalInputAgent",
+        "modular_agent_core::external_agent::ExternalOutputAgent",
+        "modular_agent_core::external_agent::LocalInputAgent",
+        "modular_agent_core::external_agent::LocalOutputAgent",
         "modular_agent_core::test_utils::TestProbeAgent",
         "modular_agent_core::tool::CallToolAgent",
         "modular_agent_core::tool::CallToolMessageAgent",

@@ -11,11 +11,11 @@ struct Args {
     /// Path to the preset JSON file
     preset: String,
 
-    /// Name of the input board
+    /// Name of the input channel
     #[arg(short, long, default_value = "input")]
     input: String,
 
-    /// Name of the output board
+    /// Name of the output channel
     #[arg(short, long, default_value = "output")]
     output: String,
 
@@ -47,11 +47,11 @@ async fn main() -> Result<(), AgentError> {
     let ma = ModularAgent::init()?;
     ma.ready().await?;
 
-    // Subscribe to output board BEFORE starting preset (avoid race condition)
-    let output_board = args.output.clone();
-    let mut board_rx = ma.subscribe_to_event(move |event| {
-        if let ModularAgentEvent::Board(name, value) = event {
-            if name == output_board {
+    // Subscribe to external output BEFORE starting preset (avoid race condition)
+    let output_channel = args.output.clone();
+    let mut output_rx = ma.subscribe_to_event(move |event| {
+        if let ModularAgentEvent::ExternalOutput(name, value) = event {
+            if name == output_channel {
                 return Some(value);
             }
         }
@@ -65,7 +65,7 @@ async fn main() -> Result<(), AgentError> {
     if args.verbose {
         eprintln!("Preset loaded: {}", args.preset);
         eprintln!(
-            "Input board: {}, Output board: {}",
+            "Input channel: {}, Output channel: {}",
             args.input, args.output
         );
     }
@@ -87,7 +87,7 @@ async fn main() -> Result<(), AgentError> {
             result = lines.next_line() => {
                 match result {
                     Ok(Some(line)) => {
-                        ma.write_board_value(
+                        ma.write_external_input(
                             args.input.clone(),
                             AgentValue::string(line)
                         ).await?;
@@ -99,7 +99,7 @@ async fn main() -> Result<(), AgentError> {
                     }
                 }
             }
-            Some(value) = board_rx.recv() => {
+            Some(value) = output_rx.recv() => {
                 println!("{}", format_value(&value));
             }
         }
@@ -110,7 +110,7 @@ async fn main() -> Result<(), AgentError> {
     ma.quit();
 
     // Drain any remaining output
-    while let Ok(value) = board_rx.try_recv() {
+    while let Ok(value) = output_rx.try_recv() {
         println!("{}", format_value(&value));
     }
 

@@ -1,10 +1,10 @@
 {
   "id": "10",
-  "name": "Core/Board2",
+  "name": "Core/External2",
   "agents": [
     {
       "id": "432",
-      "def_name": "modular_agent_core::board_agent::BoardInAgent",
+      "def_name": "modular_agent_core::external_agent::ExternalOutputAgent",
       "inputs": [
         "value"
       ],
@@ -22,12 +22,12 @@
     },
     {
       "id": "433",
-      "def_name": "modular_agent_core::board_agent::BoardOutAgent",
+      "def_name": "modular_agent_core::external_agent::ExternalInputAgent",
       "outputs": [
         "value"
       ],
       "configs": {
-        "name": "board2"
+        "name": "channel2"
       },
       "config_specs": {
         "name": {

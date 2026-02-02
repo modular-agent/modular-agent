@@ -22,8 +22,8 @@ pub async fn setup_modular_agent() -> ModularAgent {
     let ma = ModularAgent::init().unwrap();
     ma.ready().await.unwrap();
 
-    // set an observer to receive board events
-    subscribe_board_observer(&ma).unwrap();
+    // set an observer to receive external output events
+    subscribe_external_output_observer(&ma).unwrap();
 
     ma
 }
@@ -35,70 +35,70 @@ pub async fn open_and_start_preset(ma: &ModularAgent, path: &str) -> Result<Stri
     Ok(id)
 }
 
-// Board Event Subscription
+// External Output Event Subscription
 
-type BoardReceiver = Arc<AsyncMutex<mpsc::UnboundedReceiver<(String, AgentValue)>>>;
+type ExternalOutputReceiver = Arc<AsyncMutex<mpsc::UnboundedReceiver<(String, AgentValue)>>>;
 
 thread_local! {
-    static BOARD_RX: RefCell<Option<BoardReceiver>> = RefCell::new(None);
+    static EXTERNAL_OUTPUT_RX: RefCell<Option<ExternalOutputReceiver>> = RefCell::new(None);
 }
 
-pub fn subscribe_board_observer(ma: &ModularAgent) -> Result<(), AgentError> {
-    let board_event_rx = ma.subscribe_to_event(|event| {
-        if let ModularAgentEvent::Board(name, value) = event {
+pub fn subscribe_external_output_observer(ma: &ModularAgent) -> Result<(), AgentError> {
+    let output_event_rx = ma.subscribe_to_event(|event| {
+        if let ModularAgentEvent::ExternalOutput(name, value) = event {
             Some((name, value))
         } else {
             None
         }
     });
 
-    BOARD_RX.with(|slot| {
-        *slot.borrow_mut() = Some(Arc::new(AsyncMutex::new(board_event_rx)));
+    EXTERNAL_OUTPUT_RX.with(|slot| {
+        *slot.borrow_mut() = Some(Arc::new(AsyncMutex::new(output_event_rx)));
     });
     Ok(())
 }
 
-pub const DEFAULT_BOARD_TIMEOUT: Duration = Duration::from_secs(1);
+pub const DEFAULT_OUTPUT_TIMEOUT: Duration = Duration::from_secs(1);
 
-fn board_rx() -> Result<BoardReceiver, AgentError> {
-    BOARD_RX
+fn external_output_rx() -> Result<ExternalOutputReceiver, AgentError> {
+    EXTERNAL_OUTPUT_RX
         .with(|slot| slot.borrow().clone())
-        .ok_or_else(|| AgentError::SendMessageFailed("board receiver not initialized".into()))
+        .ok_or_else(|| AgentError::SendMessageFailed("external output receiver not initialized".into()))
 }
 
-pub async fn recv_board_with_timeout(
+pub async fn recv_external_output_with_timeout(
     duration: Duration,
 ) -> Result<(String, AgentValue), AgentError> {
-    let rx = board_rx()?;
+    let rx = external_output_rx()?;
     let mut rx = rx.lock().await;
     timeout(duration, rx.recv())
         .await
-        .map_err(|_| AgentError::SendMessageFailed("board receive timed out".into()))?
-        .ok_or_else(|| AgentError::SendMessageFailed("board channel closed".into()))
+        .map_err(|_| AgentError::SendMessageFailed("external output receive timed out".into()))?
+        .ok_or_else(|| AgentError::SendMessageFailed("external output channel closed".into()))
 }
 
-pub async fn expect_board_value(
+pub async fn expect_external_output(
     expected_name: &str,
     expected_value: &AgentValue,
 ) -> Result<(), AgentError> {
-    let (name, value) = recv_board_with_timeout(DEFAULT_BOARD_TIMEOUT).await?;
+    let (name, value) = recv_external_output_with_timeout(DEFAULT_OUTPUT_TIMEOUT).await?;
     if name == expected_name && &value == expected_value {
         Ok(())
     } else {
         Err(AgentError::SendMessageFailed(format!(
-            "expected board '{}' with value {:?}, got '{}' with value {:?}",
+            "expected output '{}' with value {:?}, got '{}' with value {:?}",
             expected_name, expected_value, name, value
         )))
     }
 }
 
-pub async fn expect_var_value(
+pub async fn expect_local_value(
     flow_id: &str,
     var_name: &str,
     expected_value: &AgentValue,
 ) -> Result<(), AgentError> {
     let expected_name = format!("%{}/{}", flow_id, var_name);
-    expect_board_value(&expected_name, expected_value).await
+    expect_external_output(&expected_name, expected_value).await
 }
 
 // TestProbeAgent

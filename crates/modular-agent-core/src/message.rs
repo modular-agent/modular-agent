@@ -11,7 +11,7 @@ pub enum AgentEventMessage {
         port: String,
         value: AgentValue,
     },
-    BoardOut {
+    ExternalOutput {
         name: String,
         ctx: AgentContext,
         value: AgentValue,
@@ -57,7 +57,7 @@ pub fn try_send_agent_out(
         })
 }
 
-pub async fn send_board_out(
+pub async fn send_external_output(
     ma: &ModularAgent,
     name: String,
     ctx: AgentContext,
@@ -65,10 +65,10 @@ pub async fn send_board_out(
 ) -> Result<(), AgentError> {
     ma
         .tx()?
-        .send(AgentEventMessage::BoardOut { name, ctx, value })
+        .send(AgentEventMessage::ExternalOutput { name, ctx, value })
         .await
         .map_err(|_| {
-            AgentError::SendMessageFailed("Failed to try_send BoardOut message".to_string())
+            AgentError::SendMessageFailed("Failed to send ExternalOutput message".to_string())
         })
 }
 
@@ -114,19 +114,19 @@ pub async fn agent_out(
     }
 }
 
-pub async fn board_out(ma: &ModularAgent, name: String, ctx: AgentContext, value: AgentValue) {
+pub async fn external_input(ma: &ModularAgent, name: String, ctx: AgentContext, value: AgentValue) {
     {
-        let mut board_value = ma.board_value.lock().unwrap();
-        board_value.insert(name.clone(), value.clone());
+        let mut external_values = ma.external_values.lock().unwrap();
+        external_values.insert(name.clone(), value.clone());
     }
-    let board_nodes;
+    let input_nodes;
     {
-        let env_board_nodes = ma.board_out_agents.lock().unwrap();
-        board_nodes = env_board_nodes.get(&name).cloned();
+        let env_input_nodes = ma.external_input_agents.lock().unwrap();
+        input_nodes = env_input_nodes.get(&name).cloned();
     }
-    if let Some(board_nodes) = board_nodes {
-        for node in board_nodes {
-            // Perhaps we could process this by send_message_to BoardOutAgent
+    if let Some(input_nodes) = input_nodes {
+        for node in input_nodes {
+            // Perhaps we could process this by send_message_to ExternalInputAgent
 
             let edges;
             {
@@ -148,5 +148,5 @@ pub async fn board_out(ma: &ModularAgent, name: String, ctx: AgentContext, value
         }
     }
 
-    ma.emit_board(name, value);
+    ma.emit_external_output(name, value);
 }

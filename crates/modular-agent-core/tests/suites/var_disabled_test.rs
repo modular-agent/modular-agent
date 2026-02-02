@@ -3,7 +3,7 @@ extern crate modular_agent_core as ma;
 use ma::{AgentError, AgentValue, test_utils};
 use serial_test::serial;
 
-#[serial(board_group)]
+#[serial(external_group)]
 #[tokio::test]
 async fn test_var_disabled_routing() {
     let ma = test_utils::setup_modular_agent().await;
@@ -14,18 +14,18 @@ async fn test_var_disabled_routing() {
             .await
             .unwrap();
 
-    ma.write_var_value(&var_preset_id, "var1", AgentValue::string("hello"))
+    ma.write_local_input(&var_preset_id, "var1", AgentValue::string("hello"))
         .await
         .unwrap();
 
     // var1 is diabled, but we sent "hello" to it, so the notification should still sent.
-    test_utils::expect_var_value(&var_preset_id, "var1", &AgentValue::string("hello"))
+    test_utils::expect_local_value(&var_preset_id, "var1", &AgentValue::string("hello"))
         .await
         .unwrap();
 
     // var2 is disabled, so the notification should fail.
     let res =
-        test_utils::expect_var_value(&var_preset_id, "var2", &AgentValue::string("hello")).await;
+        test_utils::expect_local_value(&var_preset_id, "var2", &AgentValue::string("hello")).await;
     assert!(matches!(res, Err(AgentError::SendMessageFailed(_))));
 
     ma.quit();

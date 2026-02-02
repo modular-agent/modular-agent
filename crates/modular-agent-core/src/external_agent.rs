@@ -1,36 +1,44 @@
-//! Board agents for external I/O with the agent network.
+//! External and local I/O agents for the agent network.
 //!
 //! This module provides agents that bridge external input/output with the internal
-//! agent network through named "boards".
+//! agent network through named channels.
 //!
-//! # Board System Overview
+//! # External I/O Overview
 //!
-//! Boards are named channels for external communication:
+//! External agents provide named channels for external communication:
 //!
 //! ```text
 //! External Input                         Agent Network                        External Output
 //!       │                                                                           ▲
-//!       │  write_board_value("input", value)                                        │
+//!       │  write_external_input("input", value)                                     │
 //!       ▼                                                                           │
 //! ┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐      │
-//! │ BoardOut    │────▶│   Agent A   │────▶│   Agent B   │────▶│ BoardIn     │──────┘
-//! │ (Board->)   │     │             │     │             │     │ (->Board)   │
+//! │ ExtInput    │────▶│   Agent A   │────▶│   Agent B   │────▶│ ExtOutput   │──────┘
+//! │ (ExtIn->)   │     │             │     │             │     │ (->ExtOut)  │
 //! │ name="input"│     └─────────────┘     └─────────────┘     │ name="output│
 //! └─────────────┘                                             └─────────────┘
 //!                                                                    │
 //!                                                                    ▼
-//!                                                    ModularAgentEvent::Board("output", value)
+//!                                               ModularAgentEvent::ExternalOutput("output", value)
 //! ```
 //!
 //! # Agent Types
 //!
-//! - [`BoardOutAgent`] (`Board->`): Entry point for external input. Listens to
-//!   [`ModularAgent::write_board_value`](crate::ModularAgent::write_board_value) calls
+//! ## External Agents (Global scope)
+//!
+//! - [`ExternalInputAgent`] (`ExtIn->`): Entry point for external input. Listens to
+//!   [`ModularAgent::write_external_input`](crate::ModularAgent::write_external_input) calls
 //!   and forwards values to connected agents.
 //!
-//! - [`BoardInAgent`] (`->Board`): Exit point for external output. When it receives
-//!   a value, it broadcasts to the named board, triggering a
-//!   [`ModularAgentEvent::Board`](crate::ModularAgentEvent::Board) event.
+//! - [`ExternalOutputAgent`] (`->ExtOut`): Exit point for external output. When it receives
+//!   a value, it broadcasts to the named channel, triggering a
+//!   [`ModularAgentEvent::ExternalOutput`](crate::ModularAgentEvent::ExternalOutput) event.
+//!
+//! ## Local Agents (Preset scope)
+//!
+//! - [`LocalInputAgent`] (`LocalIn->`): Similar to `ExternalInputAgent`, but scoped to the preset.
+//!
+//! - [`LocalOutputAgent`] (`->LocalOut`): Similar to `ExternalOutputAgent`, but scoped to the preset.
 //!
 //! # Preset Example
 //!
@@ -39,13 +47,13 @@
 //!   "agents": [
 //!     {
 //!       "id": "in",
-//!       "def_name": "modular_agent_core::board_agent::BoardOutAgent",
+//!       "def_name": "modular_agent_core::external_agent::ExternalInputAgent",
 //!       "outputs": ["value"],
 //!       "configs": { "name": "input" }
 //!     },
 //!     {
 //!       "id": "out",
-//!       "def_name": "modular_agent_core::board_agent::BoardInAgent",
+//!       "def_name": "modular_agent_core::external_agent::ExternalOutputAgent",
 //!       "inputs": ["value"],
 //!       "configs": { "name": "output" }
 //!     }
@@ -69,58 +77,58 @@ use crate::modular_agent::ModularAgent;
 use crate::spec::AgentSpec;
 use crate::value::AgentValue;
 
-const CATEGORY: &str = "Core/Board";
+const CATEGORY: &str = "Core/IO";
 
 const PORT_VALUE: &str = "value";
 
 const CONFIG_NAME: &str = "name";
 
-/// Receives values INTO a named board FROM connected agents.
+/// Receives values FROM connected agents and outputs them externally.
 ///
 /// When this agent receives a value on its input port, it broadcasts the value
-/// to the named board, which:
-/// 1. Stores the value in the board's value cache
-/// 2. Emits a [`ModularAgentEvent::Board`](crate::ModularAgentEvent::Board) event
-/// 3. Forwards the value to any [`BoardOutAgent`] instances listening to the same board
+/// to the named channel, which:
+/// 1. Stores the value in the channel's value cache
+/// 2. Emits a [`ModularAgentEvent::ExternalOutput`](crate::ModularAgentEvent::ExternalOutput) event
+/// 3. Forwards the value to any [`ExternalInputAgent`] instances listening to the same channel
 ///
 /// # Configuration
 ///
-/// - `name`: The board name to write to (required)
+/// - `name`: The channel name to write to (required)
 ///
 /// # Data Flow
 ///
 /// ```text
-/// Agent Output ──▶ BoardInAgent ──▶ Board "output" ──▶ ModularAgentEvent::Board
+/// Agent Output ──▶ ExternalOutputAgent ──▶ Channel "output" ──▶ ModularAgentEvent::ExternalOutput
 /// ```
 #[modular_agent(
-    kind = "Board",
-    title = "->Board",
+    kind = "External",
+    title = "->ExtOut",
     category = CATEGORY,
     inputs = [PORT_VALUE],
     string_config(
         name = CONFIG_NAME,
     )
 )]
-struct BoardInAgent {
+struct ExternalOutputAgent {
     data: AgentData,
-    board_name: Option<String>,
+    channel_name: Option<String>,
 }
 
 #[async_trait]
-impl AsAgent for BoardInAgent {
+impl AsAgent for ExternalOutputAgent {
     fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
-        let board_name = spec
+        let channel_name = spec
             .configs
             .as_ref()
             .and_then(|c| c.get_string(CONFIG_NAME).ok());
         Ok(Self {
             data: AgentData::new(ma, id, spec),
-            board_name,
+            channel_name,
         })
     }
 
     fn configs_changed(&mut self) -> Result<(), AgentError> {
-        self.board_name = self.configs()?.get_string(CONFIG_NAME).ok();
+        self.channel_name = self.configs()?.get_string(CONFIG_NAME).ok();
         Ok(())
     }
 
@@ -130,85 +138,80 @@ impl AsAgent for BoardInAgent {
         _port: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
-        let board_name = self.board_name.clone().unwrap_or_default();
-        if board_name.is_empty() {
-            // if board_name is not set, stop processing
+        let channel_name = self.channel_name.clone().unwrap_or_default();
+        if channel_name.is_empty() {
+            // if channel_name is not set, stop processing
             return Ok(());
         }
         let ma = self.ma();
-        ma.send_board_out(board_name.clone(), ctx, value.clone())
+        ma.send_external_output(channel_name.clone(), ctx, value.clone())
             .await?;
 
         Ok(())
     }
 }
 
-/// Outputs values FROM a named board TO connected agents.
+/// Receives external input and outputs values TO connected agents.
 ///
 /// This agent is the entry point for external input into the agent network.
-/// When [`ModularAgent::write_board_value`](crate::ModularAgent::write_board_value)
-/// is called with a matching board name, this agent receives the value and
+/// When [`ModularAgent::write_external_input`](crate::ModularAgent::write_external_input)
+/// is called with a matching channel name, this agent receives the value and
 /// forwards it to all connected agents via its output port.
 ///
 /// # Configuration
 ///
-/// - `name`: The board name to listen to (required)
+/// - `name`: The channel name to listen to (required)
 ///
 /// # Data Flow
 ///
 /// ```text
-/// write_board_value("input", value) ──▶ BoardOutAgent ──▶ Connected Agents
+/// write_external_input("input", value) ──▶ ExternalInputAgent ──▶ Connected Agents
 /// ```
-///
-/// # Note on Naming
-///
-/// The name "BoardOutAgent" refers to data flowing OUT of the board system
-/// INTO the agent network. Think of it as "Board -> Agents".
 #[modular_agent(
-    kind = "Board",
-    title = "Board->",
+    kind = "External",
+    title = "ExtIn->",
     category = CATEGORY,
     outputs = [PORT_VALUE],
     string_config(
         name = CONFIG_NAME,
     )
 )]
-struct BoardOutAgent {
+struct ExternalInputAgent {
     data: AgentData,
-    board_name: Option<String>,
+    channel_name: Option<String>,
 }
 
 #[async_trait]
-impl AsAgent for BoardOutAgent {
+impl AsAgent for ExternalInputAgent {
     fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
-        let board_name = spec
+        let channel_name = spec
             .configs
             .as_ref()
             .and_then(|c| c.get_string(CONFIG_NAME).ok());
         Ok(Self {
             data: AgentData::new(ma, id, spec),
-            board_name,
+            channel_name,
         })
     }
 
     async fn start(&mut self) -> Result<(), AgentError> {
-        if let Some(board_name) = &self.board_name {
+        if let Some(channel_name) = &self.channel_name {
             let ma = self.ma();
-            let mut board_out_agents = ma.board_out_agents.lock().unwrap();
-            if let Some(nodes) = board_out_agents.get_mut(board_name) {
+            let mut external_input_agents = ma.external_input_agents.lock().unwrap();
+            if let Some(nodes) = external_input_agents.get_mut(channel_name) {
                 nodes.push(self.data.id.clone());
             } else {
-                board_out_agents.insert(board_name.clone(), vec![self.data.id.clone()]);
+                external_input_agents.insert(channel_name.clone(), vec![self.data.id.clone()]);
             }
         }
         Ok(())
     }
 
     async fn stop(&mut self) -> Result<(), AgentError> {
-        if let Some(board_name) = &self.board_name {
+        if let Some(channel_name) = &self.channel_name {
             let ma = self.ma();
-            let mut board_out_agents = ma.board_out_agents.lock().unwrap();
-            if let Some(nodes) = board_out_agents.get_mut(board_name) {
+            let mut external_input_agents = ma.external_input_agents.lock().unwrap();
+            if let Some(nodes) = external_input_agents.get_mut(channel_name) {
                 nodes.retain(|x| x != &self.data.id);
             }
         }
@@ -216,33 +219,33 @@ impl AsAgent for BoardOutAgent {
     }
 
     fn configs_changed(&mut self) -> Result<(), AgentError> {
-        let board_name = self.configs()?.get_string(CONFIG_NAME).ok();
-        if self.board_name != board_name {
-            if let Some(board_name) = &self.board_name {
+        let channel_name = self.configs()?.get_string(CONFIG_NAME).ok();
+        if self.channel_name != channel_name {
+            if let Some(channel_name) = &self.channel_name {
                 let ma = self.ma();
-                let mut board_out_agents = ma.board_out_agents.lock().unwrap();
-                if let Some(nodes) = board_out_agents.get_mut(board_name) {
+                let mut external_input_agents = ma.external_input_agents.lock().unwrap();
+                if let Some(nodes) = external_input_agents.get_mut(channel_name) {
                     nodes.retain(|x| x != &self.data.id);
                 }
             }
-            if let Some(board_name) = &board_name {
+            if let Some(channel_name) = &channel_name {
                 let ma = self.ma();
-                let mut board_out_agents = ma.board_out_agents.lock().unwrap();
-                if let Some(nodes) = board_out_agents.get_mut(board_name) {
+                let mut external_input_agents = ma.external_input_agents.lock().unwrap();
+                if let Some(nodes) = external_input_agents.get_mut(channel_name) {
                     nodes.push(self.data.id.clone());
                 } else {
-                    board_out_agents.insert(board_name.clone(), vec![self.data.id.clone()]);
+                    external_input_agents.insert(channel_name.clone(), vec![self.data.id.clone()]);
                 }
             }
-            self.board_name = board_name;
+            self.channel_name = channel_name;
         }
         Ok(())
     }
 }
 
-/// Receives values INTO a preset-scoped variable.
+/// Receives values FROM connected agents and outputs them to a preset-scoped local variable.
 ///
-/// Similar to [`BoardInAgent`], but the board name is scoped to the preset,
+/// Similar to [`ExternalOutputAgent`], but the channel name is scoped to the preset,
 /// using the format `%{preset_id}/{var_name}`. This allows variables to be
 /// isolated between different preset instances.
 ///
@@ -250,21 +253,21 @@ impl AsAgent for BoardOutAgent {
 ///
 /// - `name`: The variable name (required)
 #[modular_agent(
-    kind = "Board",
-    title = "->Var",
+    kind = "Local",
+    title = "->LocalOut",
     category = CATEGORY,
     inputs = [PORT_VALUE],
     string_config(
         name = CONFIG_NAME,
     )
 )]
-struct VarInAgent {
+struct LocalOutputAgent {
     data: AgentData,
     var_name: Option<String>,
 }
 
 #[async_trait]
-impl AsAgent for VarInAgent {
+impl AsAgent for LocalOutputAgent {
     fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         let var_name = spec
             .configs
@@ -292,18 +295,18 @@ impl AsAgent for VarInAgent {
             // if var_name is not set, stop processing
             return Ok(());
         }
-        let board_name = board_name_for_var(self.preset_id(), &var_name);
+        let channel_name = channel_name_for_local(self.preset_id(), &var_name);
         let ma = self.ma();
-        ma.send_board_out(board_name.clone(), ctx, value.clone())
+        ma.send_external_output(channel_name.clone(), ctx, value.clone())
             .await?;
 
         Ok(())
     }
 }
 
-/// Outputs values FROM a preset-scoped variable TO connected agents.
+/// Receives values FROM a preset-scoped local variable and outputs them TO connected agents.
 ///
-/// Similar to [`BoardOutAgent`], but the board name is scoped to the preset,
+/// Similar to [`ExternalInputAgent`], but the channel name is scoped to the preset,
 /// using the format `%{preset_id}/{var_name}`. This allows variables to be
 /// isolated between different preset instances.
 ///
@@ -311,21 +314,21 @@ impl AsAgent for VarInAgent {
 ///
 /// - `name`: The variable name (required)
 #[modular_agent(
-    kind = "Board",
-    title = "Var->",
+    kind = "Local",
+    title = "LocalIn->",
     category = CATEGORY,
     outputs = [PORT_VALUE],
     string_config(
         name = CONFIG_NAME,
     )
 )]
-struct VarOutAgent {
+struct LocalInputAgent {
     data: AgentData,
     var_name: Option<String>,
 }
 
 #[async_trait]
-impl AsAgent for VarOutAgent {
+impl AsAgent for LocalInputAgent {
     fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         let var_name = spec
             .configs
@@ -339,13 +342,13 @@ impl AsAgent for VarOutAgent {
 
     async fn start(&mut self) -> Result<(), AgentError> {
         if let Some(var_name) = &self.var_name {
-            let board_name = board_name_for_var(self.preset_id(), var_name);
+            let channel_name = channel_name_for_local(self.preset_id(), var_name);
             let ma = self.ma();
-            let mut board_out_agents = ma.board_out_agents.lock().unwrap();
-            if let Some(nodes) = board_out_agents.get_mut(&board_name) {
+            let mut external_input_agents = ma.external_input_agents.lock().unwrap();
+            if let Some(nodes) = external_input_agents.get_mut(&channel_name) {
                 nodes.push(self.data.id.clone());
             } else {
-                board_out_agents.insert(board_name.clone(), vec![self.data.id.clone()]);
+                external_input_agents.insert(channel_name.clone(), vec![self.data.id.clone()]);
             }
         }
         Ok(())
@@ -353,10 +356,10 @@ impl AsAgent for VarOutAgent {
 
     async fn stop(&mut self) -> Result<(), AgentError> {
         if let Some(var_name) = &self.var_name {
-            let board_name = board_name_for_var(self.preset_id(), var_name);
+            let channel_name = channel_name_for_local(self.preset_id(), var_name);
             let ma = self.ma();
-            let mut board_out_agents = ma.board_out_agents.lock().unwrap();
-            if let Some(nodes) = board_out_agents.get_mut(&board_name) {
+            let mut external_input_agents = ma.external_input_agents.lock().unwrap();
+            if let Some(nodes) = external_input_agents.get_mut(&channel_name) {
                 nodes.retain(|x| x != &self.data.id);
             }
         }
@@ -367,21 +370,21 @@ impl AsAgent for VarOutAgent {
         let new_var_name = self.configs()?.get_string(CONFIG_NAME).ok();
         if self.var_name != new_var_name {
             if let Some(var_name) = &self.var_name {
-                let board_name = board_name_for_var(self.preset_id(), var_name);
+                let channel_name = channel_name_for_local(self.preset_id(), var_name);
                 let ma = self.ma();
-                let mut board_out_agents = ma.board_out_agents.lock().unwrap();
-                if let Some(nodes) = board_out_agents.get_mut(&board_name) {
+                let mut external_input_agents = ma.external_input_agents.lock().unwrap();
+                if let Some(nodes) = external_input_agents.get_mut(&channel_name) {
                     nodes.retain(|x| x != &self.data.id);
                 }
             }
             if let Some(var_name) = &new_var_name {
-                let board_name = board_name_for_var(self.preset_id(), var_name);
+                let channel_name = channel_name_for_local(self.preset_id(), var_name);
                 let ma = self.ma();
-                let mut board_out_agents = ma.board_out_agents.lock().unwrap();
-                if let Some(nodes) = board_out_agents.get_mut(&board_name) {
+                let mut external_input_agents = ma.external_input_agents.lock().unwrap();
+                if let Some(nodes) = external_input_agents.get_mut(&channel_name) {
                     nodes.push(self.data.id.clone());
                 } else {
-                    board_out_agents.insert(board_name.clone(), vec![self.data.id.clone()]);
+                    external_input_agents.insert(channel_name.clone(), vec![self.data.id.clone()]);
                 }
             }
             self.var_name = new_var_name;
@@ -390,6 +393,6 @@ impl AsAgent for VarOutAgent {
     }
 }
 
-fn board_name_for_var(flow_id: &str, var_name: &str) -> String {
+fn channel_name_for_local(flow_id: &str, var_name: &str) -> String {
     format!("%{}/{}", flow_id, var_name)
 }

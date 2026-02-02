@@ -40,8 +40,8 @@ const EVENT_CHANNEL_CAPACITY: usize = 256;
 ///     let preset_id = ma.open_preset_from_file("my_preset.json", None).await?;
 ///     ma.start_preset(&preset_id).await?;
 ///
-///     // Send input to a board
-///     ma.write_board_value("input".to_string(), AgentValue::string("hello")).await?;
+///     // Send external input
+///     ma.write_external_input("input".to_string(), AgentValue::string("hello")).await?;
 ///
 ///     // Cleanup
 ///     ma.stop_preset(&preset_id).await?;
@@ -57,11 +57,11 @@ pub struct ModularAgent {
     // agent id -> sender
     pub(crate) agent_txs: Arc<Mutex<FnvIndexMap<String, mpsc::Sender<AgentMessage>>>>,
 
-    // board name -> [board out agent id]
-    pub(crate) board_out_agents: Arc<Mutex<FnvIndexMap<String, Vec<String>>>>,
+    // channel name -> [external input agent id]
+    pub(crate) external_input_agents: Arc<Mutex<FnvIndexMap<String, Vec<String>>>>,
 
-    // board name -> value
-    pub(crate) board_value: Arc<Mutex<FnvIndexMap<String, AgentValue>>>,
+    // channel name -> value
+    pub(crate) external_values: Arc<Mutex<FnvIndexMap<String, AgentValue>>>,
 
     // source agent id -> [target agent id / source handle / target handle]
     pub(crate) connections: Arc<Mutex<FnvIndexMap<String, Vec<(String, String, String)>>>>,
@@ -88,8 +88,8 @@ impl ModularAgent {
         Self {
             agents: Default::default(),
             agent_txs: Default::default(),
-            board_out_agents: Default::default(),
-            board_value: Default::default(),
+            external_input_agents: Default::default(),
+            external_values: Default::default(),
             connections: Default::default(),
             defs: Default::default(),
             presets: Default::default(),
@@ -132,7 +132,7 @@ impl ModularAgent {
     /// Start the internal message loop.
     ///
     /// This must be called after [`init`](Self::init) before loading presets or sending messages.
-    /// The message loop handles routing between agents and board events.
+    /// The message loop handles routing between agents and external output events.
     ///
     /// # Example
     ///
@@ -932,16 +932,16 @@ impl ModularAgent {
         message::try_send_agent_out(self, agent_id, ctx, port, value)
     }
 
-    /// Write a value to a named board.
+    /// Write a value to a named channel.
     ///
     /// This is the primary method for sending external input into the agent network.
-    /// The value will be delivered to all [`BoardOutAgent`](crate::board_agent::BoardOutAgent)
-    /// instances listening to the specified board name, which will then forward it to
+    /// The value will be delivered to all [`ExternalInputAgent`](crate::external_agent::ExternalInputAgent)
+    /// instances listening to the specified channel name, which will then forward it to
     /// their connected agents.
     ///
     /// # Arguments
     ///
-    /// * `name` - The board name to write to. Must match the `name` config of a `BoardOutAgent`.
+    /// * `name` - The channel name to write to. Must match the `name` config of an `ExternalInputAgent`.
     /// * `value` - The value to send.
     ///
     /// # Example
@@ -949,40 +949,40 @@ impl ModularAgent {
     /// ```rust,no_run
     /// # use modular_agent_core::{ModularAgent, AgentValue};
     /// # async fn example(ma: ModularAgent) {
-    /// // Send a string to the "input" board
-    /// ma.write_board_value("input".to_string(), AgentValue::string("hello")).await.unwrap();
+    /// // Send a string to the "input" channel
+    /// ma.write_external_input("input".to_string(), AgentValue::string("hello")).await.unwrap();
     ///
     /// // Send an integer
-    /// ma.write_board_value("numbers".to_string(), AgentValue::integer(42)).await.unwrap();
+    /// ma.write_external_input("numbers".to_string(), AgentValue::integer(42)).await.unwrap();
     /// # }
     /// ```
-    pub async fn write_board_value(
+    pub async fn write_external_input(
         &self,
         name: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
-        self.send_board_out(name, AgentContext::new(), value).await
+        self.send_external_output(name, AgentContext::new(), value).await
     }
 
-    /// Write a value to the variable board.
-    pub async fn write_var_value(
+    /// Write a value to the local variable channel.
+    pub async fn write_local_input(
         &self,
         preset_id: &str,
         name: &str,
         value: AgentValue,
     ) -> Result<(), AgentError> {
-        let var_name = format!("%{}/{}", preset_id, name);
-        self.send_board_out(var_name, AgentContext::new(), value)
+        let channel_name = format!("%{}/{}", preset_id, name);
+        self.send_external_output(channel_name, AgentContext::new(), value)
             .await
     }
 
-    pub(crate) async fn send_board_out(
+    pub(crate) async fn send_external_output(
         &self,
         name: String,
         ctx: AgentContext,
         value: AgentValue,
     ) -> Result<(), AgentError> {
-        message::send_board_out(self, name, ctx, value).await
+        message::send_external_output(self, name, ctx, value).await
     }
 
     async fn spawn_message_loop(&self) -> Result<(), AgentError> {
@@ -1008,8 +1008,8 @@ impl ModularAgent {
                     } => {
                         message::agent_out(&ma, agent, ctx, port, value).await;
                     }
-                    BoardOut { name, ctx, value } => {
-                        message::board_out(&ma, name, ctx, value).await;
+                    ExternalOutput { name, ctx, value } => {
+                        message::external_input(&ma, name, ctx, value).await;
                     }
                 }
             }
@@ -1049,11 +1049,11 @@ impl ModularAgent {
     /// use modular_agent_core::{ModularAgent, ModularAgentEvent, AgentValue};
     ///
     /// # async fn example(ma: &ModularAgent) {
-    /// // Subscribe to a specific board's output
-    /// let output_board = "output".to_string();
-    /// let mut board_rx = ma.subscribe_to_event(move |event| {
-    ///     if let ModularAgentEvent::Board(name, value) = event {
-    ///         if name == output_board {
+    /// // Subscribe to a specific channel's output
+    /// let output_channel = "output".to_string();
+    /// let mut output_rx = ma.subscribe_to_event(move |event| {
+    ///     if let ModularAgentEvent::ExternalOutput(name, value) = event {
+    ///         if name == output_channel {
     ///             return Some(value);
     ///         }
     ///     }
@@ -1061,7 +1061,7 @@ impl ModularAgent {
     /// });
     ///
     /// // Now start the preset and receive events
-    /// while let Some(value) = board_rx.recv().await {
+    /// while let Some(value) = output_rx.recv().await {
     ///     println!("Received: {:?}", value);
     /// }
     /// # }
@@ -1119,12 +1119,12 @@ impl ModularAgent {
         self.notify_observers(ModularAgentEvent::AgentSpecUpdated(agent_id));
     }
 
-    pub(crate) fn emit_board(&self, name: String, value: AgentValue) {
-        // // ignore variables
+    pub(crate) fn emit_external_output(&self, name: String, value: AgentValue) {
+        // // ignore local variables
         // if name.starts_with('%') {
         //     return;
         // }
-        self.notify_observers(ModularAgentEvent::Board(name, value));
+        self.notify_observers(ModularAgentEvent::ExternalOutput(name, value));
     }
 
     fn notify_observers(&self, event: ModularAgentEvent) {
@@ -1143,9 +1143,9 @@ impl ModularAgent {
 /// use modular_agent_core::{ModularAgent, ModularAgentEvent};
 ///
 /// # fn example(ma: &ModularAgent) {
-/// // Subscribe to all board events
+/// // Subscribe to all external output events
 /// let mut rx = ma.subscribe_to_event(|event| {
-///     if let ModularAgentEvent::Board(name, value) = event {
+///     if let ModularAgentEvent::ExternalOutput(name, value) = event {
 ///         Some((name, value))
 ///     } else {
 ///         None
@@ -1175,12 +1175,12 @@ pub enum ModularAgentEvent {
     /// Fields: `(agent_id)`
     AgentSpecUpdated(String),
 
-    /// A value was written to a board.
+    /// A value was written to an external output channel.
     ///
     /// This event is emitted when:
-    /// - [`ModularAgent::write_board_value`] is called
-    /// - A [`BoardInAgent`](crate::board_agent::BoardInAgent) receives a value
+    /// - [`ModularAgent::write_external_input`] is called and flows through the network
+    /// - An [`ExternalOutputAgent`](crate::external_agent::ExternalOutputAgent) receives a value
     ///
-    /// Fields: `(board_name, value)`
-    Board(String, AgentValue),
+    /// Fields: `(channel_name, value)`
+    ExternalOutput(String, AgentValue),
 }

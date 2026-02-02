@@ -3,7 +3,7 @@ extern crate modular_agent_core as ma;
 use ma::{AgentValue, test_utils};
 use serial_test::serial;
 
-#[serial(board_group)]
+#[serial(external_group)]
 #[tokio::test]
 async fn test_var_routing() {
     let ma = test_utils::setup_modular_agent().await;
@@ -13,15 +13,15 @@ async fn test_var_routing() {
         .await
         .unwrap();
 
-    ma.write_var_value(&var_preset_id, "var1", AgentValue::string("hello"))
+    ma.write_local_input(&var_preset_id, "var1", AgentValue::string("hello"))
         .await
         .unwrap();
 
-    test_utils::expect_var_value(&var_preset_id, "var1", &AgentValue::string("hello"))
+    test_utils::expect_local_value(&var_preset_id, "var1", &AgentValue::string("hello"))
         .await
         .unwrap();
 
-    test_utils::expect_var_value(&var_preset_id, "var2", &AgentValue::string("hello"))
+    test_utils::expect_local_value(&var_preset_id, "var2", &AgentValue::string("hello"))
         .await
         .unwrap();
 

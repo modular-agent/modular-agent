@@ -5,7 +5,7 @@
 //!
 //! This crate provides tools and abstractions to create, configure, and run agents
 //! in a stream-based architecture. It supports defining agent behaviors, managing
-//! agent flows, and handling agent input/output through a board-based messaging system.
+//! agent flows, and handling agent input/output through a channel-based messaging system.
 //!
 //! ## Quick Start
 //!
@@ -18,11 +18,11 @@
 //!     let ma = ModularAgent::init()?;
 //!     ma.ready().await?;
 //!
-//!     // 2. Subscribe to board events BEFORE starting preset (avoid race condition)
-//!     let output_board = "output".to_string();
-//!     let mut board_rx = ma.subscribe_to_event(move |event| {
-//!         if let ModularAgentEvent::Board(name, value) = event {
-//!             if name == output_board {
+//!     // 2. Subscribe to output events BEFORE starting preset (avoid race condition)
+//!     let output_name = "output".to_string();
+//!     let mut output_rx = ma.subscribe_to_event(move |event| {
+//!         if let ModularAgentEvent::ExternalOutput(name, value) = event {
+//!             if name == output_name {
 //!                 return Some(value);
 //!             }
 //!         }
@@ -33,11 +33,11 @@
 //!     let preset_id = ma.open_preset_from_file("preset.json", None).await?;
 //!     ma.start_preset(&preset_id).await?;
 //!
-//!     // 4. Send input to the agent network via a board
-//!     ma.write_board_value("input".to_string(), AgentValue::string("Hello")).await?;
+//!     // 4. Send input to the agent network via external input
+//!     ma.write_external_input("input".to_string(), AgentValue::string("Hello")).await?;
 //!
 //!     // 5. Receive output from the agent network
-//!     if let Some(value) = board_rx.recv().await {
+//!     if let Some(value) = output_rx.recv().await {
 //!         println!("Output: {:?}", value);
 //!     }
 //!
@@ -62,17 +62,17 @@
 //! asynchronously. Implement the [`AsAgent`] trait to create custom agents, or use the
 //! `#[modular_agent]` macro for declarative agent definitions.
 //!
-//! ### Boards
+//! ### External I/O
 //!
-//! Boards provide external I/O to the agent network:
+//! External agents provide I/O to the agent network:
 //!
-//! - **BoardOutAgent** (`Board->`): Entry point for external input. When you call
-//!   [`ModularAgent::write_board_value`], the value is delivered to all `BoardOutAgent`
-//!   instances listening to that board name, which then forward it to connected agents.
+//! - **ExternalInputAgent** (`ExtIn->`): Entry point for external input. When you call
+//!   [`ModularAgent::write_external_input`], the value is delivered to all `ExternalInputAgent`
+//!   instances listening to that name, which then forward it to connected agents.
 //!
-//! - **BoardInAgent** (`->Board`): Exit point for external output. When an agent sends
-//!   a value to a `BoardInAgent`, it broadcasts to that board, triggering a
-//!   [`ModularAgentEvent::Board`] event.
+//! - **ExternalOutputAgent** (`->ExtOut`): Exit point for external output. When an agent sends
+//!   a value to an `ExternalOutputAgent`, it broadcasts to that channel, triggering a
+//!   [`ModularAgentEvent::ExternalOutput`] event.
 //!
 //! ### Presets
 //!
@@ -88,7 +88,7 @@
 //! - `test-utils` - Testing utilities including TestProbeAgent
 
 mod agent;
-mod board_agent;
+mod external_agent;
 mod config;
 mod context;
 mod definition;

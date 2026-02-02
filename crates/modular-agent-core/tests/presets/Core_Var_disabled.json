@@ -4,7 +4,7 @@
   "agents": [
     {
       "id": "434",
-      "def_name": "modular_agent_core::board_agent::VarInAgent",
+      "def_name": "modular_agent_core::external_agent::LocalOutputAgent",
       "inputs": [
         "value"
       ],
@@ -23,7 +23,7 @@
     },
     {
       "id": "435",
-      "def_name": "modular_agent_core::board_agent::VarOutAgent",
+      "def_name": "modular_agent_core::external_agent::LocalInputAgent",
       "outputs": [
         "value"
       ],

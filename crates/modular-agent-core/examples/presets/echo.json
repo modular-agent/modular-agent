@@ -4,13 +4,13 @@
   "agents": [
     {
       "id": "in",
-      "def_name": "modular_agent_core::board_agent::BoardOutAgent",
+      "def_name": "modular_agent_core::external_agent::ExternalInputAgent",
       "outputs": ["value"],
       "configs": { "name": "input" }
     },
     {
       "id": "out",
-      "def_name": "modular_agent_core::board_agent::BoardInAgent",
+      "def_name": "modular_agent_core::external_agent::ExternalOutputAgent",
       "inputs": ["value"],
       "configs": { "name": "output" }
     }

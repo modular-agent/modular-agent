@@ -1,15 +1,15 @@
 {
   "id": "6",
-  "name": "Core/Board1",
+  "name": "Core/External1",
   "agents": [
     {
       "id": "430",
-      "def_name": "modular_agent_core::board_agent::BoardInAgent",
+      "def_name": "modular_agent_core::external_agent::ExternalOutputAgent",
       "inputs": [
         "value"
       ],
       "configs": {
-        "name": "board2"
+        "name": "channel2"
       },
       "config_specs": {
         "name": {
@@ -22,12 +22,12 @@
     },
     {
       "id": "431",
-      "def_name": "modular_agent_core::board_agent::BoardOutAgent",
+      "def_name": "modular_agent_core::external_agent::ExternalInputAgent",
       "outputs": [
         "value"
       ],
       "configs": {
-        "name": "board1"
+        "name": "channel1"
       },
       "config_specs": {
         "name": {
