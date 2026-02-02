@@ -5,7 +5,7 @@ use ma::{AgentValue, test_utils};
 
 #[tokio::test]
 async fn test_input() {
-    let ma = test_utils::setup_mak().await;
+    let ma = test_utils::setup_modular_agent().await;
 
     // load input preset
     let preset_id = test_utils::open_and_start_preset(&ma, "tests/presets/Std_Input_test.json")
@@ -13,103 +13,103 @@ async fn test_input() {
         .unwrap();
 
     // Boolean Input
-    ma.write_var_value(&preset_id, "boolean_trig", AgentValue::unit())
+    ma.write_local_input(&preset_id, "boolean_trig", AgentValue::unit())
         .await
         .unwrap();
-    test_utils::expect_var_value(&preset_id, "boolean_trig", &AgentValue::unit())
+    test_utils::expect_local_value(&preset_id, "boolean_trig", &AgentValue::unit())
         .await
         .unwrap();
-    test_utils::expect_var_value(&preset_id, "boolean_out", &AgentValue::boolean(false))
+    test_utils::expect_local_value(&preset_id, "boolean_out", &AgentValue::boolean(false))
         .await
         .unwrap();
 
-    ma.write_var_value(&preset_id, "boolean_conf", AgentValue::boolean(true))
+    ma.write_local_input(&preset_id, "boolean_conf", AgentValue::boolean(true))
         .await
         .unwrap();
-    test_utils::expect_var_value(&preset_id, "boolean_conf", &AgentValue::boolean(true))
+    test_utils::expect_local_value(&preset_id, "boolean_conf", &AgentValue::boolean(true))
         .await
         .unwrap();
-    test_utils::expect_var_value(&preset_id, "boolean_out", &AgentValue::boolean(true))
+    test_utils::expect_local_value(&preset_id, "boolean_out", &AgentValue::boolean(true))
         .await
         .unwrap();
-    ma.write_var_value(&preset_id, "boolean_trig", AgentValue::unit())
+    ma.write_local_input(&preset_id, "boolean_trig", AgentValue::unit())
         .await
         .unwrap();
-    test_utils::expect_var_value(&preset_id, "boolean_trig", &AgentValue::unit())
+    test_utils::expect_local_value(&preset_id, "boolean_trig", &AgentValue::unit())
         .await
         .unwrap();
-    test_utils::expect_var_value(&preset_id, "boolean_out", &AgentValue::boolean(true))
+    test_utils::expect_local_value(&preset_id, "boolean_out", &AgentValue::boolean(true))
         .await
         .unwrap();
 
     // Integer Input
-    ma.write_var_value(&preset_id, "integer_trig", AgentValue::unit())
+    ma.write_local_input(&preset_id, "integer_trig", AgentValue::unit())
         .await
         .unwrap();
-    test_utils::expect_var_value(&preset_id, "integer_trig", &AgentValue::unit())
+    test_utils::expect_local_value(&preset_id, "integer_trig", &AgentValue::unit())
         .await
         .unwrap();
-    test_utils::expect_var_value(&preset_id, "integer_out", &AgentValue::integer(0))
+    test_utils::expect_local_value(&preset_id, "integer_out", &AgentValue::integer(0))
         .await
         .unwrap();
 
-    ma.write_var_value(&preset_id, "integer_conf", AgentValue::integer(42))
+    ma.write_local_input(&preset_id, "integer_conf", AgentValue::integer(42))
         .await
         .unwrap();
-    test_utils::expect_var_value(&preset_id, "integer_conf", &AgentValue::integer(42))
+    test_utils::expect_local_value(&preset_id, "integer_conf", &AgentValue::integer(42))
         .await
         .unwrap();
-    test_utils::expect_var_value(&preset_id, "integer_out", &AgentValue::integer(42))
+    test_utils::expect_local_value(&preset_id, "integer_out", &AgentValue::integer(42))
         .await
         .unwrap();
-    ma.write_var_value(&preset_id, "integer_trig", AgentValue::unit())
+    ma.write_local_input(&preset_id, "integer_trig", AgentValue::unit())
         .await
         .unwrap();
-    test_utils::expect_var_value(&preset_id, "integer_trig", &AgentValue::unit())
+    test_utils::expect_local_value(&preset_id, "integer_trig", &AgentValue::unit())
         .await
         .unwrap();
-    test_utils::expect_var_value(&preset_id, "integer_out", &AgentValue::integer(42))
+    test_utils::expect_local_value(&preset_id, "integer_out", &AgentValue::integer(42))
         .await
         .unwrap();
 
     // Number Input
-    ma.write_var_value(&preset_id, "number_trig", AgentValue::unit())
+    ma.write_local_input(&preset_id, "number_trig", AgentValue::unit())
         .await
         .unwrap();
-    test_utils::expect_var_value(&preset_id, "number_trig", &AgentValue::unit())
+    test_utils::expect_local_value(&preset_id, "number_trig", &AgentValue::unit())
         .await
         .unwrap();
-    test_utils::expect_var_value(&preset_id, "number_out", &AgentValue::number(0.0))
+    test_utils::expect_local_value(&preset_id, "number_out", &AgentValue::number(0.0))
         .await
         .unwrap();
 
-    ma.write_var_value(&preset_id, "number_conf", AgentValue::number(3.14))
+    ma.write_local_input(&preset_id, "number_conf", AgentValue::number(3.14))
         .await
         .unwrap();
-    test_utils::expect_var_value(&preset_id, "number_conf", &AgentValue::number(3.14))
+    test_utils::expect_local_value(&preset_id, "number_conf", &AgentValue::number(3.14))
         .await
         .unwrap();
-    test_utils::expect_var_value(&preset_id, "number_out", &AgentValue::number(3.14))
+    test_utils::expect_local_value(&preset_id, "number_out", &AgentValue::number(3.14))
         .await
         .unwrap();
-    ma.write_var_value(&preset_id, "number_trig", AgentValue::unit())
+    ma.write_local_input(&preset_id, "number_trig", AgentValue::unit())
         .await
         .unwrap();
-    test_utils::expect_var_value(&preset_id, "number_trig", &AgentValue::unit())
+    test_utils::expect_local_value(&preset_id, "number_trig", &AgentValue::unit())
         .await
         .unwrap();
-    test_utils::expect_var_value(&preset_id, "number_out", &AgentValue::number(3.14))
+    test_utils::expect_local_value(&preset_id, "number_out", &AgentValue::number(3.14))
         .await
         .unwrap();
 
     // String Input
-    ma.write_var_value(&preset_id, "string_trig", AgentValue::unit())
+    ma.write_local_input(&preset_id, "string_trig", AgentValue::unit())
         .await
         .unwrap();
-    test_utils::expect_var_value(&preset_id, "string_trig", &AgentValue::unit())
+    test_utils::expect_local_value(&preset_id, "string_trig", &AgentValue::unit())
         .await
         .unwrap();
-    test_utils::expect_var_value(
+    test_utils::expect_local_value(
         &preset_id,
         "string_out",
         &AgentValue::string("".to_string()),
@@ -117,34 +117,34 @@ async fn test_input() {
     .await
     .unwrap();
 
-    ma.write_var_value(
+    ma.write_local_input(
         &preset_id,
         "string_conf",
         AgentValue::string("Hello, world!".to_string()),
     )
     .await
     .unwrap();
-    test_utils::expect_var_value(
+    test_utils::expect_local_value(
         &preset_id,
         "string_conf",
         &AgentValue::string("Hello, world!".to_string()),
     )
     .await
     .unwrap();
-    test_utils::expect_var_value(
+    test_utils::expect_local_value(
         &preset_id,
         "string_out",
         &AgentValue::string("Hello, world!".to_string()),
     )
     .await
     .unwrap();
-    ma.write_var_value(&preset_id, "string_trig", AgentValue::unit())
+    ma.write_local_input(&preset_id, "string_trig", AgentValue::unit())
         .await
         .unwrap();
-    test_utils::expect_var_value(&preset_id, "string_trig", &AgentValue::unit())
+    test_utils::expect_local_value(&preset_id, "string_trig", &AgentValue::unit())
         .await
         .unwrap();
-    test_utils::expect_var_value(
+    test_utils::expect_local_value(
         &preset_id,
         "string_out",
         &AgentValue::string("Hello, world!".to_string()),
@@ -153,44 +153,44 @@ async fn test_input() {
     .unwrap();
 
     // Text Input
-    ma.write_var_value(&preset_id, "text_trig", AgentValue::unit())
+    ma.write_local_input(&preset_id, "text_trig", AgentValue::unit())
         .await
         .unwrap();
-    test_utils::expect_var_value(&preset_id, "text_trig", &AgentValue::unit())
+    test_utils::expect_local_value(&preset_id, "text_trig", &AgentValue::unit())
         .await
         .unwrap();
-    test_utils::expect_var_value(&preset_id, "text_out", &AgentValue::string(""))
+    test_utils::expect_local_value(&preset_id, "text_out", &AgentValue::string(""))
         .await
         .unwrap();
 
-    ma.write_var_value(
+    ma.write_local_input(
         &preset_id,
         "text_conf",
         AgentValue::string("Old pond\nFrogs jumped in\nSound of water.\n"),
     )
     .await
     .unwrap();
-    test_utils::expect_var_value(
+    test_utils::expect_local_value(
         &preset_id,
         "text_conf",
         &AgentValue::string("Old pond\nFrogs jumped in\nSound of water.\n"),
     )
     .await
     .unwrap();
-    test_utils::expect_var_value(
+    test_utils::expect_local_value(
         &preset_id,
         "text_out",
         &AgentValue::string("Old pond\nFrogs jumped in\nSound of water.\n"),
     )
     .await
     .unwrap();
-    ma.write_var_value(&preset_id, "text_trig", AgentValue::unit())
+    ma.write_local_input(&preset_id, "text_trig", AgentValue::unit())
         .await
         .unwrap();
-    test_utils::expect_var_value(&preset_id, "text_trig", &AgentValue::unit())
+    test_utils::expect_local_value(&preset_id, "text_trig", &AgentValue::unit())
         .await
         .unwrap();
-    test_utils::expect_var_value(
+    test_utils::expect_local_value(
         &preset_id,
         "text_out",
         &AgentValue::string("Old pond\nFrogs jumped in\nSound of water.\n"),
@@ -199,17 +199,17 @@ async fn test_input() {
     .unwrap();
 
     // Object Input
-    ma.write_var_value(&preset_id, "object_trig", AgentValue::unit())
+    ma.write_local_input(&preset_id, "object_trig", AgentValue::unit())
         .await
         .unwrap();
-    test_utils::expect_var_value(&preset_id, "object_trig", &AgentValue::unit())
+    test_utils::expect_local_value(&preset_id, "object_trig", &AgentValue::unit())
         .await
         .unwrap();
-    test_utils::expect_var_value(&preset_id, "object_out", &AgentValue::object_default())
+    test_utils::expect_local_value(&preset_id, "object_out", &AgentValue::object_default())
         .await
         .unwrap();
 
-    ma.write_var_value(
+    ma.write_local_input(
         &preset_id,
         "object_conf",
         AgentValue::object(hashmap! {
@@ -219,7 +219,7 @@ async fn test_input() {
     )
     .await
     .unwrap();
-    test_utils::expect_var_value(
+    test_utils::expect_local_value(
         &preset_id,
         "object_conf",
         &AgentValue::object(hashmap! {
@@ -229,7 +229,7 @@ async fn test_input() {
     )
     .await
     .unwrap();
-    test_utils::expect_var_value(
+    test_utils::expect_local_value(
         &preset_id,
         "object_out",
         &AgentValue::object(hashmap! {
@@ -239,13 +239,13 @@ async fn test_input() {
     )
     .await
     .unwrap();
-    ma.write_var_value(&preset_id, "object_trig", AgentValue::unit())
+    ma.write_local_input(&preset_id, "object_trig", AgentValue::unit())
         .await
         .unwrap();
-    test_utils::expect_var_value(&preset_id, "object_trig", &AgentValue::unit())
+    test_utils::expect_local_value(&preset_id, "object_trig", &AgentValue::unit())
         .await
         .unwrap();
-    test_utils::expect_var_value(
+    test_utils::expect_local_value(
         &preset_id,
         "object_out",
         &AgentValue::object(hashmap! {
