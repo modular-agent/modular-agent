@@ -45,7 +45,7 @@ fn handle_event(app: &AppHandle, event: ModularAgentEvent) -> Result<()> {
         ModularAgentEvent::AgentSpecUpdated(agent_id) => {
             emit_agent_spec_updated(app, agent_id)?;
         }
-        ModularAgentEvent::Board(_, _) => {}
+        ModularAgentEvent::ExternalOutput(_, _) => {}
     }
     Ok(())
 }
