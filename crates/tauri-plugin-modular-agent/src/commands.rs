@@ -5,7 +5,7 @@ use modular_agent_core::{
 use serde_json::Value;
 use tauri::{AppHandle, Runtime};
 
-use crate::MAKExt;
+use crate::ModularAgentExt;
 use crate::Result;
 
 // Preset management

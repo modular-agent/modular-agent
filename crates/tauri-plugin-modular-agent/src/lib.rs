@@ -12,11 +12,11 @@ mod error;
 pub use error::{Error, Result};
 
 /// Extensions to [`tauri::App`], [`tauri::AppHandle`] and [`tauri::Window`] to access the ma APIs.
-pub trait MAKExt<R: Runtime> {
+pub trait ModularAgentExt<R: Runtime> {
     fn ma(&self) -> &ModularAgent;
 }
 
-impl<R: Runtime, T: Manager<R>> crate::MAKExt<R> for T {
+impl<R: Runtime, T: Manager<R>> crate::ModularAgentExt<R> for T {
     fn ma(&self) -> &ModularAgent {
         self.state::<ModularAgent>().inner()
     }
