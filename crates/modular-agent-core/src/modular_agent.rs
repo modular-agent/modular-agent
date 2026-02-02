@@ -50,7 +50,7 @@ pub struct ModularAgent {
     pub(crate) tx: Arc<Mutex<Option<mpsc::Sender<AgentEventMessage>>>>,
 
     // observers
-    pub(crate) observers: broadcast::Sender<MAKEvent>,
+    pub(crate) observers: broadcast::Sender<ModularAgentEvent>,
 }
 
 impl ModularAgent {
@@ -928,17 +928,17 @@ impl ModularAgent {
     }
 
     /// Subscribe to all ModularAgent events.
-    pub fn subscribe(&self) -> broadcast::Receiver<MAKEvent> {
+    pub fn subscribe(&self) -> broadcast::Receiver<ModularAgentEvent> {
         self.observers.subscribe()
     }
 
-    /// Subscribe to a specific type of `MAKEvent`.
+    /// Subscribe to a specific type of `ModularAgentEvent`.
     ///
     /// It takes a closure that filters and maps the events, and returns an `mpsc::UnboundedReceiver`
     /// that will receive only the successfully mapped events.
     pub fn subscribe_to_event<F, T>(&self, mut filter_map: F) -> mpsc::UnboundedReceiver<T>
     where
-        F: FnMut(MAKEvent) -> Option<T> + Send + 'static,
+        F: FnMut(ModularAgentEvent) -> Option<T> + Send + 'static,
         T: Send + 'static,
     {
         let (tx, rx) = mpsc::unbounded_channel();
@@ -974,19 +974,19 @@ impl ModularAgent {
         key: String,
         value: AgentValue,
     ) {
-        self.notify_observers(MAKEvent::AgentConfigUpdated(agent_id, key, value));
+        self.notify_observers(ModularAgentEvent::AgentConfigUpdated(agent_id, key, value));
     }
 
     pub(crate) fn emit_agent_error(&self, agent_id: String, message: String) {
-        self.notify_observers(MAKEvent::AgentError(agent_id, message));
+        self.notify_observers(ModularAgentEvent::AgentError(agent_id, message));
     }
 
     pub(crate) fn emit_agent_input(&self, agent_id: String, port: String) {
-        self.notify_observers(MAKEvent::AgentIn(agent_id, port));
+        self.notify_observers(ModularAgentEvent::AgentIn(agent_id, port));
     }
 
     pub(crate) fn emit_agent_spec_updated(&self, agent_id: String) {
-        self.notify_observers(MAKEvent::AgentSpecUpdated(agent_id));
+        self.notify_observers(ModularAgentEvent::AgentSpecUpdated(agent_id));
     }
 
     pub(crate) fn emit_board(&self, name: String, value: AgentValue) {
@@ -994,16 +994,16 @@ impl ModularAgent {
         // if name.starts_with('%') {
         //     return;
         // }
-        self.notify_observers(MAKEvent::Board(name, value));
+        self.notify_observers(ModularAgentEvent::Board(name, value));
     }
 
-    fn notify_observers(&self, event: MAKEvent) {
+    fn notify_observers(&self, event: ModularAgentEvent) {
         let _ = self.observers.send(event);
     }
 }
 
 #[derive(Clone, Debug)]
-pub enum MAKEvent {
+pub enum ModularAgentEvent {
     AgentConfigUpdated(String, String, AgentValue), // (agent_id, key, value)
     AgentError(String, String),                     // (agent_id, message)
     AgentIn(String, String),                        // (agent_id, port)

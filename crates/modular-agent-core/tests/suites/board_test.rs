@@ -6,7 +6,7 @@ use serial_test::serial;
 #[serial(board_group)]
 #[tokio::test]
 async fn test_board_routing() {
-    let ma = test_utils::setup_mak().await;
+    let ma = test_utils::setup_modular_agent().await;
 
     // load board presets
     test_utils::open_and_start_preset(&ma, "tests/presets/Core_Board1.json")

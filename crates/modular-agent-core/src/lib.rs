@@ -62,7 +62,7 @@ pub use context::AgentContext;
 pub use definition::{AgentConfigSpec, AgentConfigSpecs, AgentDefinition, AgentDefinitions};
 pub use error::AgentError;
 pub use llm::{Message, ToolCall, ToolCallFunction};
-pub use modular_agent::{ModularAgent, MAKEvent};
+pub use modular_agent::{ModularAgent, ModularAgentEvent};
 pub use output::AgentOutput;
 pub use preset::{Preset, PresetInfo};
 pub use registry::AgentRegistration;

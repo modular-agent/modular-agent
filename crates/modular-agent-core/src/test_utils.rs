@@ -11,14 +11,14 @@ use tokio::{
 };
 
 use crate::{
-    AgentContext, AgentData, AgentError, AgentSpec, AgentValue, AsAgent, ModularAgent, MAKEvent,
+    AgentContext, AgentData, AgentError, AgentSpec, AgentValue, AsAgent, ModularAgent, ModularAgentEvent,
     modular_agent,
 };
 
 static PORT_VALUE: &str = "value";
 
 /// Setting up ModularAgent
-pub async fn setup_mak() -> ModularAgent {
+pub async fn setup_modular_agent() -> ModularAgent {
     let ma = ModularAgent::init().unwrap();
     ma.ready().await.unwrap();
 
@@ -45,7 +45,7 @@ thread_local! {
 
 pub fn subscribe_board_observer(ma: &ModularAgent) -> Result<(), AgentError> {
     let board_event_rx = ma.subscribe_to_event(|event| {
-        if let MAKEvent::Board(name, value) = event {
+        if let ModularAgentEvent::Board(name, value) = event {
             Some((name, value))
         } else {
             None
