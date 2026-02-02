@@ -57,7 +57,7 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             commands::get_global_configs_map,
             commands::set_global_configs,
             commands::set_global_configs_map,
-            commands::write_board,
+            commands::write_external_input,
         ])
         .setup(|app, _api| {
             let ma = ModularAgent::init()?;

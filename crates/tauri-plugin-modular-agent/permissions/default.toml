@@ -30,5 +30,5 @@ permissions = [
     "allow-get-global-configs-map",
     "allow-set-global-configs",
     "allow-set-global-configs-map",
-    "allow-write-board",
+    "allow-write-external-input",
 ]

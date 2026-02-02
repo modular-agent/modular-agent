@@ -28,7 +28,7 @@ const COMMANDS: &[&str] = &[
     "get_global_configs_map",
     "set_global_configs",
     "set_global_configs_map",
-    "write_board",
+    "write_external_input",
 ];
 
 fn main() {

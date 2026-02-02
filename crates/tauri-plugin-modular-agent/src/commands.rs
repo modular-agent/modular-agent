@@ -237,16 +237,16 @@ pub fn set_global_configs_map<R: Runtime>(app: AppHandle<R>, configs: AgentConfi
     app.ma().set_global_configs_map(configs)
 }
 
-// board commands
+// external input commands
 
 #[tauri::command]
-pub async fn write_board<R: Runtime>(
+pub async fn write_external_input<R: Runtime>(
     app: AppHandle<R>,
-    board: String,
+    name: String,
     message: String,
 ) -> Result<()> {
     app.ma()
-        .write_board_value(board, AgentValue::string(message))
+        .write_external_input(name, AgentValue::string(message))
         .await
         .map_err(Into::into)
 }

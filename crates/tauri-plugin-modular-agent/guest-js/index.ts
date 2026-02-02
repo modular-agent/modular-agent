@@ -73,13 +73,6 @@ export type Viewport = {
   zoom: number;
 };
 
-// emit
-
-export type BoardMessage = {
-  key: string;
-  value: any;
-};
-
 // preset
 
 export async function newPreset(): Promise<[string, string]> {
@@ -232,13 +225,13 @@ export async function stopAgent(agentId: string): Promise<void> {
   await invoke<void>("plugin:modular-agent|stop_agent", { agentId });
 }
 
-// board
+// external input
 
-export async function writeBoard(
-  board: string,
+export async function writeExternalInput(
+  name: string,
   message: string,
 ): Promise<void> {
-  await invoke<void>("plugin:modular-agent|write_board", { board, message });
+  await invoke<void>("plugin:modular-agent|write_external_input", { name, message });
 }
 
 // configs

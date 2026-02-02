@@ -33,7 +33,7 @@ Default permissions for the plugin
 - `allow-get-global-configs-map`
 - `allow-set-global-configs`
 - `allow-set-global-configs-map`
-- `allow-write-board`
+- `allow-write-external-input`
 
 ## Permission Table
 
@@ -801,12 +801,12 @@ Denies the update_preset_spec command without any pre-configured scope.
 <tr>
 <td>
 
-`modular-agent:allow-write-board`
+`modular-agent:allow-write-external-input`
 
 </td>
 <td>
 
-Enables the write_board command without any pre-configured scope.
+Enables the write_external_input command without any pre-configured scope.
 
 </td>
 </tr>
@@ -814,12 +814,12 @@ Enables the write_board command without any pre-configured scope.
 <tr>
 <td>
 
-`modular-agent:deny-write-board`
+`modular-agent:deny-write-external-input`
 
 </td>
 <td>
 
-Denies the write_board command without any pre-configured scope.
+Denies the write_external_input command without any pre-configured scope.
 
 </td>
 </tr>
