@@ -9,21 +9,23 @@ use tauri::{AppHandle, Manager, State};
 use modular_agent_core::mcp::register_tools_from_mcp_json;
 use modular_agent_core::{ModularAgent, PresetSpec};
 
-use tauri_plugin_modular_agent::MAKExt;
+use tauri_plugin_modular_agent::ModularAgentExt;
 
-use crate::modular_agent_desktop::{observer::start_mak_observer, settings::CoreSettings};
+use crate::modular_agent_desktop::{
+    observer::start_modular_agent_observer, settings::CoreSettings,
+};
 
-static MAK_PATH: &'static str = ".modular_agent";
-static MAK_PRESETS_PATH: &'static str = "presets";
+static MODULAR_AGENT_PATH: &'static str = ".modular_agent";
+static MODULAR_AGENT_PRESETS_PATH: &'static str = "presets";
 
-pub struct MakApp {
+pub struct ModularAgentApp {
     ma: ModularAgent,
 
     /// Map of preset name to preset ID.
     presets: Arc<Mutex<HashMap<String, String>>>,
 }
 
-impl MakApp {
+impl ModularAgentApp {
     pub fn new(ma: &ModularAgent) -> Self {
         Self {
             ma: ma.clone(),
@@ -112,7 +114,7 @@ impl MakApp {
         Ok(())
     }
 
-    pub fn import_preset(&self, path: String) -> Result<String> {
+    pub fn import_preset(&self, _path: String) -> Result<String> {
         // let path = PathBuf::from(path);
         // let name = path
         //     .file_stem()
@@ -153,15 +155,15 @@ impl MakApp {
 
 pub fn init(app: &AppHandle) -> Result<()> {
     let ma = app.ma();
-    let asapp = MakApp::new(ma);
+    let asapp = ModularAgentApp::new(ma);
     app.manage(asapp);
     Ok(())
 }
 
 pub async fn ready(app: &AppHandle) -> Result<()> {
-    let asapp = app.state::<MakApp>();
+    let asapp = app.state::<ModularAgentApp>();
     let ma = &asapp.ma;
-    start_mak_observer(&ma, app.clone());
+    start_modular_agent_observer(&ma, app.clone());
 
     start_mcp_services().await?;
 
@@ -171,8 +173,8 @@ pub async fn ready(app: &AppHandle) -> Result<()> {
 }
 
 async fn start_mcp_services() -> Result<()> {
-    let mak_dir = mak_dir()?;
-    let mcp_path = mak_dir.join("mcp.json");
+    let modular_agent_dir = modular_agent_dir()?;
+    let mcp_path = modular_agent_dir.join("mcp.json");
     if !mcp_path.exists() {
         return Ok(());
     }
@@ -193,7 +195,7 @@ async fn run_auto_start_presets(app: &AppHandle) {
         guard.auto_start_presets.clone()
     };
 
-    let asapp = app.state::<MakApp>();
+    let asapp = app.state::<ModularAgentApp>();
     for name in auto_start_presets {
         log::info!("Auto-starting preset: {}", name);
         match asapp.open_preset(name.clone()).await {
@@ -212,15 +214,15 @@ async fn run_auto_start_presets(app: &AppHandle) {
 
 pub fn quit(_app: &AppHandle) {}
 
-fn mak_dir() -> Result<PathBuf> {
+fn modular_agent_dir() -> Result<PathBuf> {
     let home_dir = dirs::home_dir().with_context(|| "Failed to get home directory")?;
-    let mak_dir = home_dir.join(MAK_PATH);
-    Ok(mak_dir)
+    let modular_agent_dir = home_dir.join(MODULAR_AGENT_PATH);
+    Ok(modular_agent_dir)
 }
 
 fn presets_dir() -> Result<PathBuf> {
-    let mak_dir = mak_dir()?;
-    let presets_dir = mak_dir.join(MAK_PRESETS_PATH);
+    let modular_agent_dir = modular_agent_dir()?;
+    let presets_dir = modular_agent_dir.join(MODULAR_AGENT_PRESETS_PATH);
     Ok(presets_dir)
 }
 
@@ -330,13 +332,16 @@ fn is_valid_preset_name(new_name: &str) -> bool {
 // }
 
 #[tauri::command]
-pub fn new_preset_with_name_cmd(asapp: State<'_, MakApp>, name: String) -> Result<String, String> {
+pub fn new_preset_with_name_cmd(
+    asapp: State<'_, ModularAgentApp>,
+    name: String,
+) -> Result<String, String> {
     asapp.new_preset_with_name(name).map_err(|e| e.to_string())
 }
 
 // #[tauri::command]
 // pub fn rename_preset_cmd(
-//     asapp: State<'_, MakApp>,
+//     asapp: State<'_, ModularAgentApp>,
 //     old_name: String,
 //     new_name: String,
 // ) -> Result<String, String> {
@@ -346,13 +351,16 @@ pub fn new_preset_with_name_cmd(asapp: State<'_, MakApp>, name: String) -> Resul
 // }
 
 #[tauri::command]
-pub async fn delete_preset_cmd(asapp: State<'_, MakApp>, name: String) -> Result<(), String> {
+pub async fn delete_preset_cmd(
+    asapp: State<'_, ModularAgentApp>,
+    name: String,
+) -> Result<(), String> {
     asapp.delete_preset(&name).await.map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub fn save_preset_cmd(
-    asapp: State<'_, MakApp>,
+    asapp: State<'_, ModularAgentApp>,
     name: String,
     spec: PresetSpec,
 ) -> Result<(), String> {
@@ -360,17 +368,20 @@ pub fn save_preset_cmd(
 }
 
 #[tauri::command]
-pub fn import_preset_cmd(asapp: State<'_, MakApp>, path: String) -> Result<String, String> {
+pub fn import_preset_cmd(
+    asapp: State<'_, ModularAgentApp>,
+    path: String,
+) -> Result<String, String> {
     asapp.import_preset(path).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub async fn start_preset_cmd(asapp: State<'_, MakApp>, id: String) -> Result<(), String> {
+pub async fn start_preset_cmd(asapp: State<'_, ModularAgentApp>, id: String) -> Result<(), String> {
     asapp.start_preset(&id).await.map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub async fn stop_preset_cmd(asapp: State<'_, MakApp>, id: String) -> Result<(), String> {
+pub async fn stop_preset_cmd(asapp: State<'_, ModularAgentApp>, id: String) -> Result<(), String> {
     asapp.stop_preset(&id).await.map_err(|e| e.to_string())
 }
 
@@ -380,6 +391,9 @@ pub async fn get_dir_entries_cmd(path: String) -> Result<Vec<String>, String> {
 }
 
 #[tauri::command]
-pub async fn open_preset_cmd(asapp: State<'_, MakApp>, name: String) -> Result<String, String> {
+pub async fn open_preset_cmd(
+    asapp: State<'_, ModularAgentApp>,
+    name: String,
+) -> Result<String, String> {
     asapp.open_preset(name).await.map_err(|e| e.to_string())
 }

@@ -1,5 +1,5 @@
 use anyhow::{Context as _, Result};
-use modular_agent_core::{AgentValue, MAKEvent, ModularAgent};
+use modular_agent_core::{AgentValue, ModularAgent, ModularAgentEvent};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 use tokio::sync::broadcast::error::RecvError;
@@ -9,7 +9,7 @@ const EMIT_AGENT_ERROR: &str = "ma:agent_error";
 const EMIT_AGENT_IN: &str = "ma:agent_in";
 const EMIT_AGENT_SPEC_UPDATED: &str = "ma:agent_spec_updated";
 
-pub fn start_mak_observer(ma: &ModularAgent, app: AppHandle) {
+pub fn start_modular_agent_observer(ma: &ModularAgent, app: AppHandle) {
     let mut rx = ma.subscribe();
 
     tokio::spawn(async move {
@@ -31,21 +31,21 @@ pub fn start_mak_observer(ma: &ModularAgent, app: AppHandle) {
     });
 }
 
-fn handle_event(app: &AppHandle, event: MAKEvent) -> Result<()> {
+fn handle_event(app: &AppHandle, event: ModularAgentEvent) -> Result<()> {
     match event {
-        MAKEvent::AgentConfigUpdated(agent_id, key, value) => {
+        ModularAgentEvent::AgentConfigUpdated(agent_id, key, value) => {
             emit_agent_config_updated(app, agent_id, key, value)?;
         }
-        MAKEvent::AgentError(agent_id, message) => {
+        ModularAgentEvent::AgentError(agent_id, message) => {
             emit_agent_error(app, agent_id, message)?;
         }
-        MAKEvent::AgentIn(agent_id, connection) => {
+        ModularAgentEvent::AgentIn(agent_id, connection) => {
             emit_agent_in(app, agent_id, connection)?;
         }
-        MAKEvent::AgentSpecUpdated(agent_id) => {
+        ModularAgentEvent::AgentSpecUpdated(agent_id) => {
             emit_agent_spec_updated(app, agent_id)?;
         }
-        MAKEvent::Board(_, _) => {}
+        ModularAgentEvent::Board(_, _) => {}
     }
     Ok(())
 }

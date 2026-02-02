@@ -8,7 +8,7 @@ use std::{
     sync::{LazyLock, Mutex},
 };
 use tauri::{AppHandle, Manager, State};
-use tauri_plugin_modular_agent::MAKExt;
+use tauri_plugin_modular_agent::ModularAgentExt;
 use tauri_plugin_store::StoreExt;
 
 const SETTINGS_JSON: &str = "settings.json";
