@@ -26,7 +26,7 @@ const CONFIG_OPTIONS: &str = "options";
 
 const DEFAULT_CONFIG_MODEL: &str = "text-embedding-3-small";
 
-/// Unified Embeddings Agent that routes to different LLM providers based on model prefix.
+/// Embeddings Agent that routes to different LLM providers based on model prefix.
 ///
 /// # Model Format
 /// - `openai/text-embedding-3-small` - Uses OpenAI API

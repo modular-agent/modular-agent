@@ -25,7 +25,7 @@ const CONFIG_USE_CONTEXT: &str = "use_context";
 
 const DEFAULT_CONFIG_MODEL: &str = "gpt-3.5-turbo-instruct";
 
-/// Unified Completion Agent that routes to different LLM providers based on model prefix.
+/// Completion Agent that routes to different LLM providers based on model prefix.
 ///
 /// # Model Format
 /// - `openai/gpt-3.5-turbo-instruct` - Uses OpenAI API
@@ -152,7 +152,9 @@ impl CompletionAgent {
         config_options: AgentValueMap<String, AgentValue>,
         config_system: String,
     ) -> Result<(), AgentError> {
-        use async_openai::types::{CreateCompletionRequest, CreateCompletionRequestArgs};
+        use async_openai::types::completions::{
+            CreateCompletionRequest, CreateCompletionRequestArgs,
+        };
 
         let client = self.openai_manager.get_client(self.ma())?;
 

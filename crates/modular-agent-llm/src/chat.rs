@@ -30,7 +30,7 @@ const DEFAULT_CONFIG_MODEL: &str = "gpt-5-nano";
 const DEFAULT_OPENAI_API_BASE: &str = "https://api.openai.com/v1";
 const DEFAULT_OLLAMA_URL: &str = "http://localhost:11434";
 
-/// Unified Chat Agent that routes to different LLM providers based on model prefix.
+/// Chat Agent that routes to different LLM providers based on model prefix.
 ///
 /// # Model Format
 /// - `openai/gpt-5-mini` - Uses OpenAI API
@@ -155,8 +155,8 @@ impl ChatAgent {
         config_tools: String,
         use_stream: bool,
     ) -> Result<(), AgentError> {
-        use async_openai::types::{
-            ChatCompletionTool, CreateChatCompletionRequest, CreateChatCompletionRequestArgs,
+        use async_openai::types::chat::{
+            ChatCompletionTools, CreateChatCompletionRequest, CreateChatCompletionRequestArgs,
         };
         use futures::StreamExt;
         use modular_agent_core::tool::list_tool_infos_patterns;
@@ -172,7 +172,7 @@ impl ChatAgent {
                 None
             };
 
-        let tool_infos = if config_tools.is_empty() {
+        let tool_infos: Vec<ChatCompletionTools> = if config_tools.is_empty() {
             vec![]
         } else {
             list_tool_infos_patterns(&config_tools)
@@ -183,8 +183,11 @@ impl ChatAgent {
                     ))
                 })?
                 .into_iter()
-                .map(|info| openai_client::try_from_tool_info_to_chat_completion_tool(info))
-                .collect::<Result<Vec<ChatCompletionTool>, AgentError>>()?
+                .map(|info| {
+                    openai_client::try_from_tool_info_to_chat_completion_tool(info)
+                        .map(ChatCompletionTools::Function)
+                })
+                .collect::<Result<Vec<ChatCompletionTools>, AgentError>>()?
         };
 
         let mut request = CreateChatCompletionRequestArgs::default()

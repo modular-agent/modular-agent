@@ -2,20 +2,15 @@
 
 use std::sync::{Arc, Mutex};
 
-use async_openai::types::{
-    ChatCompletionMessageToolCall, ChatCompletionMessageToolCallChunk, ChatCompletionTool,
-    ChatCompletionToolArgs, FunctionObjectArgs,
+use async_openai::types::chat::{
+    ChatCompletionMessageToolCall, ChatCompletionMessageToolCallChunk,
+    ChatCompletionMessageToolCalls, ChatCompletionRequestAssistantMessageArgs,
+    ChatCompletionRequestMessage, ChatCompletionRequestSystemMessageArgs,
+    ChatCompletionRequestToolMessageArgs, ChatCompletionRequestUserMessageArgs,
+    ChatCompletionResponseMessage, ChatCompletionTool, FunctionObject, Role,
 };
-use async_openai::{
-    Client,
-    config::OpenAIConfig,
-    types::{
-        ChatCompletionRequestAssistantMessageArgs, ChatCompletionRequestMessage,
-        ChatCompletionRequestSystemMessageArgs, ChatCompletionRequestToolMessageArgs,
-        ChatCompletionRequestUserMessageArgs, ChatCompletionResponseMessage,
-        CreateEmbeddingRequest, CreateEmbeddingRequestArgs, Role,
-    },
-};
+use async_openai::types::embeddings::{CreateEmbeddingRequest, CreateEmbeddingRequestArgs};
+use async_openai::{Client, config::OpenAIConfig};
 use modular_agent_core::tool;
 use modular_agent_core::{
     AgentError, AgentValue, AgentValueMap, Message, ModularAgent, ToolCall, ToolCallFunction,
@@ -140,8 +135,10 @@ pub fn message_from_openai_msg(msg: ChatCompletionResponseMessage) -> Message {
     if let Some(tool_calls) = msg.tool_calls {
         let mut calls: Vec<ToolCall> = Vec::new();
         for call in tool_calls {
-            if let Ok(c) = try_from_chat_completion_message_tool_call_to_tool_call(&call) {
-                calls.push(c);
+            if let ChatCompletionMessageToolCalls::Function(ref func_call) = call {
+                if let Ok(c) = try_from_chat_completion_message_tool_call_to_tool_call(func_call) {
+                    calls.push(c);
+                }
             }
         }
         if !calls.is_empty() {
@@ -163,14 +160,14 @@ pub fn message_to_chat_completion_msg(msg: &Message) -> ChatCompletionRequestMes
             #[cfg(feature = "image")]
             {
                 if let Some(image) = &msg.image {
-                    use async_openai::types::{
+                    use async_openai::types::chat::{
                         ChatCompletionRequestMessageContentPartImage,
-                        ChatCompletionRequestMessageContentPartText, ImageUrl,
+                        ChatCompletionRequestMessageContentPartText, ImageDetail, ImageUrl,
                     };
 
                     let image_url = ImageUrl {
                         url: image.get_base64(),
-                        detail: Some(async_openai::types::ImageDetail::Auto),
+                        detail: Some(ImageDetail::Auto),
                     };
                     let img = ChatCompletionRequestMessageContentPartImage { image_url };
                     let text = ChatCompletionRequestMessageContentPartText {
@@ -211,20 +208,17 @@ pub fn message_to_chat_completion_msg(msg: &Message) -> ChatCompletionRequestMes
 pub fn try_from_tool_info_to_chat_completion_tool(
     info: tool::ToolInfo,
 ) -> Result<ChatCompletionTool, AgentError> {
-    let mut function = FunctionObjectArgs::default();
-    function.name(info.name);
-    if !info.description.is_empty() {
-        function.description(info.description);
-    }
-    if let Some(params) = info.parameters {
-        function.parameters(params);
-    }
-    Ok(ChatCompletionToolArgs::default()
-        .function(function.build().map_err(|e| {
-            AgentError::InvalidValue(format!("Failed to build tool function: {}", e))
-        })?)
-        .build()
-        .map_err(|e| AgentError::InvalidValue(format!("Failed to build tool: {}", e)))?)
+    let function = FunctionObject {
+        name: info.name,
+        description: if info.description.is_empty() {
+            None
+        } else {
+            Some(info.description)
+        },
+        parameters: info.parameters,
+        strict: None,
+    };
+    Ok(ChatCompletionTool { function })
 }
 
 pub fn try_from_chat_completion_message_tool_call_chunk_to_tool_call(

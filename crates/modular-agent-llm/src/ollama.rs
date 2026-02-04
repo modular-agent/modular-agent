@@ -1,12 +1,5 @@
 #![cfg(feature = "ollama")]
 
-//! Ollama-specific agents that don't have OpenAI equivalents.
-//!
-//! For chat, completion, and embeddings, use the unified agents in:
-//! - `crate::chat::ChatAgent`
-//! - `crate::completion::CompletionAgent`
-//! - `crate::embeddings::EmbeddingsAgent`
-
 use modular_agent_core::{
     Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
     ModularAgent, async_trait, modular_agent,
