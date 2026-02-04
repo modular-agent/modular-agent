@@ -264,3 +264,120 @@ fn try_from_chat_completion_message_tool_call_to_tool_call(
     };
     Ok(ToolCall { function })
 }
+
+// ============================================================================
+// Responses API conversion functions
+// ============================================================================
+
+use async_openai::types::responses::{InputItem, OutputItem, OutputMessageContent};
+
+/// Convert messages to Responses API input format.
+///
+/// The Responses API accepts input as a vector of InputItem, which can be:
+/// - InputItem::Text(String) - simple text input
+/// - InputItem::Message { role, content } - structured message
+pub fn messages_to_response_input(
+    messages: &im::Vector<AgentValue>,
+) -> Result<Vec<InputItem>, AgentError> {
+    let mut input_items = Vec::new();
+
+    for msg_value in messages.iter() {
+        let Some(msg) = msg_value.as_message() else {
+            continue;
+        };
+
+        // Use serde_json to build the InputItem correctly
+        // The InputItem structure varies by async-openai version
+        let role_str = match msg.role.as_str() {
+            "user" => "user",
+            "assistant" => "assistant",
+            "system" => "system",
+            "tool" => "tool",
+            _ => "user",
+        };
+
+        #[cfg(feature = "image")]
+        let item = if let Some(image) = &msg.image {
+            // Build message with image content
+            let content = serde_json::json!([
+                { "type": "input_text", "text": msg.content },
+                { "type": "input_image", "image_url": image.get_base64() }
+            ]);
+            let item_json = serde_json::json!({
+                "type": "message",
+                "role": role_str,
+                "content": content
+            });
+            serde_json::from_value::<InputItem>(item_json)
+                .map_err(|e| AgentError::InvalidValue(format!("Failed to build input item: {}", e)))?
+        } else {
+            // Build text-only message
+            let item_json = serde_json::json!({
+                "type": "message",
+                "role": role_str,
+                "content": msg.content
+            });
+            serde_json::from_value::<InputItem>(item_json)
+                .map_err(|e| AgentError::InvalidValue(format!("Failed to build input item: {}", e)))?
+        };
+
+        #[cfg(not(feature = "image"))]
+        let item = {
+            let item_json = serde_json::json!({
+                "type": "message",
+                "role": role_str,
+                "content": msg.content
+            });
+            serde_json::from_value::<InputItem>(item_json)
+                .map_err(|e| AgentError::InvalidValue(format!("Failed to build input item: {}", e)))?
+        };
+
+        input_items.push(item);
+    }
+
+    Ok(input_items)
+}
+
+/// Convert Responses API output to internal Message.
+pub fn response_output_to_message(output: &[OutputItem]) -> Result<Message, AgentError> {
+    let mut content = String::new();
+    let mut tool_calls: Vec<ToolCall> = Vec::new();
+
+    for item in output {
+        match item {
+            OutputItem::Message(msg) => {
+                for part in &msg.content {
+                    match part {
+                        OutputMessageContent::OutputText(text_content) => {
+                            content.push_str(&text_content.text);
+                        }
+                        OutputMessageContent::Refusal(refusal) => {
+                            content.push_str(&format!("[Refusal: {}]", refusal.refusal));
+                        }
+                    }
+                }
+            }
+            OutputItem::FunctionCall(fc) => {
+                let parameters: serde_json::Value =
+                    serde_json::from_str(&fc.arguments).unwrap_or_default();
+                let tool_call = ToolCall {
+                    function: ToolCallFunction {
+                        id: Some(fc.call_id.clone()),
+                        name: fc.name.clone(),
+                        parameters,
+                    },
+                };
+                tool_calls.push(tool_call);
+            }
+            // Handle other output types as needed (file_search, web_search, etc.)
+            _ => {}
+        }
+    }
+
+    let mut message = Message::assistant(content);
+    if !tool_calls.is_empty() {
+        message.tool_calls = Some(tool_calls.into());
+    }
+
+    Ok(message)
+}

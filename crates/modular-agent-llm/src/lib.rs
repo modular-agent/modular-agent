@@ -9,6 +9,9 @@ pub mod completion;
 pub mod embeddings;
 
 #[cfg(feature = "openai")]
+pub mod responses;
+
+#[cfg(feature = "openai")]
 pub(crate) mod openai_client;
 
 #[cfg(feature = "ollama")]
