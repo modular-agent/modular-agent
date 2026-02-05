@@ -1,8 +1,8 @@
 #![recursion_limit = "256"]
 //! Procedural macros for modular-agent-core.
 //!
-//! Provides an attribute to declare agent metadata alongside the agent type and
-//! generate the registration boilerplate.
+//! Provides the [`#[modular_agent]`](modular_agent) attribute macro to declare agent metadata
+//! alongside the agent type and generate the registration boilerplate.
 
 use proc_macro::TokenStream;
 use proc_macro2::Span;
@@ -14,20 +14,121 @@ use syn::{
 
 /// Declare agent metadata and generate `agent_definition` / `register` helpers.
 ///
-/// Example:
+/// This macro transforms a struct into a modular agent by:
+/// - Implementing `HasAgentData` trait
+/// - Generating `agent_definition()` and `register()` methods
+/// - Registering the agent with the inventory for automatic discovery
+///
+/// # Requirements
+///
+/// The struct must have a `data: AgentData` field.
+///
+/// # Attributes
+///
+/// ## Required
+///
+/// - `title = "..."` - Display title shown in the UI
+/// - `category = "..."` - Category for organization (e.g., "Utils", "LLM/Chat")
+///
+/// ## Optional Metadata
+///
+/// - `name = "..."` - Override the definition name (default: `module::path::StructName`)
+/// - `description = "..."` - Description text
+/// - `kind = "..."` - Agent kind (default: "Agent")
+/// - `hide_title` - Hide the title in the UI
+///
+/// ## Ports
+///
+/// - `inputs = ["port1", "port2", ...]` - Input port names
+/// - `outputs = ["port1", "port2", ...]` - Output port names
+///
+/// ## Configuration
+///
+/// Add configuration fields using `*_config(...)` attributes. Each config type accepts:
+/// - `name = "..."` (required) - Config key name
+/// - `default = ...` - Default value
+/// - `title = "..."` - Display title
+/// - `description = "..."` - Description
+/// - `hide_title` - Hide title in UI
+/// - `hidden` - Hide from UI entirely
+/// - `readonly` - Make read-only in UI
+///
+/// ### Config Types
+///
+/// | Type | Macro | Default | Description |
+/// |------|-------|---------|-------------|
+/// | Boolean | `boolean_config(...)` | `false` | True/false toggle |
+/// | Integer | `integer_config(...)` | `0` | 64-bit signed integer |
+/// | Number | `number_config(...)` | `0.0` | 64-bit float |
+/// | String | `string_config(...)` | `""` | Single-line text |
+/// | Text | `text_config(...)` | `""` | Multi-line text |
+/// | Array | `array_config(...)` | `[]` | JSON array |
+/// | Object | `object_config(...)` | `{}` | JSON object |
+/// | Unit | `unit_config(...)` | - | Action button |
+/// | Custom | `custom_config(...)` | - | Custom type with `type_ = "..."` |
+///
+/// ## Global Configuration
+///
+/// Use `*_global_config(...)` variants for configs shared across all instances
+/// of this agent type (e.g., API keys).
+///
+/// # Example
+///
 /// ```rust,ignore
+/// use modular_agent_core::{
+///     ModularAgent, AgentContext, AgentData, AgentError, AgentSpec, AgentValue, AsAgent,
+///     modular_agent, async_trait,
+/// };
+///
+/// const PORT_INPUT: &str = "input";
+/// const PORT_OUTPUT: &str = "output";
+///
 /// #[modular_agent(
-///     title = "Add Int",
-///     category = "Utils",
-///     inputs = ["int"],
-///     outputs = ["int"],
-///     integer_config(
-///         name = "n",
-///         default = 1,
-///     )
+///     title = "Add Integer",
+///     category = "Math/Arithmetic",
+///     description = "Adds a constant to the input value",
+///     inputs = [PORT_INPUT],
+///     outputs = [PORT_OUTPUT],
+///     integer_config(name = "n", default = 1, title = "Add Value"),
 /// )]
-/// struct AdderAgent { /* ... */ }
+/// struct AddIntAgent {
+///     data: AgentData,
+///     n: i64,
+/// }
+///
+/// #[async_trait]
+/// impl AsAgent for AddIntAgent {
+///     fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+///         let n = spec.configs.as_ref()
+///             .map(|c| c.get_integer_or_default("n"))
+///             .unwrap_or(1);
+///         Ok(Self {
+///             data: AgentData::new(ma, id, spec),
+///             n,
+///         })
+///     }
+///
+///     async fn process(&mut self, ctx: AgentContext, port: String, value: AgentValue)
+///         -> Result<(), AgentError>
+///     {
+///         if port == PORT_INPUT {
+///             let result = value.as_integer().unwrap_or(0) + self.n;
+///             self.output(ctx, PORT_OUTPUT.into(), AgentValue::integer(result)).await?;
+///         }
+///         Ok(())
+///     }
+/// }
 /// ```
+///
+/// # Generated Code
+///
+/// The macro generates:
+/// - `impl HasAgentData for StructName` - Access to agent data
+/// - `StructName::DEF_NAME` - The definition name constant
+/// - `StructName::def_name()` - Returns the definition name
+/// - `StructName::agent_definition()` - Returns the [`AgentDefinition`]
+/// - `StructName::register(ma)` - Registers with a [`ModularAgent`]
+/// - Inventory submission for automatic registration
 #[proc_macro_attribute]
 pub fn modular_agent(attr: TokenStream, item: TokenStream) -> TokenStream {
     let args = parse_macro_input!(attr with Punctuated<Meta, Comma>::parse_terminated);

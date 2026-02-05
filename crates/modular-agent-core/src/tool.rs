@@ -1,3 +1,30 @@
+//! Tool registry and agents for LLM function calling.
+//!
+//! This module provides infrastructure for registering, managing, and invoking tools
+//! that can be called by LLMs. It includes:
+//!
+//! - A global tool registry for registering and looking up tools by name
+//! - The `Tool` trait for implementing custom tools
+//! - Agents for working with tools in workflows:
+//!   - `ListToolsAgent` - Lists available tools matching a pattern
+//!   - `PresetToolAgent` - Exposes a workflow as a callable tool
+//!   - `CallToolMessageAgent` - Processes tool calls from LLM messages
+//!   - `CallToolAgent` - Directly invokes a tool by name
+//!
+//! # Example
+//!
+//! ```no_run
+//! use modular_agent_core::{register_tool, call_tool, list_tool_infos};
+//!
+//! // List all registered tools
+//! let tools = list_tool_infos();
+//!
+//! // Call a tool by name
+//! // let result = call_tool(ctx, "tool_name", args).await?;
+//! ```
+
+#![cfg(feature = "llm")]
+
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
     sync::{Arc, Mutex, OnceLock, RwLock},
@@ -27,19 +54,64 @@ const CONFIG_TOOL_NAME: &str = "name";
 const CONFIG_TOOL_DESCRIPTION: &str = "description";
 const CONFIG_TOOL_PARAMETERS: &str = "parameters";
 
+/// Metadata describing a tool available for LLM function calling.
+///
+/// This information is typically sent to the LLM to describe what tools
+/// are available and how to call them.
 #[derive(Clone, Debug)]
 pub struct ToolInfo {
+    /// Unique name identifying the tool.
     pub name: String,
+
+    /// Human-readable description of what the tool does.
     pub description: String,
+
+    /// JSON Schema describing the tool's parameters (optional).
     pub parameters: Option<serde_json::Value>,
 }
 
-/// Trait for Tool implementations.
+/// Trait for implementing callable tools.
+///
+/// Tools are functions that can be invoked by LLMs during conversations.
+/// Implement this trait to create custom tools that can be registered
+/// with the global tool registry.
+///
+/// # Example
+///
+/// ```ignore
+/// use modular_agent_core::{Tool, ToolInfo, AgentContext, AgentValue, AgentError, async_trait};
+///
+/// struct MyTool {
+///     info: ToolInfo,
+/// }
+///
+/// #[async_trait]
+/// impl Tool for MyTool {
+///     fn info(&self) -> &ToolInfo {
+///         &self.info
+///     }
+///
+///     async fn call(&self, ctx: AgentContext, args: AgentValue) -> Result<AgentValue, AgentError> {
+///         // Tool implementation
+///         Ok(AgentValue::string("result"))
+///     }
+/// }
+/// ```
 #[async_trait]
 pub trait Tool {
+    /// Returns metadata about this tool.
     fn info(&self) -> &ToolInfo;
 
-    /// Call the tool with the given context and arguments.
+    /// Invokes the tool with the given context and arguments.
+    ///
+    /// # Arguments
+    ///
+    /// * `ctx` - The agent context for this invocation
+    /// * `args` - Arguments passed to the tool (typically from LLM)
+    ///
+    /// # Returns
+    ///
+    /// The tool's result as an `AgentValue`, or an error if the call fails.
     async fn call(&self, ctx: AgentContext, args: AgentValue) -> Result<AgentValue, AgentError>;
 }
 
@@ -60,6 +132,7 @@ impl From<ToolInfo> for AgentValue {
     }
 }
 
+/// Internal entry for a registered tool.
 #[derive(Clone)]
 struct ToolEntry {
     info: ToolInfo,
@@ -67,6 +140,7 @@ struct ToolEntry {
 }
 
 impl ToolEntry {
+    /// Creates a new tool entry from a tool implementation.
     fn new<T: Tool + Send + Sync + 'static>(tool: T) -> Self {
         Self {
             info: tool.info().clone(),
@@ -75,50 +149,71 @@ impl ToolEntry {
     }
 }
 
+/// Thread-safe registry for managing tools.
 struct ToolRegistry {
     tools: HashMap<String, ToolEntry>,
 }
 
 impl ToolRegistry {
+    /// Creates a new empty tool registry.
     fn new() -> Self {
         Self {
             tools: HashMap::new(),
         }
     }
 
+    /// Registers a tool with the registry.
     fn register_tool<T: Tool + Send + Sync + 'static>(&mut self, tool: T) {
         let name = tool.info().name.to_string();
         let entry = ToolEntry::new(tool);
         self.tools.insert(name, entry);
     }
 
+    /// Removes a tool from the registry by name.
     fn unregister_tool(&mut self, name: &str) {
         self.tools.remove(name);
     }
 
+    /// Retrieves a tool by name, if it exists.
     fn get_tool(&self, name: &str) -> Option<Arc<Box<dyn Tool + Send + Sync>>> {
         self.tools.get(name).map(|entry| entry.tool.clone())
     }
 }
 
-// Global registry instance.
+/// Global tool registry instance.
 static TOOL_REGISTRY: OnceLock<RwLock<ToolRegistry>> = OnceLock::new();
 
+/// Returns the global tool registry, initializing it if necessary.
 fn registry() -> &'static RwLock<ToolRegistry> {
     TOOL_REGISTRY.get_or_init(|| RwLock::new(ToolRegistry::new()))
 }
 
-/// Register a new tool.
+/// Registers a tool with the global registry.
+///
+/// The tool will be available for lookup and invocation by its name.
+/// If a tool with the same name already exists, it will be replaced.
+///
+/// # Arguments
+///
+/// * `tool` - The tool implementation to register
 pub fn register_tool<T: Tool + Send + Sync + 'static>(tool: T) {
     registry().write().unwrap().register_tool(tool);
 }
 
-/// Unregister a tool by name.
+/// Removes a tool from the global registry by name.
+///
+/// # Arguments
+///
+/// * `name` - The name of the tool to unregister
 pub fn unregister_tool(name: &str) {
     registry().write().unwrap().unregister_tool(name);
 }
 
-/// List all registered tool infos.
+/// Returns information about all registered tools.
+///
+/// # Returns
+///
+/// A vector of `ToolInfo` for all currently registered tools.
 pub fn list_tool_infos() -> Vec<ToolInfo> {
     registry()
         .read()
@@ -129,7 +224,22 @@ pub fn list_tool_infos() -> Vec<ToolInfo> {
         .collect()
 }
 
-/// List registerd tool infos filtered by patterns.
+/// Returns tool information for tools matching the given regex patterns.
+///
+/// Patterns are newline-separated regular expressions. A tool is included
+/// if its name matches any of the patterns.
+///
+/// # Arguments
+///
+/// * `patterns` - Newline-separated regex patterns to match tool names
+///
+/// # Returns
+///
+/// A vector of `ToolInfo` for tools whose names match the patterns.
+///
+/// # Errors
+///
+/// Returns an error if any of the patterns are invalid regular expressions.
 pub fn list_tool_infos_patterns(patterns: &str) -> Result<Vec<ToolInfo>, regex::Error> {
     // Split patterns by newline and trim whitespace
     let patterns = patterns
@@ -154,12 +264,30 @@ pub fn list_tool_infos_patterns(patterns: &str) -> Result<Vec<ToolInfo>, regex::
     Ok(tool_names)
 }
 
-/// Get a tool by name.
+/// Retrieves a tool by name from the global registry.
+///
+/// # Arguments
+///
+/// * `name` - The name of the tool to retrieve
+///
+/// # Returns
+///
+/// The tool if found, or `None` if no tool with that name is registered.
 pub fn get_tool(name: &str) -> Option<Arc<Box<dyn Tool + Send + Sync>>> {
     registry().read().unwrap().get_tool(name)
 }
 
-/// Call a tool by name.
+/// Invokes a tool by name with the given arguments.
+///
+/// # Arguments
+///
+/// * `ctx` - The agent context for the invocation
+/// * `name` - The name of the tool to call
+/// * `args` - Arguments to pass to the tool
+///
+/// # Returns
+///
+/// The tool's result, or an error if the tool is not found or fails.
 pub async fn call_tool(
     ctx: AgentContext,
     name: &str,
@@ -177,6 +305,19 @@ pub async fn call_tool(
     tool.call(ctx, args).await
 }
 
+/// Executes multiple tool calls and returns the results as messages.
+///
+/// Processes each tool call sequentially and returns tool response messages
+/// suitable for continuing an LLM conversation.
+///
+/// # Arguments
+///
+/// * `ctx` - The agent context for the invocations
+/// * `tool_calls` - The tool calls to execute
+///
+/// # Returns
+///
+/// A vector of tool response messages, one for each tool call.
 pub async fn call_tools(
     ctx: &AgentContext,
     tool_calls: &Vector<ToolCall>,
@@ -201,8 +342,22 @@ pub async fn call_tools(
     Ok(resp_messages.into())
 }
 
-// Agents
+// ============================================================================
+// Tool Agents
+// ============================================================================
 
+/// Agent that lists available tools.
+///
+/// Outputs tool information for all registered tools, optionally filtered
+/// by regex patterns provided on the input port.
+///
+/// # Inputs
+///
+/// * `patterns` - Optional regex patterns (newline-separated) to filter tools
+///
+/// # Outputs
+///
+/// * `tools` - Array of tool information objects
 #[modular_agent(
     title="List Tools",
     category=CATEGORY,
@@ -251,6 +406,22 @@ impl AsAgent for ListToolsAgent {
     }
 }
 
+/// Agent that exposes a workflow as a callable tool.
+///
+/// This agent registers itself as a tool that can be invoked by LLMs.
+/// When called, it forwards the arguments to the `tool_in` output port
+/// and waits for a response on the `tool_out` input port.
+///
+/// # Configuration
+///
+/// * `name` - The tool name (defaults to agent definition name)
+/// * `description` - Human-readable description of the tool
+/// * `parameters` - JSON Schema describing the tool's parameters
+///
+/// # Ports
+///
+/// * Input `tool_out` - Receives the tool's result from the workflow
+/// * Output `tool_in` - Emits the tool call arguments to the workflow
 #[modular_agent(
     title="Preset Tool",
     category=CATEGORY,
@@ -265,10 +436,15 @@ pub struct PresetToolAgent {
     name: String,
     description: String,
     parameters: Option<serde_json::Value>,
+    /// Pending tool calls awaiting results, keyed by context ID.
     pending: Arc<Mutex<HashMap<usize, oneshot::Sender<AgentValue>>>>,
 }
 
 impl PresetToolAgent {
+    /// Initiates a tool call and returns a receiver for the result.
+    ///
+    /// Emits the arguments to the workflow and registers a pending receiver
+    /// that will be fulfilled when the result arrives on the input port.
     fn start_tool_call(
         &mut self,
         ctx: AgentContext,
@@ -359,12 +535,14 @@ impl AsAgent for PresetToolAgent {
     }
 }
 
+/// Internal Tool implementation that delegates to a PresetToolAgent.
 struct PresetTool {
     info: ToolInfo,
     agent: Arc<AsyncMutex<Box<dyn Agent>>>,
 }
 
 impl PresetTool {
+    /// Creates a new PresetTool wrapping a PresetToolAgent.
     fn new(
         name: String,
         description: String,
@@ -381,6 +559,9 @@ impl PresetTool {
         }
     }
 
+    /// Executes a tool call through the wrapped agent.
+    ///
+    /// Times out after 60 seconds if no response is received.
     async fn tool_call(
         &self,
         ctx: AgentContext,
@@ -415,7 +596,19 @@ impl Tool for PresetTool {
     }
 }
 
-// Call Tool Message Agent
+/// Agent that processes tool calls from LLM messages.
+///
+/// When an LLM response contains tool calls, this agent executes them
+/// and outputs the results as tool response messages.
+///
+/// # Configuration
+///
+/// * `tools` - Optional regex patterns to filter which tools can be called
+///
+/// # Ports
+///
+/// * Input `message` - LLM message that may contain tool calls
+/// * Output `message` - Tool response messages (one per tool call)
 #[modular_agent(
     title="Call Tool Message",
     category=CATEGORY,
@@ -471,7 +664,15 @@ impl AsAgent for CallToolMessageAgent {
     }
 }
 
-// Call Tool Agent
+/// Agent that directly invokes a tool by name.
+///
+/// Takes a tool call specification (name and parameters) and invokes
+/// the corresponding registered tool, outputting the result.
+///
+/// # Ports
+///
+/// * Input `tool_call` - Object with `name` (string) and optional `parameters`
+/// * Output `value` - The tool's return value
 #[modular_agent(
     title="Call Tool",
     category=CATEGORY,

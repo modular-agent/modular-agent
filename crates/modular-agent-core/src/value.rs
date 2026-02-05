@@ -15,117 +15,154 @@ use crate::llm::Message;
 #[cfg(feature = "image")]
 const IMAGE_BASE64_PREFIX: &str = "data:image/png;base64,";
 
+/// The value type passed between agents.
+///
+/// Supports multiple data types with immutable data structures for efficient cloning.
+/// Large data (String, Image, Tensor, etc.) is wrapped in `Arc` for reference-counted sharing.
 #[derive(Debug, Clone)]
 pub enum AgentValue {
-    // Primitive types stored directly
+    /// Empty value. Used as a trigger signal.
     Unit,
+
+    /// Boolean value.
     Boolean(bool),
+
+    /// 64-bit signed integer.
     Integer(i64),
+
+    /// 64-bit floating point number.
     Number(f64),
 
-    // Larger data structures use reference counting
+    /// UTF-8 string wrapped in `Arc` for efficient cloning.
     String(Arc<String>),
 
+    /// Image data (requires `image` feature).
     #[cfg(feature = "image")]
     Image(Arc<PhotonImage>),
 
-    // Recursive data structures
+    /// Ordered array of values.
     Array(Vector<AgentValue>),
+
+    /// Key-value map.
     Object(HashMap<String, AgentValue>),
 
-    // Tensor Data (Embeddings, etc.)
+    /// Tensor data for embeddings, etc.
     Tensor(Arc<Vec<f32>>),
 
-    // LLM Message
+    /// LLM chat message.
     Message(Arc<Message>),
 
-    // Error
-    // special type to represent errors
+    /// Error value for propagating errors through the workflow.
     Error(Arc<AgentError>),
 }
 
+/// Type alias for key-value maps used in `AgentValue::Object`.
 pub type AgentValueMap<S, T> = HashMap<S, T>;
 
 impl AgentValue {
+    /// Creates a `Unit` value.
     pub fn unit() -> Self {
         AgentValue::Unit
     }
 
+    /// Creates a `Boolean` value.
     pub fn boolean(value: bool) -> Self {
         AgentValue::Boolean(value)
     }
 
+    /// Creates an `Integer` value.
     pub fn integer(value: i64) -> Self {
         AgentValue::Integer(value)
     }
 
+    /// Creates a `Number` value.
     pub fn number(value: f64) -> Self {
         AgentValue::Number(value)
     }
 
+    /// Creates a `String` value.
     pub fn string(value: impl Into<String>) -> Self {
         AgentValue::String(Arc::new(value.into()))
     }
 
+    /// Creates an `Image` value from a `PhotonImage`.
     #[cfg(feature = "image")]
     pub fn image(value: PhotonImage) -> Self {
         AgentValue::Image(Arc::new(value))
     }
 
+    /// Creates an `Image` value from an `Arc<PhotonImage>`.
     #[cfg(feature = "image")]
     pub fn image_arc(value: Arc<PhotonImage>) -> Self {
         AgentValue::Image(value)
     }
 
+    /// Creates an `Array` value.
     pub fn array(value: Vector<AgentValue>) -> Self {
         AgentValue::Array(value)
     }
 
+    /// Creates an `Object` value.
     pub fn object(value: AgentValueMap<String, AgentValue>) -> Self {
         AgentValue::Object(value)
     }
 
+    /// Creates a `Tensor` value from a `Vec<f32>`.
     pub fn tensor(value: Vec<f32>) -> Self {
         AgentValue::Tensor(Arc::new(value))
     }
 
+    /// Creates a `Message` value.
     pub fn message(value: Message) -> Self {
         AgentValue::Message(Arc::new(value))
     }
 
+    /// Creates a default `Boolean` value (`false`).
     pub fn boolean_default() -> Self {
         AgentValue::Boolean(false)
     }
 
+    /// Creates a default `Integer` value (`0`).
     pub fn integer_default() -> Self {
         AgentValue::Integer(0)
     }
 
+    /// Creates a default `Number` value (`0.0`).
     pub fn number_default() -> Self {
         AgentValue::Number(0.0)
     }
 
+    /// Creates a default `String` value (empty string).
     pub fn string_default() -> Self {
         AgentValue::String(Arc::new(String::new()))
     }
 
+    /// Creates a default `Image` value (1x1 transparent pixel).
     #[cfg(feature = "image")]
     pub fn image_default() -> Self {
         AgentValue::Image(Arc::new(PhotonImage::new(vec![0u8, 0u8, 0u8, 0u8], 1, 1)))
     }
 
+    /// Creates a default `Array` value (empty array).
     pub fn array_default() -> Self {
         AgentValue::Array(Vector::new())
     }
 
+    /// Creates a default `Object` value (empty object).
     pub fn object_default() -> Self {
         AgentValue::Object(HashMap::new())
     }
 
+    /// Creates a default `Tensor` value (empty vector).
     pub fn tensor_default() -> Self {
         AgentValue::Tensor(Arc::new(Vec::new()))
     }
 
+    /// Creates an `AgentValue` from a `serde_json::Value`.
+    ///
+    /// # Errors
+    ///
+    /// Returns `InvalidValue` if the JSON value cannot be converted.
     pub fn from_json(value: serde_json::Value) -> Result<Self, AgentError> {
         match value {
             serde_json::Value::Null => Ok(AgentValue::Unit),
@@ -170,6 +207,7 @@ impl AgentValue {
         }
     }
 
+    /// Converts to a `serde_json::Value`.
     pub fn to_json(&self) -> serde_json::Value {
         match self {
             AgentValue::Unit => serde_json::Value::Null,
@@ -226,49 +264,60 @@ impl AgentValue {
 
     // Type check helpers
 
+    /// Returns `true` if this is a `Unit` value.
     pub fn is_unit(&self) -> bool {
         matches!(self, AgentValue::Unit)
     }
 
+    /// Returns `true` if this is a `Boolean` value.
     pub fn is_boolean(&self) -> bool {
         matches!(self, AgentValue::Boolean(_))
     }
 
+    /// Returns `true` if this is an `Integer` value.
     pub fn is_integer(&self) -> bool {
         matches!(self, AgentValue::Integer(_))
     }
 
+    /// Returns `true` if this is a `Number` value.
     pub fn is_number(&self) -> bool {
         matches!(self, AgentValue::Number(_))
     }
 
+    /// Returns `true` if this is a `String` value.
     pub fn is_string(&self) -> bool {
         matches!(self, AgentValue::String(_))
     }
 
+    /// Returns `true` if this is an `Image` value.
     #[cfg(feature = "image")]
     pub fn is_image(&self) -> bool {
         matches!(self, AgentValue::Image(_))
     }
 
+    /// Returns `true` if this is an `Array` value.
     pub fn is_array(&self) -> bool {
         matches!(self, AgentValue::Array(_))
     }
 
+    /// Returns `true` if this is an `Object` value.
     pub fn is_object(&self) -> bool {
         matches!(self, AgentValue::Object(_))
     }
 
+    /// Returns `true` if this is a `Tensor` value.
     pub fn is_tensor(&self) -> bool {
         matches!(self, AgentValue::Tensor(_))
     }
 
+    /// Returns `true` if this is a `Message` value.
     pub fn is_message(&self) -> bool {
         matches!(self, AgentValue::Message(_))
     }
 
     // Cast helpers
 
+    /// Returns the inner boolean value if this is a `Boolean`, otherwise `None`.
     pub fn as_bool(&self) -> Option<bool> {
         match self {
             AgentValue::Boolean(b) => Some(*b),
@@ -276,6 +325,7 @@ impl AgentValue {
         }
     }
 
+    /// Returns the value as `i64` if this is an `Integer` or `Number`, otherwise `None`.
     pub fn as_i64(&self) -> Option<i64> {
         match self {
             AgentValue::Integer(i) => Some(*i),
@@ -284,6 +334,7 @@ impl AgentValue {
         }
     }
 
+    /// Returns the value as `f64` if this is an `Integer` or `Number`, otherwise `None`.
     pub fn as_f64(&self) -> Option<f64> {
         match self {
             AgentValue::Integer(i) => Some(*i as f64),
@@ -292,6 +343,7 @@ impl AgentValue {
         }
     }
 
+    /// Returns a reference to the inner string if this is a `String`, otherwise `None`.
     pub fn as_str(&self) -> Option<&str> {
         match self {
             AgentValue::String(s) => Some(s),
@@ -299,6 +351,7 @@ impl AgentValue {
         }
     }
 
+    /// Returns a reference to the inner image if this is an `Image`, otherwise `None`.
     #[cfg(feature = "image")]
     pub fn as_image(&self) -> Option<&PhotonImage> {
         match self {
@@ -307,8 +360,8 @@ impl AgentValue {
         }
     }
 
+    /// Returns a mutable reference to the inner image if this is an `Image`, otherwise `None`.
     #[cfg(feature = "image")]
-    /// If self is an Image, get a mutable reference to the inner PhotonImage.
     pub fn as_image_mut(&mut self) -> Option<&mut PhotonImage> {
         match self {
             AgentValue::Image(img) => Some(Arc::make_mut(img)),
@@ -316,9 +369,8 @@ impl AgentValue {
         }
     }
 
+    /// Extracts the inner `Arc<PhotonImage>` if this is an `Image`, consuming self.
     #[cfg(feature = "image")]
-    /// If self is an Image, extract the inner PhotonImage; otherwise, return None.
-    /// This consumes self.
     pub fn into_image(self) -> Option<Arc<PhotonImage>> {
         match self {
             AgentValue::Image(img) => Some(img),
@@ -326,6 +378,7 @@ impl AgentValue {
         }
     }
 
+    /// Returns a reference to the inner message if this is a `Message`, otherwise `None`.
     pub fn as_message(&self) -> Option<&Message> {
         match self {
             AgentValue::Message(m) => Some(m),
@@ -333,6 +386,7 @@ impl AgentValue {
         }
     }
 
+    /// Returns a mutable reference to the inner message if this is a `Message`, otherwise `None`.
     pub fn as_message_mut(&mut self) -> Option<&mut Message> {
         match self {
             AgentValue::Message(m) => Some(Arc::make_mut(m)),
@@ -340,6 +394,7 @@ impl AgentValue {
         }
     }
 
+    /// Extracts the inner `Arc<Message>` if this is a `Message`, consuming self.
     pub fn into_message(self) -> Option<Arc<Message>> {
         match self {
             AgentValue::Message(m) => Some(m),
@@ -347,7 +402,13 @@ impl AgentValue {
         }
     }
 
-    /// Convert to Boolean.
+    /// Converts to a boolean with type coercion.
+    ///
+    /// Conversion rules:
+    /// - `Boolean`: returns the value
+    /// - `Integer`: `0` → `false`, otherwise `true`
+    /// - `Number`: `0.0` → `false`, otherwise `true`
+    /// - `String`: parses "true"/"false"
     pub fn to_boolean(&self) -> Option<bool> {
         match self {
             AgentValue::Boolean(b) => Some(*b),
@@ -358,7 +419,7 @@ impl AgentValue {
         }
     }
 
-    /// Convert to AgentValue::Boolean or AgentValue::Array of booleans.
+    /// Converts to `AgentValue::Boolean` or `AgentValue::Array` of booleans.
     pub fn to_boolean_value(&self) -> Option<AgentValue> {
         match self {
             AgentValue::Boolean(_) => Some(self.clone()),
@@ -376,7 +437,7 @@ impl AgentValue {
         }
     }
 
-    /// Convert to Integer (i64).
+    /// Converts to an integer (i64) with type coercion.
     pub fn to_integer(&self) -> Option<i64> {
         match self {
             AgentValue::Integer(i) => Some(*i),
@@ -387,7 +448,7 @@ impl AgentValue {
         }
     }
 
-    /// Convert to AgentValue::Integer or AgentValue::Array of integers.
+    /// Converts to `AgentValue::Integer` or `AgentValue::Array` of integers.
     pub fn to_integer_value(&self) -> Option<AgentValue> {
         match self {
             AgentValue::Integer(_) => Some(self.clone()),
@@ -405,7 +466,7 @@ impl AgentValue {
         }
     }
 
-    /// Convert to Number (f64).
+    /// Converts to a number (f64) with type coercion.
     pub fn to_number(&self) -> Option<f64> {
         match self {
             AgentValue::Number(n) => Some(*n),
@@ -416,7 +477,7 @@ impl AgentValue {
         }
     }
 
-    /// Convert to AgentValue::Number or AgentValue::Array of numbers.
+    /// Converts to `AgentValue::Number` or `AgentValue::Array` of numbers.
     pub fn to_number_value(&self) -> Option<AgentValue> {
         match self {
             AgentValue::Number(_) => Some(self.clone()),
@@ -434,7 +495,7 @@ impl AgentValue {
         }
     }
 
-    /// Convert to String.
+    /// Converts to a string with type coercion.
     pub fn to_string(&self) -> Option<String> {
         match self {
             AgentValue::String(s) => Some(s.as_ref().clone()),
@@ -446,7 +507,7 @@ impl AgentValue {
         }
     }
 
-    /// Convert to AgentValue::String or AgentValue::Array of strings.
+    /// Converts to `AgentValue::String` or `AgentValue::Array` of strings.
     pub fn to_string_value(&self) -> Option<AgentValue> {
         match self {
             AgentValue::String(_) => Some(self.clone()),
@@ -464,12 +525,13 @@ impl AgentValue {
         }
     }
 
-    /// Convert to Message.
+    /// Converts to a `Message`.
     pub fn to_message(&self) -> Option<Message> {
         Message::try_from(self.clone()).ok()
     }
 
-    /// Convert to AgentValue::Message or AgentValue::Array of messages.
+    /// Converts to `AgentValue::Message` or `AgentValue::Array` of messages.
+    /// 
     /// If the value is an array, it recursively converts its elements.
     pub fn to_message_value(&self) -> Option<AgentValue> {
         match self {
@@ -490,6 +552,7 @@ impl AgentValue {
         }
     }
 
+    /// Returns a reference to the inner object map if this is an `Object`, otherwise `None`.
     pub fn as_object(&self) -> Option<&AgentValueMap<String, AgentValue>> {
         match self {
             AgentValue::Object(o) => Some(o),
@@ -497,6 +560,7 @@ impl AgentValue {
         }
     }
 
+    /// Returns a mutable reference to the inner object map if this is an `Object`, otherwise `None`.
     pub fn as_object_mut(&mut self) -> Option<&mut AgentValueMap<String, AgentValue>> {
         match self {
             AgentValue::Object(o) => Some(o),
@@ -504,8 +568,7 @@ impl AgentValue {
         }
     }
 
-    /// If self is an Object, extract the inner HashMap; otherwise, return None.
-    /// This consumes self.
+    /// Extracts the inner `HashMap` if this is an `Object`, consuming self.
     pub fn into_object(self) -> Option<AgentValueMap<String, AgentValue>> {
         match self {
             AgentValue::Object(o) => Some(o),
@@ -513,6 +576,7 @@ impl AgentValue {
         }
     }
 
+    /// Returns a reference to the inner array if this is an `Array`, otherwise `None`.
     pub fn as_array(&self) -> Option<&Vector<AgentValue>> {
         match self {
             AgentValue::Array(a) => Some(a),
@@ -520,6 +584,7 @@ impl AgentValue {
         }
     }
 
+    /// Returns a mutable reference to the inner array if this is an `Array`, otherwise `None`.
     pub fn as_array_mut(&mut self) -> Option<&mut Vector<AgentValue>> {
         match self {
             AgentValue::Array(a) => Some(a),
@@ -527,8 +592,7 @@ impl AgentValue {
         }
     }
 
-    /// If self is an Array, extract the inner Vector; otherwise, return None.
-    /// This consumes self.
+    /// Extracts the inner `Vector` if this is an `Array`, consuming self.
     pub fn into_array(self) -> Option<Vector<AgentValue>> {
         match self {
             AgentValue::Array(a) => Some(a),
@@ -536,6 +600,7 @@ impl AgentValue {
         }
     }
 
+    /// Returns a reference to the inner tensor if this is a `Tensor`, otherwise `None`.
     pub fn as_tensor(&self) -> Option<&Vec<f32>> {
         match self {
             AgentValue::Tensor(t) => Some(t),
@@ -543,6 +608,7 @@ impl AgentValue {
         }
     }
 
+    /// Returns a mutable reference to the inner tensor if this is a `Tensor`, otherwise `None`.
     pub fn as_tensor_mut(&mut self) -> Option<&mut Vec<f32>> {
         match self {
             AgentValue::Tensor(t) => Some(Arc::make_mut(t)),
@@ -550,8 +616,7 @@ impl AgentValue {
         }
     }
 
-    /// If self is a Tensor, extract the inner Vec; otherwise, return None.
-    /// This consumes self.
+    /// Extracts the inner `Arc<Vec<f32>>` if this is a `Tensor`, consuming self.
     pub fn into_tensor(self) -> Option<Arc<Vec<f32>>> {
         match self {
             AgentValue::Tensor(t) => Some(t),
@@ -559,9 +624,7 @@ impl AgentValue {
         }
     }
 
-    /// If self is a Tensor, extract the inner Vec; otherwise, return None.
-    ///
-    /// This consumes self.
+    /// Extracts the inner `Vec<f32>` if this is a `Tensor`, consuming self.
     /// Possibly O(n) copy.
     pub fn into_tensor_vec(self) -> Option<Vec<f32>> {
         match self {
@@ -571,75 +634,97 @@ impl AgentValue {
     }
 
     // Getters by key
+    // These methods only work on `Object` values.
 
+    /// Gets a value by key from an `Object`.
     pub fn get(&self, key: &str) -> Option<&AgentValue> {
         self.as_object().and_then(|o| o.get(key))
     }
 
+    /// Gets a mutable reference to a value by key from an `Object`.
     pub fn get_mut(&mut self, key: &str) -> Option<&mut AgentValue> {
         self.as_object_mut().and_then(|o| o.get_mut(key))
     }
 
+    /// Gets a boolean value by key from an `Object`.
     pub fn get_bool(&self, key: &str) -> Option<bool> {
         self.get(key).and_then(|v| v.as_bool())
     }
 
+    /// Gets an i64 value by key from an `Object`.
     pub fn get_i64(&self, key: &str) -> Option<i64> {
         self.get(key).and_then(|v| v.as_i64())
     }
 
+    /// Gets an f64 value by key from an `Object`.
     pub fn get_f64(&self, key: &str) -> Option<f64> {
         self.get(key).and_then(|v| v.as_f64())
     }
 
+    /// Gets a string reference by key from an `Object`.
     pub fn get_str(&self, key: &str) -> Option<&str> {
         self.get(key).and_then(|v| v.as_str())
     }
 
+    /// Gets an image reference by key from an `Object`.
     #[cfg(feature = "image")]
     pub fn get_image(&self, key: &str) -> Option<&PhotonImage> {
         self.get(key).and_then(|v| v.as_image())
     }
 
+    /// Gets a mutable image reference by key from an `Object`.
     #[cfg(feature = "image")]
     pub fn get_image_mut(&mut self, key: &str) -> Option<&mut PhotonImage> {
         self.get_mut(key).and_then(|v| v.as_image_mut())
     }
 
+    /// Gets an object reference by key from an `Object`.
     pub fn get_object(&self, key: &str) -> Option<&AgentValueMap<String, AgentValue>> {
         self.get(key).and_then(|v| v.as_object())
     }
 
+    /// Gets a mutable object reference by key from an `Object`.
     pub fn get_object_mut(&mut self, key: &str) -> Option<&mut AgentValueMap<String, AgentValue>> {
         self.get_mut(key).and_then(|v| v.as_object_mut())
     }
 
+    /// Gets an array reference by key from an `Object`.
     pub fn get_array(&self, key: &str) -> Option<&Vector<AgentValue>> {
         self.get(key).and_then(|v| v.as_array())
     }
 
+    /// Gets a mutable array reference by key from an `Object`.
     pub fn get_array_mut(&mut self, key: &str) -> Option<&mut Vector<AgentValue>> {
         self.get_mut(key).and_then(|v| v.as_array_mut())
     }
 
+    /// Gets a tensor reference by key from an `Object`.
     pub fn get_tensor(&self, key: &str) -> Option<&Vec<f32>> {
         self.get(key).and_then(|v| v.as_tensor())
     }
 
+    /// Gets a mutable tensor reference by key from an `Object`.
     pub fn get_tensor_mut(&mut self, key: &str) -> Option<&mut Vec<f32>> {
         self.get_mut(key).and_then(|v| v.as_tensor_mut())
     }
 
+    /// Gets a message reference by key from an `Object`.
     pub fn get_message(&self, key: &str) -> Option<&Message> {
         self.get(key).and_then(|v| v.as_message())
     }
 
+    /// Gets a mutable message reference by key from an `Object`.
     pub fn get_message_mut(&mut self, key: &str) -> Option<&mut Message> {
         self.get_mut(key).and_then(|v| v.as_message_mut())
     }
 
     // Setter by key
 
+    /// Sets a value by key in an `Object`.
+    ///
+    /// # Errors
+    ///
+    /// Returns `InvalidValue` if this is not an `Object`.
     pub fn set(&mut self, key: String, value: AgentValue) -> Result<(), AgentError> {
         if let Some(obj) = self.as_object_mut() {
             obj.insert(key, value);

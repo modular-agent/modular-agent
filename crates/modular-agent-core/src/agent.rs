@@ -12,6 +12,7 @@ use crate::runtime::runtime;
 use crate::spec::AgentSpec;
 use crate::value::AgentValue;
 
+/// The lifecycle status of an agent.
 #[derive(Debug, Default, Clone, PartialEq)]
 pub enum AgentStatus {
     #[default]
@@ -20,59 +21,96 @@ pub enum AgentStatus {
     Stop,
 }
 
+/// Internal messages sent to agents.
 pub enum AgentMessage {
+    /// Input value received on a port.
     Input {
         ctx: AgentContext,
         port: String,
         value: AgentValue,
     },
+
+    /// Configuration value update.
     Config {
         key: String,
         value: AgentValue,
     },
+
+    /// Full configuration update.
     Configs {
         configs: AgentConfigs,
     },
+
+    /// Stop the agent.
     Stop,
 }
 
 /// The core trait for all agents.
+///
+/// All agents implement this trait. Defines lifecycle management,
+/// configuration access, and message processing.
 #[async_trait]
 pub trait Agent: Send + Sync + 'static {
+    /// Constructs a new agent instance.
     fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError>
     where
         Self: Sized;
 
+    /// Returns the `ModularAgent`.
     fn ma(&self) -> &ModularAgent;
 
+    /// Returns the unique agent ID.
     fn id(&self) -> &str;
 
+    /// Returns the current lifecycle status.
     fn status(&self) -> &AgentStatus;
 
+    /// Returns the agent specification.
     fn spec(&self) -> &AgentSpec;
 
+    /// Updates the agent specification.
     fn update_spec(&mut self, spec_update: &Value) -> Result<(), AgentError>;
 
+    /// Returns the agent definition name.
     fn def_name(&self) -> &str;
 
+    /// Returns the agent's configuration.
+    ///
+    /// # Errors
+    ///
+    /// Returns `NoConfig` if no configuration is available.
+    ///
+    /// 設定がない場合`NoConfig`を返す。
     fn configs(&self) -> Result<&AgentConfigs, AgentError>;
 
+    /// Sets a configuration value.
     fn set_config(&mut self, key: String, value: AgentValue) -> Result<(), AgentError>;
 
+    /// Sets the entire configuration.
     fn set_configs(&mut self, configs: AgentConfigs) -> Result<(), AgentError>;
 
+    /// Gets global configuration for this agent.
     fn get_global_configs(&self) -> Option<AgentConfigs> {
         self.ma().get_global_configs(self.def_name())
     }
 
+    /// Returns the preset ID this agent belongs to.
     fn preset_id(&self) -> &str;
 
+    /// Sets the preset ID.
     fn set_preset_id(&mut self, preset_id: String);
 
+    /// Starts the agent.
+    ///
+    /// Called when the workflow starts. Use for initialization and initial output.
     async fn start(&mut self) -> Result<(), AgentError>;
 
+    /// Stops the agent.
     async fn stop(&mut self) -> Result<(), AgentError>;
 
+    /// Processes an input message.
+    ///
+    /// Called when the agent receives a value on an input port.
     async fn process(
         &mut self,
         ctx: AgentContext,
@@ -80,6 +118,7 @@ pub trait Agent: Send + Sync + 'static {
         value: AgentValue,
     ) -> Result<(), AgentError>;
 
+    /// Returns the tokio runtime.
     fn runtime(&self) -> &tokio::runtime::Runtime {
         runtime()
     }
@@ -99,26 +138,30 @@ impl dyn Agent {
     }
 }
 
-/// The core data structure for an agent.
+/// Core data structure for an agent.
+///
+/// Used by agents implementing `AsAgent` to store common state.
+/// The `#[modular_agent]` macro generates a struct with this as a field.
 pub struct AgentData {
     /// The ModularAgent instance.
     pub ma: ModularAgent,
 
-    /// The unique identifier for the agent.
+    /// The unique identifier for this agent.
     pub id: String,
 
-    /// The specification of the agent.
+    /// The specification of the agent (definition, config, etc.).
     pub spec: AgentSpec,
 
     /// The preset identifier for the agent.
     /// Empty string when the agent does not belong to any preset.
     pub preset_id: String,
 
-    /// The current status of the agent.
+    /// The current lifecycle status of the agent.
     pub status: AgentStatus,
 }
 
 impl AgentData {
+    /// Creates a new `AgentData` instance.
     pub fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Self {
         Self {
             ma,
@@ -130,30 +173,50 @@ impl AgentData {
     }
 }
 
+/// Trait for types that contain `AgentData`.
+///
+/// Required by `AsAgent`. Usually implemented automatically via `#[modular_agent]` macro.
 pub trait HasAgentData {
     fn data(&self) -> &AgentData;
 
     fn mut_data(&mut self) -> &mut AgentData;
 }
 
+/// Simplified trait for implementing custom agents.
+///
+/// Implement this trait instead of `Agent` directly.
+/// The `Agent` trait is automatically implemented for all types that implement `AsAgent`.
 #[async_trait]
 pub trait AsAgent: HasAgentData + Send + Sync + 'static {
+    /// Constructs a new agent instance.
     fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError>
     where
         Self: Sized;
 
+    /// Called when configuration values change.
+    ///
+    /// Override to react to configuration changes at runtime.
     fn configs_changed(&mut self) -> Result<(), AgentError> {
         Ok(())
     }
 
+    /// Called when the agent starts.
+    ///
+    /// Override for initialization logic or to emit initial values.
     async fn start(&mut self) -> Result<(), AgentError> {
         Ok(())
     }
 
+    /// Called when the agent stops.
+    ///
+    /// Override for cleanup logic.
     async fn stop(&mut self) -> Result<(), AgentError> {
         Ok(())
     }
 
+    /// Processes an input message.
+    ///
+    /// Override to implement the agent's main logic.
     async fn process(
         &mut self,
         _ctx: AgentContext,
@@ -290,6 +353,9 @@ pub fn new_agent_boxed<T: Agent>(
     Ok(Box::new(T::new(ma, id, spec)?))
 }
 
+/// Creates an agent based on its definition.
+///
+/// Looks up the agent definition by name and calls the appropriate constructor.
 pub fn agent_new(
     ma: ModularAgent,
     agent_id: String,

@@ -19,15 +19,22 @@ pub struct AgentContext {
     /// Unique identifier assigned when the context is created.
     id: usize,
 
+    /// Variables stored in this context.
     #[serde(skip_serializing_if = "Option::is_none")]
     vars: Option<im::HashMap<String, AgentValue>>,
 
+    /// Frame stack for tracking branching (e.g., map operations).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     frames: Option<im::Vector<Frame>>,
 }
 
+/// Frame type for map operations.
 pub const FRAME_MAP: &str = "map";
+
+/// Key for the index value in map frames.
 pub const FRAME_KEY_INDEX: &str = "index";
+
+/// Key for the length value in map frames.
 pub const FRAME_KEY_LENGTH: &str = "length";
 
 impl AgentContext {
@@ -81,7 +88,10 @@ fn new_id() -> usize {
 /// Describes a single stack frame captured during agent execution.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Frame {
+    /// The frame type name (e.g., "map").
     pub name: String,
+
+    /// Data associated with this frame.
     pub data: AgentValue,
 }
 

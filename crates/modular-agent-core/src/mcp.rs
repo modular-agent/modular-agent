@@ -1,3 +1,39 @@
+//! Model Context Protocol (MCP) integration for external tool servers.
+//!
+//! This module provides integration with MCP-compliant tool servers, allowing
+//! external tools to be registered and called through the standard tool registry.
+//!
+//! MCP is a protocol for connecting LLM applications with external tool providers.
+//! This module supports loading MCP server configurations from JSON files
+//! (compatible with Claude Desktop format) and manages connection pooling
+//! for efficient server communication.
+//!
+//! # Features
+//!
+//! - Load MCP server configurations from JSON files
+//! - Automatic connection pooling for MCP servers
+//! - Register MCP tools with the global tool registry
+//! - Graceful shutdown of all MCP connections
+//!
+//! # Example
+//!
+//! ```no_run
+//! use modular_agent_llm::mcp::{register_tools_from_mcp_json, shutdown_all_mcp_connections};
+//!
+//! #[tokio::main]
+//! async fn main() -> Result<(), Box<dyn std::error::Error>> {
+//!     // Load and register tools from MCP configuration
+//!     let tools = register_tools_from_mcp_json("mcp.json").await?;
+//!     println!("Registered {} MCP tools", tools.len());
+//!
+//!     // ... use tools ...
+//!
+//!     // Clean up connections on shutdown
+//!     shutdown_all_mcp_connections().await?;
+//!     Ok(())
+//! }
+//! ```
+
 #![cfg(feature = "mcp")]
 
 use std::collections::HashMap;
@@ -16,15 +52,29 @@ use tokio::sync::Mutex as AsyncMutex;
 
 use crate::tool::{Tool, ToolInfo, register_tool};
 
-/// MCP Tool with connection pool support
+/// Tool implementation that delegates to an MCP server.
+///
+/// Uses connection pooling to efficiently reuse connections to MCP servers.
 struct MCPTool {
+    /// Name of the MCP server this tool belongs to.
     server_name: String,
+    /// Configuration for connecting to the MCP server.
     server_config: MCPServerConfig,
+    /// The underlying MCP tool definition.
     tool: rmcp::model::Tool,
+    /// Tool metadata for registration.
     info: ToolInfo,
 }
 
 impl MCPTool {
+    /// Creates a new MCPTool from server configuration and tool definition.
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - The fully qualified tool name (typically "server::tool")
+    /// * `server_name` - Name of the MCP server
+    /// * `server_config` - Configuration for the MCP server
+    /// * `tool` - The MCP tool definition
     fn new(
         name: String,
         server_name: String,
@@ -44,6 +94,9 @@ impl MCPTool {
         }
     }
 
+    /// Invokes the tool on the MCP server.
+    ///
+    /// Gets or creates a connection from the pool and calls the tool.
     async fn tool_call(
         &self,
         _ctx: AgentContext,
@@ -102,40 +155,75 @@ impl Tool for MCPTool {
     }
 }
 
-/// Structure representing the Claude Desktop MCP configuration format
+/// Root configuration structure for MCP servers.
+///
+/// Compatible with the Claude Desktop MCP configuration format (`mcp.json`).
+///
+/// # Example JSON
+///
+/// ```json
+/// {
+///   "mcpServers": {
+///     "filesystem": {
+///       "command": "npx",
+///       "args": ["-y", "@anthropic/mcp-server-filesystem", "/path/to/dir"]
+///     }
+///   }
+/// }
+/// ```
 #[derive(Debug, Deserialize)]
 pub struct MCPConfig {
+    /// Map of server names to their configurations.
     #[serde(rename = "mcpServers")]
     pub mcp_servers: HashMap<String, MCPServerConfig>,
 }
 
+/// Configuration for a single MCP server.
+///
+/// Specifies how to start the MCP server process.
 #[derive(Debug, Clone, Deserialize)]
 pub struct MCPServerConfig {
+    /// The command to execute (e.g., "npx", "node", "python").
     pub command: String,
+
+    /// Arguments to pass to the command.
     pub args: Vec<String>,
+
+    /// Optional environment variables for the process.
     #[serde(default)]
     pub env: Option<HashMap<String, String>>,
 }
 
+/// Type alias for a running MCP service connection.
 type MCPService = rmcp::service::RunningService<rmcp::service::RoleClient, ()>;
 
-/// Connection pool entry for an MCP server
+/// A single connection to an MCP server.
 struct MCPConnection {
+    /// The running service, or None if not connected.
     service: Option<MCPService>,
 }
 
-/// Connection pool for MCP servers
+/// Connection pool for managing MCP server connections.
+///
+/// Maintains persistent connections to MCP servers and reuses them
+/// across multiple tool calls for efficiency.
 struct MCPConnectionPool {
+    /// Map of server names to their connections.
     connections: HashMap<String, Arc<AsyncMutex<MCPConnection>>>,
 }
 
 impl MCPConnectionPool {
+    /// Creates a new empty connection pool.
     fn new() -> Self {
         Self {
             connections: HashMap::new(),
         }
     }
 
+    /// Gets an existing connection or creates a new one for the server.
+    ///
+    /// If a connection already exists for the server, it is reused.
+    /// Otherwise, a new MCP server process is started.
     async fn get_or_create(
         &mut self,
         server_name: &str,
@@ -195,6 +283,9 @@ impl MCPConnectionPool {
         Ok(conn_arc)
     }
 
+    /// Shuts down all connections in the pool.
+    ///
+    /// Cancels all running MCP services and clears the connection map.
     async fn shutdown_all(&mut self) -> Result<(), AgentError> {
         let count = self.connections.len();
         log::debug!("Shutting down {} MCP server connection(s)", count);
@@ -214,14 +305,32 @@ impl MCPConnectionPool {
     }
 }
 
-// Global connection pool
+/// Global connection pool instance.
 static CONNECTION_POOL: OnceLock<AsyncMutex<MCPConnectionPool>> = OnceLock::new();
 
+/// Returns the global connection pool, initializing it if necessary.
 fn connection_pool() -> &'static AsyncMutex<MCPConnectionPool> {
     CONNECTION_POOL.get_or_init(|| AsyncMutex::new(MCPConnectionPool::new()))
 }
 
-/// Shuts down all MCP server connections in the pool
+/// Shuts down all MCP server connections.
+///
+/// Call this during application shutdown to cleanly terminate all
+/// MCP server processes.
+///
+/// # Example
+///
+/// ```no_run
+/// use modular_agent_llm::mcp::shutdown_all_mcp_connections;
+///
+/// #[tokio::main]
+/// async fn main() {
+///     // ... use MCP tools ...
+///
+///     // Clean shutdown
+///     shutdown_all_mcp_connections().await.expect("Failed to shutdown MCP");
+/// }
+/// ```
 pub async fn shutdown_all_mcp_connections() -> Result<(), AgentError> {
     log::info!("Shutting down all MCP server connections");
     connection_pool().lock().await.shutdown_all().await?;
@@ -229,14 +338,19 @@ pub async fn shutdown_all_mcp_connections() -> Result<(), AgentError> {
     Ok(())
 }
 
-/// Registers tools from a single MCP server
+/// Registers all tools from a single MCP server.
+///
+/// Connects to the MCP server, lists its available tools, and registers
+/// each one with the global tool registry.
 ///
 /// # Arguments
+///
 /// * `server_name` - Name of the MCP server
 /// * `server_config` - Configuration for the MCP server
 ///
 /// # Returns
-/// A vector of registered tool names in the format "server_name::tool_name"
+///
+/// A vector of registered tool names in the format "server_name::tool_name".
 async fn register_tools_from_server(
     server_name: String,
     server_config: MCPServerConfig,
@@ -349,6 +463,10 @@ pub async fn register_tools_from_mcp_json<P: AsRef<Path>>(
     Ok(registered_tool_names)
 }
 
+/// Converts an MCP tool call result to an AgentValue.
+///
+/// Extracts text content from the result and returns it as an array.
+/// If the result indicates an error, returns an AgentError instead.
 fn call_tool_result_to_agent_value(result: CallToolResult) -> Result<AgentValue, AgentError> {
     let mut contents = Vec::new();
     for c in result.content.iter() {

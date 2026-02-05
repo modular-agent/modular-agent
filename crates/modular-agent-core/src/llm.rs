@@ -1,3 +1,10 @@
+//! LLM message types for agent-based workflows.
+//!
+//! This module provides types for representing chat messages in LLM conversations,
+//! including support for tool calls, streaming responses, and multimodal content.
+
+#![cfg(feature = "llm")]
+
 use std::{sync::Arc, vec};
 
 use im::Vector;
@@ -9,29 +16,71 @@ use crate::value::AgentValue;
 #[cfg(feature = "image")]
 use photon_rs::PhotonImage;
 
+/// A chat message in an LLM conversation.
+///
+/// Represents messages exchanged between users, assistants, and tools in a conversation.
+/// Supports various roles (user, assistant, system, tool) and optional features like
+/// streaming, thinking traces, and attached images.
+///
+/// # Fields
+///
+/// * `id` - Optional unique identifier for the message
+/// * `role` - The role of the message sender ("user", "assistant", "system", "tool")
+/// * `content` - The text content of the message
+/// * `tokens` - Optional token count for the message
+/// * `thinking` - Optional reasoning/thinking trace (for extended thinking models)
+/// * `streaming` - Whether this is a partial streaming response
+/// * `tool_calls` - Tool invocations requested by the assistant
+/// * `tool_name` - Name of the tool (for tool role messages)
+/// * `image` - Optional attached image (requires "image" feature)
+///
+/// # Example
+///
+/// ```
+/// use modular_agent_core::Message;
+///
+/// let user_msg = Message::user("What is the weather?".to_string());
+/// let assistant_msg = Message::assistant("The weather is sunny.".to_string());
+/// let system_msg = Message::system("You are a helpful assistant.".to_string());
+/// ```
 #[derive(Debug, Default, Clone)]
 pub struct Message {
+    /// Unique identifier for this message.
     pub id: Option<String>,
 
+    /// Role of the message sender: "user", "assistant", "system", or "tool".
     pub role: String,
 
+    /// Text content of the message.
     pub content: String,
 
+    /// Token count for this message (if available).
     pub tokens: Option<usize>,
 
+    /// Reasoning/thinking trace for extended thinking models.
     pub thinking: Option<String>,
 
+    /// Whether this is a partial streaming response.
     pub streaming: bool,
 
+    /// Tool calls requested by the assistant in this message.
     pub tool_calls: Option<Vector<ToolCall>>,
 
+    /// Name of the tool (for tool role messages containing tool results).
     pub tool_name: Option<String>,
 
+    /// Attached image for multimodal messages (requires "image" feature).
     #[cfg(feature = "image")]
     pub image: Option<Arc<PhotonImage>>,
 }
 
 impl Message {
+    /// Creates a new message with the specified role and content.
+    ///
+    /// # Arguments
+    ///
+    /// * `role` - The role of the message sender
+    /// * `content` - The text content of the message
     pub fn new(role: String, content: String) -> Self {
         Self {
             id: None,
@@ -48,24 +97,41 @@ impl Message {
         }
     }
 
+    /// Creates an assistant message with the given content.
     pub fn assistant(content: String) -> Self {
         Message::new("assistant".to_string(), content)
     }
 
+    /// Creates a system message with the given content.
+    ///
+    /// System messages typically set the behavior or context for the assistant.
     pub fn system(content: String) -> Self {
         Message::new("system".to_string(), content)
     }
 
+    /// Creates a user message with the given content.
     pub fn user(content: String) -> Self {
         Message::new("user".to_string(), content)
     }
 
+    /// Creates a tool response message.
+    ///
+    /// Tool messages contain the result of a tool call and are associated
+    /// with a specific tool by name.
+    ///
+    /// # Arguments
+    ///
+    /// * `tool_name` - The name of the tool that produced this result
+    /// * `content` - The tool's output/result as a string
     pub fn tool(tool_name: String, content: String) -> Self {
         let mut message = Message::new("tool".to_string(), content);
         message.tool_name = Some(tool_name);
         message
     }
 
+    /// Attaches an image to this message (builder pattern).
+    ///
+    /// Only available when the "image" feature is enabled.
     #[cfg(feature = "image")]
     pub fn with_image(mut self, image: Arc<PhotonImage>) -> Self {
         self.image = Some(image);
@@ -192,16 +258,29 @@ impl<'de> Deserialize<'de> for Message {
     }
 }
 
+/// A tool call requested by the assistant.
+///
+/// Represents a single tool invocation as part of an LLM response.
+/// The assistant may request multiple tool calls in a single message.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolCall {
+    /// The function to be called.
     pub function: ToolCallFunction,
 }
 
+/// Details of a function call within a tool invocation.
+///
+/// Contains the function name, parameters, and optional call ID
+/// for correlating tool calls with their results.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolCallFunction {
+    /// Name of the function/tool to invoke.
     pub name: String,
+
+    /// Parameters to pass to the function as a JSON value.
     pub parameters: serde_json::Value,
 
+    /// Optional unique identifier for this tool call (for correlation).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
 }

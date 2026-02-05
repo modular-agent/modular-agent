@@ -10,78 +10,118 @@ use crate::id::new_id;
 use crate::spec::AgentSpec;
 use crate::value::AgentValue;
 
+/// A map of agent definition names to their definitions.
 pub type AgentDefinitions = FnvIndexMap<String, AgentDefinition>;
 
+/// The definition (blueprint) of an agent type.
+///
+/// An agent definition describes the metadata and capabilities of an agent type,
+/// including its ports, configuration options, and factory function.
+/// Multiple agent instances can be created from a single definition.
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct AgentDefinition {
+    /// The kind/category identifier for this agent type (e.g., "Agent", "Board").
     pub kind: String,
 
+    /// Unique name of this agent definition.
     pub name: String,
 
+    /// Human-readable title for display in UI.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
 
+    /// Whether to hide the title in UI.
     #[serde(default, skip_serializing_if = "<&bool>::not")]
     pub hide_title: bool,
 
+    /// Description of what this agent does.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
 
+    /// Category path for organizing agents (e.g., "Flow/Control").
     #[serde(skip_serializing_if = "Option::is_none")]
     pub category: Option<String>,
 
+    /// Default input port names.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub inputs: Option<Vec<String>>,
 
+    /// Default output port names.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub outputs: Option<Vec<String>>,
 
+    /// Configuration specifications for this agent type.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub configs: Option<AgentConfigSpecs>,
 
+    /// Global configuration specifications (shared across instances).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub global_configs: Option<AgentGlobalConfigSpecs>,
 
+    /// Whether to run this agent on a native OS thread instead of the async runtime.
     #[serde(default, skip_serializing_if = "<&bool>::not")]
     pub native_thread: bool,
 
+    /// Factory function to create new agent instances.
     #[serde(skip)]
     pub new_boxed: Option<AgentNewBoxedFn>,
 }
 
+/// A map of configuration keys to their specifications.
 pub type AgentConfigSpecs = FnvIndexMap<String, AgentConfigSpec>;
+
+/// A map of global configuration keys to their specifications.
 pub type AgentGlobalConfigSpecs = FnvIndexMap<String, AgentConfigSpec>;
 
+/// Specification for a configuration entry.
+///
+/// Defines the metadata for a configuration option, including its default value,
+/// type, display properties, and access control.
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct AgentConfigSpec {
+    /// Default value for this configuration.
     pub value: AgentValue,
 
+    /// Type of this configuration (e.g., "string", "integer", "boolean").
     #[serde(rename = "type")]
     pub type_: Option<String>,
 
+    /// Human-readable title for display in UI.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
 
+    /// Whether to hide the title in UI.
     #[serde(default, skip_serializing_if = "<&bool>::not")]
     pub hide_title: bool,
 
+    /// Description of this configuration option.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
 
-    /// Indicates whether this configuration entry should be hidden from the user interface.
-    /// If set to `true`, the entry will be hidden.
+    /// Whether this configuration entry should be hidden from the user interface.
     #[serde(default, skip_serializing_if = "<&bool>::not")]
     pub hidden: bool,
 
-    /// Indicates whether this configuration entry is read-only.
+    /// Whether this configuration entry is read-only.
     #[serde(default, skip_serializing_if = "<&bool>::not")]
     pub readonly: bool,
 }
 
+/// Factory function type for creating new agent instances.
+///
+/// Takes a `ModularAgent` orchestrator, agent ID, and spec, and returns
+/// a boxed `Agent` trait object or an error.
 pub type AgentNewBoxedFn =
     fn(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Box<dyn Agent>, AgentError>;
 
 impl AgentDefinition {
+    /// Creates a new agent definition.
+    ///
+    /// # Arguments
+    ///
+    /// * `kind` - The kind/category identifier (e.g., "std", "llm")
+    /// * `name` - Unique name for this agent definition
+    /// * `new_boxed` - Optional factory function to create agent instances
     pub fn new(
         kind: impl Into<String>,
         name: impl Into<String>,
@@ -95,31 +135,37 @@ impl AgentDefinition {
         }
     }
 
+    /// Sets the display title. Returns self for method chaining.
     pub fn title(mut self, title: &str) -> Self {
         self.title = Some(title.into());
         self
     }
 
+    /// Hides the title in UI. Returns self for method chaining.
     pub fn hide_title(mut self) -> Self {
         self.hide_title = true;
         self
     }
 
+    /// Sets the description. Returns self for method chaining.
     pub fn description(mut self, description: &str) -> Self {
         self.description = Some(description.into());
         self
     }
 
+    /// Sets the category path. Returns self for method chaining.
     pub fn category(mut self, category: &str) -> Self {
         self.category = Some(category.into());
         self
     }
 
+    /// Sets the input port names. Returns self for method chaining.
     pub fn inputs(mut self, inputs: Vec<&str>) -> Self {
         self.inputs = Some(inputs.into_iter().map(|x| x.into()).collect());
         self
     }
 
+    /// Sets the output port names. Returns self for method chaining.
     pub fn outputs(mut self, outputs: Vec<&str>) -> Self {
         self.outputs = Some(outputs.into_iter().map(|x| x.into()).collect());
         self
@@ -127,15 +173,18 @@ impl AgentDefinition {
 
     // Config Spec
 
+    /// Sets all configuration specifications at once.
     pub fn configs(mut self, configs: Vec<(&str, AgentConfigSpec)>) -> Self {
         self.configs = Some(configs.into_iter().map(|(k, v)| (k.into(), v)).collect());
         self
     }
 
+    /// Adds a unit (trigger/signal) configuration.
     pub fn unit_config(self, key: &str) -> Self {
         self.unit_config_with(key, |entry| entry)
     }
 
+    /// Adds a unit configuration with customization callback.
     pub fn unit_config_with<F>(self, key: &str, f: F) -> Self
     where
         F: FnOnce(AgentConfigSpec) -> AgentConfigSpec,
@@ -143,10 +192,12 @@ impl AgentDefinition {
         self.config_type_with(key, (), "unit", f)
     }
 
+    /// Adds a boolean configuration with a default value.
     pub fn boolean_config(self, key: &str, default: bool) -> Self {
         self.boolean_config_with(key, default, |entry| entry)
     }
 
+    /// Adds a boolean configuration with customization callback.
     pub fn boolean_config_with<F>(self, key: &str, default: bool, f: F) -> Self
     where
         F: FnOnce(AgentConfigSpec) -> AgentConfigSpec,
@@ -154,14 +205,17 @@ impl AgentDefinition {
         self.config_type_with(key, default, "boolean", f)
     }
 
+    /// Adds a boolean configuration with default value `false`.
     pub fn boolean_config_default(self, key: &str) -> Self {
         self.boolean_config(key, false)
     }
 
+    /// Adds an integer configuration with a default value.
     pub fn integer_config(self, key: &str, default: i64) -> Self {
         self.integer_config_with(key, default, |entry| entry)
     }
 
+    /// Adds an integer configuration with customization callback.
     pub fn integer_config_with<F>(self, key: &str, default: i64, f: F) -> Self
     where
         F: FnOnce(AgentConfigSpec) -> AgentConfigSpec,
@@ -169,14 +223,17 @@ impl AgentDefinition {
         self.config_type_with(key, default, "integer", f)
     }
 
+    /// Adds an integer configuration with default value `0`.
     pub fn integer_config_default(self, key: &str) -> Self {
         self.integer_config(key, 0)
     }
 
+    /// Adds a number (f64) configuration with a default value.
     pub fn number_config(self, key: &str, default: f64) -> Self {
         self.number_config_with(key, default, |entry| entry)
     }
 
+    /// Adds a number configuration with customization callback.
     pub fn number_config_with<F>(self, key: &str, default: f64, f: F) -> Self
     where
         F: FnOnce(AgentConfigSpec) -> AgentConfigSpec,
@@ -184,14 +241,17 @@ impl AgentDefinition {
         self.config_type_with(key, default, "number", f)
     }
 
+    /// Adds a number configuration with default value `0.0`.
     pub fn number_config_default(self, key: &str) -> Self {
         self.number_config(key, 0.0)
     }
 
+    /// Adds a string configuration with a default value.
     pub fn string_config(self, key: &str, default: impl Into<String>) -> Self {
         self.string_config_with(key, default, |entry| entry)
     }
 
+    /// Adds a string configuration with customization callback.
     pub fn string_config_with<F>(self, key: &str, default: impl Into<String>, f: F) -> Self
     where
         F: FnOnce(AgentConfigSpec) -> AgentConfigSpec,
@@ -200,14 +260,17 @@ impl AgentDefinition {
         self.config_type_with(key, AgentValue::string(default), "string", f)
     }
 
+    /// Adds a string configuration with empty default value.
     pub fn string_config_default(self, key: &str) -> Self {
         self.string_config(key, "")
     }
 
+    /// Adds a multiline text configuration with a default value.
     pub fn text_config(self, key: &str, default: impl Into<String>) -> Self {
         self.text_config_with(key, default, |entry| entry)
     }
 
+    /// Adds a text configuration with customization callback.
     pub fn text_config_with<F>(self, key: &str, default: impl Into<String>, f: F) -> Self
     where
         F: FnOnce(AgentConfigSpec) -> AgentConfigSpec,
@@ -216,14 +279,17 @@ impl AgentDefinition {
         self.config_type_with(key, AgentValue::string(default), "text", f)
     }
 
+    /// Adds a text configuration with empty default value.
     pub fn text_config_default(self, key: &str) -> Self {
         self.text_config(key, "")
     }
 
+    /// Adds an array configuration with a default value.
     pub fn array_config(self, key: &str, default: impl Into<AgentValue>) -> Self {
         self.array_config_with(key, default, |entry| entry)
     }
 
+    /// Adds an array configuration with customization callback.
     pub fn array_config_with<V: Into<AgentValue>, F>(self, key: &str, default: V, f: F) -> Self
     where
         F: FnOnce(AgentConfigSpec) -> AgentConfigSpec,
@@ -231,14 +297,17 @@ impl AgentDefinition {
         self.config_type_with(key, default, "array", f)
     }
 
+    /// Adds an array configuration with empty default value.
     pub fn array_config_default(self, key: &str) -> Self {
         self.array_config(key, AgentValue::array_default())
     }
 
+    /// Adds an object configuration with a default value.
     pub fn object_config<V: Into<AgentValue>>(self, key: &str, default: V) -> Self {
         self.object_config_with(key, default, |entry| entry)
     }
 
+    /// Adds an object configuration with customization callback.
     pub fn object_config_with<V: Into<AgentValue>, F>(self, key: &str, default: V, f: F) -> Self
     where
         F: FnOnce(AgentConfigSpec) -> AgentConfigSpec,
@@ -246,10 +315,12 @@ impl AgentDefinition {
         self.config_type_with(key, default, "object", f)
     }
 
+    /// Adds an object configuration with empty default value.
     pub fn object_config_default(self, key: &str) -> Self {
         self.object_config(key, AgentValue::object_default())
     }
 
+    /// Adds a custom-typed configuration with customization callback.
     pub fn custom_config_with<V: Into<AgentValue>, F>(
         self,
         key: &str,
@@ -263,6 +334,7 @@ impl AgentDefinition {
         self.config_type_with(key, default, type_, f)
     }
 
+    /// Internal: adds a configuration with specified type.
     fn config_type_with<V: Into<AgentValue>, F>(
         mut self,
         key: &str,
@@ -289,27 +361,21 @@ impl AgentDefinition {
     }
 
     // Global Configs
+    //
+    // Global configurations are shared across all instances of this agent type.
 
+    /// Sets all global configuration specifications at once.
     pub fn global_configs(mut self, configs: Vec<(&str, AgentConfigSpec)>) -> Self {
         self.global_configs = Some(configs.into_iter().map(|(k, v)| (k.into(), v)).collect());
         self
     }
 
-    pub fn unit_global_config(self, key: &str) -> Self {
-        self.unit_global_config_with(key, |entry| entry)
-    }
-
-    pub fn unit_global_config_with<F>(self, key: &str, f: F) -> Self
-    where
-        F: FnOnce(AgentConfigSpec) -> AgentConfigSpec,
-    {
-        self.global_config_type_with(key, (), "unit", f)
-    }
-
+    /// Adds a boolean global configuration.
     pub fn boolean_global_config(self, key: &str, default: bool) -> Self {
         self.boolean_global_config_with(key, default, |entry| entry)
     }
 
+    /// Adds a boolean global configuration with customization callback.
     pub fn boolean_global_config_with<F>(self, key: &str, default: bool, f: F) -> Self
     where
         F: FnOnce(AgentConfigSpec) -> AgentConfigSpec,
@@ -317,10 +383,12 @@ impl AgentDefinition {
         self.global_config_type_with(key, default, "boolean", f)
     }
 
+    /// Adds an integer global configuration.
     pub fn integer_global_config(self, key: &str, default: i64) -> Self {
         self.integer_global_config_with(key, default, |entry| entry)
     }
 
+    /// Adds an integer global configuration with customization callback.
     pub fn integer_global_config_with<F>(self, key: &str, default: i64, f: F) -> Self
     where
         F: FnOnce(AgentConfigSpec) -> AgentConfigSpec,
@@ -328,10 +396,12 @@ impl AgentDefinition {
         self.global_config_type_with(key, default, "integer", f)
     }
 
+    /// Adds a number (f64) global configuration.
     pub fn number_global_config(self, key: &str, default: f64) -> Self {
         self.number_global_config_with(key, default, |entry| entry)
     }
 
+    /// Adds a number global configuration with customization callback.
     pub fn number_global_config_with<F>(self, key: &str, default: f64, f: F) -> Self
     where
         F: FnOnce(AgentConfigSpec) -> AgentConfigSpec,
@@ -339,10 +409,12 @@ impl AgentDefinition {
         self.global_config_type_with(key, default, "number", f)
     }
 
+    /// Adds a string global configuration.
     pub fn string_global_config(self, key: &str, default: impl Into<String>) -> Self {
         self.string_global_config_with(key, default, |entry| entry)
     }
 
+    /// Adds a string global configuration with customization callback.
     pub fn string_global_config_with<F>(self, key: &str, default: impl Into<String>, f: F) -> Self
     where
         F: FnOnce(AgentConfigSpec) -> AgentConfigSpec,
@@ -351,10 +423,12 @@ impl AgentDefinition {
         self.global_config_type_with(key, AgentValue::string(default), "string", f)
     }
 
+    /// Adds a multiline text global configuration.
     pub fn text_global_config(self, key: &str, default: impl Into<String>) -> Self {
         self.text_global_config_with(key, default, |entry| entry)
     }
 
+    /// Adds a text global configuration with customization callback.
     pub fn text_global_config_with<F>(self, key: &str, default: impl Into<String>, f: F) -> Self
     where
         F: FnOnce(AgentConfigSpec) -> AgentConfigSpec,
@@ -363,10 +437,12 @@ impl AgentDefinition {
         self.global_config_type_with(key, AgentValue::string(default), "text", f)
     }
 
+    /// Adds an array global configuration.
     pub fn array_global_config(self, key: &str, default: impl Into<AgentValue>) -> Self {
         self.array_global_config_with(key, default, |entry| entry)
     }
 
+    /// Adds an array global configuration with customization callback.
     pub fn array_global_config_with<V: Into<AgentValue>, F>(
         self,
         key: &str,
@@ -379,14 +455,17 @@ impl AgentDefinition {
         self.global_config_type_with(key, default, "array", f)
     }
 
+    /// Adds an array global configuration with empty default value.
     pub fn array_global_config_default(self, key: &str) -> Self {
         self.array_global_config(key, AgentValue::array_default())
     }
 
+    /// Adds an object global configuration.
     pub fn object_global_config<V: Into<AgentValue>>(self, key: &str, default: V) -> Self {
         self.object_global_config_with(key, default, |entry| entry)
     }
 
+    /// Adds an object global configuration with customization callback.
     pub fn object_global_config_with<V: Into<AgentValue>, F>(
         self,
         key: &str,
@@ -399,6 +478,7 @@ impl AgentDefinition {
         self.global_config_type_with(key, default, "object", f)
     }
 
+    /// Adds a custom-typed global configuration with customization callback.
     pub fn custom_global_config_with<V: Into<AgentValue>, F>(
         self,
         key: &str,
@@ -437,11 +517,19 @@ impl AgentDefinition {
         }
     }
 
+    /// Configures this agent to run on a native OS thread.
+    ///
+    /// Use this for agents that perform blocking I/O or CPU-intensive operations
+    /// that would block the async runtime.
     pub fn use_native_thread(mut self) -> Self {
         self.native_thread = true;
         self
     }
 
+    /// Creates a new agent specification from this definition.
+    ///
+    /// Generates a unique ID and copies the definition's ports and configs
+    /// to create a new instance specification.
     pub fn to_spec(&self) -> AgentSpec {
         AgentSpec {
             id: new_id(),
@@ -463,6 +551,12 @@ impl AgentDefinition {
 }
 
 impl AgentConfigSpec {
+    /// Creates a new configuration specification.
+    ///
+    /// # Arguments
+    ///
+    /// * `value` - Default value for this configuration
+    /// * `type_` - Type identifier (e.g., "string", "integer", "boolean")
     pub fn new<V: Into<AgentValue>>(value: V, type_: &str) -> Self {
         Self {
             value: value.into(),
@@ -471,26 +565,31 @@ impl AgentConfigSpec {
         }
     }
 
+    /// Sets the display title. Returns self for method chaining.
     pub fn title(mut self, title: &str) -> Self {
         self.title = Some(title.into());
         self
     }
 
+    /// Hides the title in UI. Returns self for method chaining.
     pub fn hide_title(mut self) -> Self {
         self.hide_title = true;
         self
     }
 
+    /// Sets the description. Returns self for method chaining.
     pub fn description(mut self, description: &str) -> Self {
         self.description = Some(description.into());
         self
     }
 
+    /// Marks this config as hidden from UI. Returns self for method chaining.
     pub fn hidden(mut self) -> Self {
         self.hidden = true;
         self
     }
 
+    /// Marks this config as read-only. Returns self for method chaining.
     pub fn readonly(mut self) -> Self {
         self.readonly = true;
         self
@@ -699,7 +798,6 @@ mod tests {
             AgentValue::array(vector![AgentValue::integer(1), AgentValue::string("two")]);
 
         let def = AgentDefinition::new("test", "helpers", None)
-            .unit_global_config("global_unit")
             .boolean_global_config("global_boolean", true)
             .integer_global_config("global_integer", 42)
             .number_global_config("global_number", 1.5)

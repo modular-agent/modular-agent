@@ -25,6 +25,16 @@ const EVENT_CHANNEL_CAPACITY: usize = 256;
 /// `ModularAgent` manages agent lifecycle, connections, and message routing.
 /// It maintains agent instances, connection maps, and handles [`ModularAgentEvent`]s.
 ///
+/// # Lifecycle
+///
+/// 1. [`init()`](Self::init) - Create instance and register agent definitions
+/// 2. [`ready()`](Self::ready) - Start the internal message loop
+/// 3. Load presets with [`open_preset_from_file()`](Self::open_preset_from_file) or [`add_preset()`](Self::add_preset)
+/// 4. [`start_preset()`](Self::start_preset) - Start agents in a preset
+/// 5. Interact via [`write_external_input()`](Self::write_external_input) and [`subscribe()`](Self::subscribe)
+/// 6. [`stop_preset()`](Self::stop_preset) - Stop agents
+/// 7. [`quit()`](Self::quit) - Shut down
+///
 /// # Example
 ///
 /// ```rust,no_run
@@ -83,6 +93,10 @@ pub struct ModularAgent {
 }
 
 impl ModularAgent {
+    /// Create a new `ModularAgent` instance without registering agents.
+    ///
+    /// For most use cases, prefer [`init()`](Self::init) which also registers
+    /// all agent definitions from the inventory.
     pub fn new() -> Self {
         let (tx, _rx) = broadcast::channel(EVENT_CHANNEL_CAPACITY);
         Self {
@@ -173,15 +187,18 @@ impl ModularAgent {
 
     // Preset management
 
-    /// Create a new preset.
-    /// Returns the id of the new preset.
+    /// Create a new empty preset.
+    ///
+    /// Returns the id of the new preset. The preset is created with default settings
+    /// and contains no agents or connections initially.
     pub fn new_preset(&self) -> Result<String, AgentError> {
         let spec = PresetSpec::default();
         let id = self.add_preset(spec)?;
         Ok(id)
     }
 
-    /// Create a new preset with the given name.
+    /// Create a new empty preset with the given name.
+    ///
     /// Returns the id of the new preset.
     pub fn new_preset_with_name(&self, name: String) -> Result<String, AgentError> {
         let spec = PresetSpec::default();
@@ -190,6 +207,8 @@ impl ModularAgent {
     }
 
     /// Get a preset by id.
+    ///
+    /// Returns `None` if no preset exists with the given id.
     pub fn get_preset(&self, id: &str) -> Option<Arc<AsyncMutex<Preset>>> {
         let presets = self.presets.lock().unwrap();
         presets.get(id).cloned()
@@ -198,6 +217,7 @@ impl ModularAgent {
     /// Add a new preset with the given spec, and returns the id of the new preset.
     ///
     /// The ids of the given spec, including agents and connections, are changed to new unique ids.
+    /// This allows the same spec to be added multiple times without id conflicts.
     pub fn add_preset(&self, spec: PresetSpec) -> Result<String, AgentError> {
         self.add_preset_raw(spec, None)
     }
@@ -245,7 +265,9 @@ impl ModularAgent {
         Ok(id)
     }
 
-    /// Remove an preset by id.
+    /// Remove a preset by id.
+    ///
+    /// Stops the preset if running, then removes all associated agents and connections.
     pub async fn remove_preset(&self, id: &str) -> Result<(), AgentError> {
         let preset = self
             .get_preset(id)
@@ -272,6 +294,9 @@ impl ModularAgent {
     }
 
     /// Start a preset by id.
+    ///
+    /// This starts all agents in the preset, enabling message flow between them.
+    /// Each agent's [`start()`](crate::AsAgent::start) method is called.
     pub async fn start_preset(&self, id: &str) -> Result<(), AgentError> {
         let preset = self
             .get_preset(id)
@@ -283,6 +308,9 @@ impl ModularAgent {
     }
 
     /// Stop a preset by id.
+    ///
+    /// This stops all agents in the preset, terminating message processing.
+    /// Each agent's [`stop()`](crate::AsAgent::stop) method is called.
     pub async fn stop_preset(&self, id: &str) -> Result<(), AgentError> {
         let preset = self
             .get_preset(id)
@@ -293,7 +321,15 @@ impl ModularAgent {
         Ok(())
     }
 
-    /// Open a preset
+    /// Open a preset from a JSON file.
+    ///
+    /// Reads the file, parses the JSON as a [`PresetSpec`], and adds it to the system.
+    /// Optionally provide a custom name for the preset.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - Path to the JSON preset file
+    /// * `name` - Optional custom name for the preset
     #[cfg(feature = "file")]
     pub async fn open_preset_from_file(
         &self,
@@ -307,7 +343,10 @@ impl ModularAgent {
         Ok(id)
     }
 
-    /// Save a preset.
+    /// Save a preset to a JSON file.
+    ///
+    /// Serializes the current preset state (including agent configs) to JSON
+    /// and writes it to the specified path.
     #[cfg(feature = "file")]
     pub async fn save_preset(&self, id: &str, path: &str) -> Result<(), AgentError> {
         let Some(preset_spec) = self.get_preset_spec(id).await else {
@@ -381,6 +420,11 @@ impl ModularAgent {
     // Agents
 
     /// Register an agent definition.
+    ///
+    /// This makes the agent type available for use in presets. The definition
+    /// includes metadata (title, category), input/output ports, and config specs.
+    ///
+    /// Note: Agents using `#[modular_agent]` macro are registered automatically via inventory.
     pub fn register_agent_definiton(&self, def: AgentDefinition) {
         let def_name = def.name.clone();
         let def_global_configs = def.global_configs.clone();
@@ -398,13 +442,17 @@ impl ModularAgent {
         }
     }
 
-    /// Get all agent definitions.
+    /// Get all registered agent definitions.
+    ///
+    /// Returns a map of definition name to [`AgentDefinition`].
     pub fn get_agent_definitions(&self) -> AgentDefinitions {
         let defs = self.defs.lock().unwrap();
         defs.clone()
     }
 
     /// Get an agent definition by name.
+    ///
+    /// The name is typically in the format `module::path::StructName`.
     pub fn get_agent_definition(&self, def_name: &str) -> Option<AgentDefinition> {
         let defs = self.defs.lock().unwrap();
         defs.get(def_name).cloned()
@@ -454,7 +502,11 @@ impl ModularAgent {
         Ok(def.to_spec())
     }
 
-    /// Add an agent to the specified preset, and returns the id of the newly added agent.
+    /// Add an agent to the specified preset.
+    ///
+    /// Creates a new agent instance from the given spec and adds it to the preset.
+    /// Returns the id of the newly created agent. The agent is not started automatically;
+    /// call [`start_preset`](Self::start_preset) or [`start_agent`](Self::start_agent) to start it.
     pub async fn add_agent(
         &self,
         preset_id: String,
@@ -492,7 +544,10 @@ impl ModularAgent {
         agents.get(agent_id).cloned()
     }
 
-    /// Add a connection to the specified preset.
+    /// Add a connection between two agents in the specified preset.
+    ///
+    /// When the source agent outputs a value on the source handle (port),
+    /// it will be delivered to the target agent's target handle (port).
     pub async fn add_connection(
         &self,
         preset_id: &str,
@@ -670,6 +725,13 @@ impl ModularAgent {
     }
 
     /// Start an agent by id.
+    ///
+    /// Creates a message channel for the agent and spawns its event loop.
+    /// The agent's [`start()`](crate::AsAgent::start) method is called, then
+    /// the agent begins processing incoming messages.
+    ///
+    /// If the agent's definition has `native_thread = true`, the agent runs
+    /// on a dedicated OS thread instead of the tokio runtime.
     pub async fn start_agent(&self, agent_id: &str) -> Result<(), AgentError> {
         let agent = {
             let agents = self.agents.lock().unwrap();
@@ -770,6 +832,9 @@ impl ModularAgent {
     }
 
     /// Stop an agent by id.
+    ///
+    /// Sends a stop message to the agent, closes its message channel,
+    /// and calls the agent's [`stop()`](crate::AsAgent::stop) method.
     pub async fn stop_agent(&self, agent_id: &str) -> Result<(), AgentError> {
         {
             // remove the sender first to prevent new messages being sent
@@ -1020,7 +1085,12 @@ impl ModularAgent {
         Ok(())
     }
 
-    /// Subscribe to all ModularAgent events.
+    /// Subscribe to all `ModularAgent` events.
+    ///
+    /// Returns a broadcast receiver that receives all [`ModularAgentEvent`]s.
+    /// For filtered subscriptions, use [`subscribe_to_event`](Self::subscribe_to_event).
+    ///
+    /// **Note**: Subscribe before starting presets to avoid missing events.
     pub fn subscribe(&self) -> broadcast::Receiver<ModularAgentEvent> {
         self.observers.subscribe()
     }

@@ -52,7 +52,6 @@ const GLOBAL_CUSTOM_KEY: &str = "global_custom";
         title = "Custom",
         description = "Custom desc"
     ),
-    unit_global_config(name = GLOBAL_UNIT_KEY),
     boolean_global_config(name = GLOBAL_BOOLEAN_KEY, title = "Global Bool"),
     integer_global_config(name = GLOBAL_INTEGER_KEY, default = -1),
     number_global_config(name = GLOBAL_NUMBER_KEY, default = 2.71, description = "e", hidden),
