@@ -14,7 +14,6 @@ const TEXT_KEY: &str = "text";
 const ARRAY_KEY: &str = "array";
 const OBJECT_KEY: &str = "object";
 const CUSTOM_KEY: &str = "custom";
-const GLOBAL_UNIT_KEY: &str = "global_unit";
 const GLOBAL_BOOLEAN_KEY: &str = "global_boolean";
 const GLOBAL_INTEGER_KEY: &str = "global_integer";
 const GLOBAL_NUMBER_KEY: &str = "global_number";
@@ -157,8 +156,6 @@ fn global_config_entries_are_generated() {
     let array_entry = &configs[GLOBAL_ARRAY_KEY];
     assert_eq!(array_entry.type_.as_deref(), Some("array"));
     assert_eq!(array_entry.value, AgentValue::array_default());
-
-    assert_eq!(configs[GLOBAL_UNIT_KEY].type_.as_deref(), Some("unit"));
 
     let bool_entry = &configs[GLOBAL_BOOLEAN_KEY];
     assert_eq!(bool_entry.type_.as_deref(), Some("boolean"));

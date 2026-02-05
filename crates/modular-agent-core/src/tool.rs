@@ -10,17 +10,6 @@
 //!   - `PresetToolAgent` - Exposes a workflow as a callable tool
 //!   - `CallToolMessageAgent` - Processes tool calls from LLM messages
 //!   - `CallToolAgent` - Directly invokes a tool by name
-//!
-//! # Example
-//!
-//! ```no_run
-//! use modular_agent_core::{register_tool, call_tool, list_tool_infos};
-//!
-//! // List all registered tools
-//! let tools = list_tool_infos();
-//!
-//! // Call a tool by name
-//! // let result = call_tool(ctx, "tool_name", args).await?;
 //! ```
 
 #![cfg(feature = "llm")]

@@ -8,7 +8,7 @@ pub struct AgentRegistration {
 inventory::collect!(AgentRegistration);
 
 /// Register all agents collected via the `#[modular_agent]` macro.
-pub fn register_inventory_agents(ma: &ModularAgent) {
+pub(crate) fn register_inventory_agents(ma: &ModularAgent) {
     for reg in inventory::iter::<AgentRegistration> {
         ma.register_agent_definiton((reg.build)());
     }

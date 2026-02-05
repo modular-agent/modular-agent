@@ -1,10 +1,11 @@
 extern crate modular_agent_core as ma;
 
-use ma::{ModularAgent, AgentContext, AgentStatus, AgentValue};
+use ma::{Agent, AgentContext, AgentStatus, AgentValue, AsAgent, ModularAgent};
 
 use crate::common;
+use common::agents::CounterAgent;
 
-const COUNTER_DEF: &str = common::agents::CounterAgent::DEF_NAME;
+const COUNTER_DEF: &str = CounterAgent::DEF_NAME;
 
 #[test]
 fn test_register_agent_definiton() {
@@ -24,10 +25,10 @@ fn test_agent_new() {
     let ma = ModularAgent::init().unwrap();
     let def = ma.get_agent_definition(COUNTER_DEF).unwrap();
     let spec = def.to_spec();
-    let agent = ma::agent_new(ma.clone(), "agent_1".into(), spec).unwrap();
-    assert_eq!(agent.def_name(), COUNTER_DEF);
-    assert_eq!(agent.id(), "agent_1");
-    assert_eq!(agent.status(), &AgentStatus::Init);
+    let agent = <CounterAgent as AsAgent>::new(ma.clone(), "agent_1".into(), spec).unwrap();
+    assert_eq!(Agent::def_name(&agent), COUNTER_DEF);
+    assert_eq!(Agent::id(&agent), "agent_1");
+    assert_eq!(Agent::status(&agent), &AgentStatus::Init);
 
     ma.quit();
 }
@@ -37,10 +38,11 @@ async fn test_agent_start() {
     let ma = ModularAgent::init().unwrap();
     let def = ma.get_agent_definition(COUNTER_DEF).unwrap();
     let spec = def.to_spec();
-    let mut agent = ma::agent_new(ma.clone(), "agent_1".into(), spec).unwrap();
-    agent.start().await.unwrap();
+    let mut agent =
+        <CounterAgent as AsAgent>::new(ma.clone(), "agent_1".into(), spec).unwrap();
+    Agent::start(&mut agent).await.unwrap();
 
-    assert_eq!(agent.status(), &AgentStatus::Start);
+    assert_eq!(Agent::status(&agent), &AgentStatus::Start);
 
     ma.quit();
 }
@@ -54,19 +56,14 @@ async fn test_agent_process() {
     let counter_spec = counter_def.to_spec();
 
     let mut counter_agent =
-        ma::agent_new(ma.clone(), "agent_1".into(), counter_spec).unwrap();
-    counter_agent.start().await.unwrap();
+        <CounterAgent as AsAgent>::new(ma.clone(), "agent_1".into(), counter_spec).unwrap();
+    Agent::start(&mut counter_agent).await.unwrap();
 
     let ctx = AgentContext::new();
-    counter_agent
-        .process(ctx, "in".into(), AgentValue::unit())
+    Agent::process(&mut counter_agent, ctx, "in".into(), AgentValue::unit())
         .await
         .unwrap();
 
-    let counter_agent = counter_agent
-        .as_any()
-        .downcast_ref::<common::agents::CounterAgent>()
-        .unwrap();
     assert_eq!(counter_agent.count, 1);
 
     ma.quit();
@@ -80,17 +77,16 @@ async fn test_agent_stop() {
 
     let def = ma.get_agent_definition(COUNTER_DEF).unwrap();
     let spec = def.to_spec();
-    let mut agent = ma::agent_new(ma.clone(), "agent_1".into(), spec).unwrap();
-    agent.start().await.unwrap();
+    let mut agent = <CounterAgent as AsAgent>::new(ma.clone(), "agent_1".into(), spec).unwrap();
+    Agent::start(&mut agent).await.unwrap();
 
     let ctx = AgentContext::new();
-    agent
-        .process(ctx, "in".into(), AgentValue::unit())
+    Agent::process(&mut agent, ctx, "in".into(), AgentValue::unit())
         .await
         .unwrap();
 
-    agent.stop().await.unwrap();
-    assert_eq!(agent.status(), &AgentStatus::Init);
+    Agent::stop(&mut agent).await.unwrap();
+    assert_eq!(Agent::status(&agent), &AgentStatus::Init);
 
     ma.quit();
 }

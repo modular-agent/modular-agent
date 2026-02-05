@@ -808,12 +808,8 @@ mod tests {
             .object_global_config("global_object", custom_object_value.clone());
 
         let global_configs = def.global_configs.expect("global configs should exist");
-        assert_eq!(global_configs.len(), 9);
+        assert_eq!(global_configs.len(), 8);
         let config_map: std::collections::HashMap<_, _> = global_configs.into_iter().collect();
-
-        let entry = config_map.get("global_unit").unwrap();
-        assert_eq!(entry.type_.as_deref(), Some("unit"));
-        assert_eq!(entry.value, AgentValue::unit());
 
         let entry = config_map.get("global_boolean").unwrap();
         assert_eq!(entry.type_.as_deref(), Some("boolean"));

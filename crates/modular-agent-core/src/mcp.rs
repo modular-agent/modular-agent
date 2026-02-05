@@ -18,7 +18,7 @@
 //! # Example
 //!
 //! ```no_run
-//! use modular_agent_llm::mcp::{register_tools_from_mcp_json, shutdown_all_mcp_connections};
+//! use modular_agent_core::mcp::{register_tools_from_mcp_json, shutdown_all_mcp_connections};
 //!
 //! #[tokio::main]
 //! async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -321,7 +321,7 @@ fn connection_pool() -> &'static AsyncMutex<MCPConnectionPool> {
 /// # Example
 ///
 /// ```no_run
-/// use modular_agent_llm::mcp::shutdown_all_mcp_connections;
+/// use modular_agent_core::mcp::shutdown_all_mcp_connections;
 ///
 /// #[tokio::main]
 /// async fn main() {

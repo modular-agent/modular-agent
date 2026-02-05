@@ -138,7 +138,7 @@ pub extern crate self as modular_agent_core;
 // Re-exports modular_agent_macros
 pub use modular_agent_macros::modular_agent;
 
-pub use agent::{Agent, AgentData, AgentStatus, AsAgent, HasAgentData, agent_new, new_agent_boxed};
+pub use agent::{Agent, AgentData, AgentStatus, AsAgent, HasAgentData, new_agent_boxed};
 pub use config::{AgentConfigs, AgentConfigsMap};
 pub use context::AgentContext;
 pub use definition::{AgentConfigSpec, AgentConfigSpecs, AgentDefinition, AgentDefinitions};

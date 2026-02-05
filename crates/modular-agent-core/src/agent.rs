@@ -22,7 +22,7 @@ pub enum AgentStatus {
 }
 
 /// Internal messages sent to agents.
-pub enum AgentMessage {
+pub(crate) enum AgentMessage {
     /// Input value received on a port.
     Input {
         ctx: AgentContext,
@@ -79,8 +79,6 @@ pub trait Agent: Send + Sync + 'static {
     /// # Errors
     ///
     /// Returns `NoConfig` if no configuration is available.
-    ///
-    /// 設定がない場合`NoConfig`を返す。
     fn configs(&self) -> Result<&AgentConfigs, AgentError>;
 
     /// Sets a configuration value.
@@ -345,6 +343,8 @@ impl<T: AsAgent> Agent for T {
     }
 }
 
+/// Creates a boxed agent instance from a concrete type.
+#[doc(hidden)]
 pub fn new_agent_boxed<T: Agent>(
     ma: ModularAgent,
     id: String,
@@ -356,7 +356,7 @@ pub fn new_agent_boxed<T: Agent>(
 /// Creates an agent based on its definition.
 ///
 /// Looks up the agent definition by name and calls the appropriate constructor.
-pub fn agent_new(
+pub(crate) fn agent_new(
     ma: ModularAgent,
     agent_id: String,
     spec: AgentSpec,
