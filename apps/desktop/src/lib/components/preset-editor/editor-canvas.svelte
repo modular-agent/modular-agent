@@ -207,7 +207,7 @@
   />
 
   <div
-    class="absolute right-2 top-2 w-60 z-20 max-h-[calc(100vh-210px)] overflow-x-hidden rounded-md border shadow-lg"
+    class="absolute right-2 top-2 w-60 z-20 max-h-[calc(100vh-170px-var(--titlebar-height))] overflow-x-hidden rounded-md border shadow-lg"
   >
     <ScrollArea>
       <AgentList

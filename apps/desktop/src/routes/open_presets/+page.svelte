@@ -1,15 +1,15 @@
 <script lang="ts">
-  import { getCurrentWindow } from "@tauri-apps/api/window";
-
   import { onMount } from "svelte";
 
   import type { PageProps } from "./$types";
   import { PresetList } from "$lib/components/preset-list";
+  import { titlebarState } from "$lib/titlebar-state.svelte";
 
   let { data }: PageProps = $props();
 
-  onMount(async () => {
-    getCurrentWindow().setTitle("Preset List - Modular Agent");
+  onMount(() => {
+    titlebarState.reset();
+    titlebarState.title = "Open Presets";
   });
 </script>
 

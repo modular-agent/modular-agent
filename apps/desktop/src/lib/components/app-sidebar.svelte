@@ -4,7 +4,6 @@
   import SettingsIcon from "@lucide/svelte/icons/settings";
   import WorkflowIcon from "@lucide/svelte/icons/workflow";
 
-  import logo from "$lib/assets/logo.png";
   import * as Sidebar from "$lib/components/ui/sidebar/index.js";
 
   import Attribution from "./attribution.svelte";
@@ -25,11 +24,6 @@
 </script>
 
 <Sidebar.Root collapsible="icon" {...restProps}>
-  <Sidebar.Header>
-    <Sidebar.MenuItem class="flex justify-center">
-      <img src={logo} alt="logo" class="size-6" />
-    </Sidebar.MenuItem>
-  </Sidebar.Header>
   <Sidebar.Content>
     <Sidebar.Group class="pb-0">
       <Sidebar.GroupContent>
@@ -51,7 +45,7 @@
       </Sidebar.GroupContent>
     </Sidebar.Group>
     <NavPresets />
-    <NavSecondary items={data.navSecondary} class="mt-auto flex-shrink-0" />
+    <NavSecondary items={data.navSecondary} class="mt-auto flex-shrink-0 pb-0" />
   </Sidebar.Content>
   <Sidebar.Footer>
     <Attribution />

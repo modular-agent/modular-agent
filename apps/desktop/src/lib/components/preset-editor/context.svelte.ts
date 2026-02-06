@@ -1,4 +1,3 @@
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import { writeText, readText } from "@tauri-apps/plugin-clipboard-manager";
 import { open } from "@tauri-apps/plugin-dialog";
 
@@ -33,6 +32,7 @@ import {
   newPresetWithName,
 } from "$lib/agent";
 import type { PresetFlow, PresetNode, PresetEdge } from "$lib/types";
+import { titlebarState } from "$lib/titlebar-state.svelte";
 
 const BG_COLORS = ["bg-background dark:bg-background", "bg-muted dark:bg-muted"];
 
@@ -66,13 +66,48 @@ export class EditorState {
       const flow = this.props.flow();
       this.nodes = [...flow.nodes];
       this.edges = [...flow.edges];
-      getCurrentWindow().setTitle(flow.name + " - Modular Agent");
     });
 
     // Sync running only when preset_id changes (not on every flow update)
     $effect.pre(() => {
       const _id = this.props.preset_id();
       this.running = this.props.flow().running ?? false;
+    });
+
+    // Sync titlebar state
+    $effect.pre(() => {
+      const flow = this.props.flow();
+      titlebarState.title = flow.name;
+      titlebarState.showActions = true;
+      titlebarState.showMenubar = true;
+      titlebarState.presetId = this.props.preset_id();
+      titlebarState.presetName = flow.name;
+      titlebarState.onStart = () => this.startPreset();
+      titlebarState.onStop = () => this.stopPreset();
+      titlebarState.onNewPreset = (name: string) => {
+        this.newPreset(name).then((id) => {
+          if (id) {
+            import("$app/navigation").then(({ goto }) => {
+              goto(`/preset_editor/${id}`, { invalidateAll: true });
+            });
+          }
+        });
+      };
+      titlebarState.onSavePreset = () => { this.savePreset(); };
+      titlebarState.onImportPreset = () => {
+        this.importPreset().then((id) => {
+          if (id) {
+            import("$app/navigation").then(({ goto }) => {
+              goto(`/preset_editor/${id}`, { invalidateAll: true });
+            });
+          }
+        });
+      };
+      titlebarState.onExportPreset = () => { this.exportPreset(); };
+    });
+
+    $effect(() => {
+      titlebarState.running = this.running;
     });
   }
 

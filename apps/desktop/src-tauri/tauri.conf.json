@@ -15,7 +15,9 @@
         "title": "Modular Agent",
         "width": 1600,
         "height": 900,
-        "dragDropEnabled": false
+        "dragDropEnabled": false,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true
       }
     ]
   },

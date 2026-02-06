@@ -4,6 +4,7 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
+  --titlebar-height: 32px;
   --radius: 0.625rem;
   --background: oklch(1 0 0);
   --foreground: oklch(0.141 0.005 285.823);
@@ -135,4 +136,19 @@
   body {
     @apply bg-background text-foreground;
   }
+}
+
+[data-slot="sidebar-container"] {
+  top: var(--titlebar-height) !important;
+  height: calc(100svh - var(--titlebar-height)) !important;
+}
+
+[data-slot="sidebar-wrapper"] {
+  min-height: calc(100svh - var(--titlebar-height)) !important;
+}
+
+[data-slot="sidebar-group"],
+[data-slot="sidebar-footer"] {
+  padding-left: 0.25rem !important;
+  padding-right: 0.25rem !important;
 }

@@ -51,6 +51,15 @@ pub fn run() {
             });
         }))
         .setup(|app| {
+            #[cfg(not(target_os = "macos"))]
+            {
+                if let Some(window) = app.get_webview_window("main") {
+                    window.set_decorations(false).unwrap_or_else(|e| {
+                        log::error!("Failed to set decorations: {}", e);
+                    });
+                }
+            }
+
             let app_handle = app.handle().clone();
             tauri::async_runtime::block_on(async move {
                 modular_agent_desktop::settings::init(&app_handle).unwrap_or_else(|e| {

@@ -1,9 +1,8 @@
 <script lang="ts">
-  import { getCurrentWindow } from "@tauri-apps/api/window";
-
   import { onMount } from "svelte";
 
   import { getAgentDefinitions, getCoreSettings, getGlobalConfigsMap } from "$lib/agent";
+  import { titlebarState } from "$lib/titlebar-state.svelte";
 
   import Agent from "./Agent.svelte";
   import Core from "./Core.svelte";
@@ -13,11 +12,12 @@
   const globalConfigsMap = getGlobalConfigsMap();
 
   onMount(() => {
-    getCurrentWindow().setTitle("Settings - Modular Agent");
+    titlebarState.reset();
+    titlebarState.title = "Settings";
   });
 </script>
 
-<div class="w-full pl-4 pr-4 pb-6">
+<div class="w-full pt-4 pl-4 pr-4 pb-6">
   <header class="flex-none h-14 items-center">
     <div class="text-2xl font-semibold">Settings</div>
   </header>

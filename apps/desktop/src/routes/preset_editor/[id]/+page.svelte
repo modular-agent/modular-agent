@@ -4,7 +4,6 @@
 
   import { setEditor } from "$lib/components/preset-editor/context.svelte";
   import EditorCanvas from "$lib/components/preset-editor/editor-canvas.svelte";
-  import EditorHeader from "$lib/components/preset-editor/editor-header.svelte";
 
   import type { PageProps } from "./$types";
 
@@ -18,7 +17,6 @@
   });
 </script>
 
-<div class="flex flex-col w-full min-h-screen {editor.bgColor}">
-  <EditorHeader />
+<div class="flex flex-col w-full h-full {editor.bgColor}">
   <EditorCanvas />
 </div>

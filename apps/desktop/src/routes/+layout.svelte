@@ -12,6 +12,7 @@
 
   import { getCoreSettings } from "$lib/agent";
   import AppSidebar from "$lib/components/app-sidebar.svelte";
+  import Titlebar from "$lib/components/titlebar.svelte";
   import * as Sidebar from "$lib/components/ui/sidebar/index.js";
 
   import type { LayoutProps } from "./$types";
@@ -58,7 +59,10 @@
 <svelte:window onkeydown={handleGlobalKeydown} />
 
 <ModeWatcher />
-<Sidebar.Provider>
-  <AppSidebar />
-  {@render children?.()}
-</Sidebar.Provider>
+<div class="flex flex-col h-screen overflow-hidden">
+  <Titlebar />
+  <Sidebar.Provider>
+    <AppSidebar />
+    {@render children?.()}
+  </Sidebar.Provider>
+</div>
