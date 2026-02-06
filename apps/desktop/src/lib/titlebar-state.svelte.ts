@@ -9,8 +9,9 @@ class TitlebarState {
   // Menubar callbacks (preset_editor only)
   presetId = $state("");
   presetName = $state("");
-  onNewPreset: ((name: string) => void) | null = $state(null);
+  onShowNewDialog: (() => void) | null = $state(null);
   onSavePreset: (() => void) | null = $state(null);
+  onShowSaveAsDialog: (() => void) | null = $state(null);
   onImportPreset: (() => void) | null = $state(null);
   onExportPreset: (() => void) | null = $state(null);
 
@@ -23,8 +24,9 @@ class TitlebarState {
     this.onStop = null;
     this.presetId = "";
     this.presetName = "";
-    this.onNewPreset = null;
+    this.onShowNewDialog = null;
     this.onSavePreset = null;
+    this.onShowSaveAsDialog = null;
     this.onImportPreset = null;
     this.onExportPreset = null;
   }

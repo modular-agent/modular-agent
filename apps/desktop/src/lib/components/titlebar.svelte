@@ -85,10 +85,9 @@
       {#if titlebarState.showMenubar}
         <div>
           <Menubar
-            preset_id={titlebarState.presetId}
-            name={titlebarState.presetName}
-            onNewPreset={titlebarState.onNewPreset ?? (() => {})}
+            onShowNewDialog={titlebarState.onShowNewDialog ?? (() => {})}
             onSavePreset={titlebarState.onSavePreset ?? (() => {})}
+            onShowSaveAsDialog={titlebarState.onShowSaveAsDialog ?? (() => {})}
             onImportPreset={titlebarState.onImportPreset ?? (() => {})}
             onExportPreset={titlebarState.onExportPreset ?? (() => {})}
           />

@@ -19,8 +19,17 @@
   import { ScrollArea } from "$lib/components/ui/scroll-area/index.js";
   import type { PresetNode, PresetEdge } from "$lib/types";
 
+  import { getPresetSpec } from "tauri-plugin-modular-agent-api";
+  import { goto } from "$app/navigation";
+  import { Button } from "$lib/components/ui/button/index.js";
+  import * as Dialog from "$lib/components/ui/dialog/index.js";
+  import { Input } from "$lib/components/ui/input/index.js";
+  import PresetActionDialog from "$lib/components/preset-action-dialog.svelte";
+  import { addPresetWithName } from "tauri-plugin-modular-agent-api";
+
   import AgentNode from "./agent-node.svelte";
   import NodeContextMenu from "./node-context-menu.svelte";
+  import PaneContextMenu from "./pane-context-menu.svelte";
   import { useEditor } from "./context.svelte";
 
   const editor = useEditor();
@@ -154,6 +163,26 @@
 
   function handlePaneClick() {
     editor.hideNodeContextMenu();
+    editor.hidePaneContextMenu();
+  }
+
+  function handlePaneContextMenu({ event }: { event: MouseEvent }) {
+    event.preventDefault();
+    editor.showPaneContextMenu(event.clientX, event.clientY);
+  }
+
+  async function handleSaveAsSubmit() {
+    editor.openSaveAsDialog = false;
+    if (!editor.saveAsName) return;
+    if (editor.saveAsName === editor.name) {
+      await editor.savePreset();
+      return;
+    }
+    const s = await getPresetSpec(editor.preset_id);
+    if (!s) return;
+    const new_id = await addPresetWithName(s, editor.saveAsName);
+    if (!new_id) return;
+    goto(`/preset_editor/${new_id}`, { invalidateAll: true });
   }
 </script>
 
@@ -180,6 +209,7 @@
   onnodecontextmenu={handleNodeContextMenu}
   onmoveend={handleOnMoveEnd}
   onpaneclick={handlePaneClick}
+  onpanecontextmenu={handlePaneContextMenu}
   onselectionclick={handleSelectionClick}
   onselectioncontextmenu={handleSelectionContextMenu}
   onselectiondragstop={handleSelectionDragStop}
@@ -206,6 +236,21 @@
     ontoggleerr={() => editor.toggleErr()}
   />
 
+  <PaneContextMenu
+    bind:open={editor.openPaneContextMenu}
+    x={editor.paneContextMenuX}
+    y={editor.paneContextMenuY}
+    running={editor.running}
+    onstart={() => editor.startPreset()}
+    onstop={() => editor.stopPreset()}
+    onnew={() => editor.showNewPresetDialog()}
+    onsave={() => editor.savePreset()}
+    onsaveas={() => editor.showSaveAsDialog()}
+    onimport={() => editor.importPresetAndNavigate()}
+    onexport={() => editor.exportPreset()}
+    onpaste={() => editor.pasteNodesAndEdges()}
+  />
+
   <div
     class="absolute right-2 top-2 w-60 z-20 max-h-[calc(100vh-170px-var(--titlebar-height))] overflow-x-hidden rounded-md border shadow-lg"
   >
@@ -218,6 +263,29 @@
     </ScrollArea>
   </div>
 </SvelteFlow>
+
+<PresetActionDialog
+  action="New"
+  name={editor.name}
+  onAction={(name) => editor.newPresetAndNavigate(name)}
+  bind:open={editor.openNewPresetDialog}
+/>
+
+<Dialog.Root bind:open={editor.openSaveAsDialog}>
+  <Dialog.Content class="sm:max-w-[425px]">
+    <form onsubmit={(e) => { e.preventDefault(); handleSaveAsSubmit(); }}>
+      <Dialog.Header>
+        <Dialog.Title>Save As...</Dialog.Title>
+      </Dialog.Header>
+      <div class="mt-4 mb-4">
+        <Input id="save-as-name" name="name" bind:value={editor.saveAsName} />
+      </div>
+      <Dialog.Footer>
+        <Button type="submit">Save</Button>
+      </Dialog.Footer>
+    </form>
+  </Dialog.Content>
+</Dialog.Root>
 
 <style>
   :root {

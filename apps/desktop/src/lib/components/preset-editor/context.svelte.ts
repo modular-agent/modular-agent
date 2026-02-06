@@ -52,6 +52,14 @@ export class EditorState {
   openNodeContextMenu = $state(false);
   nodeContextMenuX = $state(0);
   nodeContextMenuY = $state(0);
+  openPaneContextMenu = $state(false);
+  paneContextMenuX = $state(0);
+  paneContextMenuY = $state(0);
+
+  // Dialog state (shared between menubar and pane context menu)
+  openNewPresetDialog = $state(false);
+  openSaveAsDialog = $state(false);
+  saveAsName = $state("");
 
   // Derived
   preset_id = $derived.by(() => this.props.preset_id());
@@ -84,25 +92,10 @@ export class EditorState {
       titlebarState.presetName = flow.name;
       titlebarState.onStart = () => this.startPreset();
       titlebarState.onStop = () => this.stopPreset();
-      titlebarState.onNewPreset = (name: string) => {
-        this.newPreset(name).then((id) => {
-          if (id) {
-            import("$app/navigation").then(({ goto }) => {
-              goto(`/preset_editor/${id}`, { invalidateAll: true });
-            });
-          }
-        });
-      };
+      titlebarState.onShowNewDialog = () => { this.showNewPresetDialog(); };
       titlebarState.onSavePreset = () => { this.savePreset(); };
-      titlebarState.onImportPreset = () => {
-        this.importPreset().then((id) => {
-          if (id) {
-            import("$app/navigation").then(({ goto }) => {
-              goto(`/preset_editor/${id}`, { invalidateAll: true });
-            });
-          }
-        });
-      };
+      titlebarState.onShowSaveAsDialog = () => { this.showSaveAsDialog(); };
+      titlebarState.onImportPreset = () => { this.importPresetAndNavigate(); };
       titlebarState.onExportPreset = () => { this.exportPreset(); };
     });
 
@@ -413,6 +406,7 @@ export class EditorState {
   // --- Context menu ---
 
   showNodeContextMenu(x: number, y: number) {
+    this.openPaneContextMenu = false;
     this.nodeContextMenuX = x;
     this.nodeContextMenuY = y;
     this.openNodeContextMenu = true;
@@ -420,6 +414,46 @@ export class EditorState {
 
   hideNodeContextMenu() {
     this.openNodeContextMenu = false;
+  }
+
+  showPaneContextMenu(x: number, y: number) {
+    this.openNodeContextMenu = false;
+    this.paneContextMenuX = x;
+    this.paneContextMenuY = y;
+    this.openPaneContextMenu = true;
+  }
+
+  hidePaneContextMenu() {
+    this.openPaneContextMenu = false;
+  }
+
+  // --- Dialogs ---
+
+  showNewPresetDialog() {
+    this.openNewPresetDialog = true;
+  }
+
+  showSaveAsDialog() {
+    this.saveAsName = this.name;
+    this.openSaveAsDialog = true;
+  }
+
+  // --- Navigate helpers ---
+
+  async importPresetAndNavigate() {
+    const id = await this.importPreset();
+    if (id) {
+      const { goto } = await import("$app/navigation");
+      goto(`/preset_editor/${id}`, { invalidateAll: true });
+    }
+  }
+
+  async newPresetAndNavigate(name: string) {
+    const id = await this.newPreset(name);
+    if (id) {
+      const { goto } = await import("$app/navigation");
+      goto(`/preset_editor/${id}`, { invalidateAll: true });
+    }
   }
 }
 
