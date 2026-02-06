@@ -51,6 +51,7 @@
     agentSpecToNode,
     connectionSpecToEdge,
     edgeToConnectionSpec,
+    importPreset,
     savePreset,
     getCoreSettings,
     newPresetWithName,
@@ -331,10 +332,19 @@
   }
 
   async function onImportPreset() {
-    // const file = await open({ multiple: false, filter: "json" });
-    // if (!file) return;
-    // const id = await importPreset(file as string);
-    // goto(`/preset_editor/${id}`, { invalidateAll: true });
+    const file = await open({
+      multiple: false,
+      filters: [{ name: "JSON", extensions: ["json"] }],
+    });
+    if (!file) return;
+
+    // Extract directory from current preset name (e.g., "subdir/preset" → "subdir")
+    const name = data.flow.name;
+    const lastSlash = name.lastIndexOf("/");
+    const targetDir = lastSlash >= 0 ? name.substring(0, lastSlash) : "";
+
+    const id = await importPreset(file as string, targetDir);
+    goto(`/preset_editor/${id}`, { invalidateAll: true });
   }
 
   async function onStartPreset() {

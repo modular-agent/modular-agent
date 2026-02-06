@@ -34,8 +34,8 @@ export async function savePreset(name: string, spec: PresetSpec): Promise<void> 
   await invoke("save_preset_cmd", { name, spec });
 }
 
-export async function importPreset(path: string): Promise<string> {
-  return await invoke("import_preset_cmd", { path });
+export async function importPreset(path: string, targetDir: string): Promise<string> {
+  return await invoke("import_preset_cmd", { path, targetDir });
 }
 
 export async function startPreset(id: string): Promise<void> {

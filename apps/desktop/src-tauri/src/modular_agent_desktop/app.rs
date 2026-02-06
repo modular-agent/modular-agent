@@ -114,27 +114,46 @@ impl ModularAgentApp {
         Ok(())
     }
 
-    pub fn import_preset(&self, _path: String) -> Result<String> {
-        // let path = PathBuf::from(path);
-        // let name = path
-        //     .file_stem()
-        //     .context("Failed to get file stem")?
-        //     .to_string_lossy()
-        //     .to_string();
+    pub async fn import_preset(&self, path: String, target_dir: String) -> Result<String> {
+        let path_buf = PathBuf::from(&path);
+        let file_stem = path_buf
+            .file_stem()
+            .context("Failed to get file stem")?
+            .to_string_lossy()
+            .to_string();
 
-        // let spec = self.read_preset(path)?;
+        let base_name = if target_dir.is_empty() {
+            file_stem
+        } else {
+            format!("{}/{}", target_dir, file_stem)
+        };
 
-        // let name = self.ma.unique_preset_name(&name);
+        // Validate before any file I/O (prevents path traversal via target_dir)
+        if !is_valid_preset_name(&base_name) {
+            return Err(anyhow!("Invalid preset name: {}", base_name));
+        }
 
-        // let id = self
-        //     .ma
-        //     .add_preset(name.clone(), spec.clone())
-        //     .context("Failed to add preset")?;
+        let name = unique_preset_name(&base_name);
 
-        // self.save_preset(name, spec)?;
+        // Read and validate the imported file
+        let content = std::fs::read_to_string(&path)
+            .with_context(|| format!("Failed to read file: {}", path))?;
+        let spec = PresetSpec::from_json(&content)
+            .map_err(|e| anyhow!("Failed to parse preset: {}", e))?;
 
-        // Ok(id)
-        Err(anyhow!("Not implemented"))
+        // Save to local presets directory
+        self.save_preset(name.clone(), spec)?;
+
+        // Open the preset; clean up orphaned file on failure
+        match self.open_preset(name.clone()).await {
+            Ok(id) => Ok(id),
+            Err(e) => {
+                if let Ok(p) = preset_path(&name) {
+                    let _ = std::fs::remove_file(p);
+                }
+                Err(e)
+            }
+        }
     }
 
     pub async fn start_preset(&self, preset_id: &str) -> Result<()> {
@@ -239,6 +258,27 @@ fn preset_path(preset_name: &str) -> Result<PathBuf> {
     preset_path = preset_path.with_extension("json");
 
     Ok(preset_path)
+}
+
+fn preset_path_exists(name: &str) -> bool {
+    preset_path(name).map(|p| p.exists()).unwrap_or(false)
+}
+
+fn unique_preset_name(base_name: &str) -> String {
+    if !preset_path_exists(base_name) {
+        return base_name.to_string();
+    }
+    let copy_name = format!("{} copy", base_name);
+    if !preset_path_exists(&copy_name) {
+        return copy_name;
+    }
+    for i in 2.. {
+        let name = format!("{} copy {}", base_name, i);
+        if !preset_path_exists(&name) {
+            return name;
+        }
+    }
+    unreachable!()
 }
 
 fn get_dir_entries(path: &str) -> Result<Vec<String>> {
@@ -368,11 +408,15 @@ pub fn save_preset_cmd(
 }
 
 #[tauri::command]
-pub fn import_preset_cmd(
+pub async fn import_preset_cmd(
     asapp: State<'_, ModularAgentApp>,
     path: String,
+    target_dir: String,
 ) -> Result<String, String> {
-    asapp.import_preset(path).map_err(|e| e.to_string())
+    asapp
+        .import_preset(path, target_dir)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
