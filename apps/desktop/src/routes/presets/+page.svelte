@@ -5,7 +5,9 @@
 
   import { goto } from "$app/navigation";
 
-  import { newPresetWithName } from "$lib/agent";
+  import { open } from "@tauri-apps/plugin-dialog";
+
+  import { importPreset, newPresetWithName } from "$lib/agent";
   import * as PresetFileList from "$lib/components/preset-file-list/index.js";
   import * as ContextMenu from "$lib/components/ui/context-menu/index.js";
   import { deletePreset, getDirEntries, openPreset } from "$lib/modular_agent";
@@ -56,6 +58,17 @@
     dialog_name = path;
     openDeletePresetDialog = true;
   }
+
+  async function handleImport(targetDir: string) {
+    const file = await open({
+      multiple: false,
+      filters: [{ name: "JSON", extensions: ["json"] }],
+    });
+    if (!file) return;
+
+    const id = await importPreset(file as string, targetDir);
+    goto(`/preset_editor/${id}`, { invalidateAll: true });
+  }
 </script>
 
 {#snippet folder({ name, path, open = false }: { name: string; path: string; open?: boolean })}
@@ -71,6 +84,7 @@
           </ContextMenu.Trigger>
           <ContextMenu.Content>
             <ContextMenu.Item onclick={() => handleNew(fp + "/")}>New</ContextMenu.Item>
+            <ContextMenu.Item onclick={() => handleImport(fp)}>Import</ContextMenu.Item>
             <ContextMenu.Item onclick={() => handleDelete(fp)}>Delete</ContextMenu.Item>
           </ContextMenu.Content>
         </ContextMenu.Root>
@@ -82,6 +96,7 @@
           </ContextMenu.Trigger>
           <ContextMenu.Content>
             <ContextMenu.Item onclick={() => handleNew(fp)}>New</ContextMenu.Item>
+            <ContextMenu.Item onclick={() => handleImport(path)}>Import</ContextMenu.Item>
             <ContextMenu.Item onclick={() => handleDelete(fp)}>Delete</ContextMenu.Item>
           </ContextMenu.Content>
         </ContextMenu.Root>
@@ -94,6 +109,7 @@
   <div class="flex flex-col items-center justify-center h-full text-center gap-4">
     <p class="text-muted-foreground">No presets found.</p>
     <button onclick={() => handleNew("")}> New Preset </button>
+    <button onclick={() => handleImport("")}> Import Preset </button>
   </div>
 {:else}
   <div class="flex flex-col gap-8 p-4">
