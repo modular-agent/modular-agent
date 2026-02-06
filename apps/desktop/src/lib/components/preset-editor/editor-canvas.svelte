@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { fade } from "svelte/transition";
+
   import {
     Background,
     BackgroundVariant,
@@ -13,23 +15,23 @@
     type OnMove,
     type OnSelectionDrag,
   } from "@xyflow/svelte";
+  import { getPresetSpec } from "tauri-plugin-modular-agent-api";
+  import { addPresetWithName } from "tauri-plugin-modular-agent-api";
+
+  import { goto } from "$app/navigation";
 
   import { getCoreSettings } from "$lib/agent";
   import { AgentList } from "$lib/components/agent-list/index.js";
-  import type { PresetNode, PresetEdge } from "$lib/types";
-
-  import { getPresetSpec } from "tauri-plugin-modular-agent-api";
-  import { goto } from "$app/navigation";
+  import PresetActionDialog from "$lib/components/preset-action-dialog.svelte";
   import { Button } from "$lib/components/ui/button/index.js";
   import * as Dialog from "$lib/components/ui/dialog/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
-  import PresetActionDialog from "$lib/components/preset-action-dialog.svelte";
-  import { addPresetWithName } from "tauri-plugin-modular-agent-api";
+  import type { PresetNode, PresetEdge } from "$lib/types";
 
   import AgentNode from "./agent-node.svelte";
+  import { useEditor } from "./context.svelte";
   import NodeContextMenu from "./node-context-menu.svelte";
   import PaneContextMenu from "./pane-context-menu.svelte";
-  import { useEditor } from "./context.svelte";
 
   const editor = useEditor();
   const coreSettings = getCoreSettings();
@@ -39,6 +41,44 @@
   };
 
   const AGENT_DRAG_FORMAT = "application/agent-name";
+
+  // --- MiniMap visibility ---
+
+  let showMiniMap = $state(false);
+  const HIDE_MARGIN = 50;
+
+  function updateMiniMapVisibility() {
+    const nodes = editor.nodes;
+    if (nodes.length === 0) {
+      showMiniMap = false;
+      return;
+    }
+
+    const container = document.querySelector(".svelte-flow");
+    if (!container) return;
+
+    const w = container.clientWidth;
+    const h = container.clientHeight;
+    const bounds = editor.props.svelteFlow.getNodesBounds(nodes);
+    const vp = editor.props.svelteFlow.getViewport();
+
+    const sL = bounds.x * vp.zoom + vp.x;
+    const sT = bounds.y * vp.zoom + vp.y;
+    const sR = (bounds.x + bounds.width) * vp.zoom + vp.x;
+    const sB = (bounds.y + bounds.height) * vp.zoom + vp.y;
+
+    const isOutside = sL < 0 || sT < 0 || sR > w || sB > h;
+    const isWellInside =
+      sL > HIDE_MARGIN && sT > HIDE_MARGIN && sR < w - HIDE_MARGIN && sB < h - HIDE_MARGIN;
+
+    if (isOutside) showMiniMap = true;
+    else if (isWellInside) showMiniMap = false;
+  }
+
+  $effect(() => {
+    editor.nodes;
+    updateMiniMapVisibility();
+  });
 
   // --- Keyboard shortcuts ---
 
@@ -115,10 +155,7 @@
     await editor.handleOnConnect(connection);
   }
 
-  const handleNodeContextMenu: NodeEventWithPointer<MouseEvent, PresetNode> = ({
-    event,
-    node,
-  }) => {
+  const handleNodeContextMenu: NodeEventWithPointer<MouseEvent, PresetNode> = ({ event, node }) => {
     event.preventDefault();
 
     const [selectedNodes] = editor.selectedNodesAndEdges();
@@ -146,14 +183,17 @@
     PresetNode
   > = async ({ targetNode }) => {
     await editor.handleNodeDragStop(targetNode ?? null);
+    updateMiniMapVisibility();
   };
 
   const handleSelectionDragStop: OnSelectionDrag = async (_event, draggedNodes) => {
     await editor.handleSelectionDragStop(draggedNodes as PresetNode[]);
+    updateMiniMapVisibility();
   };
 
   const handleOnMoveEnd: OnMove = async (_event, viewport) => {
     await editor.handleOnMoveEnd(viewport);
+    updateMiniMapVisibility();
   };
 
   function handleSelectionClick() {
@@ -222,7 +262,11 @@
   />
 
   <Controls />
-  <MiniMap />
+  {#if showMiniMap}
+    <div transition:fade={{ duration: 150 }}>
+      <MiniMap />
+    </div>
+  {/if}
 
   <NodeContextMenu
     bind:open={editor.openNodeContextMenu}
@@ -267,7 +311,12 @@
 
 <Dialog.Root bind:open={editor.openSaveAsDialog}>
   <Dialog.Content class="sm:max-w-[425px]">
-    <form onsubmit={(e) => { e.preventDefault(); handleSaveAsSubmit(); }}>
+    <form
+      onsubmit={(e) => {
+        e.preventDefault();
+        handleSaveAsSubmit();
+      }}
+    >
       <Dialog.Header>
         <Dialog.Title>Save As...</Dialog.Title>
       </Dialog.Header>
