@@ -7,7 +7,6 @@
 
   import { onMount } from "svelte";
 
-  import hotkeys from "hotkeys-js";
   import { ModeWatcher } from "mode-watcher";
   import { setMode } from "mode-watcher";
 
@@ -19,6 +18,8 @@
 
   const { children }: LayoutProps = $props();
 
+  let fullscreenKey: string | undefined;
+
   onMount(() => {
     const coreSettings = getCoreSettings();
 
@@ -29,22 +30,32 @@
       setMode("dark");
     }
 
-    const key_fullscreen = coreSettings.shortcut_keys?.["fullscreen"];
-    if (key_fullscreen) {
-      hotkeys(key_fullscreen, () => {
-        getCurrentWindow()
-          .isFullscreen()
-          .then((isFullscreen) => {
-            if (isFullscreen) {
-              getCurrentWindow().setFullscreen(false);
-            } else {
-              getCurrentWindow().setFullscreen(true);
-            }
-          });
-      });
-    }
+    fullscreenKey = coreSettings.shortcut_keys?.["fullscreen"];
   });
+
+  function handleGlobalKeydown(event: KeyboardEvent) {
+    if (!fullscreenKey) return;
+    const mod = event.ctrlKey || event.metaKey;
+    // Parse hotkeys-js format like "ctrl+r" - extract the key part after the last "+"
+    const parts = fullscreenKey.split("+");
+    const key = parts[parts.length - 1].toLowerCase();
+    const needsMod = parts.some(
+      (p) => p === "ctrl" || p === "command" || p === "meta",
+    );
+    if (needsMod && !mod) return;
+    if (!needsMod && mod) return;
+    if (event.key.toLowerCase() === key) {
+      event.preventDefault();
+      getCurrentWindow()
+        .isFullscreen()
+        .then((isFullscreen) => {
+          getCurrentWindow().setFullscreen(!isFullscreen);
+        });
+    }
+  }
 </script>
+
+<svelte:window onkeydown={handleGlobalKeydown} />
 
 <ModeWatcher />
 <Sidebar.Provider>

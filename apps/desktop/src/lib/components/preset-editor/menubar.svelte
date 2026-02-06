@@ -9,7 +9,7 @@
   import * as Menubar from "$lib/components/ui/menubar/index.js";
   import { exitApp } from "$lib/modular_agent";
 
-  import PresetActionDialog from "@/lib/components/preset-action-dialog.svelte";
+  import PresetActionDialog from "$lib/components/preset-action-dialog.svelte";
 
   type Props = {
     preset_id: string;

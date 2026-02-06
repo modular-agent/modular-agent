@@ -9,7 +9,7 @@
   import { Switch } from "$lib/components/ui/switch/index.js";
   import { Textarea } from "$lib/components/ui/textarea/index.js";
 
-  import { inferTypeForDisplay } from "@/lib/agent";
+  import { inferTypeForDisplay } from "$lib/agent";
 
   import Messages from "./messages.svelte";
 
