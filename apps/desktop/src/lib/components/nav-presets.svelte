@@ -8,6 +8,7 @@
   import { importPreset, newPresetWithName } from "$lib/agent";
   import * as PresetFileList from "$lib/components/preset-file-list/index.js";
   import * as ContextMenu from "$lib/components/ui/context-menu/index.js";
+  import { ScrollArea } from "$lib/components/ui/scroll-area/index.js";
   import * as Sidebar from "$lib/components/ui/sidebar/index.js";
   import { deletePreset, getDirEntries, openPreset } from "$lib/modular_agent";
 
@@ -110,28 +111,30 @@
   </PresetFileList.Folder>
 {/snippet}
 
-<Sidebar.Group class="flex-1 min-h-0 overflow-y-auto">
-  <Sidebar.GroupContent>
-    <div class="group-data-[collapsible=icon]:hidden pl-2">
-      {#if all_entries[""].length === 0}
-        <button
-          class="text-xs text-muted-foreground px-2 py-1 hover:underline cursor-pointer"
-          onclick={() => handleNew("")}
-        >
-          New Preset
-        </button>
-      {:else}
-        <ContextMenu.Root>
-          <ContextMenu.Trigger>
-            {@render folder({ name: "presets", path: "", open: true })}
-          </ContextMenu.Trigger>
-          <ContextMenu.Content>
-            <ContextMenu.Item onclick={() => handleNew("")}>New</ContextMenu.Item>
-            <ContextMenu.Item onclick={() => handleImport("")}>Import</ContextMenu.Item>
-          </ContextMenu.Content>
-        </ContextMenu.Root>
-      {/if}
-    </div>
+<Sidebar.Group class="flex-1 min-h-0">
+  <Sidebar.GroupContent class="h-full">
+    <ScrollArea class="h-full" orientation="both">
+      <div class="group-data-[collapsible=icon]:hidden pl-2">
+        {#if all_entries[""].length === 0}
+          <button
+            class="text-xs text-muted-foreground px-2 py-1 hover:underline cursor-pointer"
+            onclick={() => handleNew("")}
+          >
+            New Preset
+          </button>
+        {:else}
+          <ContextMenu.Root>
+            <ContextMenu.Trigger>
+              {@render folder({ name: "presets", path: "", open: true })}
+            </ContextMenu.Trigger>
+            <ContextMenu.Content>
+              <ContextMenu.Item onclick={() => handleNew("")}>New</ContextMenu.Item>
+              <ContextMenu.Item onclick={() => handleImport("")}>Import</ContextMenu.Item>
+            </ContextMenu.Content>
+          </ContextMenu.Root>
+        {/if}
+      </div>
+    </ScrollArea>
   </Sidebar.GroupContent>
 </Sidebar.Group>
 
