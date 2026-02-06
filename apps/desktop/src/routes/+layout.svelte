@@ -20,6 +20,7 @@
   const { children }: LayoutProps = $props();
 
   let fullscreenKey: string | undefined;
+  let isFullscreen = $state(false);
 
   onMount(() => {
     const coreSettings = getCoreSettings();
@@ -32,17 +33,32 @@
     }
 
     fullscreenKey = coreSettings.shortcut_keys?.["fullscreen"];
+
+    const currentWindow = getCurrentWindow();
+    currentWindow.isFullscreen().then((v) => (isFullscreen = v));
+
+    const unlistenResize = currentWindow.onResized(async () => {
+      isFullscreen = await currentWindow.isFullscreen();
+    });
+
+    return () => {
+      unlistenResize.then((fn) => fn());
+    };
   });
 
   function handleGlobalKeydown(event: KeyboardEvent) {
+    // Block sidebar toggle (Ctrl+B) during fullscreen
+    if (isFullscreen && event.key.toLowerCase() === "b" && (event.metaKey || event.ctrlKey)) {
+      event.preventDefault();
+      return;
+    }
+
     if (!fullscreenKey) return;
     const mod = event.ctrlKey || event.metaKey;
     // Parse hotkeys-js format like "ctrl+r" - extract the key part after the last "+"
     const parts = fullscreenKey.split("+");
     const key = parts[parts.length - 1].toLowerCase();
-    const needsMod = parts.some(
-      (p) => p === "ctrl" || p === "command" || p === "meta",
-    );
+    const needsMod = parts.some((p) => p === "ctrl" || p === "command" || p === "meta");
     if (needsMod && !mod) return;
     if (!needsMod && mod) return;
     if (event.key.toLowerCase() === key) {
@@ -62,7 +78,9 @@
 <div class="flex flex-col h-screen overflow-hidden">
   <Titlebar />
   <Sidebar.Provider>
-    <AppSidebar />
+    {#if !isFullscreen}
+      <AppSidebar />
+    {/if}
     {@render children?.()}
   </Sidebar.Provider>
 </div>
