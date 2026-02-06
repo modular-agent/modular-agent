@@ -14,11 +14,11 @@
   }: PresetFileListFileProps = $props();
 </script>
 
-<button {type} class={cn("flex place-items-center gap-1 pl-[3px]", className)} {...rest}>
+<button {type} class={cn("flex place-items-center gap-1 pl-[3px] overflow-hidden", className)} {...rest}>
   {#if icon}
     {@render icon({ name })}
   {:else}
-    <FileIcon class="size-4" />
+    <FileIcon class="size-4 shrink-0" />
   {/if}
-  <span>{name}</span>
+  <span class="truncate">{name}</span>
 </button>
