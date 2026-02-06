@@ -3,10 +3,10 @@
 
   import { onMount } from "svelte";
 
-  import type { PageData } from "./$types";
+  import type { PageProps } from "./$types";
   import PresetList from "./preset-list.svelte";
 
-  let { data }: PageData = $props();
+  let { data }: PageProps = $props();
 
   onMount(async () => {
     getCurrentWindow().setTitle("Preset List - Modular Agent");

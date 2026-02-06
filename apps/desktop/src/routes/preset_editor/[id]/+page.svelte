@@ -55,12 +55,12 @@
     getCoreSettings,
     newPresetWithName,
   } from "$lib/agent";
+  import { AgentList } from "$lib/components/agent-list/index.js";
   import PresetStatus from "$lib/components/preset-status.svelte";
   import { ScrollArea } from "$lib/components/ui/scroll-area/index.js";
   import type { PresetNode, PresetEdge } from "$lib/types";
 
   import type { PageProps } from "./$types";
-  import { AgentList } from "$lib/components/agent-list/index.js";
   import AgentNode from "./agent-node.svelte";
   import Menubar from "./menubar.svelte";
   import NodeContextMenu from "./node-context-menu.svelte";
