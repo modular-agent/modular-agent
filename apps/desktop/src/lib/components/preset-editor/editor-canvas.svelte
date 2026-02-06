@@ -16,7 +16,6 @@
 
   import { getCoreSettings } from "$lib/agent";
   import { AgentList } from "$lib/components/agent-list/index.js";
-  import { ScrollArea } from "$lib/components/ui/scroll-area/index.js";
   import type { PresetNode, PresetEdge } from "$lib/types";
 
   import { getPresetSpec } from "tauri-plugin-modular-agent-api";
@@ -251,16 +250,11 @@
     onpaste={() => editor.pasteNodesAndEdges()}
   />
 
-  <div
-    class="absolute right-2 top-2 w-60 z-20 max-h-[calc(100vh-170px-var(--titlebar-height))] overflow-x-hidden rounded-md border shadow-lg"
-  >
-    <ScrollArea>
-      <AgentList
-        class="h-full"
-        onAddAgent={(name: string) => editor.addAgent(name)}
-        onDragAgentStart={handleAgentDragStart}
-      />
-    </ScrollArea>
+  <div class="absolute right-2 top-2 w-60 z-20 rounded-md border shadow-lg overflow-hidden">
+    <AgentList
+      onAddAgent={(name: string) => editor.addAgent(name)}
+      onDragAgentStart={handleAgentDragStart}
+    />
   </div>
 </SvelteFlow>
 
