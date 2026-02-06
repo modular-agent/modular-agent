@@ -10,13 +10,14 @@ import {
   type ConnectionSpec,
   getAgentDefinitions as getAgentDefinitionsAPI,
   getGlobalConfigsMap as getGlobalConfigsMapAPI,
+  getPresetInfos,
 } from "tauri-plugin-modular-agent-api";
 
 import {
   getCoreSettings as getCoreSettingsUtils,
   setCoreSettings as setCoreSettingsUtils,
 } from "./modular_agent";
-import type { PresetFlow, PresetEdge, PresetNode, CoreSettings } from "./types";
+import type { PresetFlow, PresetEdge, PresetNode, CoreSettings, PresetInfoExt } from "./types";
 
 export async function newPresetWithName(name: string): Promise<string> {
   return await invoke("new_preset_with_name_cmd", { name });
@@ -195,6 +196,18 @@ export function getAgentDefinitions(): AgentDefinitions {
 
 export function getGlobalConfigsMap(): AgentConfigsMap {
   return _globalConfigsMap!;
+}
+
+export async function loadPresetInfos(): Promise<PresetInfoExt[]> {
+  const presetInfos = (await getPresetInfos()) as PresetInfoExt[];
+  const coreSettings = getCoreSettings();
+  const auto_start_presets = coreSettings.auto_start_presets || [];
+  presetInfos.forEach((s) => {
+    if (auto_start_presets.includes(s.name)) {
+      s.run_on_start = true;
+    }
+  });
+  return presetInfos;
 }
 
 export async function initGlobals() {

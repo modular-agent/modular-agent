@@ -4,7 +4,7 @@
   import { onMount } from "svelte";
 
   import type { PageProps } from "./$types";
-  import PresetList from "./preset-list.svelte";
+  import { PresetList } from "$lib/components/preset-list";
 
   let { data }: PageProps = $props();
 
