@@ -13,6 +13,7 @@
   import { deletePreset, getDirEntries, openPreset } from "$lib/modular_agent";
 
   import PresetActionDialog from "@/lib/components/preset-action-dialog.svelte";
+  import PresetDeleteDialog from "@/lib/components/preset-delete-dialog.svelte";
 
   import type { PageProps } from "./$types";
 
@@ -46,7 +47,15 @@
   }
 
   async function onDeletePreset(name: string) {
-    await deletePreset(name);
+    try {
+      await deletePreset(name);
+      // Re-fetch parent directory entries to update UI
+      const parentPath = name.includes("/") ? name.substring(0, name.lastIndexOf("/")) : "";
+      const entries = await getDirEntries(parentPath);
+      all_entries = { ...all_entries, [parentPath]: entries };
+    } catch (e) {
+      console.error("Failed to delete preset:", e);
+    }
   }
 
   async function handleNew(path: string) {
@@ -127,10 +136,9 @@
 {/if}
 
 {#if openDeletePresetDialog}
-  <PresetActionDialog
-    action="Delete"
+  <PresetDeleteDialog
     name={dialog_name}
     bind:open={openDeletePresetDialog}
-    onAction={onDeletePreset}
+    onDelete={onDeletePreset}
   />
 {/if}

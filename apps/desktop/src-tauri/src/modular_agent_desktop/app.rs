@@ -74,16 +74,23 @@ impl ModularAgentApp {
 
     /// Delete a preset by the given name, and delete its file.
     pub async fn delete_preset(&self, name: &str) -> Result<()> {
-        let preset_id = self
-            .get_preset_id(name)
-            .ok_or_else(|| anyhow!("Preset not found: {}", name))?;
+        // If the preset is opened, remove it from ModularAgent core.
+        if let Some(preset_id) = self.get_preset_id(name) {
+            self.ma.remove_preset(&preset_id).await?;
+        }
 
-        self.ma.remove_preset(&preset_id).await?;
+        // Remove from the presets HashMap
+        {
+            let mut presets = self.presets.lock().unwrap();
+            presets.remove(name);
+        }
 
+        // Delete the file from disk
         let preset_path = preset_path(name)?;
         if preset_path.exists() {
             std::fs::remove_file(preset_path).with_context(|| "Failed to remove preset file")?;
         }
+
         Ok(())
     }
 
