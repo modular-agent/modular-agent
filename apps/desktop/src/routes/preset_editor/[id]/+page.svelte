@@ -60,7 +60,7 @@
   import type { PresetNode, PresetEdge } from "$lib/types";
 
   import type { PageProps } from "./$types";
-  import AgentList from "./agent-list.svelte";
+  import { AgentList } from "$lib/components/agent-list/index.js";
   import AgentNode from "./agent-node.svelte";
   import Menubar from "./menubar.svelte";
   import NodeContextMenu from "./node-context-menu.svelte";

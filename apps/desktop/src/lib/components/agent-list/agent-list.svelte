@@ -6,7 +6,7 @@
   import { Label } from "$lib/components/ui/label/index.js";
   import * as Sidebar from "$lib/components/ui/sidebar/index.js";
 
-  import AgentListItems from "./agent-list-item.svelte";
+  import AgentListItem from "./agent-list-item.svelte";
 
   type Props = ComponentProps<typeof Sidebar.Root> & {
     onAddAgent: (agentName: string, position?: { x: number; y: number }) => Promise<void>;
@@ -73,7 +73,7 @@
   </Sidebar.Header>
   <Sidebar.Content>
     <Sidebar.Menu>
-      <AgentListItems {categories} {agentDefs} {expandAll} {onDragAgentStart} />
+      <AgentListItem {categories} {agentDefs} {expandAll} {onDragAgentStart} />
     </Sidebar.Menu>
   </Sidebar.Content>
 </Sidebar.Root>

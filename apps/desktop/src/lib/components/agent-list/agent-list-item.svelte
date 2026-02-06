@@ -1,20 +1,13 @@
 <script lang="ts">
   import ChevronRightIcon from "@lucide/svelte/icons/chevron-right";
-  import type { AgentDefinitions } from "tauri-plugin-modular-agent-api";
 
   import * as Collapsible from "$lib/components/ui/collapsible/index.js";
   import * as Sidebar from "$lib/components/ui/sidebar/index.js";
 
-  import AgentListItems from "./agent-list-item.svelte";
+  import AgentListItem from "./agent-list-item.svelte";
+  import type { AgentListItemProps } from "./types.js";
 
-  interface Props {
-    categories: Record<string, any>;
-    agentDefs: AgentDefinitions;
-    expandAll?: boolean;
-    onDragAgentStart?: (event: DragEvent, agentName: string) => void;
-  }
-
-  let { categories, agentDefs, expandAll = false, onDragAgentStart }: Props = $props();
+  let { categories, agentDefs, expandAll = false, onDragAgentStart }: AgentListItemProps = $props();
 
   const categoryKeys = $derived(Object.keys(categories).sort());
 </script>
@@ -46,7 +39,7 @@
         </Collapsible.Trigger>
         <Collapsible.Content>
           <Sidebar.MenuSub>
-            <AgentListItems
+            <AgentListItem
               categories={categories[key]}
               {agentDefs}
               {expandAll}
