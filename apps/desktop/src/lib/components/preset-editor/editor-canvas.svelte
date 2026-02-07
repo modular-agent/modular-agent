@@ -4,6 +4,7 @@
   import {
     Background,
     BackgroundVariant,
+    ControlButton,
     Controls,
     MiniMap,
     SvelteFlow,
@@ -98,6 +99,14 @@
     );
   }
 
+  function handleKeyup(event: KeyboardEvent) {
+    if (event.key === "Alt") editor.modifierPressed = false;
+  }
+
+  function handleWindowBlur() {
+    editor.modifierPressed = false;
+  }
+
   function handleKeydown(event: KeyboardEvent) {
     if (event.key === "Escape" && editor.openAgentList) {
       editor.hideAgentList();
@@ -112,6 +121,19 @@
       editor.showAgentList(mouseX, mouseY);
       return;
     }
+
+    if (event.key === "g" && !event.ctrlKey && !event.metaKey && !event.shiftKey) {
+      if (editable) return;
+      event.preventDefault();
+      editor.toggleGrid();
+      return;
+    }
+
+    if (event.key === "Alt") {
+      editor.modifierPressed = true;
+      return;
+    }
+
     const mod = event.ctrlKey || event.metaKey;
     if (!mod) return;
 
@@ -277,6 +299,8 @@
 
 <svelte:window
   onkeydown={handleKeydown}
+  onkeyup={handleKeyup}
+  onblur={handleWindowBlur}
   onmousedown={handleWindowMouseDown}
   onmousemove={handleMouseMove}
 />
@@ -306,17 +330,41 @@
     onselectionclick={handleSelectionClick}
     onselectioncontextmenu={handleSelectionContextMenu}
     onselectiondragstop={handleSelectionDragStop}
-    snapGrid={[6, 6]}
+    snapGrid={editor.effectiveSnapGrid}
     zoomOnDoubleClick={false}
   >
     <Background
       bgColor={editor.running ? "var(--color-background)" : "var(--color-muted)"}
-      gap={24}
+      gap={editor.gridGap}
       lineWidth={1}
       variant={BackgroundVariant.Dots}
+      patternColor={editor.showGrid ? undefined : "transparent"}
     />
 
-    <Controls />
+    <Controls>
+      {#snippet before()}
+        <ControlButton
+          onclick={() => editor.toggleSnap()}
+          title={"Snap (Alt)"}
+          class={editor.snapEnabled ? undefined : "icon-slashed"}
+        >
+          <img
+            src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNiIgaGVpZ2h0PSIxNiIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiNmZmZmZmYiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIiBjbGFzcz0ibHVjaWRlIGx1Y2lkZS1tYWduZXQtaWNvbiBsdWNpZGUtbWFnbmV0Ij48cGF0aCBkPSJtMTIgMTUgNCA0Ii8+PHBhdGggZD0iTTIuMzUyIDEwLjY0OGExLjIwNSAxLjIwNSAwIDAgMCAwIDEuNzA0bDIuMjk2IDIuMjk2YTEuMjA1IDEuMjA1IDAgMCAwIDEuNzA0IDBsNi4wMjktNi4wMjlhMSAxIDAgMSAxIDMgM2wtNi4wMjkgNi4wMjlhMS4yMDUgMS4yMDUgMCAwIDAgMCAxLjcwNGwyLjI5NiAyLjI5NmExLjIwNSAxLjIwNSAwIDAgMCAxLjcwNCAwbDYuMzY1LTYuMzY3QTEgMSAwIDAgMCA4LjcxNiA0LjI4MnoiLz48cGF0aCBkPSJtNSA4IDQgNCIvPjwvc3ZnPg=="
+            alt="snap"
+          />
+        </ControlButton>
+        <ControlButton
+          onclick={() => editor.toggleGrid()}
+          title={"Grid (G)"}
+          class={editor.showGrid ? undefined : "icon-slashed"}
+        >
+          <img
+            src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNiIgaGVpZ2h0PSIxNiIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiNmZmZmZmYiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIiBjbGFzcz0ibHVjaWRlIGx1Y2lkZS1ncmlkM3gzLWljb24gbHVjaWRlLWdyaWQtM3gzIj48cmVjdCB3aWR0aD0iMTgiIGhlaWdodD0iMTgiIHg9IjMiIHk9IjMiIHJ4PSIyIi8+PHBhdGggZD0iTTMgOWgxOCIvPjxwYXRoIGQ9Ik0zIDE1aDE4Ii8+PHBhdGggZD0iTTkgM3YxOCIvPjxwYXRoIGQ9Ik0xNSAzdjE4Ii8+PC9zdmc+"
+            alt="grid"
+          />
+        </ControlButton>
+      {/snippet}
+    </Controls>
     {#if showMiniMap}
       <div transition:fade={{ duration: 150 }}>
         <MiniMap />
@@ -327,11 +375,14 @@
       bind:open={editor.openNodeContextMenu}
       x={editor.nodeContextMenuX}
       y={editor.nodeContextMenuY}
+      selectedCount={editor.selectedCount}
       onenable={() => editor.enable()}
       ondisable={() => editor.disable()}
       oncut={() => editor.cutNodesAndEdges()}
       oncopy={() => editor.copyNodesAndEdges()}
       ontoggleerr={() => editor.toggleErr()}
+      onalign={(d) => editor.alignNodes(d)}
+      ondistribute={(d) => editor.distributeNodes(d)}
     />
 
     <PaneContextMenu
@@ -339,6 +390,8 @@
       x={editor.paneContextMenuX}
       y={editor.paneContextMenuY}
       running={editor.running}
+      snapEnabled={editor.snapEnabled}
+      showGrid={editor.showGrid}
       onstart={() => editor.startPreset()}
       onstop={() => editor.stopPreset()}
       onnew={() => editor.showNewPresetDialog()}
@@ -348,6 +401,8 @@
       onexport={() => editor.exportPreset()}
       onpaste={() => editor.pasteNodesAndEdges()}
       onaddagent={() => editor.showAgentList(mouseX, mouseY)}
+      ontogglesnap={() => editor.toggleSnap()}
+      ontogglegrid={() => editor.toggleGrid()}
     />
   </SvelteFlow>
 </div>
@@ -427,5 +482,24 @@
   }
   :global(.svelte-flow__attribution) {
     z-index: 20;
+  }
+  :global(.svelte-flow__controls-button svg.size-4) {
+    max-width: 16px;
+    max-height: 16px;
+  }
+  :global(.svelte-flow__controls-button.icon-slashed) {
+    position: relative;
+    opacity: 0.5;
+  }
+  :global(.svelte-flow__controls-button.icon-slashed::after) {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 80%;
+    height: 0;
+    border-top: 1.5px solid currentColor;
+    transform: translate(-50%, -50%) rotate(-45deg);
+    pointer-events: none;
   }
 </style>

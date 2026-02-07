@@ -58,6 +58,18 @@ pub struct CoreSettings {
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub shortcut_keys: Option<HashMap<String, String>>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub snap_enabled: Option<bool>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub snap_grid_size: Option<u32>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub show_grid: Option<bool>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub grid_gap: Option<u32>,
 }
 
 impl Default for CoreSettings {
@@ -82,6 +94,10 @@ impl Default for CoreSettings {
             color_mode: None,
             run_in_background: false,
             shortcut_keys: Some(SHORTCUT_KEYS.clone()),
+            snap_enabled: None,
+            snap_grid_size: None,
+            show_grid: None,
+            grid_gap: None,
         }
     }
 }

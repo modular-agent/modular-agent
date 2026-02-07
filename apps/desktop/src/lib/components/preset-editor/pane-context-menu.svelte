@@ -6,6 +6,8 @@
     x = 0,
     y = 0,
     running = false,
+    snapEnabled = false,
+    showGrid = false,
     onstart,
     onstop,
     onnew,
@@ -15,11 +17,15 @@
     onexport,
     onpaste,
     onaddagent,
+    ontogglesnap,
+    ontogglegrid,
   }: {
     open: boolean;
     x: number;
     y: number;
     running: boolean;
+    snapEnabled: boolean;
+    showGrid: boolean;
     onstart?: () => void;
     onstop?: () => void;
     onnew?: () => void;
@@ -29,6 +35,8 @@
     onexport?: () => void;
     onpaste?: () => void;
     onaddagent?: () => void;
+    ontogglesnap?: () => void;
+    ontogglegrid?: () => void;
   } = $props();
 
   const anchor = $derived({
@@ -80,6 +88,18 @@
         <ContextMenu.Separator />
         <ContextMenu.Item onclick={() => handle(onimport)}>Import</ContextMenu.Item>
         <ContextMenu.Item onclick={() => handle(onexport)}>Export</ContextMenu.Item>
+      </ContextMenu.SubContent>
+    </ContextMenu.Sub>
+    <ContextMenu.Sub>
+      <ContextMenu.SubTrigger inset>View</ContextMenu.SubTrigger>
+      <ContextMenu.SubContent>
+        <ContextMenu.CheckboxItem checked={snapEnabled} onCheckedChange={() => handle(ontogglesnap)}>
+          Snap to Grid
+        </ContextMenu.CheckboxItem>
+        <ContextMenu.CheckboxItem checked={showGrid} onCheckedChange={() => handle(ontogglegrid)}>
+          Show Grid
+          <ContextMenu.Shortcut>G</ContextMenu.Shortcut>
+        </ContextMenu.CheckboxItem>
       </ContextMenu.SubContent>
     </ContextMenu.Sub>
   </ContextMenu.Content>

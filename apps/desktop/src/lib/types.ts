@@ -49,6 +49,10 @@ export type CoreSettings = {
   color_mode?: string | null;
   run_in_background: boolean;
   shortcut_keys?: Record<string, string> | null;
+  snap_enabled?: boolean;
+  snap_grid_size?: number;
+  show_grid?: boolean;
+  grid_gap?: number;
 };
 
 export type PresetInfoExt = PresetInfo & {

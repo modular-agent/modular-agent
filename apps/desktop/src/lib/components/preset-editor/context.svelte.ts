@@ -27,6 +27,8 @@ import {
   agentSpecToNode,
   connectionSpecToEdge,
   edgeToConnectionSpec,
+  getCoreSettings,
+  setCoreSettings,
   importPreset as importPresetAPI,
   savePreset as savePresetAPI,
   newPresetWithName,
@@ -61,6 +63,18 @@ export class EditorState {
   agentListOriginX = $state(0);
   agentListOriginY = $state(0);
 
+  // Grid/Snap state
+  snapEnabled = $state(true);
+  snapGridSize = $state(12);
+  showGrid = $state(true);
+  gridGap = $state(24);
+  modifierPressed = $state(false);
+
+  effectiveSnapGrid = $derived.by(() => {
+    const active = this.snapEnabled !== this.modifierPressed;
+    return active ? ([this.snapGridSize, this.snapGridSize] as [number, number]) : undefined;
+  });
+
   // Dialog state (shared between menubar and pane context menu)
   openNewPresetDialog = $state(false);
   openSaveAsDialog = $state(false);
@@ -70,9 +84,17 @@ export class EditorState {
   preset_id = $derived.by(() => this.props.preset_id());
   name = $derived.by(() => this.props.flow().name);
   bgColor = $derived(this.running ? BG_COLORS[0] : BG_COLORS[1]);
+  selectedCount = $derived(this.nodes.filter((n) => n.selected).length);
 
   constructor(props: EditorStateProps) {
     this.props = props;
+
+    // Load grid settings from CoreSettings
+    const settings = getCoreSettings();
+    this.snapEnabled = settings.snap_enabled ?? true;
+    this.snapGridSize = settings.snap_grid_size ?? 12;
+    this.showGrid = settings.show_grid ?? true;
+    this.gridGap = settings.grid_gap ?? 24;
 
     // Sync nodes/edges from page data (separated from running to avoid overwriting optimistic updates)
     $effect.pre(() => {
@@ -462,6 +484,150 @@ export class EditorState {
   showSaveAsDialog() {
     this.saveAsName = this.name;
     this.openSaveAsDialog = true;
+  }
+
+  // --- Grid/Snap ---
+
+  toggleSnap() {
+    this.snapEnabled = !this.snapEnabled;
+    this.saveGridSettings();
+  }
+
+  toggleGrid() {
+    this.showGrid = !this.showGrid;
+    this.saveGridSettings();
+  }
+
+  private async saveGridSettings() {
+    const settings = getCoreSettings();
+    settings.snap_enabled = this.snapEnabled;
+    settings.snap_grid_size = this.snapGridSize;
+    settings.show_grid = this.showGrid;
+    settings.grid_gap = this.gridGap;
+    await setCoreSettings(settings);
+  }
+
+  // --- Alignment ---
+
+  async alignNodes(direction: "left" | "center" | "right" | "top" | "middle" | "bottom") {
+    const selectedNodes = this.nodes.filter((n) => n.selected);
+    if (selectedNodes.length < 2) return;
+
+    const updates: { id: string; x: number; y: number }[] = [];
+
+    switch (direction) {
+      case "left": {
+        const target = Math.min(...selectedNodes.map((n) => n.position.x));
+        for (const n of selectedNodes) {
+          updates.push({ id: n.id, x: target, y: n.position.y });
+        }
+        break;
+      }
+      case "right": {
+        const target = Math.max(
+          ...selectedNodes.map((n) => n.position.x + (n.measured?.width ?? n.width ?? 200)),
+        );
+        for (const n of selectedNodes) {
+          const w = n.measured?.width ?? n.width ?? 200;
+          updates.push({ id: n.id, x: target - w, y: n.position.y });
+        }
+        break;
+      }
+      case "center": {
+        const positions = selectedNodes.map((n) => {
+          const w = n.measured?.width ?? n.width ?? 200;
+          return n.position.x + w / 2;
+        });
+        const target = (Math.min(...positions) + Math.max(...positions)) / 2;
+        for (const n of selectedNodes) {
+          const w = n.measured?.width ?? n.width ?? 200;
+          updates.push({ id: n.id, x: target - w / 2, y: n.position.y });
+        }
+        break;
+      }
+      case "top": {
+        const target = Math.min(...selectedNodes.map((n) => n.position.y));
+        for (const n of selectedNodes) {
+          updates.push({ id: n.id, x: n.position.x, y: target });
+        }
+        break;
+      }
+      case "bottom": {
+        const target = Math.max(
+          ...selectedNodes.map((n) => n.position.y + (n.measured?.height ?? n.height ?? 100)),
+        );
+        for (const n of selectedNodes) {
+          const h = n.measured?.height ?? n.height ?? 100;
+          updates.push({ id: n.id, x: n.position.x, y: target - h });
+        }
+        break;
+      }
+      case "middle": {
+        const positions = selectedNodes.map((n) => {
+          const h = n.measured?.height ?? n.height ?? 100;
+          return n.position.y + h / 2;
+        });
+        const target = (Math.min(...positions) + Math.max(...positions)) / 2;
+        for (const n of selectedNodes) {
+          const h = n.measured?.height ?? n.height ?? 100;
+          updates.push({ id: n.id, x: n.position.x, y: target - h / 2 });
+        }
+        break;
+      }
+    }
+
+    for (const u of updates) {
+      this.svelteFlow.updateNode(u.id, { position: { x: u.x, y: u.y } });
+    }
+    await Promise.all(updates.map((u) => updateAgentSpec(u.id, { x: u.x, y: u.y })));
+  }
+
+  async distributeNodes(direction: "horizontal" | "vertical") {
+    const selectedNodes = this.nodes.filter((n) => n.selected);
+    if (selectedNodes.length < 3) return;
+
+    const updates: { id: string; x: number; y: number }[] = [];
+
+    if (direction === "horizontal") {
+      const sorted = [...selectedNodes].sort((a, b) => a.position.x - b.position.x);
+      const first = sorted[0].position.x;
+      const lastNode = sorted[sorted.length - 1];
+      const last = lastNode.position.x + (lastNode.measured?.width ?? lastNode.width ?? 200);
+      const totalNodeWidth = sorted.reduce(
+        (sum, n) => sum + (n.measured?.width ?? n.width ?? 200),
+        0,
+      );
+      const gap = (last - first - totalNodeWidth) / (sorted.length - 1);
+
+      let x = first;
+      for (const n of sorted) {
+        const w = n.measured?.width ?? n.width ?? 200;
+        updates.push({ id: n.id, x, y: n.position.y });
+        x += w + gap;
+      }
+    } else {
+      const sorted = [...selectedNodes].sort((a, b) => a.position.y - b.position.y);
+      const first = sorted[0].position.y;
+      const lastNode = sorted[sorted.length - 1];
+      const last = lastNode.position.y + (lastNode.measured?.height ?? lastNode.height ?? 100);
+      const totalNodeHeight = sorted.reduce(
+        (sum, n) => sum + (n.measured?.height ?? n.height ?? 100),
+        0,
+      );
+      const gap = (last - first - totalNodeHeight) / (sorted.length - 1);
+
+      let y = first;
+      for (const n of sorted) {
+        const h = n.measured?.height ?? n.height ?? 100;
+        updates.push({ id: n.id, x: n.position.x, y });
+        y += h + gap;
+      }
+    }
+
+    for (const u of updates) {
+      this.svelteFlow.updateNode(u.id, { position: { x: u.x, y: u.y } });
+    }
+    await Promise.all(updates.map((u) => updateAgentSpec(u.id, { x: u.x, y: u.y })));
   }
 
   // --- Navigate helpers ---

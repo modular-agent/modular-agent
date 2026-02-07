@@ -23,12 +23,20 @@
   let color_mode = $state<string>("");
   let run_in_background = $state(false);
   let shortcut_keys = $state<Record<string, string>>({});
+  let snap_enabled = $state(true);
+  let snap_grid_size = $state(12);
+  let show_grid = $state(true);
+  let grid_gap = $state(24);
 
   onMount(() => {
     autostart = settings["autostart"] ?? false;
     color_mode = settings["color_mode"] ?? "";
     run_in_background = settings["run_in_background"] ?? false;
     shortcut_keys = settings["shortcut_keys"] ?? {};
+    snap_enabled = settings["snap_enabled"] ?? true;
+    snap_grid_size = settings["snap_grid_size"] ?? 12;
+    show_grid = settings["show_grid"] ?? true;
+    grid_gap = settings["grid_gap"] ?? 24;
   });
 
   async function setColorMode(mode: string) {
@@ -50,6 +58,10 @@
       color_mode,
       run_in_background,
       shortcut_keys,
+      snap_enabled,
+      snap_grid_size,
+      show_grid,
+      grid_gap,
     });
     // confirm restart
     await message("Modular Agent will quit to apply changes.\n\nPlease restart.");
@@ -86,6 +98,28 @@
               <Select.Item value="dark">Dark</Select.Item>
             </Select.Content>
           </Select.Root>
+        </Field>
+
+        <div class="font-semibold mt-4">Grid / Snap</div>
+
+        <Field orientation="horizontal">
+          <Switch bind:checked={snap_enabled} />
+          <FieldLabel>Snap to Grid</FieldLabel>
+        </Field>
+
+        <Field orientation="horizontal">
+          <Switch bind:checked={show_grid} />
+          <FieldLabel>Show Grid</FieldLabel>
+        </Field>
+
+        <Field orientation="vertical">
+          <FieldLabel>Snap Grid Size: {snap_grid_size}px</FieldLabel>
+          <Input type="number" min={2} max={48} bind:value={snap_grid_size} class="max-w-xs" />
+        </Field>
+
+        <Field orientation="vertical">
+          <FieldLabel>Grid Gap: {grid_gap}px</FieldLabel>
+          <Input type="number" min={4} max={96} bind:value={grid_gap} class="max-w-xs" />
         </Field>
 
         <div class="font-semibold mt-4">Shortcut Keys</div>
