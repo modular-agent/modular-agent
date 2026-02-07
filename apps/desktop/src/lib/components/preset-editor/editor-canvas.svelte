@@ -90,18 +90,50 @@
 
   // --- Keyboard shortcuts ---
 
+  function isEditableElement(el: EventTarget | null): boolean {
+    return (
+      el instanceof HTMLInputElement ||
+      el instanceof HTMLTextAreaElement ||
+      (el instanceof HTMLElement && el.isContentEditable)
+    );
+  }
+
   function handleKeydown(event: KeyboardEvent) {
     if (event.key === "Escape" && editor.openAgentList) {
       editor.hideAgentList();
       return;
     }
+
+    const editable = isEditableElement(event.target);
+
     if (event.key === "A" && event.shiftKey && !event.ctrlKey && !event.metaKey) {
+      if (editable) return;
       event.preventDefault();
       editor.showAgentList(mouseX, mouseY);
       return;
     }
     const mod = event.ctrlKey || event.metaKey;
     if (!mod) return;
+
+    // When an editable element is focused, let text-editing shortcuts pass through
+    if (editable) {
+      switch (event.key) {
+        case "a":
+        case "c":
+        case "v":
+        case "x":
+          return;
+      }
+    }
+
+    // When text is selected (e.g. in rendered HTML), let Ctrl+C pass through to browser
+    if (event.key === "c") {
+      const selection = window.getSelection();
+      if (selection && !selection.isCollapsed) {
+        return;
+      }
+    }
+
     switch (event.key) {
       case "r":
         event.preventDefault();
