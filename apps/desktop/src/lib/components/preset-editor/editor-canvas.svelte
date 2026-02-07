@@ -91,7 +91,7 @@
   // --- Keyboard shortcuts ---
 
   function handleKeydown(event: KeyboardEvent) {
-    if (event.key === "Escape") {
+    if (event.key === "Escape" && editor.openAgentList) {
       editor.hideAgentList();
       return;
     }
@@ -151,7 +151,7 @@
   }
 
   async function handleAddAgentFromPopup(name: string) {
-    await editor.addAgent(name, { x: editor.agentListX, y: editor.agentListY });
+    await editor.addAgent(name, { x: editor.agentListOriginX, y: editor.agentListOriginY });
     editor.hideAgentList();
   }
 
@@ -243,7 +243,11 @@
   }
 </script>
 
-<svelte:window onkeydown={handleKeydown} onmousedown={handleWindowMouseDown} onmousemove={handleMouseMove} />
+<svelte:window
+  onkeydown={handleKeydown}
+  onmousedown={handleWindowMouseDown}
+  onmousemove={handleMouseMove}
+/>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="flex-1 w-full" ondblclick={handlePaneDblClick}>

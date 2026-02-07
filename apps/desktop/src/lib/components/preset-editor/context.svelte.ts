@@ -58,6 +58,8 @@ export class EditorState {
   openAgentList = $state(false);
   agentListX = $state(0);
   agentListY = $state(0);
+  agentListOriginX = $state(0);
+  agentListOriginY = $state(0);
 
   // Dialog state (shared between menubar and pane context menu)
   openNewPresetDialog = $state(false);
@@ -435,6 +437,8 @@ export class EditorState {
   showAgentList(x: number, y: number) {
     this.hideNodeContextMenu();
     this.hidePaneContextMenu();
+    this.agentListOriginX = x;
+    this.agentListOriginY = y;
     const POPUP_W = 256;
     const POPUP_H = 320;
     const HEADER_H = 40;
