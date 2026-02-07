@@ -11,6 +11,10 @@
 
   import { inferTypeForDisplay } from "$lib/agent";
 
+  import DOMPurify from "dompurify";
+  import { marked } from "marked";
+
+  import MarkdownInput from "./markdown-input.svelte";
   import Messages from "./messages.svelte";
 
   type Props = {
@@ -42,6 +46,7 @@
     object: displayObject,
     message: displayMessages,
     messages: displayMessages,
+    markdown: displayMarkdown,
     default: displayObject,
   };
 
@@ -54,6 +59,7 @@
     password: inputPassword,
     text: inputText,
     object: inputObject,
+    markdown: inputMarkdown,
     default: inputDefault,
   };
 </script>
@@ -118,6 +124,11 @@
   <div class="nodrag nowheel flex-1 border-none shadow-none agent-config-html">
     {@html typeof value === "string" ? value : String(value ?? "")}
   </div>
+{/snippet}
+
+{#snippet displayMarkdown(value: any)}
+  {@const raw = typeof value === "string" ? value : String(value ?? "")}
+  {@render displayHtml(DOMPurify.sanitize(marked.parse(raw) as string))}
 {/snippet}
 
 {#snippet displayImage(value: string)}
@@ -269,6 +280,10 @@
       }
     }}
   />
+{/snippet}
+
+{#snippet inputMarkdown(key: string, v: any)}
+  <MarkdownInput name={key} value={v ?? ""} {updateConfig} />
 {/snippet}
 
 {#snippet inputObject(key: string, v: any)}
