@@ -1,21 +1,26 @@
 <script lang="ts">
-  import { type ComponentProps } from "svelte";
-
   import { getAgentDefinitions } from "$lib/agent";
   import { Input } from "$lib/components/ui/input/index.js";
-  import { Label } from "$lib/components/ui/label/index.js";
-  import * as Sidebar from "$lib/components/ui/sidebar/index.js";
 
   import AgentListItem from "./agent-list-item.svelte";
 
-  type Props = ComponentProps<typeof Sidebar.Root> & {
-    onAddAgent: (agentName: string, position?: { x: number; y: number }) => Promise<void>;
-    onDragAgentStart?: (event: DragEvent, agentName: string) => void;
-  };
-
-  let { onAddAgent, onDragAgentStart, ...restProps }: Props = $props();
+  let {
+    onAddAgent,
+    visible = false,
+  }: {
+    onAddAgent: (agentName: string) => void;
+    visible?: boolean;
+  } = $props();
 
   const agentDefs = getAgentDefinitions();
+
+  let searchRef: HTMLInputElement | null = $state(null);
+
+  $effect(() => {
+    if (visible) {
+      searchRef?.focus();
+    }
+  });
 
   let searchTerm = $state("");
 
@@ -58,109 +63,16 @@
       {} as Record<string, any>,
     ),
   );
-
-  // --- Auto-collapse logic ---
-
-  let expanded = $state(true);
-  let dragging = $state(false);
-  let rootRef: HTMLDivElement | null = $state(null);
-  let collapseTimer: ReturnType<typeof setTimeout> | null = null;
-  const COLLAPSE_DELAY = 800;
-
-  function scheduleCollapse() {
-    cancelCollapse();
-    collapseTimer = setTimeout(() => {
-      collapseTimer = null;
-      if (dragging) return;
-      if (rootRef?.contains(document.activeElement)) return;
-      expanded = false;
-    }, COLLAPSE_DELAY);
-  }
-
-  function cancelCollapse() {
-    if (collapseTimer) {
-      clearTimeout(collapseTimer);
-      collapseTimer = null;
-    }
-  }
-
-  function handleMouseEnter() {
-    cancelCollapse();
-    expanded = true;
-  }
-
-  function handleMouseLeave() {
-    scheduleCollapse();
-  }
-
-  function handleFocusIn() {
-    cancelCollapse();
-    expanded = true;
-  }
-
-  function handleFocusOut(event: FocusEvent) {
-    const related = event.relatedTarget as Node | null;
-    if (rootRef && related && !rootRef.contains(related)) {
-      scheduleCollapse();
-    }
-  }
-
-  function handleDragStart() {
-    dragging = true;
-    cancelCollapse();
-  }
-
-  function handleDragEnd() {
-    dragging = false;
-    scheduleCollapse();
-  }
-
-  $effect(() => {
-    scheduleCollapse();
-    return () => {
-      if (collapseTimer) clearTimeout(collapseTimer);
-    };
-  });
 </script>
 
-<svelte:window ondragend={handleDragEnd} />
-
-<div
-  bind:this={rootRef}
-  role="complementary"
-  aria-label="Agent list"
-  onmouseenter={handleMouseEnter}
-  onmouseleave={handleMouseLeave}
-  onfocusin={handleFocusIn}
-  onfocusout={handleFocusOut}
-  ondragstart={handleDragStart}
->
-  <Sidebar.Root collapsible="none" variant="floating" class="rounded-md" {...restProps}>
-    <Sidebar.Header>
-      <div class="flex items-center gap-4">
-        <Label>Agents</Label>
-        <Input
-          type="search"
-          class="mr-8 text-sm h-6 bg-sidebar dark:bg-sidebar"
-          bind:value={searchTerm}
-        />
-      </div>
-    </Sidebar.Header>
-
-    <div
-      class="grid transition-[grid-template-rows,opacity] duration-300 ease-in-out"
-      style="grid-template-rows: {expanded ? '1fr' : '0fr'}; opacity: {expanded ? 1 : 0};"
-      aria-hidden={!expanded}
-    >
-      <div class="min-h-0 overflow-hidden">
-        <div class="max-h-[calc(100vh-210px-var(--titlebar-height))] overflow-y-auto">
-          <Sidebar.Content>
-            <Sidebar.Menu>
-              <AgentListItem {categories} {agentDefs} {expandAll} {onDragAgentStart} />
-            </Sidebar.Menu>
-          </Sidebar.Content>
-        </div>
-      </div>
-    </div>
-  </Sidebar.Root>
+<div class="flex flex-col gap-2 p-2">
+  <div class="flex items-center gap-4">
+    <span class="text-sm font-medium">Agents</span>
+    <Input bind:ref={searchRef} type="search" class="text-sm h-6" bind:value={searchTerm} />
+  </div>
+</div>
+<div class="max-h-80 overflow-y-auto px-1">
+  <ul class="flex w-full min-w-0 flex-col gap-1">
+    <AgentListItem {categories} {agentDefs} {expandAll} {onAddAgent} />
+  </ul>
 </div>

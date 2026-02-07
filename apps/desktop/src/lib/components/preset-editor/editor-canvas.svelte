@@ -40,8 +40,6 @@
     agent: AgentNode,
   };
 
-  const AGENT_DRAG_FORMAT = "application/agent-name";
-
   // --- MiniMap visibility ---
 
   let showMiniMap = $state(false);
@@ -80,9 +78,28 @@
     updateMiniMapVisibility();
   });
 
+  // --- Mouse position tracking ---
+
+  let mouseX = $state(0);
+  let mouseY = $state(0);
+
+  function handleMouseMove(event: MouseEvent) {
+    mouseX = event.clientX;
+    mouseY = event.clientY;
+  }
+
   // --- Keyboard shortcuts ---
 
   function handleKeydown(event: KeyboardEvent) {
+    if (event.key === "Escape") {
+      editor.hideAgentList();
+      return;
+    }
+    if (event.key === "A" && event.shiftKey && !event.ctrlKey && !event.metaKey) {
+      event.preventDefault();
+      editor.showAgentList(mouseX, mouseY);
+      return;
+    }
     const mod = event.ctrlKey || event.metaKey;
     if (!mod) return;
     switch (event.key) {
@@ -117,32 +134,31 @@
     }
   }
 
-  // --- Drag and drop ---
+  // --- Agent list popup ---
 
-  function handleAgentDragStart(event: DragEvent, agentName: string) {
-    event.dataTransfer?.setData(AGENT_DRAG_FORMAT, agentName);
-    event.dataTransfer?.setData("text/plain", agentName);
-    if (event.dataTransfer) {
-      event.dataTransfer.effectAllowed = "move";
-    }
+  let agentListRef: HTMLDivElement | null = $state(null);
+
+  function handlePaneDblClick(event: MouseEvent) {
+    const target = event.target as HTMLElement;
+    if (
+      target.closest(".svelte-flow__node") ||
+      target.closest(".svelte-flow__controls") ||
+      target.closest(".svelte-flow__minimap") ||
+      target.closest(".svelte-flow__edge")
+    )
+      return;
+    editor.showAgentList(event.clientX, event.clientY);
   }
 
-  function handleDragOver(event: DragEvent) {
-    const hasAgent = event.dataTransfer?.types?.includes(AGENT_DRAG_FORMAT);
-    if (!hasAgent) return;
-    event.preventDefault();
-    if (event.dataTransfer) {
-      event.dataTransfer.dropEffect = "move";
-    }
+  async function handleAddAgentFromPopup(name: string) {
+    await editor.addAgent(name, { x: editor.agentListX, y: editor.agentListY });
+    editor.hideAgentList();
   }
 
-  async function handleDrop(event: DragEvent) {
-    const hasAgent = event.dataTransfer?.types?.includes(AGENT_DRAG_FORMAT);
-    if (!hasAgent) return;
-    event.preventDefault();
-    const agentName = event.dataTransfer?.getData(AGENT_DRAG_FORMAT);
-    if (!agentName) return;
-    await editor.addAgent(agentName, { x: event.clientX - 40, y: event.clientY - 20 });
+  function handleWindowMouseDown(event: MouseEvent) {
+    if (editor.openAgentList && !agentListRef?.contains(event.target as Node)) {
+      editor.hideAgentList();
+    }
   }
 
   // --- Canvas event handlers ---
@@ -176,6 +192,7 @@
 
   function handleNodeClick() {
     editor.hideNodeContextMenu();
+    editor.hideAgentList();
   }
 
   const handleNodeDragStop: NodeTargetEventWithPointer<
@@ -203,6 +220,7 @@
   function handlePaneClick() {
     editor.hideNodeContextMenu();
     editor.hidePaneContextMenu();
+    editor.hideAgentList();
   }
 
   function handlePaneContextMenu({ event }: { event: MouseEvent }) {
@@ -225,82 +243,87 @@
   }
 </script>
 
-<svelte:window onkeydown={handleKeydown} />
+<svelte:window onkeydown={handleKeydown} onmousedown={handleWindowMouseDown} onmousemove={handleMouseMove} />
 
-<SvelteFlow
-  attributionPosition="bottom-right"
-  class="flex-1 w-full"
-  colorMode={(coreSettings.color_mode as "light" | "dark" | "system") || "system"}
-  connectionRadius={38}
-  deleteKey={["Delete", "Backspace"]}
-  bind:edges={editor.edges}
-  initialViewport={editor.props.flow().viewport!}
-  maxZoom={2}
-  minZoom={0.1}
-  bind:nodes={editor.nodes}
-  {nodeTypes}
-  onconnect={handleOnConnect}
-  ondelete={handleOnDelete}
-  ondragover={handleDragOver}
-  ondrop={handleDrop}
-  onnodeclick={handleNodeClick}
-  onnodedragstop={handleNodeDragStop}
-  onnodecontextmenu={handleNodeContextMenu}
-  onmoveend={handleOnMoveEnd}
-  onpaneclick={handlePaneClick}
-  onpanecontextmenu={handlePaneContextMenu}
-  onselectionclick={handleSelectionClick}
-  onselectioncontextmenu={handleSelectionContextMenu}
-  onselectiondragstop={handleSelectionDragStop}
-  snapGrid={[6, 6]}
->
-  <Background
-    bgColor={editor.running ? "var(--color-background)" : "var(--color-muted)"}
-    gap={24}
-    lineWidth={1}
-    variant={BackgroundVariant.Dots}
-  />
-
-  <Controls />
-  {#if showMiniMap}
-    <div transition:fade={{ duration: 150 }}>
-      <MiniMap />
-    </div>
-  {/if}
-
-  <NodeContextMenu
-    bind:open={editor.openNodeContextMenu}
-    x={editor.nodeContextMenuX}
-    y={editor.nodeContextMenuY}
-    onenable={() => editor.enable()}
-    ondisable={() => editor.disable()}
-    oncut={() => editor.cutNodesAndEdges()}
-    oncopy={() => editor.copyNodesAndEdges()}
-    ontoggleerr={() => editor.toggleErr()}
-  />
-
-  <PaneContextMenu
-    bind:open={editor.openPaneContextMenu}
-    x={editor.paneContextMenuX}
-    y={editor.paneContextMenuY}
-    running={editor.running}
-    onstart={() => editor.startPreset()}
-    onstop={() => editor.stopPreset()}
-    onnew={() => editor.showNewPresetDialog()}
-    onsave={() => editor.savePreset()}
-    onsaveas={() => editor.showSaveAsDialog()}
-    onimport={() => editor.importPresetAndNavigate()}
-    onexport={() => editor.exportPreset()}
-    onpaste={() => editor.pasteNodesAndEdges()}
-  />
-
-  <div class="absolute right-2 top-2 w-60 z-20 rounded-md border shadow-lg overflow-hidden">
-    <AgentList
-      onAddAgent={(name: string) => editor.addAgent(name)}
-      onDragAgentStart={handleAgentDragStart}
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div class="flex-1 w-full" ondblclick={handlePaneDblClick}>
+  <SvelteFlow
+    attributionPosition="bottom-right"
+    class="flex-1 w-full"
+    colorMode={(coreSettings.color_mode as "light" | "dark" | "system") || "system"}
+    connectionRadius={38}
+    deleteKey={["Delete", "Backspace"]}
+    bind:edges={editor.edges}
+    initialViewport={editor.props.flow().viewport!}
+    maxZoom={2}
+    minZoom={0.1}
+    bind:nodes={editor.nodes}
+    {nodeTypes}
+    onconnect={handleOnConnect}
+    ondelete={handleOnDelete}
+    onnodeclick={handleNodeClick}
+    onnodedragstop={handleNodeDragStop}
+    onnodecontextmenu={handleNodeContextMenu}
+    onmoveend={handleOnMoveEnd}
+    onpaneclick={handlePaneClick}
+    onpanecontextmenu={handlePaneContextMenu}
+    onselectionclick={handleSelectionClick}
+    onselectioncontextmenu={handleSelectionContextMenu}
+    onselectiondragstop={handleSelectionDragStop}
+    snapGrid={[6, 6]}
+    zoomOnDoubleClick={false}
+  >
+    <Background
+      bgColor={editor.running ? "var(--color-background)" : "var(--color-muted)"}
+      gap={24}
+      lineWidth={1}
+      variant={BackgroundVariant.Dots}
     />
-  </div>
-</SvelteFlow>
+
+    <Controls />
+    {#if showMiniMap}
+      <div transition:fade={{ duration: 150 }}>
+        <MiniMap />
+      </div>
+    {/if}
+
+    <NodeContextMenu
+      bind:open={editor.openNodeContextMenu}
+      x={editor.nodeContextMenuX}
+      y={editor.nodeContextMenuY}
+      onenable={() => editor.enable()}
+      ondisable={() => editor.disable()}
+      oncut={() => editor.cutNodesAndEdges()}
+      oncopy={() => editor.copyNodesAndEdges()}
+      ontoggleerr={() => editor.toggleErr()}
+    />
+
+    <PaneContextMenu
+      bind:open={editor.openPaneContextMenu}
+      x={editor.paneContextMenuX}
+      y={editor.paneContextMenuY}
+      running={editor.running}
+      onstart={() => editor.startPreset()}
+      onstop={() => editor.stopPreset()}
+      onnew={() => editor.showNewPresetDialog()}
+      onsave={() => editor.savePreset()}
+      onsaveas={() => editor.showSaveAsDialog()}
+      onimport={() => editor.importPresetAndNavigate()}
+      onexport={() => editor.exportPreset()}
+      onpaste={() => editor.pasteNodesAndEdges()}
+      onaddagent={() => editor.showAgentList(mouseX, mouseY)}
+    />
+  </SvelteFlow>
+</div>
+
+<div
+  bind:this={agentListRef}
+  class="fixed z-50 w-64 rounded-md border shadow-lg bg-popover text-popover-foreground"
+  class:hidden={!editor.openAgentList}
+  style="left: {editor.agentListX}px; top: {editor.agentListY}px;"
+>
+  <AgentList onAddAgent={handleAddAgentFromPopup} visible={editor.openAgentList} />
+</div>
 
 <PresetActionDialog
   action="New"

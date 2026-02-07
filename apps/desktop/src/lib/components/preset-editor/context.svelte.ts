@@ -55,6 +55,9 @@ export class EditorState {
   openPaneContextMenu = $state(false);
   paneContextMenuX = $state(0);
   paneContextMenuY = $state(0);
+  openAgentList = $state(false);
+  agentListX = $state(0);
+  agentListY = $state(0);
 
   // Dialog state (shared between menubar and pane context menu)
   openNewPresetDialog = $state(false);
@@ -407,6 +410,7 @@ export class EditorState {
 
   showNodeContextMenu(x: number, y: number) {
     this.openPaneContextMenu = false;
+    this.openAgentList = false;
     this.nodeContextMenuX = x;
     this.nodeContextMenuY = y;
     this.openNodeContextMenu = true;
@@ -418,6 +422,7 @@ export class EditorState {
 
   showPaneContextMenu(x: number, y: number) {
     this.openNodeContextMenu = false;
+    this.openAgentList = false;
     this.paneContextMenuX = x;
     this.paneContextMenuY = y;
     this.openPaneContextMenu = true;
@@ -425,6 +430,23 @@ export class EditorState {
 
   hidePaneContextMenu() {
     this.openPaneContextMenu = false;
+  }
+
+  showAgentList(x: number, y: number) {
+    this.hideNodeContextMenu();
+    this.hidePaneContextMenu();
+    const POPUP_W = 256;
+    const POPUP_H = 320;
+    const HEADER_H = 40;
+    const cx = x - POPUP_W / 2;
+    const cy = y - HEADER_H / 2;
+    this.agentListX = Math.max(0, Math.min(cx, window.innerWidth - POPUP_W));
+    this.agentListY = Math.max(0, Math.min(cy, window.innerHeight - POPUP_H));
+    this.openAgentList = true;
+  }
+
+  hideAgentList() {
+    this.openAgentList = false;
   }
 
   // --- Dialogs ---

@@ -14,6 +14,7 @@
     onimport,
     onexport,
     onpaste,
+    onaddagent,
   }: {
     open: boolean;
     x: number;
@@ -27,6 +28,7 @@
     onimport?: () => void;
     onexport?: () => void;
     onpaste?: () => void;
+    onaddagent?: () => void;
   } = $props();
 
   const anchor = $derived({
@@ -58,6 +60,11 @@
         <ContextMenu.Shortcut>ctl-.</ContextMenu.Shortcut>
       </ContextMenu.Item>
     {/if}
+    <ContextMenu.Separator />
+    <ContextMenu.Item inset onclick={() => handle(onaddagent)}>
+      Add agent
+      <ContextMenu.Shortcut>shift-A</ContextMenu.Shortcut>
+    </ContextMenu.Item>
     <ContextMenu.Separator />
     <ContextMenu.Item inset onclick={() => handle(onpaste)}>
       Paste
