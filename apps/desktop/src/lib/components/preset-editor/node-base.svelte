@@ -12,6 +12,8 @@
   const HANDLE_OFFSET = 87;
   const HANDLE_OFFSET_NO_TITLE = 32;
   const HANDLE_GAP = 25.5;
+  const DEFAULT_MAX_NODE_HEIGHT = 500;
+  const DEFAULT_MAX_NODE_WIDTH = 500;
 </script>
 
 <script lang="ts">
@@ -37,7 +39,7 @@
     contents: Snippet;
   };
 
-  let { data, agentDef, selected, height, inputCount, title, titleColor, contents }: Props =
+  let { data, agentDef, selected, width, height, inputCount, title, titleColor, contents }: Props =
     $props();
 
   const inputs = $derived(data.inputs ?? []);
@@ -56,9 +58,11 @@
       : HANDLE_OFFSET,
   );
 
+  let wd = $derived<number | null>(width ?? null);
   let ht = $derived<number | null>(height ?? null);
 
   function onResize(_ev: ResizeDragEvent, params: ResizeParams) {
+    wd = params.width;
     ht = params.height;
   }
 
@@ -87,6 +91,8 @@
 <div
   bind:clientHeight
   class="{bgColor} flex flex-col p-0 border-primary border-3 rounded-xl"
+  style:width={wd ? `${wd}px` : "auto"}
+  style:max-width={wd ? undefined : `${DEFAULT_MAX_NODE_WIDTH}px`}
   style:height={ht ? `${ht}px` : "auto"}
   style:box-shadow={highlight.current > 0.05
     ? `0 0 ${highlight.current * 40}px ${highlightColor}`
@@ -121,8 +127,11 @@
       {/each}
     </div>
   </div>
-  <div class="w-full grow flex flex-col gap-2 overflow-auto min-h-0">
-    <ScrollArea>
+  <div
+    class="w-full grow flex flex-col gap-2 overflow-hidden min-h-0"
+    style:max-height={ht ? undefined : `${DEFAULT_MAX_NODE_HEIGHT}px`}
+  >
+    <ScrollArea class="h-full nodrag nowheel">
       {@render contents()}
     </ScrollArea>
   </div>
