@@ -11,10 +11,11 @@
   import { setMode } from "mode-watcher";
 
   import { getCoreSettings } from "$lib/agent";
+  import { Toaster } from "$lib/components/ui/sonner";
   import AppSidebar from "$lib/components/app-sidebar.svelte";
   import Titlebar from "$lib/components/titlebar.svelte";
-  import { initLogging } from "$lib/log-store.svelte";
   import * as Sidebar from "$lib/components/ui/sidebar/index.js";
+  import { initLogging } from "$lib/log-store.svelte";
 
   import type { LayoutProps } from "./$types";
 
@@ -79,6 +80,7 @@
 <svelte:window onkeydown={handleGlobalKeydown} />
 
 <ModeWatcher />
+<Toaster />
 <div class="flex flex-col h-screen overflow-hidden">
   <Titlebar />
   <Sidebar.Provider>

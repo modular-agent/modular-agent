@@ -3,6 +3,8 @@ import { open } from "@tauri-apps/plugin-dialog";
 
 import { getContext, setContext } from "svelte";
 
+import type { useSvelteFlow } from "@xyflow/svelte";
+import { toast } from "svelte-sonner";
 import {
   addAgent,
   addAgentsAndConnections,
@@ -21,7 +23,6 @@ import {
   type AgentSpec,
   type ConnectionSpec,
 } from "tauri-plugin-modular-agent-api";
-import type { useSvelteFlow } from "@xyflow/svelte";
 
 import {
   agentSpecToNode,
@@ -33,8 +34,27 @@ import {
   savePreset as savePresetAPI,
   newPresetWithName,
 } from "$lib/agent";
-import type { PresetFlow, PresetNode, PresetEdge } from "$lib/types";
 import { titlebarState } from "$lib/titlebar-state.svelte";
+import type { PresetFlow, PresetNode, PresetEdge } from "$lib/types";
+
+async function withErrorToast<T>(fn: () => Promise<T>, message: string): Promise<T | undefined> {
+  try {
+    return await fn();
+  } catch (e) {
+    console.error(message, e);
+    toast.error(message, { description: String(e) });
+    return undefined;
+  }
+}
+
+async function withErrorLog<T>(fn: () => Promise<T>, message: string): Promise<T | undefined> {
+  try {
+    return await fn();
+  } catch (e) {
+    console.error(message, e);
+    return undefined;
+  }
+}
 
 const BG_COLORS = ["bg-background dark:bg-background", "bg-muted dark:bg-muted"];
 
@@ -119,11 +139,21 @@ export class EditorState {
       titlebarState.presetName = flow.name;
       titlebarState.onStart = () => this.startPreset();
       titlebarState.onStop = () => this.stopPreset();
-      titlebarState.onShowNewDialog = () => { this.showNewPresetDialog(); };
-      titlebarState.onSavePreset = () => { this.savePreset(); };
-      titlebarState.onShowSaveAsDialog = () => { this.showSaveAsDialog(); };
-      titlebarState.onImportPreset = () => { this.importPresetAndNavigate(); };
-      titlebarState.onExportPreset = () => { this.exportPreset(); };
+      titlebarState.onShowNewDialog = () => {
+        this.showNewPresetDialog();
+      };
+      titlebarState.onSavePreset = () => {
+        this.savePreset();
+      };
+      titlebarState.onShowSaveAsDialog = () => {
+        this.showSaveAsDialog();
+      };
+      titlebarState.onImportPreset = () => {
+        this.importPresetAndNavigate();
+      };
+      titlebarState.onExportPreset = () => {
+        this.exportPreset();
+      };
     });
 
     $effect(() => {
@@ -140,33 +170,42 @@ export class EditorState {
   // --- Preset operations ---
 
   async savePreset() {
-    const s = await getPresetSpec(this.preset_id);
-    if (!s) return;
-    await savePresetAPI(this.name, s);
+    await withErrorToast(async () => {
+      const s = await getPresetSpec(this.preset_id);
+      if (!s) return;
+      await savePresetAPI(this.name, s);
+    }, "Failed to save preset");
   }
 
   async startPreset() {
-    await startPresetAPI(this.preset_id);
-    this.running = true;
+    await withErrorToast(async () => {
+      await startPresetAPI(this.preset_id);
+      this.running = true;
+    }, "Failed to start preset");
   }
 
   async stopPreset() {
-    await stopPresetAPI(this.preset_id);
-    this.running = false;
+    await withErrorToast(async () => {
+      await stopPresetAPI(this.preset_id);
+      this.running = false;
+    }, "Failed to stop preset");
   }
 
   async exportPreset() {
-    const s = await getPresetSpec(this.preset_id);
-    const jsonStr = JSON.stringify(s, null, 2);
-    const blob = new Blob([jsonStr], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = this.name + ".json";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    await withErrorToast(async () => {
+      const s = await getPresetSpec(this.preset_id);
+      if (!s) return;
+      const jsonStr = JSON.stringify(s, null, 2);
+      const blob = new Blob([jsonStr], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = this.name + ".json";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, "Failed to export preset");
   }
 
   async importPreset(): Promise<string | null> {
@@ -176,52 +215,85 @@ export class EditorState {
     });
     if (!file) return null;
 
-    const name = this.name;
-    const lastSlash = name.lastIndexOf("/");
-    const targetDir = lastSlash >= 0 ? name.substring(0, lastSlash) : "";
-
-    const id = await importPresetAPI(file as string, targetDir);
-    return id;
+    const result = await withErrorToast(async () => {
+      const name = this.name;
+      const lastSlash = name.lastIndexOf("/");
+      const targetDir = lastSlash >= 0 ? name.substring(0, lastSlash) : "";
+      return await importPresetAPI(file as string, targetDir);
+    }, "Failed to import preset");
+    return result ?? null;
   }
 
   async newPreset(name: string): Promise<string | null> {
-    const new_id = await newPresetWithName(name);
-    return new_id || null;
+    const result = await withErrorToast(async () => {
+      return await newPresetWithName(name);
+    }, "Failed to create new preset");
+    return result || null;
   }
 
   // --- Node/Edge operations ---
 
   async addAgent(agentName: string, position?: { x: number; y: number }) {
-    const snode = await newAgentSpec(agentName);
-    const xy =
-      position !== undefined
-        ? this.svelteFlow.screenToFlowPosition(position)
-        : this.svelteFlow.screenToFlowPosition({
-            x: window.innerWidth * 0.45,
-            y: window.innerHeight * 0.3,
-          });
-    snode.x = xy.x;
-    snode.y = xy.y;
-    const id = await addAgent(this.preset_id, snode);
-    snode.id = id;
-    const new_node = agentSpecToNode(snode);
-    this.nodes = [...this.nodes, new_node];
+    try {
+      const snode = await newAgentSpec(agentName);
+      const xy =
+        position !== undefined
+          ? this.svelteFlow.screenToFlowPosition(position)
+          : this.svelteFlow.screenToFlowPosition({
+              x: window.innerWidth * 0.45,
+              y: window.innerHeight * 0.3,
+            });
+      snode.x = xy.x;
+      snode.y = xy.y;
+      const id = await addAgent(this.preset_id, snode);
+      snode.id = id;
+      const new_node = agentSpecToNode(snode);
+      this.nodes = [...this.nodes, new_node];
 
-    if (this.running) {
-      await startAgent(new_node.id);
+      if (this.running) {
+        try {
+          await startAgent(new_node.id);
+        } catch (e) {
+          console.error("Failed to start agent:", e);
+          toast.error("Agent added but failed to start", {
+            description: String(e),
+          });
+        }
+      }
+    } catch (e) {
+      console.error("Failed to add agent:", e);
+      toast.error("Failed to add agent", { description: String(e) });
     }
   }
 
   async deleteNodes(deletedNodes: PresetNode[]) {
+    const errors: string[] = [];
     for (const n of deletedNodes) {
-      await removeAgent(this.preset_id, n.id);
+      try {
+        await removeAgent(this.preset_id, n.id);
+      } catch (e) {
+        console.error("Failed to remove agent:", n.id, e);
+        errors.push(n.id);
+      }
+    }
+    if (errors.length > 0) {
+      toast.error(`Failed to delete ${errors.length} node(s)`);
     }
   }
 
   async deleteEdges(deletedEdges: PresetEdge[]) {
+    const errors: string[] = [];
     for (const e of deletedEdges) {
-      const ch = edgeToConnectionSpec(e);
-      await removeConnection(this.preset_id, ch);
+      try {
+        const ch = edgeToConnectionSpec(e);
+        await removeConnection(this.preset_id, ch);
+      } catch (err) {
+        console.error("Failed to remove connection:", e.id, err);
+        errors.push(e.id);
+      }
+    }
+    if (errors.length > 0) {
+      toast.error(`Failed to delete ${errors.length} connection(s)`);
     }
   }
 
@@ -240,13 +312,21 @@ export class EditorState {
     }
   }
 
-  async handleOnConnect(connection: { source: string; target: string; sourceHandle?: string | null; targetHandle?: string | null }) {
+  async handleOnConnect(connection: {
+    source: string;
+    target: string;
+    sourceHandle?: string | null;
+    targetHandle?: string | null;
+  }) {
     const edge = {
       id: crypto.randomUUID(),
       ...connection,
     } as PresetEdge;
 
-    await addConnection(this.preset_id, edgeToConnectionSpec(edge));
+    await withErrorToast(
+      () => addConnection(this.preset_id, edgeToConnectionSpec(edge)),
+      "Failed to add connection",
+    );
   }
 
   // --- Selection helpers ---
@@ -290,17 +370,39 @@ export class EditorState {
       return;
     }
 
-    await this.copySelected();
+    try {
+      await this.copySelected();
+    } catch (e) {
+      console.error("Failed to copy:", e);
+      toast.error("Failed to copy", { description: String(e) });
+      return;
+    }
 
+    const errors: string[] = [];
     for (const edge of selectedEdges) {
-      const ch = edgeToConnectionSpec(edge);
-      await removeConnection(this.preset_id, ch);
+      try {
+        await removeConnection(this.preset_id, edgeToConnectionSpec(edge));
+      } catch (e) {
+        console.error("Failed to remove connection:", e);
+        errors.push(edge.id);
+      }
     }
     for (const node of selectedNodes) {
-      await removeAgent(this.preset_id, node.id);
+      try {
+        await removeAgent(this.preset_id, node.id);
+      } catch (e) {
+        console.error("Failed to remove agent:", e);
+        errors.push(node.id);
+      }
     }
-    this.nodes = this.nodes.filter((node) => !node.selected);
-    this.edges = this.edges.filter((edge) => !edge.selected);
+
+    const failedIds = new Set(errors);
+    this.nodes = this.nodes.filter((n) => !n.selected || failedIds.has(n.id));
+    this.edges = this.edges.filter((e) => !e.selected || failedIds.has(e.id));
+
+    if (errors.length > 0) {
+      toast.error(`Failed to delete ${errors.length} element(s)`);
+    }
   }
 
   async copyNodesAndEdges() {
@@ -309,7 +411,7 @@ export class EditorState {
       return;
     }
 
-    await this.copySelected();
+    await withErrorToast(() => this.copySelected(), "Failed to copy");
   }
 
   async pasteNodesAndEdges() {
@@ -332,38 +434,52 @@ export class EditorState {
       return;
     }
 
-    const [added_agents, added_connections] = await addAgentsAndConnections(
-      this.preset_id,
-      copiedAgents,
-      copiedConnections,
-    );
+    try {
+      const [added_agents, added_connections] = await addAgentsAndConnections(
+        this.preset_id,
+        copiedAgents,
+        copiedConnections,
+      );
 
-    if (added_agents.length === 0 && added_connections.length === 0) return;
+      if (added_agents.length === 0 && added_connections.length === 0) return;
 
-    const new_nodes: PresetNode[] = [];
-    for (const a of added_agents) {
-      a.x += 80;
-      a.y += 80;
-      const new_node = agentSpecToNode(a);
-      new_node.selected = true;
-      new_nodes.push(new_node);
-    }
-
-    const new_edges: PresetEdge[] = [];
-    for (const conn of added_connections) {
-      const new_edge = connectionSpecToEdge(conn);
-      new_edge.selected = true;
-      new_edges.push(new_edge);
-    }
-
-    this.nodes = [...this.nodes, ...new_nodes];
-    this.edges = [...this.edges, ...new_edges];
-
-    if (this.running) {
-      for (const node of new_nodes) {
-        if (node.data.disabled) continue;
-        await startAgent(node.id);
+      const new_nodes: PresetNode[] = [];
+      for (const a of added_agents) {
+        a.x += 80;
+        a.y += 80;
+        const new_node = agentSpecToNode(a);
+        new_node.selected = true;
+        new_nodes.push(new_node);
       }
+
+      const new_edges: PresetEdge[] = [];
+      for (const conn of added_connections) {
+        const new_edge = connectionSpecToEdge(conn);
+        new_edge.selected = true;
+        new_edges.push(new_edge);
+      }
+
+      this.nodes = [...this.nodes, ...new_nodes];
+      this.edges = [...this.edges, ...new_edges];
+
+      if (this.running) {
+        const startErrors: string[] = [];
+        for (const node of new_nodes) {
+          if (node.data.disabled) continue;
+          try {
+            await startAgent(node.id);
+          } catch (e) {
+            console.error("Failed to start pasted agent:", e);
+            startErrors.push(node.id);
+          }
+        }
+        if (startErrors.length > 0) {
+          toast.error(`Pasted but failed to start ${startErrors.length} agent(s)`);
+        }
+      }
+    } catch (e) {
+      console.error("Failed to paste:", e);
+      toast.error("Failed to paste", { description: String(e) });
     }
   }
 
@@ -381,21 +497,41 @@ export class EditorState {
 
   async enable() {
     const [selectedNodes] = this.selectedNodesAndEdges();
+    const errors: string[] = [];
     for (const node of selectedNodes) {
       if (node.data.disabled) {
         this.svelteFlow.updateNodeData(node.id, { disabled: false });
-        await startAgent(node.id);
+        try {
+          await startAgent(node.id);
+        } catch (e) {
+          console.error("Failed to enable agent:", e);
+          this.svelteFlow.updateNodeData(node.id, { disabled: true });
+          errors.push(node.id);
+        }
       }
+    }
+    if (errors.length > 0) {
+      toast.error(`Failed to enable ${errors.length} agent(s)`);
     }
   }
 
   async disable() {
     const [selectedNodes] = this.selectedNodesAndEdges();
+    const errors: string[] = [];
     for (const node of selectedNodes) {
       if (!node.data.disabled) {
         this.svelteFlow.updateNodeData(node.id, { disabled: true });
-        await stopAgent(node.id);
+        try {
+          await stopAgent(node.id);
+        } catch (e) {
+          console.error("Failed to disable agent:", e);
+          this.svelteFlow.updateNodeData(node.id, { disabled: false });
+          errors.push(node.id);
+        }
       }
+    }
+    if (errors.length > 0) {
+      toast.error(`Failed to disable ${errors.length} agent(s)`);
     }
   }
 
@@ -411,23 +547,30 @@ export class EditorState {
 
   async handleNodeDragStop(targetNode: PresetNode | null) {
     if (!targetNode) return;
-    await updateAgentSpec(targetNode.id, {
-      x: targetNode.position.x,
-      y: targetNode.position.y,
-    });
+    await withErrorLog(
+      () => updateAgentSpec(targetNode.id, { x: targetNode.position.x, y: targetNode.position.y }),
+      "Failed to update node position",
+    );
   }
 
   async handleSelectionDragStop(draggedNodes: PresetNode[]) {
     for (const node of draggedNodes) {
-      await updateAgentSpec(node.id, {
-        x: node.position.x,
-        y: node.position.y,
-      });
+      try {
+        await updateAgentSpec(node.id, {
+          x: node.position.x,
+          y: node.position.y,
+        });
+      } catch (e) {
+        console.error("Failed to update node position:", node.id, e);
+      }
     }
   }
 
   async handleOnMoveEnd(viewport: { x: number; y: number; zoom: number }) {
-    await updatePresetSpec(this.preset_id, { viewport });
+    await withErrorLog(
+      () => updatePresetSpec(this.preset_id, { viewport }),
+      "Failed to update viewport",
+    );
   }
 
   // --- Context menu ---
@@ -499,12 +642,14 @@ export class EditorState {
   }
 
   private async saveGridSettings() {
-    const settings = getCoreSettings();
-    settings.snap_enabled = this.snapEnabled;
-    settings.snap_grid_size = this.snapGridSize;
-    settings.show_grid = this.showGrid;
-    settings.grid_gap = this.gridGap;
-    await setCoreSettings(settings);
+    await withErrorLog(async () => {
+      const settings = getCoreSettings();
+      settings.snap_enabled = this.snapEnabled;
+      settings.snap_grid_size = this.snapGridSize;
+      settings.show_grid = this.showGrid;
+      settings.grid_gap = this.gridGap;
+      await setCoreSettings(settings);
+    }, "Failed to save grid settings");
   }
 
   // --- Alignment ---
@@ -579,7 +724,10 @@ export class EditorState {
     for (const u of updates) {
       this.svelteFlow.updateNode(u.id, { position: { x: u.x, y: u.y } });
     }
-    await Promise.all(updates.map((u) => updateAgentSpec(u.id, { x: u.x, y: u.y })));
+    await withErrorToast(
+      () => Promise.all(updates.map((u) => updateAgentSpec(u.id, { x: u.x, y: u.y }))),
+      "Failed to save alignment",
+    );
   }
 
   async distributeNodes(direction: "horizontal" | "vertical") {
@@ -627,7 +775,10 @@ export class EditorState {
     for (const u of updates) {
       this.svelteFlow.updateNode(u.id, { position: { x: u.x, y: u.y } });
     }
-    await Promise.all(updates.map((u) => updateAgentSpec(u.id, { x: u.x, y: u.y })));
+    await withErrorToast(
+      () => Promise.all(updates.map((u) => updateAgentSpec(u.id, { x: u.x, y: u.y }))),
+      "Failed to save distribution",
+    );
   }
 
   // --- Navigate helpers ---
