@@ -21,7 +21,7 @@
 
   import { goto } from "$app/navigation";
 
-  import { getCoreSettings } from "$lib/agent";
+  import { getCoreSettings, getEdgeColor } from "$lib/agent";
   import { AgentList } from "$lib/components/agent-list/index.js";
   import PresetActionDialog from "$lib/components/preset-action-dialog.svelte";
   import { Button } from "$lib/components/ui/button/index.js";
@@ -221,6 +221,15 @@
     await editor.handleOnDelete({ nodes, edges });
   };
 
+  function handleBeforeConnect(connection: Connection): PresetEdge {
+    const color = getEdgeColor(connection.sourceHandle);
+    return {
+      id: crypto.randomUUID(),
+      ...connection,
+      ...(color ? { style: `stroke: ${color};` } : {}),
+    };
+  }
+
   async function handleOnConnect(connection: Connection) {
     await editor.handleOnConnect(connection);
   }
@@ -319,6 +328,7 @@
     minZoom={0.1}
     bind:nodes={editor.nodes}
     {nodeTypes}
+    onbeforeconnect={handleBeforeConnect}
     onconnect={handleOnConnect}
     ondelete={handleOnDelete}
     onnodeclick={handleNodeClick}

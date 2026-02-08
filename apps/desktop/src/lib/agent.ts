@@ -105,13 +105,48 @@ export function agentSpecToNode(spec: AgentSpec): PresetNode {
   };
 }
 
+// Connection color mapping by source handle name (type-aware ports only)
+const EDGE_COLOR_MAP: Record<string, string> = {
+  // unit
+  unit: "var(--color-connection-unit)",
+  // boolean
+  boolean: "var(--color-connection-boolean)",
+  // number
+  integer: "var(--color-connection-number)",
+  number: "var(--color-connection-number)",
+  // string-like
+  string: "var(--color-connection-string)",
+  text: "var(--color-connection-string)",
+  // object-like
+  doc: "var(--color-connection-string)",
+  object: "var(--color-connection-object)",
+  message: "var(--color-connection-object)",
+  // image
+  image: "var(--color-connection-image)",
+  // error
+  err: "var(--color-connection-err)",
+};
+
+export function getEdgeColor(sourceHandle: string | null | undefined): string | null {
+  if (!sourceHandle) return null;
+  const color = EDGE_COLOR_MAP[sourceHandle];
+  if (color) return color;
+  // Plural fallback: "messages" -> "message", "strings" -> "string"
+  if (sourceHandle.endsWith("s")) {
+    return EDGE_COLOR_MAP[sourceHandle.slice(0, -1)] ?? null;
+  }
+  return null;
+}
+
 export function connectionSpecToEdge(connection: ConnectionSpec): PresetEdge {
+  const color = getEdgeColor(connection.source_handle);
   return {
     id: crypto.randomUUID(),
     source: connection.source,
     sourceHandle: connection.source_handle,
     target: connection.target,
     targetHandle: connection.target_handle,
+    ...(color ? { style: `stroke: ${color};` } : {}),
   };
 }
 

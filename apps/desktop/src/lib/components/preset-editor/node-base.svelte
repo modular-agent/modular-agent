@@ -28,6 +28,8 @@
     type AgentSpec,
   } from "tauri-plugin-modular-agent-api";
 
+  import { getEdgeColor } from "$lib/agent";
+
   import { ScrollArea } from "$lib/components/ui/scroll-area/index.js";
 
   type Props = NodeProps & {
@@ -148,18 +150,20 @@
   />
 {/each}
 {#each outputs as output, idx}
+  {@const color = getEdgeColor(output)}
   <Handle
     id={output}
     type="source"
     position={Position.Right}
-    style="top: {idx * HANDLE_GAP + handleOffset}px; {DEFAULT_HANDLE_STYLE}"
+    style="top: {idx * HANDLE_GAP + handleOffset}px; {DEFAULT_HANDLE_STYLE}{color ? `background-color: ${color};` : ''}"
   />
 {/each}
 {#if showErr}
+  {@const errColor = getEdgeColor("err")}
   <Handle
     id="err"
     type="source"
     position={Position.Right}
-    style="top: {(ht ?? height ?? 100) - 20}px; {DEFAULT_HANDLE_STYLE}"
+    style="top: {(ht ?? height ?? 100) - 20}px; {DEFAULT_HANDLE_STYLE}{errColor ? `background-color: ${errColor};` : ''}"
   />
 {/if}

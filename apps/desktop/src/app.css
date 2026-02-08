@@ -43,6 +43,13 @@
   --agent-4: #b3b9d9;
   --agent-5: #d1d7dc;
   --agent-highlight: #fcfc02;
+  --connection-unit: #71717a;
+  --connection-boolean: #f5ec6e;
+  --connection-number: #82dfbb;
+  --connection-string: #97c5f5;
+  --connection-object: #eca838;
+  --connection-image: #cd96fa;
+  --connection-err: #cf4f62;
 }
 
 .dark {
@@ -83,6 +90,13 @@
   --agent-4: #b3b9d9;
   --agent-5: #414346;
   --agent-highlight: #fbf49e;
+  --connection-unit: #71717a;
+  --connection-boolean: #f5ec6e;
+  --connection-number: #82dfbb;
+  --connection-string: #97c5f5;
+  --connection-object: #eca838;
+  --connection-image: #cd96fa;
+  --connection-err: #cf4f62;
 }
 
 @theme inline {
@@ -127,6 +141,13 @@
   --color-agent-4: var(--agent-4);
   --color-agent-5: var(--agent-5);
   --color-agent-highlight: var(--agent-highlight);
+  --color-connection-err: var(--connection-err);
+  --color-connection-string: var(--connection-string);
+  --color-connection-object: var(--connection-object);
+  --color-connection-number: var(--connection-number);
+  --color-connection-unit: var(--connection-unit);
+  --color-connection-boolean: var(--connection-boolean);
+  --color-connection-image: var(--connection-image);
 }
 
 @layer base {
