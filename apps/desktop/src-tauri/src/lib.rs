@@ -1,6 +1,7 @@
 #![recursion_limit = "256"]
 
 use tauri::{AppHandle, Manager};
+use tauri_plugin_log::{Target, TargetKind};
 use tauri_plugin_window_state::{AppHandleExt, StateFlags};
 
 #[allow(unused_imports)]
@@ -28,6 +29,11 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(
             tauri_plugin_log::Builder::new()
+                .targets([
+                    Target::new(TargetKind::Stdout),
+                    Target::new(TargetKind::LogDir { file_name: None }),
+                    Target::new(TargetKind::Webview),
+                ])
                 .level(log::LevelFilter::Info)
                 .level_for(
                     "modular_agent_desktop_lib",
@@ -39,6 +45,7 @@ pub fn run() {
                 )
                 .build(),
         )
+        .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_store::Builder::new().build())

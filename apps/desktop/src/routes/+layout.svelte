@@ -13,6 +13,7 @@
   import { getCoreSettings } from "$lib/agent";
   import AppSidebar from "$lib/components/app-sidebar.svelte";
   import Titlebar from "$lib/components/titlebar.svelte";
+  import { initLogging } from "$lib/log-store.svelte";
   import * as Sidebar from "$lib/components/ui/sidebar/index.js";
 
   import type { LayoutProps } from "./$types";
@@ -41,7 +42,10 @@
       isFullscreen = await currentWindow.isFullscreen();
     });
 
+    const cleanupLogging = initLogging();
+
     return () => {
+      cleanupLogging.then((fn) => fn());
       unlistenResize.then((fn) => fn());
     };
   });

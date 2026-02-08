@@ -53,6 +53,7 @@ modular-agent-web = { git = "https://github.com/modular-agent/modular-agent-web.
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-autostart = "2"
 tauri-plugin-global-shortcut = "2"
+tauri-plugin-opener = "2"
 tauri-plugin-single-instance = "2.3"
 tauri-plugin-window-state = "2"
 

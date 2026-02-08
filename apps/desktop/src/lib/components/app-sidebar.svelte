@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { ComponentProps } from "svelte";
 
+  import ScrollTextIcon from "@lucide/svelte/icons/scroll-text";
   import SettingsIcon from "@lucide/svelte/icons/settings";
   import WorkflowIcon from "@lucide/svelte/icons/workflow";
 
@@ -12,6 +13,11 @@
 
   const data = {
     navSecondary: [
+      {
+        title: "Logs",
+        url: "/logs",
+        icon: ScrollTextIcon,
+      },
       {
         title: "Settings",
         url: "/settings",
