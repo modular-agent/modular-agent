@@ -1,6 +1,7 @@
 import { writeText, readText } from "@tauri-apps/plugin-clipboard-manager";
 import { open } from "@tauri-apps/plugin-dialog";
 
+import { goto } from "$app/navigation";
 import { getContext, setContext } from "svelte";
 
 import type { useSvelteFlow } from "@xyflow/svelte";
@@ -129,7 +130,16 @@ export class EditorState {
       this.running = this.props.flow().running ?? false;
     });
 
-    // Sync titlebar state
+    // Assign callbacks once (they capture `this` — no need to recreate)
+    titlebarState.onStart = () => this.startPreset();
+    titlebarState.onStop = () => this.stopPreset();
+    titlebarState.onShowNewDialog = () => this.showNewPresetDialog();
+    titlebarState.onSavePreset = () => this.savePreset();
+    titlebarState.onShowSaveAsDialog = () => this.showSaveAsDialog();
+    titlebarState.onImportPreset = () => this.importPresetAndNavigate();
+    titlebarState.onExportPreset = () => this.exportPreset();
+
+    // Sync titlebar data (reactive on flow changes)
     $effect.pre(() => {
       const flow = this.props.flow();
       titlebarState.title = flow.name;
@@ -137,23 +147,6 @@ export class EditorState {
       titlebarState.showMenubar = true;
       titlebarState.presetId = this.props.preset_id();
       titlebarState.presetName = flow.name;
-      titlebarState.onStart = () => this.startPreset();
-      titlebarState.onStop = () => this.stopPreset();
-      titlebarState.onShowNewDialog = () => {
-        this.showNewPresetDialog();
-      };
-      titlebarState.onSavePreset = () => {
-        this.savePreset();
-      };
-      titlebarState.onShowSaveAsDialog = () => {
-        this.showSaveAsDialog();
-      };
-      titlebarState.onImportPreset = () => {
-        this.importPresetAndNavigate();
-      };
-      titlebarState.onExportPreset = () => {
-        this.exportPreset();
-      };
     });
 
     $effect(() => {
@@ -786,7 +779,6 @@ export class EditorState {
   async importPresetAndNavigate() {
     const id = await this.importPreset();
     if (id) {
-      const { goto } = await import("$app/navigation");
       goto(`/preset_editor/${id}`, { invalidateAll: true });
     }
   }
@@ -794,7 +786,6 @@ export class EditorState {
   async newPresetAndNavigate(name: string) {
     const id = await this.newPreset(name);
     if (id) {
-      const { goto } = await import("$app/navigation");
       goto(`/preset_editor/${id}`, { invalidateAll: true });
     }
   }
