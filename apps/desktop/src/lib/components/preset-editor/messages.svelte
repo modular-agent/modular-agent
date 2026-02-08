@@ -21,8 +21,7 @@
   import BotIcon from "@lucide/svelte/icons/bot";
   import CatIcon from "@lucide/svelte/icons/cat";
   import ScrollTextIcon from "@lucide/svelte/icons/scroll-text";
-  import DOMPurify from "dompurify";
-  import { marked } from "marked";
+  import { escapeHtml, isSafeImageSrc, renderMarkdown, sanitizeHtml } from "$lib/sanitize";
 
   import * as Avatar from "$lib/components/ui/avatar/index.js";
   import * as Item from "$lib/components/ui/item/index.js";
@@ -42,17 +41,17 @@
         let content = msg.data?.content || msg.content;
         if (msg.thinking) {
           const open = content ? "" : "open";
-          html += `<p><details ${open}><summary>${truncate(msg.thinking, 30)}</summary><p>${msg.thinking}</p></details></p><br/>`;
+          html += `<p><details ${open}><summary>${escapeHtml(truncate(msg.thinking, 30))}</summary><p>${escapeHtml(msg.thinking)}</p></details></p><br/>`;
         }
         if (role === "ai") {
           if (typeof content === "string") {
-            html += marked.parse(DOMPurify.sanitize(content)) as string;
+            html += renderMarkdown(content);
           } else if (Array.isArray(content)) {
-            html += marked.parse(DOMPurify.sanitize(content.join("\n\n"))) as string;
+            html += renderMarkdown(content.join("\n\n"));
           }
           if (msg.tool_calls && msg.tool_calls.length > 0) {
             for (const toolCall of msg.tool_calls) {
-              html += `<p><details><summary>Tool Call: ${toolCall.function.name}</summary><pre>${DOMPurify.sanitize(
+              html += `<p><details><summary>Tool Call: ${escapeHtml(toolCall?.function?.name ?? "unknown")}</summary><pre>${sanitizeHtml(
                 JSON.stringify(toolCall, null, 2),
               )}</pre></details></p><br/>`;
             }
@@ -60,16 +59,16 @@
         } else if (role === "tool") {
           let toolContent;
           if (typeof content === "string") {
-            toolContent = DOMPurify.sanitize(content);
+            toolContent = sanitizeHtml(content);
           } else if (Array.isArray(content)) {
-            toolContent = DOMPurify.sanitize(content.join("\n\n"));
+            toolContent = sanitizeHtml(content.join("\n\n"));
           }
-          html += `<p><details open><summary>Tool Response: ${msg.tool_name || "unknown"}</summary><pre>${toolContent}</pre></details></p><br/>`;
+          html += `<p><details open><summary>Tool Response: ${escapeHtml(msg.tool_name || "unknown")}</summary><pre>${toolContent}</pre></details></p><br/>`;
         } else {
           if (typeof content === "string") {
-            html += DOMPurify.sanitize(JSON.stringify(content, null, 2));
+            html += sanitizeHtml(JSON.stringify(content, null, 2));
           } else if (Array.isArray(content)) {
-            html += DOMPurify.sanitize(JSON.stringify(content.join("\n\n"), null, 2));
+            html += sanitizeHtml(JSON.stringify(content.join("\n\n"), null, 2));
           }
         }
         return { role, html, image: msg.image };
@@ -109,7 +108,7 @@
           {:else}
             {message.html}
           {/if}
-          {#if message.image}
+          {#if message.image && isSafeImageSrc(message.image)}
             <div class="mt-2">
               <img src={message.image} alt="" class="max-w-full p-2" />
             </div>

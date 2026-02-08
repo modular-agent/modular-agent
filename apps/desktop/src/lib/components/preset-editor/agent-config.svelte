@@ -11,8 +11,7 @@
 
   import { inferTypeForDisplay } from "$lib/agent";
 
-  import DOMPurify from "dompurify";
-  import { marked } from "marked";
+  import { isSafeImageSrc, renderMarkdown, sanitizeHtml } from "$lib/sanitize";
 
   import MarkdownInput from "./markdown-input.svelte";
   import Messages from "./messages.svelte";
@@ -122,17 +121,24 @@
 
 {#snippet displayHtml(value: any)}
   <div class="nodrag nowheel flex-1 border-none shadow-none agent-config-html">
-    {@html typeof value === "string" ? value : String(value ?? "")}
+    {@html sanitizeHtml(typeof value === "string" ? value : String(value ?? ""))}
   </div>
 {/snippet}
 
 {#snippet displayMarkdown(value: any)}
   {@const raw = typeof value === "string" ? value : String(value ?? "")}
-  {@render displayHtml(DOMPurify.sanitize(marked.parse(raw) as string))}
+  {@const html = renderMarkdown(raw)}
+  <div class="nodrag nowheel flex-1 border-none shadow-none agent-config-html">
+    {@html html}
+  </div>
 {/snippet}
 
 {#snippet displayImage(value: string)}
-  <img class="flex-1 object-scale-down" src={value} alt="" />
+  {#if isSafeImageSrc(value)}
+    <img class="flex-1 object-scale-down" src={value} alt="" />
+  {:else}
+    <div class="flex-none border-none p-2 text-muted-foreground">Blocked image: unsafe URL scheme</div>
+  {/if}
 {/snippet}
 
 {#snippet displayObject(value: any)}

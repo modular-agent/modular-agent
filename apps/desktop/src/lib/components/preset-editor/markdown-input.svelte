@@ -1,8 +1,7 @@
 <script lang="ts">
-  import DOMPurify from "dompurify";
-  import { marked } from "marked";
-
   import { Textarea } from "$lib/components/ui/textarea/index.js";
+
+  import { renderMarkdown } from "$lib/sanitize";
 
   type Props = {
     name: string;
@@ -20,7 +19,7 @@
     if (raw.trim() === "") {
       return '<p class="text-muted-foreground italic">Click to edit...</p>';
     }
-    return DOMPurify.sanitize(marked.parse(raw) as string);
+    return renderMarkdown(raw);
   });
 
   function enterEditMode() {
