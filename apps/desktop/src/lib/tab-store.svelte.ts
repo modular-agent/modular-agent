@@ -1,3 +1,5 @@
+import { removeHistory } from "$lib/components/preset-editor/history.svelte";
+
 export type Tab = { id: string; name: string };
 
 class TabStore {
@@ -12,6 +14,7 @@ class TabStore {
   }
 
   closeTab(id: string) {
+    removeHistory(id);
     const index = this.tabs.findIndex((t) => t.id === id);
     if (index === -1) return;
     this.tabs = this.tabs.filter((t) => t.id !== id);

@@ -22,8 +22,8 @@ import type { EditorState } from "./context.svelte";
 
 export interface Command {
   readonly label: string;
-  execute(): Promise<void>;
-  undo(): Promise<void>;
+  execute(editor: EditorState): Promise<void>;
+  undo(editor: EditorState): Promise<void>;
   /** Remap a node/edge ID when another command's execute/undo re-creates entities with new IDs. */
   remapId?(oldId: string, newId: string): void;
 }
@@ -55,11 +55,11 @@ export class CommandHistory {
   /** Temporary storage for ID remaps reported by commands during execute/undo. */
   pendingRemaps: Array<{ oldId: string; newId: string }> = [];
 
-  async executeAndPush(cmd: Command): Promise<void> {
+  async executeAndPush(editor: EditorState, cmd: Command): Promise<void> {
     if (this.executing) return;
     this.executing = true;
     try {
-      await cmd.execute();
+      await cmd.execute(editor);
       this.undoStack = [...this.undoStack, cmd];
       this.redoStack = [];
       this.lastPushTime = Date.now();
@@ -100,13 +100,13 @@ export class CommandHistory {
     this.lastPushTime = now;
   }
 
-  async undo(): Promise<boolean> {
+  async undo(editor: EditorState): Promise<boolean> {
     if (this.executing || this.undoStack.length === 0) return false;
     this.executing = true;
     const cmd = this.undoStack[this.undoStack.length - 1];
     try {
       this.pendingRemaps = [];
-      await cmd.undo();
+      await cmd.undo(editor);
       this.undoStack = this.undoStack.slice(0, -1);
       this.redoStack = [...this.redoStack, cmd];
       this.propagateRemaps(this.undoStack);
@@ -121,13 +121,13 @@ export class CommandHistory {
     }
   }
 
-  async redo(): Promise<boolean> {
+  async redo(editor: EditorState): Promise<boolean> {
     if (this.executing || this.redoStack.length === 0) return false;
     this.executing = true;
     const cmd = this.redoStack[this.redoStack.length - 1];
     try {
       this.pendingRemaps = [];
-      await cmd.execute();
+      await cmd.execute(editor);
       this.redoStack = this.redoStack.slice(0, -1);
       this.undoStack = [...this.undoStack, cmd];
       this.propagateRemaps(this.redoStack);
@@ -166,13 +166,12 @@ export class AddAgentCommand implements Command {
   private node: PresetNode | null = null;
 
   constructor(
-    private editor: EditorState,
     private presetId: string,
     private agentName: string,
     private flowPos: { x: number; y: number },
   ) {}
 
-  async execute() {
+  async execute(editor: EditorState) {
     const prevNodeId = this.node?.id;
     const spec = await newAgentSpec(this.agentName);
     spec.x = this.flowPos.x;
@@ -180,8 +179,8 @@ export class AddAgentCommand implements Command {
     const id = await addAgent(this.presetId, spec);
     spec.id = id;
     this.node = agentSpecToNode(spec);
-    this.editor.nodes = [...this.editor.nodes, this.node];
-    if (this.editor.running && !this.node.data.disabled) {
+    editor.nodes = [...editor.nodes, this.node];
+    if (editor.running && !this.node.data.disabled) {
       await startAgent(this.node.id).catch((e) => {
         console.error("Failed to start agent:", e);
         toast.error("Agent added but failed to start", { description: String(e) });
@@ -189,22 +188,22 @@ export class AddAgentCommand implements Command {
     }
     // Report ID remap for redo case (backend assigned a new ID)
     if (prevNodeId && prevNodeId !== id) {
-      this.editor.history.pendingRemaps.push({ oldId: prevNodeId, newId: id });
+      editor.history.pendingRemaps.push({ oldId: prevNodeId, newId: id });
     }
   }
 
-  async undo() {
+  async undo(editor: EditorState) {
     if (!this.node) return;
     // Remove connected edges first
-    const connectedEdges = this.editor.edges.filter(
+    const connectedEdges = editor.edges.filter(
       (e) => e.source === this.node!.id || e.target === this.node!.id,
     );
     for (const e of connectedEdges) {
       await removeConnection(this.presetId, edgeToConnectionSpec(e)).catch(() => {});
     }
     await removeAgent(this.presetId, this.node.id);
-    this.editor.nodes = this.editor.nodes.filter((n) => n.id !== this.node!.id);
-    this.editor.edges = this.editor.edges.filter(
+    editor.nodes = editor.nodes.filter((n) => n.id !== this.node!.id);
+    editor.edges = editor.edges.filter(
       (e) => e.source !== this.node!.id && e.target !== this.node!.id,
     );
   }
@@ -224,7 +223,6 @@ export class DeleteCommand implements Command {
   private deletedEdges: PresetEdge[];
 
   constructor(
-    private editor: EditorState,
     private presetId: string,
     deletedNodes: PresetNode[],
     deletedEdges: PresetEdge[],
@@ -240,7 +238,7 @@ export class DeleteCommand implements Command {
     this.deletedEdges = deletedEdges.map((e) => ({ ...e }));
   }
 
-  async execute() {
+  async execute(editor: EditorState) {
     // Remove edges first, then nodes
     for (const e of this.deletedEdges) {
       await removeConnection(this.presetId, edgeToConnectionSpec(e)).catch(() => {});
@@ -250,11 +248,11 @@ export class DeleteCommand implements Command {
     }
     const nodeIds = new Set(this.deletedNodes.map((n) => n.id));
     const edgeIds = new Set(this.deletedEdges.map((e) => e.id));
-    this.editor.nodes = this.editor.nodes.filter((n) => !nodeIds.has(n.id));
-    this.editor.edges = this.editor.edges.filter((e) => !edgeIds.has(e.id));
+    editor.nodes = editor.nodes.filter((n) => !nodeIds.has(n.id));
+    editor.edges = editor.edges.filter((e) => !edgeIds.has(e.id));
   }
 
-  async undo() {
+  async undo(editor: EditorState) {
     const specs = this.deletedNodes.map(nodeToAgentSpec);
     const connSpecs = this.deletedEdges.map(edgeToConnectionSpec);
     const [addedAgents, addedConns] = await addAgentsAndConnections(
@@ -274,7 +272,7 @@ export class DeleteCommand implements Command {
     // Report ID remaps for other commands in the stack
     for (const [oldId, newId] of oldToNewId) {
       if (oldId !== newId) {
-        this.editor.history.pendingRemaps.push({ oldId, newId });
+        editor.history.pendingRemaps.push({ oldId, newId });
       }
     }
 
@@ -282,8 +280,8 @@ export class DeleteCommand implements Command {
     const newNodes = addedAgents.map(agentSpecToNode);
     const newEdges = addedConns.map(connectionSpecToEdge);
 
-    this.editor.nodes = [...this.editor.nodes, ...newNodes];
-    this.editor.edges = [...this.editor.edges, ...newEdges];
+    editor.nodes = [...editor.nodes, ...newNodes];
+    editor.edges = [...editor.edges, ...newEdges];
 
     // Update internal references for future redo
     this.deletedNodes = newNodes.map((n) => ({
@@ -294,7 +292,7 @@ export class DeleteCommand implements Command {
     this.deletedEdges = newEdges.map((e) => ({ ...e }));
 
     // Start agents if preset is running
-    if (this.editor.running) {
+    if (editor.running) {
       for (const n of newNodes) {
         if (!n.data.disabled) {
           await startAgent(n.id).catch(() => {});
@@ -323,12 +321,11 @@ export class DeleteCommand implements Command {
 
 export class CutCommand extends DeleteCommand {
   constructor(
-    editor: EditorState,
     presetId: string,
     deletedNodes: PresetNode[],
     deletedEdges: PresetEdge[],
   ) {
-    super(editor, presetId, deletedNodes, deletedEdges, "Cut");
+    super(presetId, deletedNodes, deletedEdges, "Cut");
   }
 }
 
@@ -339,14 +336,13 @@ export class AddConnectionCommand implements Command {
   private edge: PresetEdge;
 
   constructor(
-    private editor: EditorState,
     private presetId: string,
     edge: PresetEdge,
   ) {
     this.edge = { ...edge };
   }
 
-  async execute() {
+  async execute(editor: EditorState) {
     // Redo: create edge with new ID + backend call + add to edges
     const color = getEdgeColor(this.edge.sourceHandle);
     const newEdge: PresetEdge = {
@@ -358,13 +354,13 @@ export class AddConnectionCommand implements Command {
       ...(color ? { style: `stroke: ${color};` } : {}),
     };
     await addConnection(this.presetId, edgeToConnectionSpec(newEdge));
-    this.editor.edges = [...this.editor.edges, newEdge];
+    editor.edges = [...editor.edges, newEdge];
     this.edge = { ...newEdge };
   }
 
-  async undo() {
+  async undo(editor: EditorState) {
     await removeConnection(this.presetId, edgeToConnectionSpec(this.edge));
-    this.editor.edges = this.editor.edges.filter((e) => e.id !== this.edge.id);
+    editor.edges = editor.edges.filter((e) => e.id !== this.edge.id);
   }
 
   remapId(oldId: string, newId: string) {
@@ -388,25 +384,24 @@ export class MoveNodesCommand implements Command {
   readonly label: string;
 
   constructor(
-    private editor: EditorState,
     private deltas: NodePositionDelta[],
     label?: string,
   ) {
     this.label = label ?? "Move";
   }
 
-  async execute() {
+  async execute(editor: EditorState) {
     for (const d of this.deltas) {
-      this.editor.props.svelteFlow.updateNode(d.id, {
+      editor.props.svelteFlow.updateNode(d.id, {
         position: { x: d.newPosition.x, y: d.newPosition.y },
       });
       await updateAgentSpec(d.id, { x: d.newPosition.x, y: d.newPosition.y });
     }
   }
 
-  async undo() {
+  async undo(editor: EditorState) {
     for (const d of this.deltas) {
-      this.editor.props.svelteFlow.updateNode(d.id, {
+      editor.props.svelteFlow.updateNode(d.id, {
         position: { x: d.oldPosition.x, y: d.oldPosition.y },
       });
       await updateAgentSpec(d.id, { x: d.oldPosition.x, y: d.oldPosition.y });
@@ -426,7 +421,6 @@ export class ResizeNodeCommand implements Command {
   readonly label = "Resize";
 
   constructor(
-    private editor: EditorState,
     private nodeId: string,
     private oldWidth: number | undefined,
     private oldHeight: number | undefined,
@@ -434,16 +428,16 @@ export class ResizeNodeCommand implements Command {
     private newHeight: number,
   ) {}
 
-  async execute() {
-    this.editor.props.svelteFlow.updateNode(this.nodeId, {
+  async execute(editor: EditorState) {
+    editor.props.svelteFlow.updateNode(this.nodeId, {
       width: this.newWidth,
       height: this.newHeight,
     });
     await updateAgentSpec(this.nodeId, { width: this.newWidth, height: this.newHeight });
   }
 
-  async undo() {
-    this.editor.props.svelteFlow.updateNode(this.nodeId, {
+  async undo(editor: EditorState) {
+    editor.props.svelteFlow.updateNode(this.nodeId, {
       width: this.oldWidth,
       height: this.oldHeight,
     });
@@ -466,7 +460,6 @@ export class PasteCommand implements Command {
   private pastedEdges: PresetEdge[];
 
   constructor(
-    private editor: EditorState,
     private presetId: string,
     private agentSpecs: AgentSpec[],
     private connectionSpecs: { source: string; source_handle: string | null; target: string; target_handle: string | null }[],
@@ -475,7 +468,7 @@ export class PasteCommand implements Command {
     this.pastedEdges = [];
   }
 
-  async execute() {
+  async execute(editor: EditorState) {
     const prevPastedNodes = this.pastedNodes;
     const isFirstPaste = prevPastedNodes.length === 0;
 
@@ -488,11 +481,11 @@ export class PasteCommand implements Command {
     if (addedAgents.length === 0 && addedConns.length === 0) return;
 
     // Deselect existing nodes/edges
-    const { updateNode, updateEdge } = this.editor.props.svelteFlow;
-    this.editor.nodes.forEach((n) => {
+    const { updateNode, updateEdge } = editor.props.svelteFlow;
+    editor.nodes.forEach((n) => {
       if (n.selected) updateNode(n.id, { selected: false });
     });
-    this.editor.edges.forEach((e) => {
+    editor.edges.forEach((e) => {
       if (e.selected) updateEdge(e.id, { selected: false });
     });
 
@@ -514,8 +507,8 @@ export class PasteCommand implements Command {
       newEdges.push(edge);
     }
 
-    this.editor.nodes = [...this.editor.nodes, ...newNodes];
-    this.editor.edges = [...this.editor.edges, ...newEdges];
+    editor.nodes = [...editor.nodes, ...newNodes];
+    editor.edges = [...editor.edges, ...newEdges];
 
     // Update internal references for undo
     this.pastedNodes = newNodes;
@@ -524,7 +517,7 @@ export class PasteCommand implements Command {
     // Report ID remaps (redo case: IDs differ from previous execution)
     for (let i = 0; i < prevPastedNodes.length && i < newNodes.length; i++) {
       if (prevPastedNodes[i].id !== newNodes[i].id) {
-        this.editor.history.pendingRemaps.push({
+        editor.history.pendingRemaps.push({
           oldId: prevPastedNodes[i].id,
           newId: newNodes[i].id,
         });
@@ -535,7 +528,7 @@ export class PasteCommand implements Command {
     this.agentSpecs = newNodes.map(nodeToAgentSpec);
     this.connectionSpecs = newEdges.map(edgeToConnectionSpec);
 
-    if (this.editor.running) {
+    if (editor.running) {
       for (const node of newNodes) {
         if (!node.data.disabled) {
           await startAgent(node.id).catch((e) => {
@@ -546,7 +539,7 @@ export class PasteCommand implements Command {
     }
   }
 
-  async undo() {
+  async undo(editor: EditorState) {
     for (const e of this.pastedEdges) {
       await removeConnection(this.presetId, edgeToConnectionSpec(e)).catch(() => {});
     }
@@ -555,8 +548,8 @@ export class PasteCommand implements Command {
     }
     const nodeIds = new Set(this.pastedNodes.map((n) => n.id));
     const edgeIds = new Set(this.pastedEdges.map((e) => e.id));
-    this.editor.nodes = this.editor.nodes.filter((n) => !nodeIds.has(n.id));
-    this.editor.edges = this.editor.edges.filter((e) => !edgeIds.has(e.id));
+    editor.nodes = editor.nodes.filter((n) => !nodeIds.has(n.id));
+    editor.edges = editor.edges.filter((e) => !edgeIds.has(e.id));
   }
 
   remapId(oldId: string, newId: string) {
@@ -591,7 +584,6 @@ export class UpdateConfigCommand implements Command {
   readonly label = "Update Config";
 
   constructor(
-    private editor: EditorState,
     public nodeId: string,
     public readonly key: string,
     public readonly oldValue: unknown,
@@ -600,10 +592,10 @@ export class UpdateConfigCommand implements Command {
     public newConfigs: Record<string, unknown>,
   ) {}
 
-  async execute() {
-    const node = this.editor.nodes.find((n) => n.id === this.nodeId);
+  async execute(editor: EditorState) {
+    const node = editor.nodes.find((n) => n.id === this.nodeId);
     if (node) {
-      this.editor.props.svelteFlow.updateNodeData(this.nodeId, {
+      editor.props.svelteFlow.updateNodeData(this.nodeId, {
         ...node.data,
         configs: this.newConfigs,
       });
@@ -611,10 +603,10 @@ export class UpdateConfigCommand implements Command {
     await setAgentConfigs(this.nodeId, this.newConfigs);
   }
 
-  async undo() {
-    const node = this.editor.nodes.find((n) => n.id === this.nodeId);
+  async undo(editor: EditorState) {
+    const node = editor.nodes.find((n) => n.id === this.nodeId);
     if (node) {
-      this.editor.props.svelteFlow.updateNodeData(this.nodeId, {
+      editor.props.svelteFlow.updateNodeData(this.nodeId, {
         ...node.data,
         configs: this.oldConfigs,
       });
@@ -633,18 +625,17 @@ export class UpdateTitleCommand implements Command {
   readonly label = "Update Title";
 
   constructor(
-    private editor: EditorState,
     private nodeId: string,
     private oldTitle: string | null,
     private newTitle: string | null,
   ) {}
 
-  async execute() {
-    this.editor.props.svelteFlow.updateNodeData(this.nodeId, { title: this.newTitle });
+  async execute(editor: EditorState) {
+    editor.props.svelteFlow.updateNodeData(this.nodeId, { title: this.newTitle });
   }
 
-  async undo() {
-    this.editor.props.svelteFlow.updateNodeData(this.nodeId, { title: this.oldTitle });
+  async undo(editor: EditorState) {
+    editor.props.svelteFlow.updateNodeData(this.nodeId, { title: this.oldTitle });
   }
 
   remapId(oldId: string, newId: string) {
@@ -660,17 +651,16 @@ export class ToggleDisabledCommand implements Command {
   readonly label: string;
 
   constructor(
-    private editor: EditorState,
     private deltas: DisabledDelta[],
     private setDisabled: boolean,
   ) {
     this.label = setDisabled ? "Disable" : "Enable";
   }
 
-  async execute() {
+  async execute(editor: EditorState) {
     for (const d of this.deltas) {
-      this.editor.props.svelteFlow.updateNodeData(d.id, { disabled: this.setDisabled });
-      if (this.editor.running) {
+      editor.props.svelteFlow.updateNodeData(d.id, { disabled: this.setDisabled });
+      if (editor.running) {
         if (this.setDisabled) {
           await stopAgent(d.id).catch(() => {});
         } else {
@@ -680,10 +670,10 @@ export class ToggleDisabledCommand implements Command {
     }
   }
 
-  async undo() {
+  async undo(editor: EditorState) {
     for (const d of this.deltas) {
-      this.editor.props.svelteFlow.updateNodeData(d.id, { disabled: d.wasDisabled });
-      if (this.editor.running) {
+      editor.props.svelteFlow.updateNodeData(d.id, { disabled: d.wasDisabled });
+      if (editor.running) {
         if (d.wasDisabled) {
           await stopAgent(d.id).catch(() => {});
         } else {
@@ -708,19 +698,18 @@ export class ToggleShowErrCommand implements Command {
   readonly label = "Toggle Error Display";
 
   constructor(
-    private editor: EditorState,
     private deltas: ShowErrDelta[],
   ) {}
 
-  async execute() {
+  async execute(editor: EditorState) {
     for (const d of this.deltas) {
-      this.editor.props.svelteFlow.updateNodeData(d.id, { show_err: !d.wasShowErr });
+      editor.props.svelteFlow.updateNodeData(d.id, { show_err: !d.wasShowErr });
     }
   }
 
-  async undo() {
+  async undo(editor: EditorState) {
     for (const d of this.deltas) {
-      this.editor.props.svelteFlow.updateNodeData(d.id, { show_err: d.wasShowErr });
+      editor.props.svelteFlow.updateNodeData(d.id, { show_err: d.wasShowErr });
     }
   }
 
@@ -729,4 +718,21 @@ export class ToggleShowErrCommand implements Command {
       d.id === oldId ? { ...d, id: newId } : d,
     );
   }
+}
+
+// --- History cache (per preset ID) ---
+
+const historyCache = new Map<string, CommandHistory>();
+
+export function getOrCreateHistory(presetId: string): CommandHistory {
+  let h = historyCache.get(presetId);
+  if (!h) {
+    h = new CommandHistory();
+    historyCache.set(presetId, h);
+  }
+  return h;
+}
+
+export function removeHistory(presetId: string): void {
+  historyCache.delete(presetId);
 }

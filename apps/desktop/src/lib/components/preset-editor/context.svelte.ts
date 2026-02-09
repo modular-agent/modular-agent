@@ -31,7 +31,6 @@ import { titlebarState } from "$lib/titlebar-state.svelte";
 import type { PresetFlow, PresetNode, PresetEdge } from "$lib/types";
 
 import {
-  CommandHistory,
   AddAgentCommand,
   DeleteCommand,
   CutCommand,
@@ -43,6 +42,7 @@ import {
   UpdateTitleCommand,
   ToggleDisabledCommand,
   ToggleShowErrCommand,
+  getOrCreateHistory,
   type NodePositionDelta,
 } from "./history.svelte";
 
@@ -75,7 +75,7 @@ export type EditorStateProps = {
 
 export class EditorState {
   readonly props: EditorStateProps;
-  readonly history = new CommandHistory();
+  readonly history;
 
   // Reactive state
   running = $state(false);
@@ -121,6 +121,7 @@ export class EditorState {
 
   constructor(props: EditorStateProps) {
     this.props = props;
+    this.history = getOrCreateHistory(props.preset_id());
 
     // Load grid settings from CoreSettings
     const settings = getCoreSettings();
@@ -133,20 +134,11 @@ export class EditorState {
     const initialFlow = this.props.flow();
     tabStore.openTab(this.props.preset_id(), initialFlow.name);
 
-    // Track preset_id for history clearing
-    let lastPresetId = this.props.preset_id();
-
     // Sync nodes/edges from page data (separated from running to avoid overwriting optimistic updates)
     $effect.pre(() => {
       const flow = this.props.flow();
-      const currentPresetId = this.props.preset_id();
       this.nodes = [...flow.nodes];
       this.edges = [...flow.edges];
-      // Clear history when preset changes
-      if (currentPresetId !== lastPresetId) {
-        lastPresetId = currentPresetId;
-        this.history.clear();
-      }
     });
 
     // Sync running only when preset_id changes (not on every flow update)
@@ -193,11 +185,11 @@ export class EditorState {
   // --- Undo/Redo ---
 
   async undo() {
-    await this.history.undo();
+    await this.history.undo(this);
   }
 
   async redo() {
-    await this.history.redo();
+    await this.history.redo(this);
   }
 
   // --- Preset operations ---
@@ -274,8 +266,8 @@ export class EditorState {
             x: window.innerWidth * 0.45,
             y: window.innerHeight * 0.3,
           });
-    const cmd = new AddAgentCommand(this, this.preset_id, agentName, flowPos);
-    await withErrorToast(() => this.history.executeAndPush(cmd), "Failed to add agent");
+    const cmd = new AddAgentCommand(this.preset_id, agentName, flowPos);
+    await withErrorToast(() => this.history.executeAndPush(this, cmd), "Failed to add agent");
   }
 
   async handleOnDelete({
@@ -290,10 +282,10 @@ export class EditorState {
     if (dn.length === 0 && de.length === 0) return;
 
     // SvelteFlow already removed items from arrays. Create command for backend sync + undo.
-    const cmd = new DeleteCommand(this, this.preset_id, dn, de);
+    const cmd = new DeleteCommand(this.preset_id, dn, de);
     // Execute backend deletion, then push to history
     await withErrorToast(async () => {
-      await cmd.execute();
+      await cmd.execute(this);
       this.history.push(cmd);
     }, "Failed to delete");
   }
@@ -315,7 +307,7 @@ export class EditorState {
     );
     if (!edge) return;
 
-    const cmd = new AddConnectionCommand(this, this.preset_id, edge);
+    const cmd = new AddConnectionCommand(this.preset_id, edge);
     // Backend call only (edge already in UI). Push without execute.
     const result = await withErrorToast(
       () =>
@@ -386,8 +378,8 @@ export class EditorState {
       (e) => selectedEdgeIds.has(e.id) || nodeIds.has(e.source) || nodeIds.has(e.target),
     );
 
-    const cmd = new CutCommand(this, this.preset_id, selectedNodes, allAffectedEdges);
-    await withErrorToast(() => this.history.executeAndPush(cmd), "Failed to cut");
+    const cmd = new CutCommand(this.preset_id, selectedNodes, allAffectedEdges);
+    await withErrorToast(() => this.history.executeAndPush(this, cmd), "Failed to cut");
   }
 
   async copyNodesAndEdges() {
@@ -405,8 +397,8 @@ export class EditorState {
       return;
     }
 
-    const cmd = new PasteCommand(this, this.preset_id, copiedAgents, copiedConnections);
-    await withErrorToast(() => this.history.executeAndPush(cmd), "Failed to paste");
+    const cmd = new PasteCommand(this.preset_id, copiedAgents, copiedConnections);
+    await withErrorToast(() => this.history.executeAndPush(this, cmd), "Failed to paste");
   }
 
   selectAllNodesAndEdges() {
@@ -427,8 +419,8 @@ export class EditorState {
     if (targets.length === 0) return;
 
     const deltas = targets.map((n) => ({ id: n.id, wasDisabled: true }));
-    const cmd = new ToggleDisabledCommand(this, deltas, false);
-    await withErrorToast(() => this.history.executeAndPush(cmd), "Failed to enable agent(s)");
+    const cmd = new ToggleDisabledCommand(deltas, false);
+    await withErrorToast(() => this.history.executeAndPush(this, cmd), "Failed to enable agent(s)");
   }
 
   async disable() {
@@ -437,8 +429,8 @@ export class EditorState {
     if (targets.length === 0) return;
 
     const deltas = targets.map((n) => ({ id: n.id, wasDisabled: false }));
-    const cmd = new ToggleDisabledCommand(this, deltas, true);
-    await withErrorToast(() => this.history.executeAndPush(cmd), "Failed to disable agent(s)");
+    const cmd = new ToggleDisabledCommand(deltas, true);
+    await withErrorToast(() => this.history.executeAndPush(this, cmd), "Failed to disable agent(s)");
   }
 
   toggleErr() {
@@ -449,9 +441,9 @@ export class EditorState {
       id: n.id,
       wasShowErr: n.data.show_err ?? false,
     }));
-    const cmd = new ToggleShowErrCommand(this, deltas);
+    const cmd = new ToggleShowErrCommand(deltas);
     // ToggleShowErr is synchronous (no backend call), so execute directly
-    cmd.execute();
+    cmd.execute(this);
     this.history.push(cmd);
   }
 
@@ -488,7 +480,7 @@ export class EditorState {
 
     if (deltas.length > 0) {
       // Push only (SvelteFlow already moved the node). Don't re-execute.
-      this.history.push(new MoveNodesCommand(this, deltas));
+      this.history.push(new MoveNodesCommand(deltas));
     }
     this.dragStartPositions = null;
   }
@@ -513,7 +505,7 @@ export class EditorState {
     }
 
     if (deltas.length > 0) {
-      this.history.push(new MoveNodesCommand(this, deltas));
+      this.history.push(new MoveNodesCommand(deltas));
     }
     this.dragStartPositions = null;
   }
@@ -534,7 +526,7 @@ export class EditorState {
     newWidth: number,
     newHeight: number,
   ) {
-    const cmd = new ResizeNodeCommand(this, nodeId, oldWidth, oldHeight, newWidth, newHeight);
+    const cmd = new ResizeNodeCommand(nodeId, oldWidth, oldHeight, newWidth, newHeight);
     // SvelteFlow already resized the node. Backend persist + push.
     await withErrorLog(
       () => updateAgentSpec(nodeId, { width: newWidth, height: newHeight }),
@@ -555,13 +547,13 @@ export class EditorState {
     this.svelteFlow.updateNodeData(nodeId, { ...node.data, configs: newConfigs });
     await setAgentConfigs(nodeId, newConfigs);
 
-    const cmd = new UpdateConfigCommand(this, nodeId, key, oldValue, newValue, oldConfigs, newConfigs);
+    const cmd = new UpdateConfigCommand(nodeId, key, oldValue, newValue, oldConfigs, newConfigs);
     this.history.pushCoalescing(cmd);
   }
 
   updateNodeTitle(nodeId: string, oldTitle: string | null, newTitle: string | null) {
     this.svelteFlow.updateNodeData(nodeId, { title: newTitle });
-    const cmd = new UpdateTitleCommand(this, nodeId, oldTitle, newTitle);
+    const cmd = new UpdateTitleCommand(nodeId, oldTitle, newTitle);
     this.history.push(cmd);
   }
 
@@ -730,8 +722,8 @@ export class EditorState {
 
     if (deltas.length === 0) return;
 
-    const cmd = new MoveNodesCommand(this, deltas, "Align");
-    await withErrorToast(() => this.history.executeAndPush(cmd), "Failed to align nodes");
+    const cmd = new MoveNodesCommand(deltas, "Align");
+    await withErrorToast(() => this.history.executeAndPush(this, cmd), "Failed to align nodes");
   }
 
   async distributeNodes(direction: "horizontal" | "vertical") {
@@ -792,8 +784,8 @@ export class EditorState {
 
     if (deltas.length === 0) return;
 
-    const cmd = new MoveNodesCommand(this, deltas, "Distribute");
-    await withErrorToast(() => this.history.executeAndPush(cmd), "Failed to distribute nodes");
+    const cmd = new MoveNodesCommand(deltas, "Distribute");
+    await withErrorToast(() => this.history.executeAndPush(this, cmd), "Failed to distribute nodes");
   }
 
   // --- Navigate helpers ---
