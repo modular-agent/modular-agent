@@ -23,14 +23,14 @@
   import { Handle, NodeResizer, Position } from "@xyflow/svelte";
   import type { NodeProps, ResizeDragEvent, ResizeParams } from "@xyflow/svelte";
   import {
-    updateAgentSpec,
     type AgentDefinition,
     type AgentSpec,
   } from "tauri-plugin-modular-agent-api";
 
   import { getEdgeColor } from "$lib/agent";
-
   import { ScrollArea } from "$lib/components/ui/scroll-area/index.js";
+
+  import { useEditor } from "./context.svelte";
 
   type Props = NodeProps & {
     data: AgentSpec;
@@ -43,6 +43,8 @@
 
   let { data, agentDef, selected, width, height, inputCount, title, titleColor, contents }: Props =
     $props();
+
+  const editor = useEditor();
 
   const inputs = $derived(data.inputs ?? []);
   const outputs = $derived(data.outputs ?? []);
@@ -63,6 +65,14 @@
   let wd = $derived<number | null>(width ?? null);
   let ht = $derived<number | null>(height ?? null);
 
+  let resizeStartWidth: number | undefined;
+  let resizeStartHeight: number | undefined;
+
+  function onResizeStart() {
+    resizeStartWidth = width;
+    resizeStartHeight = height;
+  }
+
   function onResize(_ev: ResizeDragEvent, params: ResizeParams) {
     wd = params.width;
     ht = params.height;
@@ -70,7 +80,7 @@
 
   async function onResizeEnd(_ev: ResizeDragEvent, params: ResizeParams) {
     if (!data.id) return;
-    await updateAgentSpec(data.id, { height: params.height, width: params.width });
+    await editor.handleResizeEnd(data.id, resizeStartWidth, resizeStartHeight, params.width, params.height);
   }
 
   let lastInputCount = $state(0);
@@ -89,7 +99,7 @@
   });
 </script>
 
-<NodeResizer isVisible={selected} {onResize} {onResizeEnd} />
+<NodeResizer isVisible={selected} {onResizeStart} {onResize} {onResizeEnd} />
 <div
   bind:clientHeight
   class="{bgColor} flex flex-col p-0 border-primary border-3 rounded-xl"

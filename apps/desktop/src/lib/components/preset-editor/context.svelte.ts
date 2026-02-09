@@ -7,17 +7,10 @@ import { getContext, setContext } from "svelte";
 import type { useSvelteFlow } from "@xyflow/svelte";
 import { toast } from "svelte-sonner";
 import {
-  addAgent,
-  addAgentsAndConnections,
-  addConnection,
   getAgentSpec,
   getPresetSpec,
-  newAgentSpec,
-  removeAgent,
-  removeConnection,
-  startAgent,
+  setAgentConfigs,
   startPreset as startPresetAPI,
-  stopAgent,
   stopPreset as stopPresetAPI,
   updateAgentSpec,
   updatePresetSpec,
@@ -26,8 +19,6 @@ import {
 } from "tauri-plugin-modular-agent-api";
 
 import {
-  agentSpecToNode,
-  connectionSpecToEdge,
   edgeToConnectionSpec,
   getCoreSettings,
   setCoreSettings,
@@ -38,6 +29,22 @@ import {
 import { tabStore } from "$lib/tab-store.svelte";
 import { titlebarState } from "$lib/titlebar-state.svelte";
 import type { PresetFlow, PresetNode, PresetEdge } from "$lib/types";
+
+import {
+  CommandHistory,
+  AddAgentCommand,
+  DeleteCommand,
+  CutCommand,
+  AddConnectionCommand,
+  MoveNodesCommand,
+  ResizeNodeCommand,
+  PasteCommand,
+  UpdateConfigCommand,
+  UpdateTitleCommand,
+  ToggleDisabledCommand,
+  ToggleShowErrCommand,
+  type NodePositionDelta,
+} from "./history.svelte";
 
 async function withErrorToast<T>(fn: () => Promise<T>, message: string): Promise<T | undefined> {
   try {
@@ -68,6 +75,7 @@ export type EditorStateProps = {
 
 export class EditorState {
   readonly props: EditorStateProps;
+  readonly history = new CommandHistory();
 
   // Reactive state
   running = $state(false);
@@ -108,6 +116,9 @@ export class EditorState {
   bgColor = $derived(this.running ? BG_COLORS[0] : BG_COLORS[1]);
   selectedCount = $derived(this.nodes.filter((n) => n.selected).length);
 
+  // Drag state for undo
+  private dragStartPositions: Map<string, { x: number; y: number }> | null = null;
+
   constructor(props: EditorStateProps) {
     this.props = props;
 
@@ -122,11 +133,20 @@ export class EditorState {
     const initialFlow = this.props.flow();
     tabStore.openTab(this.props.preset_id(), initialFlow.name);
 
+    // Track preset_id for history clearing
+    let lastPresetId = this.props.preset_id();
+
     // Sync nodes/edges from page data (separated from running to avoid overwriting optimistic updates)
     $effect.pre(() => {
       const flow = this.props.flow();
+      const currentPresetId = this.props.preset_id();
       this.nodes = [...flow.nodes];
       this.edges = [...flow.edges];
+      // Clear history when preset changes
+      if (currentPresetId !== lastPresetId) {
+        lastPresetId = currentPresetId;
+        this.history.clear();
+      }
     });
 
     // Sync running only when preset_id changes (not on every flow update)
@@ -168,6 +188,16 @@ export class EditorState {
 
   private get svelteFlow() {
     return this.props.svelteFlow;
+  }
+
+  // --- Undo/Redo ---
+
+  async undo() {
+    await this.history.undo();
+  }
+
+  async redo() {
+    await this.history.redo();
   }
 
   // --- Preset operations ---
@@ -237,67 +267,15 @@ export class EditorState {
   // --- Node/Edge operations ---
 
   async addAgent(agentName: string, position?: { x: number; y: number }) {
-    try {
-      const snode = await newAgentSpec(agentName);
-      const xy =
-        position !== undefined
-          ? this.svelteFlow.screenToFlowPosition(position)
-          : this.svelteFlow.screenToFlowPosition({
-              x: window.innerWidth * 0.45,
-              y: window.innerHeight * 0.3,
-            });
-      snode.x = xy.x;
-      snode.y = xy.y;
-      const id = await addAgent(this.preset_id, snode);
-      snode.id = id;
-      const new_node = agentSpecToNode(snode);
-      this.nodes = [...this.nodes, new_node];
-
-      if (this.running) {
-        try {
-          await startAgent(new_node.id);
-        } catch (e) {
-          console.error("Failed to start agent:", e);
-          toast.error("Agent added but failed to start", {
-            description: String(e),
+    const flowPos =
+      position !== undefined
+        ? this.svelteFlow.screenToFlowPosition(position)
+        : this.svelteFlow.screenToFlowPosition({
+            x: window.innerWidth * 0.45,
+            y: window.innerHeight * 0.3,
           });
-        }
-      }
-    } catch (e) {
-      console.error("Failed to add agent:", e);
-      toast.error("Failed to add agent", { description: String(e) });
-    }
-  }
-
-  async deleteNodes(deletedNodes: PresetNode[]) {
-    const errors: string[] = [];
-    for (const n of deletedNodes) {
-      try {
-        await removeAgent(this.preset_id, n.id);
-      } catch (e) {
-        console.error("Failed to remove agent:", n.id, e);
-        errors.push(n.id);
-      }
-    }
-    if (errors.length > 0) {
-      toast.error(`Failed to delete ${errors.length} node(s)`);
-    }
-  }
-
-  async deleteEdges(deletedEdges: PresetEdge[]) {
-    const errors: string[] = [];
-    for (const e of deletedEdges) {
-      try {
-        const ch = edgeToConnectionSpec(e);
-        await removeConnection(this.preset_id, ch);
-      } catch (err) {
-        console.error("Failed to remove connection:", e.id, err);
-        errors.push(e.id);
-      }
-    }
-    if (errors.length > 0) {
-      toast.error(`Failed to delete ${errors.length} connection(s)`);
-    }
+    const cmd = new AddAgentCommand(this, this.preset_id, agentName, flowPos);
+    await withErrorToast(() => this.history.executeAndPush(cmd), "Failed to add agent");
   }
 
   async handleOnDelete({
@@ -307,12 +285,17 @@ export class EditorState {
     nodes?: PresetNode[];
     edges?: PresetEdge[];
   }) {
-    if (deletedEdges && deletedEdges.length > 0) {
-      await this.deleteEdges(deletedEdges);
-    }
-    if (deletedNodes && deletedNodes.length > 0) {
-      await this.deleteNodes(deletedNodes);
-    }
+    const dn = deletedNodes ?? [];
+    const de = deletedEdges ?? [];
+    if (dn.length === 0 && de.length === 0) return;
+
+    // SvelteFlow already removed items from arrays. Create command for backend sync + undo.
+    const cmd = new DeleteCommand(this, this.preset_id, dn, de);
+    // Execute backend deletion, then push to history
+    await withErrorToast(async () => {
+      await cmd.execute();
+      this.history.push(cmd);
+    }, "Failed to delete");
   }
 
   async handleOnConnect(connection: {
@@ -321,15 +304,29 @@ export class EditorState {
     sourceHandle?: string | null;
     targetHandle?: string | null;
   }) {
-    const edge = {
-      id: crypto.randomUUID(),
-      ...connection,
-    } as PresetEdge;
+    // SvelteFlow already added the edge via handleBeforeConnect.
+    // Find the edge that SvelteFlow just added.
+    const edge = this.edges.find(
+      (e) =>
+        e.source === connection.source &&
+        e.target === connection.target &&
+        e.sourceHandle === connection.sourceHandle &&
+        e.targetHandle === connection.targetHandle,
+    );
+    if (!edge) return;
 
-    await withErrorToast(
-      () => addConnection(this.preset_id, edgeToConnectionSpec(edge)),
+    const cmd = new AddConnectionCommand(this, this.preset_id, edge);
+    // Backend call only (edge already in UI). Push without execute.
+    const result = await withErrorToast(
+      () =>
+        import("tauri-plugin-modular-agent-api").then((m) =>
+          m.addConnection(this.preset_id, edgeToConnectionSpec(edge)),
+        ),
       "Failed to add connection",
     );
+    if (result !== undefined) {
+      this.history.push(cmd);
+    }
   }
 
   // --- Selection helpers ---
@@ -373,6 +370,7 @@ export class EditorState {
       return;
     }
 
+    // Copy to clipboard first
     try {
       await this.copySelected();
     } catch (e) {
@@ -381,31 +379,15 @@ export class EditorState {
       return;
     }
 
-    const errors: string[] = [];
-    for (const edge of selectedEdges) {
-      try {
-        await removeConnection(this.preset_id, edgeToConnectionSpec(edge));
-      } catch (e) {
-        console.error("Failed to remove connection:", e);
-        errors.push(edge.id);
-      }
-    }
-    for (const node of selectedNodes) {
-      try {
-        await removeAgent(this.preset_id, node.id);
-      } catch (e) {
-        console.error("Failed to remove agent:", e);
-        errors.push(node.id);
-      }
-    }
+    // Also capture connected edges that will be orphaned
+    const nodeIds = new Set(selectedNodes.map((n) => n.id));
+    const selectedEdgeIds = new Set(selectedEdges.map((e) => e.id));
+    const allAffectedEdges = this.edges.filter(
+      (e) => selectedEdgeIds.has(e.id) || nodeIds.has(e.source) || nodeIds.has(e.target),
+    );
 
-    const failedIds = new Set(errors);
-    this.nodes = this.nodes.filter((n) => !n.selected || failedIds.has(n.id));
-    this.edges = this.edges.filter((e) => !e.selected || failedIds.has(e.id));
-
-    if (errors.length > 0) {
-      toast.error(`Failed to delete ${errors.length} element(s)`);
-    }
+    const cmd = new CutCommand(this, this.preset_id, selectedNodes, allAffectedEdges);
+    await withErrorToast(() => this.history.executeAndPush(cmd), "Failed to cut");
   }
 
   async copyNodesAndEdges() {
@@ -418,72 +400,13 @@ export class EditorState {
   }
 
   async pasteNodesAndEdges() {
-    const { updateNode, updateEdge } = this.svelteFlow;
-
-    this.nodes.forEach((node) => {
-      if (node.selected) {
-        updateNode(node.id, { selected: false });
-      }
-    });
-    this.edges.forEach((edge) => {
-      if (edge.selected) {
-        updateEdge(edge.id, { selected: false });
-      }
-    });
-
     const [copiedAgents, copiedConnections] = await this.readCopied();
-
     if (copiedAgents.length === 0) {
       return;
     }
 
-    try {
-      const [added_agents, added_connections] = await addAgentsAndConnections(
-        this.preset_id,
-        copiedAgents,
-        copiedConnections,
-      );
-
-      if (added_agents.length === 0 && added_connections.length === 0) return;
-
-      const new_nodes: PresetNode[] = [];
-      for (const a of added_agents) {
-        a.x += 80;
-        a.y += 80;
-        const new_node = agentSpecToNode(a);
-        new_node.selected = true;
-        new_nodes.push(new_node);
-      }
-
-      const new_edges: PresetEdge[] = [];
-      for (const conn of added_connections) {
-        const new_edge = connectionSpecToEdge(conn);
-        new_edge.selected = true;
-        new_edges.push(new_edge);
-      }
-
-      this.nodes = [...this.nodes, ...new_nodes];
-      this.edges = [...this.edges, ...new_edges];
-
-      if (this.running) {
-        const startErrors: string[] = [];
-        for (const node of new_nodes) {
-          if (node.data.disabled) continue;
-          try {
-            await startAgent(node.id);
-          } catch (e) {
-            console.error("Failed to start pasted agent:", e);
-            startErrors.push(node.id);
-          }
-        }
-        if (startErrors.length > 0) {
-          toast.error(`Pasted but failed to start ${startErrors.length} agent(s)`);
-        }
-      }
-    } catch (e) {
-      console.error("Failed to paste:", e);
-      toast.error("Failed to paste", { description: String(e) });
-    }
+    const cmd = new PasteCommand(this, this.preset_id, copiedAgents, copiedConnections);
+    await withErrorToast(() => this.history.executeAndPush(cmd), "Failed to paste");
   }
 
   selectAllNodesAndEdges() {
@@ -500,73 +423,99 @@ export class EditorState {
 
   async enable() {
     const [selectedNodes] = this.selectedNodesAndEdges();
-    const errors: string[] = [];
-    for (const node of selectedNodes) {
-      if (node.data.disabled) {
-        this.svelteFlow.updateNodeData(node.id, { disabled: false });
-        try {
-          await startAgent(node.id);
-        } catch (e) {
-          console.error("Failed to enable agent:", e);
-          this.svelteFlow.updateNodeData(node.id, { disabled: true });
-          errors.push(node.id);
-        }
-      }
-    }
-    if (errors.length > 0) {
-      toast.error(`Failed to enable ${errors.length} agent(s)`);
-    }
+    const targets = selectedNodes.filter((n) => n.data.disabled);
+    if (targets.length === 0) return;
+
+    const deltas = targets.map((n) => ({ id: n.id, wasDisabled: true }));
+    const cmd = new ToggleDisabledCommand(this, deltas, false);
+    await withErrorToast(() => this.history.executeAndPush(cmd), "Failed to enable agent(s)");
   }
 
   async disable() {
     const [selectedNodes] = this.selectedNodesAndEdges();
-    const errors: string[] = [];
-    for (const node of selectedNodes) {
-      if (!node.data.disabled) {
-        this.svelteFlow.updateNodeData(node.id, { disabled: true });
-        try {
-          await stopAgent(node.id);
-        } catch (e) {
-          console.error("Failed to disable agent:", e);
-          this.svelteFlow.updateNodeData(node.id, { disabled: false });
-          errors.push(node.id);
-        }
-      }
-    }
-    if (errors.length > 0) {
-      toast.error(`Failed to disable ${errors.length} agent(s)`);
-    }
+    const targets = selectedNodes.filter((n) => !n.data.disabled);
+    if (targets.length === 0) return;
+
+    const deltas = targets.map((n) => ({ id: n.id, wasDisabled: false }));
+    const cmd = new ToggleDisabledCommand(this, deltas, true);
+    await withErrorToast(() => this.history.executeAndPush(cmd), "Failed to disable agent(s)");
   }
 
   toggleErr() {
     const [selectedNodes] = this.selectedNodesAndEdges();
     if (selectedNodes.length === 0) return;
-    selectedNodes.forEach((node) => {
-      this.svelteFlow.updateNodeData(node.id, { show_err: !node.data.show_err });
-    });
+
+    const deltas = selectedNodes.map((n) => ({
+      id: n.id,
+      wasShowErr: n.data.show_err ?? false,
+    }));
+    const cmd = new ToggleShowErrCommand(this, deltas);
+    // ToggleShowErr is synchronous (no backend call), so execute directly
+    cmd.execute();
+    this.history.push(cmd);
   }
 
   // --- Node drag/move handlers ---
 
-  async handleNodeDragStop(targetNode: PresetNode | null) {
-    if (!targetNode) return;
-    await withErrorLog(
-      () => updateAgentSpec(targetNode.id, { x: targetNode.position.x, y: targetNode.position.y }),
-      "Failed to update node position",
+  handleNodeDragStart(nodes: PresetNode[]) {
+    this.dragStartPositions = new Map(
+      nodes.filter((n) => n.selected).map((n) => [n.id, { x: n.position.x, y: n.position.y }]),
     );
   }
 
-  async handleSelectionDragStop(draggedNodes: PresetNode[]) {
-    for (const node of draggedNodes) {
-      try {
-        await updateAgentSpec(node.id, {
-          x: node.position.x,
-          y: node.position.y,
+  async handleNodeDragStop(targetNode: PresetNode | null) {
+    if (!targetNode) return;
+
+    // Build deltas from stored start positions
+    const deltas: NodePositionDelta[] = [];
+    if (this.dragStartPositions) {
+      const oldPos = this.dragStartPositions.get(targetNode.id);
+      if (oldPos && (oldPos.x !== targetNode.position.x || oldPos.y !== targetNode.position.y)) {
+        deltas.push({
+          id: targetNode.id,
+          oldPosition: oldPos,
+          newPosition: { x: targetNode.position.x, y: targetNode.position.y },
         });
+      }
+    }
+
+    // Persist to backend
+    await withErrorLog(
+      () =>
+        updateAgentSpec(targetNode.id, { x: targetNode.position.x, y: targetNode.position.y }),
+      "Failed to update node position",
+    );
+
+    if (deltas.length > 0) {
+      // Push only (SvelteFlow already moved the node). Don't re-execute.
+      this.history.push(new MoveNodesCommand(this, deltas));
+    }
+    this.dragStartPositions = null;
+  }
+
+  async handleSelectionDragStop(draggedNodes: PresetNode[]) {
+    const deltas: NodePositionDelta[] = [];
+
+    for (const node of draggedNodes) {
+      const oldPos = this.dragStartPositions?.get(node.id);
+      if (oldPos && (oldPos.x !== node.position.x || oldPos.y !== node.position.y)) {
+        deltas.push({
+          id: node.id,
+          oldPosition: oldPos,
+          newPosition: { x: node.position.x, y: node.position.y },
+        });
+      }
+      try {
+        await updateAgentSpec(node.id, { x: node.position.x, y: node.position.y });
       } catch (e) {
         console.error("Failed to update node position:", node.id, e);
       }
     }
+
+    if (deltas.length > 0) {
+      this.history.push(new MoveNodesCommand(this, deltas));
+    }
+    this.dragStartPositions = null;
   }
 
   async handleOnMoveEnd(viewport: { x: number; y: number; zoom: number }) {
@@ -574,6 +523,46 @@ export class EditorState {
       () => updatePresetSpec(this.preset_id, { viewport }),
       "Failed to update viewport",
     );
+  }
+
+  // --- Resize handler ---
+
+  async handleResizeEnd(
+    nodeId: string,
+    oldWidth: number | undefined,
+    oldHeight: number | undefined,
+    newWidth: number,
+    newHeight: number,
+  ) {
+    const cmd = new ResizeNodeCommand(this, nodeId, oldWidth, oldHeight, newWidth, newHeight);
+    // SvelteFlow already resized the node. Backend persist + push.
+    await withErrorLog(
+      () => updateAgentSpec(nodeId, { width: newWidth, height: newHeight }),
+      "Failed to update node size",
+    );
+    this.history.push(cmd);
+  }
+
+  // --- Config/Title updates (for undo support) ---
+
+  async updateNodeConfig(nodeId: string, key: string, oldValue: unknown, newValue: unknown) {
+    const node = this.nodes.find((n) => n.id === nodeId);
+    if (!node) return;
+
+    const oldConfigs = { ...node.data.configs };
+    const newConfigs = { ...oldConfigs, [key]: newValue };
+
+    this.svelteFlow.updateNodeData(nodeId, { ...node.data, configs: newConfigs });
+    await setAgentConfigs(nodeId, newConfigs);
+
+    const cmd = new UpdateConfigCommand(this, nodeId, key, oldValue, newValue, oldConfigs, newConfigs);
+    this.history.pushCoalescing(cmd);
+  }
+
+  updateNodeTitle(nodeId: string, oldTitle: string | null, newTitle: string | null) {
+    this.svelteFlow.updateNodeData(nodeId, { title: newTitle });
+    const cmd = new UpdateTitleCommand(this, nodeId, oldTitle, newTitle);
+    this.history.push(cmd);
   }
 
   // --- Context menu ---
@@ -661,6 +650,10 @@ export class EditorState {
     const selectedNodes = this.nodes.filter((n) => n.selected);
     if (selectedNodes.length < 2) return;
 
+    // Capture old positions
+    const oldPositions = new Map(selectedNodes.map((n) => [n.id, { ...n.position }]));
+
+    // Compute new positions
     const updates: { id: string; x: number; y: number }[] = [];
 
     switch (direction) {
@@ -724,18 +717,29 @@ export class EditorState {
       }
     }
 
-    for (const u of updates) {
-      this.svelteFlow.updateNode(u.id, { position: { x: u.x, y: u.y } });
-    }
-    await withErrorToast(
-      () => Promise.all(updates.map((u) => updateAgentSpec(u.id, { x: u.x, y: u.y }))),
-      "Failed to save alignment",
-    );
+    // Build deltas
+    const deltas: NodePositionDelta[] = updates
+      .map((u) => ({
+        id: u.id,
+        oldPosition: oldPositions.get(u.id)!,
+        newPosition: { x: u.x, y: u.y },
+      }))
+      .filter(
+        (d) => d.oldPosition.x !== d.newPosition.x || d.oldPosition.y !== d.newPosition.y,
+      );
+
+    if (deltas.length === 0) return;
+
+    const cmd = new MoveNodesCommand(this, deltas, "Align");
+    await withErrorToast(() => this.history.executeAndPush(cmd), "Failed to align nodes");
   }
 
   async distributeNodes(direction: "horizontal" | "vertical") {
     const selectedNodes = this.nodes.filter((n) => n.selected);
     if (selectedNodes.length < 3) return;
+
+    // Capture old positions
+    const oldPositions = new Map(selectedNodes.map((n) => [n.id, { ...n.position }]));
 
     const updates: { id: string; x: number; y: number }[] = [];
 
@@ -775,13 +779,21 @@ export class EditorState {
       }
     }
 
-    for (const u of updates) {
-      this.svelteFlow.updateNode(u.id, { position: { x: u.x, y: u.y } });
-    }
-    await withErrorToast(
-      () => Promise.all(updates.map((u) => updateAgentSpec(u.id, { x: u.x, y: u.y }))),
-      "Failed to save distribution",
-    );
+    // Build deltas
+    const deltas: NodePositionDelta[] = updates
+      .map((u) => ({
+        id: u.id,
+        oldPosition: oldPositions.get(u.id)!,
+        newPosition: { x: u.x, y: u.y },
+      }))
+      .filter(
+        (d) => d.oldPosition.x !== d.newPosition.x || d.oldPosition.y !== d.newPosition.y,
+      );
+
+    if (deltas.length === 0) return;
+
+    const cmd = new MoveNodesCommand(this, deltas, "Distribute");
+    await withErrorToast(() => this.history.executeAndPush(cmd), "Failed to distribute nodes");
   }
 
   // --- Navigate helpers ---

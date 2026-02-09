@@ -17,6 +17,10 @@
     onsaveas,
     onimport,
     onexport,
+    canUndo = false,
+    canRedo = false,
+    onundo,
+    onredo,
     onpaste,
     onaddagent,
     ontogglesnap,
@@ -36,6 +40,10 @@
     onsaveas?: () => void;
     onimport?: () => void;
     onexport?: () => void;
+    canUndo: boolean;
+    canRedo: boolean;
+    onundo?: () => void;
+    onredo?: () => void;
     onpaste?: () => void;
     onaddagent?: () => void;
     ontogglesnap?: () => void;
@@ -79,6 +87,15 @@
     <ContextMenu.Item inset onclick={() => handle(onaddagent)}>
       Add agent
       <ContextMenu.Shortcut>{hk("editor.add_agent")}</ContextMenu.Shortcut>
+    </ContextMenu.Item>
+    <ContextMenu.Separator />
+    <ContextMenu.Item inset disabled={!canUndo} onclick={() => handle(onundo)}>
+      Undo
+      <ContextMenu.Shortcut>{hk("editor.undo")}</ContextMenu.Shortcut>
+    </ContextMenu.Item>
+    <ContextMenu.Item inset disabled={!canRedo} onclick={() => handle(onredo)}>
+      Redo
+      <ContextMenu.Shortcut>{hk("editor.redo")}</ContextMenu.Shortcut>
     </ContextMenu.Item>
     <ContextMenu.Separator />
     <ContextMenu.Item inset onclick={() => handle(onpaste)}>

@@ -40,6 +40,8 @@ export const DEFAULT_HOTKEYS: HotkeyDefinition[] = [
   { id: "editor.paste", label: "Paste", group: "Editor", defaultKey: "mod+v" },
   { id: "editor.select_all", label: "Select All", group: "Editor", defaultKey: "mod+a" },
   { id: "editor.add_agent", label: "Open Agent List", group: "Editor", defaultKey: "shift+a" },
+  { id: "editor.undo", label: "Undo", group: "Editor", defaultKey: "mod+z" },
+  { id: "editor.redo", label: "Redo", group: "Editor", defaultKey: "mod+shift+z" },
   { id: "editor.toggle_grid", label: "Toggle Grid", group: "Editor", defaultKey: "g" },
   // Quick Add
   {

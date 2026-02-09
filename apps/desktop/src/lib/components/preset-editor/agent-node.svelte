@@ -14,7 +14,7 @@
 
   import AlertCircleIcon from "@lucide/svelte/icons/alert-circle";
   import { useSvelteFlow, useNodeConnections, type NodeProps } from "@xyflow/svelte";
-  import { getAgentSpec, setAgentConfigs } from "tauri-plugin-modular-agent-api";
+  import { getAgentSpec } from "tauri-plugin-modular-agent-api";
   import type { AgentSpec } from "tauri-plugin-modular-agent-api";
 
   import { getAgentDefinitions } from "$lib/agent";
@@ -25,6 +25,7 @@
   import { sharedAgentEvents } from "$lib/shared.svelte";
 
   import AgentConfig from "./agent-config.svelte";
+  import { useEditor } from "./context.svelte";
   import NodeBase from "./node-base.svelte";
 
   type Props = NodeProps & {
@@ -38,6 +39,7 @@
   // svelte-ignore state_referenced_locally
   const nodeId = id;
 
+  const editor = useEditor();
   const agentDefs = getAgentDefinitions();
   const agentDef = $derived(agentDefs[data?.def_name] ?? null);
   // const description = $derived(agentDef.description);
@@ -104,11 +106,8 @@
   const { updateNodeData } = useSvelteFlow();
 
   async function updateConfig(key: string, value: any) {
-    // TODO: validate key and value
-    // let currentValue = data.configs?.[key];
-    const newConfigs = { ...data.configs, [key]: value };
-    updateNodeData(id, { ...data, configs: newConfigs });
-    await setAgentConfigs(id, newConfigs);
+    const oldValue = data.configs?.[key];
+    await editor.updateNodeConfig(id, key, oldValue, value);
   }
 
   function clearError() {
@@ -147,10 +146,11 @@
                 onkeydown={(evt) => {
                   if (evt.key === "Enter") {
                     const newTitle = evt.currentTarget.value;
+                    const oldTitle = data.title ?? null;
                     if (newTitle === "" || newTitle === (agentDef.title ?? data.def_name)) {
-                      updateNodeData(id, { title: null });
-                    } else if (newTitle !== data.title) {
-                      updateNodeData(id, { title: newTitle });
+                      if (oldTitle !== null) editor.updateNodeTitle(id, oldTitle, null);
+                    } else if (newTitle !== oldTitle) {
+                      editor.updateNodeTitle(id, oldTitle, newTitle);
                     }
                     editTitle = false;
                   }

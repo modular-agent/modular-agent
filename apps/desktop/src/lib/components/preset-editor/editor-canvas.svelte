@@ -185,6 +185,22 @@
       preventDefault: true,
     },
     {
+      id: "editor.undo",
+      handler: () => {
+        if (!editor.history.executing) editor.undo();
+      },
+      skipEditable: true,
+      preventDefault: true,
+    },
+    {
+      id: "editor.redo",
+      handler: () => {
+        if (!editor.history.executing) editor.redo();
+      },
+      skipEditable: true,
+      preventDefault: true,
+    },
+    {
       id: "editor.toggle_grid",
       handler: () => editor.toggleGrid(),
       skipEditable: true,
@@ -394,6 +410,14 @@
     editor.hideAgentList();
   }
 
+  function handleNodeDragStart({ nodes }: { nodes: PresetNode[] }) {
+    editor.handleNodeDragStart(nodes);
+  }
+
+  function handleSelectionDragStart(_event: MouseEvent | TouchEvent, nodes: PresetNode[]) {
+    editor.handleNodeDragStart(nodes);
+  }
+
   const handleNodeDragStop: NodeTargetEventWithPointer<
     MouseEvent | TouchEvent,
     PresetNode
@@ -468,6 +492,7 @@
     onconnect={handleOnConnect}
     ondelete={handleOnDelete}
     onnodeclick={handleNodeClick}
+    onnodedragstart={handleNodeDragStart}
     onnodedragstop={handleNodeDragStop}
     onnodecontextmenu={handleNodeContextMenu}
     onmoveend={handleOnMoveEnd}
@@ -475,6 +500,7 @@
     onpanecontextmenu={handlePaneContextMenu}
     onselectionclick={handleSelectionClick}
     onselectioncontextmenu={handleSelectionContextMenu}
+    onselectiondragstart={handleSelectionDragStart}
     onselectiondragstop={handleSelectionDragStop}
     snapGrid={editor.effectiveSnapGrid}
     zoomOnDoubleClick={false}
@@ -547,6 +573,10 @@
       onsaveas={() => editor.showSaveAsDialog()}
       onimport={() => editor.importPresetAndNavigate()}
       onexport={() => editor.exportPreset()}
+      canUndo={editor.history.canUndo}
+      canRedo={editor.history.canRedo}
+      onundo={() => editor.undo()}
+      onredo={() => editor.redo()}
       onpaste={() => editor.pasteNodesAndEdges()}
       onaddagent={() => editor.showAgentList(mouseX, mouseY)}
       ontogglesnap={() => editor.toggleSnap()}
