@@ -1,11 +1,13 @@
 <script lang="ts">
   import * as ContextMenu from "$lib/components/ui/context-menu/index.js";
+  import { formatHotkey, getHotkeyKey, type ResolvedHotkeys } from "$lib/hotkeys";
 
   let {
     open = $bindable(false),
     x = 0,
     y = 0,
     selectedCount = 0,
+    hotkeys = [],
     onenable,
     ondisable,
     oncut,
@@ -18,6 +20,7 @@
     x: number;
     y: number;
     selectedCount?: number;
+    hotkeys: ResolvedHotkeys;
     onenable?: () => void;
     ondisable?: () => void;
     oncut?: () => void;
@@ -35,6 +38,10 @@
     fn?.();
     open = false;
   }
+
+  function hk(id: string): string {
+    return formatHotkey(getHotkeyKey(hotkeys, id));
+  }
 </script>
 
 <ContextMenu.Root bind:open>
@@ -47,11 +54,11 @@
   >
     <ContextMenu.Item inset onclick={() => handle(oncut)}>
       Cut
-      <ContextMenu.Shortcut>ctl-X</ContextMenu.Shortcut>
+      <ContextMenu.Shortcut>{hk("editor.cut")}</ContextMenu.Shortcut>
     </ContextMenu.Item>
     <ContextMenu.Item inset onclick={() => handle(oncopy)}>
       Copy
-      <ContextMenu.Shortcut>ctl-C</ContextMenu.Shortcut>
+      <ContextMenu.Shortcut>{hk("editor.copy")}</ContextMenu.Shortcut>
     </ContextMenu.Item>
     <ContextMenu.Separator />
     <ContextMenu.Item inset onclick={() => handle(onenable)}>Enable</ContextMenu.Item>

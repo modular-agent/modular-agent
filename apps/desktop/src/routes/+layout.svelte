@@ -15,13 +15,14 @@
   import AppSidebar from "$lib/components/app-sidebar.svelte";
   import Titlebar from "$lib/components/titlebar.svelte";
   import * as Sidebar from "$lib/components/ui/sidebar/index.js";
+  import { resolveHotkeys, getHotkeyKey, matchHotkey } from "$lib/hotkeys";
   import { initLogging } from "$lib/log-store.svelte";
 
   import type { LayoutProps } from "./$types";
 
   const { children }: LayoutProps = $props();
 
-  let fullscreenKey: string | undefined;
+  let fullscreenHotkey: string = "";
   let isFullscreen = $state(false);
 
   onMount(() => {
@@ -34,7 +35,8 @@
       setMode("dark");
     }
 
-    fullscreenKey = coreSettings.shortcut_keys?.["fullscreen"];
+    const hotkeys = resolveHotkeys(coreSettings.shortcut_keys);
+    fullscreenHotkey = getHotkeyKey(hotkeys, "fullscreen");
 
     const currentWindow = getCurrentWindow();
     currentWindow.isFullscreen().then((v) => (isFullscreen = v));
@@ -58,20 +60,13 @@
       return;
     }
 
-    if (!fullscreenKey) return;
-    const mod = event.ctrlKey || event.metaKey;
-    // Parse hotkeys-js format like "ctrl+r" - extract the key part after the last "+"
-    const parts = fullscreenKey.split("+");
-    const key = parts[parts.length - 1].toLowerCase();
-    const needsMod = parts.some((p) => p === "ctrl" || p === "command" || p === "meta");
-    if (needsMod && !mod) return;
-    if (!needsMod && mod) return;
-    if (event.key.toLowerCase() === key) {
+    if (!fullscreenHotkey) return;
+    if (matchHotkey(event, fullscreenHotkey)) {
       event.preventDefault();
       getCurrentWindow()
         .isFullscreen()
-        .then((isFullscreen) => {
-          getCurrentWindow().setFullscreen(!isFullscreen);
+        .then((fs) => {
+          getCurrentWindow().setFullscreen(!fs);
         });
     }
   }

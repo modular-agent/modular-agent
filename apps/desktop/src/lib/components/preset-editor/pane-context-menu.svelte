@@ -1,5 +1,6 @@
 <script lang="ts">
   import * as ContextMenu from "$lib/components/ui/context-menu/index.js";
+  import { formatHotkey, getHotkeyKey, type ResolvedHotkeys } from "$lib/hotkeys";
 
   let {
     open = $bindable(false),
@@ -8,6 +9,7 @@
     running = false,
     snapEnabled = false,
     showGrid = false,
+    hotkeys = [],
     onstart,
     onstop,
     onnew,
@@ -26,6 +28,7 @@
     running: boolean;
     snapEnabled: boolean;
     showGrid: boolean;
+    hotkeys: ResolvedHotkeys;
     onstart?: () => void;
     onstop?: () => void;
     onnew?: () => void;
@@ -47,6 +50,10 @@
     fn?.();
     open = false;
   }
+
+  function hk(id: string): string {
+    return formatHotkey(getHotkeyKey(hotkeys, id));
+  }
 </script>
 
 <ContextMenu.Root bind:open>
@@ -60,23 +67,23 @@
     {#if running}
       <ContextMenu.Item inset onclick={() => handle(onstop)}>
         Stop
-        <ContextMenu.Shortcut>ctl-.</ContextMenu.Shortcut>
+        <ContextMenu.Shortcut>{hk("editor.toggle_run")}</ContextMenu.Shortcut>
       </ContextMenu.Item>
     {:else}
       <ContextMenu.Item inset onclick={() => handle(onstart)}>
         Play
-        <ContextMenu.Shortcut>ctl-.</ContextMenu.Shortcut>
+        <ContextMenu.Shortcut>{hk("editor.toggle_run")}</ContextMenu.Shortcut>
       </ContextMenu.Item>
     {/if}
     <ContextMenu.Separator />
     <ContextMenu.Item inset onclick={() => handle(onaddagent)}>
       Add agent
-      <ContextMenu.Shortcut>shift-A</ContextMenu.Shortcut>
+      <ContextMenu.Shortcut>{hk("editor.add_agent")}</ContextMenu.Shortcut>
     </ContextMenu.Item>
     <ContextMenu.Separator />
     <ContextMenu.Item inset onclick={() => handle(onpaste)}>
       Paste
-      <ContextMenu.Shortcut>ctl-V</ContextMenu.Shortcut>
+      <ContextMenu.Shortcut>{hk("editor.paste")}</ContextMenu.Shortcut>
     </ContextMenu.Item>
     <ContextMenu.Separator />
     <ContextMenu.Sub>
@@ -98,7 +105,7 @@
         </ContextMenu.CheckboxItem>
         <ContextMenu.CheckboxItem checked={showGrid} onCheckedChange={() => handle(ontogglegrid)}>
           Show Grid
-          <ContextMenu.Shortcut>G</ContextMenu.Shortcut>
+          <ContextMenu.Shortcut>{hk("editor.toggle_grid")}</ContextMenu.Shortcut>
         </ContextMenu.CheckboxItem>
       </ContextMenu.SubContent>
     </ContextMenu.Sub>

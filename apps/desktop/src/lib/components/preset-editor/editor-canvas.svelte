@@ -27,6 +27,18 @@
   import { Button } from "$lib/components/ui/button/index.js";
   import * as Dialog from "$lib/components/ui/dialog/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
+  import {
+    resolveHotkeys,
+    resolveQuickAddAgents,
+    getHotkeyKey,
+    matchHotkey,
+    isSequence,
+    getSequenceFirst,
+    getSequenceSecond,
+    matchFirstChord,
+    formatHotkey,
+    type ResolvedHotkeys,
+  } from "$lib/hotkeys";
   import type { PresetNode, PresetEdge } from "$lib/types";
 
   import AgentNode from "./agent-node.svelte";
@@ -36,6 +48,11 @@
 
   const editor = useEditor();
   const coreSettings = getCoreSettings();
+
+  // --- Hotkey resolution ---
+
+  const hotkeys: ResolvedHotkeys = resolveHotkeys(coreSettings.shortcut_keys);
+  const quickAddAgents = resolveQuickAddAgents(coreSettings.shortcut_keys);
 
   const nodeTypes: NodeTypes = {
     agent: AgentNode,
@@ -107,84 +124,203 @@
     editor.modifierPressed = false;
   }
 
+  // Key sequence state
+  let pendingSequence: { firstChord: string; timestamp: number } | null = $state(null);
+  const SEQUENCE_TIMEOUT = 500;
+
+  // Quick Add debounce
+  let lastQuickAddTime = 0;
+  const QUICK_ADD_DEBOUNCE = 200;
+
+  // Action table: id → { handler, skipEditable, preventDefault }
+  type ActionEntry = {
+    id: string;
+    handler: () => void;
+    skipEditable?: boolean;
+    preventDefault?: boolean;
+    /** Allow Ctrl+C to pass through when text is selected */
+    passThroughOnSelection?: boolean;
+  };
+
+  const actions: ActionEntry[] = [
+    {
+      id: "editor.save",
+      handler: () => editor.savePreset(),
+      preventDefault: true,
+    },
+    {
+      id: "editor.toggle_run",
+      handler: () => {
+        if (editor.running) editor.stopPreset();
+        else editor.startPreset();
+      },
+      preventDefault: true,
+    },
+    {
+      id: "editor.cut",
+      handler: () => editor.cutNodesAndEdges(),
+      skipEditable: true,
+    },
+    {
+      id: "editor.copy",
+      handler: () => editor.copyNodesAndEdges(),
+      skipEditable: true,
+      passThroughOnSelection: true,
+    },
+    {
+      id: "editor.paste",
+      handler: () => editor.pasteNodesAndEdges(),
+      skipEditable: true,
+    },
+    {
+      id: "editor.select_all",
+      handler: () => editor.selectAllNodesAndEdges(),
+      skipEditable: true,
+      preventDefault: true,
+    },
+    {
+      id: "editor.add_agent",
+      handler: () => editor.showAgentList(mouseX, mouseY),
+      skipEditable: true,
+      preventDefault: true,
+    },
+    {
+      id: "editor.toggle_grid",
+      handler: () => editor.toggleGrid(),
+      skipEditable: true,
+      preventDefault: true,
+    },
+    // Quick Add entries are handled separately
+  ];
+
+  // Build quick add action entries from resolved hotkeys
+  const quickAddIds = [...quickAddAgents.keys()];
+
   function handleKeydown(event: KeyboardEvent) {
-    if (event.key === "Escape" && editor.openAgentList) {
-      editor.hideAgentList();
+    // Skip if already handled by +layout.svelte (e.g. fullscreen toggle)
+    if (event.defaultPrevented) return;
+
+    // Escape: close popups (hardcoded)
+    if (event.key === "Escape") {
+      if (editor.openAgentList) {
+        editor.hideAgentList();
+        return;
+      }
       return;
     }
 
-    const editable = isEditableElement(event.target);
-
-    if (event.key === "A" && event.shiftKey && !event.ctrlKey && !event.metaKey) {
-      if (editable) return;
-      event.preventDefault();
-      editor.showAgentList(mouseX, mouseY);
-      return;
-    }
-
-    if (event.key === "g" && !event.ctrlKey && !event.metaKey && !event.shiftKey) {
-      if (editable) return;
-      event.preventDefault();
-      editor.toggleGrid();
-      return;
-    }
-
+    // Alt: snap modifier (hardcoded)
     if (event.key === "Alt") {
       editor.modifierPressed = true;
       return;
     }
 
-    const mod = event.ctrlKey || event.metaKey;
-    if (!mod) return;
-
-    // When an editable element is focused, let text-editing shortcuts pass through
-    if (editable) {
-      switch (event.key) {
-        case "a":
-        case "c":
-        case "v":
-        case "x":
-          return;
-      }
+    // Ctrl+R: prevent browser refresh (hardcoded)
+    if (event.key === "r" && (event.ctrlKey || event.metaKey)) {
+      event.preventDefault();
+      return;
     }
 
-    // When text is selected (e.g. in rendered HTML), let Ctrl+C pass through to browser
-    if (event.key === "c") {
-      const selection = window.getSelection();
-      if (selection && !selection.isCollapsed) {
-        return;
-      }
-    }
+    const editable = isEditableElement(event.target);
+    const now = Date.now();
 
-    switch (event.key) {
-      case "r":
-        event.preventDefault();
-        break;
-      case "s":
-        event.preventDefault();
-        editor.savePreset();
-        break;
-      case "x":
-        editor.cutNodesAndEdges();
-        break;
-      case "c":
-        editor.copyNodesAndEdges();
-        break;
-      case "v":
-        editor.pasteNodesAndEdges();
-        break;
-      case "a":
-        event.preventDefault();
-        editor.selectAllNodesAndEdges();
-        break;
-      case ".":
-        event.preventDefault();
-        if (editor.running) {
-          editor.stopPreset();
-        } else {
-          editor.startPreset();
+    // --- Sequence handling ---
+    const pending = pendingSequence;
+    if (pending) {
+      const elapsed = now - pending.timestamp;
+      if (elapsed < SEQUENCE_TIMEOUT) {
+        // Check all hotkeys for a sequence whose first chord matches pending
+        for (const h of hotkeys) {
+          if (!isSequence(h.key)) continue;
+          if (getSequenceFirst(h.key) !== pending.firstChord) continue;
+          // Match the second chord
+          const secondChord = getSequenceSecond(h.key);
+          if (!matchHotkey(event, secondChord)) continue;
+
+          // Found a sequence match
+          pendingSequence = null;
+
+          // Find action or quick add
+          const action = actions.find((a) => a.id === h.id);
+          if (action) {
+            if (action.skipEditable && editable) return;
+            if (action.preventDefault) event.preventDefault();
+            action.handler();
+            return;
+          }
+          if (quickAddIds.includes(h.id)) {
+            if (editable) return;
+            handleQuickAdd(h.id, now);
+            event.preventDefault();
+            return;
+          }
         }
+      }
+      // Timeout or no match — reset
+      pendingSequence = null;
+    }
+
+    // --- Check if any sequence starts with this keypress ---
+    let sequenceCandidate = false;
+    for (const h of hotkeys) {
+      if (!isSequence(h.key)) continue;
+      if (matchFirstChord(event, getSequenceFirst(h.key))) {
+        sequenceCandidate = true;
         break;
+      }
+    }
+
+    if (sequenceCandidate) {
+      // Build chord string for pending state
+      const parts: string[] = [];
+      if (event.ctrlKey) parts.push("ctrl");
+      if (event.metaKey) parts.push("meta");
+      if (event.shiftKey) parts.push("shift");
+      parts.push(event.key.toLowerCase());
+      pendingSequence = { firstChord: parts.join("+"), timestamp: now };
+      event.preventDefault();
+      return;
+    }
+
+    // --- Single-chord matching ---
+
+    // Check standard actions
+    for (const action of actions) {
+      const key = getHotkeyKey(hotkeys, action.id);
+      if (!key || isSequence(key)) continue;
+      if (!matchHotkey(event, key)) continue;
+
+      if (action.skipEditable && editable) return;
+
+      // Special: Ctrl+C pass-through when text is selected
+      if (action.passThroughOnSelection) {
+        const selection = window.getSelection();
+        if (selection && !selection.isCollapsed) return;
+      }
+
+      if (action.preventDefault) event.preventDefault();
+      action.handler();
+      return;
+    }
+
+    // Check quick add actions
+    for (const qaId of quickAddIds) {
+      const key = getHotkeyKey(hotkeys, qaId);
+      if (!key || isSequence(key)) continue;
+      if (!matchHotkey(event, key)) continue;
+      if (editable) return;
+      handleQuickAdd(qaId, now);
+      event.preventDefault();
+      return;
+    }
+  }
+
+  function handleQuickAdd(actionId: string, now: number) {
+    if (now - lastQuickAddTime < QUICK_ADD_DEBOUNCE) return;
+    lastQuickAddTime = now;
+    const agentName = quickAddAgents.get(actionId);
+    if (agentName) {
+      editor.addAgent(agentName, { x: mouseX, y: mouseY });
     }
   }
 
@@ -355,7 +491,7 @@
       {#snippet before()}
         <ControlButton
           onclick={() => editor.toggleSnap()}
-          title={"Snap (Alt)"}
+          title="Snap (Alt)"
           class={editor.snapEnabled ? undefined : "icon-slashed"}
         >
           <img
@@ -365,7 +501,7 @@
         </ControlButton>
         <ControlButton
           onclick={() => editor.toggleGrid()}
-          title={"Grid (G)"}
+          title="Grid ({formatHotkey(getHotkeyKey(hotkeys, 'editor.toggle_grid'))})"
           class={editor.showGrid ? undefined : "icon-slashed"}
         >
           <img
@@ -386,6 +522,7 @@
       x={editor.nodeContextMenuX}
       y={editor.nodeContextMenuY}
       selectedCount={editor.selectedCount}
+      {hotkeys}
       onenable={() => editor.enable()}
       ondisable={() => editor.disable()}
       oncut={() => editor.cutNodesAndEdges()}
@@ -402,6 +539,7 @@
       running={editor.running}
       snapEnabled={editor.snapEnabled}
       showGrid={editor.showGrid}
+      {hotkeys}
       onstart={() => editor.startPreset()}
       onstop={() => editor.stopPreset()}
       onnew={() => editor.showNewPresetDialog()}

@@ -5,12 +5,14 @@
 
   import { resetMode, setMode } from "mode-watcher";
 
+  import { getAgentDefinitions } from "$lib/agent";
   import { Button } from "$lib/components/ui/button/index.js";
   import * as Card from "$lib/components/ui/card/index.js";
   import { FieldGroup, Field, FieldLabel } from "$lib/components/ui/field/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
   import * as Select from "$lib/components/ui/select/index.js";
   import { Switch } from "$lib/components/ui/switch/index.js";
+  import { DEFAULT_HOTKEYS, type HotkeyDefinition } from "$lib/hotkeys";
   import { exitApp, setCoreSettings } from "$lib/modular_agent";
 
   interface Props {
@@ -28,16 +30,61 @@
   let show_grid = $state(true);
   let grid_gap = $state(24);
 
+  // Group hotkey definitions by group
+  const hotkeyGroups = $derived(
+    DEFAULT_HOTKEYS.reduce(
+      (acc, def) => {
+        if (!acc[def.group]) acc[def.group] = [];
+        acc[def.group].push(def);
+        return acc;
+      },
+      {} as Record<string, HotkeyDefinition[]>,
+    ),
+  );
+
+  // Agent definitions for Quick Add selector
+  const agentDefs = getAgentDefinitions();
+  const agentOptions = $derived(
+    Object.entries(agentDefs)
+      .map(([defName, def]) => ({
+        value: defName,
+        label: def.title ?? def.name ?? defName,
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label)),
+  );
+
+  function getAgentLabel(defName: string): string {
+    const def = agentDefs[defName];
+    return def?.title ?? def?.name ?? defName;
+  }
+
   onMount(() => {
     autostart = settings["autostart"] ?? false;
     color_mode = settings["color_mode"] ?? "";
     run_in_background = settings["run_in_background"] ?? false;
-    shortcut_keys = settings["shortcut_keys"] ?? {};
     snap_enabled = settings["snap_enabled"] ?? true;
     snap_grid_size = settings["snap_grid_size"] ?? 12;
     show_grid = settings["show_grid"] ?? true;
     grid_gap = settings["grid_gap"] ?? 24;
+
+    // Initialize shortcut_keys with all defaults, then overlay user overrides
+    const userKeys = settings["shortcut_keys"] ?? {};
+    const keys: Record<string, string> = {};
+    for (const def of DEFAULT_HOTKEYS) {
+      keys[def.id] = userKeys[def.id] ?? def.defaultKey;
+      if (def.defaultAgent) {
+        keys[`${def.id}.agent`] = userKeys[`${def.id}.agent`] ?? def.defaultAgent;
+      }
+    }
+    shortcut_keys = keys;
   });
+
+  function resetKey(def: HotkeyDefinition) {
+    shortcut_keys[def.id] = def.defaultKey;
+    if (def.defaultAgent) {
+      shortcut_keys[`${def.id}.agent`] = def.defaultAgent;
+    }
+  }
 
   async function setColorMode(mode: string) {
     if (mode === "light") {
@@ -122,15 +169,54 @@
           <Input type="number" min={4} max={96} bind:value={grid_gap} class="max-w-xs" />
         </Field>
 
-        <div class="font-semibold mt-4">Shortcut Keys</div>
+        {#each Object.entries(hotkeyGroups) as [group, defs]}
+          <div class="font-semibold mt-4">{group}</div>
 
-        {#each Object.entries(shortcut_keys) as [key, _]}
-          <Field orientation="horizontal" class="grid gap-4 sm:grid-cols-[220px_1fr] items-center">
-            <FieldLabel>
-              {key}
-            </FieldLabel>
-            <Input type="text" bind:value={shortcut_keys[key]} />
-          </Field>
+          {#each defs as def}
+            <Field orientation="vertical" class="gap-1">
+              <div class="flex items-center gap-2">
+                <FieldLabel class="min-w-[160px]">{def.label}</FieldLabel>
+                <Input
+                  type="text"
+                  value={shortcut_keys[def.id] ?? ""}
+                  oninput={(e: Event) => {
+                    shortcut_keys[def.id] = (e.target as HTMLInputElement).value;
+                  }}
+                  class="max-w-[200px] h-8 text-sm"
+                  placeholder="(disabled)"
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  class="h-8 px-2 text-xs"
+                  onclick={() => resetKey(def)}
+                >
+                  Reset
+                </Button>
+              </div>
+              {#if def.defaultAgent}
+                <div class="flex items-center gap-2 ml-[168px]">
+                  <Select.Root
+                    type="single"
+                    value={shortcut_keys[`${def.id}.agent`] ?? def.defaultAgent}
+                    onValueChange={(v) => {
+                      shortcut_keys[`${def.id}.agent`] = v;
+                    }}
+                  >
+                    <Select.Trigger class="max-w-xs h-8 text-sm">
+                      {getAgentLabel(shortcut_keys[`${def.id}.agent`] ?? def.defaultAgent ?? "")}
+                    </Select.Trigger>
+                    <Select.Content class="max-h-60">
+                      {#each agentOptions as opt}
+                        <Select.Item value={opt.value}>{opt.label}</Select.Item>
+                      {/each}
+                    </Select.Content>
+                  </Select.Root>
+                </div>
+              {/if}
+            </Field>
+          {/each}
         {/each}
 
         <Field orientation="responsive" class="mt-4">
