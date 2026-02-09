@@ -35,6 +35,7 @@ import {
   savePreset as savePresetAPI,
   newPresetWithName,
 } from "$lib/agent";
+import { tabStore } from "$lib/tab-store.svelte";
 import { titlebarState } from "$lib/titlebar-state.svelte";
 import type { PresetFlow, PresetNode, PresetEdge } from "$lib/types";
 
@@ -117,6 +118,10 @@ export class EditorState {
     this.showGrid = settings.show_grid ?? true;
     this.gridGap = settings.grid_gap ?? 24;
 
+    // Auto-open tab (idempotent — if tab already exists, just activates it)
+    const initialFlow = this.props.flow();
+    tabStore.openTab(this.props.preset_id(), initialFlow.name);
+
     // Sync nodes/edges from page data (separated from running to avoid overwriting optimistic updates)
     $effect.pre(() => {
       const flow = this.props.flow();
@@ -151,6 +156,11 @@ export class EditorState {
 
     $effect(() => {
       titlebarState.running = this.running;
+    });
+
+    // Sync tab name when preset name changes (e.g. Save As)
+    $effect(() => {
+      tabStore.updateName(this.preset_id, this.name);
     });
   }
 

@@ -10,8 +10,7 @@
 </script>
 
 <script lang="ts">
-  import { onMount } from "svelte";
-  import type { Unsubscriber } from "svelte/store";
+  import { onDestroy, untrack } from "svelte";
 
   import AlertCircleIcon from "@lucide/svelte/icons/alert-circle";
   import { useSvelteFlow, useNodeConnections, type NodeProps } from "@xyflow/svelte";
@@ -23,12 +22,7 @@
   import { Button } from "$lib/components/ui/button/index.js";
   import * as HoverCard from "$lib/components/ui/hover-card/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
-  import {
-    subscribeAgentSpecUpdatedMessage,
-    subscribeAgentConfigUpdatedMessage,
-    subscribeAgentErrorMessage,
-    subscribeAgentInMessage,
-  } from "$lib/shared.svelte";
+  import { sharedAgentEvents } from "$lib/shared.svelte";
 
   import AgentConfig from "./agent-config.svelte";
   import NodeBase from "./node-base.svelte";
@@ -39,6 +33,10 @@
   };
 
   let { id, data, ...props }: Props = $props();
+
+  // Capture id as a non-reactive value — node id never changes during the component's lifetime.
+  // svelte-ignore state_referenced_locally
+  const nodeId = id;
 
   const agentDefs = getAgentDefinitions();
   const agentDef = $derived(agentDefs[data?.def_name] ?? null);
@@ -56,53 +54,52 @@
       .map((c) => c.targetHandle?.substring(7) ?? ""),
   );
 
-  onMount(() => {
-    let unsubscribers: Unsubscriber[] = [];
+  const agentEvent = sharedAgentEvents.getAgent(nodeId);
 
-    unsubscribers.push(
-      subscribeAgentConfigUpdatedMessage(id, ({ key, value }) => {
-        // TODO: validate key and value
-        if (!key) return;
-        let currentValue = data.configs?.[key];
-        if (currentValue === value) {
-          return;
-        }
-        const newConfigs = { ...data.configs, [key]: value };
-        updateNodeData(id, { ...data, configs: newConfigs });
-      }),
-    );
-
-    unsubscribers.push(
-      subscribeAgentErrorMessage(id, (message) => {
-        if (!message) return;
-        errorMessages.push(message);
-      }),
-    );
-
-    unsubscribers.push(
-      subscribeAgentInMessage(id, ({ port, t }) => {
-        if (!port || port === "") return;
-        inputMessage = port;
-        inputCount += 1;
-      }),
-    );
-
-    unsubscribers.push(
-      subscribeAgentSpecUpdatedMessage(id, () => {
-        getAgentSpec(id).then((spec) => {
-          if (spec) {
-            updateNodeData(id, { ...spec });
-          }
-        });
-      }),
-    );
-
-    return () => {
-      for (const unsub of unsubscribers) {
-        unsub();
-      }
-    };
+  // Config update — $effect.pre for synchronous-like timing (before DOM update)
+  // untrack the read/write of `data` to avoid cycle: read data → updateNodeData → data changes → re-trigger
+  $effect.pre(() => {
+    const { key, value, seq } = agentEvent.configUpdated;
+    if (!seq) return;
+    untrack(() => {
+      let currentValue = data.configs?.[key];
+      if (currentValue === value) return;
+      const newConfigs = { ...data.configs, [key]: value };
+      updateNodeData(id, { ...data, configs: newConfigs });
+    });
   });
+
+  // Error messages
+  // untrack to avoid cycle: .push() reads array → mutates → re-trigger
+  $effect(() => {
+    const { message, seq } = agentEvent.error;
+    if (!seq) return;
+    untrack(() => errorMessages.push(message));
+  });
+
+  // Input messages
+  // untrack to avoid cycle: inputCount += 1 reads then writes → re-trigger
+  $effect(() => {
+    const { port, seq } = agentEvent.input;
+    if (!seq) return;
+    untrack(() => {
+      inputMessage = port;
+      inputCount += 1;
+    });
+  });
+
+  // Spec updated — refetch agent spec from backend
+  $effect(() => {
+    const seq = agentEvent.specUpdated;
+    if (!seq) return;
+    getAgentSpec(id).then((spec) => {
+      if (spec) {
+        updateNodeData(id, { ...spec });
+      }
+    });
+  });
+
+  onDestroy(() => sharedAgentEvents.removeAgent(nodeId));
 
   const { updateNodeData } = useSvelteFlow();
 

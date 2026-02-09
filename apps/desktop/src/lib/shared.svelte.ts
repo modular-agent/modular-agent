@@ -1,6 +1,4 @@
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-
-import { writable, type Writable } from "svelte/store";
+import { listen } from "@tauri-apps/api/event";
 
 import type {
   AgentConfigUpdatedMessage,
@@ -9,135 +7,69 @@ import type {
   AgentSpecUpdatedMessage,
 } from "./types";
 
-// Agent Config Updated Message
+let eventSeq = 0;
 
-let agentConfigUpdatedMessageStore: Map<string, Writable<{ key: string; value: any }>> = new Map<
-  string,
-  Writable<{ key: string; value: any }>
->();
+export type AgentEventState = {
+  configUpdated: { key: string; value: any; seq: number };
+  error: { message: string; seq: number };
+  input: { port: string; seq: number };
+  specUpdated: number;
+};
 
-export function subscribeAgentConfigUpdatedMessage(
-  agentId: string,
-  callback: (message: { key: string; value: any }) => void,
-): () => void {
-  let store = agentConfigUpdatedMessageStore.get(agentId);
-  if (!store) {
-    store = writable({ key: "", value: null });
-    agentConfigUpdatedMessageStore.set(agentId, store);
-  }
-  return store.subscribe(callback);
+function defaultAgentEvent(): AgentEventState {
+  return {
+    configUpdated: { key: "", value: null, seq: 0 },
+    error: { message: "", seq: 0 },
+    input: { port: "", seq: 0 },
+    specUpdated: 0,
+  };
 }
 
-let unlistenAgentConfigUpdated: UnlistenFn | null = null;
+class SharedAgentEvents {
+  agents = $state<Record<string, AgentEventState>>({});
 
-// Agent Error Message
-let agentErrorMessageStore: Map<string, Writable<string>> = new Map<string, Writable<string>>();
-
-export function subscribeAgentErrorMessage(
-  agentId: string,
-  callback: (message: string) => void,
-): () => void {
-  let store = agentErrorMessageStore.get(agentId);
-  if (!store) {
-    store = writable("");
-    agentErrorMessageStore.set(agentId, store);
+  // Creates entry if not exists. Only call from agent-node components, not from Tauri listeners.
+  getAgent(id: string): AgentEventState {
+    if (!this.agents[id]) {
+      this.agents[id] = defaultAgentEvent();
+    }
+    return this.agents[id];
   }
-  return store.subscribe(callback);
+
+  removeAgent(id: string) {
+    delete this.agents[id];
+  }
 }
 
-let unlistenAgentError: UnlistenFn | null = null;
+export const sharedAgentEvents = new SharedAgentEvents();
 
-// Agent-in Message
-let agentInMessageStore: Map<string, Writable<{ port: string; t: number }>> = new Map<
-  string,
-  Writable<{ port: string; t: number }>
->();
-
-export function subscribeAgentInMessage(
-  agentId: string,
-  callback: (message: { port: string; t: number }) => void,
-): () => void {
-  let store = agentInMessageStore.get(agentId);
-  if (!store) {
-    store = writable({ port: "", t: 0 });
-    agentInMessageStore.set(agentId, store);
-  }
-  return store.subscribe(callback);
-}
-
-let unlistenAgentIn: UnlistenFn | null = null;
-
-// Agent Spec Updated
-
-let agentSpecUpdatedMessageStore: Map<string, Writable<any>> = new Map<string, Writable<any>>();
-
-export function subscribeAgentSpecUpdatedMessage(
-  agentId: string,
-  callback: () => void,
-): () => void {
-  let store = agentSpecUpdatedMessageStore.get(agentId);
-  if (!store) {
-    store = writable(null);
-    agentSpecUpdatedMessageStore.set(agentId, store);
-  }
-  return store.subscribe(callback);
-}
-
-let unlistenAgentSpecUpdated: UnlistenFn | null = null;
-
-//
-
+// Tauri event listeners (module-level, live for the app's lifetime)
 $effect.root(() => {
   listen<AgentConfigUpdatedMessage>("ma:agent_config_updated", (event) => {
     const { agent_id, key, value } = event.payload;
-    let store = agentConfigUpdatedMessageStore.get(agent_id);
-    if (!store) {
-      return;
-    }
-    store.set({ key, value });
-  }).then((unlistenFn) => {
-    unlistenAgentConfigUpdated = unlistenFn;
+    const agent = sharedAgentEvents.agents[agent_id];
+    if (!agent) return;
+    agent.configUpdated = { key, value, seq: ++eventSeq };
   });
 
-  // Listen for error messages
   listen<AgentErrorMessage>("ma:agent_error", (event) => {
     const { agent_id, message } = event.payload;
-    let store = agentErrorMessageStore.get(agent_id);
-    if (!store) {
-      return;
-    }
-    store.set(message);
-  }).then((unlistenFn) => {
-    unlistenAgentError = unlistenFn;
+    const agent = sharedAgentEvents.agents[agent_id];
+    if (!agent) return;
+    agent.error = { message, seq: ++eventSeq };
   });
 
-  // Listen for input messages
   listen<AgentInMessage>("ma:agent_in", (event) => {
     const { agent_id, port } = event.payload;
-    let store = agentInMessageStore.get(agent_id);
-    if (!store) {
-      return;
-    }
-    store.set({ port, t: Date.now() });
-  }).then((unlistenFn) => {
-    unlistenAgentIn = unlistenFn;
+    const agent = sharedAgentEvents.agents[agent_id];
+    if (!agent) return;
+    agent.input = { port, seq: ++eventSeq };
   });
 
   listen<AgentSpecUpdatedMessage>("ma:agent_spec_updated", (event) => {
     const { agent_id } = event.payload;
-    let store = agentSpecUpdatedMessageStore.get(agent_id);
-    if (!store) {
-      return;
-    }
-    store.set(Date.now());
-  }).then((unlistenFn) => {
-    unlistenAgentSpecUpdated = unlistenFn;
+    const agent = sharedAgentEvents.agents[agent_id];
+    if (!agent) return;
+    agent.specUpdated = ++eventSeq;
   });
-
-  return () => {
-    unlistenAgentConfigUpdated?.();
-    unlistenAgentError?.();
-    unlistenAgentIn?.();
-    unlistenAgentSpecUpdated?.();
-  };
 });
