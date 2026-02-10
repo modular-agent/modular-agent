@@ -209,7 +209,10 @@ let _agentDefinitions: AgentDefinitions | null = null;
 let _globalConfigsMap: AgentConfigsMap | null = null;
 
 export function getCoreSettings(): CoreSettings {
-  return _coreSettings!;
+  if (!_coreSettings) {
+    throw new Error("getCoreSettings() called before initGlobals()");
+  }
+  return _coreSettings;
 }
 
 export async function setCoreSettings(newSettings: CoreSettings) {
@@ -218,23 +221,26 @@ export async function setCoreSettings(newSettings: CoreSettings) {
 }
 
 export function getAgentDefinitions(): AgentDefinitions {
-  return _agentDefinitions!;
+  if (!_agentDefinitions) {
+    throw new Error("getAgentDefinitions() called before initGlobals()");
+  }
+  return _agentDefinitions;
 }
 
 export function getGlobalConfigsMap(): AgentConfigsMap {
-  return _globalConfigsMap!;
+  if (!_globalConfigsMap) {
+    throw new Error("getGlobalConfigsMap() called before initGlobals()");
+  }
+  return _globalConfigsMap;
 }
 
 export async function loadPresetInfos(): Promise<PresetInfoExt[]> {
   const presetInfos = (await getPresetInfos()) as PresetInfoExt[];
   const coreSettings = getCoreSettings();
   const auto_start_presets = coreSettings.auto_start_presets || [];
-  presetInfos.forEach((s) => {
-    if (auto_start_presets.includes(s.name)) {
-      s.run_on_start = true;
-    }
-  });
-  return presetInfos;
+  return presetInfos.map((s) =>
+    auto_start_presets.includes(s.name) ? { ...s, run_on_start: true } : s
+  );
 }
 
 export async function initGlobals() {
