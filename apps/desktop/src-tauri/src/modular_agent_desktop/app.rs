@@ -173,6 +173,35 @@ impl ModularAgentApp {
         Ok(())
     }
 
+    /// Close a preset by ID (unload from memory, does NOT delete file).
+    /// Only unloads if the preset is not running.
+    /// Returns Ok(true) if unloaded, Ok(false) if still running.
+    pub async fn close_preset(&self, preset_id: &str) -> Result<bool> {
+        // Check if running — if so, keep it loaded
+        let infos = self.ma.get_preset_infos().await;
+        if infos.iter().any(|p| p.id == preset_id && p.running) {
+            return Ok(false);
+        }
+
+        // Remove from core (stops agents, removes from core's presets map).
+        // Ignore "not found" errors — preset may have already been removed.
+        if let Err(e) = self.ma.remove_preset(preset_id).await {
+            log::warn!(
+                "close_preset: remove_preset({}) failed: {}",
+                preset_id,
+                e
+            );
+        }
+
+        // Remove from our name→ID HashMap (reverse lookup by value)
+        {
+            let mut presets = self.presets.lock().unwrap();
+            presets.retain(|_, v| v != preset_id);
+        }
+
+        Ok(true)
+    }
+
     fn get_preset_id(&self, name: &str) -> Option<String> {
         let presets = self.presets.lock().unwrap();
         presets.get(name).cloned()
@@ -434,6 +463,14 @@ pub async fn start_preset_cmd(asapp: State<'_, ModularAgentApp>, id: String) -> 
 #[tauri::command]
 pub async fn stop_preset_cmd(asapp: State<'_, ModularAgentApp>, id: String) -> Result<(), String> {
     asapp.stop_preset(&id).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn close_preset_cmd(
+    asapp: State<'_, ModularAgentApp>,
+    id: String,
+) -> Result<bool, String> {
+    asapp.close_preset(&id).await.map_err(|e| e.to_string())
 }
 
 #[tauri::command]

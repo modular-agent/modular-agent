@@ -5,13 +5,14 @@
   import { getPresetInfo, getPresetSpec } from "tauri-plugin-modular-agent-api";
 
   import { presetToFlow } from "$lib/agent";
+  import { closePreset } from "$lib/modular_agent";
   import { tabStore } from "$lib/tab-store.svelte";
   import type { PresetFlow } from "$lib/types";
 
   import EditorInstance from "./editor-instance.svelte";
 
   // Loaded flow data per tab (reads inside untrack to avoid infinite loop)
-  let flows = $state<Record<string, PresetFlow>>({});
+  let flows = $state.raw<Record<string, PresetFlow>>({});
   let loading = $state<Set<string>>(new Set());
 
   // Watch tabStore.tabs changes only — untrack flows reads/writes
@@ -31,6 +32,8 @@
         if (!tabIds.has(id)) {
           const { [id]: _, ...rest } = flows;
           flows = rest;
+          // Unload stopped preset from backend (fire-and-forget)
+          closePreset(id).catch((e) => console.error("Failed to close preset:", e));
         }
       }
     });
@@ -40,6 +43,9 @@
     loading = new Set([...loading, id]);
     try {
       const info = await getPresetInfo(id);
+      // Re-check after await — tab might have been closed during IPC
+      if (!tabStore.tabs.find((t) => t.id === id)) return;
+
       const spec = await getPresetSpec(id);
       if (!info || !spec) {
         console.error("Preset not found:", id);
@@ -57,6 +63,12 @@
       const next = new Set(loading);
       next.delete(id);
       loading = next;
+      // If tab was closed while loading, ensure backend cleanup
+      if (!tabStore.tabs.find((t) => t.id === id)) {
+        closePreset(id).catch((e) =>
+          console.error("Failed to close preset:", e),
+        );
+      }
     }
   }
 </script>

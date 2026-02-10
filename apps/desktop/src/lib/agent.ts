@@ -23,14 +23,6 @@ export async function newPresetWithName(name: string): Promise<string> {
   return await invoke("new_preset_with_name_cmd", { name });
 }
 
-export async function renamePreset(id: string, name: string): Promise<string> {
-  return await invoke("rename_preset_cmd", { id, name });
-}
-
-export async function removePreset(id: string): Promise<void> {
-  await invoke("remove_preset_cmd", { id });
-}
-
 export async function savePreset(name: string, spec: PresetSpec): Promise<void> {
   await invoke("save_preset_cmd", { name, spec });
 }

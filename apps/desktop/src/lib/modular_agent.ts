@@ -45,6 +45,10 @@ export async function openPreset(name: string): Promise<string> {
   return await invoke("open_preset_cmd", { name });
 }
 
+export async function closePreset(id: string): Promise<boolean> {
+  return await invoke("close_preset_cmd", { id });
+}
+
 export async function deletePreset(name: string): Promise<string> {
   return await invoke("delete_preset_cmd", { name });
 }
