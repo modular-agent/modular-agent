@@ -53,6 +53,7 @@ export type CoreSettings = {
   snap_grid_size?: number;
   show_grid?: boolean;
   grid_gap?: number;
+  max_history_length?: number;
 };
 
 export type PresetInfoExt = PresetInfo & {

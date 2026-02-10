@@ -52,8 +52,13 @@ export class CommandHistory {
   canRedo = $derived(this.redoStack.length > 0);
   executing = false;
   private lastPushTime = 0;
+  private readonly maxLength: number;
   /** Temporary storage for ID remaps reported by commands during execute/undo. */
   pendingRemaps: Array<{ oldId: string; newId: string }> = [];
+
+  constructor(maxLength: number) {
+    this.maxLength = maxLength;
+  }
 
   async executeAndPush(editor: EditorState, cmd: Command): Promise<void> {
     if (this.executing) return;
@@ -61,6 +66,7 @@ export class CommandHistory {
     try {
       await cmd.execute(editor);
       this.undoStack = [...this.undoStack, cmd];
+      this.trimUndo();
       this.redoStack = [];
       this.lastPushTime = Date.now();
     } finally {
@@ -71,6 +77,7 @@ export class CommandHistory {
   /** Push a command that was already executed (for operations where SvelteFlow handles the initial execution). */
   push(cmd: Command): void {
     this.undoStack = [...this.undoStack, cmd];
+    this.trimUndo();
     this.redoStack = [];
     this.lastPushTime = Date.now();
   }
@@ -96,6 +103,7 @@ export class CommandHistory {
       }
     }
     this.undoStack = [...this.undoStack, cmd];
+    this.trimUndo();
     this.redoStack = [];
     this.lastPushTime = now;
   }
@@ -130,6 +138,7 @@ export class CommandHistory {
       await cmd.execute(editor);
       this.redoStack = this.redoStack.slice(0, -1);
       this.undoStack = [...this.undoStack, cmd];
+      this.trimUndo();
       this.propagateRemaps(this.redoStack);
       return true;
     } catch (e) {
@@ -145,6 +154,12 @@ export class CommandHistory {
   clear() {
     this.undoStack = [];
     this.redoStack = [];
+  }
+
+  private trimUndo() {
+    if (this.undoStack.length > this.maxLength) {
+      this.undoStack = this.undoStack.slice(-this.maxLength);
+    }
   }
 
   private propagateRemaps(stack: Command[]) {
@@ -724,10 +739,10 @@ export class ToggleShowErrCommand implements Command {
 
 const historyCache = new Map<string, CommandHistory>();
 
-export function getOrCreateHistory(presetId: string): CommandHistory {
+export function getOrCreateHistory(presetId: string, maxLength: number): CommandHistory {
   let h = historyCache.get(presetId);
   if (!h) {
-    h = new CommandHistory();
+    h = new CommandHistory(maxLength);
     historyCache.set(presetId, h);
   }
   return h;

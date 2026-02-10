@@ -70,6 +70,9 @@ pub struct CoreSettings {
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub grid_gap: Option<u32>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_history_length: Option<u32>,
 }
 
 impl Default for CoreSettings {
@@ -98,6 +101,7 @@ impl Default for CoreSettings {
             snap_grid_size: None,
             show_grid: None,
             grid_gap: None,
+            max_history_length: None,
         }
     }
 }

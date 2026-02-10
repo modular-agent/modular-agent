@@ -124,10 +124,10 @@ export class EditorState {
 
   constructor(props: EditorStateProps) {
     this.props = props;
-    this.history = getOrCreateHistory(props.preset_id());
-
-    // Load grid settings from CoreSettings
+    // Load settings from CoreSettings
     const settings = getCoreSettings();
+    const maxHistoryLength = settings.max_history_length ?? 2000;
+    this.history = getOrCreateHistory(props.preset_id(), maxHistoryLength);
     this.snapEnabled = settings.snap_enabled ?? true;
     this.snapGridSize = settings.snap_grid_size ?? 12;
     this.showGrid = settings.show_grid ?? true;
