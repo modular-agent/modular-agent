@@ -7,7 +7,7 @@
 </script>
 
 <div class="flex flex-col w-full h-full overflow-hidden">
-  {#if tabStore.tabs.length > 1}
+  {#if tabStore.tabs.length > 0}
     <EditorTabs />
   {/if}
   <EditorHost />
