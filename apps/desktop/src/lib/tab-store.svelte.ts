@@ -6,6 +6,7 @@ class TabStore {
   tabs = $state<Tab[]>([]);
   activeTabId = $state("");
   runningMap = $state<Record<string, boolean>>({});
+  dirtyMap = $state<Record<string, boolean>>({});
 
   openTab(id: string, name: string) {
     if (!this.tabs.find((t) => t.id === id)) {
@@ -18,9 +19,14 @@ class TabStore {
     this.runningMap[id] = running;
   }
 
+  setDirty(id: string, dirty: boolean) {
+    this.dirtyMap[id] = dirty;
+  }
+
   closeTab(id: string) {
     removeHistory(id);
     delete this.runningMap[id];
+    delete this.dirtyMap[id];
     const index = this.tabs.findIndex((t) => t.id === id);
     if (index === -1) return;
     this.tabs = this.tabs.filter((t) => t.id !== id);

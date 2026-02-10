@@ -118,6 +118,7 @@ export class EditorState {
   name = $derived.by(() => this.props.flow().name);
   bgColor = $derived(this.running ? BG_COLORS[0] : BG_COLORS[1]);
   selectedCount = $derived(this.nodes.filter((n) => n.selected).length);
+  dirty = $derived.by(() => this.history.dirty);
 
   // Drag state for undo
   private dragStartPositions: Map<string, { x: number; y: number }> | null = null;
@@ -167,6 +168,7 @@ export class EditorState {
       titlebarState.showMenubar = true;
       titlebarState.presetId = this.props.preset_id();
       titlebarState.presetName = flow.name;
+      titlebarState.dirty = this.dirty;
     });
 
     $effect(() => {
@@ -182,6 +184,11 @@ export class EditorState {
     // Sync tab name when preset name changes (e.g. Save As)
     $effect(() => {
       tabStore.updateName(this.preset_id, this.name);
+    });
+
+    // Sync dirty state to tab indicator (all tabs, not just active)
+    $effect(() => {
+      tabStore.setDirty(this.preset_id, this.dirty);
     });
   }
 
@@ -204,11 +211,13 @@ export class EditorState {
   // --- Preset operations ---
 
   async savePreset() {
-    await withErrorToast(async () => {
+    const result = await withErrorToast(async () => {
       const s = await getPresetSpec(this.preset_id);
       if (!s) return;
       await savePresetAPI(this.name, s);
+      return true;
     }, "Failed to save preset");
+    if (result) this.history.markSaved();
   }
 
   async startPreset() {

@@ -1,6 +1,7 @@
 class TitlebarState {
   title = $state("Modular Agent");
   running = $state(false);
+  dirty = $state(false);
   showActions = $state(false);
   showMenubar = $state(false);
   onStart: (() => Promise<void>) | null = $state(null);
@@ -18,6 +19,7 @@ class TitlebarState {
   reset() {
     this.title = "Modular Agent";
     this.running = false;
+    this.dirty = false;
     this.showActions = false;
     this.showMenubar = false;
     this.onStart = null;

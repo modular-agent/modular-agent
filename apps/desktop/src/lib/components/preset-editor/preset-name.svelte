@@ -8,10 +8,11 @@
 
   let {
     name,
+    dirty = false,
     ref = $bindable(null),
     class: className,
     ...restProps
-  }: WithElementRef<HTMLAttributes<HTMLElement>> & { name?: string } = $props();
+  }: WithElementRef<HTMLAttributes<HTMLElement>> & { name?: string; dirty?: boolean } = $props();
 
   let path_components = $derived(name ? name.split("/") : []);
 </script>
@@ -28,5 +29,8 @@
         </Breadcrumb.Separator>
       {/if}
     {/each}
+    {#if dirty}
+      <span class="text-muted-foreground ml-0.5">*</span>
+    {/if}
   </Breadcrumb.List>
 </Breadcrumb.Root>

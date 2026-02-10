@@ -50,6 +50,9 @@ export class CommandHistory {
   redoStack = $state.raw<Command[]>([]);
   canUndo = $derived(this.undoStack.length > 0);
   canRedo = $derived(this.redoStack.length > 0);
+  /** Index into the undo stack marking the last-saved position. -1 = unreachable (permanently dirty until next save). */
+  savedIndex = $state(0);
+  dirty = $derived(this.undoStack.length !== this.savedIndex);
   executing = false;
   private lastPushTime = 0;
   private readonly maxLength: number;
@@ -60,11 +63,16 @@ export class CommandHistory {
     this.maxLength = maxLength;
   }
 
+  markSaved() {
+    this.savedIndex = this.undoStack.length;
+  }
+
   async executeAndPush(editor: EditorState, cmd: Command): Promise<void> {
     if (this.executing) return;
     this.executing = true;
     try {
       await cmd.execute(editor);
+      if (this.savedIndex > this.undoStack.length) this.savedIndex = -1;
       this.undoStack = [...this.undoStack, cmd];
       this.trimUndo();
       this.redoStack = [];
@@ -76,6 +84,7 @@ export class CommandHistory {
 
   /** Push a command that was already executed (for operations where SvelteFlow handles the initial execution). */
   push(cmd: Command): void {
+    if (this.savedIndex > this.undoStack.length) this.savedIndex = -1;
     this.undoStack = [...this.undoStack, cmd];
     this.trimUndo();
     this.redoStack = [];
@@ -98,10 +107,13 @@ export class CommandHistory {
         // Merge: keep original oldValue/oldConfigs, update newValue/newConfigs
         last.newValue = cmd.newValue;
         last.newConfigs = cmd.newConfigs;
+        // Content changed at same stack length — invalidate if it was the save point
+        if (this.savedIndex === this.undoStack.length) this.savedIndex = -1;
         this.lastPushTime = now;
         return;
       }
     }
+    if (this.savedIndex > this.undoStack.length) this.savedIndex = -1;
     this.undoStack = [...this.undoStack, cmd];
     this.trimUndo();
     this.redoStack = [];
@@ -154,10 +166,17 @@ export class CommandHistory {
   clear() {
     this.undoStack = [];
     this.redoStack = [];
+    this.savedIndex = -1;
   }
 
   private trimUndo() {
     if (this.undoStack.length > this.maxLength) {
+      const removed = this.undoStack.length - this.maxLength;
+      if (this.savedIndex < removed) {
+        this.savedIndex = -1;
+      } else {
+        this.savedIndex -= removed;
+      }
       this.undoStack = this.undoStack.slice(-this.maxLength);
     }
   }

@@ -86,7 +86,7 @@
               : 'border border-red-500'}"
           ></span>
         {/if}
-        <span class="flex-1 truncate text-left">{getDisplayName(tab.name)}</span>
+        <span class="flex-1 truncate text-left">{getDisplayName(tab.name)}{#if tabStore.dirtyMap[tab.id]}<span class="text-muted-foreground ml-0.5">*</span>{/if}</span>
         <span
           role="button"
           tabindex="-1"

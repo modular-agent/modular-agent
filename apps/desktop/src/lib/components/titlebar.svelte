@@ -99,7 +99,7 @@
     <div class="absolute inset-x-0 flex items-center justify-center h-full pointer-events-none">
       {#if titlebarState.showMenubar}
         <div class="pointer-events-auto max-w-[400px] truncate">
-          <PresetName name={titlebarState.presetName} />
+          <PresetName name={titlebarState.presetName} dirty={titlebarState.dirty} />
         </div>
       {:else}
         <span class="text-sm font-semibold truncate">{titlebarState.title}</span>
