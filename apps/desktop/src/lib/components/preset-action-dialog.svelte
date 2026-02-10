@@ -27,11 +27,11 @@
 </script>
 
 <Dialog.Root bind:open>
-  <form>
-    {#if trigger}
-      {@render trigger()}
-    {/if}
-    <Dialog.Content class="sm:max-w-[425px]">
+  {#if trigger}
+    {@render trigger()}
+  {/if}
+  <Dialog.Content class="sm:max-w-[425px]">
+    <form onsubmit={handleAction}>
       <Dialog.Header>
         <Dialog.Title>{action} Preset</Dialog.Title>
       </Dialog.Header>
@@ -42,8 +42,8 @@
         </div>
       </div>
       <Dialog.Footer>
-        <Button type="submit" onclick={handleAction}>{action}</Button>
+        <Button type="submit">{action}</Button>
       </Dialog.Footer>
-    </Dialog.Content>
-  </form>
+    </form>
+  </Dialog.Content>
 </Dialog.Root>
