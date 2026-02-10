@@ -1,29 +1,7 @@
 {
   "agents": [
     {
-      "id": "352",
-      "def_name": "modular_agent_std::input::BooleanInputAgent",
-      "inputs": [
-        "unit"
-      ],
-      "outputs": [
-        "boolean"
-      ],
-      "configs": {
-        "boolean": false
-      },
-      "config_specs": {
-        "boolean": {
-          "value": false,
-          "type": "boolean",
-          "hide_title": true
-        }
-      },
-      "x": 240,
-      "y": 72
-    },
-    {
-      "id": "353",
+      "id": "40",
       "def_name": "modular_agent_std::display::DisplayValueAgent",
       "inputs": [
         "value"
@@ -43,29 +21,7 @@
       "y": 72
     },
     {
-      "id": "354",
-      "def_name": "modular_agent_std::input::IntegerInputAgent",
-      "inputs": [
-        "unit"
-      ],
-      "outputs": [
-        "integer"
-      ],
-      "configs": {
-        "integer": 0
-      },
-      "config_specs": {
-        "integer": {
-          "value": 0,
-          "type": "integer",
-          "hide_title": true
-        }
-      },
-      "x": 240,
-      "y": 1032
-    },
-    {
-      "id": "355",
+      "id": "42",
       "def_name": "modular_agent_std::display::DisplayValueAgent",
       "inputs": [
         "value"
@@ -81,33 +37,11 @@
           "readonly": true
         }
       },
-      "x": 456,
+      "x": 528,
       "y": 1032
     },
     {
-      "id": "356",
-      "def_name": "modular_agent_std::input::NumberInputAgent",
-      "inputs": [
-        "unit"
-      ],
-      "outputs": [
-        "number"
-      ],
-      "configs": {
-        "number": 0
-      },
-      "config_specs": {
-        "number": {
-          "value": 0,
-          "type": "number",
-          "hide_title": true
-        }
-      },
-      "x": 240,
-      "y": 552
-    },
-    {
-      "id": "357",
+      "id": "44",
       "def_name": "modular_agent_std::display::DisplayValueAgent",
       "inputs": [
         "value"
@@ -123,33 +57,11 @@
           "readonly": true
         }
       },
-      "x": 456,
+      "x": 528,
       "y": 552
     },
     {
-      "id": "358",
-      "def_name": "modular_agent_std::input::ObjectInputAgent",
-      "inputs": [
-        "unit"
-      ],
-      "outputs": [
-        "object"
-      ],
-      "configs": {
-        "object": {}
-      },
-      "config_specs": {
-        "object": {
-          "value": {},
-          "type": "object",
-          "hide_title": true
-        }
-      },
-      "x": 1176,
-      "y": 1200
-    },
-    {
-      "id": "359",
+      "id": "46",
       "def_name": "modular_agent_std::display::DisplayValueAgent",
       "inputs": [
         "value"
@@ -169,53 +81,7 @@
       "y": 1200
     },
     {
-      "id": "360",
-      "def_name": "modular_agent_std::input::StringInputAgent",
-      "inputs": [
-        "unit"
-      ],
-      "outputs": [
-        "string"
-      ],
-      "configs": {
-        "string": ""
-      },
-      "config_specs": {
-        "string": {
-          "value": "",
-          "type": "string",
-          "hide_title": true
-        }
-      },
-      "x": 1152,
-      "y": 72
-    },
-    {
-      "id": "361",
-      "def_name": "modular_agent_std::input::TextInputAgent",
-      "inputs": [
-        "unit"
-      ],
-      "outputs": [
-        "text"
-      ],
-      "configs": {
-        "text": ""
-      },
-      "config_specs": {
-        "text": {
-          "value": "",
-          "type": "text",
-          "hide_title": true
-        }
-      },
-      "x": 1152,
-      "y": 648,
-      "height": 219,
-      "width": 237
-    },
-    {
-      "id": "362",
+      "id": "49",
       "def_name": "modular_agent_std::display::DisplayValueAgent",
       "inputs": [
         "value"
@@ -231,30 +97,11 @@
           "readonly": true
         }
       },
-      "x": 1464,
+      "x": 1404,
       "y": 648
     },
     {
-      "id": "363",
-      "def_name": "modular_agent_std::input::UnitInputAgent",
-      "outputs": [
-        "unit"
-      ],
-      "configs": {
-        "unit": {}
-      },
-      "config_specs": {
-        "unit": {
-          "value": null,
-          "type": "unit",
-          "hide_title": true
-        }
-      },
-      "x": 240,
-      "y": -144
-    },
-    {
-      "id": "364",
+      "id": "51",
       "def_name": "modular_agent_std::display::DisplayValueAgent",
       "inputs": [
         "value"
@@ -274,7 +121,7 @@
       "y": -144
     },
     {
-      "id": "365",
+      "id": "52",
       "def_name": "modular_agent_core::external_agent::LocalOutputAgent",
       "inputs": [
         "value"
@@ -292,7 +139,7 @@
       "y": 264
     },
     {
-      "id": "366",
+      "id": "53",
       "def_name": "modular_agent_core::external_agent::LocalInputAgent",
       "outputs": [
         "value"
@@ -310,25 +157,7 @@
       "y": 72
     },
     {
-      "id": "367",
-      "def_name": "modular_agent_core::external_agent::LocalInputAgent",
-      "outputs": [
-        "value"
-      ],
-      "configs": {
-        "name": "boolean_conf"
-      },
-      "config_specs": {
-        "name": {
-          "value": "",
-          "type": "string"
-        }
-      },
-      "x": -48,
-      "y": 312
-    },
-    {
-      "id": "368",
+      "id": "55",
       "def_name": "modular_agent_core::external_agent::LocalInputAgent",
       "outputs": [
         "value"
@@ -346,25 +175,7 @@
       "y": 1032
     },
     {
-      "id": "369",
-      "def_name": "modular_agent_core::external_agent::LocalInputAgent",
-      "outputs": [
-        "value"
-      ],
-      "configs": {
-        "name": "integer_conf"
-      },
-      "config_specs": {
-        "name": {
-          "value": "",
-          "type": "string"
-        }
-      },
-      "x": -48,
-      "y": 1248
-    },
-    {
-      "id": "370",
+      "id": "57",
       "def_name": "modular_agent_core::external_agent::LocalOutputAgent",
       "inputs": [
         "value"
@@ -378,11 +189,11 @@
           "type": "string"
         }
       },
-      "x": 456,
+      "x": 528,
       "y": 1248
     },
     {
-      "id": "371",
+      "id": "58",
       "def_name": "modular_agent_core::external_agent::LocalInputAgent",
       "outputs": [
         "value"
@@ -400,25 +211,7 @@
       "y": 552
     },
     {
-      "id": "372",
-      "def_name": "modular_agent_core::external_agent::LocalInputAgent",
-      "outputs": [
-        "value"
-      ],
-      "configs": {
-        "name": "number_conf"
-      },
-      "config_specs": {
-        "name": {
-          "value": "",
-          "type": "string"
-        }
-      },
-      "x": -48,
-      "y": 768
-    },
-    {
-      "id": "373",
+      "id": "60",
       "def_name": "modular_agent_core::external_agent::LocalOutputAgent",
       "inputs": [
         "value"
@@ -432,11 +225,11 @@
           "type": "string"
         }
       },
-      "x": 456,
+      "x": 528,
       "y": 768
     },
     {
-      "id": "374",
+      "id": "61",
       "def_name": "modular_agent_core::external_agent::LocalOutputAgent",
       "inputs": [
         "value"
@@ -450,11 +243,11 @@
           "type": "string"
         }
       },
-      "x": 1368,
+      "x": 1404,
       "y": 288
     },
     {
-      "id": "375",
+      "id": "62",
       "def_name": "modular_agent_core::external_agent::LocalInputAgent",
       "outputs": [
         "value"
@@ -472,25 +265,7 @@
       "y": 72
     },
     {
-      "id": "376",
-      "def_name": "modular_agent_core::external_agent::LocalInputAgent",
-      "outputs": [
-        "value"
-      ],
-      "configs": {
-        "name": "string_conf"
-      },
-      "config_specs": {
-        "name": {
-          "value": "",
-          "type": "string"
-        }
-      },
-      "x": 864,
-      "y": 288
-    },
-    {
-      "id": "377",
+      "id": "64",
       "def_name": "modular_agent_std::display::DisplayValueAgent",
       "inputs": [
         "value"
@@ -506,11 +281,11 @@
           "readonly": true
         }
       },
-      "x": 1368,
+      "x": 1404,
       "y": 72
     },
     {
-      "id": "378",
+      "id": "65",
       "def_name": "modular_agent_core::external_agent::LocalInputAgent",
       "outputs": [
         "value"
@@ -528,25 +303,7 @@
       "y": 648
     },
     {
-      "id": "379",
-      "def_name": "modular_agent_core::external_agent::LocalInputAgent",
-      "outputs": [
-        "value"
-      ],
-      "configs": {
-        "name": "text_conf"
-      },
-      "config_specs": {
-        "name": {
-          "value": "",
-          "type": "string"
-        }
-      },
-      "x": 864,
-      "y": 888
-    },
-    {
-      "id": "380",
+      "id": "67",
       "def_name": "modular_agent_core::external_agent::LocalOutputAgent",
       "inputs": [
         "value"
@@ -560,11 +317,11 @@
           "type": "string"
         }
       },
-      "x": 1464,
+      "x": 1404,
       "y": 864
     },
     {
-      "id": "381",
+      "id": "68",
       "def_name": "modular_agent_core::external_agent::LocalInputAgent",
       "outputs": [
         "value"
@@ -582,25 +339,7 @@
       "y": 1200
     },
     {
-      "id": "382",
-      "def_name": "modular_agent_core::external_agent::LocalInputAgent",
-      "outputs": [
-        "value"
-      ],
-      "configs": {
-        "name": "object_conf"
-      },
-      "config_specs": {
-        "name": {
-          "value": "",
-          "type": "string"
-        }
-      },
-      "x": 888,
-      "y": 1416
-    },
-    {
-      "id": "383",
+      "id": "70",
       "def_name": "modular_agent_core::external_agent::LocalOutputAgent",
       "inputs": [
         "value"
@@ -616,163 +355,285 @@
       },
       "x": 1392,
       "y": 1416
+    },
+    {
+      "id": "73",
+      "def_name": "modular_agent_std::input::IntegerInputAgent",
+      "inputs": [
+        "unit"
+      ],
+      "outputs": [
+        "integer"
+      ],
+      "configs": {
+        "integer": 1
+      },
+      "config_specs": {
+        "integer": {
+          "value": 0,
+          "type": "integer",
+          "hide_title": true
+        }
+      },
+      "x": 228,
+      "y": 1032
+    },
+    {
+      "id": "75",
+      "def_name": "modular_agent_std::input::UnitInputAgent",
+      "outputs": [
+        "unit"
+      ],
+      "configs": {
+        "unit": null
+      },
+      "config_specs": {
+        "unit": {
+          "value": null,
+          "type": "unit",
+          "hide_title": true
+        }
+      },
+      "x": 240,
+      "y": -144
+    },
+    {
+      "id": "77",
+      "def_name": "modular_agent_std::input::BooleanInputAgent",
+      "inputs": [
+        "unit"
+      ],
+      "outputs": [
+        "boolean"
+      ],
+      "configs": {
+        "boolean": true
+      },
+      "config_specs": {
+        "boolean": {
+          "value": false,
+          "type": "boolean",
+          "hide_title": true
+        }
+      },
+      "x": 252,
+      "y": 72
+    },
+    {
+      "id": "79",
+      "def_name": "modular_agent_std::input::NumberInputAgent",
+      "inputs": [
+        "unit"
+      ],
+      "outputs": [
+        "number"
+      ],
+      "configs": {
+        "number": 3.14
+      },
+      "config_specs": {
+        "number": {
+          "value": 0,
+          "type": "number",
+          "hide_title": true
+        }
+      },
+      "x": 216,
+      "y": 552
+    },
+    {
+      "id": "81",
+      "def_name": "modular_agent_std::input::StringInputAgent",
+      "inputs": [
+        "unit"
+      ],
+      "outputs": [
+        "string"
+      ],
+      "configs": {
+        "string": "Hello, world!"
+      },
+      "config_specs": {
+        "string": {
+          "value": "",
+          "type": "string",
+          "hide_title": true
+        }
+      },
+      "x": 1128,
+      "y": 72
+    },
+    {
+      "id": "83",
+      "def_name": "modular_agent_std::input::TextInputAgent",
+      "inputs": [
+        "unit"
+      ],
+      "outputs": [
+        "text"
+      ],
+      "configs": {
+        "text": "Old pond\nFrogs jumped in\nSound of water.\n"
+      },
+      "config_specs": {
+        "text": {
+          "value": "",
+          "type": "text",
+          "hide_title": true
+        }
+      },
+      "x": 1152,
+      "y": 648,
+      "width": 190,
+      "height": 227
+    },
+    {
+      "id": "85",
+      "def_name": "modular_agent_std::input::ObjectInputAgent",
+      "inputs": [
+        "unit"
+      ],
+      "outputs": [
+        "object"
+      ],
+      "configs": {
+        "object": {
+          "is_busy": false,
+          "name": "Alice"
+        }
+      },
+      "config_specs": {
+        "object": {
+          "value": {},
+          "type": "object",
+          "hide_title": true
+        }
+      },
+      "x": 1152,
+      "y": 1200,
+      "width": 190,
+      "height": 227
     }
   ],
   "connections": [
     {
-      "source": "352",
-      "source_handle": "boolean",
-      "target": "353",
-      "target_handle": "value"
-    },
-    {
-      "source": "354",
-      "source_handle": "integer",
-      "target": "355",
-      "target_handle": "value"
-    },
-    {
-      "source": "356",
-      "source_handle": "number",
-      "target": "357",
-      "target_handle": "value"
-    },
-    {
-      "source": "358",
-      "source_handle": "object",
-      "target": "359",
-      "target_handle": "value"
-    },
-    {
-      "source": "361",
-      "source_handle": "text",
-      "target": "362",
-      "target_handle": "value"
-    },
-    {
-      "source": "363",
+      "source": "75",
       "source_handle": "unit",
-      "target": "364",
+      "target": "51",
       "target_handle": "value"
     },
     {
-      "source": "366",
+      "source": "55",
       "source_handle": "value",
-      "target": "352",
+      "target": "73",
       "target_handle": "unit"
     },
     {
-      "source": "352",
-      "source_handle": "boolean",
-      "target": "365",
-      "target_handle": "value"
-    },
-    {
-      "source": "368",
-      "source_handle": "value",
-      "target": "354",
-      "target_handle": "unit"
-    },
-    {
-      "source": "354",
+      "source": "73",
       "source_handle": "integer",
-      "target": "370",
+      "target": "42",
       "target_handle": "value"
     },
     {
-      "source": "369",
-      "source_handle": "value",
-      "target": "354",
-      "target_handle": "config:integer"
+      "source": "73",
+      "source_handle": "integer",
+      "target": "57",
+      "target_handle": "value"
     },
     {
-      "source": "367",
+      "source": "53",
       "source_handle": "value",
-      "target": "352",
-      "target_handle": "config:boolean"
+      "target": "77",
+      "target_handle": "unit"
     },
     {
-      "source": "356",
+      "source": "77",
+      "source_handle": "boolean",
+      "target": "40",
+      "target_handle": "value"
+    },
+    {
+      "source": "77",
+      "source_handle": "boolean",
+      "target": "52",
+      "target_handle": "value"
+    },
+    {
+      "source": "58",
+      "source_handle": "value",
+      "target": "79",
+      "target_handle": "unit"
+    },
+    {
+      "source": "79",
       "source_handle": "number",
-      "target": "373",
+      "target": "44",
       "target_handle": "value"
     },
     {
-      "source": "371",
+      "source": "79",
+      "source_handle": "number",
+      "target": "60",
+      "target_handle": "value"
+    },
+    {
+      "source": "62",
       "source_handle": "value",
-      "target": "356",
+      "target": "81",
       "target_handle": "unit"
     },
     {
-      "source": "372",
-      "source_handle": "value",
-      "target": "356",
-      "target_handle": "config:number"
-    },
-    {
-      "source": "375",
-      "source_handle": "value",
-      "target": "360",
-      "target_handle": "unit"
-    },
-    {
-      "source": "376",
-      "source_handle": "value",
-      "target": "360",
-      "target_handle": "config:string"
-    },
-    {
-      "source": "360",
+      "source": "81",
       "source_handle": "string",
-      "target": "374",
+      "target": "64",
       "target_handle": "value"
     },
     {
-      "source": "360",
+      "source": "81",
       "source_handle": "string",
-      "target": "377",
+      "target": "61",
       "target_handle": "value"
     },
     {
-      "source": "378",
+      "source": "65",
       "source_handle": "value",
-      "target": "361",
+      "target": "83",
       "target_handle": "unit"
     },
     {
-      "source": "379",
-      "source_handle": "value",
-      "target": "361",
-      "target_handle": "config:text"
-    },
-    {
-      "source": "361",
+      "source": "83",
       "source_handle": "text",
-      "target": "380",
+      "target": "49",
       "target_handle": "value"
     },
     {
-      "source": "381",
+      "source": "83",
+      "source_handle": "text",
+      "target": "67",
+      "target_handle": "value"
+    },
+    {
+      "source": "68",
       "source_handle": "value",
-      "target": "358",
+      "target": "85",
       "target_handle": "unit"
     },
     {
-      "source": "358",
+      "source": "85",
       "source_handle": "object",
-      "target": "383",
+      "target": "46",
       "target_handle": "value"
     },
     {
-      "source": "382",
-      "source_handle": "value",
-      "target": "358",
-      "target_handle": "config:object"
+      "source": "85",
+      "source_handle": "object",
+      "target": "70",
+      "target_handle": "value"
     }
   ],
   "viewport": {
-    "x": 438.4831810180053,
-    "y": 202.88219905692273,
-    "zoom": 0.3338017094132566
+    "x": -33.14194788462089,
+    "y": -158.02066301311245,
+    "zoom": 0.44045399620030895
   }
 }

@@ -4,4 +4,5 @@ extern crate modular_agent_std;
 
 mod suites {
     mod input_test;
+    mod string_test;
 }

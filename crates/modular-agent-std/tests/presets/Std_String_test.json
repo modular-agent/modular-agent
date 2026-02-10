@@ -1,0 +1,677 @@
+{
+  "agents": [
+    {
+      "id": "88",
+      "def_name": "modular_agent_std::string::IsStringAgent",
+      "inputs": [
+        "value"
+      ],
+      "outputs": [
+        "t",
+        "f"
+      ],
+      "x": 264,
+      "y": 108
+    },
+    {
+      "id": "117",
+      "def_name": "modular_agent_core::external_agent::LocalInputAgent",
+      "outputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "is_string_in"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": -36,
+      "y": 108
+    },
+    {
+      "id": "119",
+      "def_name": "modular_agent_core::external_agent::LocalOutputAgent",
+      "inputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "is_string_t"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": 516,
+      "y": 108
+    },
+    {
+      "id": "120",
+      "def_name": "modular_agent_core::external_agent::LocalOutputAgent",
+      "inputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "is_string_f"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": 516,
+      "y": 336
+    },
+    {
+      "id": "122",
+      "def_name": "modular_agent_std::string::IsEmptyStringAgent",
+      "inputs": [
+        "string"
+      ],
+      "outputs": [
+        "t",
+        "f"
+      ],
+      "x": 276,
+      "y": 600,
+      "width": 166,
+      "height": 134
+    },
+    {
+      "id": "124",
+      "def_name": "modular_agent_core::external_agent::LocalInputAgent",
+      "outputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "is_empty_string_in"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": -36,
+      "y": 588
+    },
+    {
+      "id": "125",
+      "def_name": "modular_agent_core::external_agent::LocalOutputAgent",
+      "inputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "is_empty_string_t"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": 516,
+      "y": 588
+    },
+    {
+      "id": "126",
+      "def_name": "modular_agent_core::external_agent::LocalOutputAgent",
+      "inputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "is_empty_string_f"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": 516,
+      "y": 816
+    },
+    {
+      "id": "128",
+      "def_name": "modular_agent_std::string::StringJoinAgent",
+      "inputs": [
+        "strings"
+      ],
+      "outputs": [
+        "string"
+      ],
+      "configs": {
+        "sep": "\\n"
+      },
+      "config_specs": {
+        "sep": {
+          "value": "\\n",
+          "type": "string"
+        }
+      },
+      "x": 288,
+      "y": 1152
+    },
+    {
+      "id": "130",
+      "def_name": "modular_agent_std::string::StringLengthSplitAgent",
+      "inputs": [
+        "string"
+      ],
+      "outputs": [
+        "strings"
+      ],
+      "configs": {
+        "len": 65536,
+        "overlap": 1024
+      },
+      "config_specs": {
+        "len": {
+          "value": 65536,
+          "type": "integer"
+        },
+        "overlap": {
+          "value": 1024,
+          "type": "integer"
+        }
+      },
+      "x": 300,
+      "y": 1728
+    },
+    {
+      "id": "131",
+      "def_name": "modular_agent_core::external_agent::LocalInputAgent",
+      "outputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "string_join_in"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": -12,
+      "y": 1152
+    },
+    {
+      "id": "132",
+      "def_name": "modular_agent_core::external_agent::LocalOutputAgent",
+      "inputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "string_join_out"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": 588,
+      "y": 1152
+    },
+    {
+      "id": "133",
+      "def_name": "modular_agent_core::external_agent::LocalInputAgent",
+      "outputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "string_join_sep"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": -12,
+      "y": 1404
+    },
+    {
+      "id": "134",
+      "def_name": "modular_agent_core::external_agent::LocalInputAgent",
+      "outputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "string_length_split_in"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": -12,
+      "y": 1728
+    },
+    {
+      "id": "135",
+      "def_name": "modular_agent_core::external_agent::LocalOutputAgent",
+      "inputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "string_length_split_out"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": 624,
+      "y": 1728
+    },
+    {
+      "id": "136",
+      "def_name": "modular_agent_core::external_agent::LocalInputAgent",
+      "outputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "string_length_split_len"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": -12,
+      "y": 1968
+    },
+    {
+      "id": "137",
+      "def_name": "modular_agent_core::external_agent::LocalInputAgent",
+      "outputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "string_length_split_overlap"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": -12,
+      "y": 2196
+    },
+    {
+      "id": "139",
+      "def_name": "modular_agent_std::string::TemplateStringAgent",
+      "inputs": [
+        "value"
+      ],
+      "outputs": [
+        "string"
+      ],
+      "configs": {
+        "template": "{{value}}"
+      },
+      "config_specs": {
+        "template": {
+          "value": "{{value}}",
+          "type": "string"
+        }
+      },
+      "x": 288,
+      "y": 2484
+    },
+    {
+      "id": "140",
+      "def_name": "modular_agent_core::external_agent::LocalInputAgent",
+      "outputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "template_string_in"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": 0,
+      "y": 2484
+    },
+    {
+      "id": "141",
+      "def_name": "modular_agent_core::external_agent::LocalOutputAgent",
+      "inputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "template_string_out"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": 588,
+      "y": 2484
+    },
+    {
+      "id": "142",
+      "def_name": "modular_agent_core::external_agent::LocalInputAgent",
+      "outputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "template_string_template"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": 0,
+      "y": 2724
+    },
+    {
+      "id": "144",
+      "def_name": "modular_agent_std::string::TemplateArrayAgent",
+      "inputs": [
+        "value"
+      ],
+      "outputs": [
+        "string"
+      ],
+      "configs": {
+        "template": "{{value}}"
+      },
+      "config_specs": {
+        "template": {
+          "value": "{{value}}",
+          "type": "text"
+        }
+      },
+      "x": 300,
+      "y": 3000
+    },
+    {
+      "id": "145",
+      "def_name": "modular_agent_core::external_agent::LocalInputAgent",
+      "outputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "template_array_in"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": 12,
+      "y": 3000
+    },
+    {
+      "id": "146",
+      "def_name": "modular_agent_core::external_agent::LocalOutputAgent",
+      "inputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "template_array_out"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": 540,
+      "y": 3000
+    },
+    {
+      "id": "147",
+      "def_name": "modular_agent_core::external_agent::LocalInputAgent",
+      "outputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "template_array_template"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": 12,
+      "y": 3228
+    },
+    {
+      "id": "149",
+      "def_name": "modular_agent_std::string::TemplateTextAgent",
+      "inputs": [
+        "value"
+      ],
+      "outputs": [
+        "string"
+      ],
+      "configs": {
+        "template": "{{value}}"
+      },
+      "config_specs": {
+        "template": {
+          "value": "{{value}}",
+          "type": "text"
+        }
+      },
+      "x": 300,
+      "y": 3504
+    },
+    {
+      "id": "150",
+      "def_name": "modular_agent_core::external_agent::LocalInputAgent",
+      "outputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "template_text_in"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": 12,
+      "y": 3504
+    },
+    {
+      "id": "151",
+      "def_name": "modular_agent_core::external_agent::LocalOutputAgent",
+      "inputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "template_text_out"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": 540,
+      "y": 3504
+    },
+    {
+      "id": "152",
+      "def_name": "modular_agent_core::external_agent::LocalInputAgent",
+      "outputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "template_text_template"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": 12,
+      "y": 3744
+    }
+  ],
+  "connections": [
+    {
+      "source": "117",
+      "source_handle": "value",
+      "target": "88",
+      "target_handle": "value"
+    },
+    {
+      "source": "88",
+      "source_handle": "t",
+      "target": "119",
+      "target_handle": "value"
+    },
+    {
+      "source": "88",
+      "source_handle": "f",
+      "target": "120",
+      "target_handle": "value"
+    },
+    {
+      "source": "124",
+      "source_handle": "value",
+      "target": "122",
+      "target_handle": "string"
+    },
+    {
+      "source": "122",
+      "source_handle": "t",
+      "target": "125",
+      "target_handle": "value"
+    },
+    {
+      "source": "122",
+      "source_handle": "f",
+      "target": "126",
+      "target_handle": "value"
+    },
+    {
+      "source": "131",
+      "source_handle": "value",
+      "target": "128",
+      "target_handle": "strings"
+    },
+    {
+      "source": "128",
+      "source_handle": "string",
+      "target": "132",
+      "target_handle": "value"
+    },
+    {
+      "source": "133",
+      "source_handle": "value",
+      "target": "128",
+      "target_handle": "config:sep"
+    },
+    {
+      "source": "134",
+      "source_handle": "value",
+      "target": "130",
+      "target_handle": "string"
+    },
+    {
+      "source": "130",
+      "source_handle": "strings",
+      "target": "135",
+      "target_handle": "value"
+    },
+    {
+      "source": "136",
+      "source_handle": "value",
+      "target": "130",
+      "target_handle": "config:len"
+    },
+    {
+      "source": "137",
+      "source_handle": "value",
+      "target": "130",
+      "target_handle": "config:overlap"
+    },
+    {
+      "source": "140",
+      "source_handle": "value",
+      "target": "139",
+      "target_handle": "value"
+    },
+    {
+      "source": "139",
+      "source_handle": "string",
+      "target": "141",
+      "target_handle": "value"
+    },
+    {
+      "source": "142",
+      "source_handle": "value",
+      "target": "139",
+      "target_handle": "config:template"
+    },
+    {
+      "source": "145",
+      "source_handle": "value",
+      "target": "144",
+      "target_handle": "value"
+    },
+    {
+      "source": "144",
+      "source_handle": "string",
+      "target": "146",
+      "target_handle": "value"
+    },
+    {
+      "source": "147",
+      "source_handle": "value",
+      "target": "144",
+      "target_handle": "config:template"
+    },
+    {
+      "source": "150",
+      "source_handle": "value",
+      "target": "149",
+      "target_handle": "value"
+    },
+    {
+      "source": "149",
+      "source_handle": "string",
+      "target": "151",
+      "target_handle": "value"
+    },
+    {
+      "source": "152",
+      "source_handle": "value",
+      "target": "149",
+      "target_handle": "config:template"
+    }
+  ],
+  "viewport": {
+    "x": 569.7727929974975,
+    "y": 38.80607995725222,
+    "zoom": 0.2176376408240316
+  }
+}
