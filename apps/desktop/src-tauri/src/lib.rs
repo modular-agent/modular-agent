@@ -43,6 +43,13 @@ pub fn run() {
                         log::LevelFilter::Info
                     },
                 )
+                // Suppress known harmless tao warning on Windows:
+                // "RedrawEventsCleared emitted without explicit MainEventsCleared"
+                // See: https://github.com/tauri-apps/tao/issues/872
+                .level_for(
+                    "tao::platform_impl::platform::event_loop::runner",
+                    log::LevelFilter::Error,
+                )
                 .build(),
         )
         .plugin(tauri_plugin_opener::init())
