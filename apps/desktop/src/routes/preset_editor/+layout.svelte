@@ -1,4 +1,5 @@
 <script lang="ts">
+  import EditorHost from "$lib/components/preset-editor/editor-host.svelte";
   import EditorTabs from "$lib/components/preset-editor/editor-tabs.svelte";
   import { tabStore } from "$lib/tab-store.svelte";
 
@@ -9,5 +10,9 @@
   {#if tabStore.tabs.length > 1}
     <EditorTabs />
   {/if}
-  {@render children?.()}
+  <EditorHost />
+  <!-- SvelteKit route slot (hidden): triggers tab activation via +page.svelte -->
+  <div class="hidden">
+    {@render children?.()}
+  </div>
 </div>

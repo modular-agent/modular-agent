@@ -11,6 +11,7 @@
   import { ScrollArea } from "$lib/components/ui/scroll-area/index.js";
   import * as Sidebar from "$lib/components/ui/sidebar/index.js";
   import { deletePreset, getDirEntries, openPreset } from "$lib/modular_agent";
+  import { tabStore } from "$lib/tab-store.svelte";
 
   import PresetActionDialog from "$lib/components/preset-action-dialog.svelte";
   import PresetDeleteDialog from "$lib/components/preset-delete-dialog.svelte";
@@ -32,13 +33,15 @@
 
   async function handleFileClick(name: string) {
     let id = await openPreset(name);
-    goto(`/preset_editor/${id}`);
+    tabStore.openTab(id, name);
+    goto(`/preset_editor/${id}`, { noScroll: true });
   }
 
   async function onNewPreset(name: string) {
     const new_id = await newPresetWithName(name);
     if (new_id) {
-      goto(`/preset_editor/${new_id}`, { invalidateAll: true });
+      tabStore.openTab(new_id, name);
+      goto(`/preset_editor/${new_id}`, { noScroll: true });
     }
   }
 
@@ -71,7 +74,8 @@
     if (!file) return;
 
     const id = await importPreset(file as string, targetDir);
-    goto(`/preset_editor/${id}`, { invalidateAll: true });
+    tabStore.openTab(id, id);
+    goto(`/preset_editor/${id}`, { noScroll: true });
   }
 </script>
 

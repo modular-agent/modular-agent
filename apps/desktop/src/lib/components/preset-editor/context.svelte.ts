@@ -77,6 +77,9 @@ export class EditorState {
   readonly props: EditorStateProps;
   readonly history;
 
+  // Whether this editor's tab is currently active (visible)
+  active = $state(false);
+
   // Reactive state
   running = $state(false);
   nodes = $state.raw<PresetNode[]>([]);
@@ -130,34 +133,34 @@ export class EditorState {
     this.showGrid = settings.show_grid ?? true;
     this.gridGap = settings.grid_gap ?? 24;
 
-    // Auto-open tab (idempotent — if tab already exists, just activates it)
-    const initialFlow = this.props.flow();
-    tabStore.openTab(this.props.preset_id(), initialFlow.name);
-
-    // Sync nodes/edges from page data (separated from running to avoid overwriting optimistic updates)
+    // Sync nodes/edges from flow data
     $effect.pre(() => {
       const flow = this.props.flow();
       this.nodes = [...flow.nodes];
       this.edges = [...flow.edges];
     });
 
-    // Sync running only when preset_id changes (not on every flow update)
+    // Sync running state
     $effect.pre(() => {
       const _id = this.props.preset_id();
       this.running = this.props.flow().running ?? false;
     });
 
-    // Assign callbacks once (they capture `this` — no need to recreate)
-    titlebarState.onStart = () => this.startPreset();
-    titlebarState.onStop = () => this.stopPreset();
-    titlebarState.onShowNewDialog = () => this.showNewPresetDialog();
-    titlebarState.onSavePreset = () => this.savePreset();
-    titlebarState.onShowSaveAsDialog = () => this.showSaveAsDialog();
-    titlebarState.onImportPreset = () => this.importPresetAndNavigate();
-    titlebarState.onExportPreset = () => this.exportPreset();
+    // Titlebar callbacks — only active editor controls the titlebar
+    $effect(() => {
+      if (!this.active) return;
+      titlebarState.onStart = () => this.startPreset();
+      titlebarState.onStop = () => this.stopPreset();
+      titlebarState.onShowNewDialog = () => this.showNewPresetDialog();
+      titlebarState.onSavePreset = () => this.savePreset();
+      titlebarState.onShowSaveAsDialog = () => this.showSaveAsDialog();
+      titlebarState.onImportPreset = () => this.importPresetAndNavigate();
+      titlebarState.onExportPreset = () => this.exportPreset();
+    });
 
-    // Sync titlebar data (reactive on flow changes)
+    // Sync titlebar data — only when active
     $effect.pre(() => {
+      if (!this.active) return;
       const flow = this.props.flow();
       titlebarState.title = flow.name;
       titlebarState.showActions = true;
@@ -167,6 +170,7 @@ export class EditorState {
     });
 
     $effect(() => {
+      if (!this.active) return;
       titlebarState.running = this.running;
     });
 
@@ -793,14 +797,19 @@ export class EditorState {
   async importPresetAndNavigate() {
     const id = await this.importPreset();
     if (id) {
-      goto(`/preset_editor/${id}`, { invalidateAll: true });
+      // Derive imported preset name from current preset's directory
+      const lastSlash = this.name.lastIndexOf("/");
+      const dir = lastSlash >= 0 ? this.name.substring(0, lastSlash + 1) : "";
+      tabStore.openTab(id, dir + id);
+      goto(`/preset_editor/${id}`, { noScroll: true });
     }
   }
 
   async newPresetAndNavigate(name: string) {
     const id = await this.newPreset(name);
     if (id) {
-      goto(`/preset_editor/${id}`, { invalidateAll: true });
+      tabStore.openTab(id, name);
+      goto(`/preset_editor/${id}`, { noScroll: true });
     }
   }
 }

@@ -24,6 +24,7 @@
   import { getCoreSettings, getEdgeColor } from "$lib/agent";
   import { AgentList } from "$lib/components/agent-list/index.js";
   import PresetActionDialog from "$lib/components/preset-action-dialog.svelte";
+  import { tabStore } from "$lib/tab-store.svelte";
   import { Button } from "$lib/components/ui/button/index.js";
   import * as Dialog from "$lib/components/ui/dialog/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
@@ -61,6 +62,7 @@
   // --- MiniMap visibility ---
 
   let showMiniMap = $state(false);
+  let canvasContainer: HTMLElement;
   const HIDE_MARGIN = 50;
 
   function updateMiniMapVisibility() {
@@ -70,7 +72,7 @@
       return;
     }
 
-    const container = document.querySelector(".svelte-flow");
+    const container = canvasContainer?.querySelector(".svelte-flow");
     if (!container) return;
 
     const w = container.clientWidth;
@@ -102,6 +104,7 @@
   let mouseY = $state(0);
 
   function handleMouseMove(event: MouseEvent) {
+    if (!editor.active) return;
     mouseX = event.clientX;
     mouseY = event.clientY;
   }
@@ -117,10 +120,12 @@
   }
 
   function handleKeyup(event: KeyboardEvent) {
+    if (!editor.active) return;
     if (event.key === "Alt") editor.modifierPressed = false;
   }
 
   function handleWindowBlur() {
+    if (!editor.active) return;
     editor.modifierPressed = false;
   }
 
@@ -213,6 +218,7 @@
   const quickAddIds = [...quickAddAgents.keys()];
 
   function handleKeydown(event: KeyboardEvent) {
+    if (!editor.active) return;
     // Skip if already handled by +layout.svelte (e.g. fullscreen toggle)
     if (event.defaultPrevented) return;
 
@@ -362,6 +368,7 @@
   }
 
   function handleWindowMouseDown(event: MouseEvent) {
+    if (!editor.active) return;
     if (editor.openAgentList && !agentListRef?.contains(event.target as Node)) {
       editor.hideAgentList();
     }
@@ -462,7 +469,8 @@
     if (!s) return;
     const new_id = await addPresetWithName(s, editor.saveAsName);
     if (!new_id) return;
-    goto(`/preset_editor/${new_id}`, { invalidateAll: true });
+    tabStore.openTab(new_id, editor.saveAsName);
+    goto(`/preset_editor/${new_id}`, { noScroll: true });
   }
 </script>
 
@@ -475,7 +483,7 @@
 />
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="flex-1 w-full" ondblclick={handlePaneDblClick}>
+<div bind:this={canvasContainer} class="flex-1 w-full" ondblclick={handlePaneDblClick}>
   <SvelteFlow
     attributionPosition="bottom-right"
     class="flex-1 w-full"

@@ -1,22 +1,21 @@
 <script lang="ts">
-  import { useSvelteFlow } from "@xyflow/svelte";
-  import "@xyflow/svelte/dist/style.css";
+  import { getPresetInfo } from "tauri-plugin-modular-agent-api";
 
-  import { setEditor } from "$lib/components/preset-editor/context.svelte";
-  import EditorCanvas from "$lib/components/preset-editor/editor-canvas.svelte";
+  import { tabStore } from "$lib/tab-store.svelte";
 
   import type { PageProps } from "./$types";
 
   let { data }: PageProps = $props();
-  const svelteFlow = useSvelteFlow();
 
-  const editor = setEditor({
-    preset_id: () => data.preset_id,
-    flow: () => data.flow,
-    svelteFlow,
+  // Trigger tab activation on URL navigation (deep links, initial load)
+  $effect(() => {
+    const id = data.preset_id;
+    if (!tabStore.tabs.find((t) => t.id === id)) {
+      // Deep link: fetch name from backend and open tab
+      getPresetInfo(id).then((info) => {
+        if (info) tabStore.openTab(id, info.name);
+      });
+    }
+    tabStore.activeTabId = id;
   });
 </script>
-
-<div class="flex flex-col w-full h-full {editor.bgColor}">
-  <EditorCanvas />
-</div>

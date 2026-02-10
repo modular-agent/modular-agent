@@ -1,0 +1,81 @@
+<script lang="ts">
+  import { SvelteFlowProvider } from "@xyflow/svelte";
+  import { toast } from "svelte-sonner";
+  import { untrack } from "svelte";
+  import { getPresetInfo, getPresetSpec } from "tauri-plugin-modular-agent-api";
+
+  import { presetToFlow } from "$lib/agent";
+  import { tabStore } from "$lib/tab-store.svelte";
+  import type { PresetFlow } from "$lib/types";
+
+  import EditorInstance from "./editor-instance.svelte";
+
+  // Loaded flow data per tab (reads inside untrack to avoid infinite loop)
+  let flows = $state<Record<string, PresetFlow>>({});
+  let loading = $state<Set<string>>(new Set());
+
+  // Watch tabStore.tabs changes only — untrack flows reads/writes
+  $effect(() => {
+    const currentTabs = tabStore.tabs;
+    const tabIds = new Set(currentTabs.map((t) => t.id));
+
+    untrack(() => {
+      // Load data for new tabs
+      for (const tab of currentTabs) {
+        if (!(tab.id in flows) && !loading.has(tab.id)) {
+          loadFlow(tab.id);
+        }
+      }
+      // Cleanup closed tabs
+      for (const id of Object.keys(flows)) {
+        if (!tabIds.has(id)) {
+          const { [id]: _, ...rest } = flows;
+          flows = rest;
+        }
+      }
+    });
+  });
+
+  async function loadFlow(id: string) {
+    loading = new Set([...loading, id]);
+    try {
+      const info = await getPresetInfo(id);
+      const spec = await getPresetSpec(id);
+      if (!info || !spec) {
+        console.error("Preset not found:", id);
+        return;
+      }
+      const flow = presetToFlow(info, spec);
+      // Check tab still exists before setting
+      if (tabStore.tabs.find((t) => t.id === id)) {
+        flows = { ...flows, [id]: flow };
+      }
+    } catch (e) {
+      console.error("Failed to load preset:", id, e);
+      toast.error("Failed to load preset");
+    } finally {
+      const next = new Set(loading);
+      next.delete(id);
+      loading = next;
+    }
+  }
+</script>
+
+<div class="relative flex-1 min-h-0">
+  {#each tabStore.tabs as tab (tab.id)}
+    {@const isActive = tab.id === tabStore.activeTabId}
+    {@const flow = flows[tab.id]}
+    {#if flow}
+      <div
+        class="absolute inset-0"
+        style:visibility={isActive ? "visible" : "hidden"}
+        style:z-index={isActive ? 1 : 0}
+        style:pointer-events={isActive ? "auto" : "none"}
+      >
+        <SvelteFlowProvider>
+          <EditorInstance tabId={tab.id} {flow} active={isActive} />
+        </SvelteFlowProvider>
+      </div>
+    {/if}
+  {/each}
+</div>

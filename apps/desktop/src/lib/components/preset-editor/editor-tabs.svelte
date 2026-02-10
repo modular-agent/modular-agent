@@ -29,14 +29,15 @@
 
   async function handleTabClick(id: string) {
     if (tabStore.activeTabId === id) return;
+    tabStore.activeTabId = id;
     try {
-      await goto(`/preset_editor/${id}`, { invalidateAll: true });
+      await goto(`/preset_editor/${id}`, { noScroll: true });
     } catch {
       tabStore.closeTab(id);
       if (tabStore.tabs.length === 0) {
         goto("/open_presets");
       } else {
-        goto(`/preset_editor/${tabStore.activeTabId}`, { invalidateAll: true });
+        goto(`/preset_editor/${tabStore.activeTabId}`, { noScroll: true });
       }
     }
   }
@@ -49,7 +50,7 @@
     if (tabStore.tabs.length === 0) {
       await goto("/open_presets");
     } else {
-      await goto(`/preset_editor/${tabStore.activeTabId}`, { invalidateAll: true });
+      await goto(`/preset_editor/${tabStore.activeTabId}`, { noScroll: true });
     }
   }
 
