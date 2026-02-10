@@ -14,12 +14,8 @@ async fn test_var_disabled_routing() {
             .await
             .unwrap();
 
-    ma.write_local_input(&var_preset_id, "var1", AgentValue::string("hello"))
-        .await
-        .unwrap();
-
-    // var1 is diabled, but we sent "hello" to it, so the notification should still sent.
-    test_utils::expect_local_value(&var_preset_id, "var1", &AgentValue::string("hello"))
+    // var1 is disabled, but we sent "hello" to it, so the notification should still be sent.
+    test_utils::write_and_expect_local_value(&ma, &var_preset_id, "var1", AgentValue::string("hello"))
         .await
         .unwrap();
 

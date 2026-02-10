@@ -101,6 +101,19 @@ pub async fn expect_local_value(
     expect_external_output(&expected_name, expected_value).await
 }
 
+/// Write a value to a local input variable and expect the same value
+/// to appear as an external output on the same variable name.
+pub async fn write_and_expect_local_value(
+    ma: &ModularAgent,
+    preset_id: &str,
+    var_name: &str,
+    value: AgentValue,
+) -> Result<(), AgentError> {
+    ma.write_local_input(preset_id, var_name, value.clone())
+        .await?;
+    expect_local_value(preset_id, var_name, &value).await
+}
+
 // TestProbeAgent
 
 pub type ProbeEvent = (AgentContext, AgentValue);
