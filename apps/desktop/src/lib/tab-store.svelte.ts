@@ -5,6 +5,7 @@ export type Tab = { id: string; name: string };
 class TabStore {
   tabs = $state<Tab[]>([]);
   activeTabId = $state("");
+  runningMap = $state<Record<string, boolean>>({});
 
   openTab(id: string, name: string) {
     if (!this.tabs.find((t) => t.id === id)) {
@@ -13,8 +14,13 @@ class TabStore {
     this.activeTabId = id;
   }
 
+  setRunning(id: string, running: boolean) {
+    this.runningMap[id] = running;
+  }
+
   closeTab(id: string) {
     removeHistory(id);
+    delete this.runningMap[id];
     const index = this.tabs.findIndex((t) => t.id === id);
     if (index === -1) return;
     this.tabs = this.tabs.filter((t) => t.id !== id);

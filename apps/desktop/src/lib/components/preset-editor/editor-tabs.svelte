@@ -79,6 +79,13 @@
         onmousedown={(e) => handleMouseDown(e, tab.id)}
         title={tab.name}
       >
+        {#if tab.id in tabStore.runningMap}
+          <span
+            class="flex-none size-1.5 rounded-full {tabStore.runningMap[tab.id]
+              ? 'bg-green-500'
+              : 'border border-red-500'}"
+          ></span>
+        {/if}
         <span class="flex-1 truncate text-left">{getDisplayName(tab.name)}</span>
         <span
           role="button"

@@ -174,6 +174,11 @@ export class EditorState {
       titlebarState.running = this.running;
     });
 
+    // Sync running state to tab indicator
+    $effect(() => {
+      tabStore.setRunning(this.preset_id, this.running);
+    });
+
     // Sync tab name when preset name changes (e.g. Save As)
     $effect(() => {
       tabStore.updateName(this.preset_id, this.name);
