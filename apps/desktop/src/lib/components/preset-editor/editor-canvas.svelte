@@ -485,13 +485,14 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div bind:this={canvasContainer} class="flex-1 w-full" ondblclick={handlePaneDblClick}>
   <SvelteFlow
+    id={editor.preset_id}
     attributionPosition="bottom-right"
     class="flex-1 w-full"
     colorMode={(coreSettings.color_mode as "light" | "dark" | "system") || "system"}
     connectionRadius={38}
     deleteKey={["Delete", "Backspace"]}
     bind:edges={editor.edges}
-    initialViewport={editor.props.flow().viewport!}
+    initialViewport={editor.props.flow().viewport ?? { x: 0, y: 0, zoom: 1 }}
     maxZoom={2}
     minZoom={0.1}
     bind:nodes={editor.nodes}
