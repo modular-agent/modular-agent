@@ -117,8 +117,6 @@
   let hide_title = $derived(agentDef?.hide_title ?? false);
   let editTitle = $state(false);
   let titleColor = $derived(titleColorMap[agentDef?.kind ?? "default"] ?? titleColorMap.default);
-
-  const uid = $props.id();
 </script>
 
 {#snippet title()}
