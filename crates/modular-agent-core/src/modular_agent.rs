@@ -290,6 +290,15 @@ impl ModularAgent {
             self.remove_connection_internal(connection);
         }
 
+        // Drop the preset lock before modifying the presets map
+        drop(preset);
+
+        // Remove the preset entry from the map
+        {
+            let mut presets = self.presets.lock().unwrap();
+            presets.swap_remove(id);
+        }
+
         Ok(())
     }
 
