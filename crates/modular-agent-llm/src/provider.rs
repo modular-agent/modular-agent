@@ -4,6 +4,7 @@ use modular_agent_core::AgentError;
 pub enum ProviderKind {
     OpenAI,
     Ollama,
+    Claude,
 }
 
 #[derive(Debug)]
@@ -30,16 +31,16 @@ impl ModelIdentifier {
 
         // Ollama prefix
         if let Some(model_name) = model_str.strip_prefix("ollama/") {
-            #[cfg(not(feature = "ollama"))]
-            return Err(AgentError::InvalidConfig(
-                "Ollama provider not available. Enable 'ollama' feature.".into(),
-            ));
-
             if model_name.is_empty() {
                 return Err(AgentError::InvalidConfig(
                     "Model name after 'ollama/' prefix cannot be empty".into(),
                 ));
             }
+
+            #[cfg(not(feature = "ollama"))]
+            return Err(AgentError::InvalidConfig(
+                "Ollama provider not available. Enable 'ollama' feature.".into(),
+            ));
 
             #[cfg(feature = "ollama")]
             return Ok(Self {
@@ -50,20 +51,40 @@ impl ModelIdentifier {
 
         // OpenAI prefix
         if let Some(model_name) = model_str.strip_prefix("openai/") {
-            #[cfg(not(feature = "openai"))]
-            return Err(AgentError::InvalidConfig(
-                "OpenAI provider not available. Enable 'openai' feature.".into(),
-            ));
-
             if model_name.is_empty() {
                 return Err(AgentError::InvalidConfig(
                     "Model name after 'openai/' prefix cannot be empty".into(),
                 ));
             }
 
+            #[cfg(not(feature = "openai"))]
+            return Err(AgentError::InvalidConfig(
+                "OpenAI provider not available. Enable 'openai' feature.".into(),
+            ));
+
             #[cfg(feature = "openai")]
             return Ok(Self {
                 provider: ProviderKind::OpenAI,
+                model_name: model_name.to_string(),
+            });
+        }
+
+        // Claude prefix
+        if let Some(model_name) = model_str.strip_prefix("claude/") {
+            if model_name.is_empty() {
+                return Err(AgentError::InvalidConfig(
+                    "Model name after 'claude/' prefix cannot be empty".into(),
+                ));
+            }
+
+            #[cfg(not(feature = "claude"))]
+            return Err(AgentError::InvalidConfig(
+                "Claude provider not available. Enable 'claude' feature.".into(),
+            ));
+
+            #[cfg(feature = "claude")]
+            return Ok(Self {
+                provider: ProviderKind::Claude,
                 model_name: model_name.to_string(),
             });
         }
@@ -74,7 +95,7 @@ impl ModelIdentifier {
             // Only error if it looks like a provider prefix (no dots, reasonable length)
             if prefix.len() < 20 && !prefix.contains('.') {
                 return Err(AgentError::InvalidConfig(format!(
-                    "Unknown provider '{}'. Use 'openai/' or 'ollama/' prefix.",
+                    "Unknown provider '{}'. Use 'openai/', 'ollama/', or 'claude/' prefix.",
                     prefix
                 )));
             }
@@ -83,7 +104,7 @@ impl ModelIdentifier {
         // Default: OpenAI (backward compatibility)
         #[cfg(not(feature = "openai"))]
         return Err(AgentError::InvalidConfig(
-            "OpenAI provider not available. Specify 'ollama/' prefix.".into(),
+            "OpenAI provider not available. Specify 'ollama/' or 'claude/' prefix.".into(),
         ));
 
         #[cfg(feature = "openai")]
@@ -153,6 +174,22 @@ mod tests {
         let result = ModelIdentifier::parse("gpt-5-nano").unwrap();
         assert_eq!(result.provider, ProviderKind::OpenAI);
         assert_eq!(result.model_name, "gpt-5-nano");
+    }
+
+    #[cfg(feature = "claude")]
+    #[test]
+    fn test_parse_claude_prefix() {
+        let result = ModelIdentifier::parse("claude/claude-sonnet-4-5-20250514").unwrap();
+        assert_eq!(result.provider, ProviderKind::Claude);
+        assert_eq!(result.model_name, "claude-sonnet-4-5-20250514");
+    }
+
+    #[cfg(feature = "claude")]
+    #[test]
+    fn test_parse_claude_empty_model() {
+        let result = ModelIdentifier::parse("claude/");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("cannot be empty"));
     }
 
     #[test]

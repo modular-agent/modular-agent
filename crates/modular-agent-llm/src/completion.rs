@@ -111,6 +111,10 @@ impl AsAgent for CompletionAgent {
 
         // Route to appropriate provider
         match model_id.provider {
+            #[cfg(feature = "claude")]
+            ProviderKind::Claude => Err(AgentError::InvalidConfig(
+                "Claude does not support text completions. Use ChatAgent instead.".into(),
+            )),
             #[cfg(feature = "openai")]
             ProviderKind::OpenAI => {
                 self.process_openai(

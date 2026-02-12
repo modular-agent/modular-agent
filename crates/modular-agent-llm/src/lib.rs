@@ -14,6 +14,9 @@ pub mod responses;
 #[cfg(feature = "openai")]
 pub(crate) mod openai_client;
 
+#[cfg(feature = "claude")]
+pub(crate) mod claude_client;
+
 #[cfg(feature = "ollama")]
 pub(crate) mod ollama_client;
 

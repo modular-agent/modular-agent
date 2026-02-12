@@ -84,6 +84,10 @@ impl AsAgent for EmbeddingsAgent {
 
         // Route to appropriate provider
         match model_id.provider {
+            #[cfg(feature = "claude")]
+            ProviderKind::Claude => Err(AgentError::InvalidConfig(
+                "Claude does not support embeddings. Use OpenAI or Ollama instead.".into(),
+            )),
             #[cfg(feature = "openai")]
             ProviderKind::OpenAI => {
                 self.process_openai(ctx, port, value, &model_id.model_name, config_options)

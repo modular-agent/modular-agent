@@ -194,6 +194,7 @@ pub fn message_to_chat_completion_msg(msg: &Message) -> ChatCompletionRequestMes
             .into(),
         "tool" => ChatCompletionRequestToolMessageArgs::default()
             .content(msg.content.clone())
+            .tool_call_id(msg.id.clone().unwrap_or_default())
             .build()
             .unwrap()
             .into(),

@@ -1,10 +1,10 @@
 # LLM Agents for Modular Agent
 
-LLM integration library providing chat, completion, embeddings, and responses agents for OpenAI and Ollama.
+LLM integration library providing chat, completion, embeddings, and responses agents for OpenAI, Ollama, and Claude (Anthropic).
 
 ## Features
 
-- **ChatAgent** - Multi-provider chat with streaming and tool support (OpenAI/Ollama)
+- **ChatAgent** - Multi-provider chat with streaming and tool support (OpenAI/Ollama/Claude)
 - **ResponsesAgent** - OpenAI Responses API with server-side conversation state
 - **CompletionAgent** - Text completion (OpenAI/Ollama)
 - **EmbeddingsAgent** - Vector embeddings (OpenAI/Ollama)
@@ -18,10 +18,20 @@ LLM integration library providing chat, completion, embeddings, and responses ag
 modular-agent-llm = "0.11.0"
 ```
 
+## Model Prefix
+
+Use `provider/model-name` format to select the provider:
+
+- `openai/gpt-5-mini` - OpenAI
+- `ollama/llama3.2:1b` - Ollama
+- `claude/claude-sonnet-4-5-20250514` - Claude (Anthropic)
+- `gpt-5-nano` - No prefix defaults to OpenAI
+
 ## Feature Flags
 
 - `openai` (default) - OpenAI API support
 - `ollama` (default) - Ollama local LLM support
+- `claude` (default) - Claude (Anthropic) API support
 - `image` (default) - Image support in messages
 
 ## ResponsesAgent (Responses API)
@@ -54,6 +64,10 @@ The ResponsesAgent uses OpenAI's new Responses API, which provides:
 | `OPENAI_API_KEY` | OpenAI API key |
 | `OPENAI_API_BASE` | Custom OpenAI endpoint |
 | `OLLAMA_API_BASE_URL` | Ollama server URL |
+| `CLAUDE_API_KEY` | Claude (Anthropic) API key |
+| `ANTHROPIC_API_KEY` | Claude API key (fallback) |
+| `CLAUDE_API_BASE` | Custom Claude API endpoint |
+| `ANTHROPIC_API_BASE` | Claude API endpoint (fallback) |
 
 ## License
 

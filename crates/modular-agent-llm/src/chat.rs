@@ -8,6 +8,9 @@ use crate::provider::{ModelIdentifier, ProviderKind};
 #[cfg(feature = "openai")]
 use crate::openai_client;
 
+#[cfg(feature = "claude")]
+use crate::claude_client;
+
 #[cfg(feature = "ollama")]
 use crate::ollama_client;
 
@@ -19,6 +22,8 @@ const PORT_MESSAGE: &str = "message";
 const PORT_RESPONSE: &str = "response";
 
 const CONFIG_MODEL: &str = "model";
+const CONFIG_CLAUDE_API_KEY: &str = "claude_api_key";
+const CONFIG_CLAUDE_API_BASE: &str = "claude_api_base";
 const CONFIG_OPENAI_API_KEY: &str = "openai_api_key";
 const CONFIG_OPENAI_API_BASE: &str = "openai_api_base";
 const CONFIG_OLLAMA_URL: &str = "ollama_url";
@@ -27,6 +32,7 @@ const CONFIG_STREAM: &str = "stream";
 const CONFIG_TOOLS: &str = "tools";
 
 const DEFAULT_CONFIG_MODEL: &str = "gpt-5-nano";
+const DEFAULT_CLAUDE_API_BASE: &str = "https://api.anthropic.com";
 const DEFAULT_OPENAI_API_BASE: &str = "https://api.openai.com/v1";
 const DEFAULT_OLLAMA_URL: &str = "http://localhost:11434";
 
@@ -35,6 +41,7 @@ const DEFAULT_OLLAMA_URL: &str = "http://localhost:11434";
 /// # Model Format
 /// - `openai/gpt-5-mini` - Uses OpenAI API
 /// - `ollama/llama3.2:1b` - Uses Ollama
+/// - `claude/claude-sonnet-4-5-20250514` - Uses Claude API
 /// - `gpt-5-nano` - No prefix defaults to OpenAI (backward compatible)
 #[modular_agent(
     title = "Chat",
@@ -45,12 +52,16 @@ const DEFAULT_OLLAMA_URL: &str = "http://localhost:11434";
     string_config(name = CONFIG_MODEL, default = DEFAULT_CONFIG_MODEL),
     text_config(name = CONFIG_TOOLS),
     object_config(name = CONFIG_OPTIONS),
+    string_global_config(name = CONFIG_CLAUDE_API_KEY, title = "Claude API Key"),
+    string_global_config(name = CONFIG_CLAUDE_API_BASE, title = "Claude API Base URL", default = DEFAULT_CLAUDE_API_BASE),
     string_global_config(name = CONFIG_OPENAI_API_KEY, title = "OpenAI API Key"),
     string_global_config(name = CONFIG_OPENAI_API_BASE, title = "OpenAI API Base URL", default = DEFAULT_OPENAI_API_BASE),
     string_global_config(name = CONFIG_OLLAMA_URL, title = "Ollama URL", default = DEFAULT_OLLAMA_URL),
 )]
 pub struct ChatAgent {
     data: AgentData,
+    #[cfg(feature = "claude")]
+    claude_manager: claude_client::ClaudeManager,
     #[cfg(feature = "openai")]
     openai_manager: openai_client::OpenAIManager,
     #[cfg(feature = "ollama")]
@@ -62,6 +73,8 @@ impl AsAgent for ChatAgent {
     fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
             data: AgentData::new(ma, id, spec),
+            #[cfg(feature = "claude")]
+            claude_manager: claude_client::ClaudeManager::new(),
             #[cfg(feature = "openai")]
             openai_manager: openai_client::OpenAIManager::new(),
             #[cfg(feature = "ollama")]
@@ -111,6 +124,18 @@ impl AsAgent for ChatAgent {
 
         // Route to appropriate provider
         match model_id.provider {
+            #[cfg(feature = "claude")]
+            ProviderKind::Claude => {
+                self.process_claude(
+                    ctx,
+                    messages,
+                    &model_id.model_name,
+                    config_options,
+                    config_tools,
+                    use_stream,
+                )
+                .await
+            }
             #[cfg(feature = "openai")]
             ProviderKind::OpenAI => {
                 self.process_openai(
@@ -298,6 +323,232 @@ impl ChatAgent {
                 self.output(ctx.clone(), PORT_RESPONSE.to_string(), out_response)
                     .await?;
             }
+
+            Ok(())
+        }
+    }
+
+    #[cfg(feature = "claude")]
+    async fn process_claude(
+        &mut self,
+        ctx: AgentContext,
+        messages: im::Vector<AgentValue>,
+        model_name: &str,
+        config_options: AgentValueMap<String, AgentValue>,
+        config_tools: String,
+        use_stream: bool,
+    ) -> Result<(), AgentError> {
+        use futures::StreamExt;
+        use modular_agent_core::tool::list_tool_infos_patterns;
+
+        let client = self.claude_manager.get_client(self.ma())?;
+
+        // Convert messages (separate system)
+        let (system, claude_messages) = claude_client::messages_to_claude(&messages);
+
+        // Build tools
+        let tools: Option<Vec<claude_client::ClaudeTool>> = if config_tools.is_empty() {
+            None
+        } else {
+            let infos = list_tool_infos_patterns(&config_tools).map_err(|e| {
+                AgentError::InvalidConfig(format!(
+                    "Invalid regex patterns in tools config: {}",
+                    e
+                ))
+            })?;
+            Some(
+                infos
+                    .into_iter()
+                    .map(claude_client::tool_info_to_claude_tool)
+                    .collect(),
+            )
+        };
+
+        // Build request
+        let mut request = claude_client::ClaudeRequest {
+            model: model_name.to_string(),
+            max_tokens: 8192,
+            messages: claude_messages,
+            system,
+            stream: if use_stream { Some(true) } else { None },
+            tools,
+            thinking: None,
+        };
+
+        // Merge options
+        if !config_options.is_empty() {
+            let options_json = serde_json::to_value(&config_options)
+                .map_err(|e| AgentError::InvalidValue(format!("Invalid JSON in options: {}", e)))?;
+
+            let mut request_json = serde_json::to_value(&request)
+                .map_err(|e| AgentError::InvalidValue(format!("Serialization error: {}", e)))?;
+
+            if let (Some(request_obj), Some(options_obj)) =
+                (request_json.as_object_mut(), options_json.as_object())
+            {
+                for (key, value) in options_obj {
+                    request_obj.insert(key.clone(), value.clone());
+                }
+            }
+            request = serde_json::from_value::<claude_client::ClaudeRequest>(request_json)
+                .map_err(|e| AgentError::InvalidValue(format!("Deserialization error: {}", e)))?;
+        }
+
+        let id = uuid::Uuid::new_v4().to_string();
+        if use_stream {
+            let mut stream = client.create_message_stream(&request).await?;
+
+            let mut message = Message::assistant(String::new());
+            message.id = Some(id.clone());
+
+            let mut content = String::new();
+            let mut thinking = String::new();
+            let mut tool_calls: Vec<ToolCall> = Vec::new();
+
+            // Track block types by index
+            let mut block_types: std::collections::HashMap<usize, String> =
+                std::collections::HashMap::new();
+            let mut current_tool_id: Option<String> = None;
+            let mut current_tool_name: Option<String> = None;
+            let mut current_tool_arguments = String::new();
+
+            while let Some(event) = stream.next().await {
+                let event = event?;
+
+                match event {
+                    claude_client::ClaudeStreamEvent::ContentBlockStart {
+                        index,
+                        content_block,
+                    } => {
+                        match &content_block {
+                            claude_client::ClaudeResponseBlock::Text { .. } => {
+                                block_types.insert(index, "text".to_string());
+                            }
+                            claude_client::ClaudeResponseBlock::ToolUse { id, name, .. } => {
+                                block_types.insert(index, "tool_use".to_string());
+                                current_tool_id = Some(id.clone());
+                                current_tool_name = Some(name.clone());
+                                current_tool_arguments.clear();
+                            }
+                            claude_client::ClaudeResponseBlock::Thinking { .. } => {
+                                block_types.insert(index, "thinking".to_string());
+                            }
+                            claude_client::ClaudeResponseBlock::RedactedThinking { .. } => {
+                                block_types.insert(index, "redacted_thinking".to_string());
+                                if !thinking.is_empty() {
+                                    thinking.push('\n');
+                                }
+                                thinking.push_str("[redacted]");
+                            }
+                        }
+                    }
+                    claude_client::ClaudeStreamEvent::ContentBlockDelta { index, delta } => {
+                        let block_type = block_types.get(&index).map(|s| s.as_str());
+                        match delta {
+                            claude_client::ClaudeDelta::TextDelta { text } => {
+                                if block_type == Some("text") {
+                                    content.push_str(&text);
+                                    message.content = content.clone();
+                                    if !thinking.is_empty() {
+                                        message.thinking = Some(thinking.clone());
+                                    }
+                                    if !tool_calls.is_empty() {
+                                        message.tool_calls = Some(tool_calls.clone().into());
+                                    }
+                                    self.output(
+                                        ctx.clone(),
+                                        PORT_MESSAGE.to_string(),
+                                        message.clone().into(),
+                                    )
+                                    .await?;
+                                }
+                            }
+                            claude_client::ClaudeDelta::ThinkingDelta {
+                                thinking: thought,
+                            } => {
+                                thinking.push_str(&thought);
+                            }
+                            claude_client::ClaudeDelta::InputJsonDelta { partial_json } => {
+                                current_tool_arguments.push_str(&partial_json);
+                            }
+                            claude_client::ClaudeDelta::SignatureDelta { .. } => {
+                                // Skip signature deltas
+                            }
+                        }
+                    }
+                    claude_client::ClaudeStreamEvent::ContentBlockStop { .. } => {
+                        // Finalize tool call if one was being built
+                        if let Some(name) = current_tool_name.take() {
+                            let parameters: serde_json::Value =
+                                serde_json::from_str(&current_tool_arguments)
+                                    .unwrap_or_default();
+                            tool_calls.push(ToolCall {
+                                function: ToolCallFunction {
+                                    id: current_tool_id.take(),
+                                    name,
+                                    parameters,
+                                },
+                            });
+                            current_tool_arguments.clear();
+
+                            message.content = content.clone();
+                            if !thinking.is_empty() {
+                                message.thinking = Some(thinking.clone());
+                            }
+                            message.tool_calls = Some(tool_calls.clone().into());
+                            self.output(
+                                ctx.clone(),
+                                PORT_MESSAGE.to_string(),
+                                message.clone().into(),
+                            )
+                            .await?;
+                        }
+                    }
+                    claude_client::ClaudeStreamEvent::MessageStop {} => {
+                        // Final output with all accumulated data
+                        message.content = content.clone();
+                        if !thinking.is_empty() {
+                            message.thinking = Some(thinking.clone());
+                        }
+                        if !tool_calls.is_empty() {
+                            message.tool_calls = Some(tool_calls.clone().into());
+                        }
+                        self.output(
+                            ctx.clone(),
+                            PORT_MESSAGE.to_string(),
+                            message.clone().into(),
+                        )
+                        .await?;
+                    }
+                    claude_client::ClaudeStreamEvent::Error { error } => {
+                        return Err(AgentError::IoError(format!(
+                            "Claude stream error: {}",
+                            error.message
+                        )));
+                    }
+                    _ => {
+                        // MessageStart, MessageDelta, Ping - skip
+                    }
+                }
+            }
+
+            Ok(())
+        } else {
+            let response = client.create_message(&request).await?;
+
+            let mut message = claude_client::message_from_claude_response(&response);
+            message.id = Some(id.clone());
+
+            self.output(
+                ctx.clone(),
+                PORT_MESSAGE.to_string(),
+                message.clone().into(),
+            )
+            .await?;
+
+            let out_response = AgentValue::from_serialize(&response)?;
+            self.output(ctx.clone(), PORT_RESPONSE.to_string(), out_response)
+                .await?;
 
             Ok(())
         }
