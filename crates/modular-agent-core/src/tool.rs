@@ -322,10 +322,12 @@ pub async fn call_tools(
                 AgentError::InvalidValue(format!("Failed to parse tool call parameters: {}", e))
             })?;
         let tool_resp = call_tool(ctx.clone(), call.function.name.as_str(), args).await?;
-        resp_messages.push(Message::tool(
+        let mut msg = Message::tool(
             call.function.name.clone(),
             tool_resp.to_json().to_string(),
-        ));
+        );
+        msg.id = call.function.id.clone();
+        resp_messages.push(msg);
     }
 
     Ok(resp_messages.into())
