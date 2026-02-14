@@ -7,48 +7,6 @@
 //! in a stream-based architecture. It supports defining agent behaviors, managing
 //! agent flows, and handling agent input/output through a channel-based messaging system.
 //!
-//! ## Quick Start
-//!
-//! ```rust,no_run
-//! use modular_agent_core::{AgentError, AgentValue, ModularAgent, ModularAgentEvent};
-//!
-//! #[tokio::main]
-//! async fn main() -> Result<(), AgentError> {
-//!     // 1. Initialize and prepare ModularAgent
-//!     let ma = ModularAgent::init()?;
-//!     ma.ready().await?;
-//!
-//!     // 2. Subscribe to output events BEFORE starting preset (avoid race condition)
-//!     let output_name = "output".to_string();
-//!     let mut output_rx = ma.subscribe_to_event(move |event| {
-//!         if let ModularAgentEvent::ExternalOutput(name, value) = event {
-//!             if name == output_name {
-//!                 return Some(value);
-//!             }
-//!         }
-//!         None
-//!     });
-//!
-//!     // 3. Load and start a preset from file
-//!     let preset_id = ma.open_preset_from_file("preset.json", None).await?;
-//!     ma.start_preset(&preset_id).await?;
-//!
-//!     // 4. Send input to the agent network via external input
-//!     ma.write_external_input("input".to_string(), AgentValue::string("Hello")).await?;
-//!
-//!     // 5. Receive output from the agent network
-//!     if let Some(value) = output_rx.recv().await {
-//!         println!("Output: {:?}", value);
-//!     }
-//!
-//!     // 6. Cleanup
-//!     ma.stop_preset(&preset_id).await?;
-//!     ma.quit();
-//!
-//!     Ok(())
-//! }
-//! ```
-//!
 //! ## Core Concepts
 //!
 //! ### ModularAgent
@@ -62,22 +20,15 @@
 //! asynchronously. Implement the [`AsAgent`] trait to create custom agents, or use the
 //! `#[modular_agent]` macro for declarative agent definitions.
 //!
-//! ### External I/O
-//!
-//! External agents provide I/O to the agent network:
-//!
-//! - **ExternalInputAgent** (`ExtIn->`): Entry point for external input. When you call
-//!   [`ModularAgent::write_external_input`], the value is delivered to all `ExternalInputAgent`
-//!   instances listening to that name, which then forward it to connected agents.
-//!
-//! - **ExternalOutputAgent** (`->ExtOut`): Exit point for external output. When an agent sends
-//!   a value to an `ExternalOutputAgent`, it broadcasts to that channel, triggering a
-//!   [`ModularAgentEvent::ExternalOutput`] event.
-//!
 //! ### Presets
 //!
 //! Presets are collections of agents and their connections, defined in JSON format.
 //! They can be loaded from files and managed via [`ModularAgent`] methods.
+//!
+//! ## Quick Start
+//!
+//! See the [CLI example](https://github.com/modular-agent/modular-agent-core/blob/main/examples/cli.rs)
+//! for a complete working example of loading a preset and running agents from the command line.
 //!
 //! ## Feature Flags
 //!
@@ -88,14 +39,14 @@
 //! - `test-utils` - Testing utilities including TestProbeAgent
 
 mod agent;
-mod external_agent;
 mod config;
 mod context;
 mod definition;
 mod error;
+mod external_agent;
 mod id;
-mod modular_agent;
 mod message;
+mod modular_agent;
 mod output;
 mod preset;
 mod registry;
