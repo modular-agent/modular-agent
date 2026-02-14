@@ -292,7 +292,7 @@ pub fn messages_to_response_input(
         let role_str = match msg.role.as_str() {
             "user" => "user",
             "assistant" => "assistant",
-            "system" => "system",
+            "system" | "developer" => "developer",
             "tool" => "tool",
             _ => "user",
         };
@@ -302,7 +302,7 @@ pub fn messages_to_response_input(
             // Build message with image content
             let content = serde_json::json!([
                 { "type": "input_text", "text": msg.content },
-                { "type": "input_image", "image_url": image.get_base64() }
+                { "type": "input_image", "detail": "auto", "image_url": image.get_base64() }
             ]);
             let item_json = serde_json::json!({
                 "type": "message",

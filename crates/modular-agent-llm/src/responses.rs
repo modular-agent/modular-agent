@@ -33,7 +33,7 @@ const DEFAULT_MODEL: &str = "gpt-5-mini";
 /// # Configuration
 /// - `model`: Model name (default: "gpt-5-mini")
 /// - `stream`: Enable streaming mode
-/// - `use_conversation_state`: Use server-side conversation state (default: true)
+/// - `use_conversation_state`: Use server-side conversation state
 /// - `tools`: Tool patterns to enable (regex, newline-separated)
 /// - `options`: Additional request options as JSON
 ///
@@ -48,7 +48,7 @@ const DEFAULT_MODEL: &str = "gpt-5-mini";
     inputs = [PORT_MESSAGE, PORT_RESET],
     outputs = [PORT_MESSAGE, PORT_RESPONSE],
     boolean_config(name = CONFIG_STREAM, title = "Stream"),
-    boolean_config(name = CONFIG_USE_CONVERSATION_STATE, title = "Use Conversation State", default = true),
+    boolean_config(name = CONFIG_USE_CONVERSATION_STATE, title = "Use Conversation State"),
     string_config(name = CONFIG_MODEL, default = DEFAULT_MODEL),
     text_config(name = CONFIG_TOOLS),
     object_config(name = CONFIG_OPTIONS),
