@@ -20,10 +20,18 @@ static MODULAR_AGENT_PATH: &'static str = ".modular_agent";
 static MODULAR_AGENT_PRESETS_PATH: &'static str = "presets";
 
 const EMIT_PRESET_LIST_CHANGED: &str = "ma:preset_list_changed";
+const EMIT_PRESET_RENAMED: &str = "ma:preset_renamed";
 
 #[derive(Clone, Serialize)]
 struct PresetListChangedPayload {
     path: String,
+}
+
+#[derive(Clone, Serialize)]
+struct PresetRenamedPayload {
+    id: String,
+    #[serde(rename = "newName")]
+    new_name: String,
 }
 
 /// Extract parent directory path from a preset name.
@@ -111,18 +119,203 @@ impl ModularAgentApp {
         Ok(())
     }
 
-    // /// Rename an preset by its ID, and rename its file.
-    // pub fn rename_preset(&self, old_name: &str, new_name: &str) -> Result<String> {
-    //     let old_id = self
-    //         .get_preset_id(old_name)
-    //         .ok_or_else(|| anyhow!("Preset not found: {}", old_name))?;
+    /// Move a preset file to a different directory.
+    pub async fn move_preset(&self, app: &AppHandle, name: &str, target_dir: &str) -> Result<()> {
+        if name.contains("..") || name.contains('\\') {
+            bail!("Invalid preset name");
+        }
 
-    //     if !is_valid_preset_name(new_name) {
-    //         return Err(anyhow!("Invalid preset name: {}", new_name));
-    //     }
+        let basename = name.rsplit('/').next().unwrap_or(name);
+        let new_name = if target_dir.is_empty() {
+            basename.to_string()
+        } else {
+            format!("{}/{}", target_dir, basename)
+        };
 
-    //     Err(anyhow!("Not implemented"))
-    // }
+        if name == new_name {
+            return Ok(());
+        }
+
+        if !is_valid_preset_name(&new_name) {
+            bail!("Invalid preset name: {}", new_name);
+        }
+
+        // Block moving running presets
+        if let Some(id) = self.get_preset_id(name) {
+            let infos = self.ma.get_preset_infos().await;
+            if infos.iter().any(|p| p.id == id && p.running) {
+                bail!("Cannot move a running preset. Stop it first.");
+            }
+        }
+
+        let old_path = preset_path(name)?;
+        let new_path = preset_path(&new_name)?;
+
+        if !old_path.exists() {
+            bail!("Preset file not found: {}", name);
+        }
+        if new_path.exists() {
+            bail!("A preset with this name already exists: {}", new_name);
+        }
+
+        // Ensure target directory exists
+        if let Some(parent) = new_path.parent() {
+            if !parent.exists() {
+                std::fs::create_dir_all(parent)?;
+            }
+        }
+
+        // Move file — source and target are always under ~/.modular_agent/presets/
+        std::fs::rename(&old_path, &new_path)
+            .with_context(|| format!("Failed to move preset: {} -> {}", name, new_name))?;
+
+        // Update in-memory state if preset is open
+        if let Some(id) = self.get_preset_id(name) {
+            {
+                let mut presets = self.presets.lock().unwrap();
+                presets.remove(name);
+                presets.insert(new_name.clone(), id.clone());
+            }
+            // Update core Preset.name
+            if let Err(e) = self.ma.rename_preset(&id, new_name.clone()).await {
+                log::warn!("move_preset: rename_preset({}) failed: {}", id, e);
+            }
+            let _ = app.emit(EMIT_PRESET_RENAMED, PresetRenamedPayload {
+                id,
+                new_name: new_name.clone(),
+            });
+        }
+
+        // Update auto_start_presets
+        update_auto_start_presets(app, name, &new_name);
+
+        // Emit list changed for both old and new parent directories
+        let old_parent = parent_preset_path(name);
+        let new_parent = parent_preset_path(&new_name);
+        let _ = app.emit(EMIT_PRESET_LIST_CHANGED, PresetListChangedPayload { path: old_parent.clone() });
+        let _ = app.emit(EMIT_PRESET_LIST_CHANGED, PresetListChangedPayload { path: new_parent });
+
+        // Clean up empty ancestor directories
+        if let Some(parent) = old_path.parent() {
+            if let Ok(root) = presets_dir() {
+                cleanup_empty_ancestors(app, parent, &root);
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Move a folder (and all its contents) to a different directory.
+    pub async fn move_folder(&self, app: &AppHandle, path: &str, target_dir: &str) -> Result<()> {
+        // Validate paths to prevent path traversal
+        if !path.is_empty() && (path.contains("..") || path.contains('\\') || path.starts_with('/')) {
+            bail!("Invalid folder path");
+        }
+        if !target_dir.is_empty() && (target_dir.contains("..") || target_dir.contains('\\') || target_dir.starts_with('/')) {
+            bail!("Invalid target directory");
+        }
+
+        let basename = path.rsplit('/').next().unwrap_or(path);
+        let new_path_str = if target_dir.is_empty() {
+            basename.to_string()
+        } else {
+            format!("{}/{}", target_dir, basename)
+        };
+
+        if path == new_path_str {
+            return Ok(());
+        }
+
+        // Prevent moving into self
+        let self_prefix = format!("{}/", path);
+        if target_dir.starts_with(&self_prefix) || target_dir == path {
+            bail!("Cannot move a folder into itself");
+        }
+
+        let presets_root = presets_dir()?;
+        let old_dir = presets_root.join(path);
+        let new_dir = presets_root.join(&new_path_str);
+
+        if !old_dir.exists() || !old_dir.is_dir() {
+            bail!("Folder not found: {}", path);
+        }
+        if new_dir.exists() {
+            bail!("A folder with this name already exists: {}", new_path_str);
+        }
+
+        // Block if any preset inside the folder is running
+        let infos_needed: Vec<String> = {
+            let presets = self.presets.lock().unwrap();
+            presets
+                .iter()
+                .filter(|(name, _)| name.starts_with(&self_prefix))
+                .map(|(_, id)| id.clone())
+                .collect()
+        };
+        if !infos_needed.is_empty() {
+            let infos = self.ma.get_preset_infos().await;
+            for id in &infos_needed {
+                if infos.iter().any(|p| &p.id == id && p.running) {
+                    bail!("Cannot move folder: a preset inside it is running. Stop it first.");
+                }
+            }
+        }
+
+        // Ensure target parent directory exists
+        if let Some(parent) = new_dir.parent() {
+            if !parent.exists() {
+                std::fs::create_dir_all(parent)?;
+            }
+        }
+
+        // Move directory
+        std::fs::rename(&old_dir, &new_dir)
+            .with_context(|| format!("Failed to move folder: {} -> {}", path, new_path_str))?;
+
+        // Update all open presets that were inside the moved folder
+        let old_prefix = format!("{}/", path);
+        let new_prefix = format!("{}/", new_path_str);
+        let affected: Vec<(String, String)> = {
+            let presets = self.presets.lock().unwrap();
+            presets
+                .iter()
+                .filter(|(name, _)| name.starts_with(&old_prefix))
+                .map(|(name, id)| (name.clone(), id.clone()))
+                .collect()
+        };
+
+        for (old_name, id) in &affected {
+            let new_name = format!("{}{}", new_prefix, &old_name[old_prefix.len()..]);
+            {
+                let mut presets = self.presets.lock().unwrap();
+                presets.remove(old_name);
+                presets.insert(new_name.clone(), id.clone());
+            }
+            if let Err(e) = self.ma.rename_preset(id, new_name.clone()).await {
+                log::warn!("move_folder: rename_preset({}) failed: {}", id, e);
+            }
+            let _ = app.emit(EMIT_PRESET_RENAMED, PresetRenamedPayload {
+                id: id.clone(),
+                new_name,
+            });
+        }
+
+        // Update auto_start_presets for all affected entries
+        update_auto_start_presets_prefix(app, &old_prefix, &new_prefix);
+
+        // Emit list changed for both old and new parent directories
+        let old_parent = parent_preset_path(path);
+        let new_parent = parent_preset_path(&new_path_str);
+        let _ = app.emit(EMIT_PRESET_LIST_CHANGED, PresetListChangedPayload { path: old_parent.clone() });
+        let _ = app.emit(EMIT_PRESET_LIST_CHANGED, PresetListChangedPayload { path: new_parent });
+
+        // Clean up empty ancestor directories
+        if let Some(parent) = old_dir.parent() {
+            cleanup_empty_ancestors(app, parent, &presets_root);
+        }
+
+        Ok(())
+    }
 
     pub fn save_preset(&self, name: String, spec: PresetSpec) -> Result<()> {
         let preset_path = preset_path(&name)?;
@@ -403,26 +596,72 @@ fn is_valid_preset_name(new_name: &str) -> bool {
     true
 }
 
-// fn is_valid_preset_path(path: &str) -> bool {
-//     let path = std::path::Path::new(path);
+/// Remove empty directories walking up from `start_dir` toward `presets_root`.
+fn cleanup_empty_ancestors(app: &AppHandle, start_dir: &std::path::Path, presets_root: &std::path::Path) {
+    let mut dir = start_dir.to_path_buf();
+    while dir != *presets_root && dir.starts_with(presets_root) {
+        let is_empty = dir
+            .read_dir()
+            .map(|mut d| d.next().is_none())
+            .unwrap_or(false);
+        if !is_empty {
+            break;
+        }
+        if let Err(e) = std::fs::remove_dir(&dir) {
+            log::warn!("Failed to remove empty directory {:?}: {}", dir, e);
+            break;
+        }
+        // Emit list changed for the parent of the deleted directory
+        if let Ok(rel) = dir.strip_prefix(presets_root) {
+            let parent_path = rel
+                .parent()
+                .map(|p| p.to_string_lossy().replace('\\', "/"))
+                .unwrap_or_default();
+            let _ = app.emit(
+                EMIT_PRESET_LIST_CHANGED,
+                PresetListChangedPayload { path: parent_path },
+            );
+        }
+        dir = match dir.parent() {
+            Some(p) => p.to_path_buf(),
+            None => break,
+        };
+    }
+}
 
-//     // Check for valid file extension
-//     match path.extension().and_then(|s| s.to_str()) {
-//         Some("json") => {}
-//         _ => return false,
-//     }
+/// Update auto_start_presets: replace exact match of old_name with new_name.
+fn update_auto_start_presets(app: &AppHandle, old_name: &str, new_name: &str) {
+    let core_settings = app.state::<Mutex<CoreSettings>>();
+    let mut settings = core_settings.lock().unwrap();
+    let mut changed = false;
+    for entry in settings.auto_start_presets.iter_mut() {
+        if entry == old_name {
+            *entry = new_name.to_string();
+            changed = true;
+        }
+    }
+    drop(settings);
+    if changed {
+        let _ = crate::modular_agent_desktop::settings::save(app);
+    }
+}
 
-//     // Check for valid file name
-//     if let Some(file_stem) = path.file_stem().and_then(|s| s.to_str()) {
-//         if !is_valid_preset_name(file_stem) {
-//             return false;
-//         }
-//     } else {
-//         return false;
-//     }
-
-//     true
-// }
+/// Update auto_start_presets: replace old prefix with new prefix for folder moves.
+fn update_auto_start_presets_prefix(app: &AppHandle, old_prefix: &str, new_prefix: &str) {
+    let core_settings = app.state::<Mutex<CoreSettings>>();
+    let mut settings = core_settings.lock().unwrap();
+    let mut changed = false;
+    for entry in settings.auto_start_presets.iter_mut() {
+        if entry.starts_with(old_prefix) {
+            *entry = format!("{}{}", new_prefix, &entry[old_prefix.len()..]);
+            changed = true;
+        }
+    }
+    drop(settings);
+    if changed {
+        let _ = crate::modular_agent_desktop::settings::save(app);
+    }
+}
 
 #[tauri::command]
 pub fn new_preset_with_name_cmd(
@@ -457,16 +696,31 @@ pub fn new_preset_with_name_cmd(
     Ok(id)
 }
 
-// #[tauri::command]
-// pub fn rename_preset_cmd(
-//     asapp: State<'_, ModularAgentApp>,
-//     old_name: String,
-//     new_name: String,
-// ) -> Result<String, String> {
-//     asapp
-//         .rename_preset(&old_name, &new_name)
-//         .map_err(|e| e.to_string())
-// }
+#[tauri::command]
+pub async fn move_preset_cmd(
+    app: AppHandle,
+    asapp: State<'_, ModularAgentApp>,
+    name: String,
+    target_dir: String,
+) -> Result<(), String> {
+    asapp
+        .move_preset(&app, &name, &target_dir)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn move_folder_cmd(
+    app: AppHandle,
+    asapp: State<'_, ModularAgentApp>,
+    path: String,
+    target_dir: String,
+) -> Result<(), String> {
+    asapp
+        .move_folder(&app, &path, &target_dir)
+        .await
+        .map_err(|e| e.to_string())
+}
 
 #[tauri::command]
 pub async fn delete_preset_cmd(

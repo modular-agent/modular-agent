@@ -49,6 +49,14 @@ export async function closePreset(id: string): Promise<boolean> {
   return await invoke("close_preset_cmd", { id });
 }
 
+export async function movePreset(name: string, targetDir: string): Promise<void> {
+  await invoke("move_preset_cmd", { name, targetDir });
+}
+
+export async function moveFolder(path: string, targetDir: string): Promise<void> {
+  await invoke("move_folder_cmd", { path, targetDir });
+}
+
 export async function deletePreset(name: string): Promise<string> {
   return await invoke("delete_preset_cmd", { name });
 }

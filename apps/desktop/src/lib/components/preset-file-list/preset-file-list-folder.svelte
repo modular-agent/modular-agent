@@ -11,14 +11,30 @@
     name,
     open = $bindable(true),
     class: className,
+    draggable: isDraggable = false,
+    droptarget = false,
     icon,
     onclick,
+    ondragstart,
+    ondragenter,
+    ondragleave,
+    ondrop,
     children,
   }: PresetFileListFolderProps = $props();
 </script>
 
-<Collapsible.Root bind:open>
-  <Collapsible.Trigger class={cn("flex place-items-center gap-1 overflow-hidden", className)} {onclick}>
+<Collapsible.Root bind:open draggable={isDraggable} {ondragstart}>
+  <Collapsible.Trigger
+    class={cn(
+      "flex place-items-center gap-1 overflow-hidden",
+      droptarget && "bg-foreground/20",
+      className,
+    )}
+    {onclick}
+    {ondragenter}
+    {ondragleave}
+    {ondrop}
+  >
     {#if icon}
       {@render icon({ name, open })}
     {:else if open}

@@ -31,7 +31,25 @@ class PresetTreeStore {
     try {
       const es = await getDirEntries(path);
       if (this.refreshSeq.get(path) !== seq) return;
-      this.entries = { ...this.entries, [path]: es };
+
+      // Prune stale children entries for folders that no longer exist
+      const childPrefix = path ? path + "/" : "";
+      const validFolders = new Set(
+        es.filter((e) => e.endsWith("/")).map((e) => childPrefix + e.slice(0, -1)),
+      );
+      const updated: Record<string, string[]> = { ...this.entries, [path]: es };
+      for (const key of Object.keys(updated)) {
+        if (key !== path && key.startsWith(childPrefix)) {
+          const topLevel = key
+            .split("/")
+            .slice(0, (path ? path.split("/").length : 0) + 1)
+            .join("/");
+          if (!validFolders.has(topLevel)) {
+            delete updated[key];
+          }
+        }
+      }
+      this.entries = updated;
     } catch (e) {
       console.error("Failed to refresh preset directory:", e);
     }

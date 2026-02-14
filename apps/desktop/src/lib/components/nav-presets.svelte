@@ -10,9 +10,11 @@
   import * as ContextMenu from "$lib/components/ui/context-menu/index.js";
   import { ScrollArea } from "$lib/components/ui/scroll-area/index.js";
   import * as Sidebar from "$lib/components/ui/sidebar/index.js";
-  import { deletePreset, openPreset } from "$lib/modular_agent";
+  import { deletePreset, moveFolder, movePreset, openPreset } from "$lib/modular_agent";
   import { presetTreeStore } from "$lib/preset-tree-store.svelte";
   import { tabStore } from "$lib/tab-store.svelte";
+
+  import { toast } from "svelte-sonner";
 
   import PresetActionDialog from "$lib/components/preset-action-dialog.svelte";
   import PresetDeleteDialog from "$lib/components/preset-delete-dialog.svelte";
@@ -20,6 +22,11 @@
   let dialog_name = $state("");
   let openNewPresetDialog = $state(false);
   let openDeletePresetDialog = $state(false);
+
+  // Drag & Drop state
+  let dragSource = $state<{ type: "file" | "folder"; path: string } | null>(null);
+  let dropTarget = $state<string | null>(null);
+  let dragEnterCounters = new Map<string, number>();
 
   onMount(() => {
     presetTreeStore.loadRoot();
@@ -73,10 +80,106 @@
     tabStore.openTab(id, id);
     goto(`/preset_editor/${id}`, { noScroll: true });
   }
+
+  // --- Drag & Drop handlers ---
+
+  function handleDragStart(e: DragEvent, type: "file" | "folder", path: string) {
+    if (!e.dataTransfer) return;
+    e.stopPropagation();
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", JSON.stringify({ type, path }));
+    dragSource = { type, path };
+  }
+
+  function handleDragEnd() {
+    dragSource = null;
+    dropTarget = null;
+    dragEnterCounters.clear();
+  }
+
+  function handleDragOver(e: DragEvent) {
+    if (!dragSource) return;
+    e.preventDefault();
+    e.dataTransfer!.dropEffect = "move";
+  }
+
+  function handleDragEnter(e: DragEvent, targetDir: string) {
+    if (!dragSource) return;
+    if (!isValidDropTarget(targetDir)) return;
+    e.preventDefault();
+    const count = (dragEnterCounters.get(targetDir) ?? 0) + 1;
+    dragEnterCounters.set(targetDir, count);
+    dropTarget = targetDir;
+  }
+
+  function handleDragLeave(_e: DragEvent, targetDir: string) {
+    const count = (dragEnterCounters.get(targetDir) ?? 1) - 1;
+    dragEnterCounters.set(targetDir, count);
+    if (count <= 0) {
+      dragEnterCounters.delete(targetDir);
+      if (dropTarget === targetDir) {
+        dropTarget = null;
+      }
+    }
+  }
+
+  function isValidDropTarget(targetDir: string): boolean {
+    if (!dragSource) return false;
+    const { type, path } = dragSource;
+
+    // Compute current parent
+    const currentParent = path.includes("/") ? path.substring(0, path.lastIndexOf("/")) : "";
+    // Same parent → no-op
+    if (targetDir === currentParent) return false;
+
+    // For folders: cannot drop into self or children
+    if (type === "folder") {
+      if (targetDir === path) return false;
+      if (targetDir.startsWith(path + "/")) return false;
+    }
+
+    return true;
+  }
+
+  async function handleDrop(e: DragEvent, targetDir: string) {
+    e.preventDefault();
+    e.stopPropagation();
+    dropTarget = null;
+    dragEnterCounters.clear();
+
+    if (!dragSource) return;
+    if (!isValidDropTarget(targetDir)) return;
+
+    const { type, path } = dragSource;
+    dragSource = null;
+
+    try {
+      if (type === "file") {
+        await movePreset(path, targetDir);
+      } else {
+        await moveFolder(path, targetDir);
+      }
+    } catch (err) {
+      toast.error(String(err));
+    }
+  }
 </script>
 
-{#snippet folder({ name, path, open = false }: { name: string; path: string; open?: boolean })}
-  <PresetFileList.Folder {name} {open} onclick={() => onFolderClick(path)}>
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div ondragend={handleDragEnd} ondragover={handleDragOver}>
+
+{#snippet folder({ name, path, open = false, isRoot = false }: { name: string; path: string; open?: boolean; isRoot?: boolean })}
+  <PresetFileList.Folder
+    {name}
+    {open}
+    draggable={!isRoot}
+    droptarget={dropTarget === path}
+    onclick={() => onFolderClick(path)}
+    ondragstart={(e) => handleDragStart(e, "folder", path)}
+    ondragenter={(e) => handleDragEnter(e, path)}
+    ondragleave={(e) => handleDragLeave(e, path)}
+    ondrop={(e) => handleDrop(e, path)}
+  >
     {@const entries = presetTreeStore.entries[path]}
     {#if entries}
       {#each entries as entry (entry)}
@@ -97,7 +200,14 @@
           {@const fp = path ? `${path}/${entry}` : entry}
           <ContextMenu.Root>
             <ContextMenu.Trigger>
-              <PresetFileList.File name={entry} onclick={() => handleFileClick(fp)} />
+              <PresetFileList.File
+                name={entry}
+                onclick={() => handleFileClick(fp)}
+                ondragstart={(e) => handleDragStart(e, "file", fp)}
+                ondragenter={(e) => handleDragEnter(e, path)}
+                ondragleave={(e) => handleDragLeave(e, path)}
+                ondrop={(e) => handleDrop(e, path)}
+              />
             </ContextMenu.Trigger>
             <ContextMenu.Content>
               <ContextMenu.Item onclick={() => handleNew(fp)}>New</ContextMenu.Item>
@@ -125,7 +235,7 @@
         {:else}
           <ContextMenu.Root>
             <ContextMenu.Trigger>
-              {@render folder({ name: "presets", path: "", open: true })}
+              {@render folder({ name: "presets", path: "", open: true, isRoot: true })}
             </ContextMenu.Trigger>
             <ContextMenu.Content>
               <ContextMenu.Item onclick={() => handleNew("")}>New</ContextMenu.Item>
@@ -137,6 +247,8 @@
     </ScrollArea>
   </Sidebar.GroupContent>
 </Sidebar.Group>
+
+</div>
 
 {#if openNewPresetDialog}
   <PresetActionDialog

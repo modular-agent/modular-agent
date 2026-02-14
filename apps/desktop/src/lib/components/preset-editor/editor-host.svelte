@@ -1,8 +1,11 @@
 <script lang="ts">
   import { SvelteFlowProvider } from "@xyflow/svelte";
+  import { onMount } from "svelte";
   import { toast } from "svelte-sonner";
   import { untrack } from "svelte";
   import { getPresetInfo, getPresetSpec } from "tauri-plugin-modular-agent-api";
+
+  import { listen } from "@tauri-apps/api/event";
 
   import { presetToFlow } from "$lib/agent";
   import { closePreset } from "$lib/modular_agent";
@@ -14,6 +17,23 @@
   // Loaded flow data per tab (reads inside untrack to avoid infinite loop)
   let flows = $state.raw<Record<string, PresetFlow>>({});
   let loading = $state<Set<string>>(new Set());
+
+  // Listen for preset rename events (from move operations)
+  onMount(() => {
+    const unlisten = listen<{ id: string; newName: string }>(
+      "ma:preset_renamed",
+      (event) => {
+        const { id, newName } = event.payload;
+        if (id in flows) {
+          flows = { ...flows, [id]: { ...flows[id], name: newName } };
+        }
+        tabStore.updateName(id, newName);
+      },
+    );
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  });
 
   // Watch tabStore.tabs changes only — untrack flows reads/writes
   $effect(() => {

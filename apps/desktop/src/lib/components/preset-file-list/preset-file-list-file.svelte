@@ -14,7 +14,7 @@
   }: PresetFileListFileProps = $props();
 </script>
 
-<button {type} class={cn("flex place-items-center gap-1 pl-[3px] overflow-hidden", className)} {...rest}>
+<button {type} class={cn("flex place-items-center gap-1 pl-[3px] overflow-hidden", className)} draggable="true" {...rest}>
   {#if icon}
     {@render icon({ name })}
   {:else}
