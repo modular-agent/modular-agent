@@ -562,6 +562,7 @@
       ondisable={() => editor.disable()}
       oncut={() => editor.cutNodesAndEdges()}
       oncopy={() => editor.copyNodesAndEdges()}
+      onexport={() => editor.exportSelected()}
       ontoggleerr={() => editor.toggleErr()}
       onalign={(d) => editor.alignNodes(d)}
       ondistribute={(d) => editor.distributeNodes(d)}

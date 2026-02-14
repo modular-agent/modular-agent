@@ -12,6 +12,7 @@
     ondisable,
     oncut,
     oncopy,
+    onexport,
     ontoggleerr,
     onalign,
     ondistribute,
@@ -25,6 +26,7 @@
     ondisable?: () => void;
     oncut?: () => void;
     oncopy?: () => void;
+    onexport?: () => void;
     ontoggleerr?: () => void;
     onalign?: (direction: "left" | "center" | "right" | "top" | "middle" | "bottom") => void;
     ondistribute?: (direction: "horizontal" | "vertical") => void;
@@ -60,6 +62,7 @@
       Copy
       <ContextMenu.Shortcut>{hk("editor.copy")}</ContextMenu.Shortcut>
     </ContextMenu.Item>
+    <ContextMenu.Item inset onclick={() => handle(onexport)}>Export</ContextMenu.Item>
     <ContextMenu.Separator />
     <ContextMenu.Item inset onclick={() => handle(onenable)}>Enable</ContextMenu.Item>
     <ContextMenu.Item inset onclick={() => handle(ondisable)}>Disable</ContextMenu.Item>

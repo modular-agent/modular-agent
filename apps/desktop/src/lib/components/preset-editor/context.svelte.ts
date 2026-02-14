@@ -234,21 +234,39 @@ export class EditorState {
     }, "Failed to stop preset");
   }
 
+  private downloadJson(data: unknown, filename: string) {
+    const jsonStr = JSON.stringify(data, null, 2);
+    const blob = new Blob([jsonStr], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+  }
+
+  private sanitizeFilename(name: string): string {
+    return name.replace(/[/\\:*?"<>|]/g, "_");
+  }
+
   async exportPreset() {
     await withErrorToast(async () => {
       const s = await getPresetSpec(this.preset_id);
       if (!s) return;
-      const jsonStr = JSON.stringify(s, null, 2);
-      const blob = new Blob([jsonStr], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = this.name + ".json";
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      this.downloadJson(s, this.sanitizeFilename(this.name) + ".json");
     }, "Failed to export preset");
+  }
+
+  async exportSelected() {
+    const [selectedNodes] = this.selectedNodesAndEdges();
+    if (selectedNodes.length === 0) return;
+
+    await withErrorToast(async () => {
+      const data = await this.collectSelectedData();
+      this.downloadJson(data, this.sanitizeFilename(this.name) + "_selected.json");
+    }, "Failed to export selected");
   }
 
   async importPreset(): Promise<string | null> {
@@ -347,18 +365,30 @@ export class EditorState {
     return [selectedNodes, selectedEdges];
   }
 
-  // --- Clipboard operations ---
+  private async collectSelectedData(): Promise<{
+    agents: AgentSpec[];
+    connections: ConnectionSpec[];
+  }> {
+    const [selectedNodes] = this.selectedNodesAndEdges();
+    const nodeIds = new Set(selectedNodes.map((n) => n.id));
 
-  private async copySelected() {
-    const [selectedNodes, selectedEdges] = this.selectedNodesAndEdges();
+    const edgesBetweenSelected = this.edges.filter(
+      (e) => nodeIds.has(e.source) && nodeIds.has(e.target),
+    );
 
     const agents = (
       await Promise.all(selectedNodes.map(async (node) => await getAgentSpec(node.id)))
     ).filter((spec) => spec !== null);
-    const connections = selectedEdges.map((edge) => edgeToConnectionSpec(edge));
+    const connections = edgesBetweenSelected.map((edge) => edgeToConnectionSpec(edge));
 
-    const clipboardData = { agents, connections };
-    await writeText(JSON.stringify(clipboardData));
+    return { agents, connections };
+  }
+
+  // --- Clipboard operations ---
+
+  private async copySelected() {
+    const data = await this.collectSelectedData();
+    await writeText(JSON.stringify(data));
   }
 
   private async readCopied(): Promise<[AgentSpec[], ConnectionSpec[]]> {
