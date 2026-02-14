@@ -4,7 +4,8 @@ use std::{path::PathBuf, sync::Mutex};
 
 use anyhow::{anyhow, bail, Context as _, Result};
 use dirs;
-use tauri::{AppHandle, Manager, State};
+use serde::Serialize;
+use tauri::{AppHandle, Emitter, Manager, State};
 
 use modular_agent_core::mcp::register_tools_from_mcp_json;
 use modular_agent_core::{ModularAgent, PresetSpec};
@@ -17,6 +18,22 @@ use crate::modular_agent_desktop::{
 
 static MODULAR_AGENT_PATH: &'static str = ".modular_agent";
 static MODULAR_AGENT_PRESETS_PATH: &'static str = "presets";
+
+const EMIT_PRESET_LIST_CHANGED: &str = "ma:preset_list_changed";
+
+#[derive(Clone, Serialize)]
+struct PresetListChangedPayload {
+    path: String,
+}
+
+/// Extract parent directory path from a preset name.
+/// e.g., "Category/MyPreset" -> "Category", "MyPreset" -> ""
+fn parent_preset_path(name: &str) -> String {
+    match name.rfind('/') {
+        Some(i) => name[..i].to_string(),
+        None => String::new(),
+    }
+}
 
 pub struct ModularAgentApp {
     ma: ModularAgent,
@@ -409,10 +426,35 @@ fn is_valid_preset_name(new_name: &str) -> bool {
 
 #[tauri::command]
 pub fn new_preset_with_name_cmd(
+    app: AppHandle,
     asapp: State<'_, ModularAgentApp>,
     name: String,
 ) -> Result<String, String> {
-    asapp.new_preset_with_name(name).map_err(|e| e.to_string())
+    let parent_dir = parent_preset_path(&name);
+    let parent_existed =
+        parent_dir.is_empty() || presets_dir().map(|d| d.join(&parent_dir).exists()).unwrap_or(true);
+    let id = asapp
+        .new_preset_with_name(name.clone())
+        .map_err(|e| e.to_string())?;
+    // Save empty preset to disk immediately so it appears in the sidebar
+    asapp
+        .save_preset(name.clone(), PresetSpec::default())
+        .map_err(|e| e.to_string())?;
+    let _ = app.emit(
+        EMIT_PRESET_LIST_CHANGED,
+        PresetListChangedPayload {
+            path: parent_dir.clone(),
+        },
+    );
+    if !parent_existed {
+        let _ = app.emit(
+            EMIT_PRESET_LIST_CHANGED,
+            PresetListChangedPayload {
+                path: parent_preset_path(&parent_dir),
+            },
+        );
+    }
+    Ok(id)
 }
 
 // #[tauri::command]
@@ -428,31 +470,74 @@ pub fn new_preset_with_name_cmd(
 
 #[tauri::command]
 pub async fn delete_preset_cmd(
+    app: AppHandle,
     asapp: State<'_, ModularAgentApp>,
     name: String,
 ) -> Result<(), String> {
-    asapp.delete_preset(&name).await.map_err(|e| e.to_string())
+    asapp
+        .delete_preset(&name)
+        .await
+        .map_err(|e| e.to_string())?;
+    let _ = app.emit(
+        EMIT_PRESET_LIST_CHANGED,
+        PresetListChangedPayload {
+            path: parent_preset_path(&name),
+        },
+    );
+    Ok(())
 }
 
 #[tauri::command]
 pub fn save_preset_cmd(
+    app: AppHandle,
     asapp: State<'_, ModularAgentApp>,
     name: String,
     spec: PresetSpec,
 ) -> Result<(), String> {
-    asapp.save_preset(name, spec).map_err(|e| e.to_string())
+    let is_new = !preset_path_exists(&name);
+    let parent_dir = parent_preset_path(&name);
+    let parent_existed =
+        parent_dir.is_empty() || presets_dir().map(|d| d.join(&parent_dir).exists()).unwrap_or(true);
+    asapp
+        .save_preset(name.clone(), spec)
+        .map_err(|e| e.to_string())?;
+    if is_new {
+        let _ = app.emit(
+            EMIT_PRESET_LIST_CHANGED,
+            PresetListChangedPayload {
+                path: parent_dir.clone(),
+            },
+        );
+        if !parent_existed {
+            let _ = app.emit(
+                EMIT_PRESET_LIST_CHANGED,
+                PresetListChangedPayload {
+                    path: parent_preset_path(&parent_dir),
+                },
+            );
+        }
+    }
+    Ok(())
 }
 
 #[tauri::command]
 pub async fn import_preset_cmd(
+    app: AppHandle,
     asapp: State<'_, ModularAgentApp>,
     path: String,
     target_dir: String,
 ) -> Result<String, String> {
-    asapp
-        .import_preset(path, target_dir)
+    let id = asapp
+        .import_preset(path, target_dir.clone())
         .await
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+    let _ = app.emit(
+        EMIT_PRESET_LIST_CHANGED,
+        PresetListChangedPayload {
+            path: target_dir,
+        },
+    );
+    Ok(id)
 }
 
 #[tauri::command]
