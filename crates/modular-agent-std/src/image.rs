@@ -4,8 +4,8 @@ use std::sync::Arc;
 
 use modular_agent_core::photon_rs::{self, PhotonImage};
 use modular_agent_core::{
-    Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent, ModularAgent,
-    async_trait, modular_agent,
+    Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
+    ModularAgent, async_trait, modular_agent,
 };
 
 const CATEGORY: &str = "Std/Image";
@@ -101,7 +101,7 @@ impl AsAgent for IsBlankImageAgent {
 // ResampleImageAgent
 
 #[modular_agent(
-    title = "Resize Image",
+    title = "Resample Image",
     category = CATEGORY,
     inputs = [PORT_IMAGE],
     outputs = [PORT_IMAGE],
