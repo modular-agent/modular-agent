@@ -29,12 +29,14 @@ pub(crate) fn update_ids(
 
     let mut new_connections = Vec::new();
     for connection in connections {
-        let Some(source) = agent_id_map.get(&connection.source) else {
-            continue;
-        };
-        let Some(target) = agent_id_map.get(&connection.target) else {
-            continue;
-        };
+        let source = agent_id_map
+            .get(&connection.source)
+            .cloned()
+            .unwrap_or_else(|| connection.source.clone());
+        let target = agent_id_map
+            .get(&connection.target)
+            .cloned()
+            .unwrap_or_else(|| connection.target.clone());
         let mut new_connection = connection.clone();
         new_connection.source = source.clone();
         new_connection.target = target.clone();
