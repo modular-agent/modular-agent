@@ -265,6 +265,16 @@ impl ModularAgent {
         Ok(id)
     }
 
+    /// Rename a preset by id.
+    pub async fn rename_preset(&self, id: &str, new_name: String) -> Result<(), AgentError> {
+        let preset = self
+            .get_preset(id)
+            .ok_or_else(|| AgentError::PresetNotFound(id.to_string()))?;
+        let mut preset = preset.lock().await;
+        preset.set_name(new_name);
+        Ok(())
+    }
+
     /// Remove a preset by id.
     ///
     /// Stops the preset if running, then removes all associated agents and connections.
