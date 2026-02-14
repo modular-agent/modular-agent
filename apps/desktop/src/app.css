@@ -43,13 +43,13 @@
   --agent-4: #b3b9d9;
   --agent-5: #d1d7dc;
   --agent-highlight: #fcfc02;
-  --connection-unit: #71717a;
-  --connection-boolean: #f5ec6e;
-  --connection-number: #82dfbb;
-  --connection-string: #97c5f5;
-  --connection-object: #eca838;
-  --connection-image: #cd96fa;
-  --connection-err: #cf4f62;
+  --connection-unit: #b8bcc4;
+  --connection-boolean: #d05050;
+  --connection-number: #48b8a0;
+  --connection-string: #68b8f0;
+  --connection-object: #4070c0;
+  --connection-image: #a880d0;
+  --connection-err: #e08830;
 }
 
 .dark {
@@ -90,13 +90,13 @@
   --agent-4: #b3b9d9;
   --agent-5: #414346;
   --agent-highlight: #fbf49e;
-  --connection-unit: #71717a;
-  --connection-boolean: #f5ec6e;
-  --connection-number: #82dfbb;
-  --connection-string: #97c5f5;
-  --connection-object: #eca838;
-  --connection-image: #cd96fa;
-  --connection-err: #cf4f62;
+  --connection-unit: #b8bcc4;
+  --connection-boolean: #d05050;
+  --connection-number: #48b8a0;
+  --connection-string: #68b8f0;
+  --connection-object: #4070c0;
+  --connection-image: #a880d0;
+  --connection-err: #e08830;
 }
 
 @theme inline {

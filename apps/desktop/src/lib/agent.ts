@@ -110,8 +110,8 @@ const EDGE_COLOR_MAP: Record<string, string> = {
   string: "var(--color-connection-string)",
   text: "var(--color-connection-string)",
   // object-like
-  doc: "var(--color-connection-string)",
   object: "var(--color-connection-object)",
+  doc: "var(--color-connection-object)",
   message: "var(--color-connection-object)",
   // image
   image: "var(--color-connection-image)",
@@ -239,7 +239,7 @@ export async function loadPresetInfos(): Promise<PresetInfoExt[]> {
   const coreSettings = getCoreSettings();
   const auto_start_presets = coreSettings.auto_start_presets || [];
   return presetInfos.map((s) =>
-    auto_start_presets.includes(s.name) ? { ...s, run_on_start: true } : s
+    auto_start_presets.includes(s.name) ? { ...s, run_on_start: true } : s,
   );
 }
 

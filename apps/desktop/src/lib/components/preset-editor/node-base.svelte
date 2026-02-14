@@ -22,10 +22,7 @@
 
   import { Handle, NodeResizer, Position } from "@xyflow/svelte";
   import type { NodeProps, ResizeDragEvent, ResizeParams } from "@xyflow/svelte";
-  import {
-    type AgentDefinition,
-    type AgentSpec,
-  } from "tauri-plugin-modular-agent-api";
+  import { type AgentDefinition, type AgentSpec } from "tauri-plugin-modular-agent-api";
 
   import { getEdgeColor } from "$lib/agent";
   import { ScrollArea } from "$lib/components/ui/scroll-area/index.js";
@@ -80,7 +77,13 @@
 
   async function onResizeEnd(_ev: ResizeDragEvent, params: ResizeParams) {
     if (!data.id) return;
-    await editor.handleResizeEnd(data.id, resizeStartWidth, resizeStartHeight, params.width, params.height);
+    await editor.handleResizeEnd(
+      data.id,
+      resizeStartWidth,
+      resizeStartHeight,
+      params.width,
+      params.height,
+    );
   }
 
   let lastInputCount = $state(0);
@@ -152,11 +155,14 @@
   {/if}
 </div>
 {#each inputs as input, idx}
+  {@const color = getEdgeColor(input)}
   <Handle
     id={input}
     type="target"
     position={Position.Left}
-    style="top: {idx * HANDLE_GAP + handleOffset}px; {DEFAULT_HANDLE_STYLE}"
+    style="top: {idx * HANDLE_GAP + handleOffset}px; {DEFAULT_HANDLE_STYLE}{color
+      ? `background-color: ${color};`
+      : ''}"
   />
 {/each}
 {#each outputs as output, idx}
@@ -165,7 +171,9 @@
     id={output}
     type="source"
     position={Position.Right}
-    style="top: {idx * HANDLE_GAP + handleOffset}px; {DEFAULT_HANDLE_STYLE}{color ? `background-color: ${color};` : ''}"
+    style="top: {idx * HANDLE_GAP + handleOffset}px; {DEFAULT_HANDLE_STYLE}{color
+      ? `background-color: ${color};`
+      : ''}"
   />
 {/each}
 {#if showErr}
@@ -174,6 +182,8 @@
     id="err"
     type="source"
     position={Position.Right}
-    style="top: {(ht ?? height ?? 100) - 20}px; {DEFAULT_HANDLE_STYLE}{errColor ? `background-color: ${errColor};` : ''}"
+    style="top: {(ht ?? height ?? 100) - 20}px; {DEFAULT_HANDLE_STYLE}{errColor
+      ? `background-color: ${errColor};`
+      : ''}"
   />
 {/if}
