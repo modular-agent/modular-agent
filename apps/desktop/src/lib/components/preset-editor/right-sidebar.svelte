@@ -6,7 +6,7 @@
   import { ScrollArea } from "$lib/components/ui/scroll-area/index.js";
   import { Separator } from "$lib/components/ui/separator/index.js";
 
-  import AgentConfig from "./agent-config.svelte";
+  import SidebarConfig from "./sidebar-config.svelte";
   import { useEditor } from "./context.svelte";
 
   const editor = useEditor();
@@ -150,13 +150,12 @@
         {#if Object.keys(inspector.configs).length > 0}
           <form class="flex flex-col gap-2">
             {#each Object.entries(inspector.configs) as [key, value]}
-              <AgentConfig
+              <SidebarConfig
                 name={key}
                 {value}
                 configSpec={inspector.configSpecs[key]}
                 connected={inspector.connectedConfigs.includes(key)}
                 {updateConfig}
-                showHandle={false}
               />
             {/each}
           </form>

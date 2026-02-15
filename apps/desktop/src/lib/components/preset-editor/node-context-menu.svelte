@@ -67,21 +67,69 @@
     <ContextMenu.Item inset onclick={() => handle(onenable)}>Enable</ContextMenu.Item>
     <ContextMenu.Item inset onclick={() => handle(ondisable)}>Disable</ContextMenu.Item>
     <ContextMenu.Separator />
-    <ContextMenu.Item inset onclick={() => handle(ontoggleerr)}>Err</ContextMenu.Item>
+    <ContextMenu.Item inset onclick={() => handle(ontoggleerr)}>Show Err</ContextMenu.Item>
     <ContextMenu.Separator />
     <ContextMenu.Sub>
       <ContextMenu.SubTrigger inset>Align</ContextMenu.SubTrigger>
       <ContextMenu.SubContent>
-        <ContextMenu.Item disabled={selectedCount < 2} onclick={() => { onalign?.("left"); open = false; }}>Align Left</ContextMenu.Item>
-        <ContextMenu.Item disabled={selectedCount < 2} onclick={() => { onalign?.("center"); open = false; }}>Align Center</ContextMenu.Item>
-        <ContextMenu.Item disabled={selectedCount < 2} onclick={() => { onalign?.("right"); open = false; }}>Align Right</ContextMenu.Item>
+        <ContextMenu.Item
+          disabled={selectedCount < 2}
+          onclick={() => {
+            onalign?.("left");
+            open = false;
+          }}>Align Left</ContextMenu.Item
+        >
+        <ContextMenu.Item
+          disabled={selectedCount < 2}
+          onclick={() => {
+            onalign?.("center");
+            open = false;
+          }}>Align Center</ContextMenu.Item
+        >
+        <ContextMenu.Item
+          disabled={selectedCount < 2}
+          onclick={() => {
+            onalign?.("right");
+            open = false;
+          }}>Align Right</ContextMenu.Item
+        >
         <ContextMenu.Separator />
-        <ContextMenu.Item disabled={selectedCount < 2} onclick={() => { onalign?.("top"); open = false; }}>Align Top</ContextMenu.Item>
-        <ContextMenu.Item disabled={selectedCount < 2} onclick={() => { onalign?.("middle"); open = false; }}>Align Middle</ContextMenu.Item>
-        <ContextMenu.Item disabled={selectedCount < 2} onclick={() => { onalign?.("bottom"); open = false; }}>Align Bottom</ContextMenu.Item>
+        <ContextMenu.Item
+          disabled={selectedCount < 2}
+          onclick={() => {
+            onalign?.("top");
+            open = false;
+          }}>Align Top</ContextMenu.Item
+        >
+        <ContextMenu.Item
+          disabled={selectedCount < 2}
+          onclick={() => {
+            onalign?.("middle");
+            open = false;
+          }}>Align Middle</ContextMenu.Item
+        >
+        <ContextMenu.Item
+          disabled={selectedCount < 2}
+          onclick={() => {
+            onalign?.("bottom");
+            open = false;
+          }}>Align Bottom</ContextMenu.Item
+        >
         <ContextMenu.Separator />
-        <ContextMenu.Item disabled={selectedCount < 3} onclick={() => { ondistribute?.("horizontal"); open = false; }}>Distribute Horizontally</ContextMenu.Item>
-        <ContextMenu.Item disabled={selectedCount < 3} onclick={() => { ondistribute?.("vertical"); open = false; }}>Distribute Vertically</ContextMenu.Item>
+        <ContextMenu.Item
+          disabled={selectedCount < 3}
+          onclick={() => {
+            ondistribute?.("horizontal");
+            open = false;
+          }}>Distribute Horizontally</ContextMenu.Item
+        >
+        <ContextMenu.Item
+          disabled={selectedCount < 3}
+          onclick={() => {
+            ondistribute?.("vertical");
+            open = false;
+          }}>Distribute Vertically</ContextMenu.Item
+        >
       </ContextMenu.SubContent>
     </ContextMenu.Sub>
   </ContextMenu.Content>
