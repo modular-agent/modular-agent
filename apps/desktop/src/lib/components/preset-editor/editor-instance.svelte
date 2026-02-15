@@ -34,8 +34,8 @@
   });
 </script>
 
-<div class="flex flex-row w-full h-full {editor.bgColor}">
-  <div class="flex-1 min-w-0 flex flex-col">
+<div class="relative w-full h-full {editor.bgColor}">
+  <div class="absolute inset-0 flex flex-col">
     <EditorCanvas />
   </div>
   {#if editor.sidebarOpen}

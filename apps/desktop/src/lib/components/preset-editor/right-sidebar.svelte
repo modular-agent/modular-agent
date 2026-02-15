@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { onMount, onDestroy } from "svelte";
+
   import XIcon from "@lucide/svelte/icons/x";
 
   import { Button } from "$lib/components/ui/button/index.js";
@@ -11,36 +13,117 @@
   const editor = useEditor();
   const inspector = editor.inspector;
 
+  const DEFAULT_WIDTH = 288;
+  const DEFAULT_HEIGHT = 320;
+
+  let cardEl: HTMLElement;
+  let headerEl: HTMLElement;
+  let isDragging = $state(false);
+  let dragOffsetX = 0;
+  let dragOffsetY = 0;
+
+  let defaultX = $state(0);
+  let defaultY = $state(16);
+  let x = $derived(editor.inspectorX ?? defaultX);
+  let y = $derived(editor.inspectorY ?? defaultY);
+  let width = $derived(editor.inspectorWidth ?? DEFAULT_WIDTH);
+  let height = $derived(editor.inspectorHeight ?? DEFAULT_HEIGHT);
+
+  let resizeObserver: ResizeObserver;
+
+  onMount(() => {
+    if (editor.inspectorX === null && cardEl?.parentElement) {
+      const rect = cardEl.parentElement.getBoundingClientRect();
+      defaultX = rect.width - cardEl.offsetWidth - 16;
+      defaultY = 16;
+    }
+
+    resizeObserver = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (entry && !isDragging) {
+        const w = Math.round(entry.borderBoxSize[0].inlineSize);
+        const h = Math.round(entry.borderBoxSize[0].blockSize);
+        if (w !== width) editor.inspectorWidth = w;
+        if (h !== height) editor.inspectorHeight = h;
+      }
+    });
+    resizeObserver.observe(cardEl);
+  });
+
+  onDestroy(() => {
+    resizeObserver?.disconnect();
+  });
+
+  function handleDragStart(e: PointerEvent) {
+    if ((e.target as HTMLElement).closest("button")) return;
+    isDragging = true;
+    dragOffsetX = e.clientX - x;
+    dragOffsetY = e.clientY - y;
+    headerEl.setPointerCapture(e.pointerId);
+  }
+
+  function handleDragMove(e: PointerEvent) {
+    if (!isDragging) return;
+    const parent = cardEl.parentElement!;
+    const rect = parent.getBoundingClientRect();
+    const cardW = cardEl.offsetWidth;
+    editor.inspectorX = Math.max(0, Math.min(e.clientX - dragOffsetX, rect.width - cardW));
+    editor.inspectorY = Math.max(
+      0,
+      Math.min(e.clientY - dragOffsetY, rect.height - cardEl.offsetHeight),
+    );
+  }
+
+  function handleDragEnd() {
+    isDragging = false;
+  }
+
+  function handleWindowResize() {
+    if (editor.inspectorX === null || !cardEl?.parentElement) return;
+    const rect = cardEl.parentElement.getBoundingClientRect();
+    const maxX = rect.width - cardEl.offsetWidth;
+    const maxY = rect.height - cardEl.offsetHeight;
+    if (editor.inspectorX > maxX) editor.inspectorX = Math.max(0, maxX);
+    if (editor.inspectorY! > maxY) editor.inspectorY = Math.max(0, maxY);
+  }
+
   function updateConfig(key: string, value: any) {
     inspector.onUpdateConfig?.(key, value);
   }
 </script>
 
+<svelte:window onresize={handleWindowResize} />
+
 <div
-  class="w-72 flex-none flex flex-col border-l border-border bg-background h-full overflow-hidden"
+  bind:this={cardEl}
+  class="absolute flex flex-col rounded-lg border border-border bg-background shadow-lg overflow-hidden resize"
+  class:select-none={isDragging}
+  style="left: {x}px; top: {y}px; width: {width}px; height: {height}px; min-width: 240px; min-height: 200px; max-width: calc(100% - {x}px - 16px); max-height: calc(100% - {y}px - 16px); z-index: 40;"
+  onpointerdown={(e) => e.stopPropagation()}
+  role="dialog"
+  tabindex="-1"
 >
-  <!-- Header -->
-  <div class="flex items-center justify-between px-3 py-2 border-b border-border flex-none">
-    <span class="text-sm font-semibold">Inspector</span>
-    <Button
-      variant="ghost"
-      size="icon"
-      class="h-6 w-6"
-      onclick={() => editor.toggleSidebar()}
-    >
-      <XIcon class="h-4 w-4" />
-    </Button>
-  </div>
+  <!-- Header (drag handle) -->
+  <div
+    bind:this={headerEl}
+    class="flex items-center justify-between px-3 py-4 flex-none select-none"
+    style="cursor: {isDragging ? 'grabbing' : 'grab'};"
+    onpointerdown={handleDragStart}
+    onpointermove={handleDragMove}
+    onpointerup={handleDragEnd}
+    role="toolbar"
+    tabindex="-1"
+  ></div>
 
   {#if inspector.hasSelection}
-    <ScrollArea class="flex-1">
-      <div class="p-3 flex flex-col gap-3">
+    <ScrollArea class="flex-1 min-h-0">
+      <div class="px-3 flex flex-col gap-3">
         <!-- Agent Info -->
         <div class="flex flex-col gap-1 text-sm">
-          <div class="font-medium">{inspector.displayTitle}</div>
           {#if inspector.agentDef?.category}
             <div class="text-xs text-muted-foreground">{inspector.agentDef.category}</div>
           {/if}
+          <div class="font-medium">{inspector.displayTitle}</div>
           {#if inspector.agentDef?.description}
             <p class="text-xs text-muted-foreground mt-1">{inspector.agentDef.description}</p>
           {/if}
@@ -67,11 +150,15 @@
     </ScrollArea>
   {:else}
     <div class="flex-1 flex items-center justify-center text-sm text-muted-foreground p-4">
-      {#if inspector.selectedCount === 0}
-        Select a node to inspect
-      {:else}
+      {#if inspector.selectedCount === 0}{:else}
         {inspector.selectedCount} nodes selected
       {/if}
     </div>
   {/if}
 </div>
+
+<style>
+  :global([role="dialog"]::-webkit-resizer) {
+    display: none;
+  }
+</style>

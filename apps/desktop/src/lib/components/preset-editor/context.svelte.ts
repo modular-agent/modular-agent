@@ -110,8 +110,12 @@ export class EditorState {
     return active ? ([this.snapGridSize, this.snapGridSize] as [number, number]) : undefined;
   });
 
-  // Sidebar
+  // Sidebar / Inspector floating card
   sidebarOpen = $state(true);
+  inspectorX = $state<number | null>(null);
+  inspectorY = $state<number | null>(null);
+  inspectorWidth = $state<number | null>(null);
+  inspectorHeight = $state<number | null>(null);
   inspector = new InspectorState();
 
   // Dialog state (shared between menubar and pane context menu)
@@ -227,12 +231,10 @@ export class EditorState {
           return;
         }
 
-        // Early exit: same node, same data reference (position-only changes)
-        if (
-          this.inspector.nodeId === node.id &&
-          this.inspector.configs === node.data.configs
-        )
-          return;
+        // Early exit: same node selected (position-only changes trigger nodes update,
+        // but inspector content doesn't change). Config changes go through
+        // configUpdated event → updateNodeData → new data reference → won't match here.
+        if (this.inspector.nodeId === node.id) return;
 
         const data = node.data;
         this.inspector.selectedCount = selected.length;
@@ -260,7 +262,6 @@ export class EditorState {
 
   toggleSidebar() {
     this.sidebarOpen = !this.sidebarOpen;
-    requestAnimationFrame(() => window.dispatchEvent(new Event("resize")));
   }
 
   // --- SvelteFlow helpers ---
