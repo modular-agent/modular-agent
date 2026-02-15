@@ -52,6 +52,7 @@ use syn::{
 /// - `hide_title` - Hide title in UI
 /// - `hidden` - Hide from UI entirely
 /// - `readonly` - Make read-only in UI
+/// - `detail` - Show only in detail view
 ///
 /// ### Config Types
 ///
@@ -162,6 +163,7 @@ struct CommonConfig {
     hide_title: bool,
     hidden: bool,
     readonly: bool,
+    detail: bool,
 }
 
 struct CustomConfig {
@@ -173,6 +175,7 @@ struct CustomConfig {
     hide_title: bool,
     hidden: bool,
     readonly: bool,
+    detail: bool,
 }
 
 enum ConfigSpec {
@@ -428,6 +431,11 @@ fn expand_modular_agent(
                 } else {
                     quote! {}
                 };
+                let detail = if c.detail {
+                    quote! { let entry = entry.detail(); }
+                } else {
+                    quote! {}
+                };
                 Ok(quote! {
                     .unit_config_with(#name, |entry| {
                         let entry = entry;
@@ -436,6 +444,7 @@ fn expand_modular_agent(
                         #hide_title
                         #hidden
                         #readonly
+                        #detail
                         entry
                     })
                 })
@@ -464,6 +473,11 @@ fn expand_modular_agent(
                 } else {
                     quote! {}
                 };
+                let detail = if c.detail {
+                    quote! { let entry = entry.detail(); }
+                } else {
+                    quote! {}
+                };
                 Ok(quote! {
                     .boolean_config_with(#name, #default, |entry| {
                         let entry = entry;
@@ -472,6 +486,7 @@ fn expand_modular_agent(
                         #hide_title
                         #hidden
                         #readonly
+                        #detail
                         entry
                     })
                 })
@@ -500,6 +515,11 @@ fn expand_modular_agent(
                 } else {
                     quote! {}
                 };
+                let detail = if c.detail {
+                    quote! { let entry = entry.detail(); }
+                } else {
+                    quote! {}
+                };
                 Ok(quote! {
                     .integer_config_with(#name, #default, |entry| {
                         let entry = entry;
@@ -508,6 +528,7 @@ fn expand_modular_agent(
                         #hide_title
                         #hidden
                         #readonly
+                        #detail
                         entry
                     })
                 })
@@ -536,6 +557,11 @@ fn expand_modular_agent(
                 } else {
                     quote! {}
                 };
+                let detail = if c.detail {
+                    quote! { let entry = entry.detail(); }
+                } else {
+                    quote! {}
+                };
                 Ok(quote! {
                     .number_config_with(#name, #default, |entry| {
                         let entry = entry;
@@ -544,6 +570,7 @@ fn expand_modular_agent(
                         #hide_title
                         #hidden
                         #readonly
+                        #detail
                         entry
                     })
                 })
@@ -572,6 +599,11 @@ fn expand_modular_agent(
                 } else {
                     quote! {}
                 };
+                let detail = if c.detail {
+                    quote! { let entry = entry.detail(); }
+                } else {
+                    quote! {}
+                };
                 Ok(quote! {
                     .string_config_with(#name, #default, |entry| {
                         let entry = entry;
@@ -580,6 +612,7 @@ fn expand_modular_agent(
                         #hide_title
                         #hidden
                         #readonly
+                        #detail
                         entry
                     })
                 })
@@ -608,6 +641,11 @@ fn expand_modular_agent(
                 } else {
                     quote! {}
                 };
+                let detail = if c.detail {
+                    quote! { let entry = entry.detail(); }
+                } else {
+                    quote! {}
+                };
                 Ok(quote! {
                     .text_config_with(#name, #default, |entry| {
                         let entry = entry;
@@ -616,6 +654,7 @@ fn expand_modular_agent(
                         #hide_title
                         #hidden
                         #readonly
+                        #detail
                         entry
                     })
                 })
@@ -646,6 +685,11 @@ fn expand_modular_agent(
                 } else {
                     quote! {}
                 };
+                let detail = if c.detail {
+                    quote! { let entry = entry.detail(); }
+                } else {
+                    quote! {}
+                };
                 Ok(quote! {
                     .array_config_with(#name, #default, |entry| {
                         let entry = entry;
@@ -654,6 +698,7 @@ fn expand_modular_agent(
                         #hide_title
                         #hidden
                         #readonly
+                        #detail
                         entry
                     })
                 })
@@ -684,6 +729,11 @@ fn expand_modular_agent(
                 } else {
                     quote! {}
                 };
+                let detail = if c.detail {
+                    quote! { let entry = entry.detail(); }
+                } else {
+                    quote! {}
+                };
                 Ok(quote! {
                     .object_config_with(#name, #default, |entry| {
                         let entry = entry;
@@ -692,6 +742,7 @@ fn expand_modular_agent(
                         #hide_title
                         #hidden
                         #readonly
+                        #detail
                         entry
                     })
                 })
@@ -727,6 +778,11 @@ fn expand_modular_agent(
                 } else {
                     quote! {}
                 };
+                let detail = if c.detail {
+                    quote! { let entry = entry.detail(); }
+                } else {
+                    quote! {}
+                };
                 Ok(quote! {
                     .unit_global_config_with(#name, |entry| {
                         let entry = entry;
@@ -735,6 +791,7 @@ fn expand_modular_agent(
                         #hide_title
                         #hidden
                         #readonly
+                        #detail
                         entry
                     })
                 })
@@ -763,6 +820,11 @@ fn expand_modular_agent(
                 } else {
                     quote! {}
                 };
+                let detail = if c.detail {
+                    quote! { let entry = entry.detail(); }
+                } else {
+                    quote! {}
+                };
                 Ok(quote! {
                     .boolean_global_config_with(#name, #default, |entry| {
                         let entry = entry;
@@ -771,6 +833,7 @@ fn expand_modular_agent(
                         #hide_title
                         #hidden
                         #readonly
+                        #detail
                         entry
                     })
                 })
@@ -799,6 +862,11 @@ fn expand_modular_agent(
                 } else {
                     quote! {}
                 };
+                let detail = if c.detail {
+                    quote! { let entry = entry.detail(); }
+                } else {
+                    quote! {}
+                };
                 Ok(quote! {
                     .integer_global_config_with(#name, #default, |entry| {
                         let entry = entry;
@@ -807,6 +875,7 @@ fn expand_modular_agent(
                         #hide_title
                         #hidden
                         #readonly
+                        #detail
                         entry
                     })
                 })
@@ -835,6 +904,11 @@ fn expand_modular_agent(
                 } else {
                     quote! {}
                 };
+                let detail = if c.detail {
+                    quote! { let entry = entry.detail(); }
+                } else {
+                    quote! {}
+                };
                 Ok(quote! {
                     .number_global_config_with(#name, #default, |entry| {
                         let entry = entry;
@@ -843,6 +917,7 @@ fn expand_modular_agent(
                         #hide_title
                         #hidden
                         #readonly
+                        #detail
                         entry
                     })
                 })
@@ -871,6 +946,11 @@ fn expand_modular_agent(
                 } else {
                     quote! {}
                 };
+                let detail = if c.detail {
+                    quote! { let entry = entry.detail(); }
+                } else {
+                    quote! {}
+                };
                 Ok(quote! {
                     .string_global_config_with(#name, #default, |entry| {
                         let entry = entry;
@@ -879,6 +959,7 @@ fn expand_modular_agent(
                         #hide_title
                         #hidden
                         #readonly
+                        #detail
                         entry
                     })
                 })
@@ -907,6 +988,11 @@ fn expand_modular_agent(
                 } else {
                     quote! {}
                 };
+                let detail = if c.detail {
+                    quote! { let entry = entry.detail(); }
+                } else {
+                    quote! {}
+                };
                 Ok(quote! {
                     .text_global_config_with(#name, #default, |entry| {
                         let entry = entry;
@@ -915,6 +1001,7 @@ fn expand_modular_agent(
                         #hide_title
                         #hidden
                         #readonly
+                        #detail
                         entry
                     })
                 })
@@ -945,6 +1032,11 @@ fn expand_modular_agent(
                 } else {
                     quote! {}
                 };
+                let detail = if c.detail {
+                    quote! { let entry = entry.detail(); }
+                } else {
+                    quote! {}
+                };
                 Ok(quote! {
                     .array_global_config_with(#name, #default, |entry| {
                         let entry = entry;
@@ -953,6 +1045,7 @@ fn expand_modular_agent(
                         #hide_title
                         #hidden
                         #readonly
+                        #detail
                         entry
                     })
                 })
@@ -983,6 +1076,11 @@ fn expand_modular_agent(
                 } else {
                     quote! {}
                 };
+                let detail = if c.detail {
+                    quote! { let entry = entry.detail(); }
+                } else {
+                    quote! {}
+                };
                 Ok(quote! {
                     .object_global_config_with(#name, #default, |entry| {
                         let entry = entry;
@@ -991,6 +1089,7 @@ fn expand_modular_agent(
                         #hide_title
                         #hidden
                         #readonly
+                        #detail
                         entry
                     })
                 })
@@ -1085,6 +1184,7 @@ fn parse_custom_config(list: MetaList) -> syn::Result<CustomConfig> {
     let mut hide_title = false;
     let mut hidden = false;
     let mut readonly = false;
+    let mut detail = false;
     let nested = list.parse_args_with(Punctuated::<Meta, Comma>::parse_terminated)?;
 
     for meta in nested {
@@ -1111,10 +1211,13 @@ fn parse_custom_config(list: MetaList) -> syn::Result<CustomConfig> {
             Meta::Path(p) if p.is_ident("readonly") => {
                 readonly = true;
             }
+            Meta::Path(p) if p.is_ident("detail") => {
+                detail = true;
+            }
             other => {
                 return Err(syn::Error::new_spanned(
                     other,
-                    "custom_config supports name, default, type/type_, title, description, hide_title, hidden, readonly",
+                    "custom_config supports name, default, type/type_, title, description, hide_title, hidden, readonly, detail",
                 ));
             }
         }
@@ -1134,6 +1237,7 @@ fn parse_custom_config(list: MetaList) -> syn::Result<CustomConfig> {
         hide_title,
         hidden,
         readonly,
+        detail,
     })
 }
 
@@ -1180,10 +1284,13 @@ fn parse_common_config(list: MetaList) -> syn::Result<CommonConfig> {
             Meta::Path(p) if p.is_ident("readonly") => {
                 cfg.readonly = true;
             }
+            Meta::Path(p) if p.is_ident("detail") => {
+                cfg.detail = true;
+            }
             other => {
                 return Err(syn::Error::new_spanned(
                     other,
-                    "config supports name, default, title, description, hide_title, hidden, readonly",
+                    "config supports name, default, title, description, hide_title, hidden, readonly, detail",
                 ));
             }
         }
@@ -1205,6 +1312,7 @@ fn custom_config_call(method: &str, cfg: CustomConfig) -> syn::Result<proc_macro
         hide_title,
         hidden,
         readonly,
+        detail,
     } = cfg;
     let title = title.map(|t| quote! { let entry = entry.title(#t); });
     let description = description.map(|d| quote! { let entry = entry.description(#d); });
@@ -1223,6 +1331,11 @@ fn custom_config_call(method: &str, cfg: CustomConfig) -> syn::Result<proc_macro
     } else {
         quote! {}
     };
+    let detail = if detail {
+        quote! { let entry = entry.detail(); }
+    } else {
+        quote! {}
+    };
     let method_ident = format_ident!("{}", method);
 
     Ok(quote! {
@@ -1233,6 +1346,7 @@ fn custom_config_call(method: &str, cfg: CustomConfig) -> syn::Result<proc_macro
             #hide_title
             #hidden
             #readonly
+            #detail
             entry
         })
     })

@@ -31,7 +31,7 @@ const GLOBAL_CUSTOM_KEY: &str = "global_custom";
     boolean_config(name = BOOLEAN_KEY, default = true, title = "Bool Title"),
     integer_config(name = INTEGER_KEY, default = 7, hidden),
     number_config(name = NUMBER_KEY, default = 3.14, description = "pi"),
-    string_config(name = STRING_KEY, default = "hello"),
+    string_config(name = STRING_KEY, default = "hello", detail),
     text_config(name = TEXT_KEY, default = "long"),
     array_config(
         name = ARRAY_KEY,
@@ -49,12 +49,13 @@ const GLOBAL_CUSTOM_KEY: &str = "global_custom";
         type_ = "custom",
         default = AgentValue::string("c"),
         title = "Custom",
-        description = "Custom desc"
+        description = "Custom desc",
+        detail
     ),
     boolean_global_config(name = GLOBAL_BOOLEAN_KEY, title = "Global Bool"),
     integer_global_config(name = GLOBAL_INTEGER_KEY, default = -1),
     number_global_config(name = GLOBAL_NUMBER_KEY, default = 2.71, description = "e", hidden),
-    string_global_config(name = GLOBAL_STRING_KEY, default = "gs"),
+    string_global_config(name = GLOBAL_STRING_KEY, default = "gs", detail),
     text_global_config(name = GLOBAL_TEXT_KEY, default = "gt"),
     array_global_config(name = GLOBAL_ARRAY_KEY),
     object_global_config(
@@ -129,6 +130,7 @@ fn config_entries_are_generated() {
     assert!(configs[INTEGER_KEY].hidden);
     assert_eq!(configs[NUMBER_KEY].description.as_deref(), Some("pi"));
     assert_eq!(configs[STRING_KEY].value, AgentValue::string("hello"));
+    assert!(configs[STRING_KEY].detail);
     assert_eq!(configs[TEXT_KEY].value, AgentValue::string("long"));
 
     let obj_entry = &configs[OBJECT_KEY];
@@ -141,6 +143,7 @@ fn config_entries_are_generated() {
     assert_eq!(custom_entry.value, AgentValue::string("c"));
     assert_eq!(custom_entry.title.as_deref(), Some("Custom"));
     assert_eq!(custom_entry.description.as_deref(), Some("Custom desc"));
+    assert!(custom_entry.detail);
 }
 
 #[test]
@@ -165,6 +168,7 @@ fn global_config_entries_are_generated() {
     assert_eq!(configs[GLOBAL_NUMBER_KEY].description.as_deref(), Some("e"));
     assert!(configs[GLOBAL_NUMBER_KEY].hidden);
     assert_eq!(configs[GLOBAL_STRING_KEY].value, AgentValue::string("gs"));
+    assert!(configs[GLOBAL_STRING_KEY].detail);
     assert_eq!(configs[GLOBAL_TEXT_KEY].value, AgentValue::string("gt"));
 
     let obj_entry = &configs[GLOBAL_OBJECT_KEY];

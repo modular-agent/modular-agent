@@ -105,6 +105,10 @@ pub struct AgentConfigSpec {
     /// Whether this configuration entry is read-only.
     #[serde(default, skip_serializing_if = "<&bool>::not")]
     pub readonly: bool,
+
+    /// Whether this configuration entry should only be shown in the detail view.
+    #[serde(default, skip_serializing_if = "<&bool>::not")]
+    pub detail: bool,
 }
 
 /// Factory function type for creating new agent instances.
@@ -594,6 +598,12 @@ impl AgentConfigSpec {
         self.readonly = true;
         self
     }
+
+    /// Marks this config as detail-only (shown only in detail view). Returns self for method chaining.
+    pub fn detail(mut self) -> Self {
+        self.detail = true;
+        self
+    }
 }
 
 #[cfg(test)]
@@ -644,6 +654,7 @@ mod tests {
         assert_eq!(entry.description.as_ref().unwrap(), "display_description");
         assert_eq!(entry.hide_title, false);
         assert_eq!(entry.readonly, true);
+        assert_eq!(entry.detail, true);
         let entry = default_configs.get("hide_title_value").unwrap();
         assert_eq!(entry.value, AgentValue::integer(1));
         assert_eq!(entry.type_.as_ref().unwrap(), "integer");
@@ -651,6 +662,7 @@ mod tests {
         assert_eq!(entry.description, None);
         assert_eq!(entry.hide_title, true);
         assert_eq!(entry.readonly, true);
+        assert_eq!(entry.detail, false);
     }
 
     #[test]
@@ -671,13 +683,13 @@ mod tests {
         print!("{}", json);
         assert_eq!(
             json,
-            r#"{"kind":"test","name":"echo","title":"Echo","category":"Test","inputs":["in"],"outputs":["out"],"configs":{"value":{"value":"abc","type":"string","title":"display_title","description":"display_description","readonly":true},"hide_title_value":{"value":1,"type":"integer","hide_title":true,"readonly":true}}}"#
+            r#"{"kind":"test","name":"echo","title":"Echo","category":"Test","inputs":["in"],"outputs":["out"],"configs":{"value":{"value":"abc","type":"string","title":"display_title","description":"display_description","readonly":true,"detail":true},"hide_title_value":{"value":1,"type":"integer","hide_title":true,"readonly":true}}}"#
         );
     }
 
     #[test]
     fn test_deserialize_echo_agent_definition() {
-        let json = r#"{"kind":"test","name":"echo","title":"Echo","category":"Test","inputs":["in"],"outputs":["out"],"configs":{"value":{"value":"abc","type":"string","title":"display_title","description":"display_description","readonly":true},"hide_title_value":{"value":1,"type":"integer","hide_title":true,"readonly":true}}}"#;
+        let json = r#"{"kind":"test","name":"echo","title":"Echo","category":"Test","inputs":["in"],"outputs":["out"],"configs":{"value":{"value":"abc","type":"string","title":"display_title","description":"display_description","readonly":true,"detail":true},"hide_title_value":{"value":1,"type":"integer","hide_title":true,"readonly":true}}}"#;
         let def: AgentDefinition = serde_json::from_str(json).unwrap();
         assert_eq!(def.kind, "test");
         assert_eq!(def.name, "echo");
@@ -693,6 +705,7 @@ mod tests {
         assert_eq!(entry.title.as_ref().unwrap(), "display_title");
         assert_eq!(entry.description.as_ref().unwrap(), "display_description");
         assert_eq!(entry.hide_title, false);
+        assert_eq!(entry.detail, true);
         let (key, entry) = default_configs.get_index(1).unwrap();
         assert_eq!(key, "hide_title_value");
         assert_eq!(entry.type_.as_ref().unwrap(), "integer");
@@ -880,6 +893,7 @@ mod tests {
                 .title("display_title")
                 .description("display_description")
                 .readonly()
+                .detail()
         })
         .integer_config_with("hide_title_value", 1, |entry| entry.hide_title().readonly())
     }
