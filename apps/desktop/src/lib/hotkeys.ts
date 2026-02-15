@@ -43,6 +43,12 @@ export const DEFAULT_HOTKEYS: HotkeyDefinition[] = [
   { id: "editor.undo", label: "Undo", group: "Editor", defaultKey: "mod+z" },
   { id: "editor.redo", label: "Redo", group: "Editor", defaultKey: "mod+shift+z" },
   { id: "editor.toggle_grid", label: "Toggle Grid", group: "Editor", defaultKey: "g" },
+  {
+    id: "editor.toggle_sidebar",
+    label: "Toggle Inspector",
+    group: "Editor",
+    defaultKey: "mod+shift+b",
+  },
   // Quick Add
   {
     id: "quick_add.1",

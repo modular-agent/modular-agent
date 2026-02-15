@@ -2,7 +2,7 @@ import { writeText, readText } from "@tauri-apps/plugin-clipboard-manager";
 import { open } from "@tauri-apps/plugin-dialog";
 
 import { goto } from "$app/navigation";
-import { getContext, setContext } from "svelte";
+import { getContext, setContext, untrack } from "svelte";
 
 import type { useSvelteFlow } from "@xyflow/svelte";
 import { toast } from "svelte-sonner";
@@ -20,6 +20,7 @@ import {
 
 import {
   edgeToConnectionSpec,
+  getAgentDefinitions,
   getCoreSettings,
   setCoreSettings,
   importPreset as importPresetAPI,
@@ -30,6 +31,7 @@ import { tabStore } from "$lib/tab-store.svelte";
 import { titlebarState } from "$lib/titlebar-state.svelte";
 import type { PresetFlow, PresetNode, PresetEdge } from "$lib/types";
 
+import { InspectorState } from "./inspector-state.svelte";
 import {
   AddAgentCommand,
   DeleteCommand,
@@ -107,6 +109,10 @@ export class EditorState {
     const active = this.snapEnabled !== this.modifierPressed;
     return active ? ([this.snapGridSize, this.snapGridSize] as [number, number]) : undefined;
   });
+
+  // Sidebar
+  sidebarOpen = $state(true);
+  inspector = new InspectorState();
 
   // Dialog state (shared between menubar and pane context menu)
   openNewPresetDialog = $state(false);
@@ -190,6 +196,71 @@ export class EditorState {
     $effect(() => {
       tabStore.setDirty(this.preset_id, this.dirty);
     });
+
+    // Inspector: action callback (closure over `this`, reads state at invocation time)
+    this.inspector.onUpdateConfig = (key: string, value: any) => {
+      const nodeId = this.inspector.nodeId;
+      if (!nodeId) return;
+      const node = this.nodes.find((n) => n.id === nodeId);
+      if (!node) return;
+      const oldValue = node.data.configs?.[key];
+      this.updateNodeConfig(nodeId, key, oldValue, value);
+    };
+
+    // Inspector: sync ViewModel from Model (nodes + edges)
+    $effect(() => {
+      const nodes = this.nodes; // tracked: triggers on any node change
+      const edges = this.edges; // tracked: triggers on edge add/remove
+      untrack(() => {
+        const selected = nodes.filter((n) => n.selected);
+        const node = selected.length === 1 ? selected[0] : null;
+
+        // Early exit: no selection and nothing changed
+        if (!node) {
+          if (
+            this.inspector.nodeId === null &&
+            this.inspector.selectedCount === selected.length
+          )
+            return;
+          this.inspector.selectedCount = selected.length;
+          this.inspector.nodeId = null;
+          return;
+        }
+
+        // Early exit: same node, same data reference (position-only changes)
+        if (
+          this.inspector.nodeId === node.id &&
+          this.inspector.configs === node.data.configs
+        )
+          return;
+
+        const data = node.data;
+        this.inspector.selectedCount = selected.length;
+        this.inspector.nodeId = node.id;
+        this.inspector.defName = data.def_name;
+        this.inspector.title = data.title ?? null;
+        this.inspector.disabled = data.disabled ?? false;
+        this.inspector.showErr = data.show_err ?? false;
+        this.inspector.configs = data.configs ?? {};
+        this.inspector.configSpecs = data.config_specs ?? {};
+        this.inspector.inputs = data.inputs ?? [];
+        this.inspector.outputs = data.outputs ?? [];
+        this.inspector.agentDef = getAgentDefinitions()[data.def_name] ?? null;
+        this.inspector.connectedConfigs = edges
+          .filter(
+            (e) =>
+              e.target === node.id && e.targetHandle?.startsWith("config:"),
+          )
+          .map((e) => e.targetHandle?.substring(7) ?? "");
+      });
+    });
+  }
+
+  // --- Sidebar ---
+
+  toggleSidebar() {
+    this.sidebarOpen = !this.sidebarOpen;
+    requestAnimationFrame(() => window.dispatchEvent(new Event("resize")));
   }
 
   // --- SvelteFlow helpers ---

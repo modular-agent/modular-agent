@@ -22,9 +22,10 @@
     configSpec: AgentConfigSpec | undefined;
     connected: boolean;
     updateConfig: (key: string, value: any) => void;
+    showHandle?: boolean;
   };
 
-  let { name, value, configSpec, connected = false, updateConfig }: Props = $props();
+  let { name, value, configSpec, connected = false, updateConfig, showHandle = true }: Props = $props();
 
   const CONFIG_HANDLE_STYLE =
     "width: 10px; height: 10px; background-color: #000; border: 2px solid #fff;";
@@ -343,12 +344,14 @@
   <div class="flex-none relative flex items-center">
     {#if configSpec?.hide_title !== true}
       <h3>{configSpec?.title || name}</h3>
-      <Handle
-        id="config:{name}"
-        type="target"
-        position={Position.Left}
-        style={`top: 50%; transform: translate(${HANDLE_X_OFFSET}, -50%); ${CONFIG_HANDLE_STYLE}`}
-      />
+      {#if showHandle}
+        <Handle
+          id="config:{name}"
+          type="target"
+          position={Position.Left}
+          style={`top: 50%; transform: translate(${HANDLE_X_OFFSET}, -50%); ${CONFIG_HANDLE_STYLE}`}
+        />
+      {/if}
     {/if}
   </div>
   {#if configSpec?.description}

@@ -6,6 +6,7 @@
 
   import { setEditor } from "./context.svelte";
   import EditorCanvas from "./editor-canvas.svelte";
+  import RightSidebar from "./right-sidebar.svelte";
 
   let { tabId, flow, active }: { tabId: string; flow: PresetFlow; active: boolean } = $props();
 
@@ -33,6 +34,11 @@
   });
 </script>
 
-<div class="flex flex-col w-full h-full {editor.bgColor}">
-  <EditorCanvas />
+<div class="flex flex-row w-full h-full {editor.bgColor}">
+  <div class="flex-1 min-w-0 flex flex-col">
+    <EditorCanvas />
+  </div>
+  {#if editor.sidebarOpen}
+    <RightSidebar />
+  {/if}
 </div>

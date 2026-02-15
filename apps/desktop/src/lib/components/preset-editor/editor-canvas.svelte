@@ -1,5 +1,6 @@
 <script lang="ts">
   import { fade } from "svelte/transition";
+  import PanelRightIcon from "@lucide/svelte/icons/panel-right";
 
   import {
     Background,
@@ -208,6 +209,12 @@
     {
       id: "editor.toggle_grid",
       handler: () => editor.toggleGrid(),
+      skipEditable: true,
+      preventDefault: true,
+    },
+    {
+      id: "editor.toggle_sidebar",
+      handler: () => editor.toggleSidebar(),
       skipEditable: true,
       preventDefault: true,
     },
@@ -543,6 +550,13 @@
             src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNiIgaGVpZ2h0PSIxNiIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiNmZmZmZmYiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIiBjbGFzcz0ibHVjaWRlIGx1Y2lkZS1ncmlkM3gzLWljb24gbHVjaWRlLWdyaWQtM3gzIj48cmVjdCB3aWR0aD0iMTgiIGhlaWdodD0iMTgiIHg9IjMiIHk9IjMiIHJ4PSIyIi8+PHBhdGggZD0iTTMgOWgxOCIvPjxwYXRoIGQ9Ik0zIDE1aDE4Ii8+PHBhdGggZD0iTTkgM3YxOCIvPjxwYXRoIGQ9Ik0xNSAzdjE4Ii8+PC9zdmc+"
             alt="grid"
           />
+        </ControlButton>
+        <ControlButton
+          onclick={() => editor.toggleSidebar()}
+          title="Inspector ({formatHotkey(getHotkeyKey(hotkeys, 'editor.toggle_sidebar'))})"
+          class={editor.sidebarOpen ? undefined : "icon-slashed"}
+        >
+          <PanelRightIcon style="width: 16px; height: 16px; color: white;" />
         </ControlButton>
       {/snippet}
     </Controls>
