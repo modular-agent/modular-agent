@@ -34,6 +34,7 @@ export type AgentConfigSpec = {
   description?: string | null;
   hidden?: boolean | null;
   readonly?: boolean | null;
+  detail?: boolean | null;
 };
 
 export type PresetSpec = {
