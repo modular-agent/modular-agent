@@ -289,7 +289,7 @@ impl<T: AsAgent> Agent for T {
     async fn start(&mut self) -> Result<(), AgentError> {
         self.mut_data().status = AgentStatus::Start;
 
-        if let Err(e) = self.start().await {
+        if let Err(e) = <T as AsAgent>::start(self).await {
             self.ma()
                 .emit_agent_error(self.id().to_string(), e.to_string());
             return Err(e);
@@ -300,7 +300,7 @@ impl<T: AsAgent> Agent for T {
 
     async fn stop(&mut self) -> Result<(), AgentError> {
         self.mut_data().status = AgentStatus::Stop;
-        self.stop().await?;
+        <T as AsAgent>::stop(self).await?;
         self.mut_data().status = AgentStatus::Init;
         Ok(())
     }
@@ -311,7 +311,7 @@ impl<T: AsAgent> Agent for T {
         port: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
-        if let Err(e) = self.process(ctx.clone(), port, value).await {
+        if let Err(e) = <T as AsAgent>::process(self, ctx.clone(), port, value).await {
             self.ma()
                 .emit_agent_error(self.id().to_string(), e.to_string());
             self.ma()
