@@ -16,6 +16,8 @@ use ollama_rs::{
     generation::{
         chat::{ChatMessage, MessageRole},
         embeddings::request::GenerateEmbeddingsRequest,
+        tools::ToolCall as OllamaToolCall,
+        tools::ToolCallFunction as OllamaToolCallFunction,
     },
 };
 use schemars::{Schema, json_schema};
@@ -125,8 +127,20 @@ pub fn message_to_chat(msg: Message) -> ChatMessage {
         "assistant" => ChatMessage::assistant(msg.content),
         "system" => ChatMessage::system(msg.content),
         "tool" => ChatMessage::tool(msg.content),
-        _ => ChatMessage::user(msg.content), // Default to user if unknown role
+        _ => ChatMessage::user(msg.content),
     };
+    // Set tool_calls on assistant messages for tool call round-trip
+    if let Some(tool_calls) = &msg.tool_calls {
+        cmsg.tool_calls = tool_calls
+            .iter()
+            .map(|tc| OllamaToolCall {
+                function: OllamaToolCallFunction {
+                    name: tc.function.name.clone(),
+                    arguments: tc.function.parameters.clone(),
+                },
+            })
+            .collect();
+    }
     #[cfg(feature = "image")]
     {
         if let Some(img) = msg.image {
@@ -155,5 +169,55 @@ pub fn from_tool_info_to_ollama_tool_info(
             description: info.description,
             parameters: schema,
         },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use modular_agent_core::ToolCallFunction;
+
+    #[test]
+    fn test_message_to_chat_assistant_without_tool_calls() {
+        let msg = Message::assistant("Hello".to_string());
+        let cmsg = message_to_chat(msg);
+        assert!(cmsg.tool_calls.is_empty());
+        assert_eq!(cmsg.content, "Hello");
+    }
+
+    #[test]
+    fn test_message_to_chat_assistant_with_tool_calls() {
+        let mut msg = Message::assistant("".to_string());
+        msg.tool_calls = Some(im::vector![ToolCall {
+            function: ToolCallFunction {
+                id: Some("call_1".to_string()),
+                name: "get_weather".to_string(),
+                parameters: serde_json::json!({"city": "Tokyo"}),
+            },
+        }]);
+
+        let cmsg = message_to_chat(msg);
+        assert_eq!(cmsg.tool_calls.len(), 1);
+        assert_eq!(cmsg.tool_calls[0].function.name, "get_weather");
+        assert_eq!(
+            cmsg.tool_calls[0].function.arguments,
+            serde_json::json!({"city": "Tokyo"})
+        );
+    }
+
+    #[test]
+    fn test_message_to_chat_user_no_tool_calls() {
+        let msg = Message::user("Hello".to_string());
+        let cmsg = message_to_chat(msg);
+        assert!(cmsg.tool_calls.is_empty());
+        assert_eq!(cmsg.content, "Hello");
+    }
+
+    #[test]
+    fn test_message_to_chat_tool_result() {
+        let msg = Message::tool("my_tool".to_string(), "result".to_string());
+        let cmsg = message_to_chat(msg);
+        assert_eq!(cmsg.content, "result");
+        assert!(cmsg.tool_calls.is_empty());
     }
 }
