@@ -1,5 +1,5 @@
 use modular_agent_core::{
-    AgentContext, AgentData, AgentError, AgentSpec, AgentValue, AsAgent, modular_agent, async_trait,
+    AgentContext, AgentData, AgentError, AgentSpec, AgentValue, AsAgent, async_trait, modular_agent,
 };
 
 static CONFIG_KEY: &str = "config_key";

@@ -14,7 +14,11 @@ struct LiteralNameAgent {
 
 #[async_trait]
 impl AsAgent for LiteralNameAgent {
-    fn new(ma: modular_agent_core::ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(
+        ma: modular_agent_core::ModularAgent,
+        id: String,
+        spec: AgentSpec,
+    ) -> Result<Self, AgentError> {
         Ok(Self {
             data: AgentData::new(ma, id, spec),
         })

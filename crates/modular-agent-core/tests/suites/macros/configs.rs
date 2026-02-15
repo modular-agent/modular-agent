@@ -77,7 +77,11 @@ struct ConfigAgent {
 
 #[async_trait]
 impl AsAgent for ConfigAgent {
-    fn new(ma: modular_agent_core::ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+    fn new(
+        ma: modular_agent_core::ModularAgent,
+        id: String,
+        spec: AgentSpec,
+    ) -> Result<Self, AgentError> {
         Ok(Self {
             data: AgentData::new(ma, id, spec),
         })
@@ -95,14 +99,9 @@ impl AsAgent for ConfigAgent {
 
 #[test]
 fn def_name_is_generated() {
-    assert_eq!(
-        ConfigAgent::DEF_NAME,
-        "main_test::suites::configs::ConfigAgent"
-    );
-    assert_eq!(
-        ConfigAgent::def_name(),
-        "main_test::suites::configs::ConfigAgent"
-    );
+    let expected = concat!(module_path!(), "::", stringify!(ConfigAgent));
+    assert_eq!(ConfigAgent::DEF_NAME, expected);
+    assert_eq!(ConfigAgent::def_name(), expected);
 }
 
 #[test]
