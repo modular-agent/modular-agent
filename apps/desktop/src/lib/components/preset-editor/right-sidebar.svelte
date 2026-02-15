@@ -1,9 +1,8 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
+  import { Tween } from "svelte/motion";
+  import { cubicOut } from "svelte/easing";
 
-  import XIcon from "@lucide/svelte/icons/x";
-
-  import { Button } from "$lib/components/ui/button/index.js";
   import { ScrollArea } from "$lib/components/ui/scroll-area/index.js";
   import { Separator } from "$lib/components/ui/separator/index.js";
 
@@ -12,6 +11,12 @@
 
   const editor = useEditor();
   const inspector = editor.inspector;
+
+  const FADE_OUT_DELAY = 1500;
+  const FADE_OUT_DURATION = 300;
+  const FADE_IN_DURATION = 150;
+
+  const opacity = new Tween(inspector.selectedCount > 0 ? 1 : 0);
 
   const DEFAULT_WIDTH = 288;
   const DEFAULT_HEIGHT = 320;
@@ -87,6 +92,15 @@
     if (editor.inspectorY! > maxY) editor.inspectorY = Math.max(0, maxY);
   }
 
+  $effect(() => {
+    const nothingSelected = inspector.selectedCount === 0;
+    if (nothingSelected) {
+      opacity.set(0, { delay: FADE_OUT_DELAY, duration: FADE_OUT_DURATION, easing: cubicOut });
+    } else {
+      opacity.set(1, { delay: 0, duration: FADE_IN_DURATION, easing: cubicOut });
+    }
+  });
+
   function updateConfig(key: string, value: any) {
     inspector.onUpdateConfig?.(key, value);
   }
@@ -98,9 +112,10 @@
   bind:this={cardEl}
   class="absolute flex flex-col rounded-lg border border-border bg-background shadow-lg overflow-hidden resize"
   class:select-none={isDragging}
-  style="left: {x}px; top: {y}px; width: {width}px; height: {height}px; min-width: 240px; min-height: 200px; max-width: calc(100% - {x}px - 16px); max-height: calc(100% - {y}px - 16px); z-index: 40;"
+  style="left: {x}px; top: {y}px; width: {width}px; height: {height}px; min-width: 240px; min-height: 200px; max-width: calc(100% - {x}px - 16px); max-height: calc(100% - {y}px - 16px); z-index: 40; opacity: {opacity.current}; pointer-events: {opacity.current === 0 ? 'none' : 'auto'};"
   onpointerdown={(e) => e.stopPropagation()}
   role="dialog"
+  aria-hidden={opacity.current === 0}
   tabindex="-1"
 >
   <!-- Header (drag handle) -->
