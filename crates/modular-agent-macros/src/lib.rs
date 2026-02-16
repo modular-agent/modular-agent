@@ -1224,6 +1224,16 @@ fn parse_custom_config(list: MetaList) -> syn::Result<CustomConfig> {
     }
 
     let name = name.ok_or_else(|| syn::Error::new(list.span(), "config missing `name`"))?;
+    // Config names starting with `_` are reserved for stale key migration
+    if let Expr::Lit(ref lit) = name
+        && let syn::Lit::Str(ref s) = lit.lit
+        && s.value().starts_with('_')
+    {
+        return Err(syn::Error::new_spanned(
+            &name,
+            "config name must not start with `_` (reserved for stale key migration)",
+        ));
+    }
     let default =
         default.ok_or_else(|| syn::Error::new(list.span(), "config missing `default`"))?;
     let type_ = type_.ok_or_else(|| syn::Error::new(list.span(), "config missing `type`"))?;
@@ -1264,6 +1274,16 @@ fn parse_common_config(list: MetaList) -> syn::Result<CommonConfig> {
     for meta in nested {
         match meta {
             Meta::NameValue(nv) if nv.path.is_ident("name") => {
+                // Config names starting with `_` are reserved for stale key migration
+                if let Expr::Lit(ref lit) = nv.value
+                    && let syn::Lit::Str(ref s) = lit.lit
+                    && s.value().starts_with('_')
+                {
+                    return Err(syn::Error::new_spanned(
+                        &nv.value,
+                        "config name must not start with `_` (reserved for stale key migration)",
+                    ));
+                }
                 cfg.name = Some(nv.value.clone());
             }
             Meta::NameValue(nv) if nv.path.is_ident("default") => {

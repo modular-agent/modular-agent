@@ -160,7 +160,15 @@ pub struct AgentData {
 
 impl AgentData {
     /// Creates a new `AgentData` instance.
-    pub fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Self {
+    ///
+    /// Removes any `_`-prefixed config keys that were preserved by
+    /// `AgentDefinition::reconcile_spec()` for lazy migration.
+    /// Agents can read these keys from the `spec` parameter in `AsAgent::new()`
+    /// before calling this method.
+    pub fn new(ma: ModularAgent, id: String, mut spec: AgentSpec) -> Self {
+        if let Some(ref mut configs) = spec.configs {
+            configs.retain(|key, _| !key.starts_with('_'));
+        }
         Self {
             ma,
             id,
@@ -359,7 +367,7 @@ pub fn new_agent_boxed<T: Agent>(
 pub(crate) fn agent_new(
     ma: ModularAgent,
     agent_id: String,
-    spec: AgentSpec,
+    mut spec: AgentSpec,
 ) -> Result<Box<dyn Agent>, AgentError> {
     let def;
     {
@@ -370,6 +378,8 @@ pub(crate) fn agent_new(
             .ok_or_else(|| AgentError::UnknownDefName(def_name.to_string()))?
             .clone();
     }
+
+    def.reconcile_spec(&mut spec);
 
     if let Some(new_boxed) = def.new_boxed {
         return new_boxed(ma, agent_id, spec);
@@ -385,5 +395,37 @@ pub(crate) fn agent_new(
         //     );
         // }
         _ => return Err(AgentError::UnknownDefKind(def.kind.to_string()).into()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::AgentConfigs;
+    use crate::value::AgentValue;
+
+    #[test]
+    fn test_agent_data_new_strips_prefixed_keys() {
+        let ma = ModularAgent::init().unwrap();
+        let mut configs = AgentConfigs::new();
+        configs.set("name".into(), AgentValue::string("hello"));
+        configs.set("count".into(), AgentValue::integer(10));
+        configs.set("_old_key".into(), AgentValue::string("stale"));
+        configs.set("_removed".into(), AgentValue::integer(42));
+
+        let spec = AgentSpec {
+            configs: Some(configs),
+            ..Default::default()
+        };
+
+        let data = AgentData::new(ma.clone(), "test_id".into(), spec);
+
+        let c = data.spec.configs.as_ref().unwrap();
+        assert_eq!(c.get_string_or_default("name"), "hello");
+        assert_eq!(c.get_integer_or_default("count"), 10);
+        assert!(c.get("_old_key").is_err());
+        assert!(c.get("_removed").is_err());
+
+        ma.quit();
     }
 }

@@ -204,6 +204,26 @@ impl AgentConfigs {
             .cloned()
             .unwrap_or_default()
     }
+
+    /// Returns an iterator over the configuration keys.
+    pub fn keys(&self) -> indexmap::map::Keys<'_, String, AgentValue> {
+        self.0.keys()
+    }
+
+    /// Removes a configuration value by key, returning the value if it existed.
+    ///
+    /// Uses `shift_remove` to preserve insertion order.
+    pub fn remove(&mut self, key: &str) -> Option<AgentValue> {
+        self.0.shift_remove(key)
+    }
+
+    /// Retains only the configuration entries for which the predicate returns `true`.
+    pub fn retain<F>(&mut self, f: F)
+    where
+        F: FnMut(&String, &mut AgentValue) -> bool,
+    {
+        self.0.retain(f);
+    }
 }
 
 impl IntoIterator for AgentConfigs {

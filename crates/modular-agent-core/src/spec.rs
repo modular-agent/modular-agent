@@ -77,7 +77,7 @@ impl PresetSpec {
 ///
 /// Contains all the information needed to instantiate and configure an agent,
 /// including its ID, definition reference, ports, and configuration values.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct AgentSpec {
     /// Unique identifier for this agent instance.
     #[serde(skip_serializing_if = "String::is_empty", default)]
@@ -102,11 +102,6 @@ pub struct AgentSpec {
     /// Configuration specifications (metadata about configs).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub config_specs: Option<AgentConfigSpecs>,
-
-    /// Deprecated: Use `disabled` instead.
-    #[deprecated(note = "Use `disabled` instead")]
-    #[serde(default, skip_serializing_if = "<&bool>::not")]
-    pub enabled: bool,
 
     /// Whether this agent is disabled (will not be started).
     #[serde(default, skip_serializing_if = "<&bool>::not")]

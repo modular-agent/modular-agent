@@ -546,10 +546,76 @@ impl AgentDefinition {
                     .collect()
             }),
             config_specs: self.configs.clone(),
-            #[allow(deprecated)]
-            enabled: false,
             disabled: false,
             extensions: FnvIndexMap::default(),
+        }
+    }
+
+    /// Reconciles an existing `AgentSpec` with this definition for backward compatibility.
+    ///
+    /// When loading old JSON presets, the spec may not match the current definition.
+    /// This method:
+    /// - Fills missing config keys with definition defaults
+    /// - Renames stale keys (not in definition) with `_` prefix for lazy migration
+    /// - Overwrites `config_specs` with current definition metadata
+    /// - Overwrites ports with current definition ports
+    ///
+    /// Keys already starting with `_` are skipped during rename (idempotency).
+    /// `_`-prefixed keys are cleaned up by `AgentData::new()`.
+    ///
+    /// Config names must not start with `_` (reserved for stale key migration).
+    pub fn reconcile_spec(&self, spec: &mut AgentSpec) {
+        // Ports
+        if let Some(ref inputs) = self.inputs {
+            spec.inputs = Some(inputs.clone());
+        }
+        if let Some(ref outputs) = self.outputs {
+            spec.outputs = Some(outputs.clone());
+        }
+
+        // config_specs
+        spec.config_specs = self.configs.clone();
+
+        // Configs
+        let def_keys: Option<std::collections::HashSet<&str>> = self
+            .configs
+            .as_ref()
+            .map(|c| c.keys().map(|k| k.as_str()).collect());
+
+        if let Some(ref mut spec_configs) = spec.configs {
+            // Rename stale keys with `_` prefix (skip already-prefixed for idempotency)
+            let stale: Vec<String> = spec_configs
+                .keys()
+                .filter(|k| {
+                    !k.starts_with('_')
+                        && !def_keys
+                            .as_ref()
+                            .is_some_and(|dk| dk.contains(k.as_str()))
+                })
+                .cloned()
+                .collect();
+            for key in stale {
+                if let Some(value) = spec_configs.remove(&key) {
+                    spec_configs.set(format!("_{key}"), value);
+                }
+            }
+
+            // Fill missing keys with definition defaults
+            if let Some(ref def_configs) = self.configs {
+                for (key, cs) in def_configs.iter() {
+                    if !spec_configs.contains_key(key) {
+                        spec_configs.set(key.clone(), cs.value.clone());
+                    }
+                }
+            }
+        } else if let Some(ref def_configs) = self.configs {
+            // spec.configs is None → create from definition defaults
+            spec.configs = Some(
+                def_configs
+                    .iter()
+                    .map(|(k, v)| (k.clone(), v.value.clone()))
+                    .collect(),
+            );
         }
     }
 }
@@ -611,6 +677,7 @@ mod tests {
     use im::{hashmap, vector};
 
     use super::*;
+    use crate::config::AgentConfigs;
 
     #[test]
     fn test_agent_definition() {
@@ -896,5 +963,268 @@ mod tests {
                 .detail()
         })
         .integer_config_with("hide_title_value", 1, |entry| entry.hide_title().readonly())
+    }
+
+    // --- reconcile_spec tests ---
+
+    fn reconcile_def() -> AgentDefinition {
+        AgentDefinition::new("test", "reconcile", None)
+            .inputs(vec!["in1", "in2"])
+            .outputs(vec!["out"])
+            .string_config("name", "default_name")
+            .integer_config("count", 10)
+            .boolean_config("enabled", true)
+    }
+
+    #[test]
+    fn test_reconcile_fills_missing_configs() {
+        let def = reconcile_def();
+        let mut configs = AgentConfigs::new();
+        configs.set("name".into(), AgentValue::string("hello"));
+        let mut spec = AgentSpec {
+            configs: Some(configs),
+            ..Default::default()
+        };
+
+        def.reconcile_spec(&mut spec);
+
+        let c = spec.configs.as_ref().unwrap();
+        assert_eq!(c.get_string_or_default("name"), "hello");
+        assert_eq!(c.get_integer_or_default("count"), 10);
+        assert_eq!(c.get_bool_or_default("enabled"), true);
+    }
+
+    #[test]
+    fn test_reconcile_renames_stale_keys() {
+        let def = AgentDefinition::new("test", "r", None).string_config("name", "default");
+        let mut configs = AgentConfigs::new();
+        configs.set("name".into(), AgentValue::string("hello"));
+        configs.set("old_key".into(), AgentValue::string("stale_val"));
+        configs.set("removed".into(), AgentValue::integer(42));
+        let mut spec = AgentSpec {
+            configs: Some(configs),
+            ..Default::default()
+        };
+
+        def.reconcile_spec(&mut spec);
+
+        let c = spec.configs.as_ref().unwrap();
+        assert_eq!(c.get_string_or_default("name"), "hello");
+        assert!(c.get("old_key").is_err());
+        assert_eq!(c.get("_old_key").unwrap(), &AgentValue::string("stale_val"));
+        assert!(c.get("removed").is_err());
+        assert_eq!(c.get("_removed").unwrap(), &AgentValue::integer(42));
+    }
+
+    #[test]
+    fn test_reconcile_skips_already_prefixed() {
+        let def = AgentDefinition::new("test", "r", None).string_config("name", "default");
+        let mut configs = AgentConfigs::new();
+        configs.set("name".into(), AgentValue::string("hello"));
+        configs.set("_old".into(), AgentValue::string("from_prev_reconcile"));
+        let mut spec = AgentSpec {
+            configs: Some(configs),
+            ..Default::default()
+        };
+
+        def.reconcile_spec(&mut spec);
+
+        let c = spec.configs.as_ref().unwrap();
+        assert_eq!(
+            c.get("_old").unwrap(),
+            &AgentValue::string("from_prev_reconcile")
+        );
+        assert!(c.get("__old").is_err());
+    }
+
+    #[test]
+    fn test_reconcile_overwrites_config_specs() {
+        let def = reconcile_def();
+        let mut spec = AgentSpec {
+            config_specs: Some(FnvIndexMap::default()),
+            ..Default::default()
+        };
+
+        def.reconcile_spec(&mut spec);
+
+        let specs = spec.config_specs.as_ref().unwrap();
+        assert!(specs.contains_key("name"));
+        assert!(specs.contains_key("count"));
+        assert!(specs.contains_key("enabled"));
+        assert_eq!(specs.len(), 3);
+    }
+
+    #[test]
+    fn test_reconcile_overwrites_ports() {
+        let def = reconcile_def();
+        let mut spec = AgentSpec {
+            inputs: Some(vec!["old_in".into()]),
+            outputs: Some(vec!["old_out".into()]),
+            ..Default::default()
+        };
+
+        def.reconcile_spec(&mut spec);
+
+        assert_eq!(
+            spec.inputs.as_ref().unwrap(),
+            &vec!["in1".to_string(), "in2".to_string()]
+        );
+        assert_eq!(
+            spec.outputs.as_ref().unwrap(),
+            &vec!["out".to_string()]
+        );
+    }
+
+    #[test]
+    fn test_reconcile_preserves_ports_when_def_none() {
+        let def = AgentDefinition::new("test", "r", None);
+        let mut spec = AgentSpec {
+            inputs: Some(vec!["custom_in".into()]),
+            ..Default::default()
+        };
+
+        def.reconcile_spec(&mut spec);
+
+        assert_eq!(
+            spec.inputs.as_ref().unwrap(),
+            &vec!["custom_in".to_string()]
+        );
+    }
+
+    #[test]
+    fn test_reconcile_configs_none_creates_defaults() {
+        let def = reconcile_def();
+        let mut spec = AgentSpec::default();
+        assert!(spec.configs.is_none());
+
+        def.reconcile_spec(&mut spec);
+
+        let c = spec.configs.as_ref().unwrap();
+        assert_eq!(c.get_string_or_default("name"), "default_name");
+        assert_eq!(c.get_integer_or_default("count"), 10);
+        assert_eq!(c.get_bool_or_default("enabled"), true);
+    }
+
+    #[test]
+    fn test_reconcile_def_configs_none_marks_all_stale() {
+        let def = AgentDefinition::new("test", "r", None);
+        let mut configs = AgentConfigs::new();
+        configs.set("old_a".into(), AgentValue::string("a"));
+        configs.set("old_b".into(), AgentValue::integer(1));
+        let mut spec = AgentSpec {
+            configs: Some(configs),
+            ..Default::default()
+        };
+
+        def.reconcile_spec(&mut spec);
+
+        let c = spec.configs.as_ref().unwrap();
+        assert!(c.get("old_a").is_err());
+        assert!(c.get("old_b").is_err());
+        assert_eq!(c.get("_old_a").unwrap(), &AgentValue::string("a"));
+        assert_eq!(c.get("_old_b").unwrap(), &AgentValue::integer(1));
+    }
+
+    #[test]
+    fn test_reconcile_preserves_user_values() {
+        let def = reconcile_def();
+        let mut configs = AgentConfigs::new();
+        configs.set("name".into(), AgentValue::string("custom"));
+        configs.set("count".into(), AgentValue::integer(42));
+        configs.set("enabled".into(), AgentValue::boolean(false));
+        let mut spec = AgentSpec {
+            configs: Some(configs),
+            ..Default::default()
+        };
+
+        def.reconcile_spec(&mut spec);
+
+        let c = spec.configs.as_ref().unwrap();
+        assert_eq!(c.get_string_or_default("name"), "custom");
+        assert_eq!(c.get_integer_or_default("count"), 42);
+        assert_eq!(c.get_bool_or_default("enabled"), false);
+    }
+
+    #[test]
+    fn test_reconcile_idempotent() {
+        let def = reconcile_def();
+        let mut configs = AgentConfigs::new();
+        configs.set("name".into(), AgentValue::string("hello"));
+        configs.set("old".into(), AgentValue::string("stale"));
+        let mut spec = AgentSpec {
+            configs: Some(configs),
+            ..Default::default()
+        };
+
+        def.reconcile_spec(&mut spec);
+        let first = spec.clone();
+
+        def.reconcile_spec(&mut spec);
+
+        let c1 = first.configs.as_ref().unwrap();
+        let c2 = spec.configs.as_ref().unwrap();
+        assert_eq!(c1.get_string_or_default("name"), c2.get_string_or_default("name"));
+        assert_eq!(c1.get_integer_or_default("count"), c2.get_integer_or_default("count"));
+        assert_eq!(c1.get("_old").unwrap(), c2.get("_old").unwrap());
+    }
+
+    #[test]
+    fn test_reconcile_to_spec_is_noop() {
+        let def = reconcile_def();
+        let mut spec = def.to_spec();
+        let original = spec.clone();
+
+        def.reconcile_spec(&mut spec);
+
+        let c1 = spec.configs.as_ref().unwrap();
+        let c2 = original.configs.as_ref().unwrap();
+        assert_eq!(c1.get_string_or_default("name"), c2.get_string_or_default("name"));
+        assert_eq!(c1.get_integer_or_default("count"), c2.get_integer_or_default("count"));
+        assert_eq!(c1.get_bool_or_default("enabled"), c2.get_bool_or_default("enabled"));
+        assert_eq!(spec.inputs, original.inputs);
+        assert_eq!(spec.outputs, original.outputs);
+    }
+
+    #[test]
+    fn test_reconcile_empty_configs() {
+        let def = reconcile_def();
+        let mut spec = AgentSpec {
+            configs: Some(AgentConfigs::new()),
+            ..Default::default()
+        };
+
+        def.reconcile_spec(&mut spec);
+
+        let c = spec.configs.as_ref().unwrap();
+        assert_eq!(c.get_string_or_default("name"), "default_name");
+        assert_eq!(c.get_integer_or_default("count"), 10);
+        assert_eq!(c.get_bool_or_default("enabled"), true);
+    }
+
+    #[test]
+    fn test_reconcile_mixed_stale_and_prefixed() {
+        let def = AgentDefinition::new("test", "r", None).string_config("name", "default");
+        let mut configs = AgentConfigs::new();
+        configs.set("name".into(), AgentValue::string("hello"));
+        configs.set("_prev_stale".into(), AgentValue::string("from_prev"));
+        configs.set("removed".into(), AgentValue::integer(99));
+        let mut spec = AgentSpec {
+            configs: Some(configs),
+            ..Default::default()
+        };
+
+        def.reconcile_spec(&mut spec);
+
+        let c = spec.configs.as_ref().unwrap();
+        assert_eq!(c.get_string_or_default("name"), "hello");
+        // _prev_stale is kept as-is (already prefixed)
+        assert_eq!(
+            c.get("_prev_stale").unwrap(),
+            &AgentValue::string("from_prev")
+        );
+        assert!(c.get("__prev_stale").is_err());
+        // removed is newly prefixed
+        assert!(c.get("removed").is_err());
+        assert_eq!(c.get("_removed").unwrap(), &AgentValue::integer(99));
     }
 }
