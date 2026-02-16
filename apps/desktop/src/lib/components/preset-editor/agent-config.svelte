@@ -334,8 +334,8 @@
   />
 {/snippet}
 
-{#if configSpec?.hidden === true}
-  <!-- Hidden, do not render anything -->
+{#if configSpec?.hidden === true || configSpec?.detail === true}
+  <!-- Hidden or detail-only, do not render anything -->
 {:else if configSpec?.readonly === true}
   {@render display(name, value, configSpec)}
 {:else}
