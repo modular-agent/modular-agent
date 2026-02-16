@@ -196,41 +196,28 @@ impl CompletionAgent {
         config_options: AgentValueMap<String, AgentValue>,
         config_system: String,
     ) -> Result<(), AgentError> {
-        use ollama_rs::generation::completion::request::GenerationRequest;
-        use ollama_rs::models::ModelOptions;
-
         let client = self.ollama_manager.get_client(self.ma())?;
 
         let use_context = self.configs()?.get_bool_or_default(CONFIG_USE_CONTEXT);
 
-        let mut request = GenerationRequest::new(model_name.to_string(), prompt);
+        let mut request = serde_json::json!({
+            "model": model_name,
+            "prompt": prompt,
+            "stream": false,
+        });
 
         if !config_system.is_empty() {
-            request = request.system(config_system);
+            request["system"] = serde_json::Value::String(config_system);
         }
 
-        if !config_options.is_empty() {
-            let config_options = serde_json::to_value(&config_options)
-                .map_err(|e| AgentError::InvalidValue(format!("Invalid JSON in options: {}", e)))?;
-            if let Ok(options_json) = serde_json::from_value::<ModelOptions>(config_options) {
-                request = request.options(options_json);
-            } else {
-                return Err(AgentError::InvalidValue(
-                    "Invalid JSON in options".to_string(),
-                ));
-            }
+        ollama_client::merge_options(&mut request, &config_options)?;
+
+        if use_context && let Some(context) = &self.context {
+            request["context"] = serde_json::to_value(context).unwrap_or(serde_json::Value::Null);
         }
 
-        if use_context {
-            if let Some(context) = &self.context {
-                request = request.context(context.clone());
-            }
-        }
-
-        let res = client
-            .generate(request)
-            .await
-            .map_err(|e| AgentError::IoError(format!("Ollama Error: {}", e)))?;
+        let res: ollama_client::GenerateResponse =
+            client.post_json(&client.generate_url(), &request).await?;
 
         if use_context {
             self.context = res.context.clone().or(self.context.clone());

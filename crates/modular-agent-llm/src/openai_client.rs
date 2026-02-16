@@ -47,7 +47,11 @@ impl OpenAIManager {
             .get_global_configs(ChatAgent::DEF_NAME)
             .and_then(|cfg| cfg.get_string(CONFIG_OPENAI_API_KEY).ok())
             .filter(|key| !key.is_empty())
-            .or_else(|| std::env::var("OPENAI_API_KEY").ok().filter(|k| !k.is_empty()))
+            .or_else(|| {
+                std::env::var("OPENAI_API_KEY")
+                    .ok()
+                    .filter(|k| !k.is_empty())
+            })
             .unwrap_or_default();
 
         // API base: config → OPENAI_API_BASE env var → default
@@ -135,10 +139,8 @@ impl OpenAIClient {
         &self,
         url: &str,
         body: &serde_json::Value,
-    ) -> Result<
-        impl futures::Stream<Item = Result<Option<String>, AgentError>> + use<>,
-        AgentError,
-    > {
+    ) -> Result<impl futures::Stream<Item = Result<Option<String>, AgentError>> + use<>, AgentError>
+    {
         use eventsource_stream::Eventsource;
         use futures::StreamExt;
 
@@ -158,16 +160,19 @@ impl OpenAIClient {
             return Err(map_http_error(status, &body));
         }
 
-        let stream = resp.bytes_stream().eventsource().map(|result| match result {
-            Ok(event) => {
-                if event.data == "[DONE]" {
-                    Ok(None)
-                } else {
-                    Ok(Some(event.data))
+        let stream = resp
+            .bytes_stream()
+            .eventsource()
+            .map(|result| match result {
+                Ok(event) => {
+                    if event.data == "[DONE]" {
+                        Ok(None)
+                    } else {
+                        Ok(Some(event.data))
+                    }
                 }
-            }
-            Err(e) => Err(AgentError::IoError(format!("OpenAI stream error: {}", e))),
-        });
+                Err(e) => Err(AgentError::IoError(format!("OpenAI stream error: {}", e))),
+            });
 
         Ok(stream)
     }
@@ -428,8 +433,7 @@ pub fn message_from_chat_response(msg: &ChatResponseMessage) -> Message {
         let calls: Vec<ToolCall> = tool_calls
             .iter()
             .map(|call| {
-                let parameters =
-                    serde_json::from_str(&call.function.arguments).unwrap_or_default();
+                let parameters = serde_json::from_str(&call.function.arguments).unwrap_or_default();
                 ToolCall {
                     function: ToolCallFunction {
                         id: Some(call.id.clone()),
@@ -465,9 +469,10 @@ pub fn tool_info_to_chat_tool_json(info: tool::ToolInfo) -> serde_json::Value {
 
 /// Convert a streaming tool call chunk to internal ToolCall.
 pub fn tool_call_from_stream_chunk(call: &ChatToolCallChunk) -> Result<ToolCall, AgentError> {
-    let function = call.function.as_ref().ok_or_else(|| {
-        AgentError::InvalidValue("ToolCallChunk missing function".to_string())
-    })?;
+    let function = call
+        .function
+        .as_ref()
+        .ok_or_else(|| AgentError::InvalidValue("ToolCallChunk missing function".to_string()))?;
     let name = function.name.as_ref().ok_or_else(|| {
         AgentError::InvalidValue("ToolCallChunk function missing name".to_string())
     })?;
@@ -600,8 +605,7 @@ pub fn response_output_to_message(output: &[serde_json::Value]) -> Result<Messag
             "message" => {
                 if let Some(parts) = item.get("content").and_then(|c| c.as_array()) {
                     for part in parts {
-                        let part_type =
-                            part.get("type").and_then(|v| v.as_str()).unwrap_or("");
+                        let part_type = part.get("type").and_then(|v| v.as_str()).unwrap_or("");
                         match part_type {
                             "output_text" => {
                                 if let Some(text) = part.get("text").and_then(|v| v.as_str()) {
@@ -609,8 +613,7 @@ pub fn response_output_to_message(output: &[serde_json::Value]) -> Result<Messag
                                 }
                             }
                             "refusal" => {
-                                if let Some(refusal) =
-                                    part.get("refusal").and_then(|v| v.as_str())
+                                if let Some(refusal) = part.get("refusal").and_then(|v| v.as_str())
                                 {
                                     content.push_str(&format!("[Refusal: {}]", refusal));
                                 }
@@ -671,9 +674,7 @@ pub(crate) fn merge_options(
     }
     let options_json = serde_json::to_value(config_options)
         .map_err(|e| AgentError::InvalidValue(format!("Invalid JSON in options: {}", e)))?;
-    if let (Some(req_obj), Some(opt_obj)) =
-        (request.as_object_mut(), options_json.as_object())
-    {
+    if let (Some(req_obj), Some(opt_obj)) = (request.as_object_mut(), options_json.as_object()) {
         for (key, value) in opt_obj {
             req_obj.insert(key.clone(), value.clone());
         }
@@ -716,13 +717,11 @@ mod tests {
     #[test]
     fn test_chat_completion_assistant_with_tool_calls() {
         let mut msg = Message::assistant("".to_string());
-        msg.tool_calls = Some(
-            vector![make_tool_call(
-                "call_123",
-                "get_weather",
-                serde_json::json!({"city": "Tokyo"})
-            )],
-        );
+        msg.tool_calls = Some(vector![make_tool_call(
+            "call_123",
+            "get_weather",
+            serde_json::json!({"city": "Tokyo"})
+        )]);
 
         let json = message_to_chat_json(&msg);
         assert_eq!(json["role"], "assistant");
@@ -734,8 +733,7 @@ mod tests {
         assert_eq!(tool_calls[0]["function"]["name"], "get_weather");
 
         let args: serde_json::Value =
-            serde_json::from_str(tool_calls[0]["function"]["arguments"].as_str().unwrap())
-                .unwrap();
+            serde_json::from_str(tool_calls[0]["function"]["arguments"].as_str().unwrap()).unwrap();
         assert_eq!(args["city"], "Tokyo");
     }
 
@@ -788,10 +786,7 @@ mod tests {
         let tool_calls = result.tool_calls.unwrap();
         assert_eq!(tool_calls.len(), 1);
         assert_eq!(tool_calls[0].function.name, "get_weather");
-        assert_eq!(
-            tool_calls[0].function.id,
-            Some("call_abc".to_string())
-        );
+        assert_eq!(tool_calls[0].function.id, Some("call_abc".to_string()));
     }
 
     #[test]
@@ -854,10 +849,7 @@ mod tests {
         }"#;
         let chunk: ChatStreamChunk = serde_json::from_str(json).unwrap();
         assert_eq!(chunk.choices.len(), 1);
-        assert_eq!(
-            chunk.choices[0].delta.content,
-            Some("Hello".to_string())
-        );
+        assert_eq!(chunk.choices[0].delta.content, Some("Hello".to_string()));
     }
 
     #[test]
@@ -926,8 +918,7 @@ mod tests {
 
     #[test]
     fn test_serde_response_stream_event_function_call_args() {
-        let json =
-            r#"{"type": "response.function_call_arguments.delta", "delta": "{\"city\":"}"#;
+        let json = r#"{"type": "response.function_call_arguments.delta", "delta": "{\"city\":"}"#;
         let event: ResponseStreamEvent = serde_json::from_str(json).unwrap();
         assert!(matches!(
             event,
@@ -937,7 +928,8 @@ mod tests {
 
     #[test]
     fn test_serde_response_stream_event_completed() {
-        let json = r#"{"type": "response.completed", "response": {"id": "resp_123", "output": []}}"#;
+        let json =
+            r#"{"type": "response.completed", "response": {"id": "resp_123", "output": []}}"#;
         let event: ResponseStreamEvent = serde_json::from_str(json).unwrap();
         if let ResponseStreamEvent::Completed { response } = event {
             assert_eq!(response["id"], "resp_123");
@@ -1000,13 +992,11 @@ mod tests {
     #[test]
     fn test_response_input_assistant_with_tool_calls() {
         let mut msg = Message::assistant("I'll check.".to_string());
-        msg.tool_calls = Some(
-            vector![make_tool_call(
-                "call_456",
-                "get_weather",
-                serde_json::json!({"city": "NY"})
-            )],
-        );
+        msg.tool_calls = Some(vector![make_tool_call(
+            "call_456",
+            "get_weather",
+            serde_json::json!({"city": "NY"})
+        )]);
         let messages = vector![AgentValue::from(msg)];
         let items = messages_to_response_input(&messages).unwrap();
 
@@ -1024,13 +1014,11 @@ mod tests {
     #[test]
     fn test_response_input_assistant_with_tool_calls_no_content() {
         let mut msg = Message::assistant("".to_string());
-        msg.tool_calls = Some(
-            vector![make_tool_call(
-                "call_789",
-                "search",
-                serde_json::json!({"q": "test"})
-            )],
-        );
+        msg.tool_calls = Some(vector![make_tool_call(
+            "call_789",
+            "search",
+            serde_json::json!({"q": "test"})
+        )]);
         let messages = vector![AgentValue::from(msg)];
         let items = messages_to_response_input(&messages).unwrap();
 
@@ -1069,13 +1057,11 @@ mod tests {
     fn test_response_input_full_round_trip() {
         // Simulate: user → assistant(tool_call) → tool_result
         let mut assistant_msg = Message::assistant("".to_string());
-        assistant_msg.tool_calls = Some(
-            vector![make_tool_call(
-                "call_abc",
-                "get_horoscope",
-                serde_json::json!({"sign": "Virgo"})
-            )],
-        );
+        assistant_msg.tool_calls = Some(vector![make_tool_call(
+            "call_abc",
+            "get_horoscope",
+            serde_json::json!({"sign": "Virgo"})
+        )]);
 
         let mut tool_msg =
             Message::tool("get_horoscope".to_string(), "Virgo: Good day!".to_string());
@@ -1150,10 +1136,7 @@ mod tests {
         let tool_calls = msg.tool_calls.unwrap();
         assert_eq!(tool_calls.len(), 1);
         assert_eq!(tool_calls[0].function.name, "get_weather");
-        assert_eq!(
-            tool_calls[0].function.id,
-            Some("call_123".to_string())
-        );
+        assert_eq!(tool_calls[0].function.id, Some("call_123".to_string()));
     }
 
     #[test]

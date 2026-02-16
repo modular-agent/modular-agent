@@ -198,9 +198,7 @@ impl ResponsesAgent {
         });
 
         // Add previous_response_id for conversation continuity
-        if use_conversation_state
-            && let Some(prev_id) = &self.last_response_id
-        {
+        if use_conversation_state && let Some(prev_id) = &self.last_response_id {
             request["previous_response_id"] = serde_json::Value::String(prev_id.clone());
         }
 
@@ -230,13 +228,11 @@ impl ResponsesAgent {
         id: &str,
         use_conversation_state: bool,
     ) -> Result<(), AgentError> {
-        let response: serde_json::Value = client
-            .post_json(&client.responses_url(), request)
-            .await?;
+        let response: serde_json::Value =
+            client.post_json(&client.responses_url(), request).await?;
 
         // Store response ID for conversation continuity
-        if use_conversation_state
-            && let Some(resp_id) = response.get("id").and_then(|v| v.as_str())
+        if use_conversation_state && let Some(resp_id) = response.get("id").and_then(|v| v.as_str())
         {
             self.last_response_id = Some(resp_id.to_string());
         }

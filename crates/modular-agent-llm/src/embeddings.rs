@@ -204,7 +204,12 @@ impl EmbeddingsAgent {
     ) -> Result<(), AgentError> {
         let client = self.ollama_manager.get_client(self.ma())?;
 
-        let model_options = Self::parse_ollama_options(&config_options)?;
+        let options_json = if config_options.is_empty() {
+            serde_json::Value::Null
+        } else {
+            serde_json::to_value(&config_options)
+                .map_err(|e| AgentError::InvalidConfig(format!("Invalid JSON in options: {}", e)))?
+        };
 
         if port == PORT_STRING {
             let text = value.as_str().unwrap_or_default();
@@ -213,10 +218,9 @@ impl EmbeddingsAgent {
                     "Input text is an empty string".to_string(),
                 ));
             }
-            let input: ollama_client::EmbeddingsInput = text.into();
-            let embeddings =
-                ollama_client::generate_embeddings(&client, input, model_name, model_options)
-                    .await?;
+            let embeddings = client
+                .generate_embeddings(vec![text.to_string()], model_name, &options_json)
+                .await?;
             if embeddings.len() != 1 {
                 return Err(AgentError::Other(
                     "Expected exactly one embedding for single string input".to_string(),
@@ -238,13 +242,9 @@ impl EmbeddingsAgent {
                     .output(ctx.clone(), PORT_EMBEDDINGS, AgentValue::array_default())
                     .await;
             }
-            let embeddings = ollama_client::generate_embeddings(
-                &client,
-                texts.into(),
-                model_name,
-                model_options,
-            )
-            .await?;
+            let embeddings = client
+                .generate_embeddings(texts, model_name, &options_json)
+                .await?;
             let embedding_values_with_offsets =
                 Self::zip_embeddings_with_offsets(offsets, embeddings);
             return self
@@ -269,13 +269,9 @@ impl EmbeddingsAgent {
                     .await;
             }
 
-            let embeddings = ollama_client::generate_embeddings(
-                &client,
-                texts.into(),
-                model_name,
-                model_options,
-            )
-            .await?;
+            let embeddings = client
+                .generate_embeddings(texts, model_name, &options_json)
+                .await?;
 
             return self
                 .output_doc_embeddings(ctx, value, embeddings, indices, is_single)
@@ -402,19 +398,5 @@ impl EmbeddingsAgent {
                 .output(ctx.clone(), PORT_DOC, AgentValue::array(arr))
                 .await;
         }
-    }
-
-    #[cfg(feature = "ollama")]
-    fn parse_ollama_options(
-        config_options: &AgentValueMap<String, AgentValue>,
-    ) -> Result<Option<ollama_client::ModelOptions>, AgentError> {
-        if config_options.is_empty() {
-            return Ok(None);
-        }
-        let value = serde_json::to_value(config_options)
-            .map_err(|e| AgentError::InvalidConfig(format!("Invalid JSON in options: {}", e)))?;
-        let options = serde_json::from_value::<ollama_client::ModelOptions>(value)
-            .map_err(|e| AgentError::InvalidConfig(format!("Invalid JSON in options: {}", e)))?;
-        Ok(Some(options))
     }
 }

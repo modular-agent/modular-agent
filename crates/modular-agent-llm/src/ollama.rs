@@ -42,10 +42,7 @@ impl AsAgent for OllamaListLocalModelsAgent {
         _value: AgentValue,
     ) -> Result<(), AgentError> {
         let client = self.manager.get_client(self.ma())?;
-        let model_list = client
-            .list_local_models()
-            .await
-            .map_err(|e| AgentError::IoError(format!("Ollama Error: {}", e)))?;
+        let model_list = client.list_local_models().await?;
         let model_list = AgentValue::from_serialize(&model_list)?;
 
         self.output(ctx.clone(), PORT_MODEL_LIST, model_list)
@@ -87,10 +84,7 @@ impl AsAgent for OllamaShowModelInfoAgent {
         }
 
         let client = self.manager.get_client(self.ma())?;
-        let model_info = client
-            .show_model_info(model_name.to_string())
-            .await
-            .map_err(|e| AgentError::IoError(format!("Ollama Error: {}", e)))?;
+        let model_info = client.show_model_info(model_name).await?;
         let model_info = AgentValue::from_serialize(&model_info)?;
 
         self.output(ctx.clone(), PORT_MODEL_INFO, model_info)

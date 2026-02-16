@@ -3,7 +3,9 @@
 use std::sync::{Arc, Mutex};
 
 use modular_agent_core::tool;
-use modular_agent_core::{AgentError, AgentValue, Message, ModularAgent, ToolCall, ToolCallFunction};
+use modular_agent_core::{
+    AgentError, AgentValue, Message, ModularAgent, ToolCall, ToolCallFunction,
+};
 
 use crate::chat::ChatAgent;
 
@@ -46,7 +48,11 @@ impl ClaudeManager {
             .get_global_configs(ChatAgent::DEF_NAME)
             .and_then(|cfg| cfg.get_string(CONFIG_CLAUDE_API_KEY).ok())
             .filter(|key| !key.is_empty())
-            .or_else(|| std::env::var("CLAUDE_API_KEY").ok().filter(|k| !k.is_empty()))
+            .or_else(|| {
+                std::env::var("CLAUDE_API_KEY")
+                    .ok()
+                    .filter(|k| !k.is_empty())
+            })
             .or_else(|| {
                 std::env::var("ANTHROPIC_API_KEY")
                     .ok()
@@ -129,10 +135,8 @@ impl ClaudeClient {
     pub(crate) async fn create_message_stream(
         &self,
         request: &ClaudeRequest,
-    ) -> Result<
-        impl futures::Stream<Item = Result<ClaudeStreamEvent, AgentError>>,
-        AgentError,
-    > {
+    ) -> Result<impl futures::Stream<Item = Result<ClaudeStreamEvent, AgentError>>, AgentError>
+    {
         use eventsource_stream::Eventsource;
         use futures::StreamExt;
 
@@ -153,17 +157,20 @@ impl ClaudeClient {
             return Err(map_http_error(status, &body));
         }
 
-        let stream = resp.bytes_stream().eventsource().map(|result| match result {
-            Ok(event) => {
-                if event.data == "[DONE]" {
-                    return Ok(ClaudeStreamEvent::MessageStop {});
+        let stream = resp
+            .bytes_stream()
+            .eventsource()
+            .map(|result| match result {
+                Ok(event) => {
+                    if event.data == "[DONE]" {
+                        return Ok(ClaudeStreamEvent::MessageStop {});
+                    }
+                    serde_json::from_str::<ClaudeStreamEvent>(&event.data).map_err(|e| {
+                        AgentError::IoError(format!("Claude stream parse error: {}", e))
+                    })
                 }
-                serde_json::from_str::<ClaudeStreamEvent>(&event.data).map_err(|e| {
-                    AgentError::IoError(format!("Claude stream parse error: {}", e))
-                })
-            }
-            Err(e) => Err(AgentError::IoError(format!("Claude stream error: {}", e))),
-        });
+                Err(e) => Err(AgentError::IoError(format!("Claude stream error: {}", e))),
+            });
 
         Ok(stream)
     }
@@ -282,10 +289,7 @@ pub(crate) enum ClaudeResponseBlock {
         input: serde_json::Value,
     },
     #[serde(rename = "thinking")]
-    Thinking {
-        thinking: String,
-        signature: String,
-    },
+    Thinking { thinking: String, signature: String },
     #[serde(rename = "redacted_thinking")]
     RedactedThinking { data: String },
 }
@@ -668,7 +672,9 @@ mod tests {
         assert_eq!(msgs[0].role, "assistant");
         if let ClaudeContent::Blocks(blocks) = &msgs[0].content {
             assert_eq!(blocks.len(), 2);
-            assert!(matches!(&blocks[0], ClaudeContentBlock::Text { text } if text == "Let me check."));
+            assert!(
+                matches!(&blocks[0], ClaudeContentBlock::Text { text } if text == "Let me check.")
+            );
             assert!(
                 matches!(&blocks[1], ClaudeContentBlock::ToolUse { id, name, .. } if id == "toolu_abc" && name == "get_weather")
             );
@@ -723,10 +729,7 @@ mod tests {
         let tool_calls = msg.tool_calls.unwrap();
         assert_eq!(tool_calls.len(), 1);
         assert_eq!(tool_calls[0].function.name, "get_weather");
-        assert_eq!(
-            tool_calls[0].function.id,
-            Some("toolu_abc".to_string())
-        );
+        assert_eq!(tool_calls[0].function.id, Some("toolu_abc".to_string()));
     }
 
     #[test]
@@ -795,10 +798,7 @@ mod tests {
         let tool = tool_info_to_claude_tool(info);
         assert_eq!(tool.name, "get_weather");
         assert_eq!(tool.description, Some("Get current weather".to_string()));
-        assert_eq!(
-            tool.input_schema["type"],
-            serde_json::json!("object")
-        );
+        assert_eq!(tool.input_schema["type"], serde_json::json!("object"));
     }
 
     #[test]
@@ -812,10 +812,7 @@ mod tests {
         let tool = tool_info_to_claude_tool(info);
         assert_eq!(tool.name, "list_items");
         assert!(tool.description.is_none());
-        assert_eq!(
-            tool.input_schema,
-            serde_json::json!({"type": "object"})
-        );
+        assert_eq!(tool.input_schema, serde_json::json!({"type": "object"}));
     }
 
     #[test]
@@ -914,8 +911,12 @@ mod tests {
         let response: ClaudeResponse = serde_json::from_str(json).unwrap();
         assert_eq!(response.id, "msg_123");
         assert_eq!(response.content.len(), 2);
-        assert!(matches!(&response.content[0], ClaudeResponseBlock::Text { text } if text == "Hello!"));
-        assert!(matches!(&response.content[1], ClaudeResponseBlock::ToolUse { name, .. } if name == "calc"));
+        assert!(
+            matches!(&response.content[0], ClaudeResponseBlock::Text { text } if text == "Hello!")
+        );
+        assert!(
+            matches!(&response.content[1], ClaudeResponseBlock::ToolUse { name, .. } if name == "calc")
+        );
     }
 
     #[test]

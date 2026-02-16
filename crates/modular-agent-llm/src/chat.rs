@@ -321,10 +321,7 @@ impl ChatAgent {
             None
         } else {
             let infos = list_tool_infos_patterns(&config_tools).map_err(|e| {
-                AgentError::InvalidConfig(format!(
-                    "Invalid regex patterns in tools config: {}",
-                    e
-                ))
+                AgentError::InvalidConfig(format!("Invalid regex patterns in tools config: {}", e))
             })?;
             Some(
                 infos
@@ -389,29 +386,27 @@ impl ChatAgent {
                     claude_client::ClaudeStreamEvent::ContentBlockStart {
                         index,
                         content_block,
-                    } => {
-                        match &content_block {
-                            claude_client::ClaudeResponseBlock::Text { .. } => {
-                                block_types.insert(index, "text".to_string());
-                            }
-                            claude_client::ClaudeResponseBlock::ToolUse { id, name, .. } => {
-                                block_types.insert(index, "tool_use".to_string());
-                                current_tool_id = Some(id.clone());
-                                current_tool_name = Some(name.clone());
-                                current_tool_arguments.clear();
-                            }
-                            claude_client::ClaudeResponseBlock::Thinking { .. } => {
-                                block_types.insert(index, "thinking".to_string());
-                            }
-                            claude_client::ClaudeResponseBlock::RedactedThinking { .. } => {
-                                block_types.insert(index, "redacted_thinking".to_string());
-                                if !thinking.is_empty() {
-                                    thinking.push('\n');
-                                }
-                                thinking.push_str("[redacted]");
-                            }
+                    } => match &content_block {
+                        claude_client::ClaudeResponseBlock::Text { .. } => {
+                            block_types.insert(index, "text".to_string());
                         }
-                    }
+                        claude_client::ClaudeResponseBlock::ToolUse { id, name, .. } => {
+                            block_types.insert(index, "tool_use".to_string());
+                            current_tool_id = Some(id.clone());
+                            current_tool_name = Some(name.clone());
+                            current_tool_arguments.clear();
+                        }
+                        claude_client::ClaudeResponseBlock::Thinking { .. } => {
+                            block_types.insert(index, "thinking".to_string());
+                        }
+                        claude_client::ClaudeResponseBlock::RedactedThinking { .. } => {
+                            block_types.insert(index, "redacted_thinking".to_string());
+                            if !thinking.is_empty() {
+                                thinking.push('\n');
+                            }
+                            thinking.push_str("[redacted]");
+                        }
+                    },
                     claude_client::ClaudeStreamEvent::ContentBlockDelta { index, delta } => {
                         let block_type = block_types.get(&index).map(|s| s.as_str());
                         match delta {
@@ -433,9 +428,7 @@ impl ChatAgent {
                                     .await?;
                                 }
                             }
-                            claude_client::ClaudeDelta::ThinkingDelta {
-                                thinking: thought,
-                            } => {
+                            claude_client::ClaudeDelta::ThinkingDelta { thinking: thought } => {
                                 thinking.push_str(&thought);
                             }
                             claude_client::ClaudeDelta::InputJsonDelta { partial_json } => {
@@ -450,8 +443,7 @@ impl ChatAgent {
                         // Finalize tool call if one was being built
                         if let Some(name) = current_tool_name.take() {
                             let parameters: serde_json::Value =
-                                serde_json::from_str(&current_tool_arguments)
-                                    .unwrap_or_default();
+                                serde_json::from_str(&current_tool_arguments).unwrap_or_default();
                             tool_calls.push(ToolCall {
                                 function: ToolCallFunction {
                                     id: current_tool_id.take(),
@@ -534,25 +526,12 @@ impl ChatAgent {
         config_tools: String,
         use_stream: bool,
     ) -> Result<(), AgentError> {
+        use futures::StreamExt;
         use modular_agent_core::tool::list_tool_infos_patterns;
-        use ollama_rs::generation::chat::request::ChatMessageRequest;
-        use ollama_rs::models::ModelOptions;
-        use tokio_stream::StreamExt;
 
         let client = self.ollama_manager.get_client(self.ma())?;
 
-        let options_json = if !config_options.is_empty() {
-            let value = serde_json::to_value(&config_options).map_err(|e| {
-                AgentError::InvalidConfig(format!("Invalid JSON in options: {}", e))
-            })?;
-            Some(serde_json::from_value::<ModelOptions>(value).map_err(|e| {
-                AgentError::InvalidConfig(format!("Invalid JSON in options: {}", e))
-            })?)
-        } else {
-            None
-        };
-
-        let tool_infos = if config_tools.is_empty() {
+        let tools: Vec<ollama_client::OllamaToolInfo> = if config_tools.is_empty() {
             vec![]
         } else {
             list_tool_infos_patterns(&config_tools)
@@ -563,41 +542,43 @@ impl ChatAgent {
                     ))
                 })?
                 .into_iter()
-                .map(ollama_client::from_tool_info_to_ollama_tool_info)
-                .collect::<Vec<_>>()
+                .map(ollama_client::tool_info_to_ollama)
+                .collect()
         };
 
-        let mut request = ChatMessageRequest::new(
-            model_name.to_string(),
-            messages
-                .iter()
-                .cloned()
-                .map(|m| ollama_client::message_to_chat(m.as_message().unwrap().clone()))
-                .collect(),
-        );
+        let ollama_messages: Vec<serde_json::Value> = messages
+            .iter()
+            .filter_map(|m| m.as_message())
+            .map(|m| {
+                serde_json::to_value(ollama_client::message_to_ollama(m))
+                    .unwrap_or(serde_json::json!({}))
+            })
+            .collect();
 
-        if let Some(options) = options_json.clone() {
-            request = request.options(options);
+        let mut request = serde_json::json!({
+            "model": model_name,
+            "messages": ollama_messages,
+            "stream": use_stream,
+        });
+
+        if !tools.is_empty() {
+            request["tools"] = serde_json::to_value(&tools).unwrap_or(serde_json::json!([]));
         }
 
-        if !tool_infos.is_empty() {
-            request = request.tools(tool_infos.clone());
-        }
+        ollama_client::merge_options(&mut request, &config_options)?;
 
         let id = uuid::Uuid::new_v4().to_string();
         if use_stream {
             let mut stream = client
-                .send_chat_messages_stream(request)
-                .await
-                .map_err(|e| AgentError::IoError(format!("Ollama Error: {}", e)))?;
+                .post_ndjson_stream::<ollama_client::ChatResponse>(&client.chat_url(), &request)
+                .await?;
 
             let mut message = Message::assistant("".to_string());
             let mut content = String::new();
             let mut thinking = String::new();
             let mut tool_calls: Vec<ToolCall> = vec![];
             while let Some(res) = stream.next().await {
-                let res =
-                    res.map_err(|_| AgentError::IoError("Ollama Stream Error".to_string()))?;
+                let res = res?;
 
                 content.push_str(&res.message.content);
                 if let Some(thinking_str) = res.message.thinking.as_ref() {
@@ -650,12 +631,10 @@ impl ChatAgent {
 
             Ok(())
         } else {
-            let res = client
-                .send_chat_messages(request)
-                .await
-                .map_err(|e| AgentError::IoError(format!("Ollama Error: {}", e)))?;
+            let res: ollama_client::ChatResponse =
+                client.post_json(&client.chat_url(), &request).await?;
 
-            let mut message: Message = ollama_client::message_from_ollama(res.message.clone());
+            let mut message = ollama_client::message_from_ollama(&res.message);
             message.id = Some(id.clone());
 
             self.output(
