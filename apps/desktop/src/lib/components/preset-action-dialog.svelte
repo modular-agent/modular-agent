@@ -8,13 +8,14 @@
 
   type Props = {
     action: string;
+    subject?: string;
     name: string;
     onAction: (name: string) => void;
     open?: boolean;
     trigger?: Snippet;
   };
 
-  let { action, name, onAction, open = $bindable(false), trigger }: Props = $props();
+  let { action, subject = "Preset", name, onAction, open = $bindable(false), trigger }: Props = $props();
 
   let inputName = $derived(name);
 
@@ -33,7 +34,7 @@
   <Dialog.Content class="sm:max-w-[425px]">
     <form onsubmit={handleAction}>
       <Dialog.Header>
-        <Dialog.Title>{action} Preset</Dialog.Title>
+        <Dialog.Title>{action} {subject}</Dialog.Title>
       </Dialog.Header>
       <div class="grid gap-4">
         <div class="grid gap-3">

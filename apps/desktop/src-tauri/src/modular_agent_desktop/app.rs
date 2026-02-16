@@ -130,37 +130,34 @@ impl ModularAgentApp {
         Ok(())
     }
 
-    /// Move a preset file to a different directory.
-    pub async fn move_preset(&self, app: &AppHandle, name: &str, target_dir: &str) -> Result<()> {
-        if name.contains("..") || name.contains('\\') {
-            bail!("Invalid preset name");
+    /// Rename a preset file (also used internally by move_preset).
+    pub async fn rename_preset(
+        &self,
+        app: &AppHandle,
+        name: &str,
+        new_name: &str,
+    ) -> Result<()> {
+        if !is_valid_preset_name(name) {
+            bail!("Invalid preset name: {}", name);
         }
-
-        let basename = name.rsplit('/').next().unwrap_or(name);
-        let new_name = if target_dir.is_empty() {
-            basename.to_string()
-        } else {
-            format!("{}/{}", target_dir, basename)
-        };
+        if !is_valid_preset_name(new_name) {
+            bail!("Invalid preset name: {}", new_name);
+        }
 
         if name == new_name {
             return Ok(());
         }
 
-        if !is_valid_preset_name(&new_name) {
-            bail!("Invalid preset name: {}", new_name);
-        }
-
-        // Block moving running presets
+        // Block renaming running presets
         if let Some(id) = self.get_preset_id(name) {
             let infos = self.ma.get_preset_infos().await;
             if infos.iter().any(|p| p.id == id && p.running) {
-                bail!("Cannot move a running preset. Stop it first.");
+                bail!("Cannot rename a running preset. Stop it first.");
             }
         }
 
         let old_path = preset_path(name)?;
-        let new_path = preset_path(&new_name)?;
+        let new_path = preset_path(new_name)?;
 
         if !old_path.exists() {
             bail!("Preset file not found: {}", name);
@@ -176,46 +173,48 @@ impl ModularAgentApp {
             }
         }
 
-        // Move file — source and target are always under ~/.modular_agent/presets/
+        // Rename file — source and target are always under ~/.modular_agent/presets/
         std::fs::rename(&old_path, &new_path)
-            .with_context(|| format!("Failed to move preset: {} -> {}", name, new_name))?;
+            .with_context(|| format!("Failed to rename preset: {} -> {}", name, new_name))?;
 
         // Update in-memory state if preset is open
         if let Some(id) = self.get_preset_id(name) {
             {
                 let mut presets = self.presets.lock().unwrap();
                 presets.remove(name);
-                presets.insert(new_name.clone(), id.clone());
+                presets.insert(new_name.to_string(), id.clone());
             }
             // Update core Preset.name
-            if let Err(e) = self.ma.rename_preset(&id, new_name.clone()).await {
-                log::warn!("move_preset: rename_preset({}) failed: {}", id, e);
+            if let Err(e) = self.ma.rename_preset(&id, new_name.to_string()).await {
+                log::warn!("rename_preset: rename_preset({}) failed: {}", id, e);
             }
             let _ = app.emit(
                 EMIT_PRESET_RENAMED,
                 PresetRenamedPayload {
                     id,
-                    new_name: new_name.clone(),
+                    new_name: new_name.to_string(),
                 },
             );
         }
 
         // Update auto_start_presets
-        update_auto_start_presets(app, name, &new_name);
+        update_auto_start_presets(app, name, new_name);
 
         // Emit list changed for both old and new parent directories
         let old_parent = parent_preset_path(name);
-        let new_parent = parent_preset_path(&new_name);
+        let new_parent = parent_preset_path(new_name);
         let _ = app.emit(
             EMIT_PRESET_LIST_CHANGED,
             PresetListChangedPayload {
                 path: old_parent.clone(),
             },
         );
-        let _ = app.emit(
-            EMIT_PRESET_LIST_CHANGED,
-            PresetListChangedPayload { path: new_parent },
-        );
+        if new_parent != old_parent {
+            let _ = app.emit(
+                EMIT_PRESET_LIST_CHANGED,
+                PresetListChangedPayload { path: new_parent },
+            );
+        }
 
         // Clean up empty ancestor directories
         if let Some(parent) = old_path.parent() {
@@ -227,41 +226,51 @@ impl ModularAgentApp {
         Ok(())
     }
 
-    /// Move a folder (and all its contents) to a different directory.
-    pub async fn move_folder(&self, app: &AppHandle, path: &str, target_dir: &str) -> Result<()> {
-        // Validate paths to prevent path traversal
-        if !path.is_empty() && (path.contains("..") || path.contains('\\') || path.starts_with('/'))
-        {
-            bail!("Invalid folder path");
-        }
-        if !target_dir.is_empty()
-            && (target_dir.contains("..")
-                || target_dir.contains('\\')
-                || target_dir.starts_with('/'))
-        {
-            bail!("Invalid target directory");
-        }
-
-        let basename = path.rsplit('/').next().unwrap_or(path);
-        let new_path_str = if target_dir.is_empty() {
+    /// Move a preset file to a different directory.
+    pub async fn move_preset(&self, app: &AppHandle, name: &str, target_dir: &str) -> Result<()> {
+        let basename = name.rsplit('/').next().unwrap_or(name);
+        let new_name = if target_dir.is_empty() {
             basename.to_string()
         } else {
             format!("{}/{}", target_dir, basename)
         };
+        self.rename_preset(app, name, &new_name).await
+    }
+
+    /// Rename a folder (and all its contents). Also used internally by move_folder.
+    pub async fn rename_folder(
+        &self,
+        app: &AppHandle,
+        path: &str,
+        new_path_str: &str,
+    ) -> Result<()> {
+        // Validate paths to prevent path traversal
+        if !path.is_empty()
+            && (path.contains("..") || path.contains('\\') || path.starts_with('/'))
+        {
+            bail!("Invalid folder path");
+        }
+        if !new_path_str.is_empty()
+            && (new_path_str.contains("..")
+                || new_path_str.contains('\\')
+                || new_path_str.starts_with('/'))
+        {
+            bail!("Invalid folder path: {}", new_path_str);
+        }
 
         if path == new_path_str {
             return Ok(());
         }
 
-        // Prevent moving into self
+        // Prevent renaming into self
         let self_prefix = format!("{}/", path);
-        if target_dir.starts_with(&self_prefix) || target_dir == path {
-            bail!("Cannot move a folder into itself");
+        if new_path_str.starts_with(&self_prefix) {
+            bail!("Cannot rename a folder into itself");
         }
 
         let presets_root = presets_dir()?;
         let old_dir = presets_root.join(path);
-        let new_dir = presets_root.join(&new_path_str);
+        let new_dir = presets_root.join(new_path_str);
 
         if !old_dir.exists() || !old_dir.is_dir() {
             bail!("Folder not found: {}", path);
@@ -283,7 +292,9 @@ impl ModularAgentApp {
             let infos = self.ma.get_preset_infos().await;
             for id in &infos_needed {
                 if infos.iter().any(|p| &p.id == id && p.running) {
-                    bail!("Cannot move folder: a preset inside it is running. Stop it first.");
+                    bail!(
+                        "Cannot rename folder: a preset inside it is running. Stop it first."
+                    );
                 }
             }
         }
@@ -295,11 +306,11 @@ impl ModularAgentApp {
             }
         }
 
-        // Move directory
+        // Rename directory
         std::fs::rename(&old_dir, &new_dir)
-            .with_context(|| format!("Failed to move folder: {} -> {}", path, new_path_str))?;
+            .with_context(|| format!("Failed to rename folder: {} -> {}", path, new_path_str))?;
 
-        // Update all open presets that were inside the moved folder
+        // Update all open presets that were inside the renamed folder
         let old_prefix = format!("{}/", path);
         let new_prefix = format!("{}/", new_path_str);
         let affected: Vec<(String, String)> = {
@@ -319,7 +330,7 @@ impl ModularAgentApp {
                 presets.insert(new_name.clone(), id.clone());
             }
             if let Err(e) = self.ma.rename_preset(id, new_name.clone()).await {
-                log::warn!("move_folder: rename_preset({}) failed: {}", id, e);
+                log::warn!("rename_folder: rename_preset({}) failed: {}", id, e);
             }
             let _ = app.emit(
                 EMIT_PRESET_RENAMED,
@@ -335,17 +346,19 @@ impl ModularAgentApp {
 
         // Emit list changed for both old and new parent directories
         let old_parent = parent_preset_path(path);
-        let new_parent = parent_preset_path(&new_path_str);
+        let new_parent = parent_preset_path(new_path_str);
         let _ = app.emit(
             EMIT_PRESET_LIST_CHANGED,
             PresetListChangedPayload {
                 path: old_parent.clone(),
             },
         );
-        let _ = app.emit(
-            EMIT_PRESET_LIST_CHANGED,
-            PresetListChangedPayload { path: new_parent },
-        );
+        if new_parent != old_parent {
+            let _ = app.emit(
+                EMIT_PRESET_LIST_CHANGED,
+                PresetListChangedPayload { path: new_parent },
+            );
+        }
 
         // Clean up empty ancestor directories
         if let Some(parent) = old_dir.parent() {
@@ -353,6 +366,17 @@ impl ModularAgentApp {
         }
 
         Ok(())
+    }
+
+    /// Move a folder (and all its contents) to a different directory.
+    pub async fn move_folder(&self, app: &AppHandle, path: &str, target_dir: &str) -> Result<()> {
+        let basename = path.rsplit('/').next().unwrap_or(path);
+        let new_path_str = if target_dir.is_empty() {
+            basename.to_string()
+        } else {
+            format!("{}/{}", target_dir, basename)
+        };
+        self.rename_folder(app, path, &new_path_str).await
     }
 
     pub fn save_preset(&self, name: String, spec: PresetSpec) -> Result<()> {
@@ -758,6 +782,32 @@ pub async fn move_folder_cmd(
 ) -> Result<(), String> {
     asapp
         .move_folder(&app, &path, &target_dir)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn rename_preset_cmd(
+    app: AppHandle,
+    asapp: State<'_, ModularAgentApp>,
+    name: String,
+    new_name: String,
+) -> Result<(), String> {
+    asapp
+        .rename_preset(&app, &name, &new_name)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn rename_folder_cmd(
+    app: AppHandle,
+    asapp: State<'_, ModularAgentApp>,
+    path: String,
+    new_path: String,
+) -> Result<(), String> {
+    asapp
+        .rename_folder(&app, &path, &new_path)
         .await
         .map_err(|e| e.to_string())
 }

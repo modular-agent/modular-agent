@@ -57,6 +57,14 @@ export async function moveFolder(path: string, targetDir: string): Promise<void>
   await invoke("move_folder_cmd", { path, targetDir });
 }
 
+export async function renamePreset(name: string, newName: string): Promise<void> {
+  await invoke("rename_preset_cmd", { name, newName });
+}
+
+export async function renameFolder(path: string, newPath: string): Promise<void> {
+  await invoke("rename_folder_cmd", { path, newPath });
+}
+
 export async function deletePreset(name: string): Promise<string> {
   return await invoke("delete_preset_cmd", { name });
 }

@@ -10,7 +10,7 @@
   import * as ContextMenu from "$lib/components/ui/context-menu/index.js";
   import { ScrollArea } from "$lib/components/ui/scroll-area/index.js";
   import * as Sidebar from "$lib/components/ui/sidebar/index.js";
-  import { deletePreset, moveFolder, movePreset, openPreset } from "$lib/modular_agent";
+  import { deletePreset, moveFolder, movePreset, openPreset, renameFolder, renamePreset } from "$lib/modular_agent";
   import { presetTreeStore } from "$lib/preset-tree-store.svelte";
   import { tabStore } from "$lib/tab-store.svelte";
 
@@ -22,6 +22,8 @@
   let dialog_name = $state("");
   let openNewPresetDialog = $state(false);
   let openDeletePresetDialog = $state(false);
+  let openRenameDialog = $state(false);
+  let renameTarget = $state<{ path: string; isFolder: boolean }>({ path: "", isFolder: false });
 
   // Drag & Drop state
   let dragSource = $state<{ type: "file" | "folder"; path: string } | null>(null);
@@ -79,6 +81,31 @@
     const id = await importPreset(file as string, targetDir);
     tabStore.openTab(id, id);
     goto(`/preset_editor/${id}`, { noScroll: true });
+  }
+
+  function handleRename(path: string, isFolder: boolean) {
+    renameTarget = { path, isFolder };
+    openRenameDialog = true;
+  }
+
+  async function onRename(newBasename: string) {
+    if (newBasename.includes("/")) {
+      toast.error("Name cannot contain /");
+      return;
+    }
+    const { path, isFolder } = renameTarget;
+    const lastSlash = path.lastIndexOf("/");
+    const parent = lastSlash >= 0 ? path.substring(0, lastSlash) : "";
+    const newFullPath = parent ? `${parent}/${newBasename}` : newBasename;
+    try {
+      if (isFolder) {
+        await renameFolder(path, newFullPath);
+      } else {
+        await renamePreset(path, newFullPath);
+      }
+    } catch (e) {
+      toast.error(String(e));
+    }
   }
 
   // --- Drag & Drop handlers ---
@@ -193,6 +220,7 @@
             <ContextMenu.Content>
               <ContextMenu.Item onclick={() => handleNew(fp + "/")}>New</ContextMenu.Item>
               <ContextMenu.Item onclick={() => handleImport(fp)}>Import</ContextMenu.Item>
+              <ContextMenu.Item onclick={() => handleRename(fp, true)}>Rename</ContextMenu.Item>
               <ContextMenu.Item onclick={() => handleDelete(fp)}>Delete</ContextMenu.Item>
             </ContextMenu.Content>
           </ContextMenu.Root>
@@ -212,6 +240,7 @@
             <ContextMenu.Content>
               <ContextMenu.Item onclick={() => handleNew(fp)}>New</ContextMenu.Item>
               <ContextMenu.Item onclick={() => handleImport(path)}>Import</ContextMenu.Item>
+              <ContextMenu.Item onclick={() => handleRename(fp, false)}>Rename</ContextMenu.Item>
               <ContextMenu.Item onclick={() => handleDelete(fp)}>Delete</ContextMenu.Item>
             </ContextMenu.Content>
           </ContextMenu.Root>
@@ -264,5 +293,15 @@
     name={dialog_name}
     bind:open={openDeletePresetDialog}
     onDelete={onDeletePreset}
+  />
+{/if}
+
+{#if openRenameDialog}
+  <PresetActionDialog
+    action="Rename"
+    subject={renameTarget.isFolder ? "Folder" : "Preset"}
+    name={renameTarget.path.split("/").pop() ?? renameTarget.path}
+    bind:open={openRenameDialog}
+    onAction={onRename}
   />
 {/if}
