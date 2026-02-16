@@ -27,9 +27,12 @@ const CONFIG_CLAUDE_API_BASE: &str = "claude_api_base";
 const CONFIG_OPENAI_API_KEY: &str = "openai_api_key";
 const CONFIG_OPENAI_API_BASE: &str = "openai_api_base";
 const CONFIG_OLLAMA_URL: &str = "ollama_url";
+const CONFIG_MAX_TOKENS: &str = "max_tokens";
 const CONFIG_OPTIONS: &str = "options";
 const CONFIG_STREAM: &str = "stream";
+const CONFIG_TEMPERATURE: &str = "temperature";
 const CONFIG_TOOLS: &str = "tools";
+const CONFIG_TOP_P: &str = "top_p";
 
 const DEFAULT_CONFIG_MODEL: &str = "openai/gpt-5-nano";
 const DEFAULT_CLAUDE_API_BASE: &str = "https://api.anthropic.com";
@@ -52,6 +55,9 @@ const DEFAULT_OLLAMA_URL: &str = "http://localhost:11434";
     string_config(name = CONFIG_MODEL, default = DEFAULT_CONFIG_MODEL),
     text_config(name = CONFIG_TOOLS),
     object_config(name = CONFIG_OPTIONS),
+    integer_config(name = CONFIG_MAX_TOKENS, title = "Max Tokens", default = 0, description = "0: use API default", detail),
+    number_config(name = CONFIG_TEMPERATURE, title = "Temperature", default = -1.0, description = "-1: use API default (0.0-2.0)", detail),
+    number_config(name = CONFIG_TOP_P, title = "Top P", default = -1.0, description = "-1: use API default (0.0-1.0)", detail),
     string_global_config(name = CONFIG_CLAUDE_API_KEY, title = "Claude API Key"),
     string_global_config(name = CONFIG_CLAUDE_API_BASE, title = "Claude API Base URL", default = DEFAULT_CLAUDE_API_BASE),
     string_global_config(name = CONFIG_OPENAI_API_KEY, title = "OpenAI API Key"),
@@ -118,9 +124,13 @@ impl AsAgent for ChatAgent {
         }
 
         // Get common configs
-        let config_options = self.configs()?.get_object_or_default(CONFIG_OPTIONS);
-        let config_tools = self.configs()?.get_string_or_default(CONFIG_TOOLS);
-        let use_stream = self.configs()?.get_bool_or_default(CONFIG_STREAM);
+        let config = self.configs()?;
+        let config_options = config.get_object_or_default(CONFIG_OPTIONS);
+        let config_tools = config.get_string_or_default(CONFIG_TOOLS);
+        let use_stream = config.get_bool_or_default(CONFIG_STREAM);
+        let max_tokens = config.get_integer_or_default(CONFIG_MAX_TOKENS);
+        let temperature = config.get_number_or_default(CONFIG_TEMPERATURE);
+        let top_p = config.get_number_or_default(CONFIG_TOP_P);
 
         // Route to appropriate provider
         match model_id.provider {
@@ -133,6 +143,9 @@ impl AsAgent for ChatAgent {
                     config_options,
                     config_tools,
                     use_stream,
+                    max_tokens,
+                    temperature,
+                    top_p,
                 )
                 .await
             }
@@ -145,6 +158,9 @@ impl AsAgent for ChatAgent {
                     config_options,
                     config_tools,
                     use_stream,
+                    max_tokens,
+                    temperature,
+                    top_p,
                 )
                 .await
             }
@@ -157,6 +173,9 @@ impl AsAgent for ChatAgent {
                     config_options,
                     config_tools,
                     use_stream,
+                    max_tokens,
+                    temperature,
+                    top_p,
                 )
                 .await
             }
@@ -171,6 +190,7 @@ impl AsAgent for ChatAgent {
 
 impl ChatAgent {
     #[cfg(feature = "openai")]
+    #[allow(clippy::too_many_arguments)]
     async fn process_openai(
         &mut self,
         ctx: AgentContext,
@@ -179,6 +199,9 @@ impl ChatAgent {
         config_options: AgentValueMap<String, AgentValue>,
         config_tools: String,
         use_stream: bool,
+        max_tokens: i64,
+        temperature: f64,
+        top_p: f64,
     ) -> Result<(), AgentError> {
         use futures::StreamExt;
         use modular_agent_core::tool::list_tool_infos_patterns;
@@ -214,6 +237,15 @@ impl ChatAgent {
         }
 
         openai_client::merge_options(&mut request, &config_options)?;
+        if max_tokens > 0 {
+            request["max_tokens"] = max_tokens.into();
+        }
+        if temperature >= 0.0 {
+            request["temperature"] = temperature.into();
+        }
+        if top_p >= 0.0 {
+            request["top_p"] = top_p.into();
+        }
 
         let id = uuid::Uuid::new_v4().to_string();
         if use_stream {
@@ -299,6 +331,7 @@ impl ChatAgent {
     }
 
     #[cfg(feature = "claude")]
+    #[allow(clippy::too_many_arguments)]
     async fn process_claude(
         &mut self,
         ctx: AgentContext,
@@ -307,6 +340,9 @@ impl ChatAgent {
         config_options: AgentValueMap<String, AgentValue>,
         config_tools: String,
         use_stream: bool,
+        max_tokens: i64,
+        temperature: f64,
+        top_p: f64,
     ) -> Result<(), AgentError> {
         use futures::StreamExt;
         use modular_agent_core::tool::list_tool_infos_patterns;
@@ -340,6 +376,8 @@ impl ChatAgent {
             stream: if use_stream { Some(true) } else { None },
             tools,
             thinking: None,
+            temperature: None,
+            top_p: None,
         };
 
         // Merge options
@@ -359,6 +397,17 @@ impl ChatAgent {
             }
             request = serde_json::from_value::<claude_client::ClaudeRequest>(request_json)
                 .map_err(|e| AgentError::InvalidValue(format!("Deserialization error: {}", e)))?;
+        }
+
+        // First-class configs override options
+        if max_tokens > 0 {
+            request.max_tokens = u32::try_from(max_tokens).unwrap_or(8192);
+        }
+        if temperature >= 0.0 {
+            request.temperature = Some(temperature);
+        }
+        if top_p >= 0.0 {
+            request.top_p = Some(top_p);
         }
 
         let id = uuid::Uuid::new_v4().to_string();
@@ -517,6 +566,7 @@ impl ChatAgent {
     }
 
     #[cfg(feature = "ollama")]
+    #[allow(clippy::too_many_arguments)]
     async fn process_ollama(
         &mut self,
         ctx: AgentContext,
@@ -525,6 +575,9 @@ impl ChatAgent {
         config_options: AgentValueMap<String, AgentValue>,
         config_tools: String,
         use_stream: bool,
+        max_tokens: i64,
+        temperature: f64,
+        top_p: f64,
     ) -> Result<(), AgentError> {
         use futures::StreamExt;
         use modular_agent_core::tool::list_tool_infos_patterns;
@@ -566,6 +619,21 @@ impl ChatAgent {
         }
 
         ollama_client::merge_options(&mut request, &config_options)?;
+        if max_tokens > 0 || temperature >= 0.0 || top_p >= 0.0 {
+            if !request.get("options").is_some_and(|v| v.is_object()) {
+                request["options"] = serde_json::json!({});
+            }
+            let opts = request["options"].as_object_mut().unwrap();
+            if max_tokens > 0 {
+                opts.insert("num_predict".into(), max_tokens.into());
+            }
+            if temperature >= 0.0 {
+                opts.insert("temperature".into(), temperature.into());
+            }
+            if top_p >= 0.0 {
+                opts.insert("top_p".into(), top_p.into());
+            }
+        }
 
         let id = uuid::Uuid::new_v4().to_string();
         if use_stream {

@@ -15,10 +15,13 @@ const PORT_MESSAGE: &str = "message";
 const PORT_RESPONSE: &str = "response";
 const PORT_RESET: &str = "reset";
 
+const CONFIG_MAX_TOKENS: &str = "max_tokens";
 const CONFIG_MODEL: &str = "model";
 const CONFIG_OPTIONS: &str = "options";
 const CONFIG_STREAM: &str = "stream";
+const CONFIG_TEMPERATURE: &str = "temperature";
 const CONFIG_TOOLS: &str = "tools";
+const CONFIG_TOP_P: &str = "top_p";
 const CONFIG_USE_CONVERSATION_STATE: &str = "use_conversation_state";
 
 const DEFAULT_MODEL: &str = "openai/gpt-5-mini";
@@ -53,6 +56,9 @@ const DEFAULT_MODEL: &str = "openai/gpt-5-mini";
     string_config(name = CONFIG_MODEL, default = DEFAULT_MODEL),
     text_config(name = CONFIG_TOOLS),
     object_config(name = CONFIG_OPTIONS),
+    integer_config(name = CONFIG_MAX_TOKENS, title = "Max Tokens", default = 0, description = "0: use API default", detail),
+    number_config(name = CONFIG_TEMPERATURE, title = "Temperature", default = -1.0, description = "-1: use API default (0.0-2.0)", detail),
+    number_config(name = CONFIG_TOP_P, title = "Top P", default = -1.0, description = "-1: use API default (0.0-1.0)", detail),
 )]
 pub struct ResponsesAgent {
     data: AgentData,
@@ -131,6 +137,9 @@ impl AsAgent for ResponsesAgent {
         let config_tools = config.get_string_or_default(CONFIG_TOOLS);
         let use_stream = config.get_bool_or_default(CONFIG_STREAM);
         let use_conversation_state = config.get_bool_or_default(CONFIG_USE_CONVERSATION_STATE);
+        let max_tokens = config.get_integer_or_default(CONFIG_MAX_TOKENS);
+        let temperature = config.get_number_or_default(CONFIG_TEMPERATURE);
+        let top_p = config.get_number_or_default(CONFIG_TOP_P);
 
         self.process_response(
             ctx,
@@ -140,12 +149,16 @@ impl AsAgent for ResponsesAgent {
             config_tools,
             use_stream,
             use_conversation_state,
+            max_tokens,
+            temperature,
+            top_p,
         )
         .await
     }
 }
 
 impl ResponsesAgent {
+    #[allow(clippy::too_many_arguments)]
     async fn process_response(
         &mut self,
         ctx: AgentContext,
@@ -155,6 +168,9 @@ impl ResponsesAgent {
         config_tools: String,
         use_stream: bool,
         use_conversation_state: bool,
+        max_tokens: i64,
+        temperature: f64,
+        top_p: f64,
     ) -> Result<(), AgentError> {
         use modular_agent_core::tool::list_tool_infos_patterns;
 
@@ -209,6 +225,15 @@ impl ResponsesAgent {
 
         // Merge options
         openai_client::merge_options(&mut request, &config_options)?;
+        if max_tokens > 0 {
+            request["max_output_tokens"] = max_tokens.into();
+        }
+        if temperature >= 0.0 {
+            request["temperature"] = temperature.into();
+        }
+        if top_p >= 0.0 {
+            request["top_p"] = top_p.into();
+        }
 
         let id = uuid::Uuid::new_v4().to_string();
         if use_stream {

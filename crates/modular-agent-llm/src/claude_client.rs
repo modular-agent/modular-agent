@@ -203,6 +203,10 @@ pub(crate) struct ClaudeRequest {
     pub tools: Option<Vec<ClaudeTool>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub thinking: Option<ClaudeThinkingConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub temperature: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub top_p: Option<f64>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
@@ -866,6 +870,8 @@ mod tests {
             stream: None,
             tools: None,
             thinking: None,
+            temperature: None,
+            top_p: None,
         };
 
         let json = serde_json::to_string(&request).unwrap();
@@ -885,6 +891,8 @@ mod tests {
             stream: None,
             tools: None,
             thinking: None,
+            temperature: None,
+            top_p: None,
         };
 
         let json = serde_json::to_value(&request).unwrap();
@@ -892,6 +900,8 @@ mod tests {
         assert!(!json.as_object().unwrap().contains_key("stream"));
         assert!(!json.as_object().unwrap().contains_key("tools"));
         assert!(!json.as_object().unwrap().contains_key("thinking"));
+        assert!(!json.as_object().unwrap().contains_key("temperature"));
+        assert!(!json.as_object().unwrap().contains_key("top_p"));
     }
 
     #[test]
