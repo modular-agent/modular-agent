@@ -7,7 +7,6 @@ edition = "2024"
 license = "Apache-2.0 OR MIT"
 
 [dependencies]
-async-openai = { version = "0.32.4", features = ["chat-completion", "embedding", "completions", "responses"], optional = true }
 async-trait = "0.1"
 eventsource-stream = { version = "0.2", optional = true }
 futures = { version = "0.3.31", optional = true }
@@ -32,7 +31,7 @@ default = ["image", "claude", "ollama", "openai"]
 claude = ["reqwest", "eventsource-stream", "futures"]
 image = ["photon-rs"]
 ollama = ["ollama-rs" ]
-openai = ["async-openai", "futures"]
+openai = ["reqwest", "eventsource-stream", "futures"]
 
 # [patch.crates-io]
 # modular-agent-core = { path = "../modular-agent-core/modular-agent-core" }

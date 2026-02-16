@@ -31,7 +31,7 @@ const CONFIG_OPTIONS: &str = "options";
 const CONFIG_STREAM: &str = "stream";
 const CONFIG_TOOLS: &str = "tools";
 
-const DEFAULT_CONFIG_MODEL: &str = "gpt-5-nano";
+const DEFAULT_CONFIG_MODEL: &str = "openai/gpt-5-nano";
 const DEFAULT_CLAUDE_API_BASE: &str = "https://api.anthropic.com";
 const DEFAULT_OPENAI_API_BASE: &str = "https://api.openai.com/v1";
 const DEFAULT_OLLAMA_URL: &str = "http://localhost:11434";
@@ -42,7 +42,7 @@ const DEFAULT_OLLAMA_URL: &str = "http://localhost:11434";
 /// - `openai/gpt-5-mini` - Uses OpenAI API
 /// - `ollama/llama3.2:1b` - Uses Ollama
 /// - `claude/claude-sonnet-4-5-20250514` - Uses Claude API
-/// - `gpt-5-nano` - No prefix defaults to OpenAI (backward compatible)
+/// - `openai/qwen/qwen3-vl-8b` - Slashes after the prefix are preserved in model name
 #[modular_agent(
     title = "Chat",
     category = CATEGORY,
@@ -180,24 +180,12 @@ impl ChatAgent {
         config_tools: String,
         use_stream: bool,
     ) -> Result<(), AgentError> {
-        use async_openai::types::chat::{
-            ChatCompletionTools, CreateChatCompletionRequest, CreateChatCompletionRequestArgs,
-        };
         use futures::StreamExt;
         use modular_agent_core::tool::list_tool_infos_patterns;
 
         let client = self.openai_manager.get_client(self.ma())?;
 
-        let options_json =
-            if !config_options.is_empty() {
-                Some(serde_json::to_value(&config_options).map_err(|e| {
-                    AgentError::InvalidValue(format!("Invalid JSON in options: {}", e))
-                })?)
-            } else {
-                None
-            };
-
-        let tool_infos: Vec<ChatCompletionTools> = if config_tools.is_empty() {
+        let tools_json: Vec<serde_json::Value> = if config_tools.is_empty() {
             vec![]
         } else {
             list_tool_infos_patterns(&config_tools)
@@ -208,49 +196,29 @@ impl ChatAgent {
                     ))
                 })?
                 .into_iter()
-                .map(|info| {
-                    openai_client::try_from_tool_info_to_chat_completion_tool(info)
-                        .map(ChatCompletionTools::Function)
-                })
-                .collect::<Result<Vec<ChatCompletionTools>, AgentError>>()?
+                .map(openai_client::tool_info_to_chat_tool_json)
+                .collect()
         };
 
-        let mut request = CreateChatCompletionRequestArgs::default()
-            .model(model_name)
-            .messages(
-                messages
-                    .iter()
-                    .filter_map(|m| m.as_message())
-                    .map(openai_client::message_to_chat_completion_msg)
-                    .collect::<Vec<_>>(),
-            )
-            .tools(tool_infos.clone())
-            .stream(use_stream)
-            .build()
-            .map_err(|e| AgentError::InvalidValue(format!("Failed to build request: {}", e)))?;
-
-        if let Some(options_json) = &options_json {
-            let mut request_json = serde_json::to_value(&request)
-                .map_err(|e| AgentError::InvalidValue(format!("Serialization error: {}", e)))?;
-
-            if let (Some(request_obj), Some(options_obj)) =
-                (request_json.as_object_mut(), options_json.as_object())
-            {
-                for (key, value) in options_obj {
-                    request_obj.insert(key.clone(), value.clone());
-                }
-            }
-            request = serde_json::from_value::<CreateChatCompletionRequest>(request_json)
-                .map_err(|e| AgentError::InvalidValue(format!("Deserialization error: {}", e)))?;
+        let mut request = serde_json::json!({
+            "model": model_name,
+            "messages": messages
+                .iter()
+                .filter_map(|m| m.as_message())
+                .map(openai_client::message_to_chat_json)
+                .collect::<Vec<_>>(),
+            "stream": use_stream,
+        });
+        if !tools_json.is_empty() {
+            request["tools"] = serde_json::Value::Array(tools_json);
         }
+
+        openai_client::merge_options(&mut request, &config_options)?;
 
         let id = uuid::Uuid::new_v4().to_string();
         if use_stream {
-            let mut stream = client
-                .chat()
-                .create_stream(request)
-                .await
-                .map_err(|e| AgentError::IoError(format!("OpenAI Stream Error: {}", e)))?;
+            let url = client.chat_completions_url();
+            let mut stream = client.post_stream(&url, &request).await?;
 
             let mut message = Message::assistant("".to_string());
             message.id = Some(id.clone());
@@ -258,18 +226,21 @@ impl ChatAgent {
             let mut thinking = String::new();
             let mut tool_calls: Vec<ToolCall> = Vec::new();
             while let Some(res) = stream.next().await {
-                let res =
-                    res.map_err(|_| AgentError::IoError("OpenAI Stream Error".to_string()))?;
+                let Some(data) = res? else {
+                    continue; // [DONE] sentinel
+                };
+                let chunk: openai_client::ChatStreamChunk =
+                    serde_json::from_str(&data).map_err(|e| {
+                        AgentError::IoError(format!("OpenAI stream parse error: {}", e))
+                    })?;
 
-                for c in &res.choices {
+                for c in &chunk.choices {
                     if let Some(ref delta_content) = c.delta.content {
                         content.push_str(delta_content);
                     }
                     if let Some(tc) = &c.delta.tool_calls {
                         for call in tc {
-                            if let Ok(c) =
-                                openai_client::try_from_chat_completion_message_tool_call_chunk_to_tool_call(call)
-                            {
+                            if let Ok(c) = openai_client::tool_call_from_stream_chunk(call) {
                                 tool_calls.push(c);
                             }
                         }
@@ -294,22 +265,21 @@ impl ChatAgent {
                 )
                 .await?;
 
-                let out_response = AgentValue::from_serialize(&res)?;
+                let out_response: serde_json::Value =
+                    serde_json::from_str(&data).unwrap_or_default();
+                let out_response = AgentValue::from_serialize(&out_response)?;
                 self.output(ctx.clone(), PORT_RESPONSE.to_string(), out_response)
                     .await?;
             }
 
             Ok(())
         } else {
-            let res = client
-                .chat()
-                .create(request)
-                .await
-                .map_err(|e| AgentError::IoError(format!("OpenAI Error: {}", e)))?;
+            let res: openai_client::ChatCompletionResponse = client
+                .post_json(&client.chat_completions_url(), &request)
+                .await?;
 
             for c in &res.choices {
-                let mut message: Message =
-                    openai_client::message_from_openai_msg(c.message.clone());
+                let mut message = openai_client::message_from_chat_response(&c.message);
                 message.id = Some(id.clone());
 
                 self.output(

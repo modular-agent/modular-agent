@@ -23,14 +23,14 @@ const CONFIG_OPTIONS: &str = "options";
 const CONFIG_SYSTEM: &str = "system";
 const CONFIG_USE_CONTEXT: &str = "use_context";
 
-const DEFAULT_CONFIG_MODEL: &str = "gpt-3.5-turbo-instruct";
+const DEFAULT_CONFIG_MODEL: &str = "openai/gpt-3.5-turbo-instruct";
 
 /// Completion Agent that routes to different LLM providers based on model prefix.
 ///
 /// # Model Format
 /// - `openai/gpt-3.5-turbo-instruct` - Uses OpenAI API
 /// - `ollama/codellama` - Uses Ollama
-/// - `gpt-3.5-turbo-instruct` - No prefix defaults to OpenAI (backward compatible)
+/// - `openai/gpt-3.5-turbo-instruct` - Uses OpenAI
 ///
 /// # Ollama-specific Features
 /// - `use_context`: When enabled, maintains conversation context across requests
@@ -156,10 +156,6 @@ impl CompletionAgent {
         config_options: AgentValueMap<String, AgentValue>,
         config_system: String,
     ) -> Result<(), AgentError> {
-        use async_openai::types::completions::{
-            CreateCompletionRequest, CreateCompletionRequestArgs,
-        };
-
         let client = self.openai_manager.get_client(self.ma())?;
 
         // Build the prompt with system message if provided
@@ -169,35 +165,16 @@ impl CompletionAgent {
             prompt.to_string()
         };
 
-        let mut request = CreateCompletionRequestArgs::default()
-            .model(model_name)
-            .prompt(full_prompt)
-            .build()
-            .map_err(|e| AgentError::InvalidValue(format!("Failed to build request: {}", e)))?;
+        let mut request = serde_json::json!({
+            "model": model_name,
+            "prompt": full_prompt,
+        });
 
-        if !config_options.is_empty() {
-            let options_json = serde_json::to_value(&config_options)
-                .map_err(|e| AgentError::InvalidValue(format!("Invalid JSON in options: {}", e)))?;
+        openai_client::merge_options(&mut request, &config_options)?;
 
-            let mut request_json = serde_json::to_value(&request)
-                .map_err(|e| AgentError::InvalidValue(format!("Serialization error: {}", e)))?;
-
-            if let (Some(request_obj), Some(options_obj)) =
-                (request_json.as_object_mut(), options_json.as_object())
-            {
-                for (key, value) in options_obj {
-                    request_obj.insert(key.clone(), value.clone());
-                }
-            }
-            request = serde_json::from_value::<CreateCompletionRequest>(request_json)
-                .map_err(|e| AgentError::InvalidValue(format!("Deserialization error: {}", e)))?;
-        }
-
-        let res = client
-            .completions()
-            .create(request)
-            .await
-            .map_err(|e| AgentError::IoError(format!("OpenAI Error: {}", e)))?;
+        let res: openai_client::CompletionResponse = client
+            .post_json(&client.completions_url(), &request)
+            .await?;
 
         let message = Message::assistant(res.choices[0].text.clone());
         self.output(ctx.clone(), PORT_MESSAGE.to_string(), message.into())

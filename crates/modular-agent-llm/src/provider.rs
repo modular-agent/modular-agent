@@ -14,12 +14,14 @@ pub struct ModelIdentifier {
 }
 
 impl ModelIdentifier {
-    /// Parse model string with optional provider prefix.
+    /// Parse model string with provider prefix.
+    ///
+    /// A provider prefix is required. Supported prefixes: `openai/`, `ollama/`, `claude/`.
     ///
     /// # Examples
     /// - `"ollama/llama3.2:1b"` → (Ollama, "llama3.2:1b")
     /// - `"openai/gpt-5"` → (OpenAI, "gpt-5")
-    /// - `"gpt-5"` → (OpenAI, "gpt-5") (backward compatibility)
+    /// - `"openai/qwen/qwen3-vl-8b"` → (OpenAI, "qwen/qwen3-vl-8b")
     pub fn parse(model_str: &str) -> Result<Self, AgentError> {
         let model_str = model_str.trim();
 
@@ -89,29 +91,20 @@ impl ModelIdentifier {
             });
         }
 
-        // Unknown prefix check
+        // Unknown provider prefix
         if let Some(slash_pos) = model_str.find('/') {
             let prefix = &model_str[..slash_pos];
-            // Only error if it looks like a provider prefix (no dots, reasonable length)
-            if prefix.len() < 20 && !prefix.contains('.') {
-                return Err(AgentError::InvalidConfig(format!(
-                    "Unknown provider '{}'. Use 'openai/', 'ollama/', or 'claude/' prefix.",
-                    prefix
-                )));
-            }
+            return Err(AgentError::InvalidConfig(format!(
+                "Unknown provider '{}'. Use 'openai/', 'ollama/', or 'claude/' prefix.",
+                prefix
+            )));
         }
 
-        // Default: OpenAI (backward compatibility)
-        #[cfg(not(feature = "openai"))]
-        return Err(AgentError::InvalidConfig(
-            "OpenAI provider not available. Specify 'ollama/' or 'claude/' prefix.".into(),
-        ));
-
-        #[cfg(feature = "openai")]
-        Ok(Self {
-            provider: ProviderKind::OpenAI,
-            model_name: model_str.to_string(),
-        })
+        // No prefix at all
+        Err(AgentError::InvalidConfig(format!(
+            "Model '{}' requires a provider prefix. Use 'openai/', 'ollama/', or 'claude/'.",
+            model_str
+        )))
     }
 }
 
@@ -168,12 +161,16 @@ mod tests {
         assert!(result.is_err());
     }
 
-    #[cfg(feature = "openai")]
     #[test]
-    fn test_parse_default_to_openai() {
-        let result = ModelIdentifier::parse("gpt-5-nano").unwrap();
-        assert_eq!(result.provider, ProviderKind::OpenAI);
-        assert_eq!(result.model_name, "gpt-5-nano");
+    fn test_parse_no_prefix_error() {
+        let result = ModelIdentifier::parse("gpt-5-nano");
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("requires a provider prefix")
+        );
     }
 
     #[cfg(feature = "claude")]
@@ -199,18 +196,26 @@ mod tests {
         assert!(result.unwrap_err().to_string().contains("Unknown provider"));
     }
 
-    #[cfg(feature = "openai")]
     #[test]
-    fn test_parse_url_like_model() {
-        // Model names that look like URLs should not be treated as unknown providers
+    fn test_parse_url_like_model_requires_prefix() {
         let result = ModelIdentifier::parse("my.company.com/model-v1");
-        assert!(result.is_ok());
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Unknown provider"));
     }
 
     #[cfg(feature = "openai")]
     #[test]
     fn test_parse_preserves_whitespace_in_model() {
-        let result = ModelIdentifier::parse("  gpt-5  ").unwrap();
+        let result = ModelIdentifier::parse("  openai/gpt-5  ").unwrap();
+        assert_eq!(result.provider, ProviderKind::OpenAI);
         assert_eq!(result.model_name, "gpt-5");
+    }
+
+    #[cfg(feature = "openai")]
+    #[test]
+    fn test_parse_openai_prefix_with_slash_in_model() {
+        let result = ModelIdentifier::parse("openai/qwen/qwen3-vl-8b").unwrap();
+        assert_eq!(result.provider, ProviderKind::OpenAI);
+        assert_eq!(result.model_name, "qwen/qwen3-vl-8b");
     }
 }

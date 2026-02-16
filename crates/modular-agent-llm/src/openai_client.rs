@@ -2,15 +2,6 @@
 
 use std::sync::{Arc, Mutex};
 
-use async_openai::types::chat::{
-    ChatCompletionMessageToolCall, ChatCompletionMessageToolCallChunk,
-    ChatCompletionMessageToolCalls, ChatCompletionRequestAssistantMessageArgs,
-    ChatCompletionRequestMessage, ChatCompletionRequestSystemMessageArgs,
-    ChatCompletionRequestToolMessageArgs, ChatCompletionRequestUserMessageArgs,
-    ChatCompletionResponseMessage, ChatCompletionTool, FunctionCall, FunctionObject, Role,
-};
-use async_openai::types::embeddings::{CreateEmbeddingRequest, CreateEmbeddingRequestArgs};
-use async_openai::{Client, config::OpenAIConfig};
 use modular_agent_core::tool;
 use modular_agent_core::{
     AgentError, AgentValue, AgentValueMap, Message, ModularAgent, ToolCall, ToolCallFunction,
@@ -20,10 +11,21 @@ use crate::chat::ChatAgent;
 
 const CONFIG_OPENAI_API_KEY: &str = "openai_api_key";
 const CONFIG_OPENAI_API_BASE: &str = "openai_api_base";
+const DEFAULT_OPENAI_API_BASE: &str = "https://api.openai.com/v1";
 
-/// Shared client management for OpenAI
+// ============================================================================
+// Client management
+// ============================================================================
+
+#[derive(Clone)]
+pub(crate) struct OpenAIClient {
+    http: reqwest::Client,
+    api_key: String,
+    api_base: String,
+}
+
 pub struct OpenAIManager {
-    client: Arc<Mutex<Option<Client<OpenAIConfig>>>>,
+    client: Arc<Mutex<Option<OpenAIClient>>>,
 }
 
 impl OpenAIManager {
@@ -33,32 +35,38 @@ impl OpenAIManager {
         }
     }
 
-    pub fn get_client(&self, ma: &ModularAgent) -> Result<Client<OpenAIConfig>, AgentError> {
+    pub fn get_client(&self, ma: &ModularAgent) -> Result<OpenAIClient, AgentError> {
         let mut client_guard = self.client.lock().unwrap();
 
         if let Some(client) = client_guard.as_ref() {
             return Ok(client.clone());
         }
 
-        let mut config = OpenAIConfig::new();
-
-        if let Some(api_key) = ma
+        // API key: config → OPENAI_API_KEY env var → empty
+        let api_key = ma
             .get_global_configs(ChatAgent::DEF_NAME)
             .and_then(|cfg| cfg.get_string(CONFIG_OPENAI_API_KEY).ok())
             .filter(|key| !key.is_empty())
-        {
-            config = config.with_api_key(&api_key);
-        }
+            .or_else(|| std::env::var("OPENAI_API_KEY").ok().filter(|k| !k.is_empty()))
+            .unwrap_or_default();
 
-        if let Some(api_base) = ma
+        // API base: config → OPENAI_API_BASE env var → default
+        let api_base = ma
             .get_global_configs(ChatAgent::DEF_NAME)
             .and_then(|cfg| cfg.get_string(CONFIG_OPENAI_API_BASE).ok())
-            .filter(|key| !key.is_empty())
-        {
-            config = config.with_api_base(&api_base);
-        }
+            .filter(|url| !url.is_empty())
+            .or_else(|| {
+                std::env::var("OPENAI_API_BASE")
+                    .ok()
+                    .filter(|u| !u.is_empty())
+            })
+            .unwrap_or_else(|| DEFAULT_OPENAI_API_BASE.to_string());
 
-        let new_client = Client::with_config(config);
+        let new_client = OpenAIClient {
+            http: reqwest::Client::new(),
+            api_key,
+            api_base,
+        };
         *client_guard = Some(new_client.clone());
 
         Ok(new_client)
@@ -71,76 +79,366 @@ impl Default for OpenAIManager {
     }
 }
 
-/// Generate embeddings
+// ============================================================================
+// HTTP request methods
+// ============================================================================
+
+impl OpenAIClient {
+    pub(crate) fn chat_completions_url(&self) -> String {
+        format!("{}/chat/completions", self.api_base.trim_end_matches('/'))
+    }
+
+    pub(crate) fn completions_url(&self) -> String {
+        format!("{}/completions", self.api_base.trim_end_matches('/'))
+    }
+
+    pub(crate) fn embeddings_url(&self) -> String {
+        format!("{}/embeddings", self.api_base.trim_end_matches('/'))
+    }
+
+    pub(crate) fn responses_url(&self) -> String {
+        format!("{}/responses", self.api_base.trim_end_matches('/'))
+    }
+
+    /// POST JSON and parse typed response.
+    pub(crate) async fn post_json<T: serde::de::DeserializeOwned>(
+        &self,
+        url: &str,
+        body: &serde_json::Value,
+    ) -> Result<T, AgentError> {
+        let resp = self
+            .http
+            .post(url)
+            .header("Authorization", format!("Bearer {}", self.api_key))
+            .header("content-type", "application/json")
+            .json(body)
+            .send()
+            .await
+            .map_err(|e| AgentError::IoError(format!("OpenAI request error: {}", e)))?;
+
+        let status = resp.status().as_u16();
+        if !resp.status().is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(map_http_error(status, &body));
+        }
+
+        resp.json()
+            .await
+            .map_err(|e| AgentError::IoError(format!("OpenAI response parse error: {}", e)))
+    }
+
+    /// POST and return an SSE stream of raw JSON data strings.
+    ///
+    /// `[DONE]` sentinel is filtered out. Callers deserialize each string
+    /// into the appropriate type (e.g. `ChatStreamChunk` or `ResponseStreamEvent`).
+    pub(crate) async fn post_stream(
+        &self,
+        url: &str,
+        body: &serde_json::Value,
+    ) -> Result<
+        impl futures::Stream<Item = Result<Option<String>, AgentError>> + use<>,
+        AgentError,
+    > {
+        use eventsource_stream::Eventsource;
+        use futures::StreamExt;
+
+        let resp = self
+            .http
+            .post(url)
+            .header("Authorization", format!("Bearer {}", self.api_key))
+            .header("content-type", "application/json")
+            .json(body)
+            .send()
+            .await
+            .map_err(|e| AgentError::IoError(format!("OpenAI stream request error: {}", e)))?;
+
+        let status = resp.status().as_u16();
+        if !resp.status().is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(map_http_error(status, &body));
+        }
+
+        let stream = resp.bytes_stream().eventsource().map(|result| match result {
+            Ok(event) => {
+                if event.data == "[DONE]" {
+                    Ok(None)
+                } else {
+                    Ok(Some(event.data))
+                }
+            }
+            Err(e) => Err(AgentError::IoError(format!("OpenAI stream error: {}", e))),
+        });
+
+        Ok(stream)
+    }
+}
+
+fn map_http_error(status: u16, body: &str) -> AgentError {
+    match status {
+        401 => AgentError::InvalidConfig(format!("Invalid OpenAI API key: {}", body)),
+        429 => AgentError::IoError(format!("OpenAI rate limited: {}", body)),
+        400 => AgentError::InvalidValue(format!("OpenAI Bad Request: {}", body)),
+        _ => AgentError::IoError(format!("OpenAI API Error ({}): {}", status, body)),
+    }
+}
+
+// ============================================================================
+// Serde type definitions — Chat Completions
+// ============================================================================
+
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+pub(crate) struct ChatCompletionResponse {
+    pub choices: Vec<ChatChoice>,
+    #[serde(flatten)]
+    pub extra: serde_json::Map<String, serde_json::Value>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+pub(crate) struct ChatChoice {
+    pub index: u32,
+    pub message: ChatResponseMessage,
+    pub finish_reason: Option<String>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+pub(crate) struct ChatResponseMessage {
+    pub role: String,
+    pub content: Option<String>,
+    pub refusal: Option<String>,
+    pub tool_calls: Option<Vec<ChatToolCall>>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+pub(crate) struct ChatToolCall {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub call_type: String,
+    pub function: ChatFunctionCall,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+pub(crate) struct ChatFunctionCall {
+    pub name: String,
+    pub arguments: String,
+}
+
+// Streaming types
+
+#[derive(serde::Deserialize, Clone)]
+pub(crate) struct ChatStreamChunk {
+    pub choices: Vec<ChatStreamChoice>,
+    #[serde(flatten)]
+    pub extra: serde_json::Map<String, serde_json::Value>,
+}
+
+#[derive(serde::Deserialize, Clone)]
+pub(crate) struct ChatStreamChoice {
+    pub index: u32,
+    pub delta: ChatStreamDelta,
+    pub finish_reason: Option<String>,
+}
+
+#[derive(serde::Deserialize, Clone)]
+pub(crate) struct ChatStreamDelta {
+    pub content: Option<String>,
+    pub tool_calls: Option<Vec<ChatToolCallChunk>>,
+    pub refusal: Option<String>,
+}
+
+#[derive(serde::Deserialize, Clone)]
+pub(crate) struct ChatToolCallChunk {
+    pub index: u32,
+    pub id: Option<String>,
+    pub function: Option<ChatFunctionCallChunk>,
+}
+
+#[derive(serde::Deserialize, Clone)]
+pub(crate) struct ChatFunctionCallChunk {
+    pub name: Option<String>,
+    pub arguments: Option<String>,
+}
+
+// ============================================================================
+// Serde type definitions — Completions
+// ============================================================================
+
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+pub(crate) struct CompletionResponse {
+    pub choices: Vec<CompletionChoice>,
+    #[serde(flatten)]
+    pub extra: serde_json::Map<String, serde_json::Value>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+pub(crate) struct CompletionChoice {
+    pub text: String,
+    pub index: u32,
+    pub finish_reason: Option<String>,
+}
+
+// ============================================================================
+// Serde type definitions — Embeddings
+// ============================================================================
+
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+pub(crate) struct EmbeddingResponse {
+    pub data: Vec<EmbeddingData>,
+    #[serde(flatten)]
+    pub extra: serde_json::Map<String, serde_json::Value>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+pub(crate) struct EmbeddingData {
+    pub index: u32,
+    pub embedding: Vec<f32>,
+}
+
+// ============================================================================
+// Serde type definitions — Responses API streaming
+// ============================================================================
+
+#[derive(serde::Deserialize)]
+#[serde(tag = "type")]
+pub(crate) enum ResponseStreamEvent {
+    #[serde(rename = "response.output_text.delta")]
+    OutputTextDelta { delta: String },
+    #[serde(rename = "response.function_call_arguments.delta")]
+    FunctionCallArgumentsDelta { delta: String },
+    #[serde(rename = "response.output_item.added")]
+    OutputItemAdded { item: serde_json::Value },
+    #[serde(rename = "response.output_item.done")]
+    OutputItemDone {
+        #[allow(dead_code)]
+        item: serde_json::Value,
+    },
+    #[serde(rename = "response.completed")]
+    Completed { response: serde_json::Value },
+    #[serde(other)]
+    Other,
+}
+
+// ============================================================================
+// Embeddings helper
+// ============================================================================
+
 pub async fn generate_embeddings(
-    client: &Client<OpenAIConfig>,
+    client: &OpenAIClient,
     texts: Vec<String>,
     model_name: &str,
     config_options: &AgentValueMap<String, AgentValue>,
 ) -> Result<Vec<Vec<f32>>, AgentError> {
-    let mut request = CreateEmbeddingRequestArgs::default()
-        .model(model_name.to_string())
-        .input(texts)
-        .build()
-        .map_err(|e| AgentError::InvalidValue(format!("Failed to build request: {}", e)))?;
+    let mut request = serde_json::json!({
+        "model": model_name,
+        "input": texts,
+    });
 
-    if !config_options.is_empty() {
-        let options_json = serde_json::to_value(config_options)
-            .map_err(|e| AgentError::InvalidValue(format!("Invalid JSON in options: {}", e)))?;
+    merge_options(&mut request, config_options)?;
 
-        let mut request_json = serde_json::to_value(&request)
-            .map_err(|e| AgentError::InvalidValue(format!("Serialization error: {}", e)))?;
-
-        if let (Some(request_obj), Some(options_obj)) =
-            (request_json.as_object_mut(), options_json.as_object())
-        {
-            for (key, value) in options_obj {
-                request_obj.insert(key.clone(), value.clone());
-            }
-        }
-        request = serde_json::from_value::<CreateEmbeddingRequest>(request_json)
-            .map_err(|e| AgentError::InvalidValue(format!("Deserialization error: {}", e)))?;
-    }
-
-    let res = client
-        .embeddings()
-        .create(request)
-        .await
-        .map_err(|e| AgentError::IoError(format!("OpenAI Error: {}", e)))?;
+    let res: EmbeddingResponse = client.post_json(&client.embeddings_url(), &request).await?;
 
     Ok(res.data.into_iter().map(|d| d.embedding).collect())
 }
 
-// Message conversion functions
+// ============================================================================
+// Message conversion functions — Chat Completions
+// ============================================================================
 
-pub fn message_from_openai_msg(msg: ChatCompletionResponseMessage) -> Message {
-    let role = match msg.role {
-        Role::System => "system",
-        Role::User => "user",
-        Role::Assistant => "assistant",
-        Role::Tool => "tool",
-        Role::Function => "function",
-    };
-    let content = msg.content.unwrap_or_default();
-    let mut message = Message::new(role.to_string(), content);
+/// Convert internal Message to Chat Completions API request JSON.
+pub fn message_to_chat_json(msg: &Message) -> serde_json::Value {
+    match msg.role.as_str() {
+        "system" => serde_json::json!({
+            "role": "system",
+            "content": msg.content
+        }),
+        "user" => {
+            #[cfg(feature = "image")]
+            {
+                if let Some(image) = &msg.image {
+                    return serde_json::json!({
+                        "role": "user",
+                        "content": [
+                            { "type": "text", "text": msg.content },
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": image.get_base64(),
+                                    "detail": "auto"
+                                }
+                            }
+                        ]
+                    });
+                }
+            }
+            serde_json::json!({
+                "role": "user",
+                "content": msg.content
+            })
+        }
+        "assistant" => {
+            let mut json = serde_json::json!({
+                "role": "assistant",
+                "content": msg.content
+            });
+            if let Some(tool_calls) = &msg.tool_calls {
+                let tc: Vec<serde_json::Value> = tool_calls
+                    .iter()
+                    .map(|tc| {
+                        serde_json::json!({
+                            "type": "function",
+                            "id": tc.function.id.clone()
+                                .unwrap_or_else(|| uuid::Uuid::new_v4().to_string()),
+                            "function": {
+                                "name": tc.function.name,
+                                "arguments": tc.function.parameters.to_string()
+                            }
+                        })
+                    })
+                    .collect();
+                json["tool_calls"] = serde_json::Value::Array(tc);
+            }
+            json
+        }
+        "tool" => serde_json::json!({
+            "role": "tool",
+            "content": msg.content,
+            "tool_call_id": msg.id.clone().unwrap_or_default()
+        }),
+        _ => serde_json::json!({
+            "role": "user",
+            "content": msg.content
+        }),
+    }
+}
+
+/// Convert Chat Completions API response message to internal Message.
+pub fn message_from_chat_response(msg: &ChatResponseMessage) -> Message {
+    let content = msg.content.clone().unwrap_or_default();
+    let mut message = Message::new(msg.role.clone(), content);
 
     let thinking = msg
         .refusal
+        .as_ref()
         .map(|r| format!("Refusal: {}", r))
         .unwrap_or_default();
     if !thinking.is_empty() {
         message.thinking = Some(thinking);
     }
 
-    if let Some(tool_calls) = msg.tool_calls {
-        let mut calls: Vec<ToolCall> = Vec::new();
-        for call in tool_calls {
-            if let ChatCompletionMessageToolCalls::Function(ref func_call) = call {
-                if let Ok(c) = try_from_chat_completion_message_tool_call_to_tool_call(func_call) {
-                    calls.push(c);
+    if let Some(tool_calls) = &msg.tool_calls {
+        let calls: Vec<ToolCall> = tool_calls
+            .iter()
+            .map(|call| {
+                let parameters =
+                    serde_json::from_str(&call.function.arguments).unwrap_or_default();
+                ToolCall {
+                    function: ToolCallFunction {
+                        id: Some(call.id.clone()),
+                        name: call.function.name.clone(),
+                        parameters,
+                    },
                 }
-            }
-        }
+            })
+            .collect();
         if !calls.is_empty() {
             message.tool_calls = Some(calls.into());
         }
@@ -149,111 +447,30 @@ pub fn message_from_openai_msg(msg: ChatCompletionResponseMessage) -> Message {
     message
 }
 
-pub fn message_to_chat_completion_msg(msg: &Message) -> ChatCompletionRequestMessage {
-    match msg.role.as_str() {
-        "system" => ChatCompletionRequestSystemMessageArgs::default()
-            .content(msg.content.clone())
-            .build()
-            .unwrap()
-            .into(),
-        "user" => {
-            #[cfg(feature = "image")]
-            {
-                if let Some(image) = &msg.image {
-                    use async_openai::types::chat::{
-                        ChatCompletionRequestMessageContentPartImage,
-                        ChatCompletionRequestMessageContentPartText, ImageDetail, ImageUrl,
-                    };
-
-                    let image_url = ImageUrl {
-                        url: image.get_base64(),
-                        detail: Some(ImageDetail::Auto),
-                    };
-                    let img = ChatCompletionRequestMessageContentPartImage { image_url };
-                    let text = ChatCompletionRequestMessageContentPartText {
-                        text: msg.content.clone(),
-                    };
-
-                    return ChatCompletionRequestUserMessageArgs::default()
-                        .content(vec![text.into(), img.into()])
-                        .build()
-                        .unwrap()
-                        .into();
-                }
-            }
-            ChatCompletionRequestUserMessageArgs::default()
-                .content(msg.content.clone())
-                .build()
-                .unwrap()
-                .into()
+/// Convert a ToolInfo to Chat Completions tool definition JSON.
+pub fn tool_info_to_chat_tool_json(info: tool::ToolInfo) -> serde_json::Value {
+    serde_json::json!({
+        "type": "function",
+        "function": {
+            "name": info.name,
+            "description": if info.description.is_empty() {
+                serde_json::Value::Null
+            } else {
+                serde_json::Value::String(info.description)
+            },
+            "parameters": info.parameters.unwrap_or(serde_json::json!({}))
         }
-        "assistant" => {
-            let mut builder = ChatCompletionRequestAssistantMessageArgs::default();
-            builder.content(msg.content.clone());
-            if let Some(tool_calls) = &msg.tool_calls {
-                let tc: Vec<ChatCompletionMessageToolCalls> = tool_calls
-                    .iter()
-                    .map(|tc| {
-                        ChatCompletionMessageToolCalls::Function(ChatCompletionMessageToolCall {
-                            id: tc
-                                .function
-                                .id
-                                .clone()
-                                .unwrap_or_else(|| uuid::Uuid::new_v4().to_string()),
-                            function: FunctionCall {
-                                name: tc.function.name.clone(),
-                                arguments: tc.function.parameters.to_string(),
-                            },
-                        })
-                    })
-                    .collect();
-                builder.tool_calls(tc);
-            }
-            builder.build().unwrap().into()
-        }
-        "tool" => ChatCompletionRequestToolMessageArgs::default()
-            .content(msg.content.clone())
-            .tool_call_id(msg.id.clone().unwrap_or_default())
-            .build()
-            .unwrap()
-            .into(),
-        _ => ChatCompletionRequestUserMessageArgs::default()
-            .content(msg.content.clone())
-            .build()
-            .unwrap()
-            .into(),
-    }
+    })
 }
 
-pub fn try_from_tool_info_to_chat_completion_tool(
-    info: tool::ToolInfo,
-) -> Result<ChatCompletionTool, AgentError> {
-    let function = FunctionObject {
-        name: info.name,
-        description: if info.description.is_empty() {
-            None
-        } else {
-            Some(info.description)
-        },
-        parameters: info.parameters,
-        strict: None,
-    };
-    Ok(ChatCompletionTool { function })
-}
-
-pub fn try_from_chat_completion_message_tool_call_chunk_to_tool_call(
-    call: &ChatCompletionMessageToolCallChunk,
-) -> Result<ToolCall, AgentError> {
-    let Some(function) = &call.function else {
-        return Err(AgentError::InvalidValue(
-            "ToolCallChunk missing function".to_string(),
-        ));
-    };
-    let Some(name) = &function.name else {
-        return Err(AgentError::InvalidValue(
-            "ToolCallChunk function missing name".to_string(),
-        ));
-    };
+/// Convert a streaming tool call chunk to internal ToolCall.
+pub fn tool_call_from_stream_chunk(call: &ChatToolCallChunk) -> Result<ToolCall, AgentError> {
+    let function = call.function.as_ref().ok_or_else(|| {
+        AgentError::InvalidValue("ToolCallChunk missing function".to_string())
+    })?;
+    let name = function.name.as_ref().ok_or_else(|| {
+        AgentError::InvalidValue("ToolCallChunk function missing name".to_string())
+    })?;
     let parameters = if let Some(arguments) = &function.arguments {
         serde_json::from_str(arguments).map_err(|e| {
             AgentError::InvalidValue(format!("Failed to parse tool call arguments JSON: {}", e))
@@ -270,39 +487,19 @@ pub fn try_from_chat_completion_message_tool_call_chunk_to_tool_call(
     Ok(ToolCall { function })
 }
 
-fn try_from_chat_completion_message_tool_call_to_tool_call(
-    call: &ChatCompletionMessageToolCall,
-) -> Result<ToolCall, AgentError> {
-    let parameters = serde_json::from_str(&call.function.arguments).map_err(|e| {
-        AgentError::InvalidValue(format!("Failed to parse tool call arguments JSON: {}", e))
-    })?;
-
-    let function = ToolCallFunction {
-        id: Some(call.id.clone()),
-        name: call.function.name.clone(),
-        parameters,
-    };
-    Ok(ToolCall { function })
-}
-
 // ============================================================================
-// Responses API conversion functions
+// Message conversion functions — Responses API
 // ============================================================================
-
-use async_openai::types::responses::{
-    FunctionCallOutput, FunctionCallOutputItemParam, FunctionToolCall, InputItem, Item, OutputItem,
-    OutputMessageContent,
-};
 
 /// Convert messages to Responses API input format.
 ///
 /// Maps internal Message types to the correct Responses API InputItem variants:
 /// - Assistant messages with tool_calls → FunctionCall items
 /// - Tool result messages → FunctionCallOutput items
-/// - Other messages → EasyMessage items (via serde_json)
+/// - Other messages → Message items (via serde_json)
 pub fn messages_to_response_input(
     messages: &im::Vector<AgentValue>,
-) -> Result<Vec<InputItem>, AgentError> {
+) -> Result<Vec<serde_json::Value>, AgentError> {
     let mut input_items = Vec::new();
 
     for msg_value in messages.iter() {
@@ -312,40 +509,33 @@ pub fn messages_to_response_input(
 
         match msg.role.as_str() {
             "tool" => {
-                // Tool result → function_call_output item
                 let call_id = msg
                     .id
                     .clone()
                     .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
-                input_items.push(InputItem::Item(Item::FunctionCallOutput(
-                    FunctionCallOutputItemParam {
-                        call_id,
-                        output: FunctionCallOutput::Text(msg.content.clone()),
-                        id: None,
-                        status: None,
-                    },
-                )));
+                input_items.push(serde_json::json!({
+                    "type": "function_call_output",
+                    "call_id": call_id,
+                    "output": msg.content,
+                }));
             }
             "assistant" => {
                 if let Some(tool_calls) = &msg.tool_calls {
-                    // Assistant text content as message item (if non-empty)
                     if !msg.content.is_empty() {
                         build_response_message_item(&mut input_items, "assistant", msg)?;
                     }
-                    // Each tool_call → function_call item
                     for tc in tool_calls.iter() {
                         let call_id = tc
                             .function
                             .id
                             .clone()
                             .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
-                        input_items.push(InputItem::Item(Item::FunctionCall(FunctionToolCall {
-                            arguments: tc.function.parameters.to_string(),
-                            call_id,
-                            name: tc.function.name.clone(),
-                            id: None,
-                            status: None,
-                        })));
+                        input_items.push(serde_json::json!({
+                            "type": "function_call",
+                            "arguments": tc.function.parameters.to_string(),
+                            "call_id": call_id,
+                            "name": tc.function.name,
+                        }));
                     }
                 } else {
                     build_response_message_item(&mut input_items, "assistant", msg)?;
@@ -364,82 +554,97 @@ pub fn messages_to_response_input(
     Ok(input_items)
 }
 
-/// Build a Responses API message InputItem (for user/assistant/developer roles).
+/// Build a Responses API message input item.
 fn build_response_message_item(
-    input_items: &mut Vec<InputItem>,
+    input_items: &mut Vec<serde_json::Value>,
     role_str: &str,
     msg: &Message,
 ) -> Result<(), AgentError> {
     #[cfg(feature = "image")]
     let item = if let Some(image) = &msg.image {
-        let content = serde_json::json!([
-            { "type": "input_text", "text": msg.content },
-            { "type": "input_image", "detail": "auto", "image_url": image.get_base64() }
-        ]);
-        let item_json = serde_json::json!({
+        serde_json::json!({
             "type": "message",
             "role": role_str,
-            "content": content
-        });
-        serde_json::from_value::<InputItem>(item_json)
-            .map_err(|e| AgentError::InvalidValue(format!("Failed to build input item: {}", e)))?
+            "content": [
+                { "type": "input_text", "text": msg.content },
+                { "type": "input_image", "detail": "auto", "image_url": image.get_base64() }
+            ]
+        })
     } else {
-        let item_json = serde_json::json!({
+        serde_json::json!({
             "type": "message",
             "role": role_str,
             "content": msg.content
-        });
-        serde_json::from_value::<InputItem>(item_json)
-            .map_err(|e| AgentError::InvalidValue(format!("Failed to build input item: {}", e)))?
+        })
     };
 
     #[cfg(not(feature = "image"))]
-    let item = {
-        let item_json = serde_json::json!({
-            "type": "message",
-            "role": role_str,
-            "content": msg.content
-        });
-        serde_json::from_value::<InputItem>(item_json)
-            .map_err(|e| AgentError::InvalidValue(format!("Failed to build input item: {}", e)))?
-    };
+    let item = serde_json::json!({
+        "type": "message",
+        "role": role_str,
+        "content": msg.content
+    });
 
     input_items.push(item);
     Ok(())
 }
 
-/// Convert Responses API output to internal Message.
-pub fn response_output_to_message(output: &[OutputItem]) -> Result<Message, AgentError> {
+/// Convert Responses API output items to internal Message.
+pub fn response_output_to_message(output: &[serde_json::Value]) -> Result<Message, AgentError> {
     let mut content = String::new();
     let mut tool_calls: Vec<ToolCall> = Vec::new();
 
     for item in output {
-        match item {
-            OutputItem::Message(msg) => {
-                for part in &msg.content {
-                    match part {
-                        OutputMessageContent::OutputText(text_content) => {
-                            content.push_str(&text_content.text);
-                        }
-                        OutputMessageContent::Refusal(refusal) => {
-                            content.push_str(&format!("[Refusal: {}]", refusal.refusal));
+        let item_type = item.get("type").and_then(|v| v.as_str()).unwrap_or("");
+        match item_type {
+            "message" => {
+                if let Some(parts) = item.get("content").and_then(|c| c.as_array()) {
+                    for part in parts {
+                        let part_type =
+                            part.get("type").and_then(|v| v.as_str()).unwrap_or("");
+                        match part_type {
+                            "output_text" => {
+                                if let Some(text) = part.get("text").and_then(|v| v.as_str()) {
+                                    content.push_str(text);
+                                }
+                            }
+                            "refusal" => {
+                                if let Some(refusal) =
+                                    part.get("refusal").and_then(|v| v.as_str())
+                                {
+                                    content.push_str(&format!("[Refusal: {}]", refusal));
+                                }
+                            }
+                            _ => {}
                         }
                     }
                 }
             }
-            OutputItem::FunctionCall(fc) => {
+            "function_call" => {
+                let name = item
+                    .get("name")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default()
+                    .to_string();
+                let call_id = item
+                    .get("call_id")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default()
+                    .to_string();
+                let arguments = item
+                    .get("arguments")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("{}");
                 let parameters: serde_json::Value =
-                    serde_json::from_str(&fc.arguments).unwrap_or_default();
-                let tool_call = ToolCall {
+                    serde_json::from_str(arguments).unwrap_or_default();
+                tool_calls.push(ToolCall {
                     function: ToolCallFunction {
-                        id: Some(fc.call_id.clone()),
-                        name: fc.name.clone(),
+                        id: Some(call_id),
+                        name,
                         parameters,
                     },
-                };
-                tool_calls.push(tool_call);
+                });
             }
-            // Handle other output types as needed (file_search, web_search, etc.)
             _ => {}
         }
     }
@@ -451,6 +656,34 @@ pub fn response_output_to_message(output: &[OutputItem]) -> Result<Message, Agen
 
     Ok(message)
 }
+
+// ============================================================================
+// Helpers
+// ============================================================================
+
+/// Merge user options JSON into a request JSON object.
+pub(crate) fn merge_options(
+    request: &mut serde_json::Value,
+    config_options: &AgentValueMap<String, AgentValue>,
+) -> Result<(), AgentError> {
+    if config_options.is_empty() {
+        return Ok(());
+    }
+    let options_json = serde_json::to_value(config_options)
+        .map_err(|e| AgentError::InvalidValue(format!("Invalid JSON in options: {}", e)))?;
+    if let (Some(req_obj), Some(opt_obj)) =
+        (request.as_object_mut(), options_json.as_object())
+    {
+        for (key, value) in opt_obj {
+            req_obj.insert(key.clone(), value.clone());
+        }
+    }
+    Ok(())
+}
+
+// ============================================================================
+// Tests
+// ============================================================================
 
 #[cfg(test)]
 mod tests {
@@ -468,14 +701,13 @@ mod tests {
     }
 
     // =========================================================================
-    // Chat Completions: message_to_chat_completion_msg
+    // Chat Completions: message_to_chat_json
     // =========================================================================
 
     #[test]
     fn test_chat_completion_assistant_without_tool_calls() {
         let msg = Message::assistant("Hello".to_string());
-        let result = message_to_chat_completion_msg(&msg);
-        let json = serde_json::to_value(&result).unwrap();
+        let json = message_to_chat_json(&msg);
         assert_eq!(json["role"], "assistant");
         assert_eq!(json["content"], "Hello");
         assert!(json.get("tool_calls").is_none());
@@ -492,8 +724,7 @@ mod tests {
             )],
         );
 
-        let result = message_to_chat_completion_msg(&msg);
-        let json = serde_json::to_value(&result).unwrap();
+        let json = message_to_chat_json(&msg);
         assert_eq!(json["role"], "assistant");
 
         let tool_calls = json["tool_calls"].as_array().unwrap();
@@ -513,11 +744,233 @@ mod tests {
         let mut msg = Message::tool("get_weather".to_string(), "22°C".to_string());
         msg.id = Some("call_123".to_string());
 
-        let result = message_to_chat_completion_msg(&msg);
-        let json = serde_json::to_value(&result).unwrap();
+        let json = message_to_chat_json(&msg);
         assert_eq!(json["role"], "tool");
         assert_eq!(json["content"], "22°C");
         assert_eq!(json["tool_call_id"], "call_123");
+    }
+
+    // =========================================================================
+    // Chat Completions: message_from_chat_response
+    // =========================================================================
+
+    #[test]
+    fn test_message_from_chat_response_text() {
+        let msg = ChatResponseMessage {
+            role: "assistant".to_string(),
+            content: Some("Hello!".to_string()),
+            refusal: None,
+            tool_calls: None,
+        };
+        let result = message_from_chat_response(&msg);
+        assert_eq!(result.content, "Hello!");
+        assert!(result.tool_calls.is_none());
+        assert!(result.thinking.is_none());
+    }
+
+    #[test]
+    fn test_message_from_chat_response_tool_use() {
+        let msg = ChatResponseMessage {
+            role: "assistant".to_string(),
+            content: Some("I'll check.".to_string()),
+            refusal: None,
+            tool_calls: Some(vec![ChatToolCall {
+                id: "call_abc".to_string(),
+                call_type: "function".to_string(),
+                function: ChatFunctionCall {
+                    name: "get_weather".to_string(),
+                    arguments: r#"{"location":"Tokyo"}"#.to_string(),
+                },
+            }]),
+        };
+        let result = message_from_chat_response(&msg);
+        assert_eq!(result.content, "I'll check.");
+        let tool_calls = result.tool_calls.unwrap();
+        assert_eq!(tool_calls.len(), 1);
+        assert_eq!(tool_calls[0].function.name, "get_weather");
+        assert_eq!(
+            tool_calls[0].function.id,
+            Some("call_abc".to_string())
+        );
+    }
+
+    #[test]
+    fn test_message_from_chat_response_refusal() {
+        let msg = ChatResponseMessage {
+            role: "assistant".to_string(),
+            content: Some("".to_string()),
+            refusal: Some("I cannot do that.".to_string()),
+            tool_calls: None,
+        };
+        let result = message_from_chat_response(&msg);
+        assert_eq!(
+            result.thinking,
+            Some("Refusal: I cannot do that.".to_string())
+        );
+    }
+
+    // =========================================================================
+    // Serde: response types
+    // =========================================================================
+
+    #[test]
+    fn test_serde_chat_completion_response() {
+        let json = r#"{
+            "id": "chatcmpl-123",
+            "object": "chat.completion",
+            "model": "gpt-5-mini",
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {
+                        "role": "assistant",
+                        "content": "Hello!",
+                        "refusal": null,
+                        "tool_calls": null
+                    },
+                    "finish_reason": "stop"
+                }
+            ],
+            "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}
+        }"#;
+        let resp: ChatCompletionResponse = serde_json::from_str(json).unwrap();
+        assert_eq!(resp.choices.len(), 1);
+        assert_eq!(resp.choices[0].message.content, Some("Hello!".to_string()));
+        assert_eq!(resp.extra.get("id").unwrap(), "chatcmpl-123");
+        assert!(resp.extra.contains_key("usage"));
+    }
+
+    #[test]
+    fn test_serde_chat_stream_chunk() {
+        let json = r#"{
+            "id": "chatcmpl-123",
+            "choices": [
+                {
+                    "index": 0,
+                    "delta": {"content": "Hello"},
+                    "finish_reason": null
+                }
+            ]
+        }"#;
+        let chunk: ChatStreamChunk = serde_json::from_str(json).unwrap();
+        assert_eq!(chunk.choices.len(), 1);
+        assert_eq!(
+            chunk.choices[0].delta.content,
+            Some("Hello".to_string())
+        );
+    }
+
+    #[test]
+    fn test_serde_chat_stream_chunk_tool_call() {
+        let json = r#"{
+            "id": "chatcmpl-123",
+            "choices": [
+                {
+                    "index": 0,
+                    "delta": {
+                        "tool_calls": [
+                            {
+                                "index": 0,
+                                "id": "call_abc",
+                                "function": {"name": "get_weather", "arguments": "{\"city\":\"Tokyo\"}"}
+                            }
+                        ]
+                    },
+                    "finish_reason": null
+                }
+            ]
+        }"#;
+        let chunk: ChatStreamChunk = serde_json::from_str(json).unwrap();
+        let tc = &chunk.choices[0].delta.tool_calls.as_ref().unwrap()[0];
+        assert_eq!(tc.id, Some("call_abc".to_string()));
+        let func = tc.function.as_ref().unwrap();
+        assert_eq!(func.name, Some("get_weather".to_string()));
+    }
+
+    #[test]
+    fn test_serde_completion_response() {
+        let json = r#"{
+            "id": "cmpl-123",
+            "object": "text_completion",
+            "model": "gpt-3.5-turbo-instruct",
+            "choices": [{"text": "Hello world", "index": 0, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 5, "completion_tokens": 3, "total_tokens": 8}
+        }"#;
+        let resp: CompletionResponse = serde_json::from_str(json).unwrap();
+        assert_eq!(resp.choices[0].text, "Hello world");
+        assert!(resp.extra.contains_key("usage"));
+    }
+
+    #[test]
+    fn test_serde_embedding_response() {
+        let json = r#"{
+            "object": "list",
+            "data": [{"index": 0, "embedding": [0.1, 0.2, 0.3]}],
+            "model": "text-embedding-3-small",
+            "usage": {"prompt_tokens": 5, "total_tokens": 5}
+        }"#;
+        let resp: EmbeddingResponse = serde_json::from_str(json).unwrap();
+        assert_eq!(resp.data.len(), 1);
+        assert_eq!(resp.data[0].embedding, vec![0.1, 0.2, 0.3]);
+    }
+
+    #[test]
+    fn test_serde_response_stream_event_text_delta() {
+        let json = r#"{"type": "response.output_text.delta", "delta": "Hello"}"#;
+        let event: ResponseStreamEvent = serde_json::from_str(json).unwrap();
+        assert!(matches!(
+            event,
+            ResponseStreamEvent::OutputTextDelta { delta } if delta == "Hello"
+        ));
+    }
+
+    #[test]
+    fn test_serde_response_stream_event_function_call_args() {
+        let json =
+            r#"{"type": "response.function_call_arguments.delta", "delta": "{\"city\":"}"#;
+        let event: ResponseStreamEvent = serde_json::from_str(json).unwrap();
+        assert!(matches!(
+            event,
+            ResponseStreamEvent::FunctionCallArgumentsDelta { .. }
+        ));
+    }
+
+    #[test]
+    fn test_serde_response_stream_event_completed() {
+        let json = r#"{"type": "response.completed", "response": {"id": "resp_123", "output": []}}"#;
+        let event: ResponseStreamEvent = serde_json::from_str(json).unwrap();
+        if let ResponseStreamEvent::Completed { response } = event {
+            assert_eq!(response["id"], "resp_123");
+        } else {
+            panic!("Expected Completed event");
+        }
+    }
+
+    #[test]
+    fn test_serde_response_stream_event_other() {
+        let json = r#"{"type": "response.created", "response": {}}"#;
+        let event: ResponseStreamEvent = serde_json::from_str(json).unwrap();
+        assert!(matches!(event, ResponseStreamEvent::Other));
+    }
+
+    #[test]
+    fn test_map_http_error() {
+        assert!(matches!(
+            map_http_error(401, "Unauthorized"),
+            AgentError::InvalidConfig(_)
+        ));
+        assert!(matches!(
+            map_http_error(429, "Rate limited"),
+            AgentError::IoError(_)
+        ));
+        assert!(matches!(
+            map_http_error(400, "Bad request"),
+            AgentError::InvalidValue(_)
+        ));
+        assert!(matches!(
+            map_http_error(500, "Server error"),
+            AgentError::IoError(_)
+        ));
     }
 
     // =========================================================================
@@ -530,9 +983,8 @@ mod tests {
         let items = messages_to_response_input(&messages).unwrap();
 
         assert_eq!(items.len(), 1);
-        let json = serde_json::to_value(&items[0]).unwrap();
-        assert_eq!(json["role"], "user");
-        assert_eq!(json["content"], "Hello");
+        assert_eq!(items[0]["role"], "user");
+        assert_eq!(items[0]["content"], "Hello");
     }
 
     #[test]
@@ -541,9 +993,8 @@ mod tests {
         let items = messages_to_response_input(&messages).unwrap();
 
         assert_eq!(items.len(), 1);
-        let json = serde_json::to_value(&items[0]).unwrap();
-        assert_eq!(json["role"], "assistant");
-        assert_eq!(json["content"], "Hi there");
+        assert_eq!(items[0]["role"], "assistant");
+        assert_eq!(items[0]["content"], "Hi there");
     }
 
     #[test]
@@ -562,14 +1013,12 @@ mod tests {
         // Should have: 1 message item (text) + 1 function_call item
         assert_eq!(items.len(), 2);
 
-        let msg_json = serde_json::to_value(&items[0]).unwrap();
-        assert_eq!(msg_json["role"], "assistant");
-        assert_eq!(msg_json["content"], "I'll check.");
+        assert_eq!(items[0]["role"], "assistant");
+        assert_eq!(items[0]["content"], "I'll check.");
 
-        let fc_json = serde_json::to_value(&items[1]).unwrap();
-        assert_eq!(fc_json["type"], "function_call");
-        assert_eq!(fc_json["call_id"], "call_456");
-        assert_eq!(fc_json["name"], "get_weather");
+        assert_eq!(items[1]["type"], "function_call");
+        assert_eq!(items[1]["call_id"], "call_456");
+        assert_eq!(items[1]["name"], "get_weather");
     }
 
     #[test]
@@ -587,9 +1036,8 @@ mod tests {
 
         // No text content → only function_call item, no message item
         assert_eq!(items.len(), 1);
-        let fc_json = serde_json::to_value(&items[0]).unwrap();
-        assert_eq!(fc_json["type"], "function_call");
-        assert_eq!(fc_json["name"], "search");
+        assert_eq!(items[0]["type"], "function_call");
+        assert_eq!(items[0]["name"], "search");
     }
 
     #[test]
@@ -600,10 +1048,9 @@ mod tests {
         let items = messages_to_response_input(&messages).unwrap();
 
         assert_eq!(items.len(), 1);
-        let json = serde_json::to_value(&items[0]).unwrap();
-        assert_eq!(json["type"], "function_call_output");
-        assert_eq!(json["call_id"], "call_456");
-        assert_eq!(json["output"], "22°C");
+        assert_eq!(items[0]["type"], "function_call_output");
+        assert_eq!(items[0]["call_id"], "call_456");
+        assert_eq!(items[0]["output"], "22°C");
     }
 
     #[test]
@@ -612,10 +1059,9 @@ mod tests {
         let messages = vector![AgentValue::from(msg)];
         let items = messages_to_response_input(&messages).unwrap();
 
-        let json = serde_json::to_value(&items[0]).unwrap();
-        assert_eq!(json["type"], "function_call_output");
+        assert_eq!(items[0]["type"], "function_call_output");
         // Should have a generated UUID, not empty
-        let call_id = json["call_id"].as_str().unwrap();
+        let call_id = items[0]["call_id"].as_str().unwrap();
         assert!(!call_id.is_empty());
     }
 
@@ -646,17 +1092,14 @@ mod tests {
         // user message + function_call + function_call_output = 3 items
         assert_eq!(items.len(), 3);
 
-        let user_json = serde_json::to_value(&items[0]).unwrap();
-        assert_eq!(user_json["role"], "user");
+        assert_eq!(items[0]["role"], "user");
 
-        let fc_json = serde_json::to_value(&items[1]).unwrap();
-        assert_eq!(fc_json["type"], "function_call");
-        assert_eq!(fc_json["name"], "get_horoscope");
+        assert_eq!(items[1]["type"], "function_call");
+        assert_eq!(items[1]["name"], "get_horoscope");
 
-        let fco_json = serde_json::to_value(&items[2]).unwrap();
-        assert_eq!(fco_json["type"], "function_call_output");
-        assert_eq!(fco_json["call_id"], "call_abc");
-        assert_eq!(fco_json["output"], "Virgo: Good day!");
+        assert_eq!(items[2]["type"], "function_call_output");
+        assert_eq!(items[2]["call_id"], "call_abc");
+        assert_eq!(items[2]["output"], "Virgo: Good day!");
     }
 
     #[test]
@@ -666,7 +1109,63 @@ mod tests {
         ))];
         let items = messages_to_response_input(&messages).unwrap();
 
-        let json = serde_json::to_value(&items[0]).unwrap();
-        assert_eq!(json["role"], "developer");
+        assert_eq!(items[0]["role"], "developer");
+    }
+
+    // =========================================================================
+    // Responses API: response_output_to_message
+    // =========================================================================
+
+    #[test]
+    fn test_response_output_text() {
+        let output = vec![serde_json::json!({
+            "type": "message",
+            "role": "assistant",
+            "content": [
+                {"type": "output_text", "text": "Hello!"}
+            ]
+        })];
+        let msg = response_output_to_message(&output).unwrap();
+        assert_eq!(msg.content, "Hello!");
+        assert!(msg.tool_calls.is_none());
+    }
+
+    #[test]
+    fn test_response_output_function_call() {
+        let output = vec![
+            serde_json::json!({
+                "type": "message",
+                "role": "assistant",
+                "content": [{"type": "output_text", "text": "I'll check."}]
+            }),
+            serde_json::json!({
+                "type": "function_call",
+                "name": "get_weather",
+                "arguments": "{\"location\":\"Tokyo\"}",
+                "call_id": "call_123"
+            }),
+        ];
+        let msg = response_output_to_message(&output).unwrap();
+        assert_eq!(msg.content, "I'll check.");
+        let tool_calls = msg.tool_calls.unwrap();
+        assert_eq!(tool_calls.len(), 1);
+        assert_eq!(tool_calls[0].function.name, "get_weather");
+        assert_eq!(
+            tool_calls[0].function.id,
+            Some("call_123".to_string())
+        );
+    }
+
+    #[test]
+    fn test_response_output_refusal() {
+        let output = vec![serde_json::json!({
+            "type": "message",
+            "role": "assistant",
+            "content": [
+                {"type": "refusal", "refusal": "I cannot do that."}
+            ]
+        })];
+        let msg = response_output_to_message(&output).unwrap();
+        assert_eq!(msg.content, "[Refusal: I cannot do that.]");
     }
 }

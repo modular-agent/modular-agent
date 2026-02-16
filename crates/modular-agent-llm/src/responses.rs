@@ -7,6 +7,7 @@ use modular_agent_core::{
 };
 
 use crate::openai_client;
+use crate::provider::{ModelIdentifier, ProviderKind};
 
 const CATEGORY: &str = "LLM";
 
@@ -20,7 +21,7 @@ const CONFIG_STREAM: &str = "stream";
 const CONFIG_TOOLS: &str = "tools";
 const CONFIG_USE_CONVERSATION_STATE: &str = "use_conversation_state";
 
-const DEFAULT_MODEL: &str = "gpt-5-mini";
+const DEFAULT_MODEL: &str = "openai/gpt-5-mini";
 
 /// Responses Agent using OpenAI Responses API.
 ///
@@ -97,6 +98,13 @@ impl AsAgent for ResponsesAgent {
             return Ok(());
         }
 
+        let model_id = ModelIdentifier::parse(&config_model)?;
+        if model_id.provider != ProviderKind::OpenAI {
+            return Err(AgentError::InvalidConfig(
+                "ResponsesAgent only supports OpenAI models".into(),
+            ));
+        }
+
         // Convert value to messages
         let Some(value) = value.to_message_value() else {
             return Err(AgentError::InvalidValue(
@@ -127,7 +135,7 @@ impl AsAgent for ResponsesAgent {
         self.process_response(
             ctx,
             messages,
-            &config_model,
+            &model_id.model_name,
             config_options,
             config_tools,
             use_stream,
@@ -148,9 +156,6 @@ impl ResponsesAgent {
         use_stream: bool,
         use_conversation_state: bool,
     ) -> Result<(), AgentError> {
-        use async_openai::types::responses::{
-            CreateResponse, CreateResponseArgs, FunctionTool, Tool,
-        };
         use modular_agent_core::tool::list_tool_infos_patterns;
 
         let client = self.openai_manager.get_client(self.ma())?;
@@ -159,7 +164,7 @@ impl ResponsesAgent {
         let input = openai_client::messages_to_response_input(&messages)?;
 
         // Build tools array
-        let tools: Vec<Tool> = if config_tools.is_empty() {
+        let tools_json: Vec<serde_json::Value> = if config_tools.is_empty() {
             vec![]
         } else {
             list_tool_infos_patterns(&config_tools)
@@ -171,65 +176,48 @@ impl ResponsesAgent {
                 })?
                 .into_iter()
                 .map(|info| {
-                    let function = FunctionTool {
-                        name: info.name,
-                        description: if info.description.is_empty() {
-                            None
+                    serde_json::json!({
+                        "type": "function",
+                        "name": info.name,
+                        "description": if info.description.is_empty() {
+                            serde_json::Value::Null
                         } else {
-                            Some(info.description)
+                            serde_json::Value::String(info.description)
                         },
-                        parameters: info.parameters,
-                        strict: None,
-                    };
-                    Tool::Function(function)
+                        "parameters": info.parameters.unwrap_or(serde_json::json!({})),
+                    })
                 })
                 .collect()
         };
 
         // Build request
-        let mut request = CreateResponseArgs::default()
-            .model(model_name)
-            .input(input)
-            .build()
-            .map_err(|e| AgentError::InvalidValue(format!("Failed to build request: {}", e)))?;
+        let mut request = serde_json::json!({
+            "model": model_name,
+            "input": input,
+            "stream": use_stream,
+        });
 
         // Add previous_response_id for conversation continuity
-        if use_conversation_state {
-            if let Some(prev_id) = &self.last_response_id {
-                request.previous_response_id = Some(prev_id.clone());
-            }
+        if use_conversation_state
+            && let Some(prev_id) = &self.last_response_id
+        {
+            request["previous_response_id"] = serde_json::Value::String(prev_id.clone());
         }
 
         // Add tools if configured
-        if !tools.is_empty() {
-            request.tools = Some(tools);
+        if !tools_json.is_empty() {
+            request["tools"] = serde_json::Value::Array(tools_json);
         }
 
         // Merge options
-        if !config_options.is_empty() {
-            let options_json = serde_json::to_value(&config_options)
-                .map_err(|e| AgentError::InvalidValue(format!("Invalid JSON in options: {}", e)))?;
-
-            let mut request_json = serde_json::to_value(&request)
-                .map_err(|e| AgentError::InvalidValue(format!("Serialization error: {}", e)))?;
-
-            if let (Some(request_obj), Some(options_obj)) =
-                (request_json.as_object_mut(), options_json.as_object())
-            {
-                for (key, value) in options_obj {
-                    request_obj.insert(key.clone(), value.clone());
-                }
-            }
-            request = serde_json::from_value::<CreateResponse>(request_json)
-                .map_err(|e| AgentError::InvalidValue(format!("Deserialization error: {}", e)))?;
-        }
+        openai_client::merge_options(&mut request, &config_options)?;
 
         let id = uuid::Uuid::new_v4().to_string();
         if use_stream {
-            self.process_streaming(ctx, &client, request, &id, use_conversation_state)
+            self.process_streaming(ctx, &client, &request, &id, use_conversation_state)
                 .await
         } else {
-            self.process_non_streaming(ctx, &client, request, &id, use_conversation_state)
+            self.process_non_streaming(ctx, &client, &request, &id, use_conversation_state)
                 .await
         }
     }
@@ -237,26 +225,29 @@ impl ResponsesAgent {
     async fn process_non_streaming(
         &mut self,
         ctx: AgentContext,
-        client: &async_openai::Client<async_openai::config::OpenAIConfig>,
-        request: async_openai::types::responses::CreateResponse,
+        client: &openai_client::OpenAIClient,
+        request: &serde_json::Value,
         id: &str,
         use_conversation_state: bool,
     ) -> Result<(), AgentError> {
-        use async_openai::types::responses::Response;
-
-        let response: Response = client
-            .responses()
-            .create(request)
-            .await
-            .map_err(|e| AgentError::IoError(format!("OpenAI Responses Error: {}", e)))?;
+        let response: serde_json::Value = client
+            .post_json(&client.responses_url(), request)
+            .await?;
 
         // Store response ID for conversation continuity
-        if use_conversation_state {
-            self.last_response_id = Some(response.id.clone());
+        if use_conversation_state
+            && let Some(resp_id) = response.get("id").and_then(|v| v.as_str())
+        {
+            self.last_response_id = Some(resp_id.to_string());
         }
 
         // Convert response to message
-        let mut message = openai_client::response_output_to_message(&response.output)?;
+        let output = response
+            .get("output")
+            .and_then(|v| v.as_array())
+            .cloned()
+            .unwrap_or_default();
+        let mut message = openai_client::response_output_to_message(&output)?;
         message.id = Some(id.to_string());
 
         // Output message
@@ -274,19 +265,15 @@ impl ResponsesAgent {
     async fn process_streaming(
         &mut self,
         ctx: AgentContext,
-        client: &async_openai::Client<async_openai::config::OpenAIConfig>,
-        request: async_openai::types::responses::CreateResponse,
+        client: &openai_client::OpenAIClient,
+        request: &serde_json::Value,
         id: &str,
         use_conversation_state: bool,
     ) -> Result<(), AgentError> {
-        use async_openai::types::responses::ResponseStreamEvent;
         use futures::StreamExt;
 
-        let mut stream = client
-            .responses()
-            .create_stream(request)
-            .await
-            .map_err(|e| AgentError::IoError(format!("OpenAI Responses Stream Error: {}", e)))?;
+        let url = client.responses_url();
+        let mut stream = client.post_stream(&url, request).await?;
 
         let mut message = Message::assistant(String::new());
         message.id = Some(id.to_string());
@@ -297,12 +284,16 @@ impl ResponsesAgent {
         let mut current_tool_call_id: Option<String> = None;
         let mut current_tool_arguments = String::new();
 
-        while let Some(event) = stream.next().await {
-            let event = event.map_err(|e| AgentError::IoError(format!("Stream error: {}", e)))?;
+        while let Some(res) = stream.next().await {
+            let Some(data) = res? else {
+                continue; // [DONE] sentinel
+            };
+            let event: openai_client::ResponseStreamEvent =
+                serde_json::from_str(&data).unwrap_or(openai_client::ResponseStreamEvent::Other);
 
             match event {
-                ResponseStreamEvent::ResponseOutputTextDelta(delta_event) => {
-                    content.push_str(&delta_event.delta);
+                openai_client::ResponseStreamEvent::OutputTextDelta { delta } => {
+                    content.push_str(&delta);
                     message.content = content.clone();
                     self.output(
                         ctx.clone(),
@@ -311,22 +302,20 @@ impl ResponsesAgent {
                     )
                     .await?;
                 }
-                ResponseStreamEvent::ResponseFunctionCallArgumentsDelta(args_delta) => {
-                    current_tool_arguments.push_str(&args_delta.delta);
+                openai_client::ResponseStreamEvent::FunctionCallArgumentsDelta { delta } => {
+                    current_tool_arguments.push_str(&delta);
                 }
-                ResponseStreamEvent::ResponseOutputItemAdded(item_added) => {
-                    // Check if this is a function call item using JSON serialization
-                    let item_json = serde_json::to_value(&item_added.item).unwrap_or_default();
-                    if let Some(name) = item_json.get("name").and_then(|v| v.as_str()) {
+                openai_client::ResponseStreamEvent::OutputItemAdded { item } => {
+                    if let Some(name) = item.get("name").and_then(|v| v.as_str()) {
                         current_tool_name = Some(name.to_string());
-                        current_tool_call_id = item_json
+                        current_tool_call_id = item
                             .get("call_id")
                             .and_then(|v| v.as_str())
                             .map(|s| s.to_string());
                         current_tool_arguments.clear();
                     }
                 }
-                ResponseStreamEvent::ResponseOutputItemDone(_item_done) => {
+                openai_client::ResponseStreamEvent::OutputItemDone { .. } => {
                     // Handle completed function call
                     if let Some(name) = current_tool_name.take() {
                         let parameters: serde_json::Value =
@@ -350,19 +339,19 @@ impl ResponsesAgent {
                         .await?;
                     }
                 }
-                ResponseStreamEvent::ResponseCompleted(completed) => {
+                openai_client::ResponseStreamEvent::Completed { response } => {
                     // Store response ID for conversation continuity
-                    if use_conversation_state {
-                        self.last_response_id = Some(completed.response.id.clone());
+                    if use_conversation_state
+                        && let Some(resp_id) = response.get("id").and_then(|v| v.as_str())
+                    {
+                        self.last_response_id = Some(resp_id.to_string());
                     }
 
-                    let out_response = AgentValue::from_serialize(&completed.response)?;
+                    let out_response = AgentValue::from_serialize(&response)?;
                     self.output(ctx.clone(), PORT_RESPONSE.to_string(), out_response)
                         .await?;
                 }
-                _ => {
-                    // Handle other events as needed
-                }
+                openai_client::ResponseStreamEvent::Other => {}
             }
         }
 

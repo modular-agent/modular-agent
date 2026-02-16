@@ -24,14 +24,14 @@ const PORT_STRING: &str = "string";
 const CONFIG_MODEL: &str = "model";
 const CONFIG_OPTIONS: &str = "options";
 
-const DEFAULT_CONFIG_MODEL: &str = "text-embedding-3-small";
+const DEFAULT_CONFIG_MODEL: &str = "openai/text-embedding-3-small";
 
 /// Embeddings Agent that routes to different LLM providers based on model prefix.
 ///
 /// # Model Format
 /// - `openai/text-embedding-3-small` - Uses OpenAI API
 /// - `ollama/nomic-embed-text` - Uses Ollama
-/// - `text-embedding-3-small` - No prefix defaults to OpenAI (backward compatible)
+/// - `openai/text-embedding-3-small` - Uses OpenAI
 ///
 /// # Input Ports
 /// - `string`: Single text input, outputs single embedding
