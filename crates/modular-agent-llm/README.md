@@ -25,7 +25,8 @@ Use `provider/model-name` format to select the provider:
 - `openai/gpt-5-mini` - OpenAI
 - `ollama/llama3.2:1b` - Ollama
 - `claude/claude-sonnet-4-5-20250514` - Claude (Anthropic)
-- `gpt-5-nano` - No prefix defaults to OpenAI
+
+A provider prefix is required.
 
 ## Feature Flags
 
@@ -46,7 +47,7 @@ The ResponsesAgent uses OpenAI's new Responses API, which provides:
 
 | Config | Default | Description |
 | ------ | ------- | ----------- |
-| model | gpt-5-mini | Model name |
+| model | openai/gpt-5-mini | Model name |
 | stream | false | Enable streaming |
 | use_conversation_state | true | Use server-side conversation state |
 | tools | - | Tool patterns (regex, newline-separated) |
