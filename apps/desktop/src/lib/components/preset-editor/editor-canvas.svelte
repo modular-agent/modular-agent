@@ -17,14 +17,12 @@
     type OnSelectionDrag,
   } from "@xyflow/svelte";
   import { getPresetSpec } from "tauri-plugin-modular-agent-api";
-  import { addPresetWithName } from "tauri-plugin-modular-agent-api";
 
   import { goto } from "$app/navigation";
 
-  import { getCoreSettings, getEdgeColor } from "$lib/agent";
+  import { getCoreSettings, getEdgeColor, saveAsPreset } from "$lib/agent";
   import { AgentList } from "$lib/components/agent-list/index.js";
   import PresetActionDialog from "$lib/components/preset-action-dialog.svelte";
-  import { tabStore } from "$lib/tab-store.svelte";
   import { Button } from "$lib/components/ui/button/index.js";
   import * as Dialog from "$lib/components/ui/dialog/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
@@ -40,6 +38,7 @@
     formatHotkey,
     type ResolvedHotkeys,
   } from "$lib/hotkeys";
+  import { tabStore } from "$lib/tab-store.svelte";
   import type { PresetNode, PresetEdge } from "$lib/types";
 
   import AgentNode from "./agent-node.svelte";
@@ -473,7 +472,7 @@
     }
     const s = await getPresetSpec(editor.preset_id);
     if (!s) return;
-    const new_id = await addPresetWithName(s, editor.saveAsName);
+    const new_id = await saveAsPreset(editor.saveAsName, s);
     if (!new_id) return;
     tabStore.openTab(new_id, editor.saveAsName);
     goto(`/preset_editor/${new_id}`, { noScroll: true });

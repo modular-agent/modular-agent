@@ -119,6 +119,7 @@ pub fn run() {
             modular_agent_desktop::app::close_preset_cmd,
             modular_agent_desktop::app::import_preset_cmd,
             modular_agent_desktop::app::save_preset_cmd,
+            modular_agent_desktop::app::save_as_preset_cmd,
             modular_agent_desktop::app::start_preset_cmd,
             modular_agent_desktop::app::stop_preset_cmd,
             modular_agent_desktop::app::get_dir_entries_cmd,

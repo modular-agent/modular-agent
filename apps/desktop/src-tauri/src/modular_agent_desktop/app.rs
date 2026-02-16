@@ -71,6 +71,17 @@ impl ModularAgentApp {
         Ok(id)
     }
 
+    /// Create a new preset with the given spec content.
+    pub fn add_preset_with_name(&self, spec: PresetSpec, name: String) -> Result<String> {
+        if !is_valid_preset_name(&name) {
+            return Err(anyhow!("Invalid preset name: {}", name));
+        }
+        let id = self.ma.add_preset_with_name(spec, name.clone())?;
+        let mut presets = self.presets.lock().unwrap();
+        presets.insert(name, id.clone());
+        Ok(id)
+    }
+
     pub async fn open_preset(&self, name: String) -> Result<String> {
         if !is_valid_preset_name(&name) {
             return Err(anyhow!("Invalid preset name: {}", name));
@@ -180,10 +191,13 @@ impl ModularAgentApp {
             if let Err(e) = self.ma.rename_preset(&id, new_name.clone()).await {
                 log::warn!("move_preset: rename_preset({}) failed: {}", id, e);
             }
-            let _ = app.emit(EMIT_PRESET_RENAMED, PresetRenamedPayload {
-                id,
-                new_name: new_name.clone(),
-            });
+            let _ = app.emit(
+                EMIT_PRESET_RENAMED,
+                PresetRenamedPayload {
+                    id,
+                    new_name: new_name.clone(),
+                },
+            );
         }
 
         // Update auto_start_presets
@@ -192,8 +206,16 @@ impl ModularAgentApp {
         // Emit list changed for both old and new parent directories
         let old_parent = parent_preset_path(name);
         let new_parent = parent_preset_path(&new_name);
-        let _ = app.emit(EMIT_PRESET_LIST_CHANGED, PresetListChangedPayload { path: old_parent.clone() });
-        let _ = app.emit(EMIT_PRESET_LIST_CHANGED, PresetListChangedPayload { path: new_parent });
+        let _ = app.emit(
+            EMIT_PRESET_LIST_CHANGED,
+            PresetListChangedPayload {
+                path: old_parent.clone(),
+            },
+        );
+        let _ = app.emit(
+            EMIT_PRESET_LIST_CHANGED,
+            PresetListChangedPayload { path: new_parent },
+        );
 
         // Clean up empty ancestor directories
         if let Some(parent) = old_path.parent() {
@@ -208,10 +230,15 @@ impl ModularAgentApp {
     /// Move a folder (and all its contents) to a different directory.
     pub async fn move_folder(&self, app: &AppHandle, path: &str, target_dir: &str) -> Result<()> {
         // Validate paths to prevent path traversal
-        if !path.is_empty() && (path.contains("..") || path.contains('\\') || path.starts_with('/')) {
+        if !path.is_empty() && (path.contains("..") || path.contains('\\') || path.starts_with('/'))
+        {
             bail!("Invalid folder path");
         }
-        if !target_dir.is_empty() && (target_dir.contains("..") || target_dir.contains('\\') || target_dir.starts_with('/')) {
+        if !target_dir.is_empty()
+            && (target_dir.contains("..")
+                || target_dir.contains('\\')
+                || target_dir.starts_with('/'))
+        {
             bail!("Invalid target directory");
         }
 
@@ -294,10 +321,13 @@ impl ModularAgentApp {
             if let Err(e) = self.ma.rename_preset(id, new_name.clone()).await {
                 log::warn!("move_folder: rename_preset({}) failed: {}", id, e);
             }
-            let _ = app.emit(EMIT_PRESET_RENAMED, PresetRenamedPayload {
-                id: id.clone(),
-                new_name,
-            });
+            let _ = app.emit(
+                EMIT_PRESET_RENAMED,
+                PresetRenamedPayload {
+                    id: id.clone(),
+                    new_name,
+                },
+            );
         }
 
         // Update auto_start_presets for all affected entries
@@ -306,8 +336,16 @@ impl ModularAgentApp {
         // Emit list changed for both old and new parent directories
         let old_parent = parent_preset_path(path);
         let new_parent = parent_preset_path(&new_path_str);
-        let _ = app.emit(EMIT_PRESET_LIST_CHANGED, PresetListChangedPayload { path: old_parent.clone() });
-        let _ = app.emit(EMIT_PRESET_LIST_CHANGED, PresetListChangedPayload { path: new_parent });
+        let _ = app.emit(
+            EMIT_PRESET_LIST_CHANGED,
+            PresetListChangedPayload {
+                path: old_parent.clone(),
+            },
+        );
+        let _ = app.emit(
+            EMIT_PRESET_LIST_CHANGED,
+            PresetListChangedPayload { path: new_parent },
+        );
 
         // Clean up empty ancestor directories
         if let Some(parent) = old_dir.parent() {
@@ -396,11 +434,7 @@ impl ModularAgentApp {
         // Remove from core (stops agents, removes from core's presets map).
         // Ignore "not found" errors — preset may have already been removed.
         if let Err(e) = self.ma.remove_preset(preset_id).await {
-            log::warn!(
-                "close_preset: remove_preset({}) failed: {}",
-                preset_id,
-                e
-            );
+            log::warn!("close_preset: remove_preset({}) failed: {}", preset_id, e);
         }
 
         // Remove from our name→ID HashMap (reverse lookup by value)
@@ -597,7 +631,11 @@ fn is_valid_preset_name(new_name: &str) -> bool {
 }
 
 /// Remove empty directories walking up from `start_dir` toward `presets_root`.
-fn cleanup_empty_ancestors(app: &AppHandle, start_dir: &std::path::Path, presets_root: &std::path::Path) {
+fn cleanup_empty_ancestors(
+    app: &AppHandle,
+    start_dir: &std::path::Path,
+    presets_root: &std::path::Path,
+) {
     let mut dir = start_dir.to_path_buf();
     while dir != *presets_root && dir.starts_with(presets_root) {
         let is_empty = dir
@@ -670,8 +708,10 @@ pub fn new_preset_with_name_cmd(
     name: String,
 ) -> Result<String, String> {
     let parent_dir = parent_preset_path(&name);
-    let parent_existed =
-        parent_dir.is_empty() || presets_dir().map(|d| d.join(&parent_dir).exists()).unwrap_or(true);
+    let parent_existed = parent_dir.is_empty()
+        || presets_dir()
+            .map(|d| d.join(&parent_dir).exists())
+            .unwrap_or(true);
     let id = asapp
         .new_preset_with_name(name.clone())
         .map_err(|e| e.to_string())?;
@@ -750,8 +790,10 @@ pub fn save_preset_cmd(
 ) -> Result<(), String> {
     let is_new = !preset_path_exists(&name);
     let parent_dir = parent_preset_path(&name);
-    let parent_existed =
-        parent_dir.is_empty() || presets_dir().map(|d| d.join(&parent_dir).exists()).unwrap_or(true);
+    let parent_existed = parent_dir.is_empty()
+        || presets_dir()
+            .map(|d| d.join(&parent_dir).exists())
+            .unwrap_or(true);
     asapp
         .save_preset(name.clone(), spec)
         .map_err(|e| e.to_string())?;
@@ -775,6 +817,48 @@ pub fn save_preset_cmd(
 }
 
 #[tauri::command]
+pub fn save_as_preset_cmd(
+    app: AppHandle,
+    asapp: State<'_, ModularAgentApp>,
+    name: String,
+    spec: PresetSpec,
+) -> Result<String, String> {
+    let parent_dir = parent_preset_path(&name);
+    let parent_existed = parent_dir.is_empty()
+        || presets_dir()
+            .map(|d| d.join(&parent_dir).exists())
+            .unwrap_or(true);
+
+    // Add to core engine with spec content + register name→ID mapping
+    let id = asapp
+        .add_preset_with_name(spec.clone(), name.clone())
+        .map_err(|e| e.to_string())?;
+
+    // Save spec to disk
+    asapp
+        .save_preset(name.clone(), spec)
+        .map_err(|e| e.to_string())?;
+
+    // Emit sidebar refresh event
+    let _ = app.emit(
+        EMIT_PRESET_LIST_CHANGED,
+        PresetListChangedPayload {
+            path: parent_dir.clone(),
+        },
+    );
+    if !parent_existed {
+        let _ = app.emit(
+            EMIT_PRESET_LIST_CHANGED,
+            PresetListChangedPayload {
+                path: parent_preset_path(&parent_dir),
+            },
+        );
+    }
+
+    Ok(id)
+}
+
+#[tauri::command]
 pub async fn import_preset_cmd(
     app: AppHandle,
     asapp: State<'_, ModularAgentApp>,
@@ -787,9 +871,7 @@ pub async fn import_preset_cmd(
         .map_err(|e| e.to_string())?;
     let _ = app.emit(
         EMIT_PRESET_LIST_CHANGED,
-        PresetListChangedPayload {
-            path: target_dir,
-        },
+        PresetListChangedPayload { path: target_dir },
     );
     Ok(id)
 }
