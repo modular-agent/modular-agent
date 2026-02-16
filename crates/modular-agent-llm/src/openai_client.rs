@@ -233,13 +233,16 @@ pub(crate) struct ChatFunctionCall {
 pub(crate) struct ChatStreamChunk {
     pub choices: Vec<ChatStreamChoice>,
     #[serde(flatten)]
+    #[allow(dead_code)]
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
 #[derive(serde::Deserialize, Clone)]
 pub(crate) struct ChatStreamChoice {
+    #[allow(dead_code)]
     pub index: u32,
     pub delta: ChatStreamDelta,
+    #[allow(dead_code)]
     pub finish_reason: Option<String>,
 }
 
@@ -252,6 +255,7 @@ pub(crate) struct ChatStreamDelta {
 
 #[derive(serde::Deserialize, Clone)]
 pub(crate) struct ChatToolCallChunk {
+    #[allow(dead_code)]
     pub index: u32,
     pub id: Option<String>,
     pub function: Option<ChatFunctionCallChunk>,
