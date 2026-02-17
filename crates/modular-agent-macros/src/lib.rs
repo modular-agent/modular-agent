@@ -355,6 +355,14 @@ fn expand_modular_agent(
         }
     }
 
+    // Fall back to doc comments when no explicit `description` is provided.
+    if parsed.description.is_none() {
+        if let Some(doc) = extract_doc_comment(&item.attrs) {
+            let lit = syn::LitStr::new(&doc, Span::call_site());
+            parsed.description = Some(parse_quote! { #lit });
+        }
+    }
+
     let ident = &item.ident;
     let generics = item.generics.clone();
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
@@ -1320,6 +1328,37 @@ fn parse_common_config(list: MetaList) -> syn::Result<CommonConfig> {
         return Err(syn::Error::new(list.span(), "config missing `name`"));
     }
     Ok(cfg)
+}
+
+fn extract_doc_comment(attrs: &[syn::Attribute]) -> Option<String> {
+    let lines: Vec<String> = attrs
+        .iter()
+        .filter_map(|attr| {
+            if !attr.path().is_ident("doc") {
+                return None;
+            }
+            if let Meta::NameValue(nv) = &attr.meta {
+                if let Expr::Lit(lit) = &nv.value {
+                    if let syn::Lit::Str(s) = &lit.lit {
+                        return Some(s.value());
+                    }
+                }
+            }
+            None
+        })
+        .collect();
+    if lines.is_empty() {
+        return None;
+    }
+    // rustc converts `/// text` to `#[doc = " text"]`. Strip the leading space.
+    let text = lines
+        .iter()
+        .map(|l| l.strip_prefix(' ').unwrap_or(l))
+        .collect::<Vec<_>>()
+        .join("\n")
+        .trim()
+        .to_string();
+    if text.is_empty() { None } else { Some(text) }
 }
 
 fn custom_config_call(method: &str, cfg: CustomConfig) -> syn::Result<proc_macro2::TokenStream> {
