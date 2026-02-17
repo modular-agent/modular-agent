@@ -1,13 +1,13 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
-  import { Tween } from "svelte/motion";
   import { cubicOut } from "svelte/easing";
+  import { Tween } from "svelte/motion";
 
   import { ScrollArea } from "$lib/components/ui/scroll-area/index.js";
   import { Separator } from "$lib/components/ui/separator/index.js";
 
-  import SidebarConfig from "./sidebar-config.svelte";
   import { useEditor } from "./context.svelte";
+  import SidebarConfig from "./sidebar-config.svelte";
 
   const editor = useEditor();
   const inspector = editor.inspector;
@@ -18,8 +18,8 @@
 
   const opacity = new Tween(inspector.selectedCount > 0 ? 1 : 0);
 
-  const DEFAULT_WIDTH = 288;
-  const DEFAULT_HEIGHT = 320;
+  const DEFAULT_WIDTH = 320;
+  const DEFAULT_HEIGHT = 640;
 
   let cardEl: HTMLElement;
   let headerEl: HTMLElement;
@@ -112,7 +112,10 @@
   bind:this={cardEl}
   class="absolute flex flex-col rounded-lg border border-border bg-background shadow-lg overflow-hidden resize"
   class:select-none={isDragging}
-  style="left: {x}px; top: {y}px; width: {width}px; height: {height}px; min-width: 240px; min-height: 200px; max-width: calc(100% - {x}px - 16px); max-height: calc(100% - {y}px - 16px); z-index: 40; opacity: {opacity.current}; pointer-events: {opacity.current === 0 ? 'none' : 'auto'};"
+  style="left: {x}px; top: {y}px; width: {width}px; height: {height}px; min-width: 240px; min-height: 200px; max-width: calc(100% - {x}px - 16px); max-height: calc(100% - {y}px - 16px); z-index: 40; opacity: {opacity.current}; pointer-events: {opacity.current ===
+  0
+    ? 'none'
+    : 'auto'};"
   onpointerdown={(e) => e.stopPropagation()}
   role="dialog"
   aria-hidden={opacity.current === 0}
