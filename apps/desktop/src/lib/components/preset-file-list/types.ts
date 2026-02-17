@@ -7,6 +7,8 @@ export type PresetFileListRootProps = HTMLAttributes<HTMLDivElement>;
 
 export type PresetFileListFolderProps = WithChildren<{
   name: string;
+  depth?: number;
+  title?: string;
   open?: boolean;
   class?: string;
   draggable?: boolean;
@@ -21,6 +23,7 @@ export type PresetFileListFolderProps = WithChildren<{
 
 export type PresetFileListFilePropsWithoutHTML = WithChildren<{
   name: string;
+  depth?: number;
   icon?: Snippet<[{ name: string }]>;
 }>;
 

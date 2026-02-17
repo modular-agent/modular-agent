@@ -7,6 +7,7 @@
 
   let {
     name,
+    depth = 0,
     icon,
     type = "button",
     class: className,
@@ -14,7 +15,13 @@
   }: PresetFileListFileProps = $props();
 </script>
 
-<button {type} class={cn("flex place-items-center gap-1 pl-[3px] overflow-hidden", className)} draggable="true" {...rest}>
+<button
+  {type}
+  class={cn("flex w-full place-items-center gap-1 overflow-hidden hover:bg-sidebar-accent hover:text-sidebar-accent-foreground", className)}
+  style:padding-left="{8 + depth * 16}px"
+  draggable="true"
+  {...rest}
+>
   {#if icon}
     {@render icon({ name })}
   {:else}

@@ -9,6 +9,8 @@
 
   let {
     name,
+    depth = 0,
+    title: titleText,
     open = $bindable(true),
     class: className,
     draggable: isDraggable = false,
@@ -26,10 +28,12 @@
 <Collapsible.Root bind:open draggable={isDraggable} {ondragstart}>
   <Collapsible.Trigger
     class={cn(
-      "flex place-items-center gap-1 overflow-hidden",
+      "flex w-full place-items-center gap-1 overflow-hidden hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
       droptarget && "bg-foreground/20",
       className,
     )}
+    style="padding-left: {8 + depth * 16}px"
+    title={titleText}
     {onclick}
     {ondragenter}
     {ondragleave}
@@ -44,12 +48,7 @@
     {/if}
     <span class="truncate">{name}</span>
   </Collapsible.Trigger>
-  <Collapsible.Content class="mx-2 border-l">
-    <div class="relative flex place-items-start">
-      <div class="bg-border mx-2 h-full w-px"></div>
-      <div class="flex flex-col">
-        {@render children?.()}
-      </div>
-    </div>
+  <Collapsible.Content>
+    {@render children?.()}
   </Collapsible.Content>
 </Collapsible.Root>

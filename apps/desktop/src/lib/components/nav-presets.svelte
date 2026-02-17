@@ -195,9 +195,11 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div ondragend={handleDragEnd} ondragover={handleDragOver}>
 
-{#snippet folder({ name, path, open = false, isRoot = false }: { name: string; path: string; open?: boolean; isRoot?: boolean })}
+{#snippet folder({ name, path, open = false, isRoot = false, depth = 0 }: { name: string; path: string; open?: boolean; isRoot?: boolean; depth?: number })}
   <PresetFileList.Folder
     {name}
+    {depth}
+    title={path || undefined}
     {open}
     draggable={!isRoot}
     droptarget={dropTarget === path}
@@ -215,7 +217,7 @@
           {@const fp = path ? `${path}/${fn}` : fn}
           <ContextMenu.Root>
             <ContextMenu.Trigger>
-              {@render folder({ name: fn, path: fp })}
+              {@render folder({ name: fn, path: fp, depth: depth + 1 })}
             </ContextMenu.Trigger>
             <ContextMenu.Content>
               <ContextMenu.Item onclick={() => handleNew(fp + "/")}>New</ContextMenu.Item>
@@ -230,6 +232,8 @@
             <ContextMenu.Trigger>
               <PresetFileList.File
                 name={entry}
+                depth={depth + 1}
+                title={fp}
                 onclick={() => handleFileClick(fp)}
                 ondragstart={(e) => handleDragStart(e, "file", fp)}
                 ondragenter={(e) => handleDragEnter(e, path)}
@@ -253,10 +257,10 @@
 <Sidebar.Group class="flex-1 min-h-0">
   <Sidebar.GroupContent class="h-full">
     <ScrollArea class="h-full" orientation="both">
-      <div class="group-data-[collapsible=icon]:hidden pl-2">
+      <div class="group-data-[collapsible=icon]:hidden">
         {#if presetTreeStore.entries[""].length === 0}
           <button
-            class="text-xs text-muted-foreground px-2 py-1 hover:underline cursor-pointer"
+            class="text-xs text-muted-foreground px-2 pl-4 py-1 hover:underline cursor-pointer"
             onclick={() => handleNew("")}
           >
             New Preset
