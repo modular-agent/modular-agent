@@ -1,10 +1,10 @@
 <script lang="ts" module>
   const titleColorMap: Record<string, string> = {
-    default: "text-agent-1",
+    default: "text-agent-7",
     External: "text-agent-2",
     Local: "text-agent-2",
     Display: "text-agent-3",
-    Input: "text-agent-3",
+    Input: "text-agent-6",
     UI: "text-agent-4",
   };
 </script>

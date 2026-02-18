@@ -107,6 +107,9 @@ export class EditorState {
   modifierPressed = $state(false);
   resizing = $state(false);
 
+  // Connection opacity
+  connectionOpacity = $state(0.8);
+
   effectiveSnapGrid = $derived.by(() => {
     if (this.resizing) return undefined;
     const active = this.snapEnabled !== this.modifierPressed;
@@ -150,6 +153,7 @@ export class EditorState {
     this.snapGridSize = settings.snap_grid_size ?? 192;
     this.showGrid = settings.show_grid ?? true;
     this.gridGap = settings.grid_gap ?? 192;
+    this.connectionOpacity = settings.connection_opacity ?? 0.8;
 
     // Sync nodes/edges from flow data
     $effect.pre(() => {
@@ -748,6 +752,11 @@ export class EditorState {
     this.saveGridSettings();
   }
 
+  setConnectionOpacity(value: number) {
+    this.connectionOpacity = Math.max(0, Math.min(1, value));
+    this.saveGridSettings();
+  }
+
   private async saveGridSettings() {
     await withErrorLog(async () => {
       const settings = getCoreSettings();
@@ -755,6 +764,7 @@ export class EditorState {
       settings.snap_grid_size = this.snapGridSize;
       settings.show_grid = this.showGrid;
       settings.grid_gap = this.gridGap;
+      settings.connection_opacity = this.connectionOpacity;
       await setCoreSettings(settings);
     }, "Failed to save grid settings");
   }

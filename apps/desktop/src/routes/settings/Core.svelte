@@ -30,6 +30,7 @@
   let show_grid = $state(true);
   let grid_gap = $state(196);
   let max_history_length = $state(2000);
+  let connection_opacity = $state(80);
 
   // Group hotkey definitions by group
   const hotkeyGroups = $derived(
@@ -68,6 +69,7 @@
     show_grid = settings["show_grid"] ?? true;
     grid_gap = settings["grid_gap"] ?? 24;
     max_history_length = settings["max_history_length"] ?? 2000;
+    connection_opacity = Math.round((settings["connection_opacity"] ?? 0.8) * 100);
 
     // Initialize shortcut_keys with all defaults, then overlay user overrides
     const userKeys = settings["shortcut_keys"] ?? {};
@@ -112,6 +114,7 @@
       show_grid,
       grid_gap,
       max_history_length,
+      connection_opacity: connection_opacity / 100,
     });
     // confirm restart
     await message("Modular Agent will quit to apply changes.\n\nPlease restart.");
@@ -170,6 +173,20 @@
         <Field orientation="vertical">
           <FieldLabel>Grid Gap: {grid_gap}px</FieldLabel>
           <Input type="number" min={4} max={400} bind:value={grid_gap} class="max-w-xs" />
+        </Field>
+
+        <div class="font-semibold mt-4">Connections</div>
+
+        <Field orientation="vertical">
+          <FieldLabel>Connection Opacity: {connection_opacity}%</FieldLabel>
+          <input
+            type="range"
+            min={10}
+            max={100}
+            step={5}
+            bind:value={connection_opacity}
+            class="max-w-xs accent-primary"
+          />
         </Field>
 
         <div class="font-semibold mt-4">Undo / Redo</div>

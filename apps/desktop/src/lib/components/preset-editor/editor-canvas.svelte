@@ -495,7 +495,7 @@
 />
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<div bind:this={canvasContainer} class="flex-1 w-full" ondblclick={handlePaneDblClick}>
+<div bind:this={canvasContainer} class="flex-1 w-full" style="--connection-opacity: {editor.connectionOpacity};" ondblclick={handlePaneDblClick}>
   <SvelteFlow
     id={editor.preset_id}
     attributionPosition="bottom-right"
@@ -657,6 +657,13 @@
   }
   :global(.svelte-flow__edge .svelte-flow__edge-path) {
     stroke-width: 8px;
+    stroke-opacity: var(--connection-opacity, 1);
+  }
+  :global(.svelte-flow__edge.selected .svelte-flow__edge-path) {
+    stroke-opacity: 1;
+  }
+  :global(.svelte-flow__connection-path) {
+    stroke-opacity: var(--connection-opacity, 1);
   }
   :global(.svelte-flow__resize-control.handle) {
     border: calc(var(--resize-control-size) * 1.5) solid var(--resize-control-color);

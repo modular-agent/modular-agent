@@ -54,6 +54,7 @@ export type CoreSettings = {
   show_grid?: boolean;
   grid_gap?: number;
   max_history_length?: number;
+  connection_opacity?: number;
 };
 
 export type PresetInfoExt = PresetInfo & {

@@ -73,6 +73,9 @@ pub struct CoreSettings {
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_history_length: Option<u32>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub connection_opacity: Option<f64>,
 }
 
 impl Default for CoreSettings {
@@ -102,6 +105,7 @@ impl Default for CoreSettings {
             show_grid: None,
             grid_gap: None,
             max_history_length: None,
+            connection_opacity: None,
         }
     }
 }
