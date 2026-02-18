@@ -6,7 +6,7 @@
 
   import { setEditor } from "./context.svelte";
   import EditorCanvas from "./editor-canvas.svelte";
-  import RightSidebar from "./right-sidebar.svelte";
+  import Inspector from "./inspector.svelte";
 
   let { tabId, flow, active }: { tabId: string; flow: PresetFlow; active: boolean } = $props();
 
@@ -39,6 +39,6 @@
     <EditorCanvas />
   </div>
   {#if editor.sidebarOpen}
-    <RightSidebar />
+    <Inspector />
   {/if}
 </div>

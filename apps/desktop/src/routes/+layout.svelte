@@ -10,6 +10,8 @@
   import { ModeWatcher } from "mode-watcher";
   import { setMode } from "mode-watcher";
 
+  import { openUrl } from "@tauri-apps/plugin-opener";
+
   import { getCoreSettings } from "$lib/agent";
   import { Toaster } from "$lib/components/ui/sonner";
   import AppSidebar from "$lib/components/app-sidebar.svelte";
@@ -53,6 +55,16 @@
     };
   });
 
+  function handleGlobalClick(event: MouseEvent) {
+    const anchor = (event.target as HTMLElement).closest("a[href]");
+    if (!anchor) return;
+    const href = anchor.getAttribute("href");
+    if (href && /^https?:\/\//.test(href)) {
+      event.preventDefault();
+      openUrl(href).catch((err) => console.error("Failed to open URL:", err));
+    }
+  }
+
   function handleGlobalKeydown(event: KeyboardEvent) {
     // Block sidebar toggle (Ctrl+B) during fullscreen
     if (isFullscreen && event.key.toLowerCase() === "b" && (event.metaKey || event.ctrlKey)) {
@@ -72,7 +84,7 @@
   }
 </script>
 
-<svelte:window onkeydown={handleGlobalKeydown} />
+<svelte:window onkeydown={handleGlobalKeydown} onclick={handleGlobalClick} />
 
 <ModeWatcher />
 <Toaster />

@@ -359,6 +359,49 @@
 {/if}
 
 <style>
+  .agent-config-html :global(p) {
+    margin-bottom: 0.4rem;
+  }
+  .agent-config-html :global(code) {
+    background-color: var(--muted);
+    padding: 0.1rem 0.3rem;
+    border-radius: 0.2rem;
+    font-size: 0.85em;
+  }
+  .agent-config-html :global(pre) {
+    background-color: var(--muted);
+    padding: 0.5rem;
+    border-radius: 0.3rem;
+    overflow-x: auto;
+    margin-bottom: 0.4rem;
+  }
+  .agent-config-html :global(pre code) {
+    background-color: transparent;
+    padding: 0;
+  }
+  .agent-config-html :global(a) {
+    color: var(--link-color);
+    text-decoration: underline;
+  }
+  .agent-config-html :global(a:hover) {
+    opacity: 0.8;
+  }
+  .agent-config-html :global(blockquote) {
+    border-left: 3px solid var(--border);
+    padding-left: 0.75rem;
+    margin-left: 0;
+    margin-bottom: 0.4rem;
+    color: var(--muted-foreground);
+  }
+  .agent-config-html :global(ul),
+  .agent-config-html :global(ol) {
+    padding-left: 1.5rem;
+    margin-bottom: 0.4rem;
+  }
+  .agent-config-html :global(li) {
+    margin-bottom: 0.1rem;
+  }
+
   .agent-config-html :global(table) {
     border-collapse: separate;
     border-spacing: 0;
@@ -367,7 +410,7 @@
   .agent-config-html :global(th) {
     text-align: left;
     font-weight: 700;
-    border-bottom: 1.5px solid rgb(156 163 175 / 0.6);
+    border-bottom: 1.5px solid var(--border);
     padding-bottom: 0.35rem;
   }
 

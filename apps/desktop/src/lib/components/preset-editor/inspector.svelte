@@ -6,6 +6,7 @@
   import { ScrollArea } from "$lib/components/ui/scroll-area/index.js";
   import { Separator } from "$lib/components/ui/separator/index.js";
 
+  import { renderMarkdown } from "$lib/sanitize";
   import { useEditor } from "./context.svelte";
   import SidebarConfig from "./sidebar-config.svelte";
 
@@ -143,7 +144,8 @@
           {/if}
           <div class="font-medium">{inspector.displayTitle}</div>
           {#if inspector.agentDef?.description}
-            <p class="text-xs text-muted-foreground mt-1">{inspector.agentDef.description}</p>
+            {@const descriptionHtml = renderMarkdown(inspector.agentDef.description)}
+            <div class="text-xs text-muted-foreground mt-1 inspector-description">{@html descriptionHtml}</div>
           {/if}
         </div>
 
@@ -177,5 +179,54 @@
 <style>
   :global([role="dialog"]::-webkit-resizer) {
     display: none;
+  }
+
+  .inspector-description {
+    overflow-wrap: break-word;
+  }
+  .inspector-description :global(p) {
+    margin-bottom: 0.25rem;
+  }
+  .inspector-description :global(p:last-child) {
+    margin-bottom: 0;
+  }
+  .inspector-description :global(code) {
+    background-color: var(--muted);
+    padding: 0.05rem 0.2rem;
+    border-radius: 0.15rem;
+    font-size: 0.85em;
+  }
+  .inspector-description :global(pre) {
+    background-color: var(--muted);
+    padding: 0.5rem;
+    border-radius: 0.3rem;
+    overflow-x: auto;
+    margin-bottom: 0.25rem;
+  }
+  .inspector-description :global(pre code) {
+    background-color: transparent;
+    padding: 0;
+  }
+  .inspector-description :global(a) {
+    color: var(--link-color);
+    text-decoration: underline;
+  }
+  .inspector-description :global(a:hover) {
+    opacity: 0.8;
+  }
+  .inspector-description :global(ul),
+  .inspector-description :global(ol) {
+    padding-left: 1.25rem;
+    margin-bottom: 0.25rem;
+  }
+  .inspector-description :global(li) {
+    margin-bottom: 0.1rem;
+  }
+  .inspector-description :global(blockquote) {
+    border-left: 3px solid var(--border);
+    padding-left: 0.75rem;
+    margin-left: 0;
+    margin-bottom: 0.25rem;
+    color: var(--muted-foreground);
   }
 </style>

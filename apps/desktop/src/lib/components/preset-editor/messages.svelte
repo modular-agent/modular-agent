@@ -102,7 +102,7 @@
         </Avatar.Root>
       </Item.Media>
       <Item.Content class="min-w-0">
-        <Item.Description class="line-clamp-none text-primary select-text cursor-text">
+        <div class="text-sm leading-normal font-normal text-primary select-text cursor-text message-content">
           {#if message.role === "ai" || message.role === "tool"}
             {@html message.html}
           {:else}
@@ -113,8 +113,45 @@
               <img src={message.image} alt="" class="max-w-full p-2" />
             </div>
           {/if}
-        </Item.Description>
+        </div>
       </Item.Content>
     </Item.Root>
   {/each}
 </div>
+
+<style>
+  .message-content :global(code) {
+    background-color: var(--muted);
+    padding: 0.1rem 0.3rem;
+    border-radius: 0.2rem;
+    font-size: 0.85em;
+  }
+  .message-content :global(pre) {
+    background-color: var(--muted);
+    padding: 0.5rem;
+    border-radius: 0.3rem;
+    overflow-x: auto;
+    margin-bottom: 0.4rem;
+  }
+  .message-content :global(pre code) {
+    background-color: transparent;
+    padding: 0;
+  }
+  .message-content :global(a) {
+    color: var(--link-color);
+    text-decoration: underline;
+  }
+  .message-content :global(a:hover) {
+    opacity: 0.8;
+  }
+  .message-content :global(blockquote) {
+    border-left: 3px solid var(--border);
+    padding-left: 0.75rem;
+    margin-left: 0;
+    margin-bottom: 0.4rem;
+    color: var(--muted-foreground);
+  }
+  .message-content :global(p) {
+    margin-bottom: 0.4rem;
+  }
+</style>

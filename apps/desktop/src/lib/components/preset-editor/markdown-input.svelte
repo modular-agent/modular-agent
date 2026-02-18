@@ -78,7 +78,7 @@
   }
 
   .agent-config-markdown:hover {
-    outline: 1px solid rgba(0, 0, 0, 0.15);
+    outline: 1px solid var(--border);
   }
 
   .agent-config-markdown :global(h1) {
@@ -114,14 +114,14 @@
   }
 
   .agent-config-markdown :global(code) {
-    background-color: rgba(0, 0, 0, 0.05);
+    background-color: var(--muted);
     padding: 0.1rem 0.3rem;
     border-radius: 0.2rem;
     font-size: 0.85em;
   }
 
   .agent-config-markdown :global(pre) {
-    background-color: rgba(0, 0, 0, 0.05);
+    background-color: var(--muted);
     padding: 0.5rem;
     border-radius: 0.3rem;
     overflow-x: auto;
@@ -134,15 +134,15 @@
   }
 
   .agent-config-markdown :global(blockquote) {
-    border-left: 3px solid rgba(0, 0, 0, 0.2);
+    border-left: 3px solid var(--border);
     padding-left: 0.75rem;
     margin-left: 0;
     margin-bottom: 0.4rem;
-    color: rgba(0, 0, 0, 0.6);
+    color: var(--muted-foreground);
   }
 
   .agent-config-markdown :global(a) {
-    color: #2563eb;
+    color: var(--link-color);
     text-decoration: underline;
   }
 
@@ -154,7 +154,7 @@
   .agent-config-markdown :global(th) {
     text-align: left;
     font-weight: 700;
-    border-bottom: 1.5px solid rgb(156 163 175 / 0.6);
+    border-bottom: 1.5px solid var(--border);
     padding-bottom: 0.35rem;
   }
 
@@ -178,7 +178,7 @@
 
   .agent-config-markdown :global(hr) {
     border: none;
-    border-top: 1px solid rgba(0, 0, 0, 0.15);
+    border-top: 1px solid var(--border);
     margin: 0.5rem 0;
   }
 </style>

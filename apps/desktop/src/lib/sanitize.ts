@@ -44,6 +44,14 @@ const PURIFY_CONFIG = {
   ALLOW_DATA_ATTR: false,
 };
 
+// Note: depends on "target" and "rel" being in ALLOWED_ATTR above
+DOMPurify.addHook("afterSanitizeAttributes", (node) => {
+  if (node.tagName === "A" && node.hasAttribute("href")) {
+    node.setAttribute("target", "_blank");
+    node.setAttribute("rel", "noopener noreferrer");
+  }
+});
+
 export function sanitizeHtml(html: string): string {
   return DOMPurify.sanitize(html, PURIFY_CONFIG);
 }
