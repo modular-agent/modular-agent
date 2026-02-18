@@ -4,13 +4,11 @@
   import { Handle, Position } from "@xyflow/svelte";
   import type { AgentConfigSpec } from "tauri-plugin-modular-agent-api";
 
+  import { inferTypeForDisplay } from "$lib/agent";
   import { Button } from "$lib/components/ui/button/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
   import { Switch } from "$lib/components/ui/switch/index.js";
   import { Textarea } from "$lib/components/ui/textarea/index.js";
-
-  import { inferTypeForDisplay } from "$lib/agent";
-
   import { isSafeImageSrc, renderMarkdown, sanitizeHtml } from "$lib/sanitize";
 
   import MarkdownInput from "./markdown-input.svelte";
@@ -28,8 +26,6 @@
 
   const CONFIG_HANDLE_STYLE =
     "width: 10px; height: 10px; background-color: #000; border: 2px solid #fff;";
-
-  const HANDLE_X_OFFSET = "-12px";
 
   const displayRenderers: Record<string, Snippet<[any]>> = {
     undefined: displayEmpty,
@@ -137,7 +133,9 @@
   {#if isSafeImageSrc(value)}
     <img class="flex-1 object-scale-down" src={value} alt="" />
   {:else}
-    <div class="flex-none border-none p-2 text-muted-foreground">Blocked image: unsafe URL scheme</div>
+    <div class="flex-none border-none p-2 text-muted-foreground">
+      Blocked image: unsafe URL scheme
+    </div>
   {/if}
 {/snippet}
 
@@ -342,12 +340,12 @@
   {@const ty = configSpec?.type}
   <div class="flex-none relative flex items-center">
     {#if configSpec?.hide_title !== true}
-      <h3>{configSpec?.title || name}</h3>
+      <h3 class="ml-3">{configSpec?.title || name}</h3>
       <Handle
         id="config:{name}"
         type="target"
         position={Position.Left}
-        style={`top: 50%; transform: translate(${HANDLE_X_OFFSET}, -50%); ${CONFIG_HANDLE_STYLE}`}
+        style={`top: 50%; left: 2px; ${CONFIG_HANDLE_STYLE}`}
       />
     {/if}
   </div>

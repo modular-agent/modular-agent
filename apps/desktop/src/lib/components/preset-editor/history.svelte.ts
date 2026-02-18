@@ -210,6 +210,8 @@ export class AddAgentCommand implements Command {
     const spec = await newAgentSpec(this.agentName);
     spec.x = this.flowPos.x;
     spec.y = this.flowPos.y;
+    spec.width = editor.snapGridSize;
+    spec.height = editor.snapGridSize;
     const id = await addAgent(this.presetId, spec);
     spec.id = id;
     this.node = agentSpecToNode(spec);

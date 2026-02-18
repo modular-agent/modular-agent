@@ -51,11 +51,11 @@
 <div class="flex items-center justify-end gap-2">
   {#if running}
     <Button onclick={handleStop} variant="ghost" class="w-4">
-      <SquareIcon color="red" />
+      <SquareIcon color="var(--color-agent-1)" />
     </Button>
   {:else}
     <Button onclick={handleStart} variant="ghost" class="w-4">
-      <PlayIcon color="blue" />
+      <PlayIcon color="var(--color-agent-6)" />
     </Button>
   {/if}
 

@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { goto } from "$app/navigation";
-
   import XIcon from "@lucide/svelte/icons/x";
+
+  import { goto } from "$app/navigation";
 
   import ScrollArea from "$lib/components/ui/scroll-area/scroll-area.svelte";
   import { tabStore } from "$lib/tab-store.svelte";
@@ -82,11 +82,15 @@
         {#if tab.id in tabStore.runningMap}
           <span
             class="flex-none size-1.5 rounded-full {tabStore.runningMap[tab.id]
-              ? 'bg-green-500'
-              : 'border border-red-500'}"
+              ? 'bg-[var(--color-agent-2)]'
+              : 'border border-[var(--color-agent-1)]'}"
           ></span>
         {/if}
-        <span class="flex-1 truncate text-left">{getDisplayName(tab.name)}{#if tabStore.dirtyMap[tab.id]}<span class="text-muted-foreground ml-0.5">*</span>{/if}</span>
+        <span class="flex-1 truncate text-left"
+          >{getDisplayName(tab.name)}{#if tabStore.dirtyMap[tab.id]}<span
+              class="text-muted-foreground ml-0.5">*</span
+            >{/if}</span
+        >
         <span
           role="button"
           tabindex="-1"

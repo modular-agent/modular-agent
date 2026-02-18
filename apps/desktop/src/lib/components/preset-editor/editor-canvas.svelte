@@ -11,6 +11,7 @@
     type Connection,
     type NodeEventWithPointer,
     type NodeTargetEventWithPointer,
+    type EdgeTypes,
     type NodeTypes,
     type OnDelete,
     type OnMove,
@@ -22,6 +23,8 @@
 
   import { getCoreSettings, getEdgeColor, saveAsPreset } from "$lib/agent";
   import { AgentList } from "$lib/components/agent-list/index.js";
+  import CustomBezierEdge from "$lib/components/connection/custom-bezier-edge.svelte";
+  import CustomConnectionLine from "$lib/components/connection/custom-connection-line.svelte";
   import PresetActionDialog from "$lib/components/preset-action-dialog.svelte";
   import { Button } from "$lib/components/ui/button/index.js";
   import * as Dialog from "$lib/components/ui/dialog/index.js";
@@ -56,6 +59,10 @@
 
   const nodeTypes: NodeTypes = {
     agent: AgentNode,
+  };
+
+  const edgeTypes: EdgeTypes = {
+    default: CustomBezierEdge,
   };
 
   // --- MiniMap visibility ---
@@ -494,8 +501,10 @@
     attributionPosition="bottom-right"
     class="flex-1 w-full"
     colorMode={(coreSettings.color_mode as "light" | "dark" | "system") || "system"}
+    connectionLineComponent={CustomConnectionLine}
     connectionRadius={38}
     deleteKey={["Delete", "Backspace"]}
+    {edgeTypes}
     bind:edges={editor.edges}
     initialViewport={editor.props.flow().viewport ?? { x: 0, y: 0, zoom: 1 }}
     maxZoom={2}
@@ -520,10 +529,10 @@
     zoomOnDoubleClick={false}
   >
     <Background
-      bgColor={editor.running ? "var(--color-background)" : "var(--color-muted)"}
+      bgColor="var(--color-background)"
       gap={editor.gridGap}
       lineWidth={1}
-      variant={BackgroundVariant.Dots}
+      variant={editor.running ? undefined : BackgroundVariant.Cross}
       patternColor={editor.showGrid ? undefined : "transparent"}
     />
 
@@ -642,11 +651,13 @@
     --resize-control-size: 2px;
     --resize-control-color: var(--color-ring);
   }
-
+  :global(.svelte-flow .svelte-flow__edges) {
+    z-index: 1001;
+    pointer-events: none;
+  }
   :global(.svelte-flow__edge .svelte-flow__edge-path) {
     stroke-width: 8px;
   }
-
   :global(.svelte-flow__resize-control.handle) {
     border: calc(var(--resize-control-size) * 1.5) solid var(--resize-control-color);
     border-radius: var(--resize-control-size);

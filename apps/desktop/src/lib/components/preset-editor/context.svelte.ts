@@ -1,7 +1,6 @@
 import { writeText, readText } from "@tauri-apps/plugin-clipboard-manager";
 import { open } from "@tauri-apps/plugin-dialog";
 
-import { goto } from "$app/navigation";
 import { getContext, setContext, untrack } from "svelte";
 
 import type { useSvelteFlow } from "@xyflow/svelte";
@@ -18,6 +17,8 @@ import {
   type ConnectionSpec,
 } from "tauri-plugin-modular-agent-api";
 
+import { goto } from "$app/navigation";
+
 import {
   edgeToConnectionSpec,
   getAgentDefinitions,
@@ -31,7 +32,6 @@ import { tabStore } from "$lib/tab-store.svelte";
 import { titlebarState } from "$lib/titlebar-state.svelte";
 import type { PresetFlow, PresetNode, PresetEdge } from "$lib/types";
 
-import { InspectorState } from "./inspector-state.svelte";
 import {
   AddAgentCommand,
   DeleteCommand,
@@ -47,6 +47,7 @@ import {
   getOrCreateHistory,
   type NodePositionDelta,
 } from "./history.svelte";
+import { InspectorState } from "./inspector-state.svelte";
 
 async function withErrorToast<T>(fn: () => Promise<T>, message: string): Promise<T | undefined> {
   try {
@@ -100,15 +101,21 @@ export class EditorState {
 
   // Grid/Snap state
   snapEnabled = $state(true);
-  snapGridSize = $state(12);
+  snapGridSize = $state(192);
   showGrid = $state(true);
-  gridGap = $state(24);
+  gridGap = $state(192);
   modifierPressed = $state(false);
+  resizing = $state(false);
 
   effectiveSnapGrid = $derived.by(() => {
+    if (this.resizing) return undefined;
     const active = this.snapEnabled !== this.modifierPressed;
     return active ? ([this.snapGridSize, this.snapGridSize] as [number, number]) : undefined;
   });
+
+  get snapActive(): boolean {
+    return this.snapEnabled !== this.modifierPressed;
+  }
 
   // Sidebar / Inspector floating card
   sidebarOpen = $state(true);
@@ -140,9 +147,9 @@ export class EditorState {
     const maxHistoryLength = settings.max_history_length ?? 2000;
     this.history = getOrCreateHistory(props.preset_id(), maxHistoryLength);
     this.snapEnabled = settings.snap_enabled ?? true;
-    this.snapGridSize = settings.snap_grid_size ?? 12;
+    this.snapGridSize = settings.snap_grid_size ?? 192;
     this.showGrid = settings.show_grid ?? true;
-    this.gridGap = settings.grid_gap ?? 24;
+    this.gridGap = settings.grid_gap ?? 192;
 
     // Sync nodes/edges from flow data
     $effect.pre(() => {
@@ -221,10 +228,7 @@ export class EditorState {
 
         // Early exit: no selection and nothing changed
         if (!node) {
-          if (
-            this.inspector.nodeId === null &&
-            this.inspector.selectedCount === selected.length
-          )
+          if (this.inspector.nodeId === null && this.inspector.selectedCount === selected.length)
             return;
           this.inspector.selectedCount = selected.length;
           this.inspector.nodeId = null;
@@ -249,10 +253,7 @@ export class EditorState {
         this.inspector.outputs = data.outputs ?? [];
         this.inspector.agentDef = getAgentDefinitions()[data.def_name] ?? null;
         this.inspector.connectedConfigs = edges
-          .filter(
-            (e) =>
-              e.target === node.id && e.targetHandle?.startsWith("config:"),
-          )
+          .filter((e) => e.target === node.id && e.targetHandle?.startsWith("config:"))
           .map((e) => e.targetHandle?.substring(7) ?? "");
       });
     });
@@ -550,7 +551,10 @@ export class EditorState {
 
     const deltas = targets.map((n) => ({ id: n.id, wasDisabled: false }));
     const cmd = new ToggleDisabledCommand(deltas, true);
-    await withErrorToast(() => this.history.executeAndPush(this, cmd), "Failed to disable agent(s)");
+    await withErrorToast(
+      () => this.history.executeAndPush(this, cmd),
+      "Failed to disable agent(s)",
+    );
   }
 
   toggleErr() {
@@ -593,8 +597,7 @@ export class EditorState {
 
     // Persist to backend
     await withErrorLog(
-      () =>
-        updateAgentSpec(targetNode.id, { x: targetNode.position.x, y: targetNode.position.y }),
+      () => updateAgentSpec(targetNode.id, { x: targetNode.position.x, y: targetNode.position.y }),
       "Failed to update node position",
     );
 
@@ -836,9 +839,7 @@ export class EditorState {
         oldPosition: oldPositions.get(u.id)!,
         newPosition: { x: u.x, y: u.y },
       }))
-      .filter(
-        (d) => d.oldPosition.x !== d.newPosition.x || d.oldPosition.y !== d.newPosition.y,
-      );
+      .filter((d) => d.oldPosition.x !== d.newPosition.x || d.oldPosition.y !== d.newPosition.y);
 
     if (deltas.length === 0) return;
 
@@ -898,14 +899,15 @@ export class EditorState {
         oldPosition: oldPositions.get(u.id)!,
         newPosition: { x: u.x, y: u.y },
       }))
-      .filter(
-        (d) => d.oldPosition.x !== d.newPosition.x || d.oldPosition.y !== d.newPosition.y,
-      );
+      .filter((d) => d.oldPosition.x !== d.newPosition.x || d.oldPosition.y !== d.newPosition.y);
 
     if (deltas.length === 0) return;
 
     const cmd = new MoveNodesCommand(deltas, "Distribute");
-    await withErrorToast(() => this.history.executeAndPush(this, cmd), "Failed to distribute nodes");
+    await withErrorToast(
+      () => this.history.executeAndPush(this, cmd),
+      "Failed to distribute nodes",
+    );
   }
 
   // --- Navigate helpers ---

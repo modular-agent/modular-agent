@@ -1,11 +1,11 @@
 <script lang="ts" module>
   const titleColorMap: Record<string, string> = {
-    default: "bg-agent-1",
-    External: "bg-agent-2",
-    Local: "bg-agent-2",
-    Display: "bg-agent-3",
-    Input: "bg-agent-3",
-    UI: "bg-agent-4",
+    default: "text-agent-1",
+    External: "text-agent-2",
+    Local: "text-agent-2",
+    Display: "text-agent-3",
+    Input: "text-agent-3",
+    UI: "text-agent-4",
   };
 </script>
 
@@ -126,13 +126,8 @@
     </div>
   {:else}
     <div class="flex-none mt-1">
-      <div class="flex flex-col flex-nowrap items-start">
+      <div class="flex flex-col flex-nowrap items-center">
         {#if agentDef}
-          <div class="text-xs">
-            {#if agentDef.category}
-              {agentDef.category}
-            {/if}
-          </div>
           <div class="flex flex-row space-x-2">
             {#if editTitle}
               <Input
@@ -161,7 +156,7 @@
                 class="flex-none"
                 tabindex={-1}
               >
-                <div class="text-xl font-semibold">
+                <div class="text-xl font-semibold {titleColor}">
                   {data.title ?? agentDef.title ?? data.def_name}
                 </div>
               </button>
@@ -198,7 +193,7 @@
 
 {#snippet contents()}
   {#if data.configs}
-    <form class="grow flex flex-col gap-1 pl-4 pr-4 pb-4">
+    <form class="grow flex flex-col gap-1 pl-7 pr-7 pb-4">
       {#each Object.entries(data.configs) as [key, value]}
         <AgentConfig
           name={key}

@@ -26,9 +26,9 @@
   let run_in_background = $state(false);
   let shortcut_keys = $state<Record<string, string>>({});
   let snap_enabled = $state(true);
-  let snap_grid_size = $state(12);
+  let snap_grid_size = $state(196);
   let show_grid = $state(true);
-  let grid_gap = $state(24);
+  let grid_gap = $state(196);
   let max_history_length = $state(2000);
 
   // Group hotkey definitions by group
@@ -164,19 +164,25 @@
 
         <Field orientation="vertical">
           <FieldLabel>Snap Grid Size: {snap_grid_size}px</FieldLabel>
-          <Input type="number" min={2} max={48} bind:value={snap_grid_size} class="max-w-xs" />
+          <Input type="number" min={2} max={400} bind:value={snap_grid_size} class="max-w-xs" />
         </Field>
 
         <Field orientation="vertical">
           <FieldLabel>Grid Gap: {grid_gap}px</FieldLabel>
-          <Input type="number" min={4} max={96} bind:value={grid_gap} class="max-w-xs" />
+          <Input type="number" min={4} max={400} bind:value={grid_gap} class="max-w-xs" />
         </Field>
 
         <div class="font-semibold mt-4">Undo / Redo</div>
 
         <Field orientation="vertical">
           <FieldLabel>Max Undo History: {max_history_length}</FieldLabel>
-          <Input type="number" min={10} max={10000} bind:value={max_history_length} class="max-w-xs" />
+          <Input
+            type="number"
+            min={10}
+            max={10000}
+            bind:value={max_history_length}
+            class="max-w-xs"
+          />
         </Field>
 
         {#each Object.entries(hotkeyGroups) as [group, defs]}
