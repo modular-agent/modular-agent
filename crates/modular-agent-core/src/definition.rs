@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::FnvIndexMap;
 use crate::agent::Agent;
+use crate::config::AgentConfigs;
 use crate::modular_agent::ModularAgent;
 use crate::error::AgentError;
 use crate::id::new_id;
@@ -617,6 +618,26 @@ impl AgentDefinition {
                     .collect(),
             );
         }
+
+        // Reorder configs to match definition key order
+        if let Some(ref mut spec_configs) = spec.configs {
+            if let Some(ref def_configs) = self.configs {
+                let mut reordered = AgentConfigs::new();
+                // First: definition keys in definition order
+                for (key, _) in def_configs.iter() {
+                    if let Ok(value) = spec_configs.get(key) {
+                        reordered.set(key.clone(), value.clone());
+                    }
+                }
+                // Then: remaining keys (stale `_`-prefixed, etc.)
+                for (key, value) in &*spec_configs {
+                    if !reordered.contains_key(key) {
+                        reordered.set(key.clone(), value.clone());
+                    }
+                }
+                *spec_configs = reordered;
+            }
+        }
     }
 }
 
@@ -1103,6 +1124,9 @@ mod tests {
         assert_eq!(c.get_string_or_default("name"), "default_name");
         assert_eq!(c.get_integer_or_default("count"), 10);
         assert_eq!(c.get_bool_or_default("enabled"), true);
+        // Key order matches definition order
+        let keys: Vec<&String> = c.keys().collect();
+        assert_eq!(keys, vec!["name", "count", "enabled"]);
     }
 
     #[test]
@@ -1226,5 +1250,70 @@ mod tests {
         // removed is newly prefixed
         assert!(c.get("removed").is_err());
         assert_eq!(c.get("_removed").unwrap(), &AgentValue::integer(99));
+    }
+
+    #[test]
+    fn test_reconcile_reorders_configs_to_definition_order() {
+        let def = reconcile_def(); // defines: name, count, enabled
+        let mut configs = AgentConfigs::new();
+        // Insert in reverse order
+        configs.set("enabled".into(), AgentValue::boolean(false));
+        configs.set("count".into(), AgentValue::integer(42));
+        configs.set("name".into(), AgentValue::string("custom"));
+        let mut spec = AgentSpec {
+            configs: Some(configs),
+            ..Default::default()
+        };
+
+        def.reconcile_spec(&mut spec);
+
+        let c = spec.configs.as_ref().unwrap();
+        let keys: Vec<&String> = c.keys().collect();
+        assert_eq!(keys, vec!["name", "count", "enabled"]);
+        // Values are preserved
+        assert_eq!(c.get_string_or_default("name"), "custom");
+        assert_eq!(c.get_integer_or_default("count"), 42);
+        assert_eq!(c.get_bool_or_default("enabled"), false);
+    }
+
+    #[test]
+    fn test_reconcile_reorder_stale_keys_at_end() {
+        let def = reconcile_def(); // defines: name, count, enabled
+        let mut configs = AgentConfigs::new();
+        configs.set("old_key".into(), AgentValue::string("stale"));
+        configs.set("enabled".into(), AgentValue::boolean(true));
+        configs.set("name".into(), AgentValue::string("hello"));
+        let mut spec = AgentSpec {
+            configs: Some(configs),
+            ..Default::default()
+        };
+
+        def.reconcile_spec(&mut spec);
+
+        let c = spec.configs.as_ref().unwrap();
+        let keys: Vec<&String> = c.keys().collect();
+        // Definition keys first in definition order, then stale keys at end
+        assert_eq!(keys, vec!["name", "count", "enabled", "_old_key"]);
+    }
+
+    #[test]
+    fn test_reconcile_reorder_is_idempotent() {
+        let def = reconcile_def();
+        let mut configs = AgentConfigs::new();
+        configs.set("enabled".into(), AgentValue::boolean(false));
+        configs.set("name".into(), AgentValue::string("hello"));
+        configs.set("old".into(), AgentValue::string("stale"));
+        let mut spec = AgentSpec {
+            configs: Some(configs),
+            ..Default::default()
+        };
+
+        def.reconcile_spec(&mut spec);
+        let order_first: Vec<String> = spec.configs.as_ref().unwrap().keys().cloned().collect();
+
+        def.reconcile_spec(&mut spec);
+        let order_second: Vec<String> = spec.configs.as_ref().unwrap().keys().cloned().collect();
+
+        assert_eq!(order_first, order_second);
     }
 }
