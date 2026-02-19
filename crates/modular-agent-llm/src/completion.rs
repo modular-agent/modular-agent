@@ -45,10 +45,10 @@ const DEFAULT_CONFIG_MODEL: &str = "openai/gpt-3.5-turbo-instruct";
     string_config(name = CONFIG_MODEL, default = DEFAULT_CONFIG_MODEL),
     text_config(name = CONFIG_SYSTEM, default = ""),
     boolean_config(name = CONFIG_USE_CONTEXT, title = "Use Context (Ollama only)"),
-    object_config(name = CONFIG_OPTIONS),
     integer_config(name = CONFIG_MAX_TOKENS, title = "Max Tokens", default = 0, description = "0: use API default", detail),
     number_config(name = CONFIG_TEMPERATURE, title = "Temperature", default = -1.0, description = "-1: use API default (0.0-2.0)", detail),
     number_config(name = CONFIG_TOP_P, title = "Top P", default = -1.0, description = "-1: use API default (0.0-1.0)", detail),
+    object_config(name = CONFIG_OPTIONS, title = "Options", description = "Additional request options as JSON", detail),
 )]
 pub struct CompletionAgent {
     data: AgentData,

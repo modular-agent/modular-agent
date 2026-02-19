@@ -51,14 +51,14 @@ const DEFAULT_MODEL: &str = "openai/gpt-5-mini";
     category = CATEGORY,
     inputs = [PORT_MESSAGE, PORT_RESET],
     outputs = [PORT_MESSAGE, PORT_RESPONSE],
+    string_config(name = CONFIG_MODEL, default = DEFAULT_MODEL),
     boolean_config(name = CONFIG_STREAM, title = "Stream"),
     boolean_config(name = CONFIG_USE_CONVERSATION_STATE, title = "Use Conversation State"),
-    string_config(name = CONFIG_MODEL, default = DEFAULT_MODEL),
     text_config(name = CONFIG_TOOLS),
-    object_config(name = CONFIG_OPTIONS),
     integer_config(name = CONFIG_MAX_TOKENS, title = "Max Tokens", default = 0, description = "0: use API default", detail),
     number_config(name = CONFIG_TEMPERATURE, title = "Temperature", default = -1.0, description = "-1: use API default (0.0-2.0)", detail),
     number_config(name = CONFIG_TOP_P, title = "Top P", default = -1.0, description = "-1: use API default (0.0-1.0)", detail),
+    object_config(name = CONFIG_OPTIONS, title = "Options", description = "Additional request options as JSON", detail),
 )]
 pub struct ResponsesAgent {
     data: AgentData,
