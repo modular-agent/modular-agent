@@ -7,6 +7,7 @@
 
   import { ScrollArea } from "$lib/components/ui/scroll-area/index.js";
   import { Separator } from "$lib/components/ui/separator/index.js";
+  import { KIND_COLOR_DEFAULTS } from "$lib/agent";
   import { renderMarkdown } from "$lib/sanitize";
 
   import { useEditor } from "./context.svelte";
@@ -197,9 +198,6 @@
             <button
               class="text-xs text-muted-foreground hover:text-foreground"
               onclick={() => {
-                const KIND_COLOR_DEFAULTS: Record<string, number> = {
-                  default: 4, External: 5, Local: 5, Display: 3, Input: 6, UI: 2,
-                };
                 const rawColor = inspector.extensions.color
                   ?? inspector.agentDef?.hints?.color
                   ?? KIND_COLOR_DEFAULTS[inspector.agentDef?.kind ?? "default"]

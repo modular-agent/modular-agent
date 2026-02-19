@@ -1,4 +1,5 @@
 <script lang="ts">
+  import XIcon from "@lucide/svelte/icons/x";
   import * as ContextMenu from "$lib/components/ui/context-menu/index.js";
   import { formatHotkey, getHotkeyKey, type ResolvedHotkeys } from "$lib/hotkeys";
 
@@ -16,6 +17,9 @@
     ontoggleerr,
     onalign,
     ondistribute,
+    oncolor,
+    onapplycolortoports,
+    onclearportcolors,
   }: {
     open: boolean;
     x: number;
@@ -30,6 +34,9 @@
     ontoggleerr?: () => void;
     onalign?: (direction: "left" | "center" | "right" | "top" | "middle" | "bottom") => void;
     ondistribute?: (direction: "horizontal" | "vertical") => void;
+    oncolor?: (color: number | null) => void;
+    onapplycolortoports?: () => void;
+    onclearportcolors?: () => void;
   } = $props();
 
   const anchor = $derived({
@@ -68,6 +75,44 @@
     <ContextMenu.Item inset onclick={() => handle(ondisable)}>Disable</ContextMenu.Item>
     <ContextMenu.Separator />
     <ContextMenu.Item inset onclick={() => handle(ontoggleerr)}>Show Err</ContextMenu.Item>
+    <ContextMenu.Separator />
+    <ContextMenu.Sub>
+      <ContextMenu.SubTrigger inset>Color</ContextMenu.SubTrigger>
+      <ContextMenu.SubContent>
+        <div class="flex items-center gap-1.5 px-2 py-1.5">
+          <button
+            aria-label="Default color"
+            class="w-4 h-4 rounded-full border border-border flex items-center justify-center
+                   text-muted-foreground hover:bg-accent"
+            onclick={() => {
+              oncolor?.(null);
+              open = false;
+            }}
+            title="Default"
+          >
+            <XIcon size={10} />
+          </button>
+          {#each [1, 2, 3, 4, 5, 6] as n}
+            <button
+              aria-label="Color {n}"
+              class="w-4 h-4 rounded-full border border-border hover:scale-110 transition-transform"
+              style="background-color: var(--color-agent-{n})"
+              onclick={() => {
+                oncolor?.(n);
+                open = false;
+              }}
+            ></button>
+          {/each}
+        </div>
+        <ContextMenu.Separator />
+        <ContextMenu.Item inset onclick={() => handle(onapplycolortoports)}
+          >Apply to ports</ContextMenu.Item
+        >
+        <ContextMenu.Item inset onclick={() => handle(onclearportcolors)}
+          >Clear port colors</ContextMenu.Item
+        >
+      </ContextMenu.SubContent>
+    </ContextMenu.Sub>
     <ContextMenu.Separator />
     <ContextMenu.Sub>
       <ContextMenu.SubTrigger inset>Align</ContextMenu.SubTrigger>

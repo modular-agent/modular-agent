@@ -128,6 +128,16 @@ export const KIND_COLOR_VALUES: Record<string, string> = {
   UI: "var(--color-agent-2)",
 };
 
+// Kind-based default color: agent kind → palette index (numeric)
+export const KIND_COLOR_DEFAULTS: Record<string, number> = {
+  default: 4,
+  External: 5,
+  Local: 5,
+  Display: 3,
+  Input: 6,
+  UI: 2,
+};
+
 /** Convert a raw color value (palette number or hex string) to a CSS color string. */
 export function resolveColorCss(value: number | string | null | undefined): string | null {
   if (value == null) return null;

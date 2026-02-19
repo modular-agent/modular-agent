@@ -582,6 +582,9 @@
       oncopy={() => editor.copyNodesAndEdges()}
       onexport={() => editor.exportSelected()}
       ontoggleerr={() => editor.toggleErr()}
+      oncolor={(c) => editor.setSelectedNodesColor(c)}
+      onapplycolortoports={() => editor.applyColorToPorts()}
+      onclearportcolors={() => editor.clearPortColors()}
       onalign={(d) => editor.alignNodes(d)}
       ondistribute={(d) => editor.distributeNodes(d)}
     />

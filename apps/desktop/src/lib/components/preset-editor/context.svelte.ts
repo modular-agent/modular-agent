@@ -29,6 +29,7 @@ import {
   savePreset as savePresetAPI,
   newPresetWithName,
   resolveColorCss,
+  KIND_COLOR_DEFAULTS,
 } from "$lib/agent";
 import { coreSettingsStore } from "$lib/core-settings-store.svelte";
 import { tabStore } from "$lib/tab-store.svelte";
@@ -46,6 +47,7 @@ import {
   UpdateConfigCommand,
   UpdateTitleCommand,
   UpdateExtensionCommand,
+  BatchUpdateExtensionCommand,
   ToggleDisabledCommand,
   ToggleShowErrCommand,
   getOrCreateHistory,
@@ -616,6 +618,63 @@ export class EditorState {
     // ToggleShowErr is synchronous (no backend call), so execute directly
     cmd.execute(this);
     this.history.push(cmd);
+  }
+
+  // --- Batch color operations (context menu) ---
+
+  async setSelectedNodesColor(color: number | null) {
+    const [selectedNodes] = this.selectedNodesAndEdges();
+    if (selectedNodes.length === 0) return;
+    const deltas = selectedNodes
+      .map((n) => ({ id: n.id, oldValue: (n.data.color as number | string | null) ?? null, newValue: color }))
+      .filter((d) => d.oldValue !== d.newValue);
+    if (deltas.length === 0) return;
+    const cmd = new BatchUpdateExtensionCommand(deltas, "color");
+    await withErrorToast(() => this.history.executeAndPush(this, cmd), "Failed to set color");
+  }
+
+  async applyColorToPorts() {
+    const [selectedNodes] = this.selectedNodesAndEdges();
+    if (selectedNodes.length === 0) return;
+    const agentDefs = getAgentDefinitions();
+    const deltas = selectedNodes
+      .map((n) => {
+        const def = agentDefs[n.data.def_name];
+        const rawColor =
+          n.data.color ?? def?.hints?.color ?? KIND_COLOR_DEFAULTS[def?.kind ?? "default"] ?? 4;
+        const ports = [
+          ...(n.data.inputs ?? []).filter((p: string) => p !== "err"),
+          ...(n.data.outputs ?? []).filter((p: string) => p !== "err"),
+        ];
+        const pc: Record<string, number | string> = {};
+        for (const p of ports) pc[p] = rawColor;
+        return {
+          id: n.id,
+          oldValue: (n.data.port_colors as Record<string, number | string> | null) ?? null,
+          newValue: ports.length > 0 ? pc : null,
+        };
+      })
+      .filter((d) => JSON.stringify(d.oldValue) !== JSON.stringify(d.newValue));
+    if (deltas.length === 0) return;
+    const cmd = new BatchUpdateExtensionCommand(deltas, "port_colors");
+    await withErrorToast(
+      () => this.history.executeAndPush(this, cmd),
+      "Failed to apply color to ports",
+    );
+  }
+
+  async clearPortColors() {
+    const [selectedNodes] = this.selectedNodesAndEdges();
+    if (selectedNodes.length === 0) return;
+    const deltas = selectedNodes
+      .filter((n) => n.data.port_colors != null)
+      .map((n) => ({ id: n.id, oldValue: n.data.port_colors, newValue: null }));
+    if (deltas.length === 0) return;
+    const cmd = new BatchUpdateExtensionCommand(deltas, "port_colors");
+    await withErrorToast(
+      () => this.history.executeAndPush(this, cmd),
+      "Failed to clear port colors",
+    );
   }
 
   // --- Node drag/move handlers ---

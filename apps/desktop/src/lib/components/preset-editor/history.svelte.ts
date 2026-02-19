@@ -739,6 +739,39 @@ export class UpdateExtensionCommand implements Command {
   }
 }
 
+// ── BatchUpdateExtensionCommand ──
+
+type ExtDelta = { id: string; oldValue: any; newValue: any };
+
+export class BatchUpdateExtensionCommand implements Command {
+  readonly label = "Update Extension";
+
+  constructor(
+    private deltas: ExtDelta[],
+    private key: string,
+  ) {}
+
+  async execute(editor: EditorState) {
+    for (const d of this.deltas) {
+      editor.props.svelteFlow.updateNodeData(d.id, { [this.key]: d.newValue ?? undefined });
+      await updateAgentSpec(d.id, { [this.key]: d.newValue ?? null });
+      if (this.key === "port_colors") editor.refreshEdgeColorsForNode(d.id, d.newValue);
+    }
+  }
+
+  async undo(editor: EditorState) {
+    for (const d of this.deltas) {
+      editor.props.svelteFlow.updateNodeData(d.id, { [this.key]: d.oldValue ?? undefined });
+      await updateAgentSpec(d.id, { [this.key]: d.oldValue ?? null });
+      if (this.key === "port_colors") editor.refreshEdgeColorsForNode(d.id, d.oldValue);
+    }
+  }
+
+  remapId(oldId: string, newId: string) {
+    this.deltas = this.deltas.map((d) => (d.id === oldId ? { ...d, id: newId } : d));
+  }
+}
+
 // ── ToggleDisabledCommand ──
 
 type DisabledDelta = { id: string; wasDisabled: boolean };
