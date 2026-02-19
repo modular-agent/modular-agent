@@ -193,6 +193,34 @@
               onchange={(e) => inspector.onUpdateExtension?.("color", e.currentTarget.value)}
             />
           </div>
+          <div class="flex items-center gap-1.5">
+            <button
+              class="text-xs text-muted-foreground hover:text-foreground"
+              onclick={() => {
+                const KIND_COLOR_DEFAULTS: Record<string, number> = {
+                  default: 4, External: 5, Local: 5, Display: 3, Input: 6, UI: 2,
+                };
+                const rawColor = inspector.extensions.color
+                  ?? inspector.agentDef?.hints?.color
+                  ?? KIND_COLOR_DEFAULTS[inspector.agentDef?.kind ?? "default"]
+                  ?? 4;
+                const ports = [
+                  ...inspector.inputs.filter((p: string) => p !== "err"),
+                  ...inspector.outputs.filter((p: string) => p !== "err"),
+                ];
+                if (ports.length === 0) return;
+                const pc: Record<string, number | string> = {};
+                for (const p of ports) pc[p] = rawColor;
+                inspector.onUpdateExtension?.("port_colors", pc);
+              }}
+            >Apply to ports</button>
+            {#if inspector.extensions.port_colors}
+              <button
+                class="text-xs text-muted-foreground hover:text-foreground"
+                onclick={() => inspector.onUpdateExtension?.("port_colors", null)}
+              >Clear</button>
+            {/if}
+          </div>
         </div>
 
         <Separator />

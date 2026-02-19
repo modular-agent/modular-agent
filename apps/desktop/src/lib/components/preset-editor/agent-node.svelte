@@ -1,23 +1,4 @@
 <script lang="ts" module>
-  // Inline style maps for title color (supports both CSS variable palette and arbitrary hex)
-  const hintColorStyles: Record<number, string> = {
-    1: "color: var(--color-agent-1)",
-    2: "color: var(--color-agent-2)",
-    3: "color: var(--color-agent-3)",
-    4: "color: var(--color-agent-4)",
-    5: "color: var(--color-agent-5)",
-    6: "color: var(--color-agent-6)",
-    7: "color: var(--color-agent-7)",
-  };
-
-  const kindColorStyles: Record<string, string> = {
-    default: "color: var(--color-agent-4)",
-    External: "color: var(--color-agent-5)",
-    Local: "color: var(--color-agent-5)",
-    Display: "color: var(--color-agent-3)",
-    Input: "color: var(--color-agent-6)",
-    UI: "color: var(--color-agent-2)",
-  };
 </script>
 
 <script lang="ts">
@@ -28,7 +9,7 @@
   import { getAgentSpec } from "tauri-plugin-modular-agent-api";
   import type { AgentSpec } from "tauri-plugin-modular-agent-api";
 
-  import { getAgentDefinitions } from "$lib/agent";
+  import { getAgentDefinitions, resolveNodeColor } from "$lib/agent";
   import * as Alert from "$lib/components/ui/alert/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
   import * as HoverCard from "$lib/components/ui/hover-card/index.js";
@@ -127,19 +108,8 @@
 
   let hide_title = $derived(agentDef?.hide_title ?? false);
   let editTitle = $state(false);
-  let titleColorStyle = $derived.by(() => {
-    // Per-instance override from extensions
-    const c = data.color;
-    if (c != null) {
-      if (typeof c === "number" && hintColorStyles[c]) return hintColorStyles[c];
-      if (typeof c === "string" && /^#[0-9a-fA-F]{6}$/.test(c)) return `color: ${c}`;
-    }
-    // Definition-level hint
-    const h = agentDef?.hints?.color;
-    if (typeof h === "number" && hintColorStyles[h]) return hintColorStyles[h];
-    // Kind-based default
-    return kindColorStyles[agentDef?.kind ?? "default"] ?? kindColorStyles.default;
-  });
+  let titleColor = $derived(resolveNodeColor(data, agentDef));
+  let titleColorStyle = $derived(`color: ${titleColor}`);
 </script>
 
 {#snippet title()}
@@ -230,4 +200,4 @@
   {/if}
 {/snippet}
 
-<NodeBase {id} {data} {agentDef} {inputCount} {title} {contents} {...props} />
+<NodeBase {id} {data} {agentDef} {inputCount} portColors={data.port_colors} {title} {contents} {...props} />

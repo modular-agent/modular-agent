@@ -1,7 +1,7 @@
 import type { AgentConfigSpec, AgentDefinition } from "tauri-plugin-modular-agent-api";
 
 /** Per-instance visual/metadata attributes stored in AgentSpec extensions. */
-export const EXTENSION_KEYS = ["color"] as const;
+export const EXTENSION_KEYS = ["color", "port_colors"] as const;
 
 export class InspectorState {
   // Display data (synced by EditorState)

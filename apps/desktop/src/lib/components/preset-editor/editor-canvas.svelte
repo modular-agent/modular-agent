@@ -21,7 +21,7 @@
 
   import { goto } from "$app/navigation";
 
-  import { getEdgeColor, saveAsPreset } from "$lib/agent";
+  import { getEdgeColor, resolveColorCss, saveAsPreset } from "$lib/agent";
   import { coreSettingsStore } from "$lib/core-settings-store.svelte";
   import { AgentList } from "$lib/components/agent-list/index.js";
   import CustomBezierEdge from "$lib/components/connection/custom-bezier-edge.svelte";
@@ -391,7 +391,13 @@
   };
 
   function handleBeforeConnect(connection: Connection): PresetEdge {
-    const color = getEdgeColor(connection.sourceHandle);
+    const srcNode = editor.nodes.find((n) => n.id === connection.source);
+    const portColors = srcNode?.data.port_colors;
+    let color: string | null = null;
+    if (portColors && connection.sourceHandle && connection.sourceHandle !== "err") {
+      color = resolveColorCss(portColors[connection.sourceHandle]);
+    }
+    if (!color) color = getEdgeColor(connection.sourceHandle);
     return {
       id: crypto.randomUUID(),
       ...connection,

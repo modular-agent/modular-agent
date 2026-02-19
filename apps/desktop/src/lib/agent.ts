@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import {
   type AgentConfigSpec,
   type AgentConfigsMap,
+  type AgentDefinition,
   type AgentDefinitions,
   type AgentSpec,
   type PresetInfo,
@@ -78,11 +79,15 @@ export function presetToFlow(info: PresetInfo, spec: PresetSpec): PresetFlow {
     return isSourceValid && isTargetValid;
   });
 
+  const nodeDataMap = new Map(nodes.map((n) => [n.id, n.data]));
+
   return {
     id: info.id,
     name: info.name,
     nodes: nodes,
-    edges: validConnections.map((conn) => connectionSpecToEdge(conn)),
+    edges: validConnections.map((conn) =>
+      connectionSpecToEdge(conn, nodeDataMap.get(conn.source)?.port_colors),
+    ),
     running: info.running,
     viewport: spec.viewport,
   };
@@ -100,6 +105,44 @@ export function agentSpecToNode(spec: AgentSpec): PresetNode {
     width: spec.width,
     height: spec.height,
   };
+}
+
+// Node color palette: raw value (number 1-7) → CSS color variable
+export const NODE_COLOR_VALUES: Record<number, string> = {
+  1: "var(--color-agent-1)",
+  2: "var(--color-agent-2)",
+  3: "var(--color-agent-3)",
+  4: "var(--color-agent-4)",
+  5: "var(--color-agent-5)",
+  6: "var(--color-agent-6)",
+  7: "var(--color-agent-7)",
+};
+
+// Kind-based default color: agent kind → CSS color variable
+export const KIND_COLOR_VALUES: Record<string, string> = {
+  default: "var(--color-agent-4)",
+  External: "var(--color-agent-5)",
+  Local: "var(--color-agent-5)",
+  Display: "var(--color-agent-3)",
+  Input: "var(--color-agent-6)",
+  UI: "var(--color-agent-2)",
+};
+
+/** Convert a raw color value (palette number or hex string) to a CSS color string. */
+export function resolveColorCss(value: number | string | null | undefined): string | null {
+  if (value == null) return null;
+  if (typeof value === "number") return NODE_COLOR_VALUES[value] ?? null;
+  if (typeof value === "string" && /^#[0-9a-fA-F]{6}$/.test(value)) return value;
+  return null;
+}
+
+/** Resolve a node's title color as a CSS value (instance > hint > kind default). */
+export function resolveNodeColor(data: AgentSpec, agentDef: AgentDefinition | null): string {
+  const c = resolveColorCss(data.color);
+  if (c) return c;
+  const h = agentDef?.hints?.color;
+  if (typeof h === "number" && NODE_COLOR_VALUES[h]) return NODE_COLOR_VALUES[h];
+  return KIND_COLOR_VALUES[agentDef?.kind ?? "default"] ?? KIND_COLOR_VALUES.default;
 }
 
 // Connection color mapping by source handle name (type-aware ports only)
@@ -136,8 +179,15 @@ export function getEdgeColor(sourceHandle: string | null | undefined): string | 
   return color ?? EDGE_COLOR_MAP["default"];
 }
 
-export function connectionSpecToEdge(connection: ConnectionSpec): PresetEdge {
-  const color = getEdgeColor(connection.source_handle);
+export function connectionSpecToEdge(
+  connection: ConnectionSpec,
+  sourcePortColors?: Record<string, number | string> | null,
+): PresetEdge {
+  let color: string | null = null;
+  if (sourcePortColors && connection.source_handle && connection.source_handle !== "err") {
+    color = resolveColorCss(sourcePortColors[connection.source_handle]);
+  }
+  if (!color) color = getEdgeColor(connection.source_handle);
   return {
     id: crypto.randomUUID(),
     source: connection.source,

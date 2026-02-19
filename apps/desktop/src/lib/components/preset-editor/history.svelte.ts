@@ -19,6 +19,7 @@ import {
   edgeToConnectionSpec,
   getAgentDefinitions,
   getEdgeColor,
+  resolveColorCss,
 } from "$lib/agent";
 import type { PresetNode, PresetEdge } from "$lib/types";
 
@@ -332,9 +333,13 @@ export class DeleteCommand implements Command {
 
     // Rebuild nodes/edges from returned specs
     const newNodes = addedAgents.map(agentSpecToNode);
-    const newEdges = addedConns.map(connectionSpecToEdge);
+    const allNodes = [...editor.nodes, ...newNodes];
+    const nodeDataMap = new Map(allNodes.map((n) => [n.id, n.data]));
+    const newEdges = addedConns.map((conn) =>
+      connectionSpecToEdge(conn, nodeDataMap.get(conn.source)?.port_colors),
+    );
 
-    editor.nodes = [...editor.nodes, ...newNodes];
+    editor.nodes = allNodes;
     editor.edges = [...editor.edges, ...newEdges];
 
     // Update internal references for future redo
@@ -398,7 +403,13 @@ export class AddConnectionCommand implements Command {
 
   async execute(editor: EditorState) {
     // Redo: create edge with new ID + backend call + add to edges
-    const color = getEdgeColor(this.edge.sourceHandle);
+    const srcNode = editor.nodes.find((n) => n.id === this.edge.source);
+    const portColors = srcNode?.data.port_colors;
+    let color: string | null = null;
+    if (portColors && this.edge.sourceHandle && this.edge.sourceHandle !== "err") {
+      color = resolveColorCss(portColors[this.edge.sourceHandle]);
+    }
+    if (!color) color = getEdgeColor(this.edge.sourceHandle);
     const newEdge: PresetEdge = {
       id: crypto.randomUUID(),
       source: this.edge.source,
@@ -554,14 +565,16 @@ export class PasteCommand implements Command {
       newNodes.push(node);
     }
 
+    const allNodes = [...editor.nodes, ...newNodes];
+    const nodeDataMap = new Map(allNodes.map((n) => [n.id, n.data]));
     const newEdges: PresetEdge[] = [];
     for (const conn of addedConns) {
-      const edge = connectionSpecToEdge(conn);
+      const edge = connectionSpecToEdge(conn, nodeDataMap.get(conn.source)?.port_colors);
       edge.selected = true;
       newEdges.push(edge);
     }
 
-    editor.nodes = [...editor.nodes, ...newNodes];
+    editor.nodes = allNodes;
     editor.edges = [...editor.edges, ...newEdges];
 
     // Update internal references for undo
@@ -712,11 +725,13 @@ export class UpdateExtensionCommand implements Command {
   async execute(editor: EditorState) {
     editor.props.svelteFlow.updateNodeData(this.nodeId, { [this.key]: this.newValue ?? undefined });
     await updateAgentSpec(this.nodeId, { [this.key]: this.newValue ?? null });
+    if (this.key === "port_colors") editor.refreshEdgeColorsForNode(this.nodeId, this.newValue);
   }
 
   async undo(editor: EditorState) {
     editor.props.svelteFlow.updateNodeData(this.nodeId, { [this.key]: this.oldValue ?? undefined });
     await updateAgentSpec(this.nodeId, { [this.key]: this.oldValue ?? null });
+    if (this.key === "port_colors") editor.refreshEdgeColorsForNode(this.nodeId, this.oldValue);
   }
 
   remapId(oldId: string, newId: string) {

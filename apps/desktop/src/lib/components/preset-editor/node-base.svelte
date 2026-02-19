@@ -25,7 +25,7 @@
   import type { NodeProps, ResizeDragEvent, ResizeParams } from "@xyflow/svelte";
   import { type AgentDefinition, type AgentSpec } from "tauri-plugin-modular-agent-api";
 
-  import { getEdgeColor } from "$lib/agent";
+  import { getEdgeColor, resolveColorCss } from "$lib/agent";
   import { ScrollArea } from "$lib/components/ui/scroll-area/index.js";
 
   import { useEditor } from "./context.svelte";
@@ -34,12 +34,22 @@
     data: AgentSpec;
     agentDef: AgentDefinition | null;
     inputCount: number;
+    portColors?: Record<string, number | string> | null;
     title: Snippet;
     contents: Snippet;
   };
 
-  let { data, agentDef, selected, width, height, inputCount, title, contents }: Props =
+  let { data, agentDef, selected, width, height, inputCount, portColors, title, contents }: Props =
     $props();
+
+  function resolveHandleColor(portName: string): string | null {
+    if (portName === "err") return getEdgeColor("err");
+    if (portColors) {
+      const c = resolveColorCss(portColors[portName]);
+      if (c) return c;
+    }
+    return getEdgeColor(portName);
+  }
 
   const editor = useEditor();
 
@@ -163,7 +173,7 @@
     <div class="w-full flex-none grid grid-cols-2 gap-1 mt-4 mb-2">
       <div>
         {#each inputs as input}
-          {@const color = getEdgeColor(input)}
+          {@const color = resolveHandleColor(input)}
           {#if input === "unit"}
             <div class="text-left text-[1.55rem] leading-none ml-6" style:color>▸</div>
           {:else}
@@ -175,7 +185,7 @@
       </div>
       <div>
         {#each outputs as output}
-          {@const color = getEdgeColor(output)}
+          {@const color = resolveHandleColor(output)}
           {#if output === "unit"}
             <div class="text-right text-[1.55rem] leading-none mr-5" style:color>▸</div>
           {:else}
@@ -195,14 +205,14 @@
       </ScrollArea>
     </div>
     {#if showErr}
-      {@const errLabelColor = getEdgeColor("err")}
+      {@const errLabelColor = resolveHandleColor("err")}
       <div class="text-right mr-5 mb-2" style:color={errLabelColor}>err</div>
     {/if}
   </div>
 </div>
 
 {#each inputs as input, idx}
-  {@const color = getEdgeColor(input)}
+  {@const color = resolveHandleColor(input)}
   <Handle
     id={input}
     type="target"
@@ -214,7 +224,7 @@
   />
 {/each}
 {#each outputs as output, idx}
-  {@const color = getEdgeColor(output)}
+  {@const color = resolveHandleColor(output)}
   <Handle
     id={output}
     type="source"
@@ -226,7 +236,7 @@
   />
 {/each}
 {#if showErr}
-  {@const errColor = getEdgeColor("err")}
+  {@const errColor = resolveHandleColor("err")}
   <Handle
     id="err"
     type="source"

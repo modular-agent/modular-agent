@@ -22,11 +22,13 @@ import { goto } from "$app/navigation";
 import {
   edgeToConnectionSpec,
   getAgentDefinitions,
+  getEdgeColor,
   getCoreSettings,
   setCoreSettings,
   importPreset as importPresetAPI,
   savePreset as savePresetAPI,
   newPresetWithName,
+  resolveColorCss,
 } from "$lib/agent";
 import { coreSettingsStore } from "$lib/core-settings-store.svelte";
 import { tabStore } from "$lib/tab-store.svelte";
@@ -727,12 +729,38 @@ export class EditorState {
 
   async updateNodeExtension(nodeId: string, key: string, oldValue: any, newValue: any) {
     this.svelteFlow.updateNodeData(nodeId, { [key]: newValue ?? undefined });
+    if (key === "port_colors") this.refreshEdgeColorsForNode(nodeId, newValue);
     await withErrorLog(
       () => updateAgentSpec(nodeId, { [key]: newValue ?? null }),
       "Failed to update node extension",
     );
     const cmd = new UpdateExtensionCommand(nodeId, key, oldValue, newValue);
     this.history.push(cmd);
+  }
+
+  /** Re-compute edge stroke colors for all edges originating from a given node. */
+  refreshEdgeColorsForNode(
+    nodeId: string,
+    portColorsOverride?: Record<string, number | string> | null,
+  ) {
+    const portColors =
+      portColorsOverride !== undefined
+        ? portColorsOverride
+        : (this.nodes.find((n) => n.id === nodeId)?.data.port_colors ?? null);
+    let changed = false;
+    const newEdges = this.edges.map((edge) => {
+      if (edge.source !== nodeId) return edge;
+      let color: string | null = null;
+      if (portColors && edge.sourceHandle && edge.sourceHandle !== "err") {
+        color = resolveColorCss(portColors[edge.sourceHandle]);
+      }
+      if (!color) color = getEdgeColor(edge.sourceHandle);
+      const newStyle = color ? `stroke: ${color};` : undefined;
+      if (edge.style === newStyle) return edge;
+      changed = true;
+      return { ...edge, style: newStyle };
+    });
+    if (changed) this.edges = newEdges;
   }
 
   // --- Context menu ---
