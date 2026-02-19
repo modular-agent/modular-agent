@@ -1,15 +1,16 @@
 use std::ops::Not;
 
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
-use crate::FnvIndexMap;
 use crate::agent::Agent;
 use crate::config::AgentConfigs;
-use crate::modular_agent::ModularAgent;
 use crate::error::AgentError;
 use crate::id::new_id;
+use crate::modular_agent::ModularAgent;
 use crate::spec::AgentSpec;
 use crate::value::AgentValue;
+use crate::FnvIndexMap;
 
 /// A map of agent definition names to their definitions.
 pub type AgentDefinitions = FnvIndexMap<String, AgentDefinition>;
@@ -58,6 +59,10 @@ pub struct AgentDefinition {
     /// Global configuration specifications (shared across instances).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub global_configs: Option<AgentGlobalConfigSpecs>,
+
+    /// Hint metadata for UI presentation (e.g., color, size).
+    #[serde(default, skip_serializing_if = "FnvIndexMap::is_empty")]
+    pub hints: FnvIndexMap<String, Value>,
 
     /// Whether to run this agent on a native OS thread instead of the async runtime.
     #[serde(default, skip_serializing_if = "<&bool>::not")]
@@ -531,6 +536,12 @@ impl AgentDefinition {
         self
     }
 
+    /// Adds a UI hint. Returns self for method chaining.
+    pub fn hint(mut self, key: &str, value: impl Into<Value>) -> Self {
+        self.hints.insert(key.into(), value.into());
+        self
+    }
+
     /// Creates a new agent specification from this definition.
     ///
     /// Generates a unique ID and copies the definition's ports and configs
@@ -589,9 +600,7 @@ impl AgentDefinition {
                 .keys()
                 .filter(|k| {
                     !k.starts_with('_')
-                        && !def_keys
-                            .as_ref()
-                            .is_some_and(|dk| dk.contains(k.as_str()))
+                        && !def_keys.as_ref().is_some_and(|dk| dk.contains(k.as_str()))
                 })
                 .cloned()
                 .collect();
@@ -1090,10 +1099,7 @@ mod tests {
             spec.inputs.as_ref().unwrap(),
             &vec!["in1".to_string(), "in2".to_string()]
         );
-        assert_eq!(
-            spec.outputs.as_ref().unwrap(),
-            &vec!["out".to_string()]
-        );
+        assert_eq!(spec.outputs.as_ref().unwrap(), &vec!["out".to_string()]);
     }
 
     #[test]
@@ -1187,8 +1193,14 @@ mod tests {
 
         let c1 = first.configs.as_ref().unwrap();
         let c2 = spec.configs.as_ref().unwrap();
-        assert_eq!(c1.get_string_or_default("name"), c2.get_string_or_default("name"));
-        assert_eq!(c1.get_integer_or_default("count"), c2.get_integer_or_default("count"));
+        assert_eq!(
+            c1.get_string_or_default("name"),
+            c2.get_string_or_default("name")
+        );
+        assert_eq!(
+            c1.get_integer_or_default("count"),
+            c2.get_integer_or_default("count")
+        );
         assert_eq!(c1.get("_old").unwrap(), c2.get("_old").unwrap());
     }
 
@@ -1202,9 +1214,18 @@ mod tests {
 
         let c1 = spec.configs.as_ref().unwrap();
         let c2 = original.configs.as_ref().unwrap();
-        assert_eq!(c1.get_string_or_default("name"), c2.get_string_or_default("name"));
-        assert_eq!(c1.get_integer_or_default("count"), c2.get_integer_or_default("count"));
-        assert_eq!(c1.get_bool_or_default("enabled"), c2.get_bool_or_default("enabled"));
+        assert_eq!(
+            c1.get_string_or_default("name"),
+            c2.get_string_or_default("name")
+        );
+        assert_eq!(
+            c1.get_integer_or_default("count"),
+            c2.get_integer_or_default("count")
+        );
+        assert_eq!(
+            c1.get_bool_or_default("enabled"),
+            c2.get_bool_or_default("enabled")
+        );
         assert_eq!(spec.inputs, original.inputs);
         assert_eq!(spec.outputs, original.outputs);
     }
@@ -1315,5 +1336,58 @@ mod tests {
         let order_second: Vec<String> = spec.configs.as_ref().unwrap().keys().cloned().collect();
 
         assert_eq!(order_first, order_second);
+    }
+
+    // --- hints tests ---
+
+    #[test]
+    fn test_hint_builder() {
+        let def = AgentDefinition::new("test", "hinted", None)
+            .hint("color", 3)
+            .hint("width", 2)
+            .hint("height", 1);
+        assert_eq!(def.hints.len(), 3);
+        assert_eq!(def.hints["color"], serde_json::json!(3));
+        assert_eq!(def.hints["width"], serde_json::json!(2));
+        assert_eq!(def.hints["height"], serde_json::json!(1));
+    }
+
+    #[test]
+    fn test_hint_string_value() {
+        let def = AgentDefinition::new("test", "hinted", None).hint("label", "red");
+        assert_eq!(def.hints["label"], serde_json::json!("red"));
+    }
+
+    #[test]
+    fn test_hint_boolean_value() {
+        let def = AgentDefinition::new("test", "hinted", None).hint("resizable", true);
+        assert_eq!(def.hints["resizable"], serde_json::json!(true));
+    }
+
+    #[test]
+    fn test_no_hints_serialization() {
+        let def = AgentDefinition::new("test", "empty", None);
+        let json = serde_json::to_string(&def).unwrap();
+        assert!(!json.contains("hints"));
+    }
+
+    #[test]
+    fn test_hints_serialization_roundtrip() {
+        let def = AgentDefinition::new("test", "hinted", None)
+            .hint("color", 3)
+            .hint("width", 2);
+        let json = serde_json::to_string(&def).unwrap();
+        assert!(json.contains(r#""hints""#));
+        let parsed: AgentDefinition = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.hints.len(), 2);
+        assert_eq!(parsed.hints["color"], serde_json::json!(3));
+        assert_eq!(parsed.hints["width"], serde_json::json!(2));
+    }
+
+    #[test]
+    fn test_hints_deserialization_missing_field() {
+        let json = r#"{"kind":"test","name":"no_hints"}"#;
+        let def: AgentDefinition = serde_json::from_str(json).unwrap();
+        assert!(def.hints.is_empty());
     }
 }

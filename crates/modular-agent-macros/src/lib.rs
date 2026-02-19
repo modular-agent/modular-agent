@@ -36,6 +36,7 @@ use syn::{
 /// - `description = "..."` - Description text
 /// - `kind = "..."` - Agent kind (default: "Agent")
 /// - `hide_title` - Hide the title in the UI
+/// - `hint(key = value, ...)` - UI hints (e.g., `hint(color = 3, width = 2)`)
 ///
 /// ## Ports
 ///
@@ -152,6 +153,7 @@ struct AgentArgs {
     outputs: Vec<Expr>,
     configs: Vec<ConfigSpec>,
     global_configs: Vec<ConfigSpec>,
+    hints: Vec<(Expr, Expr)>,
 }
 
 #[derive(Default)]
@@ -222,6 +224,7 @@ fn expand_modular_agent(
         outputs: Vec::new(),
         configs: Vec::new(),
         global_configs: Vec::new(),
+        hints: Vec::new(),
     };
 
     for meta in args {
@@ -345,6 +348,9 @@ fn expand_modular_agent(
                 parsed
                     .global_configs
                     .push(ConfigSpec::Unit(parse_common_config(ml)?));
+            }
+            Meta::List(ml) if ml.path.is_ident("hint") => {
+                parsed.hints.extend(parse_hint_pairs(ml)?);
             }
             other => {
                 return Err(syn::Error::new_spanned(
@@ -1106,6 +1112,14 @@ fn expand_modular_agent(
         })
         .collect::<syn::Result<Vec<_>>>()?;
 
+    let hint_calls: Vec<_> = parsed
+        .hints
+        .iter()
+        .map(|(key, value)| {
+            quote! { .hint(#key, #value) }
+        })
+        .collect();
+
     let definition_builder = quote! {
         ::modular_agent_core::AgentDefinition::new(
             #kind,
@@ -1120,6 +1134,7 @@ fn expand_modular_agent(
         #outputs
         #(#config_calls)*
         #(#global_config_calls)*
+        #(#hint_calls)*
     };
 
     let expanded = quote! {
@@ -1328,6 +1343,36 @@ fn parse_common_config(list: MetaList) -> syn::Result<CommonConfig> {
         return Err(syn::Error::new(list.span(), "config missing `name`"));
     }
     Ok(cfg)
+}
+
+fn parse_hint_pairs(list: MetaList) -> syn::Result<Vec<(Expr, Expr)>> {
+    let nested = list.parse_args_with(Punctuated::<Meta, Comma>::parse_terminated)?;
+    let mut pairs = Vec::new();
+    for meta in nested {
+        match meta {
+            Meta::NameValue(nv) => {
+                let key = nv
+                    .path
+                    .get_ident()
+                    .ok_or_else(|| {
+                        syn::Error::new_spanned(
+                            &nv.path,
+                            "hint key must be a simple identifier",
+                        )
+                    })?;
+                let key_str = key.to_string();
+                let key_lit = syn::LitStr::new(&key_str, key.span());
+                pairs.push((parse_quote!(#key_lit), nv.value));
+            }
+            other => {
+                return Err(syn::Error::new_spanned(
+                    other,
+                    "hint expects `key = value` pairs (e.g., `hint(color = 3)`)",
+                ));
+            }
+        }
+    }
+    Ok(pairs)
 }
 
 fn extract_doc_comment(attrs: &[syn::Attribute]) -> Option<String> {
