@@ -19,6 +19,7 @@ export type AgentDefinition = {
   outputs?: string[] | null;
   configs?: AgentConfigSpecs | null;
   global_configs?: AgentGlobalConfigs | null;
+  hints?: Record<string, any>;
   native_thread?: boolean | null;
 };
 
@@ -84,8 +85,14 @@ export async function addPreset(spec: PresetSpec): Promise<string> {
   return await invoke<any>("plugin:modular-agent|add_preset", { spec });
 }
 
-export async function addPresetWithName(spec: PresetSpec, name: string): Promise<string> {
-  return await invoke<any>("plugin:modular-agent|add_preset_with_name", { spec, name });
+export async function addPresetWithName(
+  spec: PresetSpec,
+  name: string,
+): Promise<string> {
+  return await invoke<any>("plugin:modular-agent|add_preset_with_name", {
+    spec,
+    name,
+  });
 }
 
 export async function removePreset(id: string): Promise<void> {
@@ -100,8 +107,14 @@ export async function stopPreset(id: string): Promise<void> {
   await invoke<void>("plugin:modular-agent|stop_preset", { id });
 }
 
-export async function openPresetFromFile(path: string, name?: string | null): Promise<string> {
-  return await invoke<any>("plugin:modular-agent|open_preset_from_file", { path, name });
+export async function openPresetFromFile(
+  path: string,
+  name?: string | null,
+): Promise<string> {
+  return await invoke<any>("plugin:modular-agent|open_preset_from_file", {
+    path,
+    name,
+  });
 }
 
 export async function savePreset(id: string, path: string): Promise<void> {
@@ -232,7 +245,10 @@ export async function writeExternalInput(
   name: string,
   message: string,
 ): Promise<void> {
-  await invoke<void>("plugin:modular-agent|write_external_input", { name, message });
+  await invoke<void>("plugin:modular-agent|write_external_input", {
+    name,
+    message,
+  });
 }
 
 // configs
@@ -241,13 +257,18 @@ export async function setAgentConfigs(
   agentId: string,
   configs: AgentConfigs,
 ): Promise<void> {
-  await invoke<void>("plugin:modular-agent|set_agent_configs", { agentId, configs });
+  await invoke<void>("plugin:modular-agent|set_agent_configs", {
+    agentId,
+    configs,
+  });
 }
 
 export async function getGlobalConfigs(
   defName: string,
 ): Promise<AgentConfigs | null> {
-  return await invoke<any>("plugin:modular-agent|get_global_configs", { defName });
+  return await invoke<any>("plugin:modular-agent|get_global_configs", {
+    defName,
+  });
 }
 
 export async function getGlobalConfigsMap(): Promise<AgentConfigsMap> {
@@ -258,11 +279,16 @@ export async function setGlobalConfigs(
   defName: string,
   configs: AgentConfigs,
 ): Promise<void> {
-  await invoke<void>("plugin:modular-agent|set_global_configs", { defName, configs });
+  await invoke<void>("plugin:modular-agent|set_global_configs", {
+    defName,
+    configs,
+  });
 }
 
 export async function setGlobalConfigsMap(
   configs: AgentConfigsMap,
 ): Promise<void> {
-  await invoke<void>("plugin:modular-agent|set_global_configs_map", { configs });
+  await invoke<void>("plugin:modular-agent|set_global_configs_map", {
+    configs,
+  });
 }
