@@ -26,13 +26,13 @@ export type ResolvedHotkeys = ResolvedHotkey[];
 export const DEFAULT_HOTKEYS: HotkeyDefinition[] = [
   // Global
   { id: "global_shortcut", label: "Show App Window", group: "Global", defaultKey: "" },
+  // Editor
   {
     id: "fullscreen",
     label: "Toggle Fullscreen",
-    group: "Global",
+    group: "Editor",
     defaultKey: isMac ? "" : "f11",
   },
-  // Editor
   { id: "editor.save", label: "Save", group: "Editor", defaultKey: "mod+s" },
   { id: "editor.toggle_run", label: "Play / Stop", group: "Editor", defaultKey: "mod+." },
   { id: "editor.cut", label: "Cut", group: "Editor", defaultKey: "mod+x" },

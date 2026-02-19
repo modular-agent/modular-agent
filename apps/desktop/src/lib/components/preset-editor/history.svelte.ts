@@ -55,12 +55,18 @@ export class CommandHistory {
   dirty = $derived(this.undoStack.length !== this.savedIndex);
   executing = false;
   private lastPushTime = 0;
-  private readonly maxLength: number;
+  private maxLength: number;
   /** Temporary storage for ID remaps reported by commands during execute/undo. */
   pendingRemaps: Array<{ oldId: string; newId: string }> = [];
 
   constructor(maxLength: number) {
     this.maxLength = maxLength;
+  }
+
+  setMaxLength(newLength: number) {
+    if (newLength === this.maxLength) return;
+    this.maxLength = newLength;
+    this.trimUndo();
   }
 
   markSaved() {

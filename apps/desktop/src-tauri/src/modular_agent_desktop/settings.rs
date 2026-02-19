@@ -187,6 +187,12 @@ pub fn set_core_settings_cmd(
         return Ok(());
     }
 
+    // Capture old autostart value before merge
+    let old_autostart = {
+        let current = settings.lock().unwrap();
+        current.autostart
+    };
+
     // Merge new settings into existing settings
     if new_settings.is_object() {
         let mut settings = settings.lock().unwrap();
@@ -200,6 +206,16 @@ pub fn set_core_settings_cmd(
     }
 
     save(&app).map_err(|e| e.to_string())?;
+
+    // Apply autostart change at runtime (after lock is released)
+    let new_autostart = {
+        let current = settings.lock().unwrap();
+        current.autostart
+    };
+    if old_autostart != new_autostart {
+        crate::modular_agent_desktop::autostart::apply(&app, new_autostart)
+            .map_err(|e| format!("Failed to apply autostart setting: {}", e))?;
+    }
 
     Ok(())
 }

@@ -19,9 +19,15 @@ pub fn init(app: &AppHandle) -> Result<()> {
         None,
     ))?;
 
+    apply(app, is_autostart)
+}
+
+/// Apply autostart setting at runtime. Called from init() and set_core_settings_cmd().
+/// Takes `enabled` as argument instead of reading from Mutex to avoid deadlock.
+pub fn apply(app: &AppHandle, enabled: bool) -> Result<()> {
     let autostart_manager = app.autolaunch();
 
-    if is_autostart {
+    if enabled {
         if autostart_manager.is_enabled()? {
             log::debug!("Autostart is already enabled");
         } else {

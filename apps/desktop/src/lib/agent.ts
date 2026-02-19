@@ -17,6 +17,7 @@ import {
   getCoreSettings as getCoreSettingsUtils,
   setCoreSettings as setCoreSettingsUtils,
 } from "./modular_agent";
+import { coreSettingsStore } from "./core-settings-store.svelte";
 import type { PresetFlow, PresetEdge, PresetNode, CoreSettings, PresetInfoExt } from "./types";
 
 export async function newPresetWithName(name: string): Promise<string> {
@@ -220,8 +221,9 @@ export function getCoreSettings(): CoreSettings {
   return _coreSettings;
 }
 
-export async function setCoreSettings(newSettings: CoreSettings) {
-  _coreSettings = newSettings;
+export async function setCoreSettings(newSettings: Partial<CoreSettings>) {
+  _coreSettings = { ..._coreSettings!, ...newSettings };
+  coreSettingsStore.update(_coreSettings);
   await setCoreSettingsUtils(newSettings);
 }
 
@@ -252,4 +254,5 @@ export async function initGlobals() {
   _coreSettings = await getCoreSettingsUtils();
   _agentDefinitions = await getAgentDefinitionsAPI();
   _globalConfigsMap = await getGlobalConfigsMapAPI();
+  coreSettingsStore.update(_coreSettings);
 }

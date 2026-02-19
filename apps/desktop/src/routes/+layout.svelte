@@ -17,14 +17,15 @@
   import AppSidebar from "$lib/components/app-sidebar.svelte";
   import Titlebar from "$lib/components/titlebar.svelte";
   import * as Sidebar from "$lib/components/ui/sidebar/index.js";
-  import { resolveHotkeys, getHotkeyKey, matchHotkey } from "$lib/hotkeys";
+  import { coreSettingsStore } from "$lib/core-settings-store.svelte";
+  import { getHotkeyKey, matchHotkey } from "$lib/hotkeys";
   import { initLogging } from "$lib/log-store.svelte";
 
   import type { LayoutProps } from "./$types";
 
   const { children }: LayoutProps = $props();
 
-  let fullscreenHotkey: string = "";
+  const fullscreenHotkey = $derived(getHotkeyKey(coreSettingsStore.hotkeys, "fullscreen"));
   let isFullscreen = $state(false);
 
   onMount(() => {
@@ -36,9 +37,6 @@
     } else if (color_mode === "dark") {
       setMode("dark");
     }
-
-    const hotkeys = resolveHotkeys(coreSettings.shortcut_keys);
-    fullscreenHotkey = getHotkeyKey(hotkeys, "fullscreen");
 
     const currentWindow = getCurrentWindow();
     currentWindow.isFullscreen().then((v) => (isFullscreen = v));

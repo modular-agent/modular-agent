@@ -21,7 +21,8 @@
 
   import { goto } from "$app/navigation";
 
-  import { getCoreSettings, getEdgeColor, saveAsPreset } from "$lib/agent";
+  import { getEdgeColor, saveAsPreset } from "$lib/agent";
+  import { coreSettingsStore } from "$lib/core-settings-store.svelte";
   import { AgentList } from "$lib/components/agent-list/index.js";
   import CustomBezierEdge from "$lib/components/connection/custom-bezier-edge.svelte";
   import CustomConnectionLine from "$lib/components/connection/custom-connection-line.svelte";
@@ -30,8 +31,6 @@
   import * as Dialog from "$lib/components/ui/dialog/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
   import {
-    resolveHotkeys,
-    resolveQuickAddAgents,
     getHotkeyKey,
     matchHotkey,
     isSequence,
@@ -50,12 +49,11 @@
   import PaneContextMenu from "./pane-context-menu.svelte";
 
   const editor = useEditor();
-  const coreSettings = getCoreSettings();
 
   // --- Hotkey resolution ---
 
-  const hotkeys: ResolvedHotkeys = resolveHotkeys(coreSettings.shortcut_keys);
-  const quickAddAgents = resolveQuickAddAgents(coreSettings.shortcut_keys);
+  const hotkeys: ResolvedHotkeys = $derived(coreSettingsStore.hotkeys);
+  const quickAddAgents = $derived(coreSettingsStore.quickAddAgents);
 
   const nodeTypes: NodeTypes = {
     agent: AgentNode,
@@ -227,7 +225,7 @@
   ];
 
   // Build quick add action entries from resolved hotkeys
-  const quickAddIds = [...quickAddAgents.keys()];
+  const quickAddIds = $derived([...quickAddAgents.keys()]);
 
   function handleKeydown(event: KeyboardEvent) {
     if (!editor.active) return;
@@ -500,7 +498,7 @@
     id={editor.preset_id}
     attributionPosition="bottom-right"
     class="flex-1 w-full"
-    colorMode={(coreSettings.color_mode as "light" | "dark" | "system") || "system"}
+    colorMode={(coreSettingsStore.colorMode as "light" | "dark" | "system") || "system"}
     connectionLineComponent={CustomConnectionLine}
     connectionRadius={38}
     deleteKey={["Delete", "Backspace"]}

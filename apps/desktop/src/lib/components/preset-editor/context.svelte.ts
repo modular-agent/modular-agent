@@ -28,6 +28,7 @@ import {
   savePreset as savePresetAPI,
   newPresetWithName,
 } from "$lib/agent";
+import { coreSettingsStore } from "$lib/core-settings-store.svelte";
 import { tabStore } from "$lib/tab-store.svelte";
 import { titlebarState } from "$lib/titlebar-state.svelte";
 import type { PresetFlow, PresetNode, PresetEdge } from "$lib/types";
@@ -146,14 +147,31 @@ export class EditorState {
   constructor(props: EditorStateProps) {
     this.props = props;
     // Load settings from CoreSettings
-    const settings = getCoreSettings();
-    const maxHistoryLength = settings.max_history_length ?? 2000;
-    this.history = getOrCreateHistory(props.preset_id(), maxHistoryLength);
-    this.snapEnabled = settings.snap_enabled ?? true;
-    this.snapGridSize = settings.snap_grid_size ?? 192;
-    this.showGrid = settings.show_grid ?? true;
-    this.gridGap = settings.grid_gap ?? 192;
-    this.connectionOpacity = settings.connection_opacity ?? 0.8;
+    this.history = getOrCreateHistory(props.preset_id(), coreSettingsStore.maxHistoryLength);
+    this.snapEnabled = coreSettingsStore.snapEnabled;
+    this.snapGridSize = coreSettingsStore.snapGridSize;
+    this.showGrid = coreSettingsStore.showGrid;
+    this.gridGap = coreSettingsStore.gridGap;
+    this.connectionOpacity = coreSettingsStore.connectionOpacity;
+
+    // Subscribe to runtime settings changes
+    $effect(() => {
+      const snap = coreSettingsStore.snapEnabled;
+      const size = coreSettingsStore.snapGridSize;
+      const grid = coreSettingsStore.showGrid;
+      const gap = coreSettingsStore.gridGap;
+      const opacity = coreSettingsStore.connectionOpacity;
+      const maxLen = coreSettingsStore.maxHistoryLength;
+
+      untrack(() => {
+        this.snapEnabled = snap;
+        this.snapGridSize = size;
+        this.showGrid = grid;
+        this.gridGap = gap;
+        this.connectionOpacity = opacity;
+        this.history.setMaxLength(maxLen);
+      });
+    });
 
     // Sync nodes/edges from flow data
     $effect.pre(() => {
