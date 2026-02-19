@@ -1,5 +1,8 @@
 import type { AgentConfigSpec, AgentDefinition } from "tauri-plugin-modular-agent-api";
 
+/** Per-instance visual/metadata attributes stored in AgentSpec extensions. */
+export const EXTENSION_KEYS = ["color"] as const;
+
 export class InspectorState {
   // Display data (synced by EditorState)
   nodeId = $state<string | null>(null);
@@ -14,9 +17,11 @@ export class InspectorState {
   inputs = $state<string[]>([]);
   outputs = $state<string[]>([]);
   selectedCount = $state(0);
+  extensions = $state<Record<string, any>>({});
 
-  // Action callback (set by EditorState)
+  // Action callbacks (set by EditorState)
   onUpdateConfig: ((key: string, value: any) => void) | null = $state(null);
+  onUpdateExtension: ((key: string, value: any) => void) | null = $state(null);
 
   get hasSelection(): boolean {
     return this.nodeId !== null;

@@ -43,12 +43,13 @@ import {
   PasteCommand,
   UpdateConfigCommand,
   UpdateTitleCommand,
+  UpdateExtensionCommand,
   ToggleDisabledCommand,
   ToggleShowErrCommand,
   getOrCreateHistory,
   type NodePositionDelta,
 } from "./history.svelte";
-import { InspectorState } from "./inspector-state.svelte";
+import { InspectorState, EXTENSION_KEYS } from "./inspector-state.svelte";
 
 async function withErrorToast<T>(fn: () => Promise<T>, message: string): Promise<T | undefined> {
   try {
@@ -144,6 +145,9 @@ export class EditorState {
   // Drag state for undo
   private dragStartPositions: Map<string, { x: number; y: number }> | null = null;
 
+  // Inspector sync: track last synced data ref to detect actual data changes
+  private _lastSyncedData: any = null;
+
   constructor(props: EditorStateProps) {
     this.props = props;
     // Load settings from CoreSettings
@@ -230,7 +234,7 @@ export class EditorState {
       tabStore.setDirty(this.preset_id, this.dirty);
     });
 
-    // Inspector: action callback (closure over `this`, reads state at invocation time)
+    // Inspector: action callbacks (closure over `this`, reads state at invocation time)
     this.inspector.onUpdateConfig = (key: string, value: any) => {
       const nodeId = this.inspector.nodeId;
       if (!nodeId) return;
@@ -238,6 +242,16 @@ export class EditorState {
       if (!node) return;
       const oldValue = node.data.configs?.[key];
       this.updateNodeConfig(nodeId, key, oldValue, value);
+    };
+
+    this.inspector.onUpdateExtension = (key: string, value: any) => {
+      const nodeId = this.inspector.nodeId;
+      if (!nodeId) return;
+      const node = this.nodes.find((n) => n.id === nodeId);
+      if (!node) return;
+      const oldValue = node.data[key] ?? null;
+      if (oldValue === value) return;
+      this.updateNodeExtension(nodeId, key, oldValue, value);
     };
 
     // Inspector: sync ViewModel from Model (nodes + edges)
@@ -254,13 +268,14 @@ export class EditorState {
             return;
           this.inspector.selectedCount = selected.length;
           this.inspector.nodeId = null;
+          this._lastSyncedData = null;
           return;
         }
 
-        // Early exit: same node selected (position-only changes trigger nodes update,
-        // but inspector content doesn't change). Config changes go through
-        // configUpdated event → updateNodeData → new data reference → won't match here.
-        if (this.inspector.nodeId === node.id) return;
+        // Early exit: same node selected AND data hasn't changed.
+        // Position-only changes don't create a new data ref → early exit (perf).
+        // updateNodeData creates a new data ref → full sync (correctness for undo/redo).
+        if (this.inspector.nodeId === node.id && this._lastSyncedData === node.data) return;
 
         const data = node.data;
         this.inspector.selectedCount = selected.length;
@@ -277,6 +292,14 @@ export class EditorState {
         this.inspector.connectedConfigs = edges
           .filter((e) => e.target === node.id && e.targetHandle?.startsWith("config:"))
           .map((e) => e.targetHandle?.substring(7) ?? "");
+
+        // Sync extension attributes
+        const ext: Record<string, any> = {};
+        for (const key of EXTENSION_KEYS) {
+          if (data[key] != null) ext[key] = data[key];
+        }
+        this.inspector.extensions = ext;
+        this._lastSyncedData = node.data;
       });
     });
   }
@@ -699,6 +722,16 @@ export class EditorState {
   updateNodeTitle(nodeId: string, oldTitle: string | null, newTitle: string | null) {
     this.svelteFlow.updateNodeData(nodeId, { title: newTitle });
     const cmd = new UpdateTitleCommand(nodeId, oldTitle, newTitle);
+    this.history.push(cmd);
+  }
+
+  async updateNodeExtension(nodeId: string, key: string, oldValue: any, newValue: any) {
+    this.svelteFlow.updateNodeData(nodeId, { [key]: newValue ?? undefined });
+    await withErrorLog(
+      () => updateAgentSpec(nodeId, { [key]: newValue ?? null }),
+      "Failed to update node extension",
+    );
+    const cmd = new UpdateExtensionCommand(nodeId, key, oldValue, newValue);
     this.history.push(cmd);
   }
 

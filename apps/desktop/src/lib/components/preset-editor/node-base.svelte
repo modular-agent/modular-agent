@@ -35,11 +35,10 @@
     agentDef: AgentDefinition | null;
     inputCount: number;
     title: Snippet;
-    titleColor: string;
     contents: Snippet;
   };
 
-  let { data, agentDef, selected, width, height, inputCount, title, titleColor, contents }: Props =
+  let { data, agentDef, selected, width, height, inputCount, title, contents }: Props =
     $props();
 
   const editor = useEditor();

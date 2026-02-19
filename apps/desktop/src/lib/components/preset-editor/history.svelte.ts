@@ -697,6 +697,33 @@ export class UpdateTitleCommand implements Command {
   }
 }
 
+// ── UpdateExtensionCommand ──
+
+export class UpdateExtensionCommand implements Command {
+  readonly label = "Update Extension";
+
+  constructor(
+    public nodeId: string,
+    public readonly key: string,
+    public readonly oldValue: any,
+    public newValue: any,
+  ) {}
+
+  async execute(editor: EditorState) {
+    editor.props.svelteFlow.updateNodeData(this.nodeId, { [this.key]: this.newValue ?? undefined });
+    await updateAgentSpec(this.nodeId, { [this.key]: this.newValue ?? null });
+  }
+
+  async undo(editor: EditorState) {
+    editor.props.svelteFlow.updateNodeData(this.nodeId, { [this.key]: this.oldValue ?? undefined });
+    await updateAgentSpec(this.nodeId, { [this.key]: this.oldValue ?? null });
+  }
+
+  remapId(oldId: string, newId: string) {
+    if (this.nodeId === oldId) this.nodeId = newId;
+  }
+}
+
 // ── ToggleDisabledCommand ──
 
 type DisabledDelta = { id: string; wasDisabled: boolean };

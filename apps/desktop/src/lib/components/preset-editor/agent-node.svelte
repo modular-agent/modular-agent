@@ -1,22 +1,22 @@
 <script lang="ts" module>
-  const titleColorMap: Record<string, string> = {
-    default: "text-agent-4",
-    External: "text-agent-5",
-    Local: "text-agent-5",
-    Display: "text-agent-3",
-    Input: "text-agent-6",
-    UI: "text-agent-2",
+  // Inline style maps for title color (supports both CSS variable palette and arbitrary hex)
+  const hintColorStyles: Record<number, string> = {
+    1: "color: var(--color-agent-1)",
+    2: "color: var(--color-agent-2)",
+    3: "color: var(--color-agent-3)",
+    4: "color: var(--color-agent-4)",
+    5: "color: var(--color-agent-5)",
+    6: "color: var(--color-agent-6)",
+    7: "color: var(--color-agent-7)",
   };
 
-  // Static map for Tailwind JIT class detection (dynamic `text-agent-${N}` would be purged)
-  const hintColorClasses: Record<number, string> = {
-    1: "text-agent-1",
-    2: "text-agent-2",
-    3: "text-agent-3",
-    4: "text-agent-4",
-    5: "text-agent-5",
-    6: "text-agent-6",
-    7: "text-agent-7",
+  const kindColorStyles: Record<string, string> = {
+    default: "color: var(--color-agent-4)",
+    External: "color: var(--color-agent-5)",
+    Local: "color: var(--color-agent-5)",
+    Display: "color: var(--color-agent-3)",
+    Input: "color: var(--color-agent-6)",
+    UI: "color: var(--color-agent-2)",
   };
 </script>
 
@@ -127,12 +127,18 @@
 
   let hide_title = $derived(agentDef?.hide_title ?? false);
   let editTitle = $state(false);
-  let titleColor = $derived.by(() => {
-    const hintColor = agentDef?.hints?.color;
-    if (typeof hintColor === "number" && hintColorClasses[hintColor]) {
-      return hintColorClasses[hintColor];
+  let titleColorStyle = $derived.by(() => {
+    // Per-instance override from extensions
+    const c = data.color;
+    if (c != null) {
+      if (typeof c === "number" && hintColorStyles[c]) return hintColorStyles[c];
+      if (typeof c === "string" && /^#[0-9a-fA-F]{6}$/.test(c)) return `color: ${c}`;
     }
-    return titleColorMap[agentDef?.kind ?? "default"] ?? titleColorMap.default;
+    // Definition-level hint
+    const h = agentDef?.hints?.color;
+    if (typeof h === "number" && hintColorStyles[h]) return hintColorStyles[h];
+    // Kind-based default
+    return kindColorStyles[agentDef?.kind ?? "default"] ?? kindColorStyles.default;
   });
 </script>
 
@@ -173,7 +179,7 @@
                 class="flex-none"
                 tabindex={-1}
               >
-                <div class="text-xl font-semibold {titleColor}">
+                <div class="text-xl font-semibold" style={titleColorStyle}>
                   {data.title ?? agentDef.title ?? data.def_name}
                 </div>
               </button>
@@ -224,4 +230,4 @@
   {/if}
 {/snippet}
 
-<NodeBase {id} {data} {agentDef} {inputCount} {title} {titleColor} {contents} {...props} />
+<NodeBase {id} {data} {agentDef} {inputCount} {title} {contents} {...props} />

@@ -3,15 +3,20 @@
   import { cubicOut } from "svelte/easing";
   import { Tween } from "svelte/motion";
 
+  import XIcon from "@lucide/svelte/icons/x";
+
   import { ScrollArea } from "$lib/components/ui/scroll-area/index.js";
   import { Separator } from "$lib/components/ui/separator/index.js";
-
   import { renderMarkdown } from "$lib/sanitize";
+
   import { useEditor } from "./context.svelte";
   import SidebarConfig from "./sidebar-config.svelte";
 
   const editor = useEditor();
   const inspector = editor.inspector;
+
+  const SWATCH_CLASS = "w-3 h-3 rounded-full border border-border";
+  const COLOR_INPUT_CLASS = "w-4 h-5 rounded cursor-pointer border-none p-0";
 
   const FADE_OUT_DELAY = 1500;
   const FADE_OUT_DURATION = 300;
@@ -111,7 +116,7 @@
 
 <div
   bind:this={cardEl}
-  class="absolute flex flex-col rounded-lg border border-border bg-background shadow-lg overflow-hidden resize"
+  class="absolute flex flex-col rounded-lg border border-border bg-sidebar shadow-lg overflow-hidden resize"
   class:select-none={isDragging}
   style="left: {x}px; top: {y}px; width: {width}px; height: {height}px; min-width: 240px; min-height: 200px; max-width: calc(100% - {x}px - 16px); max-height: calc(100% - {y}px - 16px); z-index: 40; opacity: {opacity.current}; pointer-events: {opacity.current ===
   0
@@ -142,11 +147,52 @@
           {#if inspector.agentDef?.category}
             <div class="text-xs text-muted-foreground">{inspector.agentDef.category}</div>
           {/if}
-          <div class="font-medium">{inspector.displayTitle}</div>
+          <div class="text-lg font-medium">{inspector.displayTitle}</div>
           {#if inspector.agentDef?.description}
             {@const descriptionHtml = renderMarkdown(inspector.agentDef.description)}
-            <div class="text-xs text-muted-foreground mt-1 inspector-description">{@html descriptionHtml}</div>
+            <div class="text-xs text-muted-foreground mt-1 inspector-description">
+              {@html descriptionHtml}
+            </div>
           {/if}
+        </div>
+
+        <Separator />
+
+        <!-- Color -->
+        <div class="flex flex-col gap-2">
+          <div class="text-xs text-muted-foreground">Color</div>
+          <div class="flex items-center gap-1.5 flex-wrap">
+            <button
+              aria-label="Reset to default color"
+              class="{SWATCH_CLASS} flex items-center justify-center
+                     text-muted-foreground hover:bg-accent"
+              class:ring-2={inspector.extensions.color == null}
+              class:ring-ring={inspector.extensions.color == null}
+              onclick={() => inspector.onUpdateExtension?.("color", null)}
+              title="Default"
+            >
+              <XIcon size={10} />
+            </button>
+            {#each [1, 2, 3, 4, 5, 6] as n}
+              <button
+                aria-label="Color {n}"
+                class={SWATCH_CLASS}
+                class:ring-2={inspector.extensions.color === n}
+                class:ring-ring={inspector.extensions.color === n}
+                style="background-color: var(--color-agent-{n})"
+                onclick={() => inspector.onUpdateExtension?.("color", n)}
+              ></button>
+            {/each}
+            <input
+              type="color"
+              aria-label="Custom color"
+              class={COLOR_INPUT_CLASS}
+              value={typeof inspector.extensions.color === "string"
+                ? inspector.extensions.color
+                : "#888888"}
+              onchange={(e) => inspector.onUpdateExtension?.("color", e.currentTarget.value)}
+            />
+          </div>
         </div>
 
         <Separator />
