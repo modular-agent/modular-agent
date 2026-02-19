@@ -38,7 +38,8 @@ const TIME_DEFAULT: &str = "1s";
     inputs = [PORT_VALUE],
     outputs = [PORT_VALUE],
     integer_config(name = CONFIG_DELAY, default = DELAY_MS_DEFAULT, title = "delay (ms)"),
-    integer_config(name = CONFIG_MAX_NUM_DATA, default = MAX_NUM_DATA_DEFAULT, title = "max num data")
+    integer_config(name = CONFIG_MAX_NUM_DATA, default = MAX_NUM_DATA_DEFAULT, title = "max num data"),
+    hint(color=2),
 )]
 struct DelayAgent {
     data: AgentData,
@@ -91,7 +92,8 @@ impl AsAgent for DelayAgent {
     description = "Outputs a unit signal at specified intervals",
     category = CATEGORY,
     outputs = [PORT_UNIT],
-    string_config(name = CONFIG_INTERVAL, default = INTERVAL_DEFAULT, description = "(ex. 10s, 5m, 100ms, 1h, 1d)")
+    string_config(name = CONFIG_INTERVAL, default = INTERVAL_DEFAULT, description = "(ex. 10s, 5m, 100ms, 1h, 1d)"),
+    hint(color=2),
 )]
 struct IntervalTimerAgent {
     data: AgentData,
@@ -195,7 +197,8 @@ impl AsAgent for IntervalTimerAgent {
     title = "On Start",
     category = CATEGORY,
     outputs = [PORT_UNIT],
-    integer_config(name = CONFIG_DELAY, default = DELAY_MS_DEFAULT, title = "delay (ms)")
+    integer_config(name = CONFIG_DELAY, default = DELAY_MS_DEFAULT, title = "delay (ms)"),
+    hint(color=2),
 )]
 struct OnStartAgent {
     data: AgentData,
@@ -238,7 +241,8 @@ impl AsAgent for OnStartAgent {
     title = "Schedule Timer",
     category = CATEGORY,
     outputs = [PORT_TIME],
-    string_config(name = CONFIG_SCHEDULE, default = "0 0 * * * *", description = "sec min hour day month week year")
+    string_config(name = CONFIG_SCHEDULE, default = "0 0 * * * *", description = "sec min hour day month week year"),
+    hint(color=2),
 )]
 struct ScheduleTimerAgent {
     data: AgentData,
@@ -403,7 +407,8 @@ impl AsAgent for ScheduleTimerAgent {
     inputs = [PORT_VALUE],
     outputs = [PORT_VALUE],
     string_config(name = CONFIG_TIME, default = TIME_DEFAULT, description = "(ex. 10s, 5m, 100ms, 1h, 1d)"),
-    integer_config(name = CONFIG_MAX_NUM_DATA, title = "max num data", description = "0: no data, -1: all data")
+    integer_config(name = CONFIG_MAX_NUM_DATA, title = "max num data", description = "0: no data, -1: all data"),
+    hint(color=2),
 )]
 struct ThrottleTimeAgent {
     data: AgentData,

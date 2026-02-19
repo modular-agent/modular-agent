@@ -1,8 +1,8 @@
 use handlebars::Handlebars;
 use im::vector;
 use modular_agent_core::{
-    Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent, ModularAgent,
-    async_trait, modular_agent,
+    Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
+    ModularAgent, async_trait, modular_agent,
 };
 use serde_json::json;
 
@@ -25,6 +25,7 @@ const CONFIG_TEMPLATE: &str = "template";
     category = CATEGORY,
     inputs = [PORT_VALUE],
     outputs = [PORT_T, PORT_F],
+    hint(color=5),
 )]
 struct IsStringAgent {
     data: AgentData,
@@ -58,6 +59,7 @@ impl AsAgent for IsStringAgent {
     category = CATEGORY,
     inputs = [PORT_STRING],
     outputs = [PORT_T, PORT_F],
+    hint(color=5),
 )]
 struct IsEmptyStringAgent {
     data: AgentData,
@@ -110,7 +112,8 @@ impl AsAgent for IsEmptyStringAgent {
     category = CATEGORY,
     inputs = [PORT_STRINGS],
     outputs = [PORT_STRING],
-    string_config(name = CONFIG_SEP, default = "\\n")
+    string_config(name = CONFIG_SEP, default = "\\n"),
+    hint(color=5),
 )]
 struct StringJoinAgent {
     data: AgentData,
@@ -162,6 +165,7 @@ impl AsAgent for StringJoinAgent {
     outputs = [PORT_STRINGS],
     integer_config(name = CONFIG_LEN, default = 65536),
     integer_config(name = CONFIG_OVERLAP, default = 1024),
+    hint(color=5),
 )]
 struct StringLengthSplitAgent {
     data: AgentData,
@@ -234,7 +238,8 @@ impl AsAgent for StringLengthSplitAgent {
     category = CATEGORY,
     inputs = [PORT_VALUE],
     outputs = [PORT_STRING],
-    string_config(name = CONFIG_TEMPLATE, default = "{{value}}")
+    string_config(name = CONFIG_TEMPLATE, default = "{{value}}"),
+    hint(color=5),
 )]
 struct TemplateStringAgent {
     data: AgentData,
@@ -294,7 +299,8 @@ impl AsAgent for TemplateStringAgent {
     category = CATEGORY,
     inputs = [PORT_VALUE],
     outputs = [PORT_STRING],
-    text_config(name = CONFIG_TEMPLATE, default = "{{value}}")
+    text_config(name = CONFIG_TEMPLATE, default = "{{value}}"),
+    hint(color=5),
 )]
 struct TemplateTextAgent {
     data: AgentData,

@@ -22,7 +22,8 @@ const OBJECT: &str = "object";
     hide_title,
     category = CATEGORY,
     outputs = [UNIT],
-    unit_config(name = UNIT, hide_title)
+    unit_config(name = UNIT, hide_title),
+    hint(color=2),
 )]
 struct UnitInputAgent {
     data: AgentData,
@@ -54,6 +55,7 @@ impl AsAgent for UnitInputAgent {
     inputs = [UNIT],
     outputs = [BOOLEAN],
     boolean_config(name = BOOLEAN, hide_title),
+    hint(color=3),
 )]
 struct BooleanInputAgent {
     data: AgentData,
@@ -93,7 +95,8 @@ impl AsAgent for BooleanInputAgent {
     category = CATEGORY,
     inputs = [UNIT],
     outputs = [INTEGER],
-    integer_config(name = INTEGER, hide_title)
+    integer_config(name = INTEGER, hide_title),
+    hint(color=6),
 )]
 struct IntegerInputAgent {
     data: AgentData,
@@ -133,7 +136,8 @@ impl AsAgent for IntegerInputAgent {
     category = CATEGORY,
     inputs = [UNIT],
     outputs = [NUMBER],
-    number_config(name = NUMBER, hide_title)
+    number_config(name = NUMBER, hide_title),
+    hint(color=6),
 )]
 struct NumberInputAgent {
     data: AgentData,
@@ -173,7 +177,8 @@ impl AsAgent for NumberInputAgent {
     category = CATEGORY,
     inputs = [UNIT],
     outputs = [STRING],
-    string_config(name = STRING, hide_title)
+    string_config(name = STRING, hide_title),
+    hint(color=5),
 )]
 struct StringInputAgent {
     data: AgentData,
@@ -213,7 +218,8 @@ impl AsAgent for StringInputAgent {
     category = CATEGORY,
     inputs = [UNIT],
     outputs = [TEXT],
-    text_config(name = TEXT, hide_title)
+    text_config(name = TEXT, hide_title),
+    hint(color=5),
 )]
 struct TextInputAgent {
     data: AgentData,
@@ -253,7 +259,8 @@ impl AsAgent for TextInputAgent {
     category = CATEGORY,
     inputs = [UNIT],
     outputs = [OBJECT],
-    object_config(name = OBJECT, hide_title)
+    object_config(name = OBJECT, hide_title),
+    hint(color=4),
 )]
 struct ObjectInputAgent {
     data: AgentData,

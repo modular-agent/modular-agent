@@ -28,6 +28,7 @@ const CONFIG_USE_CTX: &str = "use_ctx";
     inputs = [PORT_IN],
     outputs = [PORT_OUT1, PORT_OUT2],
     integer_config(name = CONFIG_N, default = 2),
+    hint(color=2),
 )]
 struct SequenceAgent {
     data: AgentData,
@@ -96,6 +97,7 @@ impl AsAgent for SequenceAgent {
     boolean_config(name = CONFIG_USE_CTX),
     integer_config(name = CONFIG_TTL_SEC, default = 60), 
     integer_config(name = CONFIG_CAPACITY, default = 1000),
+    hint(color=2),
 )]
 struct SyncAgent {
     data: AgentData,

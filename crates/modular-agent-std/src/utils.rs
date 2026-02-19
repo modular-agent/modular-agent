@@ -1,8 +1,8 @@
 use std::vec;
 
 use modular_agent_core::{
-    Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent, ModularAgent,
-    async_trait, modular_agent,
+    Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
+    ModularAgent, async_trait, modular_agent,
 };
 
 const CATEGORY: &str = "Std/Utils";
@@ -23,7 +23,8 @@ const DISPLAY_COUNT: &str = "count";
         name = DISPLAY_COUNT,
         readonly,
         hide_title,
-    )
+    ),
+    hint(color=6),
 )]
 struct CounterAgent {
     data: AgentData,

@@ -17,7 +17,8 @@ const PORT_YAML: &str = "yaml";
     title = "To YAML",
     category = CATEGORY,
     inputs = [PORT_DATA],
-    outputs = [PORT_YAML]
+    outputs = [PORT_YAML],
+    hint(color=5),
 )]
 struct ToYamlAgent {
     data: AgentData,
@@ -50,7 +51,8 @@ impl AsAgent for ToYamlAgent {
     title = "From YAML",
     category = CATEGORY,
     inputs = [PORT_YAML],
-    outputs = [PORT_DATA]
+    outputs = [PORT_DATA],
+    hint(color=5),
 )]
 struct FromYamlAgent {
     data: AgentData,

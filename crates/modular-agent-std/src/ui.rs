@@ -12,7 +12,8 @@ const PORT_SP: &str = " ";
     kind = "UI",
     title = "Note",
     category = CATEGORY,
-    custom_config(name = NOTE, type_="markdown", default="", hide_title)
+    custom_config(name = NOTE, type_="markdown", default="", hide_title),
+    hint(color=2),
 )]
 struct NoteAgent {
     data: AgentData,
