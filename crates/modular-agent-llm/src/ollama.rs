@@ -20,6 +20,7 @@ const PORT_UNIT: &str = "unit";
     category=CATEGORY,
     inputs=[PORT_UNIT],
     outputs=[PORT_MODEL_LIST],
+    hint(width = 2, height = 1),
 )]
 pub struct OllamaListLocalModelsAgent {
     data: AgentData,
@@ -57,6 +58,7 @@ impl AsAgent for OllamaListLocalModelsAgent {
     category=CATEGORY,
     inputs=[PORT_MODEL_NAME],
     outputs=[PORT_MODEL_INFO],
+    hint(width = 2, height = 1),
 )]
 pub struct OllamaShowModelInfoAgent {
     data: AgentData,

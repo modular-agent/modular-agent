@@ -44,6 +44,7 @@ const DEFAULT_CONFIG_MODEL: &str = "openai/text-embedding-3-small";
     outputs = [PORT_EMBEDDING, PORT_EMBEDDINGS, PORT_DOC],
     string_config(name = CONFIG_MODEL, default = DEFAULT_CONFIG_MODEL),
     object_config(name = CONFIG_OPTIONS),
+    hint(width = 2, height = 2),
 )]
 pub struct EmbeddingsAgent {
     data: AgentData,

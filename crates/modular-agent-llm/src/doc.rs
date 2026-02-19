@@ -212,7 +212,8 @@ impl AsAgent for SplitTextAgent {
     inputs=[PORT_STRING, PORT_DOC],
     outputs=[PORT_CHUNKS, PORT_DOC],
     integer_config(name=CONFIG_MAX_TOKENS, default=500),
-    string_config(name=CONFIG_TOKENIZER, default="nomic-ai/nomic-embed-text-v2-moe")
+    string_config(name=CONFIG_TOKENIZER, default="nomic-ai/nomic-embed-text-v2-moe"),
+    hint(width = 2, height = 2),
 )]
 pub struct SplitTextByTokensAgent {
     data: AgentData,

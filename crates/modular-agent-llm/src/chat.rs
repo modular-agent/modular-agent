@@ -63,6 +63,7 @@ const DEFAULT_OLLAMA_URL: &str = "http://localhost:11434";
     custom_global_config(name = CONFIG_OPENAI_API_KEY, type_ = "password", default = AgentValue::string(""), title = "OpenAI API Key"),
     string_global_config(name = CONFIG_OPENAI_API_BASE, title = "OpenAI API Base URL", default = DEFAULT_OPENAI_API_BASE),
     string_global_config(name = CONFIG_OLLAMA_URL, title = "Ollama URL", default = DEFAULT_OLLAMA_URL),
+    hint(width = 2, height = 2),
 )]
 pub struct ChatAgent {
     data: AgentData,

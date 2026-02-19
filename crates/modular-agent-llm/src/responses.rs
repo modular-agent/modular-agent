@@ -59,6 +59,7 @@ const DEFAULT_MODEL: &str = "openai/gpt-5-mini";
     number_config(name = CONFIG_TEMPERATURE, title = "Temperature", default = -1.0, description = "-1: use API default (0.0-2.0)", detail),
     number_config(name = CONFIG_TOP_P, title = "Top P", default = -1.0, description = "-1: use API default (0.0-1.0)", detail),
     object_config(name = CONFIG_OPTIONS, title = "Options", description = "Additional request options as JSON", detail),
+    hint(width = 2, height = 2),
 )]
 pub struct ResponsesAgent {
     data: AgentData,

@@ -21,7 +21,8 @@ const CONFIG_PREAMBLE: &str = "preamble";
     category=CATEGORY,
     inputs=[PORT_MESSAGES],
     outputs=[PORT_MESSAGES],
-    text_config(name=CONFIG_MESSAGE)
+    text_config(name=CONFIG_MESSAGE),
+    hint(width = 2, height = 1),
 )]
 pub struct AssistantMessageAgent {
     data: AgentData,
@@ -57,7 +58,8 @@ impl AsAgent for AssistantMessageAgent {
     category=CATEGORY,
     inputs=[PORT_MESSAGES],
     outputs=[PORT_MESSAGES],
-    text_config(name=CONFIG_MESSAGE)
+    text_config(name=CONFIG_MESSAGE),
+    hint(width = 2, height = 1),
 )]
 pub struct SystemMessageAgent {
     data: AgentData,
@@ -91,7 +93,8 @@ impl AsAgent for SystemMessageAgent {
     category=CATEGORY,
     inputs=[PORT_MESSAGES],
     outputs=[PORT_MESSAGES],
-    text_config(name=CONFIG_MESSAGE)
+    text_config(name=CONFIG_MESSAGE),
+    hint(width = 2, height = 1),
 )]
 pub struct UserMessageAgent {
     data: AgentData,
@@ -162,6 +165,7 @@ fn prepend_message(value: AgentValue, message: Message) -> AgentValue {
     inputs=[PORT_MESSAGE, PORT_RESET],
     outputs=[PORT_MESSAGES],
     object_config(name=CONFIG_PREAMBLE),
+    hint(width = 2, height = 2),
 )]
 pub struct PreambleAgent {
     data: AgentData,
@@ -277,6 +281,7 @@ impl AsAgent for PreambleAgent {
     outputs=[PORT_MESSAGES],
     integer_config(name=CONFIG_MAX_SIZE),
     array_config(name=CONFIG_MESSAGES, hidden),
+    hint(width = 2, height = 1),
 )]
 pub struct MessagesAgent {
     data: AgentData,
@@ -373,6 +378,7 @@ impl AsAgent for MessagesAgent {
     inputs=[PORT_MESSAGES],
     outputs=[PORT_MESSAGES],
     integer_config(name=CONFIG_MAX_SIZE),
+    hint(width = 2, height = 1),
 )]
 pub struct MessagesForPromptAgent {
     data: AgentData,
