@@ -13,7 +13,13 @@ import {
   type AgentSpec,
 } from "tauri-plugin-modular-agent-api";
 
-import { agentSpecToNode, connectionSpecToEdge, edgeToConnectionSpec, getEdgeColor } from "$lib/agent";
+import {
+  agentSpecToNode,
+  connectionSpecToEdge,
+  edgeToConnectionSpec,
+  getAgentDefinitions,
+  getEdgeColor,
+} from "$lib/agent";
 import type { PresetNode, PresetEdge } from "$lib/types";
 
 import type { EditorState } from "./context.svelte";
@@ -216,8 +222,14 @@ export class AddAgentCommand implements Command {
     const spec = await newAgentSpec(this.agentName);
     spec.x = this.flowPos.x;
     spec.y = this.flowPos.y;
-    spec.width = editor.snapGridSize;
-    spec.height = editor.snapGridSize;
+    if (!spec.width || !spec.height) {
+      const agentDefs = getAgentDefinitions();
+      const hints = agentDefs[this.agentName]?.hints;
+      const hintWidth = typeof hints?.width === "number" && hints.width > 0 ? hints.width : 1;
+      const hintHeight = typeof hints?.height === "number" && hints.height > 0 ? hints.height : 1;
+      spec.width = spec.width || hintWidth * editor.snapGridSize;
+      spec.height = spec.height || hintHeight * editor.snapGridSize;
+    }
     const id = await addAgent(this.presetId, spec);
     spec.id = id;
     this.node = agentSpecToNode(spec);

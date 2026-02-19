@@ -1,11 +1,22 @@
 <script lang="ts" module>
   const titleColorMap: Record<string, string> = {
-    default: "text-agent-7",
-    External: "text-agent-2",
-    Local: "text-agent-2",
+    default: "text-agent-4",
+    External: "text-agent-5",
+    Local: "text-agent-5",
     Display: "text-agent-3",
     Input: "text-agent-6",
-    UI: "text-agent-4",
+    UI: "text-agent-2",
+  };
+
+  // Static map for Tailwind JIT class detection (dynamic `text-agent-${N}` would be purged)
+  const hintColorClasses: Record<number, string> = {
+    1: "text-agent-1",
+    2: "text-agent-2",
+    3: "text-agent-3",
+    4: "text-agent-4",
+    5: "text-agent-5",
+    6: "text-agent-6",
+    7: "text-agent-7",
   };
 </script>
 
@@ -116,7 +127,13 @@
 
   let hide_title = $derived(agentDef?.hide_title ?? false);
   let editTitle = $state(false);
-  let titleColor = $derived(titleColorMap[agentDef?.kind ?? "default"] ?? titleColorMap.default);
+  let titleColor = $derived.by(() => {
+    const hintColor = agentDef?.hints?.color;
+    if (typeof hintColor === "number" && hintColorClasses[hintColor]) {
+      return hintColorClasses[hintColor];
+    }
+    return titleColorMap[agentDef?.kind ?? "default"] ?? titleColorMap.default;
+  });
 </script>
 
 {#snippet title()}

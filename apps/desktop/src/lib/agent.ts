@@ -13,11 +13,11 @@ import {
   getPresetInfos,
 } from "tauri-plugin-modular-agent-api";
 
+import { coreSettingsStore } from "./core-settings-store.svelte";
 import {
   getCoreSettings as getCoreSettingsUtils,
   setCoreSettings as setCoreSettingsUtils,
 } from "./modular_agent";
-import { coreSettingsStore } from "./core-settings-store.svelte";
 import type { PresetFlow, PresetEdge, PresetNode, CoreSettings, PresetInfoExt } from "./types";
 
 export async function newPresetWithName(name: string): Promise<string> {
@@ -110,17 +110,17 @@ const EDGE_COLOR_MAP: Record<string, string> = {
   // boolean
   boolean: "var(--color-agent-3)",
   // number
-  integer: "var(--color-agent-4)",
-  number: "var(--color-agent-4)",
+  integer: "var(--color-agent-6)",
+  number: "var(--color-agent-6)",
   // string-like
   string: "var(--color-agent-5)",
   text: "var(--color-agent-5)",
   // object-like
-  object: "var(--color-agent-6)",
-  doc: "var(--color-agent-6)",
-  message: "var(--color-agent-6)",
+  object: "var(--color-agent-4)",
+  doc: "var(--color-agent-4)",
+  message: "var(--color-agent-4)",
   // image
-  image: "var(--color-agent-6)",
+  image: "var(--color-agent-4)",
   // error
   err: "var(--color-agent-1)",
 };
