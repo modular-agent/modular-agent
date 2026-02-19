@@ -165,8 +165,12 @@ impl AgentSpec {
                     }
                 }
                 _ => {
-                    // Update extensions
-                    self.extensions.insert(k.clone(), v.clone());
+                    // Update extensions: null removes the key
+                    if v.is_null() {
+                        self.extensions.remove(k);
+                    } else {
+                        self.extensions.insert(k.clone(), v.clone());
+                    }
                 }
             }
         }
