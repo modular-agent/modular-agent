@@ -1,6 +1,6 @@
 [package]
 name = "modular-agent-std"
-version = "0.13.0"
+version = "0.13.1"
 description = "Standard Agents of Modular Agent"
 authors = ["Akira Ishino <akira@lumilab.jp>"]
 edition = "2024"
@@ -14,7 +14,7 @@ handlebars = "6"
 im = "15"
 log = "0.4"
 mini-moka = "0.10.3"
-modular-agent-core = "0.23.0"
+modular-agent-core = "0.23.1"
 regex = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
