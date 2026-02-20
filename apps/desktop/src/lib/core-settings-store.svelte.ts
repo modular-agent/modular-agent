@@ -1,28 +1,37 @@
 import { resolveHotkeys, resolveQuickAddAgents, type ResolvedHotkeys } from "./hotkeys";
 import type { CoreSettings } from "./types";
 
+export const CORE_DEFAULTS = {
+  connectionOpacity: 0.8,
+  gridGap: 240,
+  maxHistoryLength: 2000,
+  showGrid: true,
+  snapEnabled: true,
+  snapGridSize: 240,
+} as const;
+
 class CoreSettingsStore {
-  snapEnabled = $state(true);
-  snapGridSize = $state(192);
-  showGrid = $state(true);
-  gridGap = $state(192);
-  connectionOpacity = $state(0.8);
-  maxHistoryLength = $state(2000);
-  shortcutKeys = $state<Record<string, string> | null>(null);
   colorMode = $state<string>("");
+  connectionOpacity = $state<number>(CORE_DEFAULTS.connectionOpacity);
+  gridGap = $state<number>(CORE_DEFAULTS.gridGap);
+  maxHistoryLength = $state<number>(CORE_DEFAULTS.maxHistoryLength);
+  shortcutKeys = $state<Record<string, string> | null>(null);
+  showGrid = $state<boolean>(CORE_DEFAULTS.showGrid);
+  snapEnabled = $state<boolean>(CORE_DEFAULTS.snapEnabled);
+  snapGridSize = $state<number>(CORE_DEFAULTS.snapGridSize);
 
   hotkeys: ResolvedHotkeys = $derived(resolveHotkeys(this.shortcutKeys));
   quickAddAgents = $derived(resolveQuickAddAgents(this.shortcutKeys));
 
   update(settings: CoreSettings) {
-    this.snapEnabled = settings.snap_enabled ?? true;
-    this.snapGridSize = settings.snap_grid_size ?? 192;
-    this.showGrid = settings.show_grid ?? true;
-    this.gridGap = settings.grid_gap ?? 192;
-    this.connectionOpacity = settings.connection_opacity ?? 0.8;
-    this.maxHistoryLength = settings.max_history_length ?? 2000;
-    this.shortcutKeys = settings.shortcut_keys ?? null;
     this.colorMode = settings.color_mode ?? "";
+    this.connectionOpacity = settings.connection_opacity ?? CORE_DEFAULTS.connectionOpacity;
+    this.gridGap = settings.grid_gap ?? CORE_DEFAULTS.gridGap;
+    this.maxHistoryLength = settings.max_history_length ?? CORE_DEFAULTS.maxHistoryLength;
+    this.shortcutKeys = settings.shortcut_keys ?? null;
+    this.showGrid = settings.show_grid ?? CORE_DEFAULTS.showGrid;
+    this.snapEnabled = settings.snap_enabled ?? CORE_DEFAULTS.snapEnabled;
+    this.snapGridSize = settings.snap_grid_size ?? CORE_DEFAULTS.snapGridSize;
   }
 }
 

@@ -4,7 +4,6 @@
   import { onMount } from "svelte";
 
   import { resetMode, setMode } from "mode-watcher";
-
   import { toast } from "svelte-sonner";
 
   import { getAgentDefinitions, getCoreSettings, setCoreSettings } from "$lib/agent";
@@ -14,6 +13,7 @@
   import { Input } from "$lib/components/ui/input/index.js";
   import * as Select from "$lib/components/ui/select/index.js";
   import { Switch } from "$lib/components/ui/switch/index.js";
+  import { CORE_DEFAULTS } from "$lib/core-settings-store.svelte";
   import { DEFAULT_HOTKEYS, type HotkeyDefinition } from "$lib/hotkeys";
   import { exitApp } from "$lib/modular_agent";
   import type { CoreSettings } from "$lib/types";
@@ -26,14 +26,14 @@
 
   let autostart = $state(false);
   let color_mode = $state<string>("");
+  let connection_opacity = $state(CORE_DEFAULTS.connectionOpacity * 100);
+  let grid_gap = $state(CORE_DEFAULTS.gridGap);
+  let max_history_length = $state(CORE_DEFAULTS.maxHistoryLength);
   let run_in_background = $state(false);
   let shortcut_keys = $state<Record<string, string>>({});
-  let snap_enabled = $state(true);
-  let snap_grid_size = $state(196);
   let show_grid = $state(true);
-  let grid_gap = $state(196);
-  let max_history_length = $state(2000);
-  let connection_opacity = $state(80);
+  let snap_enabled = $state(true);
+  let snap_grid_size = $state(CORE_DEFAULTS.snapGridSize);
 
   let initialGlobalShortcut = "";
 
@@ -72,13 +72,15 @@
   onMount(() => {
     autostart = settings["autostart"] ?? false;
     color_mode = settings["color_mode"] ?? "";
+    connection_opacity = Math.round(
+      (settings["connection_opacity"] ?? CORE_DEFAULTS.connectionOpacity) * 100,
+    );
+    grid_gap = settings["grid_gap"] ?? CORE_DEFAULTS.gridGap;
+    max_history_length = settings["max_history_length"] ?? CORE_DEFAULTS.maxHistoryLength;
     run_in_background = settings["run_in_background"] ?? false;
-    snap_enabled = settings["snap_enabled"] ?? true;
-    snap_grid_size = settings["snap_grid_size"] ?? 12;
     show_grid = settings["show_grid"] ?? true;
-    grid_gap = settings["grid_gap"] ?? 24;
-    max_history_length = settings["max_history_length"] ?? 2000;
-    connection_opacity = Math.round((settings["connection_opacity"] ?? 0.8) * 100);
+    snap_enabled = settings["snap_enabled"] ?? true;
+    snap_grid_size = settings["snap_grid_size"] ?? CORE_DEFAULTS.snapGridSize;
 
     // Initialize shortcut_keys with all defaults, then overlay user overrides
     const userKeys = settings["shortcut_keys"] ?? {};
@@ -168,10 +170,7 @@
       </Field>
 
       <Field orientation="horizontal">
-        <Switch
-          bind:checked={autostart}
-          onCheckedChange={(v) => autoSave({ autostart: v })}
-        />
+        <Switch bind:checked={autostart} onCheckedChange={(v) => autoSave({ autostart: v })} />
         <FieldLabel>Auto Start on System Boot</FieldLabel>
       </Field>
 
@@ -200,10 +199,7 @@
       </Field>
 
       <Field orientation="horizontal">
-        <Switch
-          bind:checked={show_grid}
-          onCheckedChange={(v) => autoSave({ show_grid: v })}
-        />
+        <Switch bind:checked={show_grid} onCheckedChange={(v) => autoSave({ show_grid: v })} />
         <FieldLabel>Show Grid</FieldLabel>
       </Field>
 

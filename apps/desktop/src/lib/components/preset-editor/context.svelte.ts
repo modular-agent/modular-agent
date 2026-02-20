@@ -106,15 +106,15 @@ export class EditorState {
   agentListOriginY = $state(0);
 
   // Grid/Snap state
-  snapEnabled = $state(true);
-  snapGridSize = $state(192);
-  showGrid = $state(true);
-  gridGap = $state(192);
+  snapEnabled = $state(coreSettingsStore.snapEnabled);
+  snapGridSize = $state(coreSettingsStore.snapGridSize);
+  showGrid = $state(coreSettingsStore.showGrid);
+  gridGap = $state(coreSettingsStore.gridGap);
   modifierPressed = $state(false);
   resizing = $state(false);
 
   // Connection opacity
-  connectionOpacity = $state(0.8);
+  connectionOpacity = $state(coreSettingsStore.connectionOpacity);
 
   effectiveSnapGrid = $derived.by(() => {
     if (this.resizing) return undefined;
@@ -154,13 +154,7 @@ export class EditorState {
 
   constructor(props: EditorStateProps) {
     this.props = props;
-    // Load settings from CoreSettings
     this.history = getOrCreateHistory(props.preset_id(), coreSettingsStore.maxHistoryLength);
-    this.snapEnabled = coreSettingsStore.snapEnabled;
-    this.snapGridSize = coreSettingsStore.snapGridSize;
-    this.showGrid = coreSettingsStore.showGrid;
-    this.gridGap = coreSettingsStore.gridGap;
-    this.connectionOpacity = coreSettingsStore.connectionOpacity;
 
     // Subscribe to runtime settings changes
     $effect(() => {
@@ -626,7 +620,11 @@ export class EditorState {
     const [selectedNodes] = this.selectedNodesAndEdges();
     if (selectedNodes.length === 0) return;
     const deltas = selectedNodes
-      .map((n) => ({ id: n.id, oldValue: (n.data.color as number | string | null) ?? null, newValue: color }))
+      .map((n) => ({
+        id: n.id,
+        oldValue: (n.data.color as number | string | null) ?? null,
+        newValue: color,
+      }))
       .filter((d) => d.oldValue !== d.newValue);
     if (deltas.length === 0) return;
     const cmd = new BatchUpdateExtensionCommand(deltas, "color");
