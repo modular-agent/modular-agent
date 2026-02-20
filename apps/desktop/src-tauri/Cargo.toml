@@ -1,6 +1,6 @@
 [package]
 name = "modular-agent-desktop"
-version = "0.15.0"
+version = "0.15.1"
 description = "Modular Agent Desktop Application"
 authors = ["Akira Ishino <akira@lumilab.jp>"]
 edition = "2021"
