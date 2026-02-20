@@ -1,6 +1,6 @@
 [package]
 name = "modular-agent-llm"
-version = "0.12.0"
+version = "0.12.1"
 description = "LLM Agents for Modular Agent"
 authors = ["Akira Ishino <akira@lumilab.jp>"]
 edition = "2024"
@@ -22,7 +22,7 @@ tokio = { version = "1.48.0", features = ["rt-multi-thread"] }
 tokio-stream = "0.1"
 uuid = { version = "1.18.1", features = ["v4"] }
 
-modular-agent-core = "0.23.0"
+modular-agent-core = "0.23.1"
 
 [features]
 default = ["image", "claude", "ollama", "openai"]
