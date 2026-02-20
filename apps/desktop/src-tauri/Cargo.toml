@@ -1,6 +1,6 @@
 [package]
 name = "modular-agent-desktop"
-version = "0.14.0"
+version = "0.15.0"
 description = "Modular Agent Desktop Application"
 authors = ["Akira Ishino <akira@lumilab.jp>"]
 edition = "2021"
@@ -34,13 +34,13 @@ tauri-plugin-log = "2"
 tauri-plugin-store = "2"
 tokio = { version = "1", features = ["full"] }
 
-modular-agent-core = "0.23.0"
-tauri-plugin-modular-agent = "0.14.0"
+modular-agent-core = "0.23.1"
+tauri-plugin-modular-agent = "0.14.1"
 
 modular-agent-lifelog = { git = "https://github.com/modular-agent/modular-agent-lifelog.git", tag = "v0.7.0" }
-modular-agent-llm = { git = "https://github.com/modular-agent/modular-agent-llm.git", tag = "v0.12.0" }
-modular-agent-slack = { git = "https://github.com/modular-agent/modular-agent-slack.git", tag = "v0.3.0" }
-modular-agent-std = { git = "https://github.com/modular-agent/modular-agent-std.git", tag = "v0.13.0" }
+modular-agent-llm = { git = "https://github.com/modular-agent/modular-agent-llm.git", tag = "v0.12.1" }
+modular-agent-slack = { git = "https://github.com/modular-agent/modular-agent-slack.git", tag = "v0.3.1" }
+modular-agent-std = { git = "https://github.com/modular-agent/modular-agent-std.git", tag = "v0.13.1" }
 modular-agent-sqlx = { git = "https://github.com/modular-agent/modular-agent-sqlx.git", tag = "v0.3.0" }
 modular-agent-web = { git = "https://github.com/modular-agent/modular-agent-web.git", tag = "v0.6.0" }
 # modular-agent-lifelog = { path = "../../modular-agent-lifelog" }

@@ -431,9 +431,9 @@ checksum = "c08606f8c3cbf4ce6ec8e28fb0014a2c086708fe954eaa885384a6165172e7e8"
 
 [[package]]
 name = "aws-lc-rs"
-version = "1.15.4"
+version = "1.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7b7b6141e96a8c160799cc2d5adecd5cbbe5054cb8c7c4af53da0f83bb7ad256"
+checksum = "d9a7b350e3bb1767102698302bc37256cbd48422809984b98d292c40e2579aa9"
 dependencies = [
  "aws-lc-sys",
  "zeroize",
@@ -638,9 +638,9 @@ dependencies = [
 
 [[package]]
 name = "bumpalo"
-version = "3.19.1"
+version = "3.20.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5dd9dc738b7a8311c7ade152424974d8115f2cdad61e8dab8dac9f2362298510"
+checksum = "5d20789868f4b01b2f2caec9f5c4e0213b41e3e5702a50157d699ae31ced2fcb"
 
 [[package]]
 name = "byte-unit"
@@ -911,18 +911,18 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "4.5.59"
+version = "4.5.60"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c5caf74d17c3aec5495110c34cc3f78644bfa89af6c8993ed4de2790e49b6499"
+checksum = "2797f34da339ce31042b27d23607e051786132987f595b02ba4f6a6dffb7030a"
 dependencies = [
  "clap_builder",
 ]
 
 [[package]]
 name = "clap_builder"
-version = "4.5.59"
+version = "4.5.60"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "370daa45065b80218950227371916a1633217ae42b2715b2287b606dcd618e24"
+checksum = "24a241312cea5059b13574bb9b3861cabf758b879c15190b37b6d6fd63ab6876"
 dependencies = [
  "anstream",
  "anstyle",
@@ -2931,9 +2931,9 @@ dependencies = [
 
 [[package]]
 name = "html-to-markdown-rs"
-version = "2.25.0"
+version = "2.25.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bb31d75f2fdbc8d889d78a912e10c22c30451afb44ee3310f5bfcabf79a31a17"
+checksum = "c05335c6bf406653110ad8447c84461c6d0cda5e0aff9d3d3518f87502d30abe"
 dependencies = [
  "ahash 0.8.12",
  "astral-tl",
@@ -3460,9 +3460,9 @@ dependencies = [
 
 [[package]]
 name = "inventory"
-version = "0.3.21"
+version = "0.3.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bc61209c082fbeb19919bee74b176221b27223e27b65d781eb91af24eb1fb46e"
+checksum = "009ae045c87e7082cb72dab0ccd01ae075dd00141ddc108f43a0ea150a9e7227"
 dependencies = [
  "rustversion",
 ]
@@ -4083,9 +4083,9 @@ dependencies = [
 
 [[package]]
 name = "modular-agent-core"
-version = "0.23.0"
+version = "0.23.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a1b7b378ce84754ca33a1ba3d12646cdc4e05a6568fe8f7a41482d058b082e1f"
+checksum = "930e7c7f5e4bbace2066aac2d64d8b81c855d8ec603101bf914162f6de58e62a"
 dependencies = [
  "async-trait",
  "fnv",
@@ -4105,7 +4105,7 @@ dependencies = [
 
 [[package]]
 name = "modular-agent-desktop"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "anyhow",
  "ctrlc",
@@ -4155,8 +4155,8 @@ dependencies = [
 
 [[package]]
 name = "modular-agent-llm"
-version = "0.12.0"
-source = "git+https://github.com/modular-agent/modular-agent-llm.git?tag=v0.12.0#e58cb14612c4afc284e6ea585b9ec3d69cb54789"
+version = "0.12.1"
+source = "git+https://github.com/modular-agent/modular-agent-llm.git?tag=v0.12.1#b22957d2944fc8a52f3cf83aa0461ba142959f33"
 dependencies = [
  "async-trait",
  "eventsource-stream",
@@ -4177,9 +4177,9 @@ dependencies = [
 
 [[package]]
 name = "modular-agent-macros"
-version = "0.23.0"
+version = "0.23.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8091610d5456aad831905f9f00c2b84e12260492bfa1040446344abb14223365"
+checksum = "a61645b59c11f5d920bfc33619d28176c411c926356b804cb68abc3a65d867a4"
 dependencies = [
  "im",
  "proc-macro2",
@@ -4189,12 +4189,13 @@ dependencies = [
 
 [[package]]
 name = "modular-agent-slack"
-version = "0.3.0"
-source = "git+https://github.com/modular-agent/modular-agent-slack.git?tag=v0.3.0#288d805f221b31d5c21b21b7800cede8a4be820b"
+version = "0.3.1"
+source = "git+https://github.com/modular-agent/modular-agent-slack.git?tag=v0.3.1#6bedb4ffad5971d46104708bc557856739bea9c9"
 dependencies = [
  "chrono",
  "im",
  "modular-agent-core",
+ "regex",
  "reqwest 0.12.28",
  "rustls",
  "serde",
@@ -4219,8 +4220,8 @@ dependencies = [
 
 [[package]]
 name = "modular-agent-std"
-version = "0.13.0"
-source = "git+https://github.com/modular-agent/modular-agent-std.git?tag=v0.13.0#a2eff291f59fb0f0a933fa1f38ba052db0508204"
+version = "0.13.1"
+source = "git+https://github.com/modular-agent/modular-agent-std.git?tag=v0.13.1#1f88ee96086ebc404f502ee85e14fb142ee2dace"
 dependencies = [
  "chrono",
  "cron",
@@ -4328,9 +4329,9 @@ dependencies = [
 
 [[package]]
 name = "native-tls"
-version = "0.2.16"
+version = "0.2.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9d5d26952a508f321b4d3d2e80e78fc2603eaefcdf0c30783867f19586518bdc"
+checksum = "465500e14ea162429d264d44189adc38b199b62b1c21eea9f69e4b73cb03bbf2"
 dependencies = [
  "libc",
  "log",
@@ -6706,9 +6707,9 @@ checksum = "1c107b6f4780854c8b126e228ea8869f4d7b71260f962fefb57b996b8959ba6b"
 
 [[package]]
 name = "security-framework"
-version = "3.6.0"
+version = "3.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d17b898a6d6948c3a8ee4372c17cb384f90d2e6e912ef00895b14fd7ab54ec38"
+checksum = "b7f4bc775c73d9a02cde8bf7b2ec4c9d12743edf609006c7facc23998404cd1d"
 dependencies = [
  "bitflags 2.11.0",
  "core-foundation 0.10.1",
@@ -6719,9 +6720,9 @@ dependencies = [
 
 [[package]]
 name = "security-framework-sys"
-version = "2.16.0"
+version = "2.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "321c8673b092a9a42605034a9879d73cb79101ed5fd117bc9a597b89b4e9e61a"
+checksum = "6ce2691df843ecc5d231c0b14ece2acc3efb62c0a398c7e1d875f3983ce020e3"
 dependencies = [
  "core-foundation-sys",
  "libc",
@@ -7963,9 +7964,9 @@ dependencies = [
 
 [[package]]
 name = "tauri-plugin-modular-agent"
-version = "0.14.0"
+version = "0.14.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ca3c059c65452fd0a76d3b6d94277682e383f9528cd3c51b6334717ef389d595"
+checksum = "b94a1ad80bd501e8bac52bb421494fd4d624bf240398c874ec83a68b4f213922"
 dependencies = [
  "im",
  "modular-agent-core",
