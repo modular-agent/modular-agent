@@ -254,6 +254,19 @@
     }
 
     const editable = isEditableElement(event.target);
+
+    // Delete/Backspace: delete selected nodes/edges.
+    // Placed here (not in the hotkey table) because event.preventDefault() must fire at the
+    // window level to suppress macOS WKWebView's back-navigation default for Backspace.
+    // This replaces SvelteFlow's built-in deleteKey behavior (removed from SvelteFlow props).
+    if (event.key === "Delete" || event.key === "Backspace") {
+      if (!editable) {
+        event.preventDefault();
+        editor.deleteSelectedNodesAndEdges();
+      }
+      return;
+    }
+
     const now = Date.now();
 
     // --- Sequence handling ---
@@ -507,7 +520,6 @@
     colorMode={(coreSettingsStore.colorMode as "light" | "dark" | "system") || "system"}
     connectionLineComponent={CustomConnectionLine}
     connectionRadius={38}
-    deleteKey={["Delete", "Backspace"]}
     {edgeTypes}
     bind:edges={editor.edges}
     initialViewport={editor.props.flow().viewport ?? { x: 0, y: 0, zoom: 1 }}

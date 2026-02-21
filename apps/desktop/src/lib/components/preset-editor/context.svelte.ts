@@ -546,6 +546,22 @@ export class EditorState {
     await withErrorToast(() => this.history.executeAndPush(this, cmd), "Failed to cut");
   }
 
+  async deleteSelectedNodesAndEdges() {
+    if (this.history.executing) return;
+    const [selectedNodes, selectedEdges] = this.selectedNodesAndEdges();
+    if (selectedNodes.length === 0 && selectedEdges.length === 0) return;
+
+    // Also include edges connected to deleted nodes (same logic as cutNodesAndEdges)
+    const nodeIds = new Set(selectedNodes.map((n) => n.id));
+    const selectedEdgeIds = new Set(selectedEdges.map((e) => e.id));
+    const allAffectedEdges = this.edges.filter(
+      (e) => selectedEdgeIds.has(e.id) || nodeIds.has(e.source) || nodeIds.has(e.target),
+    );
+
+    const cmd = new DeleteCommand(this.preset_id, selectedNodes, allAffectedEdges);
+    await withErrorToast(() => this.history.executeAndPush(this, cmd), "Failed to delete");
+  }
+
   async copyNodesAndEdges() {
     const [selectedNodes, selectedEdges] = this.selectedNodesAndEdges();
     if (selectedNodes.length === 0 && selectedEdges.length === 0) {
