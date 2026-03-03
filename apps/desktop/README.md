@@ -22,7 +22,7 @@
 
 </div>
 
-Modular Agent is a local-first desktop application for building AI workflows visually. Wire together 80+ pre-built agents — LLMs, databases, web scrapers, messaging — into pipelines that run continuously, streaming data in real time. No cloud or Docker required.
+Build AI workflows like a modular synth — patch extensible agents together visually into real-time pipelines. LLMs, databases, web scrapers, messaging, and more. Privacy-first, no cloud required.
 
 [English](README.md) | [日本語](README_ja.md)
 
@@ -35,7 +35,7 @@ Modular Agent is a local-first desktop application for building AI workflows vis
 ### Agents
 
 - ⚡ **Stream-Based Data Flow** — Real-time data streaming between agents
-- 🤖 **80+ Built-in Agents** — LLM, Web/HTTP, Slack, SQL databases, screen capture, and more
+- 🤖 **Built-in Agents** — LLM, Web/HTTP, Slack, SQL databases, screen capture, and more
 - 🧩 **Extensible** — Add agent plugins via Rust crates
 
 ### Runtime
