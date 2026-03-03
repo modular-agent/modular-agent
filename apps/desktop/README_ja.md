@@ -28,7 +28,7 @@ Modular Agentは、AIワークフローをビジュアルに構築するロー�
 [English](README.md) | [日本語](README_ja.md)
 
 <div align="center">
-<img alt="Workflow Editor" width="800" src="doc/images/screenshot_editor.png">
+<img alt="Workflow Editor" width="800" src="doc/images/screenshot_editor.jpg">
 </div>
 
 ## 特徴
