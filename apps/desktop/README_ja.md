@@ -9,7 +9,6 @@
 <br>
 
 ![Developer Preview](https://img.shields.io/badge/Status-Developer_Preview-orange)
-[![Give it a Star](https://img.shields.io/badge/⭐_Give_it_a_Star-F5C518)](https://github.com/modular-agent/modular-agent-desktop)
 <!-- [![GitHub release](https://img.shields.io/github/v/release/modular-agent/modular-agent-desktop?style=flat)](https://github.com/modular-agent/modular-agent-desktop/releases) -->
 <!-- [![GitHub downloads](https://img.shields.io/github/downloads/modular-agent/modular-agent-desktop/total?style=flat)](https://github.com/modular-agent/modular-agent-desktop/releases) -->
 
@@ -23,7 +22,8 @@
 
 </div>
 
-Modular Agentは、AIワークフローをビジュアルに構築するローカルファーストなデスクトップアプリケーションです。80以上のビルド済みエージェント（LLM、データベース、Webスクレイピング、メッセージングなど）を接続してパイプラインを設計し、ワンクリックでローカル実行できます。クラウド不要。
+Modular Agentは、エージェントが動き続けるAIワークフローをビジュアルに構築するローカルファーストなデスクトップアプリケーションです。
+80以上のビルド済みエージェント（LLM、データベース、Webスクレイピング、メッセージングなど）を接続し、リアルタイムにデータが流れ続けるパイプラインを設計できます。クラウドもDockerも不要。
 
 [English](README.md) | [日本語](README_ja.md)
 
@@ -33,30 +33,24 @@ Modular Agentは、AIワークフローをビジュアルに構築するロー�
 
 ## 特徴
 
-### エディタ
-
-- **ビジュアルワークフローエディタ** — ノードベースのドラッグ＆ドロップでエージェントパイプラインを設計
-- **マルチタブ編集** — 複数のプリセットを同時に編集
-- **Undo/Redo** — すべてのエディタ操作に対応するコマンドパターン履歴
-- **カスタムショートカット** — キー割り当ての変更、Quick Add（Ctrl+1〜5）で素早くエージェント配置
-- **ダークモード** — システム連動のカラースキーム
-
 ### エージェント
 
-- **80以上のビルトインエージェント** — LLM、Web/HTTP、Slack、SQLデータベース、スクリーンキャプチャなど
-- **拡張可能** — Rust crateでエージェントプラグインを追加
-- **ストリームベースのデータフロー** — エージェント間のリアルタイムデータストリーミング
+- ⚡ **ストリームベースのデータフロー** — エージェント間のリアルタイムデータストリーミング
+- 🤖 **80以上のビルトインエージェント** — LLM、Web/HTTP、Slack、SQLデータベース、スクリーンキャプチャなど
+- 🧩 **拡張可能** — Rust crateでエージェントプラグインを追加
 
 ### ランタイム
 
-- **ローカル実行** — すべての処理はローカルマシン上で完結。クラウド不要
-- **システムトレイ** — バックグラウンドでワークフローを実行
-- **クロスプラットフォーム** — Windows、macOS、Linux
+- 🏠 **ローカル実行** — すべての処理はローカルマシン上で完結。クラウド不要
+- 💻 **クロスプラットフォーム** — Windows、macOS、Linux
+- 📦 **組み込み可能** — コアランタイム（[modular-agent-core](https://github.com/modular-agent/modular-agent-core)）は依存関係を最小限に抑えており、さまざまなアプリに組み込んでプリセットを実行できる
 
-### プリセット
+### エディタ
 
-- **プリセット管理** — ワークフロー設定の保存、読み込み、インポート/エクスポート
-- **自動起動** — アプリ起動時に実行するプリセットを設定可能
+- 🎨 **ビジュアルワークフローエディタ** — ノードベースのドラッグ＆ドロップでエージェントパイプラインを設計
+- 💾 **プリセット管理** — ワークフロー設定の保存、読み込み、インポート/エクスポート
+- 🚀 **自動起動** — アプリ起動時に実行するプリセットを設定可能
+- 🔲 **システムトレイ** — バックグラウンドでワークフローを実行
 
 ## はじめに
 
@@ -68,7 +62,7 @@ Modular Agentは、AIワークフローをビジュアルに構築するロー�
 - [Node.js](https://nodejs.org/) 20+
 - [Tauri Prerequisites](https://v2.tauri.app/start/prerequisites/)（プラットフォーム固有の依存関係）
 
-### ビルド・実行
+### ビルド
 
 ```bash
 npm install              # 依存パッケージのインストール
@@ -80,13 +74,15 @@ npm run tauri build      # プロダクションビルド
 - **実行ファイル** - `src-tauri/target/release/modular-agent-desktop.exe`（Windows）/ `modular-agent-desktop`（macOS/Linux）
 - **インストーラー** - `src-tauri/target/release/bundle/msi/*.msi`（Windows）/ `dmg/*.dmg`（macOS）/ `deb/*.deb`（Linux）
 
-### 使い方
+### 実行
 
 1. Modular Agentを起動
 2. プリセットを開くか、新規作成
 3. キャンバス上で右クリック→「Add agent」、またはダブルクリックでエージェント一覧を表示
 4. ポート間をドラッグして接続
 5. 右クリック→「Play」（または `Ctrl+.` / `Cmd+.`）でワークフローを開始
+
+## 技術概要
 
 ### 仕組み
 
@@ -111,6 +107,11 @@ src/                    # Svelteフロントエンド
 src-tauri/src/          # Rustバックエンド
 ```
 
+### 関連プロジェクト
+
+- [modular-agent-core](https://github.com/modular-agent/modular-agent-core) - Modular Agentコアランタイム
+- [tauri-plugin-modular-agent](https://github.com/modular-agent/tauri-plugin-modular-agent) - Tauriプラグイン
+
 ## エージェントプラグイン
 
 以下のエージェントcrateが標準で組み込まれています:
@@ -130,27 +131,22 @@ src-tauri/src/          # Rustバックエンド
 
     ```toml
     [dependencies]
-    modular-agent-xxx = { git = "https://github.com/modular-agent/modular-agent-xxx.git", tag = "v0.1.0" }
+    modular-agent-foo = { git = "https://github.com/modular-agent/modular-agent-foo.git", tag = "v0.1.0" }
     ```
 
 2. `src-tauri/src/lib.rs` でcrateをインポート:
 
     ```rust
     #[allow(unused_imports)]
-    use modular_agent_xxx;
+    use modular_agent_foo;
     ```
 
 3. アプリケーションを再ビルド。
 
-## 関連プロジェクト
-
-- [modular-agent-core](https://github.com/modular-agent/modular-agent-core) - Modular Agentコアランタイム
-- [tauri-plugin-modular-agent](https://github.com/modular-agent/tauri-plugin-modular-agent) - Tauriプラグイン
-
 ## コントリビューション
 
-- [GitHub Issues](https://github.com/modular-agent/modular-agent-desktop/issues) — バグ報告と機能リクエスト
-- PR歓迎 — [CONTRIBUTING.md](CONTRIBUTING.md) を参照（CLAへの署名が必要）
+- ⭐ **スターで応援する** — プロジェクトを広めるのに役立ちます
+- 🤝 PR歓迎 — [CONTRIBUTING.md](CONTRIBUTING.md) を参照（CLAへの署名が必要）
 
 ## ライセンス
 

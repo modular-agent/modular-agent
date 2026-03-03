@@ -9,7 +9,6 @@
 <br>
 
 ![Developer Preview](https://img.shields.io/badge/Status-Developer_Preview-orange)
-[![Give it a Star](https://img.shields.io/badge/⭐_Give_it_a_Star-F5C518)](https://github.com/modular-agent/modular-agent-desktop)
 <!-- [![GitHub release](https://img.shields.io/github/v/release/modular-agent/modular-agent-desktop?style=flat)](https://github.com/modular-agent/modular-agent-desktop/releases) -->
 <!-- [![GitHub downloads](https://img.shields.io/github/downloads/modular-agent/modular-agent-desktop/total?style=flat)](https://github.com/modular-agent/modular-agent-desktop/releases) -->
 
@@ -23,7 +22,7 @@
 
 </div>
 
-Modular Agent is a local-first desktop application for building AI workflows visually. Wire together 80+ pre-built agents — LLMs, databases, web scrapers, messaging — and run pipelines locally with a single click. No cloud required.
+Modular Agent is a local-first desktop application for building AI workflows visually. Wire together 80+ pre-built agents — LLMs, databases, web scrapers, messaging — into pipelines that run continuously, streaming data in real time. No cloud or Docker required.
 
 [English](README.md) | [日本語](README_ja.md)
 
@@ -33,30 +32,24 @@ Modular Agent is a local-first desktop application for building AI workflows vis
 
 ## Features
 
-### Editor
-
-- **Visual Workflow Editor** — Node-based drag-and-drop interface for designing agent pipelines
-- **Multi-Tab Editing** — Work on multiple presets simultaneously
-- **Undo/Redo** — Full command-pattern history for all editor operations
-- **Customizable Shortcuts** — Rebind keys, Quick Add (Ctrl+1–5) for fast agent placement
-- **Dark Mode** — System-aware color scheme
-
 ### Agents
 
-- **80+ Built-in Agents** — LLM, Web/HTTP, Slack, SQL databases, screen capture, and more
-- **Extensible** — Add agent plugins via Rust crates
-- **Stream-Based Data Flow** — Real-time data streaming between agents
+- ⚡ **Stream-Based Data Flow** — Real-time data streaming between agents
+- 🤖 **80+ Built-in Agents** — LLM, Web/HTTP, Slack, SQL databases, screen capture, and more
+- 🧩 **Extensible** — Add agent plugins via Rust crates
 
 ### Runtime
 
-- **Local Execution** — All processing happens on your machine; no cloud dependency
-- **System Tray** — Run workflows in the background
-- **Cross-Platform** — Windows, macOS, Linux
+- 🏠 **Local Execution** — All processing happens on your machine; no cloud dependency
+- 💻 **Cross-Platform** — Windows, macOS, Linux
+- 📦 **Embeddable** — The core runtime ([modular-agent-core](https://github.com/modular-agent/modular-agent-core)) has minimal dependencies and can be embedded into various applications to run presets
 
-### Presets
+### Editor
 
-- **Preset Management** — Save, load, import/export workflow configurations
-- **Auto-Start** — Configure presets to run on app launch
+- 🎨 **Visual Workflow Editor** — Node-based drag-and-drop interface for designing agent pipelines
+- 💾 **Preset Management** — Save, load, import/export workflow configurations
+- 🚀 **Auto-Start** — Configure presets to run on app launch
+- 🔲 **System Tray** — Run workflows in the background
 
 ## Getting Started
 
@@ -68,7 +61,7 @@ Modular Agent is a local-first desktop application for building AI workflows vis
 - [Node.js](https://nodejs.org/) 20+
 - [Tauri Prerequisites](https://v2.tauri.app/start/prerequisites/) (platform-specific dependencies)
 
-### Build & Run
+### Build
 
 ```bash
 npm install              # Install dependencies
@@ -80,13 +73,15 @@ After building, either copy the executable or run the installer:
 - **Executable** - `src-tauri/target/release/modular-agent-desktop.exe` (Windows) / `modular-agent-desktop` (macOS/Linux)
 - **Installer** - `src-tauri/target/release/bundle/msi/*.msi` (Windows) / `dmg/*.dmg` (macOS) / `deb/*.deb` (Linux)
 
-### Usage
+### Run
 
 1. Launch Modular Agent
 2. Open or create a new preset
 3. Right-click on the canvas and select "Add agent", or double-click to open the agent list
 4. Connect agents by dragging between ports
 5. Right-click and select "Play" (or press `Ctrl+.` / `Cmd+.`) to start the workflow
+
+## Technical Overview
 
 ### How It Works
 
@@ -111,6 +106,11 @@ src/                    # Svelte frontend
 src-tauri/src/          # Rust backend
 ```
 
+### Related Projects
+
+- [modular-agent-core](https://github.com/modular-agent/modular-agent-core) - Modular Agent core runtime
+- [tauri-plugin-modular-agent](https://github.com/modular-agent/tauri-plugin-modular-agent) - Tauri plugin
+
 ## Agent Plugins
 
 The following agent crates are included by default:
@@ -130,27 +130,22 @@ The following agent crates are included by default:
 
     ```toml
     [dependencies]
-    modular-agent-xxx = { git = "https://github.com/modular-agent/modular-agent-xxx.git", tag = "v0.1.0" }
+    modular-agent-foo = { git = "https://github.com/modular-agent/modular-agent-foo.git", tag = "v0.1.0" }
     ```
 
 2. Import the crate in `src-tauri/src/lib.rs`:
 
     ```rust
     #[allow(unused_imports)]
-    use modular_agent_xxx;
+    use modular_agent_foo;
     ```
 
 3. Rebuild the application.
 
-## Related Projects
-
-- [modular-agent-core](https://github.com/modular-agent/modular-agent-core) - Modular Agent core runtime
-- [tauri-plugin-modular-agent](https://github.com/modular-agent/tauri-plugin-modular-agent) - Tauri plugin
-
 ## Contributing
 
-- [GitHub Issues](https://github.com/modular-agent/modular-agent-desktop/issues) — Bug reports and feature requests
-- Pull requests welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) (CLA signature required)
+- ⭐ **Star to show support** — Helps the project reach more people
+- 🤝 Pull requests welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) (CLA signature required)
 
 ## License
 
