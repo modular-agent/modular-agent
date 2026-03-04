@@ -5,6 +5,7 @@
 
 <img alt="modular-agent-core" height="40" src="https://raw.githubusercontent.com/modular-agent/modular-agent-core/main/doc/images/modular_agent_core_title.svg">
 <br/>
+<br/>
 
 ![Language](https://img.shields.io/github/languages/top/modular-agent/modular-agent-core)
 [![Crates.io](https://img.shields.io/crates/v/modular-agent-core.svg)](https://crates.io/crates/modular-agent-core)
