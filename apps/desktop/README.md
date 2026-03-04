@@ -1,11 +1,10 @@
 <div align="center">
 
 <img alt="logo" width="150" height="150" src="src-tauri/icons/Square150x150Logo.png">
-
 <br>
 
-<img alt="Modular Agent" width="353" height="50" src="doc/images/modular_agent_title.png">
-
+<img alt="Modular Agent" width="343" height="60" src="doc/images/modular_agent_title.svg">
+<br>
 <br>
 
 ![Developer Preview](https://img.shields.io/badge/Status-Developer_Preview-orange)

@@ -4,7 +4,7 @@
 
 <br>
 
-<img alt="Modular Agent" width="353" height="50" src="doc/images/modular_agent_title.png">
+<img alt="Modular Agent" width="343" height="60" src="doc/images/modular_agent_title.svg">
 
 <br>
 
