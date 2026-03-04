@@ -5,6 +5,8 @@ description.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
+repository.workspace = true
+readme = "../README.md"
 
 [dependencies]
 async-trait = "0.1"
