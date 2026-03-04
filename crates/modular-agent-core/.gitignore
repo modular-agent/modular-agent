@@ -2,3 +2,4 @@
 lcov.info
 Cargo.lock
 __pycache__/
+scripts/
