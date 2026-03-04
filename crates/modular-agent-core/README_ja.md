@@ -1,9 +1,9 @@
 <div align="center">
 
 <img alt="Modular Agent" width="150" height="150" src="https://raw.githubusercontent.com/modular-agent/modular-agent-core/main/doc/images/Square150x150Logo.png">
+<br/>
 
 <img alt="modular-agent-core" height="40" src="https://raw.githubusercontent.com/modular-agent/modular-agent-core/main/doc/images/modular_agent_core_title.svg">
-
 <br/>
 
 ![Language](https://img.shields.io/github/languages/top/modular-agent/modular-agent-core)
