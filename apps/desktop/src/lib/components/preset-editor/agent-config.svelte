@@ -165,7 +165,6 @@
 {#snippet display(name: string, v: any, configSpec: AgentConfigSpec | undefined)}
   {#if configSpec?.hide_title !== true}
     <h3 class="flex-none">{configSpec?.title || name}</h3>
-    <p class="flex-none text-xs text-gray-500">{configSpec?.description}</p>
   {/if}
   {@const ty = inferTypeForDisplay(configSpec, v)}
   {#if v instanceof Array && ty !== "object" && ty !== "message"}
@@ -349,9 +348,6 @@
       />
     {/if}
   </div>
-  {#if configSpec?.description}
-    <p class="flex-none text-xs text-gray-500">{configSpec?.description}</p>
-  {/if}
   {#if !connected}
     {@const renderInput = inputRenderers[ty ?? "default"] ?? inputRenderers.default}
     {@render renderInput(name, value)}
