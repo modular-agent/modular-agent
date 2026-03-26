@@ -8,10 +8,7 @@ use modular_agent_core::{
 };
 
 use crate::chat::ChatAgent;
-
-const CONFIG_CLAUDE_API_KEY: &str = "claude_api_key";
-const CONFIG_CLAUDE_API_BASE: &str = "claude_api_base";
-const DEFAULT_CLAUDE_API_BASE: &str = "https://api.anthropic.com";
+use crate::provider::{CONFIG_CLAUDE_API_BASE, CONFIG_CLAUDE_API_KEY, DEFAULT_CLAUDE_API_BASE};
 const ANTHROPIC_VERSION: &str = "2023-06-01";
 
 // ============================================================================

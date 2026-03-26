@@ -1,5 +1,18 @@
 use modular_agent_core::AgentError;
 
+// Global config keys
+pub(crate) const CONFIG_CLAUDE_API_KEY: &str = "claude_api_key";
+pub(crate) const CONFIG_CLAUDE_API_BASE: &str = "claude_api_base";
+pub(crate) const CONFIG_OPENAI_API_KEY: &str = "openai_api_key";
+pub(crate) const CONFIG_OPENAI_API_BASE: &str = "openai_api_base";
+pub(crate) const CONFIG_OLLAMA_API_KEY: &str = "ollama_api_key";
+pub(crate) const CONFIG_OLLAMA_URL: &str = "ollama_url";
+
+// Default values
+pub(crate) const DEFAULT_CLAUDE_API_BASE: &str = "https://api.anthropic.com";
+pub(crate) const DEFAULT_OPENAI_API_BASE: &str = "https://api.openai.com/v1";
+pub(crate) const DEFAULT_OLLAMA_URL: &str = "http://localhost:11434";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProviderKind {
     OpenAI,
@@ -116,12 +129,10 @@ mod tests {
     fn test_parse_empty_model() {
         let result = ModelIdentifier::parse("");
         assert!(result.is_err());
-        assert!(
-            result
-                .unwrap_err()
-                .to_string()
-                .contains("Model name cannot be empty")
-        );
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Model name cannot be empty"));
     }
 
     #[test]
@@ -165,12 +176,10 @@ mod tests {
     fn test_parse_no_prefix_error() {
         let result = ModelIdentifier::parse("gpt-5-nano");
         assert!(result.is_err());
-        assert!(
-            result
-                .unwrap_err()
-                .to_string()
-                .contains("requires a provider prefix")
-        );
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("requires a provider prefix"));
     }
 
     #[cfg(feature = "claude")]

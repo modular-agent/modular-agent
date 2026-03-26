@@ -8,12 +8,9 @@ use modular_agent_core::{
 };
 
 use crate::chat::ChatAgent;
+use crate::provider::{CONFIG_OLLAMA_API_KEY, CONFIG_OLLAMA_URL, DEFAULT_OLLAMA_URL};
 
 use im::vector;
-
-const CONFIG_OLLAMA_API_KEY: &str = "ollama_api_key";
-const CONFIG_OLLAMA_URL: &str = "ollama_url";
-const DEFAULT_OLLAMA_URL: &str = "http://localhost:11434";
 
 // ============================================================================
 // Client management

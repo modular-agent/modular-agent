@@ -8,10 +8,7 @@ use modular_agent_core::{
 };
 
 use crate::chat::ChatAgent;
-
-const CONFIG_OPENAI_API_KEY: &str = "openai_api_key";
-const CONFIG_OPENAI_API_BASE: &str = "openai_api_base";
-const DEFAULT_OPENAI_API_BASE: &str = "https://api.openai.com/v1";
+use crate::provider::{CONFIG_OPENAI_API_BASE, CONFIG_OPENAI_API_KEY, DEFAULT_OPENAI_API_BASE};
 
 // ============================================================================
 // Client management

@@ -3,7 +3,11 @@ use modular_agent_core::{
     AsAgent, Message, ModularAgent, ToolCall, ToolCallFunction, async_trait, modular_agent,
 };
 
-use crate::provider::{ModelIdentifier, ProviderKind};
+use crate::provider::{
+    ModelIdentifier, ProviderKind, CONFIG_CLAUDE_API_BASE, CONFIG_CLAUDE_API_KEY,
+    CONFIG_OLLAMA_API_KEY, CONFIG_OLLAMA_URL, CONFIG_OPENAI_API_BASE, CONFIG_OPENAI_API_KEY,
+    DEFAULT_CLAUDE_API_BASE, DEFAULT_OLLAMA_URL, DEFAULT_OPENAI_API_BASE,
+};
 
 #[cfg(feature = "openai")]
 use crate::openai_client;
@@ -22,12 +26,6 @@ const PORT_MESSAGE: &str = "message";
 const PORT_RESPONSE: &str = "response";
 
 const CONFIG_MODEL: &str = "model";
-const CONFIG_CLAUDE_API_KEY: &str = "claude_api_key";
-const CONFIG_CLAUDE_API_BASE: &str = "claude_api_base";
-const CONFIG_OPENAI_API_KEY: &str = "openai_api_key";
-const CONFIG_OPENAI_API_BASE: &str = "openai_api_base";
-const CONFIG_OLLAMA_API_KEY: &str = "ollama_api_key";
-const CONFIG_OLLAMA_URL: &str = "ollama_url";
 const CONFIG_MAX_TOKENS: &str = "max_tokens";
 const CONFIG_OPTIONS: &str = "options";
 const CONFIG_STREAM: &str = "stream";
@@ -36,9 +34,6 @@ const CONFIG_TOOLS: &str = "tools";
 const CONFIG_TOP_P: &str = "top_p";
 
 const DEFAULT_CONFIG_MODEL: &str = "openai/gpt-5-nano";
-const DEFAULT_CLAUDE_API_BASE: &str = "https://api.anthropic.com";
-const DEFAULT_OPENAI_API_BASE: &str = "https://api.openai.com/v1";
-const DEFAULT_OLLAMA_URL: &str = "http://localhost:11434";
 
 /// Chat Agent that routes to different LLM providers based on model prefix.
 ///
