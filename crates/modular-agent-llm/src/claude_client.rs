@@ -1,5 +1,3 @@
-#![cfg(feature = "claude")]
-
 use std::sync::{Arc, Mutex};
 
 use modular_agent_core::tool;

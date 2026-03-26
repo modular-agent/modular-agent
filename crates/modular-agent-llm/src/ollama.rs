@@ -1,5 +1,3 @@
-#![cfg(feature = "ollama")]
-
 use modular_agent_core::{
     Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
     ModularAgent, async_trait, modular_agent,

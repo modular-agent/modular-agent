@@ -1,5 +1,3 @@
-#![cfg(feature = "openai")]
-
 use im::vector;
 use modular_agent_core::{
     Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AgentValueMap,

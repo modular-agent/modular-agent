@@ -652,12 +652,8 @@ impl ChatAgent {
                 }
                 for call in &res.message.tool_calls {
                     let mut parameters = call.function.arguments.clone();
-                    if parameters.is_object() {
-                        if let Some(obj) = parameters.as_object() {
-                            if let Some(props) = obj.get("properties") {
-                                parameters = props.clone();
-                            }
-                        }
+                    if let Some(props) = parameters.as_object().and_then(|obj| obj.get("properties")) {
+                        parameters = props.clone();
                     }
 
                     let tool_call = ToolCall {

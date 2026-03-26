@@ -343,7 +343,7 @@ impl AsAgent for MessagesAgent {
             .clone();
 
         let mut messages = self.configs()?.get_array_or_default(CONFIG_MESSAGES);
-        if messages.len() > 0 && first_in_message_id.is_some() {
+        if !messages.is_empty() && first_in_message_id.is_some() {
             let last_message = messages.last().unwrap().as_message().ok_or_else(|| {
                 AgentError::InvalidValue("Stored messages contain non-Message values".to_string())
             })?;
