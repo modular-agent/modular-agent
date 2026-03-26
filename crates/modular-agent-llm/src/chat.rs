@@ -26,6 +26,7 @@ const CONFIG_CLAUDE_API_KEY: &str = "claude_api_key";
 const CONFIG_CLAUDE_API_BASE: &str = "claude_api_base";
 const CONFIG_OPENAI_API_KEY: &str = "openai_api_key";
 const CONFIG_OPENAI_API_BASE: &str = "openai_api_base";
+const CONFIG_OLLAMA_API_KEY: &str = "ollama_api_key";
 const CONFIG_OLLAMA_URL: &str = "ollama_url";
 const CONFIG_MAX_TOKENS: &str = "max_tokens";
 const CONFIG_OPTIONS: &str = "options";
@@ -62,6 +63,7 @@ const DEFAULT_OLLAMA_URL: &str = "http://localhost:11434";
     string_global_config(name = CONFIG_CLAUDE_API_BASE, title = "Claude API Base URL", default = DEFAULT_CLAUDE_API_BASE),
     custom_global_config(name = CONFIG_OPENAI_API_KEY, type_ = "password", default = AgentValue::string(""), title = "OpenAI API Key"),
     string_global_config(name = CONFIG_OPENAI_API_BASE, title = "OpenAI API Base URL", default = DEFAULT_OPENAI_API_BASE),
+    custom_global_config(name = CONFIG_OLLAMA_API_KEY, type_ = "password", default = AgentValue::string(""), title = "Ollama API Key"),
     string_global_config(name = CONFIG_OLLAMA_URL, title = "Ollama URL", default = DEFAULT_OLLAMA_URL),
     hint(width = 2, height = 2),
 )]

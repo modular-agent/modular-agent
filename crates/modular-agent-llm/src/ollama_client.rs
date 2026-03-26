@@ -11,6 +11,7 @@ use crate::chat::ChatAgent;
 
 use im::vector;
 
+const CONFIG_OLLAMA_API_KEY: &str = "ollama_api_key";
 const CONFIG_OLLAMA_URL: &str = "ollama_url";
 const DEFAULT_OLLAMA_URL: &str = "http://localhost:11434";
 
@@ -22,6 +23,7 @@ const DEFAULT_OLLAMA_URL: &str = "http://localhost:11434";
 pub(crate) struct OllamaClient {
     http: reqwest::Client,
     api_base: String,
+    api_key: String,
 }
 
 pub struct OllamaManager {
@@ -51,6 +53,18 @@ impl OllamaManager {
         DEFAULT_OLLAMA_URL.to_string()
     }
 
+    pub fn get_ollama_api_key(ma: &ModularAgent) -> String {
+        ma.get_global_configs(ChatAgent::DEF_NAME)
+            .and_then(|cfg| cfg.get_string(CONFIG_OLLAMA_API_KEY).ok())
+            .filter(|key| !key.is_empty())
+            .or_else(|| {
+                std::env::var("OLLAMA_API_KEY")
+                    .ok()
+                    .filter(|k| !k.is_empty())
+            })
+            .unwrap_or_default()
+    }
+
     pub fn get_client(&self, ma: &ModularAgent) -> Result<OllamaClient, AgentError> {
         let mut client_guard = self.client.lock().unwrap();
 
@@ -59,9 +73,11 @@ impl OllamaManager {
         }
 
         let api_base = Self::get_ollama_url(ma);
+        let api_key = Self::get_ollama_api_key(ma);
         let new_client = OllamaClient {
             http: reqwest::Client::new(),
             api_base,
+            api_key,
         };
         *client_guard = Some(new_client.clone());
 
@@ -100,6 +116,14 @@ impl OllamaClient {
         format!("{}/api/show", self.api_base.trim_end_matches('/'))
     }
 
+    fn apply_auth(&self, builder: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
+        if !self.api_key.is_empty() {
+            builder.header("Authorization", format!("Bearer {}", self.api_key))
+        } else {
+            builder
+        }
+    }
+
     /// POST JSON and parse typed response (non-streaming).
     pub(crate) async fn post_json<T: serde::de::DeserializeOwned>(
         &self,
@@ -107,8 +131,7 @@ impl OllamaClient {
         body: &serde_json::Value,
     ) -> Result<T, AgentError> {
         let resp = self
-            .http
-            .post(url)
+            .apply_auth(self.http.post(url))
             .header("content-type", "application/json")
             .json(body)
             .send()
@@ -129,8 +152,7 @@ impl OllamaClient {
     /// GET and parse typed response.
     async fn get_json<T: serde::de::DeserializeOwned>(&self, url: &str) -> Result<T, AgentError> {
         let resp = self
-            .http
-            .get(url)
+            .apply_auth(self.http.get(url))
             .send()
             .await
             .map_err(|e| AgentError::IoError(format!("Ollama request error: {}", e)))?;
@@ -161,8 +183,7 @@ impl OllamaClient {
         use futures::StreamExt;
 
         let resp = self
-            .http
-            .post(url)
+            .apply_auth(self.http.post(url))
             .header("content-type", "application/json")
             .json(body)
             .send()
@@ -282,6 +303,7 @@ where
 fn map_http_error(status: u16, body: &str) -> AgentError {
     match status {
         400 => AgentError::InvalidValue(format!("Ollama Bad Request: {}", body)),
+        401 => AgentError::InvalidConfig(format!("Ollama authentication failed: {}", body)),
         404 => AgentError::InvalidConfig(format!("Ollama model not found: {}", body)),
         _ => AgentError::IoError(format!("Ollama API Error ({}): {}", status, body)),
     }
@@ -762,6 +784,10 @@ mod tests {
         assert!(matches!(
             map_http_error(400, "bad"),
             AgentError::InvalidValue(_)
+        ));
+        assert!(matches!(
+            map_http_error(401, "unauthorized"),
+            AgentError::InvalidConfig(_)
         ));
         assert!(matches!(
             map_http_error(404, "not found"),
