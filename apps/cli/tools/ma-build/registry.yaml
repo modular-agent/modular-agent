@@ -1,0 +1,122 @@
+agents:
+  - name: modular-agent-std
+    description: Standard agents (timer, template, file, etc.)
+    git_url: https://github.com/modular-agent/modular-agent-std.git
+    available_features:
+      - image
+      - yaml
+    default_features:
+      - image
+      - yaml
+    is_default: true
+
+  - name: modular-agent-llm
+    description: LLM agents (OpenAI, Anthropic, Google, etc.)
+    git_url: https://github.com/modular-agent/modular-agent-llm.git
+    available_features:
+      - image
+      - claude
+      - ollama
+      - openai
+    default_features:
+      - image
+      - claude
+      - ollama
+      - openai
+    conflicts:
+      - with: modular-agent-duckdb
+        reason: CRT mismatch on Windows
+        platform: windows
+    is_default: true
+
+  - name: modular-agent-web
+    description: Web/HTTP, scraping, YouTube agents
+    git_url: https://github.com/modular-agent/modular-agent-web.git
+    available_features:
+      - default-tls
+      - rustls-tls
+      - fetch-url
+      - html-scraper
+      - html-to-markdown
+      - yt-transcript
+    default_features:
+      - rustls-tls
+      - fetch-url
+      - html-scraper
+      - html-to-markdown
+      - yt-transcript
+    is_default: true
+
+  - name: modular-agent-slack
+    description: Slack messaging agents
+    git_url: https://github.com/modular-agent/modular-agent-slack.git
+    is_default: true
+
+  - name: modular-agent-sqlx
+    description: SQL database agents (PostgreSQL, MySQL, SQLite)
+    git_url: https://github.com/modular-agent/modular-agent-sqlx.git
+    conflicts:
+      - with: modular-agent-cozodb
+        reason: sqlite3 native link conflict
+    is_default: true
+
+  - name: modular-agent-mongodb
+    description: MongoDB CRUD agents
+    git_url: https://github.com/modular-agent/modular-agent-mongodb.git
+
+  - name: modular-agent-lifelog
+    description: Screen capture, window tracking agents
+    git_url: https://github.com/modular-agent/modular-agent-lifelog.git
+    available_features:
+      - application
+      - screen
+    default_features:
+      - application
+      - screen
+
+  - name: modular-agent-surrealdb
+    description: SurrealDB graph database agents
+    git_url: https://github.com/modular-agent/modular-agent-surrealdb.git
+
+  - name: modular-agent-lancedb
+    description: LanceDB vector database agents
+    git_url: https://github.com/modular-agent/modular-agent-lancedb.git
+
+  - name: modular-agent-audio
+    description: Audio capture/transcription agents
+    git_url: https://github.com/modular-agent/modular-agent-audio.git
+    available_features:
+      - capture
+      - transcribe
+      - transcribe-cuda
+      - transcribe-vulkan
+      - transcribe-metal
+      - transcribe-coreml
+
+  - name: modular-agent-voicevox
+    description: VOICEVOX text-to-speech agents
+    git_url: https://github.com/modular-agent/modular-agent-voicevox.git
+    available_features:
+      - default-tls
+      - rustls
+    default_features:
+      - rustls
+
+  - name: modular-agent-monty
+    description: Monty agents
+    git_url: https://github.com/modular-agent/modular-agent-monty.git
+
+  - name: modular-agent-cozodb
+    description: CozoDB logic database agents
+    git_url: https://github.com/modular-agent/modular-agent-cozodb.git
+    conflicts:
+      - with: modular-agent-sqlx
+        reason: sqlite3 native link conflict
+
+  - name: modular-agent-duckdb
+    description: DuckDB analytics agents
+    git_url: https://github.com/modular-agent/modular-agent-duckdb.git
+    conflicts:
+      - with: modular-agent-llm
+        reason: CRT mismatch on Windows
+        platform: windows

@@ -17,33 +17,9 @@ env_logger = "0.11"
 log = "0.4"
 serde_json = "1"
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros", "io-util", "io-std", "signal", "sync"] }
-
 modular-agent-core = "0.23.0"
-
-# Agent crates (all optional, enabled via features)
-modular-agent-std = { path = "../modular-agent-std", optional = true }
-modular-agent-llm = { path = "../modular-agent-llm", optional = true }
-modular-agent-web = { path = "../modular-agent-web", optional = true }
-modular-agent-slack = { path = "../modular-agent-slack", optional = true }
-modular-agent-sqlx = { path = "../modular-agent-sqlx", optional = true }
-modular-agent-mongodb = { path = "../modular-agent-mongodb", optional = true }
-modular-agent-lifelog = { path = "../modular-agent-lifelog", optional = true }
-modular-agent-surrealdb = { path = "../modular-agent-surrealdb", optional = true }
-modular-agent-lancedb = { path = "../modular-agent-lancedb", optional = true }
-
-[features]
-default = ["std", "llm", "web", "slack", "sqlx"]
-std = ["modular-agent-std"]
-llm = ["modular-agent-llm"]
-web = ["modular-agent-web"]
-slack = ["modular-agent-slack"]
-sqlx = ["modular-agent-sqlx"]
-mongodb = ["modular-agent-mongodb"]
-lifelog = ["modular-agent-lifelog"]
-surrealdb = ["modular-agent-surrealdb"]
-lancedb = ["modular-agent-lancedb"]
-all = ["std", "llm", "web", "slack", "sqlx", "mongodb", "lifelog",
-       "surrealdb", "lancedb"]
-
-[patch.crates-io]
-modular-agent-core = { path = "../modular-agent-core/modular-agent-core" }
+modular-agent-std = { git = "https://github.com/modular-agent/modular-agent-std.git" }
+modular-agent-llm = { git = "https://github.com/modular-agent/modular-agent-llm.git" }
+modular-agent-web = { git = "https://github.com/modular-agent/modular-agent-web.git" }
+modular-agent-slack = { git = "https://github.com/modular-agent/modular-agent-slack.git" }
+modular-agent-sqlx = { git = "https://github.com/modular-agent/modular-agent-sqlx.git" }

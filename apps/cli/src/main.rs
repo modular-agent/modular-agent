@@ -4,44 +4,7 @@ use std::path::Path;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::select;
 
-// Feature-gated imports to trigger inventory registration.
-// Each `use` pulls in the crate, causing #[modular_agent] registrations to be linked.
-
-#[cfg(feature = "std")]
-#[allow(unused_imports)]
-use modular_agent_std;
-
-#[cfg(feature = "llm")]
-#[allow(unused_imports)]
-use modular_agent_llm;
-
-#[cfg(feature = "web")]
-#[allow(unused_imports)]
-use modular_agent_web;
-
-#[cfg(feature = "slack")]
-#[allow(unused_imports)]
-use modular_agent_slack;
-
-#[cfg(feature = "sqlx")]
-#[allow(unused_imports)]
-use modular_agent_sqlx;
-
-#[cfg(feature = "mongodb")]
-#[allow(unused_imports)]
-use modular_agent_mongodb;
-
-#[cfg(feature = "lifelog")]
-#[allow(unused_imports)]
-use modular_agent_lifelog;
-
-#[cfg(feature = "surrealdb")]
-#[allow(unused_imports)]
-use modular_agent_surrealdb;
-
-#[cfg(feature = "lancedb")]
-#[allow(unused_imports)]
-use modular_agent_lancedb;
+mod agents;
 
 #[derive(Parser)]
 #[command(name = "ma")]

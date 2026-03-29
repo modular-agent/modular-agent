@@ -1,0 +1,21 @@
+[package]
+name = "ma-build"
+version = "0.1.0"
+description = "TUI wizard for building modular-agent-cli with custom agent selections"
+authors = ["Akira Ishino <akira@lumilab.jp>"]
+edition = "2024"
+license = "Apache-2.0 OR MIT"
+publish = false
+
+[[bin]]
+name = "ma-build"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+console = "0.15"
+dialoguer = "0.11"
+serde = { version = "1", features = ["derive"] }
+serde_yaml = "0.9"
+toml = "0.8"
+toml_edit = "0.22"

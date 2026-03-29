@@ -5,12 +5,22 @@ CLI runner for [Modular Agent](https://github.com/modular-agent) presets. Loads 
 ## Build
 
 ```bash
-# Default features (std, llm, web, slack, sqlx)
 cargo build
-
-# Specific features
-cargo build --no-default-features --features "std,llm"
 ```
+
+### Custom Build with ma-build
+
+`ma-build` is a TUI wizard that lets you select which agent crates to include, configure their sources (local path or Git repository), and build a custom `ma` binary.
+
+```bash
+# Run the wizard
+cd tools/ma-build && cargo run
+
+# Build in release mode (skip build-mode prompt)
+cargo run -- --release
+```
+
+The wizard generates `Cargo.toml` dependencies and `src/agents.rs` based on your selections. Configuration is saved to `ma-build.toml` for subsequent rebuilds.
 
 ## Usage
 
