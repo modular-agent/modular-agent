@@ -62,22 +62,40 @@ cat data.txt | ma ./preset.json | jq '.result'
 
 Input is read line-by-line from stdin. String output is printed as-is; other types are printed as JSON.
 
-## Features
+## Official Agents
 
-All agent crates are optional, controlled by Cargo features.
+| Package | Description | Default |
+| --- | --- | --- |
+| [modular-agent-audio](https://github.com/modular-agent/modular-agent-audio) | Audio capture/transcription | |
+| [modular-agent-cozodb](https://github.com/modular-agent/modular-agent-cozodb) | CozoDB logic database | |
+| [modular-agent-duckdb](https://github.com/modular-agent/modular-agent-duckdb) | DuckDB analytics | |
+| [modular-agent-lancedb](https://github.com/modular-agent/modular-agent-lancedb) | LanceDB vector database | |
+| [modular-agent-lifelog](https://github.com/modular-agent/modular-agent-lifelog) | Screen capture, window tracking | |
+| [modular-agent-llm](https://github.com/modular-agent/modular-agent-llm) | LLM (OpenAI, Anthropic, Google, etc.) | Yes |
+| [modular-agent-mongodb](https://github.com/modular-agent/modular-agent-mongodb) | MongoDB CRUD | |
+| [modular-agent-monty](https://github.com/modular-agent/modular-agent-monty) | Monty | |
+| [modular-agent-slack](https://github.com/modular-agent/modular-agent-slack) | Slack messaging | Yes |
+| [modular-agent-sqlx](https://github.com/modular-agent/modular-agent-sqlx) | SQL database (PostgreSQL, MySQL, SQLite) | Yes |
+| [modular-agent-std](https://github.com/modular-agent/modular-agent-std) | Standard (timer, template, file, etc.) | Yes |
+| [modular-agent-surrealdb](https://github.com/modular-agent/modular-agent-surrealdb) | SurrealDB graph database | |
+| [modular-agent-voicevox](https://github.com/modular-agent/modular-agent-voicevox) | VOICEVOX text-to-speech | |
+| [modular-agent-web](https://github.com/modular-agent/modular-agent-web) | Web/HTTP, scraping, YouTube | Yes |
 
-| Feature | Crate | Default | Description |
-| --- | --- | --- | --- |
-| `std` | modular-agent-std | Yes | Array, string, file, time, template agents |
-| `llm` | modular-agent-llm | Yes | OpenAI, Ollama chat/completion/embeddings |
-| `web` | modular-agent-web | Yes | HTTP fetch, HTML scraper, YouTube transcript |
-| `slack` | modular-agent-slack | Yes | Slack messaging |
-| `sqlx` | modular-agent-sqlx | Yes | SQLite, MySQL, PostgreSQL |
-| `mongodb` | modular-agent-mongodb | No | MongoDB CRUD operations |
-| `lifelog` | modular-agent-lifelog | No | Screen capture, window tracking |
-| `surrealdb` | modular-agent-surrealdb | No | SurrealDB graph database |
-| `lancedb` | modular-agent-lancedb | No | Vector database |
-| `all` | All of the above | No | |
+Agent selection and features are managed by the `ma-build` wizard.
+
+## Development
+
+### Adding Custom Agents
+
+To add a custom agent package, edit `tools/ma-build/registry.yaml`:
+
+```yaml
+  - name: my-custom
+    description: My custom agents
+    git_url: https://github.com/your-repo/my-custom.git
+```
+
+Then re-run `ma-build` to include it in the build.
 
 ## License
 
