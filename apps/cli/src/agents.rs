@@ -4,16 +4,16 @@
 //! to be linked via the `inventory` crate.
 
 #[allow(unused_imports)]
-use modular_agent_std;
-
-#[allow(unused_imports)]
 use modular_agent_llm;
-
-#[allow(unused_imports)]
-use modular_agent_web;
 
 #[allow(unused_imports)]
 use modular_agent_slack;
 
 #[allow(unused_imports)]
 use modular_agent_sqlx;
+
+#[allow(unused_imports)]
+use modular_agent_std;
+
+#[allow(unused_imports)]
+use modular_agent_web;

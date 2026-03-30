@@ -17,9 +17,9 @@ env_logger = "0.11"
 log = "0.4"
 serde_json = "1"
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros", "io-util", "io-std", "signal", "sync"] }
-modular-agent-core = "0.23.0"
-modular-agent-std = { git = "https://github.com/modular-agent/modular-agent-std.git" }
+modular-agent-core = "0.23.1"
 modular-agent-llm = { git = "https://github.com/modular-agent/modular-agent-llm.git" }
-modular-agent-web = { git = "https://github.com/modular-agent/modular-agent-web.git" }
 modular-agent-slack = { git = "https://github.com/modular-agent/modular-agent-slack.git" }
 modular-agent-sqlx = { git = "https://github.com/modular-agent/modular-agent-sqlx.git" }
+modular-agent-std = { git = "https://github.com/modular-agent/modular-agent-std.git" }
+modular-agent-web = { git = "https://github.com/modular-agent/modular-agent-web.git" }

@@ -3,8 +3,21 @@ use std::path::Path;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct BuildConfig {
-    pub core: AgentSource,
+    pub core: DepConfig,
+    /// Desktop-only field. CLI ignores this but accepts it for config compatibility.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plugin: Option<DepConfig>,
     pub agents: Vec<AgentEntry>,
+}
+
+/// A dependency with both a crates.io default version and the actual source.
+/// When source is Path or Git, the default version is used in `[dependencies]`
+/// while the actual source goes into `[patch.crates-io]`.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct DepConfig {
+    #[serde(default)]
+    pub default_version: String,
+    pub source: AgentSource,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]

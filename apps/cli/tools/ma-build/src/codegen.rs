@@ -1,9 +1,9 @@
 use std::fs;
 use std::path::Path;
 
-use toml_edit::{Array, DocumentMut, InlineTable, Item, Value};
+use toml_edit::{Array, DocumentMut, InlineTable, Item, Table, Value};
 
-use crate::config::{AgentSource, BuildConfig};
+use crate::config::{AgentSource, BuildConfig, DepConfig};
 
 /// Generate `src/agents.rs` with imports for each agent.
 pub fn generate_agents_rs(config: &BuildConfig, cli_root: &Path) -> Result<(), String> {
@@ -48,8 +48,8 @@ pub fn update_cargo_toml(config: &BuildConfig, cli_root: &Path) -> Result<(), St
     // Remove [features] section (no longer needed; ma-build manages deps directly)
     doc.remove("features");
 
-    // Remove [patch] section unconditionally (no longer needed)
-    doc.remove("patch");
+    // Update [patch.crates-io] for core when using Path or Git
+    update_patch_section(&mut doc, config);
 
     fs::write(&cargo_path, doc.to_string()).map_err(|e| format!("Failed to write Cargo.toml: {e}"))
 }
@@ -103,10 +103,11 @@ fn update_dependencies(doc: &mut DocumentMut, config: &BuildConfig) -> Result<()
         deps.remove(&key);
     }
 
-    // Add core
+    // Add core — always as version string in [dependencies].
+    // Path/Git override goes into [patch.crates-io].
     deps.insert(
         "modular-agent-core",
-        Item::Value(source_to_toml_value(&config.core)),
+        Item::Value(dep_config_to_dep_value(&config.core)),
     );
 
     // Add selected agents
@@ -146,11 +147,37 @@ fn source_to_inline_table(source: &AgentSource) -> InlineTable {
     dep
 }
 
-fn source_to_toml_value(source: &AgentSource) -> Value {
-    match source {
+/// For core: always emit a version string in [dependencies].
+/// When the source is Path or Git, the actual override goes into [patch.crates-io].
+fn dep_config_to_dep_value(dep_config: &DepConfig) -> Value {
+    match &dep_config.source {
         AgentSource::Registry { version } => Value::from(version.as_str()),
-        _ => Value::InlineTable(source_to_inline_table(source)),
+        _ => Value::from(dep_config.default_version.as_str()),
     }
+}
+
+/// Build [patch.crates-io] section for core when it uses Path or Git.
+fn update_patch_section(doc: &mut DocumentMut, config: &BuildConfig) {
+    // Remove existing [patch] section first
+    doc.remove("patch");
+
+    if matches!(config.core.source, AgentSource::Registry { .. }) {
+        return;
+    }
+
+    // Build [patch.crates-io] table
+    let mut crates_io_table = Table::new();
+    crates_io_table.insert(
+        "modular-agent-core",
+        Item::Value(Value::InlineTable(source_to_inline_table(
+            &config.core.source,
+        ))),
+    );
+
+    let mut patch_table = Table::new();
+    patch_table.set_implicit(true);
+    patch_table.insert("crates-io", Item::Table(crates_io_table));
+    doc.insert("patch", Item::Table(patch_table));
 }
 
 /// Remove old inline feature-gated agent imports from main.rs.
@@ -273,7 +300,7 @@ pub fn validate_paths(config: &BuildConfig, cli_root: &Path) -> Vec<String> {
     let mut warnings = Vec::new();
 
     // Check core path
-    if let AgentSource::Path { path } = &config.core {
+    if let AgentSource::Path { path } = &config.core.source {
         let full_path = cli_root.join(path);
         if !full_path.join("Cargo.toml").exists() {
             warnings.push(format!(

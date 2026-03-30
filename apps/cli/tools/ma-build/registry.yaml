@@ -1,3 +1,9 @@
+# Paths are relative to CLI crate root
+core:
+  default_path: "../modular-agent-core/modular-agent-core"
+  git_url: "https://github.com/modular-agent/modular-agent-core.git"
+  default_version: "0.23.1"
+
 agents:
   - name: modular-agent-audio
     description: Audio capture/transcription agents

@@ -3,18 +3,19 @@ use std::path::Path;
 use console::Style;
 use dialoguer::{Confirm, Input, MultiSelect, Select};
 
-use crate::config::{AgentEntry, AgentSource, BuildConfig};
-use crate::registry::{self, KnownAgent};
-
-const CORE_DEFAULT_PATH: &str = "../modular-agent-core/modular-agent-core";
-const CORE_DEFAULT_GIT: &str = "https://github.com/modular-agent/modular-agent-core.git";
-const CORE_DEFAULT_VERSION: &str = "0.23.0";
+use crate::config::{AgentEntry, AgentSource, BuildConfig, DepConfig};
+use crate::registry::{self, KnownAgent, Registry};
 
 pub fn run_wizard(
     existing_config: Option<&BuildConfig>,
     cli_root: &Path,
-    known_agents: &[KnownAgent],
+    registry: &Registry,
 ) -> Result<BuildConfig, String> {
+    let Registry {
+        ref core,
+        ref agents,
+    } = *registry;
+    let known_agents = agents.as_slice();
     let bold = Style::new().bold();
 
     println!();
@@ -25,7 +26,13 @@ pub fn run_wizard(
     println!();
 
     // Step 1: Core crate config
-    let core = prompt_core_config(cli_root)?;
+    let core_dep = prompt_dep_config(
+        "modular-agent-core",
+        &core.default_path,
+        &core.git_url,
+        &core.default_version,
+        cli_root,
+    )?;
 
     // Step 2: Agent selection
     let selected_indices = select_agents(existing_config, known_agents)?;
@@ -77,7 +84,11 @@ pub fn run_wizard(
         agents.push(prompt_custom_agent()?);
     }
 
-    let config = BuildConfig { core, agents };
+    let config = BuildConfig {
+        core: core_dep,
+        plugin: None,
+        agents,
+    };
 
     // Step 6: Confirmation
     print_summary(&config);
@@ -283,58 +294,68 @@ fn prompt_custom_agent() -> Result<AgentEntry, String> {
     })
 }
 
-fn prompt_core_config(cli_root: &Path) -> Result<AgentSource, String> {
-    let local_exists = cli_root.join(CORE_DEFAULT_PATH).join("Cargo.toml").exists();
+fn prompt_dep_config(
+    label: &str,
+    default_path: &str,
+    default_git: &str,
+    default_version: &str,
+    root: &Path,
+) -> Result<DepConfig, String> {
+    let local_exists = root.join(default_path).join("Cargo.toml").exists();
 
-    if local_exists {
+    let source = if local_exists {
         let items = &["Local path", "Git repository", "crates.io (version)"];
         let selection = Select::new()
-            .with_prompt("[core] Source (local found)")
+            .with_prompt(format!("[{label}] Source (local found)"))
             .items(items)
             .default(0)
             .interact()
             .map_err(|e| e.to_string())?;
         match selection {
-            0 => Ok(AgentSource::Path {
-                path: CORE_DEFAULT_PATH.to_string(),
-            }),
-            1 => Ok(AgentSource::Git {
-                url: CORE_DEFAULT_GIT.to_string(),
+            0 => AgentSource::Path {
+                path: default_path.to_string(),
+            },
+            1 => AgentSource::Git {
+                url: default_git.to_string(),
                 tag: None,
-            }),
+            },
             _ => {
                 let version: String = Input::new()
-                    .with_prompt("[core] crates.io version")
-                    .default(CORE_DEFAULT_VERSION.to_string())
+                    .with_prompt(format!("[{label}] crates.io version"))
+                    .default(default_version.to_string())
                     .interact_text()
                     .map_err(|e| e.to_string())?;
-                Ok(AgentSource::Registry { version })
+                AgentSource::Registry { version }
             }
         }
     } else {
-        println!("  [core] not found locally");
-        let items = &["Git repository", "crates.io (version)"];
+        let items = &["crates.io (version)", "Git repository"];
         let selection = Select::new()
-            .with_prompt("[core] Source")
+            .with_prompt(format!("[{label}] Source"))
             .items(items)
             .default(0)
             .interact()
             .map_err(|e| e.to_string())?;
         match selection {
-            0 => Ok(AgentSource::Git {
-                url: CORE_DEFAULT_GIT.to_string(),
-                tag: None,
-            }),
-            _ => {
+            0 => {
                 let version: String = Input::new()
-                    .with_prompt("[core] crates.io version")
-                    .default(CORE_DEFAULT_VERSION.to_string())
+                    .with_prompt(format!("[{label}] crates.io version"))
+                    .default(default_version.to_string())
                     .interact_text()
                     .map_err(|e| e.to_string())?;
-                Ok(AgentSource::Registry { version })
+                AgentSource::Registry { version }
             }
+            _ => AgentSource::Git {
+                url: default_git.to_string(),
+                tag: None,
+            },
         }
-    }
+    };
+
+    Ok(DepConfig {
+        default_version: default_version.to_string(),
+        source,
+    })
 }
 
 fn check_conflicts(entries: &[AgentEntry], known_agents: &[KnownAgent]) -> Result<(), String> {
@@ -390,7 +411,10 @@ fn print_summary(config: &BuildConfig) {
     println!();
     println!("{}", bold.apply_to("=== Build Configuration Summary ==="));
     println!();
-    println!("  Core: {}", format_source(&config.core));
+    println!(
+        "  modular-agent-core: {}",
+        format_source(&config.core.source)
+    );
     println!();
     println!("  Agents:");
     for agent in &config.agents {

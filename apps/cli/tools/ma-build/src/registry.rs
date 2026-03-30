@@ -5,8 +5,17 @@ use serde::Deserialize;
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct Registry {
-    agents: Vec<KnownAgent>,
+pub struct DepDefaults {
+    pub default_path: String,
+    pub git_url: String,
+    pub default_version: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Registry {
+    pub core: DepDefaults,
+    pub agents: Vec<KnownAgent>,
 }
 
 #[derive(Deserialize)]
@@ -33,12 +42,12 @@ pub struct Conflict {
     pub platform: Option<String>,
 }
 
-pub fn load(path: &Path) -> Result<Vec<KnownAgent>, String> {
+pub fn load(path: &Path) -> Result<Registry, String> {
     let content = std::fs::read_to_string(path)
         .map_err(|e| format!("Failed to read registry file {}: {}", path.display(), e))?;
     let registry: Registry = serde_yaml::from_str(&content)
         .map_err(|e| format!("Failed to parse registry file {}: {}", path.display(), e))?;
-    Ok(registry.agents)
+    Ok(registry)
 }
 
 impl KnownAgent {
