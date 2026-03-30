@@ -73,6 +73,14 @@ agents:
         platform: windows
     is_default: true
 
+  - name: modular-agent-mattermost
+    description: Mattermost messaging agents
+    git_url: https://github.com/modular-agent/modular-agent-mattermost.git
+    available_features:
+      - image
+    default_features:
+      - image
+
   - name: modular-agent-mongodb
     description: MongoDB CRUD agents
     git_url: https://github.com/modular-agent/modular-agent-mongodb.git
