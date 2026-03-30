@@ -1,14 +1,14 @@
 [package]
-name = "ma-build"
+name = "ma-config"
 version = "0.1.0"
-description = "TUI wizard for building modular-agent-cli with custom agent selections"
+description = "TUI wizard for configuring modular-agent-cli agent selections"
 authors = ["Akira Ishino <akira@lumilab.jp>"]
 edition = "2024"
 license = "Apache-2.0 OR MIT"
 publish = false
 
 [[bin]]
-name = "ma-build"
+name = "ma-config"
 path = "src/main.rs"
 
 [dependencies]

@@ -8,26 +8,23 @@ CLI runner for [Modular Agent](https://github.com/modular-agent) presets. Loads 
 cargo build
 ```
 
-### Custom Build with ma-build
+### Custom Configuration with ma-config
 
-`ma-build` is a TUI wizard that lets you select which agent crates to include, configure their sources (local path or Git repository), and build a custom `ma` binary.
+`ma-config` is a TUI wizard that lets you select which agent crates to include and configure their sources (local path or Git repository).
 
 ```bash
 # Run the wizard
-cd tools/ma-build && cargo run
+cd tools/ma-config && cargo run
 
 # Use a specific config file
 cargo run -- server.toml
-
-# Build in release mode (skip build-mode prompt)
-cargo run -- --release
 ```
 
-The wizard generates `Cargo.toml` dependencies and `src/agents.rs` based on your selections. Configuration is saved to `ma-build.toml` for subsequent rebuilds.
+The wizard generates `Cargo.toml` dependencies and `src/agents.rs` based on your selections. Configuration is saved to `ma-config.toml` for subsequent runs.
 
 ## Usage
 
-```
+```bash
 ma <preset> [-i <input>] [-o <output>] [-v]
 ```
 
@@ -81,13 +78,13 @@ Input is read line-by-line from stdin. String output is printed as-is; other typ
 | [modular-agent-voicevox](https://github.com/modular-agent/modular-agent-voicevox) | VOICEVOX text-to-speech | |
 | [modular-agent-web](https://github.com/modular-agent/modular-agent-web) | Web/HTTP, scraping, YouTube | Yes |
 
-Agent selection and features are managed by the `ma-build` wizard.
+Agent selection and features are managed by the `ma-config` wizard.
 
 ## Development
 
 ### Adding Custom Agents
 
-To add a custom agent package, edit `tools/ma-build/registry.yaml`:
+To add a custom agent package, edit `tools/ma-config/registry.yaml`:
 
 ```yaml
   - name: my-custom
@@ -95,7 +92,7 @@ To add a custom agent package, edit `tools/ma-build/registry.yaml`:
     git_url: https://github.com/your-repo/my-custom.git
 ```
 
-Then re-run `ma-build` to include it in the build.
+Then re-run `ma-config` to include it in the configuration.
 
 ## License
 

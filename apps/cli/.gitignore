@@ -1,5 +1,5 @@
 /target
 lcov.info
-ma-build.toml
+ma-config.toml
 *.bak
-tools/ma-build/target
+tools/ma-config/target

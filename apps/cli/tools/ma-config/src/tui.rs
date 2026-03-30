@@ -21,7 +21,7 @@ pub fn run_wizard(
     println!();
     println!(
         "{}",
-        bold.apply_to("=== ma-build: Modular Agent CLI Builder ===")
+        bold.apply_to("=== ma-config: Modular Agent CLI Configurator ===")
     );
     println!();
 
@@ -409,7 +409,7 @@ fn print_summary(config: &BuildConfig) {
     let dim = Style::new().dim();
 
     println!();
-    println!("{}", bold.apply_to("=== Build Configuration Summary ==="));
+    println!("{}", bold.apply_to("=== Configuration Summary ==="));
     println!();
     println!(
         "  modular-agent-core: {}",
