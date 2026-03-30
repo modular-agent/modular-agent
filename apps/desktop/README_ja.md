@@ -122,25 +122,20 @@ src-tauri/src/          # Rustバックエンド
 | [modular-agent-web](https://github.com/modular-agent/modular-agent-web) | HTTP、スクレイピング、YouTube |
 | [modular-agent-slack](https://github.com/modular-agent/modular-agent-slack) | Slackメッセージング |
 | [modular-agent-sqlx](https://github.com/modular-agent/modular-agent-sqlx) | SQLite、MySQL、PostgreSQL |
+| [modular-agent-audio](https://github.com/modular-agent/modular-agent-audio) | 音声キャプチャ・文字起こし |
+| [modular-agent-voicevox](https://github.com/modular-agent/modular-agent-voicevox) | VOICEVOX テキスト読み上げ |
 | [modular-agent-lifelog](https://github.com/modular-agent/modular-agent-lifelog) | スクリーンキャプチャ、ウィンドウ追跡 |
+| [modular-agent-monty](https://github.com/modular-agent/modular-agent-monty) | Montyエージェント |
 
-### 新しいエージェントプラグインの追加
+### カスタムビルド
 
-1. `src-tauri/Cargo.toml` に依存関係を追加:
+**ma-config** TUIウィザードで、ビルドに含めるエージェントパッケージを選択できます:
 
-    ```toml
-    [dependencies]
-    modular-agent-foo = { git = "https://github.com/modular-agent/modular-agent-foo.git", tag = "v0.1.0" }
-    ```
+```bash
+cd tools/ma-config && cargo run
+```
 
-2. `src-tauri/src/lib.rs` でcrateをインポート:
-
-    ```rust
-    #[allow(unused_imports)]
-    use modular_agent_foo;
-    ```
-
-3. アプリケーションを再ビルド。
+ウィザードではエージェントの選択、ソースの設定（ローカルパス、Git、crates.io）、クレートごとのfeature選択が可能です。設定は `ma-config.toml` に保存され、次回以降のリビルドに再利用できます。ウィザード完了後、`npm run tauri dev` または `npm run tauri build` でビルドしてください。
 
 ## コントリビューション
 

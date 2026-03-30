@@ -121,25 +121,20 @@ The following agent crates are included by default:
 | [modular-agent-web](https://github.com/modular-agent/modular-agent-web) | HTTP, scraping, YouTube |
 | [modular-agent-slack](https://github.com/modular-agent/modular-agent-slack) | Slack messaging |
 | [modular-agent-sqlx](https://github.com/modular-agent/modular-agent-sqlx) | SQLite, MySQL, PostgreSQL |
+| [modular-agent-audio](https://github.com/modular-agent/modular-agent-audio) | Audio capture/transcription |
+| [modular-agent-voicevox](https://github.com/modular-agent/modular-agent-voicevox) | VOICEVOX text-to-speech |
 | [modular-agent-lifelog](https://github.com/modular-agent/modular-agent-lifelog) | Screen capture, window tracking |
+| [modular-agent-monty](https://github.com/modular-agent/modular-agent-monty) | Monty agents |
 
-### Adding a New Agent Plugin
+### Custom Build
 
-1. Add the dependency to `src-tauri/Cargo.toml`:
+Use the **ma-config** TUI wizard to select which agent packages to include:
 
-    ```toml
-    [dependencies]
-    modular-agent-foo = { git = "https://github.com/modular-agent/modular-agent-foo.git", tag = "v0.1.0" }
-    ```
+```bash
+cd tools/ma-config && cargo run
+```
 
-2. Import the crate in `src-tauri/src/lib.rs`:
-
-    ```rust
-    #[allow(unused_imports)]
-    use modular_agent_foo;
-    ```
-
-3. Rebuild the application.
+The wizard lets you choose agents, configure sources (local path, Git, or crates.io), and select per-crate features. Configuration is saved to `ma-config.toml` for future rebuilds. After the wizard completes, build with `npm run tauri dev` or `npm run tauri build`.
 
 ## Contributing
 

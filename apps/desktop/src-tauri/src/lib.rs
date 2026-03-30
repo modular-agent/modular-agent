@@ -4,23 +4,7 @@ use tauri::{AppHandle, Manager};
 use tauri_plugin_log::{Target, TargetKind};
 use tauri_plugin_window_state::{AppHandleExt, StateFlags};
 
-#[allow(unused_imports)]
-use modular_agent_lifelog;
-
-#[allow(unused_imports)]
-use modular_agent_llm;
-
-#[allow(unused_imports)]
-use modular_agent_slack;
-
-#[allow(unused_imports)]
-use modular_agent_std;
-
-#[allow(unused_imports)]
-use modular_agent_sqlx;
-
-#[allow(unused_imports)]
-use modular_agent_web;
+mod agents;
 
 mod modular_agent_desktop;
 
