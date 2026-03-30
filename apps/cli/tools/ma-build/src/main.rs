@@ -16,7 +16,7 @@ use config::BuildConfig;
 #[command(about = "TUI wizard for building modular-agent-cli with custom agent selections")]
 struct Args {
     /// Path to the build config file
-    #[arg(long, default_value = "ma-build.toml")]
+    #[arg(default_value = "ma-build.toml")]
     config: String,
 
     /// Path to the agent registry YAML file
@@ -126,14 +126,14 @@ fn run(args: Args) -> Result<(), String> {
         let release = if args.release {
             true
         } else {
-            let items = &["Debug", "Release"];
+            let items = &["Release", "Debug"];
             let selection = dialoguer::Select::new()
                 .with_prompt("Build mode")
                 .items(items)
                 .default(0)
                 .interact()
                 .map_err(|e| e.to_string())?;
-            selection == 1
+            selection == 0
         };
         let success = run_cargo_build(&cli_root, release)?;
         if success {

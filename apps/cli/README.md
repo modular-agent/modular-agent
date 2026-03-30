@@ -16,6 +16,9 @@ cargo build
 # Run the wizard
 cd tools/ma-build && cargo run
 
+# Use a specific config file
+cargo run -- server.toml
+
 # Build in release mode (skip build-mode prompt)
 cargo run -- --release
 ```
