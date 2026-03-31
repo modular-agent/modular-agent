@@ -1,6 +1,4 @@
 <script lang="ts">
-  import { message } from "@tauri-apps/plugin-dialog";
-
   import { onMount } from "svelte";
 
   import { resetMode, setMode } from "mode-watcher";
@@ -15,7 +13,6 @@
   import { Switch } from "$lib/components/ui/switch/index.js";
   import { CORE_DEFAULTS } from "$lib/core-settings-store.svelte";
   import { DEFAULT_HOTKEYS, type HotkeyDefinition } from "$lib/hotkeys";
-  import { exitApp } from "$lib/modular_agent";
   import type { CoreSettings } from "$lib/types";
 
   interface Props {
@@ -121,8 +118,13 @@
     await autoSaveShortcutKeys();
   }
 
-  function resetGlobalShortcutKey() {
+  async function autoSaveGlobalShortcut() {
+    await autoSave({ shortcut_keys });
+  }
+
+  async function resetGlobalShortcutKey() {
     shortcut_keys["global_shortcut"] = globalShortcutDef.defaultKey;
+    await autoSaveGlobalShortcut();
   }
 
   async function setColorMode(mode: string) {
@@ -137,16 +139,6 @@
       resetMode();
     }
     await autoSave({ color_mode });
-  }
-
-  async function saveGlobalShortcut() {
-    await setCoreSettings({ shortcut_keys });
-    if (shortcut_keys["global_shortcut"] !== initialGlobalShortcut) {
-      await message("Global Shortcut の変更を適用するにはアプリの再起動が必要です。");
-      await exitApp();
-    } else {
-      toast.success("Settings saved");
-    }
   }
 
   function blurOnEnter(e: KeyboardEvent) {
@@ -260,7 +252,6 @@
       </Field>
 
       <div class="font-semibold mt-4">Global Shortcut</div>
-      <p class="text-sm text-muted-foreground">Requires app restart to apply.</p>
 
       <Field orientation="vertical" class="gap-1">
         <div class="flex items-center gap-2">
@@ -271,6 +262,7 @@
             oninput={(e: Event) => {
               shortcut_keys["global_shortcut"] = (e.target as HTMLInputElement).value;
             }}
+            onchange={() => autoSaveGlobalShortcut()}
             onkeydown={blurOnEnter}
             class="max-w-[200px] h-8 text-sm"
             placeholder="(disabled)"
@@ -285,9 +277,11 @@
             Reset
           </Button>
         </div>
-        <Field orientation="responsive" class="mt-2">
-          <Button type="button" onclick={saveGlobalShortcut} variant="outline">Save</Button>
-        </Field>
+        {#if shortcut_keys["global_shortcut"] !== initialGlobalShortcut}
+          <p class="text-sm text-amber-600 dark:text-amber-400">
+            Restart required to apply the new global shortcut.
+          </p>
+        {/if}
       </Field>
 
       {#each Object.entries(hotkeyGroups) as [group, defs]}
