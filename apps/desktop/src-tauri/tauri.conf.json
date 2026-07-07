@@ -25,7 +25,7 @@
     "active": true,
     "targets": [
       "deb",
-      "msi",
+      "nsis",
       "dmg"
     ],
     "icon": [
