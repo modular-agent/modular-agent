@@ -187,10 +187,11 @@ impl AsAgent for StringLengthSplitAgent {
     ) -> Result<(), AgentError> {
         let config = self.configs()?;
 
-        let n = config.get_integer_or_default(CONFIG_LEN) as usize;
+        let n = config.get_integer_or_default(CONFIG_LEN);
         if n <= 0 {
             return Err(AgentError::InvalidConfig("n must be greater than 0".into()));
         }
+        let n = n as usize;
 
         let overlap = config.get_integer_or_default(CONFIG_OVERLAP) as usize;
         if overlap >= n {
