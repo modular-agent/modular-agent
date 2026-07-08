@@ -140,7 +140,7 @@ cd tools/ma-config && cargo run
 ## コントリビューション
 
 - ⭐ **スターで応援する** — プロジェクトを広めるのに役立ちます
-- 🤝 PR歓迎 — [CONTRIBUTING.md](CONTRIBUTING.md) を参照（CLAへの署名が必要）
+- 🤝 PR歓迎 — [CONTRIBUTING.md](CONTRIBUTING.md) を参照
 
 ## ライセンス
 

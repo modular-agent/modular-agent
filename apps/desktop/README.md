@@ -139,7 +139,7 @@ The wizard lets you choose agents, configure sources (local path, Git, or crates
 ## Contributing
 
 - ⭐ **Star to show support** — Helps the project reach more people
-- 🤝 Pull requests welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) (CLA signature required)
+- 🤝 Pull requests welcome — see [CONTRIBUTING.md](CONTRIBUTING.md)
 
 ## License
 
