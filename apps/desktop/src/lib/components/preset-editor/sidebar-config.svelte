@@ -8,6 +8,7 @@
   import { Switch } from "$lib/components/ui/switch/index.js";
   import { Textarea } from "$lib/components/ui/textarea/index.js";
 
+  import { getConfigWidget } from "./custom-ui/registry";
   import MarkdownInput from "./markdown-input.svelte";
 
   type Props = {
@@ -200,7 +201,12 @@
     <p class="flex-none text-xs text-gray-500">{configSpec?.description}</p>
   {/if}
   {#if !connected}
-    {@const renderInput = inputRenderers[ty ?? "default"] ?? inputRenderers.default}
-    {@render renderInput(name, value)}
+    {@const Widget = configSpec && getConfigWidget(ty)}
+    {#if Widget && configSpec}
+      <Widget configKey={name} {value} {configSpec} readonly={false} {updateConfig} />
+    {:else}
+      {@const renderInput = inputRenderers[ty ?? "default"] ?? inputRenderers.default}
+      {@render renderInput(name, value)}
+    {/if}
   {/if}
 {/if}

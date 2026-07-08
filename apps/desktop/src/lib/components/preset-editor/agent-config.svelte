@@ -11,6 +11,7 @@
   import { Textarea } from "$lib/components/ui/textarea/index.js";
   import { isSafeImageSrc, renderMarkdown, sanitizeHtml } from "$lib/sanitize";
 
+  import { getConfigWidget } from "./custom-ui/registry";
   import MarkdownInput from "./markdown-input.svelte";
   import Messages from "./messages.svelte";
 
@@ -334,7 +335,12 @@
 {#if configSpec?.hidden === true || configSpec?.detail === true}
   <!-- Hidden or detail-only, do not render anything -->
 {:else if configSpec?.readonly === true}
-  {@render display(name, value, configSpec)}
+  {@const Widget = getConfigWidget(configSpec.type)}
+  {#if Widget}
+    <Widget configKey={name} {value} {configSpec} readonly={true} {updateConfig} />
+  {:else}
+    {@render display(name, value, configSpec)}
+  {/if}
 {:else}
   {@const ty = configSpec?.type}
   <div class="flex-none relative flex items-center">
@@ -349,8 +355,13 @@
     {/if}
   </div>
   {#if !connected}
-    {@const renderInput = inputRenderers[ty ?? "default"] ?? inputRenderers.default}
-    {@render renderInput(name, value)}
+    {@const Widget = configSpec && getConfigWidget(ty)}
+    {#if Widget && configSpec}
+      <Widget configKey={name} {value} {configSpec} readonly={false} {updateConfig} />
+    {:else}
+      {@const renderInput = inputRenderers[ty ?? "default"] ?? inputRenderers.default}
+      {@render renderInput(name, value)}
+    {/if}
   {/if}
 {/if}
 

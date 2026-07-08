@@ -18,6 +18,7 @@
 
   import AgentConfig from "./agent-config.svelte";
   import { useEditor } from "./context.svelte";
+  import { getNodeView } from "./custom-ui/registry";
   import NodeBase from "./node-base.svelte";
 
   type Props = NodeProps & {
@@ -106,6 +107,10 @@
     errorMessages = [];
   }
 
+  // Custom NodeView registered for this agent type (replaces the default
+  // config iteration in the contents area when present).
+  const NodeView = $derived(getNodeView(data.def_name));
+
   let hide_title = $derived(agentDef?.hide_title ?? false);
   let editTitle = $state(false);
   let titleColor = $derived(resolveNodeColor(data, agentDef));
@@ -185,7 +190,18 @@
 {/snippet}
 
 {#snippet contents()}
-  {#if data.configs}
+  {#if NodeView}
+    <NodeView
+      nodeId={id}
+      defName={data.def_name}
+      configs={data.configs ?? {}}
+      configSpecs={data.config_specs ?? {}}
+      {updateConfig}
+      {agentEvent}
+      {connectedConfigs}
+      running={editor.running}
+    />
+  {:else if data.configs}
     <form class="grow flex flex-col gap-1 pl-7 pr-7 pb-4">
       {#each Object.entries(data.configs) as [key, value]}
         <AgentConfig
@@ -200,4 +216,13 @@
   {/if}
 {/snippet}
 
-<NodeBase {id} {data} {agentDef} {inputCount} portColors={data.port_colors} {title} {contents} {...props} />
+<NodeBase
+  {id}
+  {data}
+  {agentDef}
+  {inputCount}
+  portColors={data.port_colors}
+  {title}
+  {contents}
+  {...props}
+/>
