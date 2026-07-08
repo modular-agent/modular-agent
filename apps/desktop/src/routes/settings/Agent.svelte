@@ -19,11 +19,10 @@
 
   const { agentName, agentConfigs, agentDef }: Props = $props();
 
-  // configs is $derived — bind:value mutates the underlying agentConfigs object in-place.
-  // Do not change this to clone/spread, or auto-save will read stale data.
-  let configs = $derived.by(() => {
-    let ac = agentConfigs;
-    return ac;
+  // Keep configs state-backed so bind targets are reactive and auto-save reads current values.
+  let configs = $state<AgentConfigs>({});
+  $effect(() => {
+    configs = agentConfigs;
   });
   let ad = $derived.by(() => {
     let ad = agentDef;

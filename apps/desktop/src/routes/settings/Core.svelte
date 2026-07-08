@@ -32,7 +32,7 @@
   let snap_enabled = $state(true);
   let snap_grid_size = $state(CORE_DEFAULTS.snapGridSize);
 
-  let initialGlobalShortcut = "";
+  let initialGlobalShortcut = $state("");
 
   // Group hotkey definitions by group (exclude "Global" — rendered separately)
   const hotkeyGroups = $derived(
