@@ -3,6 +3,7 @@
 pub mod array;
 pub mod data;
 pub mod display;
+pub mod example;
 pub mod file;
 pub mod input;
 pub mod sequence;
