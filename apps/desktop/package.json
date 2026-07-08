@@ -1,6 +1,6 @@
 {
   "name": "modular-agent-desktop",
-  "version": "0.15.2",
+  "version": "0.16.0",
   "description": "",
   "type": "module",
   "private": true,
@@ -12,8 +12,7 @@
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
     "format": "prettier --write src",
     "tauri": "tauri",
-    "test": "vitest",
-    "release": "commit-and-tag-version"
+    "test": "vitest"
   },
   "dependencies": {
     "@modular-agent/widget-kit": "file:./widget-kit",
@@ -49,7 +48,6 @@
     "@types/node": "^26.1.0",
     "bits-ui": "^2.18.1",
     "clsx": "^2.1.1",
-    "commit-and-tag-version": "^12.7.3",
     "prettier": "^3.9.4",
     "prettier-plugin-svelte": "^3.5.2",
     "smol-toml": "^1.4.2",
