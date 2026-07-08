@@ -10,7 +10,7 @@ describe("inferTypeForDisplay", () => {
   });
 
   it("infers primitives and nullish values", () => {
-    expect(inferTypeForDisplay({} as AgentConfigSpec, null)).toBe("object");
+    expect(inferTypeForDisplay({} as AgentConfigSpec, null)).toBe("null");
     expect(inferTypeForDisplay({} as AgentConfigSpec, true)).toBe("boolean");
     expect(inferTypeForDisplay({} as AgentConfigSpec, 3)).toBe("integer");
     expect(inferTypeForDisplay({} as AgentConfigSpec, 3.14)).toBe("number");
