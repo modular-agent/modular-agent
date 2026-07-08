@@ -1,12 +1,12 @@
 use std::collections::VecDeque;
 use std::time::Duration;
 
-use modular_agent_core::{
-    ModularAgent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
-    modular_agent, async_trait,
-};
 use im::{Vector, vector};
 use mini_moka::sync::Cache;
+use modular_agent_core::{
+    AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent, ModularAgent,
+    async_trait, modular_agent,
+};
 
 const CATEGORY: &str = "Std/Array";
 
@@ -125,7 +125,8 @@ impl AsAgent for ArrayLengthAgent {
         } else {
             1
         };
-        self.output(ctx, PORT_VALUE, AgentValue::integer(length)).await
+        self.output(ctx, PORT_VALUE, AgentValue::integer(length))
+            .await
     }
 }
 
@@ -198,12 +199,15 @@ impl AsAgent for ArrayRestAgent {
     ) -> Result<(), AgentError> {
         if let Some(mut arr) = value.into_array() {
             if arr.is_empty() {
-                return self.output(ctx, PORT_ARRAY, AgentValue::array_default()).await;
+                return self
+                    .output(ctx, PORT_ARRAY, AgentValue::array_default())
+                    .await;
             }
             arr.pop_front();
             self.output(ctx, PORT_ARRAY, AgentValue::array(arr)).await
         } else {
-            self.output(ctx, PORT_ARRAY, AgentValue::array_default()).await
+            self.output(ctx, PORT_ARRAY, AgentValue::array_default())
+                .await
         }
     }
 }
@@ -349,7 +353,9 @@ impl AsAgent for ArrayTakeAgent {
             .unwrap_or(0);
         if n <= 0 {
             // output empty array
-            return self.output(ctx, PORT_ARRAY, AgentValue::array_default()).await;
+            return self
+                .output(ctx, PORT_ARRAY, AgentValue::array_default())
+                .await;
         }
         let n = n as usize;
 
@@ -359,9 +365,11 @@ impl AsAgent for ArrayTakeAgent {
                 return self.output(ctx, PORT_ARRAY, value).await;
             }
             let taken_items = arr.take(n);
-            self.output(ctx, PORT_ARRAY, AgentValue::array(taken_items)).await
+            self.output(ctx, PORT_ARRAY, AgentValue::array(taken_items))
+                .await
         } else {
-            self.output(ctx, PORT_ARRAY, AgentValue::array(vector![value])).await
+            self.output(ctx, PORT_ARRAY, AgentValue::array(vector![value]))
+                .await
         }
     }
 }
@@ -514,7 +522,8 @@ impl AsAgent for CollectAgent {
 
             // Pop one map frame and output
             let next_ctx = ctx.pop_map_frame()?;
-            self.output(next_ctx, PORT_ARRAY, AgentValue::array(arr)).await
+            self.output(next_ctx, PORT_ARRAY, AgentValue::array(arr))
+                .await
         } else {
             // Not yet complete, keep waiting
             Ok(())
@@ -558,7 +567,7 @@ impl CollectAgent {
     outputs = [PORT_ARRAY],
     integer_config(name = CONFIG_N, default = 2),
     boolean_config(name = CONFIG_USE_CTX),
-    integer_config(name = CONFIG_TTL_SEC, default = 60), 
+    integer_config(name = CONFIG_TTL_SEC, default = 60),
     integer_config(name = CONFIG_CAPACITY, default = 1000),
 )]
 struct ZipToArrayAgent {
@@ -702,10 +711,13 @@ impl AsAgent for ZipToArrayAgent {
             let ctx_key = ctx.ctx_key()?;
 
             // Get from cache (or create new if not present)
-            let mut entry = self.ctx_buffers.get(&ctx_key).unwrap_or_else(|| PendingZip {
-                values: vec![None; self.n],
-                count: 0,
-            });
+            let mut entry = self
+                .ctx_buffers
+                .get(&ctx_key)
+                .unwrap_or_else(|| PendingZip {
+                    values: vec![None; self.n],
+                    count: 0,
+                });
 
             // Update
             if entry.values[idx].is_none() {
@@ -718,10 +730,8 @@ impl AsAgent for ZipToArrayAgent {
                 // All inputs collected, remove from cache (invalidate)
                 self.ctx_buffers.invalidate(&ctx_key);
 
-                let arr: Vector<AgentValue> = entry.values
-                    .into_iter()
-                    .map(|v| v.unwrap())
-                    .collect();
+                let arr: Vector<AgentValue> =
+                    entry.values.into_iter().map(|v| v.unwrap()).collect();
 
                 return self.output(ctx, PORT_ARRAY, AgentValue::array(arr)).await;
             }
@@ -734,7 +744,8 @@ impl AsAgent for ZipToArrayAgent {
 
         // Check if all queues have data
         if self.queues.iter().all(|q| !q.is_empty()) {
-            let arr: Vector<AgentValue> = self.queues
+            let arr: Vector<AgentValue> = self
+                .queues
                 .iter_mut()
                 .map(|q| q.pop_front().unwrap())
                 .collect();

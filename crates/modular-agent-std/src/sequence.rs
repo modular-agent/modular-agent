@@ -1,11 +1,11 @@
 use std::collections::VecDeque;
 use std::time::Duration;
 
-use modular_agent_core::{
-    ModularAgent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
-    modular_agent, async_trait,
-};
 use mini_moka::sync::Cache;
+use modular_agent_core::{
+    AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent, ModularAgent,
+    async_trait, modular_agent,
+};
 
 const CONFIG_TTL_SEC: &str = "ttl_sec";
 const CONFIG_CAPACITY: &str = "capacity";
@@ -95,7 +95,7 @@ impl AsAgent for SequenceAgent {
     outputs = [PORT_OUT1, PORT_OUT2],
     integer_config(name = CONFIG_N, default = 2),
     boolean_config(name = CONFIG_USE_CTX),
-    integer_config(name = CONFIG_TTL_SEC, default = 60), 
+    integer_config(name = CONFIG_TTL_SEC, default = 60),
     integer_config(name = CONFIG_CAPACITY, default = 1000),
     hint(color=2),
 )]
@@ -103,7 +103,7 @@ struct SyncAgent {
     data: AgentData,
     n: usize,
     use_ctx: bool,
-        ttl_sec: u64,
+    ttl_sec: u64,
     capacity: u64,
 
     // Optimization: Pre-generate and store output port names ("out1", "out2"...)
@@ -123,8 +123,12 @@ struct PendingSync {
 }
 
 impl SyncAgent {
-    fn update_spec(spec: &mut AgentSpec) -> Result<(usize, bool, u64, u64, Vec<String>), AgentError> {
-        let n = spec.configs.as_ref()
+    fn update_spec(
+        spec: &mut AgentSpec,
+    ) -> Result<(usize, bool, u64, u64, Vec<String>), AgentError> {
+        let n = spec
+            .configs
+            .as_ref()
             .map(|cfg| cfg.get_integer_or(CONFIG_N, 2))
             .unwrap_or(2) as usize;
         let n = if n < 1 { 1 } else { n };
@@ -234,7 +238,10 @@ impl AsAgent for SyncAgent {
             .filter(|&i| i >= 1 && i <= self.n)
             .map(|i| i - 1)
         else {
-            return Err(AgentError::InvalidValue(format!("Invalid input port: {}", port)));
+            return Err(AgentError::InvalidValue(format!(
+                "Invalid input port: {}",
+                port
+            )));
         };
 
         // Context Mode
@@ -242,10 +249,13 @@ impl AsAgent for SyncAgent {
             let ctx_key = ctx.ctx_key()?;
 
             // Get from cache or create new
-            let mut entry = self.ctx_buffers.get(&ctx_key).unwrap_or_else(|| PendingSync {
-                values: vec![None; self.n],
-                count: 0,
-            });
+            let mut entry = self
+                .ctx_buffers
+                .get(&ctx_key)
+                .unwrap_or_else(|| PendingSync {
+                    values: vec![None; self.n],
+                    count: 0,
+                });
 
             if entry.values[idx].is_none() {
                 entry.count += 1;
@@ -271,7 +281,8 @@ impl AsAgent for SyncAgent {
 
         // Check if all queues have data
         if self.queues.iter().all(|q| !q.is_empty()) {
-            let ready_values: Vec<AgentValue> = self.queues
+            let ready_values: Vec<AgentValue> = self
+                .queues
                 .iter_mut()
                 .map(|q| q.pop_front().unwrap())
                 .collect();
