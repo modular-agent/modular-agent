@@ -4,9 +4,9 @@ use modular_agent_core::{
 };
 
 use crate::provider::{
-    ModelIdentifier, ProviderKind, CONFIG_CLAUDE_API_BASE, CONFIG_CLAUDE_API_KEY,
-    CONFIG_OLLAMA_API_KEY, CONFIG_OLLAMA_URL, CONFIG_OPENAI_API_BASE, CONFIG_OPENAI_API_KEY,
-    DEFAULT_CLAUDE_API_BASE, DEFAULT_OLLAMA_URL, DEFAULT_OPENAI_API_BASE,
+    CONFIG_CLAUDE_API_BASE, CONFIG_CLAUDE_API_KEY, CONFIG_OLLAMA_API_KEY, CONFIG_OLLAMA_URL,
+    CONFIG_OPENAI_API_BASE, CONFIG_OPENAI_API_KEY, DEFAULT_CLAUDE_API_BASE, DEFAULT_OLLAMA_URL,
+    DEFAULT_OPENAI_API_BASE, ModelIdentifier, ProviderKind,
 };
 
 #[cfg(feature = "openai")]
@@ -252,6 +252,9 @@ impl ChatAgent {
 
             let mut message = Message::assistant("".to_string());
             message.id = Some(id.clone());
+            // Partial emits carry streaming=true so downstream agents (e.g. tool
+            // execution) act only on the final message.
+            message.streaming = true;
             let mut content = String::new();
             let mut thinking = String::new();
             let mut tool_calls: Vec<ToolCall> = Vec::new();
@@ -301,6 +304,19 @@ impl ChatAgent {
                 self.output(ctx.clone(), PORT_RESPONSE.to_string(), out_response)
                     .await?;
             }
+
+            // All in-loop emits are partial; emit the finalized message exactly
+            // once so tool calls are executed a single time per turn.
+            message.content = content;
+            if !thinking.is_empty() {
+                message.thinking = Some(thinking);
+            }
+            if !tool_calls.is_empty() {
+                message.tool_calls = Some(tool_calls.into());
+            }
+            message.streaming = false;
+            self.output(ctx.clone(), PORT_MESSAGE.to_string(), message.into())
+                .await?;
 
             Ok(())
         } else {
@@ -414,6 +430,8 @@ impl ChatAgent {
 
             let mut message = Message::assistant(String::new());
             message.id = Some(id.clone());
+            // Partial emits carry streaming=true; MessageStop flips it to false.
+            message.streaming = true;
 
             let mut content = String::new();
             let mut thinking = String::new();
@@ -515,6 +533,7 @@ impl ChatAgent {
                     }
                     claude_client::ClaudeStreamEvent::MessageStop {} => {
                         // Final output with all accumulated data
+                        message.streaming = false;
                         message.content = content.clone();
                         if !thinking.is_empty() {
                             message.thinking = Some(thinking.clone());
@@ -652,7 +671,9 @@ impl ChatAgent {
                 }
                 for call in &res.message.tool_calls {
                     let mut parameters = call.function.arguments.clone();
-                    if let Some(props) = parameters.as_object().and_then(|obj| obj.get("properties")) {
+                    if let Some(props) =
+                        parameters.as_object().and_then(|obj| obj.get("properties"))
+                    {
                         parameters = props.clone();
                     }
 
@@ -674,6 +695,8 @@ impl ChatAgent {
                     message.tool_calls = Some(tool_calls.clone().into());
                 }
                 message.id = Some(id.clone());
+                // Only the final chunk (done=true) is a non-streaming emit.
+                message.streaming = !res.done;
 
                 self.output(
                     ctx.clone(),

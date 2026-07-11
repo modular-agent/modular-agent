@@ -297,6 +297,9 @@ impl ResponsesAgent {
 
         let mut message = Message::assistant(String::new());
         message.id = Some(id.to_string());
+        // Partial emits during streaming must be skipped by CallToolMessageAgent so tools
+        // are executed only once against the final message.
+        message.streaming = true;
 
         let mut content = String::new();
         let mut tool_calls: Vec<ToolCall> = Vec::new();
@@ -360,6 +363,19 @@ impl ResponsesAgent {
                     }
                 }
                 openai_client::ResponseStreamEvent::Completed { response } => {
+                    // Emit the final, non-streaming message so downstream agents act on it once.
+                    message.content = content.clone();
+                    if !tool_calls.is_empty() {
+                        message.tool_calls = Some(tool_calls.clone().into());
+                    }
+                    message.streaming = false;
+                    self.output(
+                        ctx.clone(),
+                        PORT_MESSAGE.to_string(),
+                        message.clone().into(),
+                    )
+                    .await?;
+
                     // Store response ID for conversation continuity
                     if use_conversation_state
                         && let Some(resp_id) = response.get("id").and_then(|v| v.as_str())
@@ -373,6 +389,20 @@ impl ResponsesAgent {
                 }
                 openai_client::ResponseStreamEvent::Other => {}
             }
+        }
+
+        // The Responses API can terminate a stream with response.incomplete or
+        // response.failed instead of response.completed (e.g. max_output_tokens,
+        // content filter); those events fall into Other. Guarantee exactly one
+        // streaming=false final emit per turn so accumulated tool_calls still run.
+        if message.streaming {
+            message.content = content;
+            if !tool_calls.is_empty() {
+                message.tool_calls = Some(tool_calls.into());
+            }
+            message.streaming = false;
+            self.output(ctx, PORT_MESSAGE.to_string(), message.into())
+                .await?;
         }
 
         Ok(())
