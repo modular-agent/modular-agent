@@ -21,8 +21,8 @@ use std::{
 };
 
 use crate::{
-    Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
-    Message, ModularAgent, ToolCall, async_trait, modular_agent,
+    Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentStatus, AgentValue,
+    AsAgent, Message, ModularAgent, ToolCall, async_trait, modular_agent,
 };
 use im::{Vector, vector};
 use regex::RegexSet;
@@ -187,6 +187,16 @@ fn registry() -> &'static RwLock<ToolRegistry> {
 /// * `tool` - The tool implementation to register
 pub fn register_tool<T: Tool + Send + Sync + 'static>(tool: T) {
     registry().write().unwrap().register_tool(tool);
+}
+
+/// Returns whether a tool name satisfies the `^[a-zA-Z0-9_-]{1,64}$` pattern
+/// required by the Claude and OpenAI APIs.
+fn is_valid_tool_name(name: &str) -> bool {
+    let len = name.len();
+    (1..=64).contains(&len)
+        && name
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
 }
 
 /// Removes a tool from the global registry by name.
@@ -502,6 +512,7 @@ impl AsAgent for PresetToolAgent {
     }
 
     fn configs_changed(&mut self) -> Result<(), AgentError> {
+        let old_name = self.name.clone();
         self.name = self.configs()?.get_string_or_default(CONFIG_TOOL_NAME);
         self.description = self
             .configs()?
@@ -512,12 +523,52 @@ impl AsAgent for PresetToolAgent {
             .ok()
             .and_then(|v| serde_json::to_value(v).ok());
 
-        // TODO: update registered tool info
+        // Refresh the registration only while running; otherwise start() will
+        // register the tool with the new values later.
+        if self.data.status == AgentStatus::Start {
+            if !is_valid_tool_name(&self.name) {
+                log::warn!(
+                    "PresetToolAgent {} has invalid tool name {:?}; \
+                     tool names must match ^[a-zA-Z0-9_-]{{1,64}}$",
+                    self.id(),
+                    self.name
+                );
+            }
+            let agent_handle = self
+                .ma()
+                .get_agent(self.id())
+                .ok_or_else(|| AgentError::AgentNotFound(self.id().to_string()))?;
+            let tool = PresetTool::new(
+                self.name.clone(),
+                self.description.clone(),
+                self.parameters.clone(),
+                agent_handle,
+            );
+            // Register first: for an in-place refresh this overwrites the entry
+            // atomically, so concurrent lookups never hit a missing tool. The
+            // registry is name-keyed and process-global, so on rename the old
+            // name must still be removed explicitly or it would leak a stale
+            // entry that stop() (which unregisters the new name) never cleans up.
+            register_tool(tool);
+            if old_name != self.name {
+                unregister_tool(&old_name);
+            }
+        }
 
         Ok(())
     }
 
     async fn start(&mut self) -> Result<(), AgentError> {
+        // Claude and OpenAI both require tool names to match ^[a-zA-Z0-9_-]{1,64}$;
+        // an invalid name only fails later at API-call time, so surface it early.
+        if !is_valid_tool_name(&self.name) {
+            log::warn!(
+                "PresetToolAgent {} has invalid tool name {:?}; \
+                 tool names must match ^[a-zA-Z0-9_-]{{1,64}}$",
+                self.id(),
+                self.name
+            );
+        }
         let agent_handle = self
             .ma()
             .get_agent(self.id())
@@ -814,5 +865,24 @@ mod tests {
         assert_eq!(msg.id.as_deref(), Some("call42"));
         assert_eq!(msg.is_error, Some(true));
         assert_eq!(msg.content, "something went wrong");
+    }
+
+    #[test]
+    fn test_is_valid_tool_name_accepts_valid() {
+        assert!(is_valid_tool_name("a"));
+        assert!(is_valid_tool_name("my_tool"));
+        assert!(is_valid_tool_name("my-tool"));
+        assert!(is_valid_tool_name("Tool_123-ABC"));
+        assert!(is_valid_tool_name(&"x".repeat(64)));
+    }
+
+    #[test]
+    fn test_is_valid_tool_name_rejects_invalid() {
+        assert!(!is_valid_tool_name(""));
+        assert!(!is_valid_tool_name(&"x".repeat(65)));
+        assert!(!is_valid_tool_name("my tool"));
+        assert!(!is_valid_tool_name("my.tool"));
+        assert!(!is_valid_tool_name("ツール"));
+        assert!(!is_valid_tool_name("tool@1"));
     }
 }

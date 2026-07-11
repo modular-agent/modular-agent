@@ -9,6 +9,7 @@ mod suites {
     mod external_test;
     mod modular_agent_test;
     mod preset_test;
+    mod preset_tool_test;
     mod var_disabled_test;
     mod var_test;
 }
