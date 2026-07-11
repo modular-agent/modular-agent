@@ -31,5 +31,5 @@ image = ["photon-rs"]
 ollama = ["reqwest", "futures"]
 openai = ["reqwest", "eventsource-stream", "futures"]
 
-# [patch.crates-io]
-# modular-agent-core = { path = "../modular-agent-core/modular-agent-core" }
+[patch.crates-io]
+modular-agent-core = { path = "../modular-agent-core/modular-agent-core" }

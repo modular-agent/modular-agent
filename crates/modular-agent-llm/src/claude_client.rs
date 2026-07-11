@@ -234,6 +234,8 @@ pub(crate) enum ClaudeContentBlock {
     ToolResult {
         tool_use_id: String,
         content: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        is_error: Option<bool>,
     },
     #[serde(rename = "thinking")]
     Thinking { thinking: String, signature: String },
@@ -411,11 +413,19 @@ pub(crate) fn messages_to_claude(
                     .id
                     .clone()
                     .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+                // Claude only expects is_error when true; omit it otherwise to
+                // avoid sending a redundant `false`.
+                let is_error = if msg.is_error == Some(true) {
+                    Some(true)
+                } else {
+                    None
+                };
                 claude_messages.push(ClaudeMessage {
                     role: "user".to_string(),
                     content: ClaudeContent::Blocks(vec![ClaudeContentBlock::ToolResult {
                         tool_use_id,
                         content: msg.content.clone(),
+                        is_error,
                     }]),
                 });
             }
@@ -620,10 +630,12 @@ mod tests {
             if let ClaudeContentBlock::ToolResult {
                 tool_use_id,
                 content,
+                is_error,
             } = &blocks[0]
             {
                 assert_eq!(tool_use_id, "toolu_123");
                 assert_eq!(content, r#"{"result": "ok"}"#);
+                assert_eq!(is_error, &None);
             } else {
                 panic!("Expected ToolResult block");
             }
@@ -649,6 +661,31 @@ mod tests {
         } else {
             panic!("Expected Blocks content");
         }
+    }
+
+    #[test]
+    fn test_messages_to_claude_tool_result_is_error_serializes() {
+        let mut tool_msg = Message::tool("my_tool".to_string(), "boom".to_string());
+        tool_msg.id = Some("toolu_err".to_string());
+        tool_msg.is_error = Some(true);
+
+        let messages = vector![AgentValue::from(tool_msg)];
+        let (_, msgs) = messages_to_claude(&messages);
+
+        let json = serde_json::to_string(&msgs[0]).unwrap();
+        assert!(json.contains(r#""is_error":true"#), "json was: {json}");
+    }
+
+    #[test]
+    fn test_messages_to_claude_tool_result_no_error_omits_key() {
+        let mut tool_msg = Message::tool("my_tool".to_string(), "ok".to_string());
+        tool_msg.id = Some("toolu_ok".to_string());
+
+        let messages = vector![AgentValue::from(tool_msg)];
+        let (_, msgs) = messages_to_claude(&messages);
+
+        let json = serde_json::to_string(&msgs[0]).unwrap();
+        assert!(!json.contains("is_error"), "json was: {json}");
     }
 
     #[test]
