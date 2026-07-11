@@ -15,14 +15,14 @@
 #![cfg(feature = "llm")]
 
 use std::{
-    collections::{BTreeMap, HashMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet, VecDeque},
     sync::{Arc, Mutex, OnceLock, RwLock},
     time::Duration,
 };
 
 use crate::{
-    ModularAgent, Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
-    Message, ToolCall, async_trait, modular_agent,
+    Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
+    Message, ModularAgent, ToolCall, async_trait, modular_agent,
 };
 use im::{Vector, vector};
 use regex::RegexSet;
@@ -322,10 +322,7 @@ pub async fn call_tools(
                 AgentError::InvalidValue(format!("Failed to parse tool call parameters: {}", e))
             })?;
         let tool_resp = call_tool(ctx.clone(), call.function.name.as_str(), args).await?;
-        let mut msg = Message::tool(
-            call.function.name.clone(),
-            tool_resp.to_json().to_string(),
-        );
+        let mut msg = Message::tool(call.function.name.clone(), tool_resp.to_json().to_string());
         msg.id = call.function.id.clone();
         resp_messages.push(msg);
     }
@@ -609,6 +606,38 @@ impl Tool for PresetTool {
 )]
 pub struct CallToolMessageAgent {
     data: AgentData,
+    /// Tool-call ids already executed, keyed by ctx_key, guarding against a
+    /// streaming turn re-delivering the same final message (e.g. Claude emits
+    /// identical tool_calls on both ContentBlockStop and MessageStop).
+    executed: BTreeMap<String, HashSet<String>>,
+    /// Insertion order of ctx_keys, enabling oldest-first eviction once capped.
+    ctx_key_order: VecDeque<String>,
+}
+
+/// Upper bound on tracked ctx_keys; the oldest entry is evicted when exceeded.
+const MAX_TRACKED_CTX_KEYS: usize = 1024;
+
+impl CallToolMessageAgent {
+    fn is_executed(&self, ctx_key: &str, id: &str) -> bool {
+        self.executed
+            .get(ctx_key)
+            .is_some_and(|ids| ids.contains(id))
+    }
+
+    fn mark_executed(&mut self, ctx_key: &str, id: String) {
+        if !self.executed.contains_key(ctx_key) {
+            if self.ctx_key_order.len() >= MAX_TRACKED_CTX_KEYS
+                && let Some(oldest) = self.ctx_key_order.pop_front()
+            {
+                self.executed.remove(&oldest);
+            }
+            self.ctx_key_order.push_back(ctx_key.to_string());
+        }
+        self.executed
+            .entry(ctx_key.to_string())
+            .or_default()
+            .insert(id);
+    }
 }
 
 #[async_trait]
@@ -616,7 +645,15 @@ impl AsAgent for CallToolMessageAgent {
     fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
             data: AgentData::new(ma, id, spec),
+            executed: BTreeMap::new(),
+            ctx_key_order: VecDeque::new(),
         })
+    }
+
+    async fn stop(&mut self) -> Result<(), AgentError> {
+        self.executed.clear();
+        self.ctx_key_order.clear();
+        Ok(())
     }
 
     async fn process(
@@ -628,6 +665,11 @@ impl AsAgent for CallToolMessageAgent {
         let Some(message) = value.as_message() else {
             return Ok(());
         };
+        // Partial streaming messages carry accumulated tool_calls but are not final;
+        // only the streaming=false message for the turn may trigger execution.
+        if message.streaming {
+            return Ok(());
+        }
         let Some(mut tool_calls) = message.tool_calls.clone() else {
             return Ok(());
         };
@@ -644,6 +686,26 @@ impl AsAgent for CallToolMessageAgent {
                 .filter(|call| allowed_tool_names.contains(&call.function.name))
                 .cloned()
                 .collect();
+        }
+
+        // Defensive dedup: skip calls whose id was already executed for this flow.
+        // Calls without an id keep legacy behavior and always execute.
+        let ctx_key = ctx.ctx_key()?;
+        tool_calls = tool_calls
+            .iter()
+            .filter(|call| match &call.function.id {
+                Some(id) => !self.is_executed(&ctx_key, id),
+                None => true,
+            })
+            .cloned()
+            .collect();
+
+        // Record ids before executing: for side-effecting tools (Slack posts, DB
+        // writes) skipping a retry is safer than double execution.
+        for call in &tool_calls {
+            if let Some(id) = &call.function.id {
+                self.mark_executed(&ctx_key, id.clone());
+            }
         }
 
         let resp_messages = call_tools(&ctx, &tool_calls).await?;
