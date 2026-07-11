@@ -32,6 +32,7 @@ use photon_rs::PhotonImage;
 /// * `streaming` - Whether this is a partial streaming response
 /// * `tool_calls` - Tool invocations requested by the assistant
 /// * `tool_name` - Name of the tool (for tool role messages)
+/// * `is_error` - Marks a tool-result message as an error
 /// * `image` - Optional attached image (requires "image" feature)
 ///
 /// # Example
@@ -69,6 +70,9 @@ pub struct Message {
     /// Name of the tool (for tool role messages containing tool results).
     pub tool_name: Option<String>,
 
+    /// Marks a tool-result message as an error, per Claude's `tool_result` `is_error`.
+    pub is_error: Option<bool>,
+
     /// Attached image for multimodal messages (requires "image" feature).
     #[cfg(feature = "image")]
     pub image: Option<Arc<PhotonImage>>,
@@ -91,6 +95,7 @@ impl Message {
             thinking: None,
             tool_calls: None,
             tool_name: None,
+            is_error: None,
 
             #[cfg(feature = "image")]
             image: None,
@@ -193,6 +198,11 @@ impl Serialize for Message {
                 serde_json::Value::String(tool_name.clone()),
             );
         }
+        // Only emitted when set, so presets saved before this field existed
+        // round-trip unchanged.
+        if let Some(is_error) = &self.is_error {
+            map.insert("is_error".to_string(), serde_json::Value::Bool(*is_error));
+        }
         #[cfg(feature = "image")]
         {
             if let Some(image) = &self.image {
@@ -246,6 +256,7 @@ impl<'de> Deserialize<'de> for Message {
         if let Some(tool_name) = map.get("tool_name") {
             message.tool_name = tool_name.as_str().map(|s| s.to_string());
         }
+        message.is_error = map.get("is_error").and_then(|v| v.as_bool());
         #[cfg(feature = "image")]
         if let Some(image) = map.get("image") {
             let image_str = image
@@ -331,6 +342,8 @@ impl TryFrom<AgentValue> for Message {
                     .get("streaming")
                     .and_then(|st| st.as_bool())
                     .unwrap_or_default();
+
+                message.is_error = obj.get("is_error").and_then(|v| v.as_bool());
 
                 if let Some(tool_name) = obj.get("tool_name") {
                     message.tool_name = Some(
@@ -515,6 +528,18 @@ mod tests {
     }
 
     #[test]
+    fn test_message_from_object_value_reads_is_error() {
+        let value = AgentValue::object(hashmap! {
+            "role".into() => AgentValue::string("tool"),
+            "content".into() => AgentValue::string("boom"),
+            "tool_name".into() => AgentValue::string("failing_tool"),
+            "is_error".into() => AgentValue::boolean(true),
+        });
+        let msg: Message = value.try_into().unwrap();
+        assert_eq!(msg.is_error, Some(true));
+    }
+
+    #[test]
     fn test_message_from_invalid_value() {
         let value = AgentValue::integer(42);
         let result: Result<Message, AgentError> = value.try_into();
@@ -546,6 +571,7 @@ mod tests {
             }]),
             id: None,
             tool_name: None,
+            is_error: None,
             #[cfg(feature = "image")]
             image: None,
         };
@@ -568,6 +594,41 @@ mod tests {
                 .unwrap()
                 .is_empty()
         );
+    }
+
+    #[test]
+    fn test_message_is_error_serde_round_trip() {
+        let mut msg = Message::tool("failing_tool".to_string(), "boom".to_string());
+        msg.id = Some("call1".to_string());
+        msg.is_error = Some(true);
+
+        let json = serde_json::to_value(&msg).unwrap();
+        assert_eq!(json["is_error"], serde_json::json!(true));
+
+        let restored: Message = serde_json::from_value(json).unwrap();
+        assert_eq!(restored.is_error, Some(true));
+        assert_eq!(restored.id.as_deref(), Some("call1"));
+        assert_eq!(restored.tool_name.as_deref(), Some("failing_tool"));
+    }
+
+    #[test]
+    fn test_message_without_is_error_deserializes_to_none() {
+        let json = serde_json::json!({
+            "role": "tool",
+            "content": "ok",
+            "tool_name": "some_tool",
+        });
+        let msg: Message = serde_json::from_value(json).unwrap();
+        assert_eq!(msg.is_error, None);
+    }
+
+    #[test]
+    fn test_message_is_error_none_serializes_without_key() {
+        let msg = Message::tool("some_tool".to_string(), "ok".to_string());
+        assert_eq!(msg.is_error, None);
+
+        let json = serde_json::to_value(&msg).unwrap();
+        assert!(json.as_object().unwrap().get("is_error").is_none());
     }
 
     #[test]

@@ -294,10 +294,26 @@ pub async fn call_tool(
     tool.call(ctx, args).await
 }
 
+/// Builds an error tool-result message for a failed tool call.
+///
+/// The message carries `is_error: Some(true)` so LLM clients can report the
+/// failure back to the model (Claude's `tool_result` `is_error`) instead of
+/// aborting the whole flow. This is the designated return path for parse,
+/// validation, and execution failures of tool calls.
+pub fn error_tool_result(call: &ToolCall, e: impl ToString) -> Message {
+    let mut msg = Message::tool(call.function.name.clone(), e.to_string());
+    msg.id = call.function.id.clone();
+    msg.is_error = Some(true);
+    msg
+}
+
 /// Executes multiple tool calls and returns the results as messages.
 ///
 /// Processes each tool call sequentially and returns tool response messages
-/// suitable for continuing an LLM conversation.
+/// suitable for continuing an LLM conversation. A failure of one call
+/// (unparseable parameters or a tool error) does not abort the others: it is
+/// returned as a tool message with `is_error: Some(true)` so the LLM can
+/// recover.
 ///
 /// # Arguments
 ///
@@ -317,11 +333,23 @@ pub async fn call_tools(
     let mut resp_messages = vec![];
 
     for call in tool_calls {
-        let args: AgentValue =
-            AgentValue::from_json(call.function.parameters.clone()).map_err(|e| {
-                AgentError::InvalidValue(format!("Failed to parse tool call parameters: {}", e))
-            })?;
-        let tool_resp = call_tool(ctx.clone(), call.function.name.as_str(), args).await?;
+        let args = match AgentValue::from_json(call.function.parameters.clone()) {
+            Ok(args) => args,
+            Err(e) => {
+                resp_messages.push(error_tool_result(
+                    call,
+                    format!("Failed to parse tool call parameters: {}", e),
+                ));
+                continue;
+            }
+        };
+        let tool_resp = match call_tool(ctx.clone(), call.function.name.as_str(), args).await {
+            Ok(resp) => resp,
+            Err(e) => {
+                resp_messages.push(error_tool_result(call, e));
+                continue;
+            }
+        };
         let mut msg = Message::tool(call.function.name.clone(), tool_resp.to_json().to_string());
         msg.id = call.function.id.clone();
         resp_messages.push(msg);
@@ -762,5 +790,29 @@ impl AsAgent for CallToolAgent {
         self.output(ctx, PORT_VALUE, resp).await?;
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ToolCallFunction;
+
+    #[test]
+    fn test_error_tool_result_shape() {
+        let call = ToolCall {
+            function: ToolCallFunction {
+                name: "my_tool".to_string(),
+                parameters: serde_json::json!({}),
+                id: Some("call42".to_string()),
+            },
+        };
+        let msg = error_tool_result(&call, "something went wrong");
+
+        assert_eq!(msg.role, "tool");
+        assert_eq!(msg.tool_name.as_deref(), Some("my_tool"));
+        assert_eq!(msg.id.as_deref(), Some("call42"));
+        assert_eq!(msg.is_error, Some(true));
+        assert_eq!(msg.content, "something went wrong");
     }
 }
