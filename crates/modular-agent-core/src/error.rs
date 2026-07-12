@@ -9,12 +9,7 @@ use thiserror::Error;
 /// - **Agent management errors**: `AgentNotFound`, `AgentAlreadyExists`
 /// - **Connection errors**: `ConnectionNotFound`, `ConnectionAlreadyExists`
 /// - **I/O errors**: `IoError`, `SerializationError`, `JsonParseError`
-///
-/// - **設定エラー**: `InvalidConfig`, `UnknownConfig`, `NoConfig`
-/// - **値エラー**: `InvalidValue`, `InvalidArrayValue`
-/// - **エージェント管理エラー**: `AgentNotFound`, `AgentAlreadyExists`
-/// - **接続エラー**: `ConnectionNotFound`, `ConnectionAlreadyExists`
-/// - **I/Oエラー**: `IoError`, `SerializationError`, `JsonParseError`
+/// - **Retryable / provider errors**: `RateLimited`, `Overloaded`, `Timeout`, `ContextOverflow`, `Cancelled`
 #[derive(Clone, Debug, Error)]
 pub enum AgentError {
     /// Invalid value in an array element.
@@ -157,7 +152,69 @@ pub enum AgentError {
     #[error("Pin not found: {0}")]
     PinNotFound(String),
 
+    /// Request was rejected because the provider rate limit was exceeded.
+    ///
+    /// `retry_after` carries the provider's suggested wait duration when a
+    /// `Retry-After` header is present.
+    #[error("Rate limited: {message}")]
+    RateLimited {
+        message: String,
+        retry_after: Option<std::time::Duration>,
+    },
+
+    /// Provider is temporarily overloaded (e.g. HTTP 529).
+    #[error("Provider overloaded: {0}")]
+    Overloaded(String),
+
+    /// Request did not complete within the allotted time.
+    #[error("Request timed out: {0}")]
+    Timeout(String),
+
+    /// Request exceeded the model's context window.
+    #[error("Context overflow: {0}")]
+    ContextOverflow(String),
+
+    /// Operation was cancelled before completion.
+    #[error("Cancelled")]
+    Cancelled,
+
     /// Generic agent error.
     #[error("Agent error: {0}")]
     Other(String),
+}
+
+impl AgentError {
+    /// Returns `true` for errors that are transient and may succeed on retry.
+    pub fn is_retryable(&self) -> bool {
+        matches!(
+            self,
+            Self::RateLimited { .. } | Self::Overloaded(_) | Self::Timeout(_)
+        )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn retryable_variants_are_retryable() {
+        assert!(
+            AgentError::RateLimited {
+                message: "slow down".into(),
+                retry_after: None,
+            }
+            .is_retryable()
+        );
+        assert!(AgentError::Overloaded("busy".into()).is_retryable());
+        assert!(AgentError::Timeout("deadline exceeded".into()).is_retryable());
+    }
+
+    #[test]
+    fn non_retryable_variants_are_not_retryable() {
+        assert!(!AgentError::ContextOverflow("too long".into()).is_retryable());
+        assert!(!AgentError::Cancelled.is_retryable());
+        assert!(!AgentError::InvalidValue("bad".into()).is_retryable());
+        assert!(!AgentError::IoError("disk full".into()).is_retryable());
+    }
 }
