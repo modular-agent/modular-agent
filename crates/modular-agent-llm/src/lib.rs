@@ -23,6 +23,11 @@ pub mod responses;
 #[cfg(any(feature = "openai", feature = "claude", feature = "ollama"))]
 pub(crate) mod http_error;
 
+// Only the providers that transport tool arguments as strings need the
+// repair parser; Ollama sends them as already-parsed JSON.
+#[cfg(any(feature = "openai", feature = "claude"))]
+pub(crate) mod json_repair;
+
 #[cfg(feature = "openai")]
 pub(crate) mod openai_client;
 

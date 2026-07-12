@@ -182,11 +182,7 @@ impl OpenAIClient {
     }
 }
 
-fn map_http_error(
-    status: u16,
-    body: &str,
-    retry_after: Option<std::time::Duration>,
-) -> AgentError {
+fn map_http_error(status: u16, body: &str, retry_after: Option<std::time::Duration>) -> AgentError {
     // 429 takes precedence over overflow detection so throttling responses
     // whose body happens to mention context size stay retryable.
     if status == 429 {
@@ -286,7 +282,6 @@ pub(crate) struct ChatStreamDelta {
 
 #[derive(serde::Deserialize, Clone)]
 pub(crate) struct ChatToolCallChunk {
-    #[allow(dead_code)]
     pub index: u32,
     pub id: Option<String>,
     pub function: Option<ChatFunctionCallChunk>,
@@ -468,12 +463,14 @@ pub fn message_from_chat_response(msg: &ChatResponseMessage) -> Message {
         let calls: Vec<ToolCall> = tool_calls
             .iter()
             .map(|call| {
-                let parameters = serde_json::from_str(&call.function.arguments).unwrap_or_default();
+                let (parameters, parse_error) =
+                    crate::json_repair::parse_tool_arguments(&call.function.arguments);
                 ToolCall {
                     function: ToolCallFunction {
                         id: Some(call.id.clone()),
                         name: call.function.name.clone(),
                         parameters,
+                        parse_error,
                     },
                 }
             })
@@ -502,29 +499,56 @@ pub fn tool_info_to_chat_tool_json(info: tool::ToolInfo) -> serde_json::Value {
     })
 }
 
-/// Convert a streaming tool call chunk to internal ToolCall.
-pub fn tool_call_from_stream_chunk(call: &ChatToolCallChunk) -> Result<ToolCall, AgentError> {
-    let function = call
-        .function
-        .as_ref()
-        .ok_or_else(|| AgentError::InvalidValue("ToolCallChunk missing function".to_string()))?;
-    let name = function.name.as_ref().ok_or_else(|| {
-        AgentError::InvalidValue("ToolCallChunk function missing name".to_string())
-    })?;
-    let parameters = if let Some(arguments) = &function.arguments {
-        serde_json::from_str(arguments).map_err(|e| {
-            AgentError::InvalidValue(format!("Failed to parse tool call arguments JSON: {}", e))
-        })?
-    } else {
-        serde_json::json!({})
-    };
+/// Tool call being assembled from streaming fragments.
+///
+/// The Chat Completions API splits a tool call's id/name/arguments across
+/// multiple chunks correlated by `ChatToolCallChunk.index`.
+#[derive(Default)]
+pub(crate) struct PendingToolCall {
+    pub id: Option<String>,
+    pub name: String,
+    pub arguments: String,
+}
 
-    let function = ToolCallFunction {
-        id: call.id.clone(),
-        name: name.clone(),
-        parameters,
-    };
-    Ok(ToolCall { function })
+/// Merge one delta's tool call fragments into the per-index buffers.
+pub(crate) fn accumulate_tool_call_chunks(
+    pending: &mut std::collections::BTreeMap<u32, PendingToolCall>,
+    chunks: &[ChatToolCallChunk],
+) {
+    for call in chunks {
+        let e = pending.entry(call.index).or_default();
+        if let Some(id) = &call.id {
+            e.id = Some(id.clone());
+        }
+        if let Some(f) = &call.function {
+            if let Some(n) = &f.name {
+                e.name.push_str(n);
+            }
+            if let Some(a) = &f.arguments {
+                e.arguments.push_str(a);
+            }
+        }
+    }
+}
+
+/// Finalize accumulated tool calls in index order once the stream completes.
+pub(crate) fn finalize_pending_tool_calls(
+    pending: std::collections::BTreeMap<u32, PendingToolCall>,
+) -> Vec<ToolCall> {
+    pending
+        .into_values()
+        .map(|p| {
+            let (parameters, parse_error) = crate::json_repair::parse_tool_arguments(&p.arguments);
+            ToolCall {
+                function: ToolCallFunction {
+                    id: p.id,
+                    name: p.name,
+                    parameters,
+                    parse_error,
+                },
+            }
+        })
+        .collect()
 }
 
 // ============================================================================
@@ -673,13 +697,13 @@ pub fn response_output_to_message(output: &[serde_json::Value]) -> Result<Messag
                     .get("arguments")
                     .and_then(|v| v.as_str())
                     .unwrap_or("{}");
-                let parameters: serde_json::Value =
-                    serde_json::from_str(arguments).unwrap_or_default();
+                let (parameters, parse_error) = crate::json_repair::parse_tool_arguments(arguments);
                 tool_calls.push(ToolCall {
                     function: ToolCallFunction {
                         id: Some(call_id),
                         name,
                         parameters,
+                        parse_error,
                     },
                 });
             }
@@ -732,6 +756,7 @@ mod tests {
                 id: Some(id.to_string()),
                 name: name.to_string(),
                 parameters: params,
+                parse_error: None,
             },
         }
     }
@@ -980,6 +1005,109 @@ mod tests {
         assert!(matches!(event, ResponseStreamEvent::Other));
     }
 
+    // =========================================================================
+    // Streaming tool call accumulation
+    // =========================================================================
+
+    fn chunk(
+        index: u32,
+        id: Option<&str>,
+        name: Option<&str>,
+        args: Option<&str>,
+    ) -> ChatToolCallChunk {
+        ChatToolCallChunk {
+            index,
+            id: id.map(String::from),
+            function: (name.is_some() || args.is_some()).then(|| ChatFunctionCallChunk {
+                name: name.map(String::from),
+                arguments: args.map(String::from),
+            }),
+        }
+    }
+
+    #[test]
+    fn test_accumulate_interleaved_tool_calls() {
+        let mut pending = std::collections::BTreeMap::new();
+
+        // id/name arrive only in the first fragment of each call; arguments
+        // are split across three deltas with the two calls interleaved.
+        accumulate_tool_call_chunks(
+            &mut pending,
+            &[
+                chunk(0, Some("call_a"), Some("get_weather"), Some("")),
+                chunk(1, Some("call_b"), Some("search"), None),
+            ],
+        );
+        accumulate_tool_call_chunks(
+            &mut pending,
+            &[
+                chunk(1, None, None, Some(r#"{"q":"ru"#)),
+                chunk(0, None, None, Some(r#"{"city":"#)),
+            ],
+        );
+        accumulate_tool_call_chunks(
+            &mut pending,
+            &[
+                chunk(0, None, None, Some(r#""Tokyo"}"#)),
+                chunk(1, None, None, Some(r#"st"}"#)),
+            ],
+        );
+
+        let calls = finalize_pending_tool_calls(pending);
+        assert_eq!(calls.len(), 2);
+
+        assert_eq!(calls[0].function.id, Some("call_a".to_string()));
+        assert_eq!(calls[0].function.name, "get_weather");
+        assert_eq!(
+            calls[0].function.parameters,
+            serde_json::json!({"city": "Tokyo"})
+        );
+        assert_eq!(calls[0].function.parse_error, None);
+
+        assert_eq!(calls[1].function.id, Some("call_b".to_string()));
+        assert_eq!(calls[1].function.name, "search");
+        assert_eq!(
+            calls[1].function.parameters,
+            serde_json::json!({"q": "rust"})
+        );
+        assert_eq!(calls[1].function.parse_error, None);
+    }
+
+    #[test]
+    fn test_finalize_empty_args_is_no_arg_call() {
+        let mut pending = std::collections::BTreeMap::new();
+        accumulate_tool_call_chunks(
+            &mut pending,
+            &[chunk(0, Some("call_a"), Some("ping"), None)],
+        );
+
+        let calls = finalize_pending_tool_calls(pending);
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].function.parameters, serde_json::json!({}));
+        assert_eq!(calls[0].function.parse_error, None);
+    }
+
+    #[test]
+    fn test_finalize_unparseable_args_sets_parse_error() {
+        let mut pending = std::collections::BTreeMap::new();
+        accumulate_tool_call_chunks(
+            &mut pending,
+            &[chunk(
+                0,
+                Some("call_a"),
+                Some("search"),
+                Some(r#"{"q": trunc"#),
+            )],
+        );
+
+        let calls = finalize_pending_tool_calls(pending);
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].function.id, Some("call_a".to_string()));
+        assert_eq!(calls[0].function.parameters, serde_json::json!({}));
+        let err = calls[0].function.parse_error.as_deref().unwrap();
+        assert!(err.contains(r#"{"q": trunc"#), "err was: {err}");
+    }
+
     #[test]
     fn test_map_http_error() {
         assert!(matches!(
@@ -1047,11 +1175,19 @@ mod tests {
     #[test]
     fn test_map_http_error_context_overflow() {
         assert!(matches!(
-            map_http_error(400, "This model's maximum context length is 128000 tokens", None),
+            map_http_error(
+                400,
+                "This model's maximum context length is 128000 tokens",
+                None
+            ),
             AgentError::ContextOverflow(_)
         ));
         assert!(matches!(
-            map_http_error(400, "Your input exceeds the context window of this model", None),
+            map_http_error(
+                400,
+                "Your input exceeds the context window of this model",
+                None
+            ),
             AgentError::ContextOverflow(_)
         ));
     }

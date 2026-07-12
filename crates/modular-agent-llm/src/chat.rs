@@ -294,7 +294,11 @@ impl ChatAgent {
             message.streaming = true;
             let mut content = String::new();
             let mut thinking = String::new();
-            let mut tool_calls: Vec<ToolCall> = Vec::new();
+            // Tool call fragments are accumulated by index and finalized only
+            // after the stream completes; partial emits never carry tool_calls
+            // so downstream tool execution acts on the final message alone.
+            let mut pending: std::collections::BTreeMap<u32, openai_client::PendingToolCall> =
+                std::collections::BTreeMap::new();
             while let Some(res) = stream.next().await {
                 let Some(data) = res? else {
                     continue; // [DONE] sentinel
@@ -309,11 +313,7 @@ impl ChatAgent {
                         content.push_str(delta_content);
                     }
                     if let Some(tc) = &c.delta.tool_calls {
-                        for call in tc {
-                            if let Ok(c) = openai_client::tool_call_from_stream_chunk(call) {
-                                tool_calls.push(c);
-                            }
-                        }
+                        openai_client::accumulate_tool_call_chunks(&mut pending, tc);
                     }
                     if let Some(refusal) = &c.delta.refusal {
                         thinking.push_str(&format!("Refusal: {}", refusal));
@@ -323,9 +323,6 @@ impl ChatAgent {
                 message.content = content.clone();
                 if !thinking.is_empty() {
                     message.thinking = Some(thinking.clone());
-                }
-                if !tool_calls.is_empty() {
-                    message.tool_calls = Some(tool_calls.clone().into());
                 }
 
                 self.output(
@@ -348,6 +345,7 @@ impl ChatAgent {
             if !thinking.is_empty() {
                 message.thinking = Some(thinking);
             }
+            let tool_calls = openai_client::finalize_pending_tool_calls(pending);
             if !tool_calls.is_empty() {
                 message.tool_calls = Some(tool_calls.into());
             }
@@ -548,13 +546,14 @@ impl ChatAgent {
                     claude_client::ClaudeStreamEvent::ContentBlockStop { .. } => {
                         // Finalize tool call if one was being built
                         if let Some(name) = current_tool_name.take() {
-                            let parameters: serde_json::Value =
-                                serde_json::from_str(&current_tool_arguments).unwrap_or_default();
+                            let (parameters, parse_error) =
+                                crate::json_repair::parse_tool_arguments(&current_tool_arguments);
                             tool_calls.push(ToolCall {
                                 function: ToolCallFunction {
                                     id: current_tool_id.take(),
                                     name,
                                     parameters,
+                                    parse_error,
                                 },
                             });
                             current_tool_arguments.clear();
@@ -728,6 +727,7 @@ impl ChatAgent {
                             id: None,
                             name: call.function.name.clone(),
                             parameters,
+                            parse_error: None,
                         },
                     };
                     tool_calls.push(tool_call);

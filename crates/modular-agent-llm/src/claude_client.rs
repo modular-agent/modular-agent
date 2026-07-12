@@ -180,11 +180,7 @@ impl ClaudeClient {
     }
 }
 
-fn map_http_error(
-    status: u16,
-    body: &str,
-    retry_after: Option<std::time::Duration>,
-) -> AgentError {
+fn map_http_error(status: u16, body: &str, retry_after: Option<std::time::Duration>) -> AgentError {
     // 429 takes precedence over overflow detection so throttling responses
     // whose body happens to mention prompt size stay retryable.
     if status == 429 {
@@ -563,6 +559,7 @@ pub(crate) fn message_from_claude_response(response: &ClaudeResponse) -> Message
                         id: Some(id.clone()),
                         name: name.clone(),
                         parameters: input.clone(),
+                        parse_error: None,
                     },
                 });
             }
@@ -736,6 +733,7 @@ mod tests {
                     id: Some("toolu_abc".to_string()),
                     name: "get_weather".to_string(),
                     parameters: serde_json::json!({"location": "Tokyo"}),
+                    parse_error: None,
                 },
             }]
             .into(),
@@ -1127,7 +1125,11 @@ mod tests {
     #[test]
     fn test_map_http_error_context_overflow() {
         assert!(matches!(
-            map_http_error(400, "prompt is too long: 250000 tokens > 200000 maximum", None),
+            map_http_error(
+                400,
+                "prompt is too long: 250000 tokens > 200000 maximum",
+                None
+            ),
             AgentError::ContextOverflow(_)
         ));
         assert!(matches!(

@@ -305,11 +305,7 @@ where
     )
 }
 
-fn map_http_error(
-    status: u16,
-    body: &str,
-    retry_after: Option<std::time::Duration>,
-) -> AgentError {
+fn map_http_error(status: u16, body: &str, retry_after: Option<std::time::Duration>) -> AgentError {
     // 429 takes precedence over overflow detection so throttling responses
     // whose body happens to mention context size stay retryable.
     if status == 429 {
@@ -456,6 +452,7 @@ pub(crate) fn message_from_ollama(msg: &OllamaChatMessage) -> Message {
                     id: None,
                     name: call.function.name.clone(),
                     parameters: call.function.arguments.clone(),
+                    parse_error: None,
                 },
             };
             calls.push_back(tool_call);
@@ -561,6 +558,7 @@ mod tests {
                 id: Some("call_1".to_string()),
                 name: "get_weather".to_string(),
                 parameters: serde_json::json!({"city": "Tokyo"}),
+                parse_error: None,
             },
         }]);
 

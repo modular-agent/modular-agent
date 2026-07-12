@@ -369,13 +369,14 @@ impl ResponsesAgent {
                 openai_client::ResponseStreamEvent::OutputItemDone { .. } => {
                     // Handle completed function call
                     if let Some(name) = current_tool_name.take() {
-                        let parameters: serde_json::Value =
-                            serde_json::from_str(&current_tool_arguments).unwrap_or_default();
+                        let (parameters, parse_error) =
+                            crate::json_repair::parse_tool_arguments(&current_tool_arguments);
                         let tool_call = ToolCall {
                             function: ToolCallFunction {
                                 id: current_tool_call_id.take(),
                                 name,
                                 parameters,
+                                parse_error,
                             },
                         };
                         tool_calls.push(tool_call);
