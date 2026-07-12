@@ -42,6 +42,10 @@ const CONFIG_TOOLS: &str = "tools";
 const CONFIG_TOOL_NAME: &str = "name";
 const CONFIG_TOOL_DESCRIPTION: &str = "description";
 const CONFIG_TOOL_PARAMETERS: &str = "parameters";
+const CONFIG_TIMEOUT_SECS: &str = "timeout_secs";
+
+/// Fallback timeout (seconds) when `timeout_secs` config is unset or unreadable.
+const DEFAULT_TIMEOUT_SECS: i64 = 60;
 
 /// Metadata describing a tool available for LLM function calling.
 ///
@@ -443,6 +447,9 @@ impl AsAgent for ListToolsAgent {
 /// * `name` - The tool name (defaults to agent definition name)
 /// * `description` - Human-readable description of the tool
 /// * `parameters` - JSON Schema describing the tool's parameters
+/// * `timeout_secs` - Seconds to wait for the workflow's result before timing
+///   out (default: 60). `0` waits indefinitely. On timeout the caller receives
+///   a tool result with `is_error: true` so the LLM can recover.
 ///
 /// # Ports
 ///
@@ -456,6 +463,7 @@ impl AsAgent for ListToolsAgent {
     string_config(name=CONFIG_TOOL_NAME),
     text_config(name=CONFIG_TOOL_DESCRIPTION),
     object_config(name=CONFIG_TOOL_PARAMETERS),
+    integer_config(name=CONFIG_TIMEOUT_SECS, default=60),
 )]
 pub struct PresetToolAgent {
     data: AgentData,
@@ -479,7 +487,13 @@ impl PresetToolAgent {
         let (tx, rx) = oneshot::channel();
 
         self.pending.lock().unwrap().insert(ctx.id(), tx);
-        self.try_output(ctx.clone(), PORT_TOOL_IN, args)?;
+        if let Err(e) = self.try_output(ctx.clone(), PORT_TOOL_IN, args) {
+            // Nothing was emitted, so no result can ever arrive; drop the entry
+            // now or it would linger until stop() and could swallow the result
+            // of a later call reusing this context id.
+            self.pending.lock().unwrap().remove(&ctx.id());
+            return Err(e);
+        }
 
         Ok(rx)
     }
@@ -628,27 +642,56 @@ impl PresetTool {
 
     /// Executes a tool call through the wrapped agent.
     ///
-    /// Times out after 60 seconds if no response is received.
+    /// Waits up to the agent's `timeout_secs` config (default 60) for a result;
+    /// `0` waits indefinitely. The timeout is read at call time so runtime config
+    /// changes take effect. On timeout an `AgentError::Timeout` is returned, which
+    /// the LLM tool-call path (`call_tools`) turns into an `is_error` tool result.
     async fn tool_call(
         &self,
         ctx: AgentContext,
         args: AgentValue,
     ) -> Result<AgentValue, AgentError> {
         // Kick off the tool call while holding the lock, then drop it before awaiting the result
-        let rx = {
+        let ctx_id = ctx.id();
+        let (rx, timeout_secs, pending) = {
             let mut guard = self.agent.lock().await;
             let Some(preset_tool_agent) = guard.as_agent_mut::<PresetToolAgent>() else {
                 return Err(AgentError::Other(
                     "Agent is not PresetToolAgent".to_string(),
                 ));
             };
-            preset_tool_agent.start_tool_call(ctx, args)?
+            let timeout_secs = preset_tool_agent
+                .configs()
+                .map(|c| c.get_integer_or(CONFIG_TIMEOUT_SECS, DEFAULT_TIMEOUT_SECS))
+                .unwrap_or(DEFAULT_TIMEOUT_SECS);
+            let pending = preset_tool_agent.pending.clone();
+            let rx = preset_tool_agent.start_tool_call(ctx, args)?;
+            (rx, timeout_secs, pending)
         };
 
-        tokio::time::timeout(Duration::from_secs(60), rx)
-            .await
-            .map_err(|_| AgentError::Other("tool_call timed out".to_string()))?
-            .map_err(|_| AgentError::Other("tool_out dropped".to_string()))
+        if timeout_secs <= 0 {
+            return rx
+                .await
+                .map_err(|_| AgentError::Other("tool_out dropped".to_string()));
+        }
+
+        match tokio::time::timeout(Duration::from_secs(timeout_secs as u64), rx).await {
+            Ok(result) => result.map_err(|_| AgentError::Other("tool_out dropped".to_string())),
+            Err(_) => {
+                // The pending map is keyed by context id, which is shared by every
+                // tool call in the same flow (including an LLM retry after this
+                // error). Drop the stale sender now, otherwise a late tool_out from
+                // this timed-out invocation would be delivered to whichever call
+                // registers under the same id next. Tool calls within a flow run
+                // sequentially (call_tools awaits each call), so this cannot remove
+                // a newer call's sender.
+                pending.lock().unwrap().remove(&ctx_id);
+                Err(AgentError::Timeout(format!(
+                    "Tool call timed out after {} seconds",
+                    timeout_secs
+                )))
+            }
+        }
     }
 }
 
@@ -874,6 +917,19 @@ mod tests {
         assert!(is_valid_tool_name("my-tool"));
         assert!(is_valid_tool_name("Tool_123-ABC"));
         assert!(is_valid_tool_name(&"x".repeat(64)));
+    }
+
+    #[test]
+    fn test_preset_tool_timeout_config_default() {
+        let def = PresetToolAgent::agent_definition();
+        let specs = def
+            .configs
+            .as_ref()
+            .expect("PresetToolAgent should have config specs");
+        let spec = specs
+            .get(CONFIG_TIMEOUT_SECS)
+            .expect("timeout_secs config should be present");
+        assert_eq!(spec.value, AgentValue::integer(DEFAULT_TIMEOUT_SECS));
     }
 
     #[test]
