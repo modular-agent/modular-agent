@@ -29,6 +29,7 @@ pub async fn setup_modular_agent() -> ModularAgent {
 }
 
 /// Load and start an preset from a file.
+#[cfg(feature = "file")]
 pub async fn open_and_start_preset(ma: &ModularAgent, path: &str) -> Result<String, AgentError> {
     let id = ma.open_preset_from_file(path, None).await?;
     ma.start_preset(&id).await?;

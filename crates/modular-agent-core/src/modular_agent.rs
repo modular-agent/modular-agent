@@ -1,4 +1,3 @@
-#[cfg(feature = "file")]
 use std::sync::{Arc, Mutex};
 
 use serde_json::Value;
@@ -37,7 +36,8 @@ const EVENT_CHANNEL_CAPACITY: usize = 256;
 ///
 /// # Example
 ///
-/// ```rust,no_run
+#[cfg_attr(feature = "file", doc = "```rust,no_run")]
+#[cfg_attr(not(feature = "file"), doc = "```rust,no_run,ignore")]
 /// use modular_agent_core::{ModularAgent, AgentValue, ModularAgentEvent};
 ///
 /// #[tokio::main]

@@ -36,7 +36,7 @@ default = ["file", "image", "llm", "mcp"]
 file = []
 image = ["photon-rs"]
 llm = ["regex"]
-mcp = ["rmcp"]
+mcp = ["rmcp", "llm"]
 test-utils = []
 
 [[test]]
@@ -47,3 +47,4 @@ required-features = ["test-utils"]
 [[example]]
 name = "cli"
 path = "examples/cli.rs"
+required-features = ["file"]
