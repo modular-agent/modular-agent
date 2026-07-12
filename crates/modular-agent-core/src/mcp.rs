@@ -130,7 +130,7 @@ impl MCPTool {
             })?;
             service
                 .call_tool(CallToolRequestParam {
-                    name: self.tool.name.clone().into(),
+                    name: self.tool.name.clone(),
                     arguments,
                     task: None,
                 })
@@ -140,7 +140,7 @@ impl MCPTool {
                 })?
         };
 
-        Ok(call_tool_result_to_agent_value(tool_result)?)
+        call_tool_result_to_agent_value(tool_result)
     }
 }
 

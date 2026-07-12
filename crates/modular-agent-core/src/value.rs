@@ -21,8 +21,10 @@ const IMAGE_BASE64_PREFIX: &str = "data:image/png;base64,";
 /// Supports multiple data types with immutable data structures for efficient cloning.
 /// Large data (String, Image, Tensor, etc.) is wrapped in `Arc` for reference-counted sharing.
 #[derive(Debug, Clone)]
+#[derive(Default)]
 pub enum AgentValue {
     /// Empty value. Used as a trigger signal.
+    #[default]
     Unit,
 
     /// Boolean value.
@@ -185,7 +187,7 @@ impl AgentValue {
                 #[cfg(feature = "image")]
                 if s.starts_with(IMAGE_BASE64_PREFIX) {
                     let img =
-                        PhotonImage::new_from_base64(&s.trim_start_matches(IMAGE_BASE64_PREFIX));
+                        PhotonImage::new_from_base64(s.trim_start_matches(IMAGE_BASE64_PREFIX));
                     Ok(AgentValue::Image(Arc::new(img)))
                 } else {
                     Ok(AgentValue::String(Arc::new(s)))
@@ -559,7 +561,7 @@ impl AgentValue {
             }
             _ => Message::try_from(self.clone())
                 .ok()
-                .map(|m| AgentValue::message(m)),
+                .map(AgentValue::message),
         }
     }
 
@@ -750,11 +752,6 @@ impl AgentValue {
     }
 }
 
-impl Default for AgentValue {
-    fn default() -> Self {
-        AgentValue::Unit
-    }
-}
 
 impl PartialEq for AgentValue {
     fn eq(&self, other: &Self) -> bool {
@@ -970,8 +967,8 @@ mod tests {
         let different = AgentValue::integer(100);
         assert_ne!(integer1, different);
 
-        let number1 = AgentValue::number(3.14);
-        let number2 = AgentValue::number(3.14);
+        let number1 = AgentValue::number(2.5);
+        let number2 = AgentValue::number(2.5);
         assert_eq!(number1, number2);
 
         let string1 = AgentValue::string("hello");
@@ -1031,10 +1028,10 @@ mod tests {
         let integer = AgentValue::integer(42);
         assert_eq!(integer, AgentValue::Integer(42));
 
-        let number = AgentValue::number(3.14);
+        let number = AgentValue::number(2.5);
         assert!(matches!(number, AgentValue::Number(_)));
         if let AgentValue::Number(num) = number {
-            assert!((num - 3.14).abs() < f64::EPSILON);
+            assert!((num - 2.5).abs() < f64::EPSILON);
         }
 
         let string = AgentValue::string("hello");
@@ -1084,10 +1081,10 @@ mod tests {
         let integer = AgentValue::from_json(json!(42)).unwrap();
         assert_eq!(integer, AgentValue::Integer(42));
 
-        let number = AgentValue::from_json(json!(3.14)).unwrap();
+        let number = AgentValue::from_json(json!(2.5)).unwrap();
         assert!(matches!(number, AgentValue::Number(_)));
         if let AgentValue::Number(num) = number {
-            assert!((num - 3.14).abs() < f64::EPSILON);
+            assert!((num - 2.5).abs() < f64::EPSILON);
         }
 
         let string = AgentValue::from_json(json!("hello")).unwrap();
@@ -1126,111 +1123,111 @@ mod tests {
     fn test_agent_value_test_methods() {
         // Test test methods on AgentValue
         let unit = AgentValue::unit();
-        assert_eq!(unit.is_unit(), true);
-        assert_eq!(unit.is_boolean(), false);
-        assert_eq!(unit.is_integer(), false);
-        assert_eq!(unit.is_number(), false);
-        assert_eq!(unit.is_string(), false);
-        assert_eq!(unit.is_array(), false);
-        assert_eq!(unit.is_object(), false);
+        assert!(unit.is_unit());
+        assert!(!unit.is_boolean());
+        assert!(!unit.is_integer());
+        assert!(!unit.is_number());
+        assert!(!unit.is_string());
+        assert!(!unit.is_array());
+        assert!(!unit.is_object());
         #[cfg(feature = "image")]
-        assert_eq!(unit.is_image(), false);
+        assert!(!unit.is_image());
 
         let boolean = AgentValue::boolean(true);
-        assert_eq!(boolean.is_unit(), false);
-        assert_eq!(boolean.is_boolean(), true);
-        assert_eq!(boolean.is_integer(), false);
-        assert_eq!(boolean.is_number(), false);
-        assert_eq!(boolean.is_string(), false);
-        assert_eq!(boolean.is_array(), false);
-        assert_eq!(boolean.is_object(), false);
+        assert!(!boolean.is_unit());
+        assert!(boolean.is_boolean());
+        assert!(!boolean.is_integer());
+        assert!(!boolean.is_number());
+        assert!(!boolean.is_string());
+        assert!(!boolean.is_array());
+        assert!(!boolean.is_object());
         #[cfg(feature = "image")]
-        assert_eq!(boolean.is_image(), false);
+        assert!(!boolean.is_image());
 
         let integer = AgentValue::integer(42);
-        assert_eq!(integer.is_unit(), false);
-        assert_eq!(integer.is_boolean(), false);
-        assert_eq!(integer.is_integer(), true);
-        assert_eq!(integer.is_number(), false);
-        assert_eq!(integer.is_string(), false);
-        assert_eq!(integer.is_array(), false);
-        assert_eq!(integer.is_object(), false);
+        assert!(!integer.is_unit());
+        assert!(!integer.is_boolean());
+        assert!(integer.is_integer());
+        assert!(!integer.is_number());
+        assert!(!integer.is_string());
+        assert!(!integer.is_array());
+        assert!(!integer.is_object());
         #[cfg(feature = "image")]
-        assert_eq!(integer.is_image(), false);
+        assert!(!integer.is_image());
 
-        let number = AgentValue::number(3.14);
-        assert_eq!(number.is_unit(), false);
-        assert_eq!(number.is_boolean(), false);
-        assert_eq!(number.is_integer(), false);
-        assert_eq!(number.is_number(), true);
-        assert_eq!(number.is_string(), false);
-        assert_eq!(number.is_array(), false);
-        assert_eq!(number.is_object(), false);
+        let number = AgentValue::number(2.5);
+        assert!(!number.is_unit());
+        assert!(!number.is_boolean());
+        assert!(!number.is_integer());
+        assert!(number.is_number());
+        assert!(!number.is_string());
+        assert!(!number.is_array());
+        assert!(!number.is_object());
         #[cfg(feature = "image")]
-        assert_eq!(number.is_image(), false);
+        assert!(!number.is_image());
 
         let string = AgentValue::string("hello");
-        assert_eq!(string.is_unit(), false);
-        assert_eq!(string.is_boolean(), false);
-        assert_eq!(string.is_integer(), false);
-        assert_eq!(string.is_number(), false);
-        assert_eq!(string.is_string(), true);
-        assert_eq!(string.is_array(), false);
-        assert_eq!(string.is_object(), false);
+        assert!(!string.is_unit());
+        assert!(!string.is_boolean());
+        assert!(!string.is_integer());
+        assert!(!string.is_number());
+        assert!(string.is_string());
+        assert!(!string.is_array());
+        assert!(!string.is_object());
         #[cfg(feature = "image")]
-        assert_eq!(string.is_image(), false);
+        assert!(!string.is_image());
 
         let array = AgentValue::array(vector![AgentValue::integer(1), AgentValue::integer(2)]);
-        assert_eq!(array.is_unit(), false);
-        assert_eq!(array.is_boolean(), false);
-        assert_eq!(array.is_integer(), false);
-        assert_eq!(array.is_number(), false);
-        assert_eq!(array.is_string(), false);
-        assert_eq!(array.is_array(), true);
-        assert_eq!(array.is_object(), false);
+        assert!(!array.is_unit());
+        assert!(!array.is_boolean());
+        assert!(!array.is_integer());
+        assert!(!array.is_number());
+        assert!(!array.is_string());
+        assert!(array.is_array());
+        assert!(!array.is_object());
         #[cfg(feature = "image")]
-        assert_eq!(array.is_image(), false);
+        assert!(!array.is_image());
 
         let obj = AgentValue::object(hashmap! {
                 "key1".to_string() => AgentValue::string("string1"),
                 "key2".to_string() => AgentValue::integer(2),
         });
-        assert_eq!(obj.is_unit(), false);
-        assert_eq!(obj.is_boolean(), false);
-        assert_eq!(obj.is_integer(), false);
-        assert_eq!(obj.is_number(), false);
-        assert_eq!(obj.is_string(), false);
-        assert_eq!(obj.is_array(), false);
-        assert_eq!(obj.is_object(), true);
+        assert!(!obj.is_unit());
+        assert!(!obj.is_boolean());
+        assert!(!obj.is_integer());
+        assert!(!obj.is_number());
+        assert!(!obj.is_string());
+        assert!(!obj.is_array());
+        assert!(obj.is_object());
         #[cfg(feature = "image")]
-        assert_eq!(obj.is_image(), false);
+        assert!(!obj.is_image());
 
         #[cfg(feature = "image")]
         {
             let img = AgentValue::image(PhotonImage::new(vec![0u8; 4], 1, 1));
-            assert_eq!(img.is_unit(), false);
-            assert_eq!(img.is_boolean(), false);
-            assert_eq!(img.is_integer(), false);
-            assert_eq!(img.is_number(), false);
-            assert_eq!(img.is_string(), false);
-            assert_eq!(img.is_array(), false);
-            assert_eq!(img.is_object(), false);
-            assert_eq!(img.is_image(), true);
+            assert!(!img.is_unit());
+            assert!(!img.is_boolean());
+            assert!(!img.is_integer());
+            assert!(!img.is_number());
+            assert!(!img.is_string());
+            assert!(!img.is_array());
+            assert!(!img.is_object());
+            assert!(img.is_image());
         }
 
         #[cfg(feature = "llm")]
         {
             let msg = AgentValue::message(Message::user("hello".to_string()));
-            assert_eq!(msg.is_unit(), false);
-            assert_eq!(msg.is_boolean(), false);
-            assert_eq!(msg.is_integer(), false);
-            assert_eq!(msg.is_number(), false);
-            assert_eq!(msg.is_string(), false);
-            assert_eq!(msg.is_array(), false);
-            assert_eq!(msg.is_object(), false);
+            assert!(!msg.is_unit());
+            assert!(!msg.is_boolean());
+            assert!(!msg.is_integer());
+            assert!(!msg.is_number());
+            assert!(!msg.is_string());
+            assert!(!msg.is_array());
+            assert!(!msg.is_object());
             #[cfg(feature = "image")]
-            assert_eq!(msg.is_image(), false);
-            assert_eq!(msg.is_message(), true);
+            assert!(!msg.is_image());
+            assert!(msg.is_message());
         }
     }
 
@@ -1257,10 +1254,10 @@ mod tests {
         #[cfg(feature = "image")]
         assert!(integer.as_image().is_none());
 
-        let number = AgentValue::number(3.14);
+        let number = AgentValue::number(2.5);
         assert_eq!(number.as_bool(), None);
-        assert_eq!(number.as_i64(), Some(3)); // truncated
-        assert_eq!(number.as_f64().unwrap(), 3.14);
+        assert_eq!(number.as_i64(), Some(2)); // truncated
+        assert_eq!(number.as_f64().unwrap(), 2.5);
         assert_eq!(number.as_str(), None);
         assert!(number.as_array().is_none());
         assert_eq!(number.as_object(), None);
@@ -1359,7 +1356,7 @@ mod tests {
         let integer = AgentValue::integer(42);
         assert_eq!(integer.get(KEY), None);
 
-        let number = AgentValue::number(3.14);
+        let number = AgentValue::number(2.5);
         assert_eq!(number.get(KEY), None);
 
         let string = AgentValue::string("hello");
@@ -1374,7 +1371,7 @@ mod tests {
         let mut obj = AgentValue::object(hashmap! {
                 "k_boolean".to_string() => AgentValue::boolean(true),
                 "k_integer".to_string() => AgentValue::integer(42),
-                "k_number".to_string() => AgentValue::number(3.14),
+                "k_number".to_string() => AgentValue::number(2.5),
                 "k_string".to_string() => AgentValue::string("string1"),
                 "k_array".to_string() => AgentValue::array(vector![AgentValue::integer(1)]),
                 "k_object".to_string() => AgentValue::object(hashmap! {
@@ -1396,7 +1393,7 @@ mod tests {
         assert_eq!(obj.get(KEY), None);
         assert_eq!(obj.get_bool("k_boolean"), Some(true));
         assert_eq!(obj.get_i64("k_integer"), Some(42));
-        assert_eq!(obj.get_f64("k_number"), Some(3.14));
+        assert_eq!(obj.get_f64("k_number"), Some(2.5));
         assert_eq!(obj.get_str("k_string"), Some("string1"));
         assert!(obj.get_array("k_array").is_some());
         assert!(obj.get_array_mut("k_array").is_some());
@@ -1472,8 +1469,8 @@ mod tests {
         let integer = AgentValue::integer(42);
         assert_eq!(integer.to_json(), json!(42));
 
-        let number = AgentValue::number(3.14);
-        assert_eq!(number.to_json(), json!(3.14));
+        let number = AgentValue::number(2.5);
+        assert_eq!(number.to_json(), json!(2.5));
 
         let string = AgentValue::string("hello");
         assert_eq!(string.to_json(), json!("hello"));
@@ -1536,8 +1533,8 @@ mod tests {
 
         // Test Number serialization
         {
-            let num = AgentValue::number(3.14);
-            assert_eq!(serde_json::to_string(&num).unwrap(), "3.14");
+            let num = AgentValue::number(2.5);
+            assert_eq!(serde_json::to_string(&num).unwrap(), "2.5");
 
             let num = AgentValue::number(3.0);
             assert_eq!(serde_json::to_string(&num).unwrap(), "3.0");
@@ -1626,8 +1623,8 @@ mod tests {
 
         // Test Number deserialization
         {
-            let deserialized: AgentValue = serde_json::from_str("3.14").unwrap();
-            assert_eq!(deserialized, AgentValue::number(3.14));
+            let deserialized: AgentValue = serde_json::from_str("2.5").unwrap();
+            assert_eq!(deserialized, AgentValue::number(2.5));
 
             let deserialized: AgentValue = serde_json::from_str("3.0").unwrap();
             assert_eq!(deserialized, AgentValue::number(3.0));
@@ -1700,8 +1697,8 @@ mod tests {
         let from_i64: AgentValue = 100i64.into();
         assert_eq!(from_i64, AgentValue::Integer(100));
 
-        let from_f64: AgentValue = 3.14f64.into();
-        assert_eq!(from_f64, AgentValue::Number(3.14));
+        let from_f64: AgentValue = 2.5f64.into();
+        assert_eq!(from_f64, AgentValue::Number(2.5));
 
         let from_string: AgentValue = "hello".to_string().into();
         assert_eq!(
@@ -1820,10 +1817,10 @@ mod tests {
         assert_eq!(arr[1], AgentValue::integer(1));
 
         // Number
-        assert_eq!(AgentValue::number(3.14).to_number(), Some(3.14));
+        assert_eq!(AgentValue::number(2.5).to_number(), Some(2.5));
         assert_eq!(AgentValue::integer(42).to_number(), Some(42.0));
         assert_eq!(AgentValue::boolean(true).to_number(), Some(1.0));
-        assert_eq!(AgentValue::string("3.14").to_number(), Some(3.14));
+        assert_eq!(AgentValue::string("2.5").to_number(), Some(2.5));
         assert_eq!(AgentValue::unit().to_number(), None);
 
         let num_arr =
@@ -1845,8 +1842,8 @@ mod tests {
             Some("true".to_string())
         );
         assert_eq!(
-            AgentValue::number(3.14).to_string(),
-            Some("3.14".to_string())
+            AgentValue::number(2.5).to_string(),
+            Some("2.5".to_string())
         );
         #[cfg(feature = "llm")]
         assert_eq!(

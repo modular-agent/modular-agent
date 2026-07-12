@@ -96,7 +96,7 @@ pub use definition::{AgentConfigSpec, AgentConfigSpecs, AgentDefinition, AgentDe
 pub use error::AgentError;
 #[cfg(feature = "llm")]
 pub use llm::{Message, ToolCall, ToolCallFunction};
-pub use modular_agent::{ModularAgent, ModularAgentEvent};
+pub use modular_agent::{ModularAgent, ModularAgentEvent, SharedAgent};
 pub use output::AgentOutput;
 pub use preset::{Preset, PresetInfo};
 pub use registry::AgentRegistration;

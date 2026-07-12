@@ -385,17 +385,7 @@ pub(crate) fn agent_new(
         return new_boxed(ma, agent_id, spec);
     }
 
-    match def.kind.as_str() {
-        // "Command" => {
-        //     return new_boxed::<super::builtins::CommandAgent>(
-        //         ma,
-        //         agent_id,
-        //         def_name.to_string(),
-        //         config,
-        //     );
-        // }
-        _ => return Err(AgentError::UnknownDefKind(def.kind.to_string()).into()),
-    }
+    Err(AgentError::UnknownDefKind(def.kind.to_string()))
 }
 
 #[cfg(test)]

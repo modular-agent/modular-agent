@@ -41,7 +41,7 @@ pub async fn open_and_start_preset(ma: &ModularAgent, path: &str) -> Result<Stri
 type ExternalOutputReceiver = Arc<AsyncMutex<mpsc::UnboundedReceiver<(String, AgentValue)>>>;
 
 thread_local! {
-    static EXTERNAL_OUTPUT_RX: RefCell<Option<ExternalOutputReceiver>> = RefCell::new(None);
+    static EXTERNAL_OUTPUT_RX: RefCell<Option<ExternalOutputReceiver>> = const { RefCell::new(None) };
 }
 
 pub fn subscribe_external_output_observer(ma: &ModularAgent) -> Result<(), AgentError> {

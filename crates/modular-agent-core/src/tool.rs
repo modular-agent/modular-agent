@@ -22,11 +22,11 @@ use std::{
 
 use crate::{
     Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentStatus, AgentValue,
-    AsAgent, Message, ModularAgent, ToolCall, async_trait, modular_agent,
+    AsAgent, Message, ModularAgent, SharedAgent, ToolCall, async_trait, modular_agent,
 };
 use im::{Vector, vector};
 use regex::RegexSet;
-use tokio::sync::{Mutex as AsyncMutex, oneshot};
+use tokio::sync::oneshot;
 
 const CATEGORY: &str = "Core/Tool";
 
@@ -116,10 +116,10 @@ impl From<ToolInfo> for AgentValue {
             "description".to_string(),
             AgentValue::from(info.description),
         );
-        if let Some(params) = &info.parameters {
-            if let Ok(params_value) = AgentValue::from_serialize(params) {
-                obj.insert("parameters".to_string(), params_value);
-            }
+        if let Some(params) = &info.parameters
+            && let Ok(params_value) = AgentValue::from_serialize(params)
+        {
+            obj.insert("parameters".to_string(), params_value);
         }
         AgentValue::object(obj.into())
     }
@@ -619,7 +619,7 @@ impl AsAgent for PresetToolAgent {
 /// Internal Tool implementation that delegates to a PresetToolAgent.
 struct PresetTool {
     info: ToolInfo,
-    agent: Arc<AsyncMutex<Box<dyn Agent>>>,
+    agent: SharedAgent,
 }
 
 impl PresetTool {
@@ -628,13 +628,13 @@ impl PresetTool {
         name: String,
         description: String,
         parameters: Option<serde_json::Value>,
-        agent: Arc<AsyncMutex<Box<dyn Agent>>>,
+        agent: SharedAgent,
     ) -> Self {
         Self {
             info: ToolInfo {
-                name: name,
-                description: description,
-                parameters: parameters,
+                name,
+                description,
+                parameters,
             },
             agent,
         }

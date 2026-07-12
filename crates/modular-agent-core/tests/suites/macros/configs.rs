@@ -30,7 +30,7 @@ const GLOBAL_CUSTOM_KEY: &str = "global_custom";
     unit_config(name = UNIT_KEY),
     boolean_config(name = BOOLEAN_KEY, default = true, title = "Bool Title"),
     integer_config(name = INTEGER_KEY, default = 7, hidden),
-    number_config(name = NUMBER_KEY, default = 3.14, description = "pi"),
+    number_config(name = NUMBER_KEY, default = 2.5, description = "num"),
     string_config(name = STRING_KEY, default = "hello", detail),
     text_config(name = TEXT_KEY, default = "long"),
     array_config(
@@ -128,7 +128,7 @@ fn config_entries_are_generated() {
 
     assert_eq!(configs[INTEGER_KEY].value, AgentValue::integer(7));
     assert!(configs[INTEGER_KEY].hidden);
-    assert_eq!(configs[NUMBER_KEY].description.as_deref(), Some("pi"));
+    assert_eq!(configs[NUMBER_KEY].description.as_deref(), Some("num"));
     assert_eq!(configs[STRING_KEY].value, AgentValue::string("hello"));
     assert!(configs[STRING_KEY].detail);
     assert_eq!(configs[TEXT_KEY].value, AgentValue::string("long"));

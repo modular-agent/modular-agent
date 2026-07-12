@@ -52,9 +52,7 @@ impl PresetSpec {
     /// Returns `Some(ConnectionSpec)` if the connection was found and removed,
     /// or `None` if it was not found.
     pub fn remove_connection(&mut self, connection: &ConnectionSpec) -> Option<ConnectionSpec> {
-        let Some(index) = self.connections.iter().position(|c| c == connection) else {
-            return None;
-        };
+        let index = self.connections.iter().position(|c| c == connection)?;
         Some(self.connections.remove(index))
     }
 

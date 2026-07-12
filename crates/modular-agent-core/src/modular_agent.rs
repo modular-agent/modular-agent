@@ -59,10 +59,16 @@ const EVENT_CHANNEL_CAPACITY: usize = 256;
 ///     Ok(())
 /// }
 /// ```
+/// Shared, lockable handle to a running agent instance.
+pub type SharedAgent = Arc<AsyncMutex<Box<dyn Agent>>>;
+
+// target agent id / source handle / target handle
+pub(crate) type ConnectionTarget = (String, String, String);
+
 #[derive(Clone)]
 pub struct ModularAgent {
     // agent id -> agent
-    pub(crate) agents: Arc<Mutex<FnvIndexMap<String, Arc<AsyncMutex<Box<dyn Agent>>>>>>,
+    pub(crate) agents: Arc<Mutex<FnvIndexMap<String, SharedAgent>>>,
 
     // agent id -> sender
     pub(crate) agent_txs: Arc<Mutex<FnvIndexMap<String, mpsc::Sender<AgentMessage>>>>,
@@ -73,8 +79,8 @@ pub struct ModularAgent {
     // channel name -> value
     pub(crate) external_values: Arc<Mutex<FnvIndexMap<String, AgentValue>>>,
 
-    // source agent id -> [target agent id / source handle / target handle]
-    pub(crate) connections: Arc<Mutex<FnvIndexMap<String, Vec<(String, String, String)>>>>,
+    // source agent id -> [connection targets]
+    pub(crate) connections: Arc<Mutex<FnvIndexMap<String, Vec<ConnectionTarget>>>>,
 
     // agent def name -> agent definition
     pub(crate) defs: Arc<Mutex<AgentDefinitions>>,
@@ -90,6 +96,12 @@ pub struct ModularAgent {
 
     // observers
     pub(crate) observers: broadcast::Sender<ModularAgentEvent>,
+}
+
+impl Default for ModularAgent {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ModularAgent {
@@ -258,7 +270,7 @@ impl ModularAgent {
         // add the given preset into presets
         let mut presets = self.presets.lock().unwrap();
         if presets.contains_key(&id) {
-            return Err(AgentError::DuplicateId(id.into()));
+            return Err(AgentError::DuplicateId(id));
         }
         presets.insert(id.to_string(), Arc::new(AsyncMutex::new(preset)));
 
@@ -380,9 +392,7 @@ impl ModularAgent {
 
     /// Get the current preset spec by id.
     pub async fn get_preset_spec(&self, id: &str) -> Option<PresetSpec> {
-        let Some(preset) = self.get_preset(id) else {
-            return None;
-        };
+        let preset = self.get_preset(id)?;
         let mut preset_spec = {
             let preset = preset.lock().await;
             preset.spec().clone()
@@ -416,9 +426,7 @@ impl ModularAgent {
 
     /// Get info of the preset by id.
     pub async fn get_preset_info(&self, id: &str) -> Option<PresetInfo> {
-        let Some(preset) = self.get_preset(id) else {
-            return None;
-        };
+        let preset = self.get_preset(id)?;
         Some(PresetInfo::from(&*preset.lock().await))
     }
 
@@ -480,9 +488,7 @@ impl ModularAgent {
     /// Get the config specs of an agent definition by name.
     pub fn get_agent_config_specs(&self, def_name: &str) -> Option<AgentConfigSpecs> {
         let defs = self.defs.lock().unwrap();
-        let Some(def) = defs.get(def_name) else {
-            return None;
-        };
+        let def = defs.get(def_name)?;
         def.configs.clone()
     }
 
@@ -490,10 +496,7 @@ impl ModularAgent {
     pub async fn get_agent_spec(&self, agent_id: &str) -> Option<AgentSpec> {
         let agent = {
             let agents = self.agents.lock().unwrap();
-            let Some(agent) = agents.get(agent_id) else {
-                return None;
-            };
-            agent.clone()
+            agents.get(agent_id)?.clone()
         };
         let agent = agent.lock().await;
         Some(agent.spec().clone())
@@ -558,7 +561,7 @@ impl ModularAgent {
     }
 
     /// Get the agent by id.
-    pub fn get_agent(&self, agent_id: &str) -> Option<Arc<AsyncMutex<Box<dyn Agent>>>> {
+    pub fn get_agent(&self, agent_id: &str) -> Option<SharedAgent> {
         let agents = self.agents.lock().unwrap();
         agents.get(agent_id).cloned()
     }
@@ -672,9 +675,7 @@ impl ModularAgent {
             let mut preset = preset.lock().await;
             preset.remove_agent(agent_id);
         }
-        if let Err(e) = self.remove_agent_internal(agent_id).await {
-            return Err(e);
-        }
+        self.remove_agent_internal(agent_id).await?;
         Ok(())
     }
 
@@ -858,11 +859,10 @@ impl ModularAgent {
         {
             // remove the sender first to prevent new messages being sent
             let mut agent_txs = self.agent_txs.lock().unwrap();
-            if let Some(tx) = agent_txs.swap_remove(agent_id) {
-                if let Err(e) = tx.try_send(AgentMessage::Stop) {
+            if let Some(tx) = agent_txs.swap_remove(agent_id)
+                && let Err(e) = tx.try_send(AgentMessage::Stop) {
                     log::warn!("Failed to send stop message to agent {}: {}", agent_id, e);
                 }
-            }
         }
 
         let agent = {
@@ -952,10 +952,9 @@ impl ModularAgent {
         port: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
-        let message = if port.starts_with("config:") {
-            let config_key = port[7..].to_string();
+        let message = if let Some(config_key) = port.strip_prefix("config:") {
             AgentMessage::Config {
-                key: config_key,
+                key: config_key.to_string(),
                 value,
             }
         } else {
@@ -973,7 +972,7 @@ impl ModularAgent {
 
         let Some(tx) = tx else {
             // The agent is not running. If it's a config message, we can set it directly.
-            let agent: Arc<AsyncMutex<Box<dyn Agent>>> = {
+            let agent: SharedAgent = {
                 let agents = self.agents.lock().unwrap();
                 let Some(a) = agents.get(&agent_id) else {
                     return Err(AgentError::AgentNotFound(agent_id.to_string()));
@@ -1167,12 +1166,11 @@ impl ModularAgent {
             loop {
                 match event_rx.recv().await {
                     Ok(event) => {
-                        if let Some(mapped_event) = filter_map(event) {
-                            if tx.send(mapped_event).is_err() {
+                        if let Some(mapped_event) = filter_map(event)
+                            && tx.send(mapped_event).is_err() {
                                 // Receiver dropped, task can exit
                                 break;
                             }
-                        }
                     }
                     Err(RecvError::Lagged(n)) => {
                         log::warn!("Event subscriber lagged by {} events", n);

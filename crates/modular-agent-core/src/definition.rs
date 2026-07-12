@@ -629,8 +629,8 @@ impl AgentDefinition {
         }
 
         // Reorder configs to match definition key order
-        if let Some(ref mut spec_configs) = spec.configs {
-            if let Some(ref def_configs) = self.configs {
+        if let Some(ref mut spec_configs) = spec.configs
+            && let Some(ref def_configs) = self.configs {
                 let mut reordered = AgentConfigs::new();
                 // First: definition keys in definition order
                 for (key, _) in def_configs.iter() {
@@ -646,7 +646,6 @@ impl AgentDefinition {
                 }
                 *spec_configs = reordered;
             }
-        }
     }
 }
 
@@ -749,17 +748,17 @@ mod tests {
         assert_eq!(entry.type_.as_ref().unwrap(), "string");
         assert_eq!(entry.title.as_ref().unwrap(), "display_title");
         assert_eq!(entry.description.as_ref().unwrap(), "display_description");
-        assert_eq!(entry.hide_title, false);
-        assert_eq!(entry.readonly, true);
-        assert_eq!(entry.detail, true);
+        assert!(!entry.hide_title);
+        assert!(entry.readonly);
+        assert!(entry.detail);
         let entry = default_configs.get("hide_title_value").unwrap();
         assert_eq!(entry.value, AgentValue::integer(1));
         assert_eq!(entry.type_.as_ref().unwrap(), "integer");
         assert_eq!(entry.title, None);
         assert_eq!(entry.description, None);
-        assert_eq!(entry.hide_title, true);
-        assert_eq!(entry.readonly, true);
-        assert_eq!(entry.detail, false);
+        assert!(entry.hide_title);
+        assert!(entry.readonly);
+        assert!(!entry.detail);
     }
 
     #[test]
@@ -801,14 +800,14 @@ mod tests {
         assert_eq!(entry.type_.as_ref().unwrap(), "string");
         assert_eq!(entry.title.as_ref().unwrap(), "display_title");
         assert_eq!(entry.description.as_ref().unwrap(), "display_description");
-        assert_eq!(entry.hide_title, false);
-        assert_eq!(entry.detail, true);
+        assert!(!entry.hide_title);
+        assert!(entry.detail);
         let (key, entry) = default_configs.get_index(1).unwrap();
         assert_eq!(key, "hide_title_value");
         assert_eq!(entry.type_.as_ref().unwrap(), "integer");
         assert_eq!(entry.title, None);
         assert_eq!(entry.description, None);
-        assert_eq!(entry.hide_title, true);
+        assert!(entry.hide_title);
     }
 
     #[test]
@@ -1021,7 +1020,7 @@ mod tests {
         let c = spec.configs.as_ref().unwrap();
         assert_eq!(c.get_string_or_default("name"), "hello");
         assert_eq!(c.get_integer_or_default("count"), 10);
-        assert_eq!(c.get_bool_or_default("enabled"), true);
+        assert!(c.get_bool_or_default("enabled"));
     }
 
     #[test]
@@ -1129,7 +1128,7 @@ mod tests {
         let c = spec.configs.as_ref().unwrap();
         assert_eq!(c.get_string_or_default("name"), "default_name");
         assert_eq!(c.get_integer_or_default("count"), 10);
-        assert_eq!(c.get_bool_or_default("enabled"), true);
+        assert!(c.get_bool_or_default("enabled"));
         // Key order matches definition order
         let keys: Vec<&String> = c.keys().collect();
         assert_eq!(keys, vec!["name", "count", "enabled"]);
@@ -1172,7 +1171,7 @@ mod tests {
         let c = spec.configs.as_ref().unwrap();
         assert_eq!(c.get_string_or_default("name"), "custom");
         assert_eq!(c.get_integer_or_default("count"), 42);
-        assert_eq!(c.get_bool_or_default("enabled"), false);
+        assert!(!c.get_bool_or_default("enabled"));
     }
 
     #[test]
@@ -1243,7 +1242,7 @@ mod tests {
         let c = spec.configs.as_ref().unwrap();
         assert_eq!(c.get_string_or_default("name"), "default_name");
         assert_eq!(c.get_integer_or_default("count"), 10);
-        assert_eq!(c.get_bool_or_default("enabled"), true);
+        assert!(c.get_bool_or_default("enabled"));
     }
 
     #[test]
@@ -1294,7 +1293,7 @@ mod tests {
         // Values are preserved
         assert_eq!(c.get_string_or_default("name"), "custom");
         assert_eq!(c.get_integer_or_default("count"), 42);
-        assert_eq!(c.get_bool_or_default("enabled"), false);
+        assert!(!c.get_bool_or_default("enabled"));
     }
 
     #[test]

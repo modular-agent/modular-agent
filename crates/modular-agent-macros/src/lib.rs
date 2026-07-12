@@ -362,12 +362,11 @@ fn expand_modular_agent(
     }
 
     // Fall back to doc comments when no explicit `description` is provided.
-    if parsed.description.is_none() {
-        if let Some(doc) = extract_doc_comment(&item.attrs) {
+    if parsed.description.is_none()
+        && let Some(doc) = extract_doc_comment(&item.attrs) {
             let lit = syn::LitStr::new(&doc, Span::call_site());
             parsed.description = Some(parse_quote! { #lit });
         }
-    }
 
     let ident = &item.ident;
     let generics = item.generics.clone();
@@ -1382,13 +1381,11 @@ fn extract_doc_comment(attrs: &[syn::Attribute]) -> Option<String> {
             if !attr.path().is_ident("doc") {
                 return None;
             }
-            if let Meta::NameValue(nv) = &attr.meta {
-                if let Expr::Lit(lit) = &nv.value {
-                    if let syn::Lit::Str(s) = &lit.lit {
+            if let Meta::NameValue(nv) = &attr.meta
+                && let Expr::Lit(lit) = &nv.value
+                    && let syn::Lit::Str(s) = &lit.lit {
                         return Some(s.value());
                     }
-                }
-            }
             None
         })
         .collect();
