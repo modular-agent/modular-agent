@@ -107,7 +107,7 @@ async fn main() -> Result<(), AgentError> {
 
     // Graceful shutdown
     ma.stop_preset(&preset_id).await?;
-    ma.quit();
+    ma.shutdown().await?;
 
     // Drain any remaining output
     while let Ok(value) = output_rx.try_recv() {

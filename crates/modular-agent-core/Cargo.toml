@@ -44,6 +44,14 @@ name = "main_test"
 path = "tests/main_test.rs"
 required-features = ["test-utils"]
 
+# harness = false: the binary re-executes itself as a mock MCP stdio server
+# (see tests/mcp_lifecycle_test.rs), which needs control over main().
+[[test]]
+name = "mcp_lifecycle_test"
+path = "tests/mcp_lifecycle_test.rs"
+harness = false
+required-features = ["mcp"]
+
 [[example]]
 name = "cli"
 path = "examples/cli.rs"

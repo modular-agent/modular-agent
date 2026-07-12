@@ -181,6 +181,9 @@ impl ModularAgent {
     /// This stops the internal message loop. Call [`stop_preset`](Self::stop_preset)
     /// for each running preset before calling this method for graceful shutdown.
     ///
+    /// This does not release external resources such as MCP server child processes.
+    /// Use [`shutdown`](Self::shutdown) instead when full cleanup is required.
+    ///
     /// # Example
     ///
     /// ```rust,no_run
@@ -195,6 +198,30 @@ impl ModularAgent {
     pub fn quit(&self) {
         let mut tx_lock = self.tx.lock().unwrap();
         *tx_lock = None;
+    }
+
+    /// Shut down the `ModularAgent` and release external resources.
+    ///
+    /// Calls [`quit`](Self::quit) to stop the internal message loop, then closes any
+    /// pooled MCP server connections so their child processes do not leak. Call
+    /// [`stop_preset`](Self::stop_preset) for each running preset before this method.
+    /// An MCP tool call still in flight during shutdown may reconnect and respawn its
+    /// server process afterwards, so quiesce all workflows first.
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// # use modular_agent_core::ModularAgent;
+    /// # async fn example(ma: ModularAgent, preset_id: &str) {
+    /// ma.stop_preset(preset_id).await.unwrap();
+    /// ma.shutdown().await.unwrap();
+    /// # }
+    /// ```
+    pub async fn shutdown(&self) -> Result<(), AgentError> {
+        self.quit();
+        #[cfg(feature = "mcp")]
+        crate::mcp::shutdown_all_mcp_connections().await?;
+        Ok(())
     }
 
     // Preset management
