@@ -11,7 +11,7 @@ fn test_init() {
     let ma = ModularAgent::init().unwrap();
 
     let defs = ma.get_agent_definitions();
-    assert_eq!(defs.len(), 10);
+    assert_eq!(defs.len(), 11);
     let mut keys: Vec<_> = defs.keys().cloned().collect();
     keys.sort();
     let expected = vec![
@@ -24,6 +24,7 @@ fn test_init() {
         "modular_agent_core::tool::CallToolAgent",
         "modular_agent_core::tool::CallToolMessageAgent",
         "modular_agent_core::tool::ListToolsAgent",
+        "modular_agent_core::tool::LoopControlAgent",
         "modular_agent_core::tool::PresetToolAgent",
     ];
     assert_eq!(keys, expected);

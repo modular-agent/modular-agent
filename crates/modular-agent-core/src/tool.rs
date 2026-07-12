@@ -9,6 +9,7 @@
 //!   - `ListToolsAgent` - Lists available tools matching a pattern
 //!   - `PresetToolAgent` - Exposes a workflow as a callable tool
 //!   - `CallToolMessageAgent` - Processes tool calls from LLM messages
+//!   - `LoopControlAgent` - Guards tool-call cycles with an iteration limit
 //!   - `CallToolAgent` - Directly invokes a tool by name
 //! ```
 
@@ -30,6 +31,7 @@ use tokio::sync::oneshot;
 
 const CATEGORY: &str = "Core/Tool";
 
+const PORT_LIMIT_EXCEEDED: &str = "limit_exceeded";
 const PORT_MESSAGE: &str = "message";
 const PORT_PATTERNS: &str = "patterns";
 const PORT_TOOLS: &str = "tools";
@@ -43,9 +45,13 @@ const CONFIG_TOOL_NAME: &str = "name";
 const CONFIG_TOOL_DESCRIPTION: &str = "description";
 const CONFIG_TOOL_PARAMETERS: &str = "parameters";
 const CONFIG_TIMEOUT_SECS: &str = "timeout_secs";
+const CONFIG_MAX_ITERATIONS: &str = "max_iterations";
 
 /// Fallback timeout (seconds) when `timeout_secs` config is unset or unreadable.
 const DEFAULT_TIMEOUT_SECS: i64 = 60;
+
+/// Fallback loop limit when `max_iterations` config is unset or unreadable.
+const DEFAULT_MAX_ITERATIONS: i64 = 25;
 
 /// Metadata describing a tool available for LLM function calling.
 ///
@@ -852,6 +858,140 @@ impl AsAgent for CallToolMessageAgent {
     }
 }
 
+/// Agent that guards LLM tool-call cycles against runaway iteration.
+///
+/// Insert this agent between a chat agent's message output and the
+/// tool-execution node. It forwards traffic transparently while counting,
+/// per flow, the final assistant messages that request tool calls. Once the
+/// count would exceed `max_iterations`, the triggering message is not
+/// forwarded — severing the cycle — and a synthesized assistant message
+/// explaining the stop is emitted on `limit_exceeded` instead.
+///
+/// A message is counted only when all of the following hold: role is
+/// "assistant", `tool_calls` is present and non-empty, `streaming` is false,
+/// and its id differs from the last counted id for the flow. Streaming turns
+/// re-deliver the same tool_calls-bearing message under one id (partials plus
+/// a possibly duplicated final), so counting every delivery would exhaust the
+/// limit within a few turns. Messages without an id cannot be deduplicated
+/// and are always counted. Everything else — non-message values, user / tool /
+/// system messages, streaming partials, and assistant messages without tool
+/// calls — passes through unchanged.
+///
+/// Setting `max_iterations` to zero or a negative value disables the limit.
+/// Counters are kept per flow (`ctx_key`), capped at 1024 flows with
+/// oldest-first eviction, and cleared when the agent stops.
+///
+/// # Configuration
+///
+/// * `max_iterations` - Maximum tool-call iterations per flow; `<= 0` disables the limit (default: 25)
+///
+/// # Ports
+///
+/// * Input `message` - Messages flowing through the tool-call cycle
+/// * Output `message` - The forwarded input while within the limit
+/// * Output `limit_exceeded` - Synthesized assistant message emitted when the limit is exceeded
+#[modular_agent(
+    title="Loop Control",
+    category=CATEGORY,
+    inputs=[PORT_MESSAGE],
+    outputs=[PORT_MESSAGE, PORT_LIMIT_EXCEEDED],
+    integer_config(name=CONFIG_MAX_ITERATIONS, default=25),
+)]
+pub struct LoopControlAgent {
+    data: AgentData,
+    /// Iteration count and last counted message id, keyed by ctx_key. The id
+    /// guards against a streaming turn re-delivering the same final message.
+    counts: BTreeMap<String, (u32, Option<String>)>,
+    /// Insertion order of ctx_keys, enabling oldest-first eviction once capped.
+    ctx_key_order: VecDeque<String>,
+}
+
+impl LoopControlAgent {
+    fn record_count(&mut self, ctx_key: &str, count: u32, id: Option<String>) {
+        if !self.counts.contains_key(ctx_key) {
+            if self.ctx_key_order.len() >= MAX_TRACKED_CTX_KEYS
+                && let Some(oldest) = self.ctx_key_order.pop_front()
+            {
+                self.counts.remove(&oldest);
+            }
+            self.ctx_key_order.push_back(ctx_key.to_string());
+        }
+        self.counts.insert(ctx_key.to_string(), (count, id));
+    }
+}
+
+#[async_trait]
+impl AsAgent for LoopControlAgent {
+    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+        Ok(Self {
+            data: AgentData::new(ma, id, spec),
+            counts: BTreeMap::new(),
+            ctx_key_order: VecDeque::new(),
+        })
+    }
+
+    async fn stop(&mut self) -> Result<(), AgentError> {
+        self.counts.clear();
+        self.ctx_key_order.clear();
+        Ok(())
+    }
+
+    async fn process(
+        &mut self,
+        ctx: AgentContext,
+        _port: String,
+        value: AgentValue,
+    ) -> Result<(), AgentError> {
+        let countable = value.as_message().is_some_and(|m| {
+            m.role == "assistant"
+                && !m.streaming
+                && m.tool_calls.as_ref().is_some_and(|calls| !calls.is_empty())
+        });
+        if !countable {
+            // The node must stay transparent for everything it does not count:
+            // non-message values, user / tool / system messages, streaming
+            // partials, and assistant messages without tool calls.
+            return self.output(ctx, PORT_MESSAGE, value).await;
+        }
+        let message_id = value.as_message().and_then(|m| m.id.clone());
+
+        let max_iterations = self
+            .configs()?
+            .get_integer_or(CONFIG_MAX_ITERATIONS, DEFAULT_MAX_ITERATIONS);
+        let ctx_key = ctx.ctx_key()?;
+        let (count, last_counted_id) = self.counts.get(&ctx_key).cloned().unwrap_or((0, None));
+
+        // Re-delivery of the last counted message (e.g. Claude emits the same
+        // final message on both ContentBlockStop and MessageStop). Never
+        // re-count it, and forward it only if it was forwarded the first time,
+        // so a duplicate of the blocked message neither re-opens the cycle nor
+        // emits limit_exceeded twice.
+        if let Some(id) = &message_id
+            && last_counted_id.as_deref() == Some(id)
+        {
+            if max_iterations > 0 && i64::from(count) > max_iterations {
+                return Ok(());
+            }
+            return self.output(ctx, PORT_MESSAGE, value).await;
+        }
+
+        let count = count.saturating_add(1);
+        self.record_count(&ctx_key, count, message_id);
+
+        if max_iterations > 0 && i64::from(count) > max_iterations {
+            let notice = Message::assistant(format!(
+                "Loop limit reached: the tool-call cycle exceeded the configured max_iterations of {} and has been stopped.",
+                max_iterations
+            ));
+            return self
+                .output(ctx, PORT_LIMIT_EXCEEDED, AgentValue::message(notice))
+                .await;
+        }
+
+        self.output(ctx, PORT_MESSAGE, value).await
+    }
+}
+
 /// Agent that directly invokes a tool by name.
 ///
 /// Takes a tool call specification (name and parameters) and invokes
@@ -954,5 +1094,290 @@ mod tests {
         assert!(!is_valid_tool_name("my.tool"));
         assert!(!is_valid_tool_name("ツール"));
         assert!(!is_valid_tool_name("tool@1"));
+    }
+
+    #[cfg(feature = "test-utils")]
+    mod loop_control {
+        use super::*;
+        use crate::test_utils::{ProbeReceiver, probe_receiver};
+        use crate::{AgentContext, ConnectionSpec, SharedAgent};
+
+        const LOOP_DEF: &str = "modular_agent_core::tool::LoopControlAgent";
+        const PROBE_DEF: &str = "modular_agent_core::test_utils::TestProbeAgent";
+        const PROBE_PORT: &str = "value";
+
+        struct Fixture {
+            ma: ModularAgent,
+            loop_agent: SharedAgent,
+            forwarded: ProbeReceiver,
+            limit: ProbeReceiver,
+        }
+
+        /// Builds a running preset: LoopControlAgent with its `message` and
+        /// `limit_exceeded` outputs each wired to a TestProbeAgent.
+        async fn setup(max_iterations: i64) -> Fixture {
+            let ma = ModularAgent::init().unwrap();
+            ma.ready().await.unwrap();
+            let preset_id = ma.new_preset().unwrap();
+
+            let loop_def = ma.get_agent_definition(LOOP_DEF).unwrap();
+            let loop_id = ma
+                .add_agent(preset_id.clone(), loop_def.to_spec())
+                .await
+                .unwrap();
+
+            let probe_def = ma.get_agent_definition(PROBE_DEF).unwrap();
+            let fwd_id = ma
+                .add_agent(preset_id.clone(), probe_def.to_spec())
+                .await
+                .unwrap();
+            let lim_id = ma
+                .add_agent(preset_id.clone(), probe_def.to_spec())
+                .await
+                .unwrap();
+
+            for (source_handle, target) in [
+                (PORT_MESSAGE, fwd_id.clone()),
+                (PORT_LIMIT_EXCEEDED, lim_id.clone()),
+            ] {
+                ma.add_connection(
+                    &preset_id,
+                    ConnectionSpec {
+                        source: loop_id.clone(),
+                        source_handle: source_handle.to_string(),
+                        target,
+                        target_handle: PROBE_PORT.to_string(),
+                    },
+                )
+                .await
+                .unwrap();
+            }
+
+            let loop_agent = ma.get_agent(&loop_id).unwrap();
+            loop_agent
+                .lock()
+                .await
+                .set_config(
+                    CONFIG_MAX_ITERATIONS.into(),
+                    AgentValue::integer(max_iterations),
+                )
+                .unwrap();
+
+            ma.start_preset(&preset_id).await.unwrap();
+
+            let forwarded = probe_receiver(&ma, &fwd_id).await.unwrap();
+            let limit = probe_receiver(&ma, &lim_id).await.unwrap();
+
+            Fixture {
+                ma,
+                loop_agent,
+                forwarded,
+                limit,
+            }
+        }
+
+        fn assistant_tool_call_msg(id: Option<&str>, streaming: bool) -> AgentValue {
+            let mut msg = Message::assistant("use tools".to_string());
+            msg.id = id.map(str::to_string);
+            msg.streaming = streaming;
+            msg.tool_calls = Some(vector![ToolCall {
+                function: ToolCallFunction {
+                    name: "my_tool".to_string(),
+                    parameters: serde_json::json!({}),
+                    id: Some("call1".to_string()),
+                    parse_error: None,
+                },
+            }]);
+            AgentValue::message(msg)
+        }
+
+        async fn send(fixture: &Fixture, ctx: &AgentContext, value: AgentValue) {
+            fixture
+                .loop_agent
+                .lock()
+                .await
+                .process(ctx.clone(), PORT_MESSAGE.to_string(), value)
+                .await
+                .unwrap();
+        }
+
+        async fn recv(rx: &ProbeReceiver) -> AgentValue {
+            let (_ctx, value) = rx.recv().await.unwrap();
+            value
+        }
+
+        async fn expect_no_event(rx: &ProbeReceiver) {
+            assert!(
+                rx.recv_with_timeout(Duration::from_millis(200))
+                    .await
+                    .is_err()
+            );
+        }
+
+        async fn count_for(fixture: &Fixture, ctx_key: &str) -> Option<(u32, Option<String>)> {
+            let guard = fixture.loop_agent.lock().await;
+            let agent = guard.as_agent::<LoopControlAgent>().unwrap();
+            agent.counts.get(ctx_key).cloned()
+        }
+
+        #[tokio::test]
+        async fn streaming_partials_are_not_double_counted() {
+            let fixture = setup(25).await;
+            let ctx = AgentContext::new();
+            let ctx_key = ctx.ctx_key().unwrap();
+
+            // Streaming partials re-deliver accumulated tool_calls under the
+            // same id, followed by the streaming=false final message.
+            send(&fixture, &ctx, assistant_tool_call_msg(Some("m1"), true)).await;
+            send(&fixture, &ctx, assistant_tool_call_msg(Some("m1"), true)).await;
+            send(&fixture, &ctx, assistant_tool_call_msg(Some("m1"), false)).await;
+
+            // All three deliveries pass through transparently.
+            for _ in 0..3 {
+                let value = recv(&fixture.forwarded).await;
+                assert_eq!(value.as_message().unwrap().id.as_deref(), Some("m1"));
+            }
+            // Only the final message is counted.
+            assert_eq!(
+                count_for(&fixture, &ctx_key).await,
+                Some((1, Some("m1".to_string())))
+            );
+            expect_no_event(&fixture.limit).await;
+
+            fixture.ma.quit();
+        }
+
+        #[tokio::test]
+        async fn same_id_final_redelivered_counts_once() {
+            let fixture = setup(25).await;
+            let ctx = AgentContext::new();
+            let ctx_key = ctx.ctx_key().unwrap();
+
+            send(&fixture, &ctx, assistant_tool_call_msg(Some("m1"), false)).await;
+            send(&fixture, &ctx, assistant_tool_call_msg(Some("m1"), false)).await;
+
+            // Both deliveries are forwarded, but counted only once.
+            for _ in 0..2 {
+                let value = recv(&fixture.forwarded).await;
+                assert_eq!(value.as_message().unwrap().id.as_deref(), Some("m1"));
+            }
+            assert_eq!(
+                count_for(&fixture, &ctx_key).await,
+                Some((1, Some("m1".to_string())))
+            );
+            expect_no_event(&fixture.limit).await;
+
+            fixture.ma.quit();
+        }
+
+        #[tokio::test]
+        async fn blocks_and_emits_limit_exceeded_after_max_iterations() {
+            let fixture = setup(2).await;
+            let ctx = AgentContext::new();
+
+            send(&fixture, &ctx, assistant_tool_call_msg(Some("m1"), false)).await;
+            send(&fixture, &ctx, assistant_tool_call_msg(Some("m2"), false)).await;
+            for expected in ["m1", "m2"] {
+                let value = recv(&fixture.forwarded).await;
+                assert_eq!(value.as_message().unwrap().id.as_deref(), Some(expected));
+            }
+
+            // The third distinct countable message exceeds max_iterations=2:
+            // it must not be forwarded, and limit_exceeded fires instead.
+            send(&fixture, &ctx, assistant_tool_call_msg(Some("m3"), false)).await;
+            let notice = recv(&fixture.limit).await;
+            let notice = notice.as_message().unwrap();
+            assert_eq!(notice.role, "assistant");
+            assert!(!notice.streaming);
+            assert!(notice.tool_calls.is_none());
+            assert!(notice.content.contains("max_iterations of 2"));
+            expect_no_event(&fixture.forwarded).await;
+
+            // A re-delivered duplicate of the blocked message (same id) is
+            // neither forwarded nor reported again.
+            send(&fixture, &ctx, assistant_tool_call_msg(Some("m3"), false)).await;
+            expect_no_event(&fixture.forwarded).await;
+            expect_no_event(&fixture.limit).await;
+
+            fixture.ma.quit();
+        }
+
+        #[tokio::test]
+        async fn non_countable_values_pass_through_even_over_limit() {
+            let fixture = setup(1).await;
+            let ctx = AgentContext::new();
+
+            send(&fixture, &ctx, assistant_tool_call_msg(Some("m1"), false)).await;
+            let _ = recv(&fixture.forwarded).await;
+            // Trip the limit for this flow.
+            send(&fixture, &ctx, assistant_tool_call_msg(Some("m2"), false)).await;
+            let _ = recv(&fixture.limit).await;
+
+            // Non-countable traffic must keep flowing untouched.
+            let passthrough = [
+                AgentValue::message(Message::user("hi".to_string())),
+                AgentValue::message(Message::tool("my_tool".to_string(), "ok".to_string())),
+                AgentValue::message(Message::assistant("no tools".to_string())),
+                assistant_tool_call_msg(Some("m4"), true),
+                AgentValue::string("not a message"),
+            ];
+            for value in passthrough {
+                send(&fixture, &ctx, value.clone()).await;
+                let received = recv(&fixture.forwarded).await;
+                assert_eq!(received, value);
+            }
+            expect_no_event(&fixture.limit).await;
+
+            fixture.ma.quit();
+        }
+
+        #[tokio::test]
+        async fn separate_ctx_keys_count_independently() {
+            let fixture = setup(1).await;
+            let ctx_a = AgentContext::new();
+            let ctx_b = AgentContext::new();
+
+            send(&fixture, &ctx_a, assistant_tool_call_msg(Some("a1"), false)).await;
+            let value = recv(&fixture.forwarded).await;
+            assert_eq!(value.as_message().unwrap().id.as_deref(), Some("a1"));
+
+            // ctx_a hits its limit...
+            send(&fixture, &ctx_a, assistant_tool_call_msg(Some("a2"), false)).await;
+            let _ = recv(&fixture.limit).await;
+            expect_no_event(&fixture.forwarded).await;
+
+            // ...but ctx_b still has its own budget.
+            send(&fixture, &ctx_b, assistant_tool_call_msg(Some("b1"), false)).await;
+            let value = recv(&fixture.forwarded).await;
+            assert_eq!(value.as_message().unwrap().id.as_deref(), Some("b1"));
+            expect_no_event(&fixture.limit).await;
+
+            fixture.ma.quit();
+        }
+
+        #[tokio::test]
+        async fn stop_clears_counters() {
+            let fixture = setup(1).await;
+            let ctx = AgentContext::new();
+
+            send(&fixture, &ctx, assistant_tool_call_msg(Some("m1"), false)).await;
+            let _ = recv(&fixture.forwarded).await;
+            send(&fixture, &ctx, assistant_tool_call_msg(Some("m2"), false)).await;
+            let _ = recv(&fixture.limit).await;
+
+            {
+                let mut guard = fixture.loop_agent.lock().await;
+                guard.stop().await.unwrap();
+                guard.start().await.unwrap();
+            }
+
+            // After a restart the flow gets a fresh budget.
+            send(&fixture, &ctx, assistant_tool_call_msg(Some("m3"), false)).await;
+            let value = recv(&fixture.forwarded).await;
+            assert_eq!(value.as_message().unwrap().id.as_deref(), Some("m3"));
+            expect_no_event(&fixture.limit).await;
+
+            fixture.ma.quit();
+        }
     }
 }
