@@ -269,7 +269,6 @@ pub(crate) struct ChatStreamChoice {
     #[allow(dead_code)]
     pub index: u32,
     pub delta: ChatStreamDelta,
-    #[allow(dead_code)]
     pub finish_reason: Option<String>,
 }
 
@@ -348,6 +347,10 @@ pub(crate) enum ResponseStreamEvent {
     },
     #[serde(rename = "response.completed")]
     Completed { response: serde_json::Value },
+    #[serde(rename = "response.incomplete")]
+    Incomplete { response: serde_json::Value },
+    #[serde(rename = "response.failed")]
+    Failed { response: serde_json::Value },
     #[serde(other)]
     Other,
 }
@@ -481,6 +484,19 @@ pub fn message_from_chat_response(msg: &ChatResponseMessage) -> Message {
     }
 
     message
+}
+
+/// Normalize a Chat Completions `finish_reason` to the framework
+/// stop_reason vocabulary. Unknown provider values pass through unchanged.
+pub(crate) fn normalize_finish_reason(raw: &str) -> String {
+    match raw {
+        "stop" => "stop",
+        "tool_calls" | "function_call" => "tool_use",
+        "length" => "length",
+        "content_filter" => "error",
+        other => other,
+    }
+    .to_string()
 }
 
 /// Convert a ToolInfo to Chat Completions tool definition JSON.
@@ -1020,6 +1036,38 @@ mod tests {
         } else {
             panic!("Expected Completed event");
         }
+    }
+
+    #[test]
+    fn test_serde_response_stream_event_incomplete() {
+        let json = r#"{"type": "response.incomplete", "response": {"status": "incomplete", "incomplete_details": {"reason": "max_output_tokens"}}}"#;
+        let event: ResponseStreamEvent = serde_json::from_str(json).unwrap();
+        if let ResponseStreamEvent::Incomplete { response } = event {
+            assert_eq!(
+                response["incomplete_details"]["reason"],
+                "max_output_tokens"
+            );
+        } else {
+            panic!("Expected Incomplete event");
+        }
+    }
+
+    #[test]
+    fn test_serde_response_stream_event_failed() {
+        let json = r#"{"type": "response.failed", "response": {"status": "failed"}}"#;
+        let event: ResponseStreamEvent = serde_json::from_str(json).unwrap();
+        assert!(matches!(event, ResponseStreamEvent::Failed { .. }));
+    }
+
+    #[test]
+    fn test_normalize_finish_reason() {
+        assert_eq!(normalize_finish_reason("stop"), "stop");
+        assert_eq!(normalize_finish_reason("tool_calls"), "tool_use");
+        assert_eq!(normalize_finish_reason("function_call"), "tool_use");
+        assert_eq!(normalize_finish_reason("length"), "length");
+        assert_eq!(normalize_finish_reason("content_filter"), "error");
+        // Unknown provider values pass through unchanged
+        assert_eq!(normalize_finish_reason("weird_reason"), "weird_reason");
     }
 
     #[test]

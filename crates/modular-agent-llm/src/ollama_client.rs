@@ -389,6 +389,8 @@ pub(crate) struct ChatResponse {
     pub created_at: String,
     pub message: OllamaChatMessage,
     pub done: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub done_reason: Option<String>,
     #[serde(flatten)]
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
@@ -463,6 +465,17 @@ pub(crate) fn message_from_ollama(msg: &OllamaChatMessage) -> Message {
         message.tool_calls = Some(calls);
     }
     message
+}
+
+/// Normalize an Ollama `done_reason` to the framework stop_reason
+/// vocabulary. Unknown provider values pass through unchanged.
+pub(crate) fn normalize_done_reason(raw: &str) -> String {
+    match raw {
+        "stop" => "stop",
+        "length" => "length",
+        other => other,
+    }
+    .to_string()
 }
 
 /// Convert an internal Message to an Ollama API chat message.
@@ -662,8 +675,35 @@ mod tests {
         assert_eq!(resp.model, "llama3.2");
         assert!(resp.done);
         assert_eq!(resp.message.content, "Hello!");
+        assert!(resp.done_reason.is_none());
         assert!(resp.extra.contains_key("total_duration"));
         assert!(resp.extra.contains_key("eval_count"));
+    }
+
+    #[test]
+    fn test_serde_chat_response_done_reason() {
+        let json = r#"{
+            "model": "llama3.2",
+            "created_at": "2024-01-01T00:00:00Z",
+            "message": {
+                "role": "assistant",
+                "content": "Hello!"
+            },
+            "done": true,
+            "done_reason": "stop"
+        }"#;
+        let resp: ChatResponse = serde_json::from_str(json).unwrap();
+        assert_eq!(resp.done_reason.as_deref(), Some("stop"));
+        // The typed field consumes the key so it no longer lands in extra
+        assert!(!resp.extra.contains_key("done_reason"));
+    }
+
+    #[test]
+    fn test_normalize_done_reason() {
+        assert_eq!(normalize_done_reason("stop"), "stop");
+        assert_eq!(normalize_done_reason("length"), "length");
+        // Unknown provider values pass through unchanged
+        assert_eq!(normalize_done_reason("load"), "load");
     }
 
     #[test]

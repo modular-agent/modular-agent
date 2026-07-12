@@ -286,7 +286,6 @@ impl ChatAgent {
         retry: RetryPolicy,
         cache_retention: CacheRetention,
     ) -> Result<(), AgentError> {
-        use futures::StreamExt;
         use modular_agent_core::tool::list_tool_infos_patterns;
 
         // Captured before building the request because a stable cache key must
@@ -345,73 +344,18 @@ impl ChatAgent {
             // Retry covers stream establishment only: once chunks have been
             // emitted downstream they cannot be rolled back, so any failure
             // after this point must propagate instead of being retried.
-            let mut stream = retry.run(|| client.post_stream(&url, &request)).await?;
+            let stream = retry.run(|| client.post_stream(&url, &request)).await?;
 
             let mut message = Message::assistant("".to_string());
             message.id = Some(id.clone());
             // Partial emits carry streaming=true so downstream agents (e.g. tool
             // execution) act only on the final message.
             message.streaming = true;
-            let mut content = String::new();
-            let mut thinking = String::new();
-            // Tool call fragments are accumulated by index and finalized only
-            // after the stream completes; partial emits never carry tool_calls
-            // so downstream tool execution acts on the final message alone.
-            let mut pending: std::collections::BTreeMap<u32, openai_client::PendingToolCall> =
-                std::collections::BTreeMap::new();
-            while let Some(res) = stream.next().await {
-                let Some(data) = res? else {
-                    continue; // [DONE] sentinel
-                };
-                let chunk: openai_client::ChatStreamChunk =
-                    serde_json::from_str(&data).map_err(|e| {
-                        AgentError::IoError(format!("OpenAI stream parse error: {}", e))
-                    })?;
 
-                for c in &chunk.choices {
-                    if let Some(ref delta_content) = c.delta.content {
-                        content.push_str(delta_content);
-                    }
-                    if let Some(tc) = &c.delta.tool_calls {
-                        openai_client::accumulate_tool_call_chunks(&mut pending, tc);
-                    }
-                    if let Some(refusal) = &c.delta.refusal {
-                        thinking.push_str(&format!("Refusal: {}", refusal));
-                    }
-                }
-
-                message.content = content.clone();
-                if !thinking.is_empty() {
-                    message.thinking = Some(thinking.clone());
-                }
-
-                self.output(
-                    ctx.clone(),
-                    PORT_MESSAGE.to_string(),
-                    message.clone().into(),
-                )
-                .await?;
-
-                let out_response: serde_json::Value =
-                    serde_json::from_str(&data).unwrap_or_default();
-                let out_response = AgentValue::from_serialize(&out_response)?;
-                self.output(ctx.clone(), PORT_RESPONSE.to_string(), out_response)
-                    .await?;
+            if let Err(e) = self.run_openai_stream(&ctx, stream, &mut message).await {
+                self.emit_stream_error_message(&ctx, message).await;
+                return Err(e);
             }
-
-            // All in-loop emits are partial; emit the finalized message exactly
-            // once so tool calls are executed a single time per turn.
-            message.content = content;
-            if !thinking.is_empty() {
-                message.thinking = Some(thinking);
-            }
-            let tool_calls = openai_client::finalize_pending_tool_calls(pending);
-            if !tool_calls.is_empty() {
-                message.tool_calls = Some(tool_calls.into());
-            }
-            message.streaming = false;
-            self.output(ctx.clone(), PORT_MESSAGE.to_string(), message.into())
-                .await?;
 
             Ok(())
         } else {
@@ -422,6 +366,10 @@ impl ChatAgent {
             for c in &res.choices {
                 let mut message = openai_client::message_from_chat_response(&c.message);
                 message.id = Some(id.clone());
+                message.stop_reason = c
+                    .finish_reason
+                    .as_deref()
+                    .map(openai_client::normalize_finish_reason);
 
                 self.output(
                     ctx.clone(),
@@ -437,6 +385,104 @@ impl ChatAgent {
 
             Ok(())
         }
+    }
+
+    /// Emit a final same-id message marking a mid-stream failure so message
+    /// history replaces the dangling partial with an error-terminated one.
+    /// Best effort: the original stream error is the more useful signal, so
+    /// an emit failure here must not mask it.
+    #[cfg(any(feature = "openai", feature = "claude", feature = "ollama"))]
+    async fn emit_stream_error_message(&mut self, ctx: &AgentContext, message: Message) {
+        let Some(message) = stream_error_final(message) else {
+            return;
+        };
+        let _ = self
+            .output(ctx.clone(), PORT_MESSAGE.to_string(), message.into())
+            .await;
+    }
+
+    /// Consume an established OpenAI SSE stream, emitting partial messages
+    /// and exactly one finalized message. Extracted so the caller can
+    /// intercept a mid-stream Err and emit an error-marked final message.
+    #[cfg(feature = "openai")]
+    async fn run_openai_stream(
+        &mut self,
+        ctx: &AgentContext,
+        mut stream: impl futures::Stream<Item = Result<Option<String>, AgentError>> + Unpin,
+        message: &mut Message,
+    ) -> Result<(), AgentError> {
+        use futures::StreamExt;
+
+        let mut content = String::new();
+        let mut thinking = String::new();
+        let mut finish_reason: Option<String> = None;
+        // Tool call fragments are accumulated by index and finalized only
+        // after the stream completes; partial emits never carry tool_calls
+        // so downstream tool execution acts on the final message alone.
+        let mut pending: std::collections::BTreeMap<u32, openai_client::PendingToolCall> =
+            std::collections::BTreeMap::new();
+        while let Some(res) = stream.next().await {
+            let Some(data) = res? else {
+                continue; // [DONE] sentinel
+            };
+            let chunk: openai_client::ChatStreamChunk = serde_json::from_str(&data)
+                .map_err(|e| AgentError::IoError(format!("OpenAI stream parse error: {}", e)))?;
+
+            for c in &chunk.choices {
+                if let Some(ref delta_content) = c.delta.content {
+                    content.push_str(delta_content);
+                }
+                if let Some(tc) = &c.delta.tool_calls {
+                    openai_client::accumulate_tool_call_chunks(&mut pending, tc);
+                }
+                if let Some(refusal) = &c.delta.refusal {
+                    thinking.push_str(&format!("Refusal: {}", refusal));
+                }
+                if let Some(reason) = &c.finish_reason {
+                    finish_reason = Some(reason.clone());
+                }
+            }
+
+            message.content = content.clone();
+            if !thinking.is_empty() {
+                message.thinking = Some(thinking.clone());
+            }
+
+            self.output(
+                ctx.clone(),
+                PORT_MESSAGE.to_string(),
+                message.clone().into(),
+            )
+            .await?;
+
+            let out_response: serde_json::Value = serde_json::from_str(&data).unwrap_or_default();
+            let out_response = AgentValue::from_serialize(&out_response)?;
+            self.output(ctx.clone(), PORT_RESPONSE.to_string(), out_response)
+                .await?;
+        }
+
+        // All in-loop emits are partial; emit the finalized message exactly
+        // once so tool calls are executed a single time per turn.
+        message.content = content;
+        if !thinking.is_empty() {
+            message.thinking = Some(thinking);
+        }
+        let tool_calls = openai_client::finalize_pending_tool_calls(pending);
+        if !tool_calls.is_empty() {
+            message.tool_calls = Some(tool_calls.into());
+        }
+        message.streaming = false;
+        message.stop_reason = finish_reason
+            .as_deref()
+            .map(openai_client::normalize_finish_reason);
+        self.output(
+            ctx.clone(),
+            PORT_MESSAGE.to_string(),
+            message.clone().into(),
+        )
+        .await?;
+
+        Ok(())
     }
 
     #[cfg(feature = "claude")]
@@ -456,7 +502,6 @@ impl ChatAgent {
         retry: RetryPolicy,
         cache_retention: CacheRetention,
     ) -> Result<(), AgentError> {
-        use futures::StreamExt;
         use modular_agent_core::tool::list_tool_infos_patterns;
 
         let client = self.claude_manager.get_client(self.ma())?;
@@ -547,139 +592,16 @@ impl ChatAgent {
             // Retry covers stream establishment only: once chunks have been
             // emitted downstream they cannot be rolled back, so any failure
             // after this point must propagate instead of being retried.
-            let mut stream = retry.run(|| client.create_message_stream(&request)).await?;
+            let stream = retry.run(|| client.create_message_stream(&request)).await?;
 
             let mut message = Message::assistant(String::new());
             message.id = Some(id.clone());
             // Partial emits carry streaming=true; MessageStop flips it to false.
             message.streaming = true;
 
-            let mut content = String::new();
-            let mut thinking = String::new();
-            let mut tool_calls: Vec<ToolCall> = Vec::new();
-
-            // Track block types by index
-            let mut block_types: std::collections::HashMap<usize, String> =
-                std::collections::HashMap::new();
-            let mut current_tool_id: Option<String> = None;
-            let mut current_tool_name: Option<String> = None;
-            let mut current_tool_arguments = String::new();
-
-            while let Some(event) = stream.next().await {
-                let event = event?;
-
-                match event {
-                    claude_client::ClaudeStreamEvent::ContentBlockStart {
-                        index,
-                        content_block,
-                    } => match &content_block {
-                        claude_client::ClaudeResponseBlock::Text { .. } => {
-                            block_types.insert(index, "text".to_string());
-                        }
-                        claude_client::ClaudeResponseBlock::ToolUse { id, name, .. } => {
-                            block_types.insert(index, "tool_use".to_string());
-                            current_tool_id = Some(id.clone());
-                            current_tool_name = Some(name.clone());
-                            current_tool_arguments.clear();
-                        }
-                        claude_client::ClaudeResponseBlock::Thinking { .. } => {
-                            block_types.insert(index, "thinking".to_string());
-                        }
-                        claude_client::ClaudeResponseBlock::RedactedThinking { .. } => {
-                            block_types.insert(index, "redacted_thinking".to_string());
-                            if !thinking.is_empty() {
-                                thinking.push('\n');
-                            }
-                            thinking.push_str("[redacted]");
-                        }
-                    },
-                    claude_client::ClaudeStreamEvent::ContentBlockDelta { index, delta } => {
-                        let block_type = block_types.get(&index).map(|s| s.as_str());
-                        match delta {
-                            claude_client::ClaudeDelta::TextDelta { text } => {
-                                if block_type == Some("text") {
-                                    content.push_str(&text);
-                                    message.content = content.clone();
-                                    if !thinking.is_empty() {
-                                        message.thinking = Some(thinking.clone());
-                                    }
-                                    if !tool_calls.is_empty() {
-                                        message.tool_calls = Some(tool_calls.clone().into());
-                                    }
-                                    self.output(
-                                        ctx.clone(),
-                                        PORT_MESSAGE.to_string(),
-                                        message.clone().into(),
-                                    )
-                                    .await?;
-                                }
-                            }
-                            claude_client::ClaudeDelta::ThinkingDelta { thinking: thought } => {
-                                thinking.push_str(&thought);
-                            }
-                            claude_client::ClaudeDelta::InputJsonDelta { partial_json } => {
-                                current_tool_arguments.push_str(&partial_json);
-                            }
-                            claude_client::ClaudeDelta::SignatureDelta { .. } => {
-                                // Skip signature deltas
-                            }
-                        }
-                    }
-                    claude_client::ClaudeStreamEvent::ContentBlockStop { .. } => {
-                        // Finalize tool call if one was being built
-                        if let Some(name) = current_tool_name.take() {
-                            let (parameters, parse_error) =
-                                crate::json_repair::parse_tool_arguments(&current_tool_arguments);
-                            tool_calls.push(ToolCall {
-                                function: ToolCallFunction {
-                                    id: current_tool_id.take(),
-                                    name,
-                                    parameters,
-                                    parse_error,
-                                },
-                            });
-                            current_tool_arguments.clear();
-
-                            message.content = content.clone();
-                            if !thinking.is_empty() {
-                                message.thinking = Some(thinking.clone());
-                            }
-                            message.tool_calls = Some(tool_calls.clone().into());
-                            self.output(
-                                ctx.clone(),
-                                PORT_MESSAGE.to_string(),
-                                message.clone().into(),
-                            )
-                            .await?;
-                        }
-                    }
-                    claude_client::ClaudeStreamEvent::MessageStop {} => {
-                        // Final output with all accumulated data
-                        message.streaming = false;
-                        message.content = content.clone();
-                        if !thinking.is_empty() {
-                            message.thinking = Some(thinking.clone());
-                        }
-                        if !tool_calls.is_empty() {
-                            message.tool_calls = Some(tool_calls.clone().into());
-                        }
-                        self.output(
-                            ctx.clone(),
-                            PORT_MESSAGE.to_string(),
-                            message.clone().into(),
-                        )
-                        .await?;
-                    }
-                    claude_client::ClaudeStreamEvent::Error { error } => {
-                        return Err(AgentError::IoError(format!(
-                            "Claude stream error: {}",
-                            error.message
-                        )));
-                    }
-                    _ => {
-                        // MessageStart, MessageDelta, Ping - skip
-                    }
-                }
+            if let Err(e) = self.run_claude_stream(&ctx, stream, &mut message).await {
+                self.emit_stream_error_message(&ctx, message).await;
+                return Err(e);
             }
 
             Ok(())
@@ -704,6 +626,157 @@ impl ChatAgent {
         }
     }
 
+    /// Consume an established Claude SSE stream, emitting partial messages
+    /// and the finalized message on MessageStop. Extracted so the caller can
+    /// intercept a mid-stream Err and emit an error-marked final message.
+    #[cfg(feature = "claude")]
+    async fn run_claude_stream(
+        &mut self,
+        ctx: &AgentContext,
+        mut stream: impl futures::Stream<Item = Result<claude_client::ClaudeStreamEvent, AgentError>>
+        + Unpin,
+        message: &mut Message,
+    ) -> Result<(), AgentError> {
+        use futures::StreamExt;
+
+        let mut content = String::new();
+        let mut thinking = String::new();
+        let mut tool_calls: Vec<ToolCall> = Vec::new();
+        let mut stop_reason: Option<String> = None;
+
+        // Track block types by index
+        let mut block_types: std::collections::HashMap<usize, String> =
+            std::collections::HashMap::new();
+        let mut current_tool_id: Option<String> = None;
+        let mut current_tool_name: Option<String> = None;
+        let mut current_tool_arguments = String::new();
+
+        while let Some(event) = stream.next().await {
+            let event = event?;
+
+            match event {
+                claude_client::ClaudeStreamEvent::ContentBlockStart {
+                    index,
+                    content_block,
+                } => match &content_block {
+                    claude_client::ClaudeResponseBlock::Text { .. } => {
+                        block_types.insert(index, "text".to_string());
+                    }
+                    claude_client::ClaudeResponseBlock::ToolUse { id, name, .. } => {
+                        block_types.insert(index, "tool_use".to_string());
+                        current_tool_id = Some(id.clone());
+                        current_tool_name = Some(name.clone());
+                        current_tool_arguments.clear();
+                    }
+                    claude_client::ClaudeResponseBlock::Thinking { .. } => {
+                        block_types.insert(index, "thinking".to_string());
+                    }
+                    claude_client::ClaudeResponseBlock::RedactedThinking { .. } => {
+                        block_types.insert(index, "redacted_thinking".to_string());
+                        if !thinking.is_empty() {
+                            thinking.push('\n');
+                        }
+                        thinking.push_str("[redacted]");
+                    }
+                },
+                claude_client::ClaudeStreamEvent::ContentBlockDelta { index, delta } => {
+                    let block_type = block_types.get(&index).map(|s| s.as_str());
+                    match delta {
+                        claude_client::ClaudeDelta::TextDelta { text } => {
+                            if block_type == Some("text") {
+                                content.push_str(&text);
+                                message.content = content.clone();
+                                if !thinking.is_empty() {
+                                    message.thinking = Some(thinking.clone());
+                                }
+                                if !tool_calls.is_empty() {
+                                    message.tool_calls = Some(tool_calls.clone().into());
+                                }
+                                self.output(
+                                    ctx.clone(),
+                                    PORT_MESSAGE.to_string(),
+                                    message.clone().into(),
+                                )
+                                .await?;
+                            }
+                        }
+                        claude_client::ClaudeDelta::ThinkingDelta { thinking: thought } => {
+                            thinking.push_str(&thought);
+                        }
+                        claude_client::ClaudeDelta::InputJsonDelta { partial_json } => {
+                            current_tool_arguments.push_str(&partial_json);
+                        }
+                        claude_client::ClaudeDelta::SignatureDelta { .. } => {
+                            // Skip signature deltas
+                        }
+                    }
+                }
+                claude_client::ClaudeStreamEvent::ContentBlockStop { .. } => {
+                    // Finalize tool call if one was being built
+                    if let Some(name) = current_tool_name.take() {
+                        let (parameters, parse_error) =
+                            crate::json_repair::parse_tool_arguments(&current_tool_arguments);
+                        tool_calls.push(ToolCall {
+                            function: ToolCallFunction {
+                                id: current_tool_id.take(),
+                                name,
+                                parameters,
+                                parse_error,
+                            },
+                        });
+                        current_tool_arguments.clear();
+
+                        message.content = content.clone();
+                        if !thinking.is_empty() {
+                            message.thinking = Some(thinking.clone());
+                        }
+                        message.tool_calls = Some(tool_calls.clone().into());
+                        self.output(
+                            ctx.clone(),
+                            PORT_MESSAGE.to_string(),
+                            message.clone().into(),
+                        )
+                        .await?;
+                    }
+                }
+                claude_client::ClaudeStreamEvent::MessageStop {} => {
+                    // Final output with all accumulated data
+                    message.streaming = false;
+                    message.stop_reason = stop_reason.clone();
+                    message.content = content.clone();
+                    if !thinking.is_empty() {
+                        message.thinking = Some(thinking.clone());
+                    }
+                    if !tool_calls.is_empty() {
+                        message.tool_calls = Some(tool_calls.clone().into());
+                    }
+                    self.output(
+                        ctx.clone(),
+                        PORT_MESSAGE.to_string(),
+                        message.clone().into(),
+                    )
+                    .await?;
+                }
+                claude_client::ClaudeStreamEvent::MessageDelta { delta, .. } => {
+                    if let Some(reason) = delta.stop_reason {
+                        stop_reason = Some(claude_client::normalize_stop_reason(&reason));
+                    }
+                }
+                claude_client::ClaudeStreamEvent::Error { error } => {
+                    return Err(AgentError::IoError(format!(
+                        "Claude stream error: {}",
+                        error.message
+                    )));
+                }
+                _ => {
+                    // MessageStart, Ping - skip
+                }
+            }
+        }
+
+        Ok(())
+    }
+
     #[cfg(feature = "ollama")]
     #[allow(clippy::too_many_arguments)]
     async fn process_ollama(
@@ -722,7 +795,6 @@ impl ChatAgent {
         // Ollama has no prompt cache API; accepted only to keep call sites uniform.
         _cache_retention: CacheRetention,
     ) -> Result<(), AgentError> {
-        use futures::StreamExt;
         use modular_agent_core::tool::list_tool_infos_patterns;
 
         let client = self.ollama_manager.get_client(self.ma())?;
@@ -789,68 +861,18 @@ impl ChatAgent {
             // Retry covers stream establishment only: once chunks have been
             // emitted downstream they cannot be rolled back, so any failure
             // after this point must propagate instead of being retried.
-            let mut stream = retry
+            let stream = retry
                 .run(|| client.post_ndjson_stream::<ollama_client::ChatResponse>(&url, &request))
                 .await?;
 
             let mut message = Message::assistant("".to_string());
-            let mut content = String::new();
-            let mut thinking = String::new();
-            let mut tool_calls: Vec<ToolCall> = vec![];
-            while let Some(res) = stream.next().await {
-                let res = res?;
+            message.id = Some(id.clone());
+            // Partial emits carry streaming=true; the done=true chunk flips it.
+            message.streaming = true;
 
-                content.push_str(&res.message.content);
-                if let Some(thinking_str) = res.message.thinking.as_ref() {
-                    thinking.push_str(thinking_str);
-                }
-                for call in &res.message.tool_calls {
-                    let mut parameters = call.function.arguments.clone();
-                    if let Some(props) =
-                        parameters.as_object().and_then(|obj| obj.get("properties"))
-                    {
-                        parameters = props.clone();
-                    }
-
-                    let tool_call = ToolCall {
-                        function: ToolCallFunction {
-                            // Ollama sends no tool_call id; assign a stable
-                            // one at generation time so tool results can be
-                            // paired even after a provider switch (P-02).
-                            id: Some(uuid::Uuid::new_v4().to_string()),
-                            name: call.function.name.clone(),
-                            parameters,
-                            parse_error: None,
-                        },
-                    };
-                    tool_calls.push(tool_call);
-                }
-
-                message.content = content.clone();
-                if !thinking.is_empty() {
-                    message.thinking = Some(thinking.clone());
-                }
-                if !tool_calls.is_empty() {
-                    message.tool_calls = Some(tool_calls.clone().into());
-                }
-                message.id = Some(id.clone());
-                // Only the final chunk (done=true) is a non-streaming emit.
-                message.streaming = !res.done;
-
-                self.output(
-                    ctx.clone(),
-                    PORT_MESSAGE.to_string(),
-                    message.clone().into(),
-                )
-                .await?;
-
-                let out_response = AgentValue::from_serialize(&res)?;
-                self.output(ctx.clone(), PORT_RESPONSE.to_string(), out_response)
-                    .await?;
-
-                if res.done {
-                    break;
-                }
+            if let Err(e) = self.run_ollama_stream(&ctx, stream, &mut message).await {
+                self.emit_stream_error_message(&ctx, message).await;
+                return Err(e);
             }
 
             Ok(())
@@ -861,6 +883,10 @@ impl ChatAgent {
 
             let mut message = ollama_client::message_from_ollama(&res.message);
             message.id = Some(id.clone());
+            message.stop_reason = res
+                .done_reason
+                .as_deref()
+                .map(ollama_client::normalize_done_reason);
 
             self.output(
                 ctx.clone(),
@@ -875,5 +901,349 @@ impl ChatAgent {
 
             Ok(())
         }
+    }
+
+    /// Consume an established Ollama NDJSON stream, emitting partial messages
+    /// and the finalized message on the done=true chunk. Extracted so the
+    /// caller can intercept a mid-stream Err and emit an error-marked final
+    /// message.
+    #[cfg(feature = "ollama")]
+    async fn run_ollama_stream(
+        &mut self,
+        ctx: &AgentContext,
+        mut stream: std::pin::Pin<
+            Box<dyn futures::Stream<Item = Result<ollama_client::ChatResponse, AgentError>> + Send>,
+        >,
+        message: &mut Message,
+    ) -> Result<(), AgentError> {
+        use futures::StreamExt;
+
+        let mut content = String::new();
+        let mut thinking = String::new();
+        let mut tool_calls: Vec<ToolCall> = vec![];
+        while let Some(res) = stream.next().await {
+            let res = res?;
+
+            content.push_str(&res.message.content);
+            if let Some(thinking_str) = res.message.thinking.as_ref() {
+                thinking.push_str(thinking_str);
+            }
+            for call in &res.message.tool_calls {
+                let mut parameters = call.function.arguments.clone();
+                if let Some(props) = parameters.as_object().and_then(|obj| obj.get("properties")) {
+                    parameters = props.clone();
+                }
+
+                let tool_call = ToolCall {
+                    function: ToolCallFunction {
+                        // Ollama sends no tool_call id; assign a stable
+                        // one at generation time so tool results can be
+                        // paired even after a provider switch (P-02).
+                        id: Some(uuid::Uuid::new_v4().to_string()),
+                        name: call.function.name.clone(),
+                        parameters,
+                        parse_error: None,
+                    },
+                };
+                tool_calls.push(tool_call);
+            }
+
+            message.content = content.clone();
+            if !thinking.is_empty() {
+                message.thinking = Some(thinking.clone());
+            }
+            if !tool_calls.is_empty() {
+                message.tool_calls = Some(tool_calls.clone().into());
+            }
+            // Only the final chunk (done=true) is a non-streaming emit.
+            message.streaming = !res.done;
+            if res.done {
+                message.stop_reason = res
+                    .done_reason
+                    .as_deref()
+                    .map(ollama_client::normalize_done_reason);
+            }
+
+            self.output(
+                ctx.clone(),
+                PORT_MESSAGE.to_string(),
+                message.clone().into(),
+            )
+            .await?;
+
+            let out_response = AgentValue::from_serialize(&res)?;
+            self.output(ctx.clone(), PORT_RESPONSE.to_string(), out_response)
+                .await?;
+
+            if res.done {
+                break;
+            }
+        }
+
+        Ok(())
+    }
+}
+
+/// Build the error-marked final message for a stream that failed mid-turn,
+/// or `None` if the turn already delivered its final message (`streaming`
+/// flips to false only at final-emit time, so emitting again would clobber a
+/// successful final with the same id). Accumulated tool_calls from partial
+/// emits are dropped: the model never finished the turn, so they must not
+/// reach the tool executor.
+#[cfg(any(feature = "openai", feature = "claude", feature = "ollama"))]
+pub(crate) fn stream_error_final(mut message: Message) -> Option<Message> {
+    if !message.streaming {
+        return None;
+    }
+    message.streaming = false;
+    message.stop_reason = Some("error".to_string());
+    message.tool_calls = None;
+    Some(message)
+}
+
+#[cfg(test)]
+#[cfg(any(feature = "openai", feature = "claude", feature = "ollama"))]
+mod tests {
+    use super::*;
+
+    use modular_agent_core::ConnectionSpec;
+    use modular_agent_core::test_utils::{ProbeReceiver, TestProbeAgent, probe_receiver};
+
+    /// Build a running preset with a ChatAgent whose `message` port feeds a
+    /// probe, so stream-loop emits can be observed end to end.
+    async fn setup_chat_with_probe() -> (ModularAgent, String, ProbeReceiver) {
+        let ma = ModularAgent::init().unwrap();
+        ma.ready().await.unwrap();
+
+        let preset_id = ma.new_preset().unwrap();
+        let chat_def = ma.get_agent_definition(ChatAgent::DEF_NAME).unwrap();
+        let chat_id = ma
+            .add_agent(preset_id.clone(), chat_def.to_spec())
+            .await
+            .unwrap();
+        let probe_def = ma.get_agent_definition(TestProbeAgent::DEF_NAME).unwrap();
+        let probe_id = ma
+            .add_agent(preset_id.clone(), probe_def.to_spec())
+            .await
+            .unwrap();
+        ma.add_connection(
+            &preset_id,
+            ConnectionSpec {
+                source: chat_id.clone(),
+                source_handle: PORT_MESSAGE.into(),
+                target: probe_id.clone(),
+                target_handle: "value".into(),
+            },
+        )
+        .await
+        .unwrap();
+        ma.start_preset(&preset_id).await.unwrap();
+        let probe_rx = probe_receiver(&ma, &probe_id).await.unwrap();
+
+        (ma, chat_id, probe_rx)
+    }
+
+    fn streaming_seed_message(id: &str) -> Message {
+        let mut message = Message::assistant(String::new());
+        message.id = Some(id.to_string());
+        message.streaming = true;
+        message
+    }
+
+    /// Drain probe emits until the final (streaming=false) message, asserting
+    /// every partial keeps stop_reason None.
+    async fn recv_final_message(probe_rx: &ProbeReceiver) -> Message {
+        loop {
+            let (_ctx, value) = probe_rx.recv().await.unwrap();
+            let msg = value.as_message().unwrap().clone();
+            if !msg.streaming {
+                return msg;
+            }
+            assert_eq!(msg.stop_reason, None, "partial emits must keep None");
+        }
+    }
+
+    #[cfg(feature = "openai")]
+    #[tokio::test]
+    async fn openai_stream_finish_reason_lands_on_final_message() {
+        let (ma, chat_id, probe_rx) = setup_chat_with_probe().await;
+
+        let chunks: Vec<Result<Option<String>, AgentError>> = vec![
+            Ok(Some(
+                r#"{"choices":[{"index":0,"delta":{"content":"Hel"},"finish_reason":null}]}"#
+                    .to_string(),
+            )),
+            Ok(Some(
+                r#"{"choices":[{"index":0,"delta":{"content":"lo"},"finish_reason":"length"}]}"#
+                    .to_string(),
+            )),
+            Ok(None), // [DONE] sentinel
+        ];
+        let mut message = streaming_seed_message("m1");
+
+        {
+            let agent = ma.get_agent(&chat_id).unwrap();
+            let mut guard = agent.lock().await;
+            let chat = guard.as_agent_mut::<ChatAgent>().unwrap();
+            chat.run_openai_stream(
+                &AgentContext::new(),
+                futures::stream::iter(chunks),
+                &mut message,
+            )
+            .await
+            .unwrap();
+        }
+
+        let final_msg = recv_final_message(&probe_rx).await;
+        assert_eq!(final_msg.stop_reason.as_deref(), Some("length"));
+        assert_eq!(final_msg.content, "Hello");
+        assert_eq!(final_msg.id.as_deref(), Some("m1"));
+
+        ma.quit();
+    }
+
+    #[cfg(feature = "openai")]
+    #[tokio::test]
+    async fn openai_stream_error_emits_same_id_error_final() {
+        let (ma, chat_id, probe_rx) = setup_chat_with_probe().await;
+
+        let chunks: Vec<Result<Option<String>, AgentError>> = vec![
+            Ok(Some(
+                r#"{"choices":[{"index":0,"delta":{"content":"partial"},"finish_reason":null}]}"#
+                    .to_string(),
+            )),
+            Err(AgentError::IoError("connection reset".into())),
+        ];
+        let mut message = streaming_seed_message("m1");
+
+        {
+            let agent = ma.get_agent(&chat_id).unwrap();
+            let mut guard = agent.lock().await;
+            let chat = guard.as_agent_mut::<ChatAgent>().unwrap();
+            let ctx = AgentContext::new();
+            // Same sequence as the process_* call sites: intercept the Err,
+            // then emit the error-marked final for the dangling partial.
+            let result = chat
+                .run_openai_stream(&ctx, futures::stream::iter(chunks), &mut message)
+                .await;
+            assert!(result.is_err());
+            chat.emit_stream_error_message(&ctx, message).await;
+        }
+
+        let final_msg = recv_final_message(&probe_rx).await;
+        assert_eq!(final_msg.stop_reason.as_deref(), Some("error"));
+        assert_eq!(final_msg.content, "partial");
+        assert_eq!(final_msg.id.as_deref(), Some("m1"));
+
+        ma.quit();
+    }
+
+    #[cfg(feature = "claude")]
+    #[tokio::test]
+    async fn claude_stream_stop_reason_lands_on_final_message() {
+        let (ma, chat_id, probe_rx) = setup_chat_with_probe().await;
+
+        let events: Vec<Result<claude_client::ClaudeStreamEvent, AgentError>> = [
+            r#"{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}"#,
+            r#"{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hi"}}"#,
+            r#"{"type":"message_delta","delta":{"stop_reason":"max_tokens"},"usage":{"input_tokens":1,"output_tokens":1}}"#,
+            r#"{"type":"message_stop"}"#,
+        ]
+        .iter()
+        .map(|json| Ok(serde_json::from_str(json).unwrap()))
+        .collect();
+        let mut message = streaming_seed_message("m1");
+
+        {
+            let agent = ma.get_agent(&chat_id).unwrap();
+            let mut guard = agent.lock().await;
+            let chat = guard.as_agent_mut::<ChatAgent>().unwrap();
+            chat.run_claude_stream(
+                &AgentContext::new(),
+                futures::stream::iter(events),
+                &mut message,
+            )
+            .await
+            .unwrap();
+        }
+
+        let final_msg = recv_final_message(&probe_rx).await;
+        assert_eq!(final_msg.stop_reason.as_deref(), Some("length"));
+        assert_eq!(final_msg.content, "Hi");
+        assert_eq!(final_msg.id.as_deref(), Some("m1"));
+
+        ma.quit();
+    }
+
+    #[cfg(feature = "ollama")]
+    #[tokio::test]
+    async fn ollama_stream_done_reason_lands_on_final_message() {
+        let (ma, chat_id, probe_rx) = setup_chat_with_probe().await;
+
+        let chunks: Vec<Result<ollama_client::ChatResponse, AgentError>> = [
+            r#"{"model":"m","created_at":"t","message":{"role":"assistant","content":"Hel"},"done":false}"#,
+            r#"{"model":"m","created_at":"t","message":{"role":"assistant","content":"lo"},"done":true,"done_reason":"stop"}"#,
+        ]
+        .iter()
+        .map(|json| Ok(serde_json::from_str(json).unwrap()))
+        .collect();
+        let mut message = streaming_seed_message("m1");
+
+        {
+            let agent = ma.get_agent(&chat_id).unwrap();
+            let mut guard = agent.lock().await;
+            let chat = guard.as_agent_mut::<ChatAgent>().unwrap();
+            chat.run_ollama_stream(
+                &AgentContext::new(),
+                Box::pin(futures::stream::iter(chunks)),
+                &mut message,
+            )
+            .await
+            .unwrap();
+        }
+
+        let final_msg = recv_final_message(&probe_rx).await;
+        assert_eq!(final_msg.stop_reason.as_deref(), Some("stop"));
+        assert_eq!(final_msg.content, "Hello");
+        assert_eq!(final_msg.id.as_deref(), Some("m1"));
+
+        ma.quit();
+    }
+
+    fn partial_message_with_tool_calls() -> Message {
+        let mut message = Message::assistant("partial".to_string());
+        message.id = Some("msg-1".to_string());
+        message.streaming = true;
+        message.tool_calls = Some(
+            vec![ToolCall {
+                function: ToolCallFunction {
+                    id: Some("call-1".to_string()),
+                    name: "do_thing".to_string(),
+                    parameters: serde_json::json!({}),
+                    parse_error: None,
+                },
+            }]
+            .into(),
+        );
+        message
+    }
+
+    #[test]
+    fn stream_error_final_marks_error_and_strips_tool_calls() {
+        let message =
+            stream_error_final(partial_message_with_tool_calls()).expect("should emit final");
+        assert!(!message.streaming);
+        assert_eq!(message.stop_reason.as_deref(), Some("error"));
+        assert!(message.tool_calls.is_none());
+        assert_eq!(message.content, "partial");
+        assert_eq!(message.id.as_deref(), Some("msg-1"));
+    }
+
+    #[test]
+    fn stream_error_final_skips_already_finalized_turn() {
+        let mut message = partial_message_with_tool_calls();
+        message.streaming = false;
+        message.stop_reason = Some("stop".to_string());
+        assert!(stream_error_final(message).is_none());
     }
 }

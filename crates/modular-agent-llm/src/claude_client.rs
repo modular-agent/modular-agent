@@ -384,7 +384,6 @@ pub(crate) enum ClaudeStreamEvent {
     },
     #[serde(rename = "message_delta")]
     MessageDelta {
-        #[allow(dead_code)]
         delta: ClaudeMessageDelta,
         #[allow(dead_code)]
         usage: ClaudeUsage,
@@ -416,7 +415,6 @@ pub(crate) enum ClaudeDelta {
 
 #[derive(serde::Deserialize)]
 pub(crate) struct ClaudeMessageDelta {
-    #[allow(dead_code)]
     pub stop_reason: Option<String>,
 }
 
@@ -615,8 +613,21 @@ pub(crate) fn message_from_claude_response(response: &ClaudeResponse) -> Message
     if !thinking.is_empty() {
         message.thinking = Some(thinking);
     }
+    message.stop_reason = response.stop_reason.as_deref().map(normalize_stop_reason);
 
     message
+}
+
+/// Normalize a Claude `stop_reason` to the framework stop_reason vocabulary.
+/// Unknown provider values pass through unchanged.
+pub(crate) fn normalize_stop_reason(raw: &str) -> String {
+    match raw {
+        "end_turn" | "stop_sequence" => "stop",
+        "tool_use" => "tool_use",
+        "max_tokens" => "length",
+        other => other,
+    }
+    .to_string()
 }
 
 /// Convert a framework ToolInfo to a Claude Tool definition.
@@ -873,6 +884,7 @@ mod tests {
         assert_eq!(msg.content, "Hello!");
         assert!(msg.tool_calls.is_none());
         assert!(msg.thinking.is_none());
+        assert_eq!(msg.stop_reason.as_deref(), Some("stop"));
     }
 
     #[test]
@@ -902,6 +914,35 @@ mod tests {
         assert_eq!(tool_calls.len(), 1);
         assert_eq!(tool_calls[0].function.name, "get_weather");
         assert_eq!(tool_calls[0].function.id, Some("toolu_abc".to_string()));
+        assert_eq!(msg.stop_reason.as_deref(), Some("tool_use"));
+    }
+
+    #[test]
+    fn test_message_from_claude_response_max_tokens() {
+        let response = ClaudeResponse {
+            id: "msg_123".to_string(),
+            content: vec![ClaudeResponseBlock::Text {
+                text: "Truncated...".to_string(),
+            }],
+            stop_reason: Some("max_tokens".to_string()),
+            usage: ClaudeUsage {
+                input_tokens: 10,
+                output_tokens: 5,
+            },
+        };
+
+        let msg = message_from_claude_response(&response);
+        assert_eq!(msg.stop_reason.as_deref(), Some("length"));
+    }
+
+    #[test]
+    fn test_normalize_stop_reason() {
+        assert_eq!(normalize_stop_reason("end_turn"), "stop");
+        assert_eq!(normalize_stop_reason("stop_sequence"), "stop");
+        assert_eq!(normalize_stop_reason("tool_use"), "tool_use");
+        assert_eq!(normalize_stop_reason("max_tokens"), "length");
+        // Unknown provider values pass through unchanged
+        assert_eq!(normalize_stop_reason("pause_turn"), "pause_turn");
     }
 
     #[test]

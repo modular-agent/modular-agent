@@ -313,6 +313,7 @@ impl ResponsesAgent {
             .unwrap_or_default();
         let mut message = openai_client::response_output_to_message(&output)?;
         message.id = Some(id.to_string());
+        message.stop_reason = stop_reason_from_response(&response, message.tool_calls.is_some());
 
         // Output message
         self.output(ctx.clone(), PORT_MESSAGE.to_string(), message.into())
@@ -335,19 +336,48 @@ impl ResponsesAgent {
         use_conversation_state: bool,
         retry: RetryPolicy,
     ) -> Result<(), AgentError> {
-        use futures::StreamExt;
-
         let url = client.responses_url();
         // Retry covers stream establishment only: once chunks have been
         // emitted downstream they cannot be rolled back, so any failure
         // after this point must propagate instead of being retried.
-        let mut stream = retry.run(|| client.post_stream(&url, request)).await?;
+        let stream = retry.run(|| client.post_stream(&url, request)).await?;
 
         let mut message = Message::assistant(String::new());
         message.id = Some(id.to_string());
         // Partial emits during streaming must be skipped by CallToolMessageAgent so tools
         // are executed only once against the final message.
         message.streaming = true;
+
+        if let Err(e) = self
+            .run_stream(&ctx, stream, &mut message, use_conversation_state)
+            .await
+        {
+            // Mark the mid-stream failure on a final same-id emit so message
+            // history replaces the dangling partial with an error-terminated
+            // one. Best effort: the stream error is the more useful signal,
+            // so an emit failure here must not mask it.
+            if let Some(message) = crate::chat::stream_error_final(message) {
+                let _ = self
+                    .output(ctx.clone(), PORT_MESSAGE.to_string(), message.into())
+                    .await;
+            }
+            return Err(e);
+        }
+
+        Ok(())
+    }
+
+    /// Consume an established Responses API SSE stream, emitting partial
+    /// messages and exactly one finalized message. Extracted so the caller
+    /// can intercept a mid-stream Err and emit an error-marked final message.
+    async fn run_stream(
+        &mut self,
+        ctx: &AgentContext,
+        mut stream: impl futures::Stream<Item = Result<Option<String>, AgentError>> + Unpin,
+        message: &mut Message,
+        use_conversation_state: bool,
+    ) -> Result<(), AgentError> {
+        use futures::StreamExt;
 
         let mut content = String::new();
         let mut tool_calls: Vec<ToolCall> = Vec::new();
@@ -411,6 +441,13 @@ impl ResponsesAgent {
                         .await?;
                     }
                 }
+                openai_client::ResponseStreamEvent::Incomplete { response }
+                | openai_client::ResponseStreamEvent::Failed { response } => {
+                    // Terminal but unsuccessful; record the reason and let the
+                    // trailing guard below emit the single final message.
+                    message.stop_reason =
+                        stop_reason_from_response(&response, !tool_calls.is_empty());
+                }
                 openai_client::ResponseStreamEvent::Completed { response } => {
                     // Emit the final, non-streaming message so downstream agents act on it once.
                     message.content = content.clone();
@@ -418,6 +455,8 @@ impl ResponsesAgent {
                         message.tool_calls = Some(tool_calls.clone().into());
                     }
                     message.streaming = false;
+                    message.stop_reason =
+                        stop_reason_from_response(&response, !tool_calls.is_empty());
                     self.output(
                         ctx.clone(),
                         PORT_MESSAGE.to_string(),
@@ -441,20 +480,216 @@ impl ResponsesAgent {
         }
 
         // The Responses API can terminate a stream with response.incomplete or
-        // response.failed instead of response.completed (e.g. max_output_tokens,
-        // content filter); those events fall into Other. Guarantee exactly one
-        // streaming=false final emit per turn so accumulated tool_calls still run.
+        // response.failed instead of response.completed (their stop_reason is
+        // recorded in the arms above). Guarantee exactly one streaming=false
+        // final emit per turn so accumulated tool_calls still run.
         if message.streaming {
             message.content = content;
             if !tool_calls.is_empty() {
                 message.tool_calls = Some(tool_calls.into());
             }
             message.streaming = false;
-            self.output(ctx, PORT_MESSAGE.to_string(), message.into())
-                .await?;
+            self.output(
+                ctx.clone(),
+                PORT_MESSAGE.to_string(),
+                message.clone().into(),
+            )
+            .await?;
         }
 
         Ok(())
+    }
+}
+
+/// Map a terminal Responses API `response` object to a normalized stop_reason.
+///
+/// The Responses API reports completion via `status` plus
+/// `incomplete_details.reason` instead of a finish_reason; unknown provider
+/// values pass through unchanged.
+fn stop_reason_from_response(response: &serde_json::Value, has_tool_calls: bool) -> Option<String> {
+    let status = response.get("status").and_then(|v| v.as_str())?;
+    let reason = match status {
+        "completed" => {
+            if has_tool_calls {
+                "tool_use"
+            } else {
+                "stop"
+            }
+        }
+        "incomplete" => {
+            match response
+                .get("incomplete_details")
+                .and_then(|d| d.get("reason"))
+                .and_then(|v| v.as_str())
+            {
+                Some("max_output_tokens") => "length",
+                Some("content_filter") => "error",
+                Some(other) => other,
+                None => "incomplete",
+            }
+        }
+        "failed" => "error",
+        other => other,
+    };
+    Some(reason.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use modular_agent_core::ConnectionSpec;
+    use modular_agent_core::test_utils::{ProbeReceiver, TestProbeAgent, probe_receiver};
+
+    /// Build a running preset with a ResponsesAgent whose `message` port
+    /// feeds a probe, so stream-loop emits can be observed end to end.
+    async fn setup_responses_with_probe() -> (ModularAgent, String, ProbeReceiver) {
+        let ma = ModularAgent::init().unwrap();
+        ma.ready().await.unwrap();
+
+        let preset_id = ma.new_preset().unwrap();
+        let responses_def = ma.get_agent_definition(ResponsesAgent::DEF_NAME).unwrap();
+        let responses_id = ma
+            .add_agent(preset_id.clone(), responses_def.to_spec())
+            .await
+            .unwrap();
+        let probe_def = ma.get_agent_definition(TestProbeAgent::DEF_NAME).unwrap();
+        let probe_id = ma
+            .add_agent(preset_id.clone(), probe_def.to_spec())
+            .await
+            .unwrap();
+        ma.add_connection(
+            &preset_id,
+            ConnectionSpec {
+                source: responses_id.clone(),
+                source_handle: PORT_MESSAGE.into(),
+                target: probe_id.clone(),
+                target_handle: "value".into(),
+            },
+        )
+        .await
+        .unwrap();
+        ma.start_preset(&preset_id).await.unwrap();
+        let probe_rx = probe_receiver(&ma, &probe_id).await.unwrap();
+
+        (ma, responses_id, probe_rx)
+    }
+
+    #[tokio::test]
+    async fn responses_stream_incomplete_status_lands_on_final_message() {
+        let (ma, responses_id, probe_rx) = setup_responses_with_probe().await;
+
+        // An incomplete turn: text deltas, then response.incomplete instead
+        // of response.completed. The trailing guard must still emit exactly
+        // one streaming=false final carrying the mapped stop_reason.
+        let chunks: Vec<Result<Option<String>, AgentError>> = vec![
+            Ok(Some(
+                r#"{"type":"response.output_text.delta","delta":"Hi"}"#.to_string(),
+            )),
+            Ok(Some(
+                r#"{"type":"response.incomplete","response":{"status":"incomplete","incomplete_details":{"reason":"max_output_tokens"}}}"#
+                    .to_string(),
+            )),
+            Ok(None), // [DONE] sentinel
+        ];
+        let mut message = Message::assistant(String::new());
+        message.id = Some("m1".to_string());
+        message.streaming = true;
+
+        {
+            let agent = ma.get_agent(&responses_id).unwrap();
+            let mut guard = agent.lock().await;
+            let responses = guard.as_agent_mut::<ResponsesAgent>().unwrap();
+            responses
+                .run_stream(
+                    &AgentContext::new(),
+                    futures::stream::iter(chunks),
+                    &mut message,
+                    false,
+                )
+                .await
+                .unwrap();
+        }
+
+        let final_msg = loop {
+            let (_ctx, value) = probe_rx.recv().await.unwrap();
+            let msg = value.as_message().unwrap().clone();
+            if !msg.streaming {
+                break msg;
+            }
+            assert_eq!(msg.stop_reason, None, "partial emits must keep None");
+        };
+        assert_eq!(final_msg.stop_reason.as_deref(), Some("length"));
+        assert_eq!(final_msg.content, "Hi");
+        assert_eq!(final_msg.id.as_deref(), Some("m1"));
+
+        ma.quit();
+    }
+
+    #[test]
+    fn test_stop_reason_from_response_completed() {
+        let response = serde_json::json!({"status": "completed"});
+        assert_eq!(
+            stop_reason_from_response(&response, false).as_deref(),
+            Some("stop")
+        );
+        assert_eq!(
+            stop_reason_from_response(&response, true).as_deref(),
+            Some("tool_use")
+        );
+    }
+
+    #[test]
+    fn test_stop_reason_from_response_incomplete() {
+        let response = serde_json::json!({
+            "status": "incomplete",
+            "incomplete_details": {"reason": "max_output_tokens"}
+        });
+        assert_eq!(
+            stop_reason_from_response(&response, false).as_deref(),
+            Some("length")
+        );
+
+        let response = serde_json::json!({
+            "status": "incomplete",
+            "incomplete_details": {"reason": "content_filter"}
+        });
+        assert_eq!(
+            stop_reason_from_response(&response, false).as_deref(),
+            Some("error")
+        );
+
+        // Unknown reason passes through unchanged
+        let response = serde_json::json!({
+            "status": "incomplete",
+            "incomplete_details": {"reason": "something_new"}
+        });
+        assert_eq!(
+            stop_reason_from_response(&response, false).as_deref(),
+            Some("something_new")
+        );
+
+        // Missing reason falls back to the raw status
+        let response = serde_json::json!({"status": "incomplete"});
+        assert_eq!(
+            stop_reason_from_response(&response, false).as_deref(),
+            Some("incomplete")
+        );
+    }
+
+    #[test]
+    fn test_stop_reason_from_response_failed() {
+        let response = serde_json::json!({"status": "failed"});
+        assert_eq!(
+            stop_reason_from_response(&response, false).as_deref(),
+            Some("error")
+        );
+    }
+
+    #[test]
+    fn test_stop_reason_from_response_missing_status() {
+        let response = serde_json::json!({"output": []});
+        assert_eq!(stop_reason_from_response(&response, false), None);
     }
 }
 
