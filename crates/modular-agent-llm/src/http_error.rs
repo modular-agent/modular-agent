@@ -2,6 +2,8 @@
 
 use std::time::Duration;
 
+use modular_agent_core::AgentError;
+
 /// Parse a `Retry-After` header value as integer seconds.
 ///
 /// HTTP-date format is not supported and yields `None`.
@@ -14,6 +16,16 @@ pub(crate) fn parse_retry_after(headers: &reqwest::header::HeaderMap) -> Option<
         .parse::<u64>()
         .ok()
         .map(Duration::from_secs)
+}
+
+/// Map a transport-level reqwest error, promoting timeouts (connect or read)
+/// to `AgentError::Timeout` so the retry layer classifies them as retryable.
+pub(crate) fn map_reqwest_error(context: &str, e: reqwest::Error) -> AgentError {
+    if e.is_timeout() {
+        AgentError::Timeout(format!("{}: {}", context, e))
+    } else {
+        AgentError::IoError(format!("{}: {}", context, e))
+    }
 }
 
 /// Throttling-related wording that must never be classified as context

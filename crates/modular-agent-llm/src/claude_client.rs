@@ -72,8 +72,15 @@ impl ClaudeManager {
             })
             .unwrap_or_else(|| DEFAULT_CLAUDE_API_BASE.to_string());
 
+        // Timeouts keep a hung server from blocking process() forever;
+        // read_timeout is idle time between reads, so streaming is safe.
+        let http = reqwest::Client::builder()
+            .connect_timeout(std::time::Duration::from_secs(10))
+            .read_timeout(std::time::Duration::from_secs(120))
+            .build()
+            .map_err(|e| AgentError::IoError(format!("Claude client build error: {}", e)))?;
         let new_client = ClaudeClient {
-            http: reqwest::Client::new(),
+            http,
             api_key,
             api_base,
         };
@@ -111,7 +118,7 @@ impl ClaudeClient {
             .json(request)
             .send()
             .await
-            .map_err(|e| AgentError::IoError(format!("Claude request error: {}", e)))?;
+            .map_err(|e| crate::http_error::map_reqwest_error("Claude request error", e))?;
 
         let status = resp.status().as_u16();
         if !resp.status().is_success() {
@@ -123,7 +130,7 @@ impl ClaudeClient {
         let response: ClaudeResponse = resp
             .json()
             .await
-            .map_err(|e| AgentError::IoError(format!("Claude response parse error: {}", e)))?;
+            .map_err(|e| crate::http_error::map_reqwest_error("Claude response parse error", e))?;
 
         Ok(response)
     }
@@ -145,7 +152,7 @@ impl ClaudeClient {
             .json(request)
             .send()
             .await
-            .map_err(|e| AgentError::IoError(format!("Claude stream request error: {}", e)))?;
+            .map_err(|e| crate::http_error::map_reqwest_error("Claude stream request error", e))?;
 
         let status = resp.status().as_u16();
         if !resp.status().is_success() {

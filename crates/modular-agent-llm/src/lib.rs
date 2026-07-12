@@ -8,6 +8,15 @@ pub mod chat;
 pub mod completion;
 pub mod embeddings;
 
+// With no provider features enabled, only `RetryPolicy::from_configs` is
+// reachable; the retry machinery itself is dead. Keep it compiled (so all
+// feature combinations type-check it) but silence the dead-code lint.
+#[cfg_attr(
+    not(any(feature = "openai", feature = "claude", feature = "ollama")),
+    allow(dead_code)
+)]
+pub(crate) mod retry;
+
 #[cfg(feature = "openai")]
 pub mod responses;
 

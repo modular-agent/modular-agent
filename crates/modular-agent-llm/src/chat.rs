@@ -8,6 +8,7 @@ use crate::provider::{
     CONFIG_OPENAI_API_BASE, CONFIG_OPENAI_API_KEY, DEFAULT_CLAUDE_API_BASE, DEFAULT_OLLAMA_URL,
     DEFAULT_OPENAI_API_BASE, ModelIdentifier, ProviderKind,
 };
+use crate::retry::RetryPolicy;
 
 #[cfg(feature = "openai")]
 use crate::openai_client;
@@ -26,10 +27,13 @@ const PORT_MESSAGE: &str = "message";
 const PORT_RESPONSE: &str = "response";
 
 const CONFIG_MODEL: &str = "model";
+const CONFIG_MAX_RETRIES: &str = "max_retries";
 const CONFIG_MAX_TOKENS: &str = "max_tokens";
 const CONFIG_OPTIONS: &str = "options";
+const CONFIG_RETRY_BASE_DELAY_MS: &str = "retry_base_delay_ms";
 const CONFIG_STREAM: &str = "stream";
 const CONFIG_TEMPERATURE: &str = "temperature";
+const CONFIG_TIMEOUT_SECS: &str = "timeout_secs";
 const CONFIG_TOOLS: &str = "tools";
 const CONFIG_TOP_P: &str = "top_p";
 
@@ -42,6 +46,21 @@ const DEFAULT_CONFIG_MODEL: &str = "openai/gpt-5-nano";
 /// - `ollama/llama3.2:1b` - Uses Ollama
 /// - `claude/claude-sonnet-4-5-20250514` - Uses Claude API
 /// - `openai/qwen/qwen3-vl-8b` - Slashes after the prefix are preserved in model name
+///
+/// # Configuration
+/// - `model`: Provider-prefixed model name (default: "openai/gpt-5-nano")
+/// - `stream`: Enable streaming mode
+/// - `tools`: Tool patterns to enable (regex, newline-separated)
+/// - `max_tokens`: Maximum tokens to generate (0: use API default)
+/// - `temperature`: Sampling temperature (-1: use API default)
+/// - `top_p`: Nucleus sampling parameter (-1: use API default)
+/// - `options`: Additional request options as JSON
+/// - `max_retries`: Maximum automatic retries for retryable errors such as
+///   rate limits, server overload, and timeouts (default: 2)
+/// - `retry_base_delay_ms`: Base delay for exponential backoff between
+///   retries; a server-provided Retry-After takes precedence (default: 1000)
+/// - `timeout_secs`: Per-attempt deadline in seconds; for streaming it covers
+///   stream establishment only (default: 300, 0 = disabled)
 #[modular_agent(
     title = "Chat",
     category = CATEGORY,
@@ -54,6 +73,9 @@ const DEFAULT_CONFIG_MODEL: &str = "openai/gpt-5-nano";
     number_config(name = CONFIG_TEMPERATURE, title = "Temperature", default = -1.0, description = "-1: use API default (0.0-2.0)", detail),
     number_config(name = CONFIG_TOP_P, title = "Top P", default = -1.0, description = "-1: use API default (0.0-1.0)", detail),
     object_config(name = CONFIG_OPTIONS, title = "Options", description = "Additional request options as JSON", detail),
+    integer_config(name = CONFIG_MAX_RETRIES, title = "Max Retries", default = 2, description = "Automatic retries for retryable errors", detail),
+    integer_config(name = CONFIG_RETRY_BASE_DELAY_MS, title = "Retry Base Delay (ms)", default = 1000, description = "Base delay for exponential backoff", detail),
+    integer_config(name = CONFIG_TIMEOUT_SECS, title = "Timeout (secs)", default = 300, description = "Per-attempt deadline; 0: disabled", detail),
     custom_global_config(name = CONFIG_CLAUDE_API_KEY, type_ = "password", default = AgentValue::string(""), title = "Claude API Key"),
     string_global_config(name = CONFIG_CLAUDE_API_BASE, title = "Claude API Base URL", default = DEFAULT_CLAUDE_API_BASE),
     custom_global_config(name = CONFIG_OPENAI_API_KEY, type_ = "password", default = AgentValue::string(""), title = "OpenAI API Key"),
@@ -130,6 +152,14 @@ impl AsAgent for ChatAgent {
         let temperature = config.get_number_or_default(CONFIG_TEMPERATURE);
         let top_p = config.get_number_or_default(CONFIG_TOP_P);
 
+        // Snapshot retry/timeout configs once per turn so a mid-turn config
+        // change cannot alter an in-flight retry loop.
+        let retry = RetryPolicy::from_configs(
+            config.get_integer_or_default(CONFIG_MAX_RETRIES),
+            config.get_integer_or_default(CONFIG_RETRY_BASE_DELAY_MS),
+            config.get_integer_or_default(CONFIG_TIMEOUT_SECS),
+        );
+
         // Route to appropriate provider
         match model_id.provider {
             #[cfg(feature = "claude")]
@@ -144,6 +174,7 @@ impl AsAgent for ChatAgent {
                     max_tokens,
                     temperature,
                     top_p,
+                    retry,
                 )
                 .await
             }
@@ -159,6 +190,7 @@ impl AsAgent for ChatAgent {
                     max_tokens,
                     temperature,
                     top_p,
+                    retry,
                 )
                 .await
             }
@@ -174,6 +206,7 @@ impl AsAgent for ChatAgent {
                     max_tokens,
                     temperature,
                     top_p,
+                    retry,
                 )
                 .await
             }
@@ -200,6 +233,7 @@ impl ChatAgent {
         max_tokens: i64,
         temperature: f64,
         top_p: f64,
+        retry: RetryPolicy,
     ) -> Result<(), AgentError> {
         use futures::StreamExt;
         use modular_agent_core::tool::list_tool_infos_patterns;
@@ -248,7 +282,10 @@ impl ChatAgent {
         let id = uuid::Uuid::new_v4().to_string();
         if use_stream {
             let url = client.chat_completions_url();
-            let mut stream = client.post_stream(&url, &request).await?;
+            // Retry covers stream establishment only: once chunks have been
+            // emitted downstream they cannot be rolled back, so any failure
+            // after this point must propagate instead of being retried.
+            let mut stream = retry.run(|| client.post_stream(&url, &request)).await?;
 
             let mut message = Message::assistant("".to_string());
             message.id = Some(id.clone());
@@ -320,9 +357,9 @@ impl ChatAgent {
 
             Ok(())
         } else {
-            let res: openai_client::ChatCompletionResponse = client
-                .post_json(&client.chat_completions_url(), &request)
-                .await?;
+            let url = client.chat_completions_url();
+            let res: openai_client::ChatCompletionResponse =
+                retry.run(|| client.post_json(&url, &request)).await?;
 
             for c in &res.choices {
                 let mut message = openai_client::message_from_chat_response(&c.message);
@@ -357,6 +394,7 @@ impl ChatAgent {
         max_tokens: i64,
         temperature: f64,
         top_p: f64,
+        retry: RetryPolicy,
     ) -> Result<(), AgentError> {
         use futures::StreamExt;
         use modular_agent_core::tool::list_tool_infos_patterns;
@@ -426,7 +464,10 @@ impl ChatAgent {
 
         let id = uuid::Uuid::new_v4().to_string();
         if use_stream {
-            let mut stream = client.create_message_stream(&request).await?;
+            // Retry covers stream establishment only: once chunks have been
+            // emitted downstream they cannot be rolled back, so any failure
+            // after this point must propagate instead of being retried.
+            let mut stream = retry.run(|| client.create_message_stream(&request)).await?;
 
             let mut message = Message::assistant(String::new());
             message.id = Some(id.clone());
@@ -562,7 +603,7 @@ impl ChatAgent {
 
             Ok(())
         } else {
-            let response = client.create_message(&request).await?;
+            let response = retry.run(|| client.create_message(&request)).await?;
 
             let mut message = claude_client::message_from_claude_response(&response);
             message.id = Some(id.clone());
@@ -595,6 +636,7 @@ impl ChatAgent {
         max_tokens: i64,
         temperature: f64,
         top_p: f64,
+        retry: RetryPolicy,
     ) -> Result<(), AgentError> {
         use futures::StreamExt;
         use modular_agent_core::tool::list_tool_infos_patterns;
@@ -654,8 +696,12 @@ impl ChatAgent {
 
         let id = uuid::Uuid::new_v4().to_string();
         if use_stream {
-            let mut stream = client
-                .post_ndjson_stream::<ollama_client::ChatResponse>(&client.chat_url(), &request)
+            let url = client.chat_url();
+            // Retry covers stream establishment only: once chunks have been
+            // emitted downstream they cannot be rolled back, so any failure
+            // after this point must propagate instead of being retried.
+            let mut stream = retry
+                .run(|| client.post_ndjson_stream::<ollama_client::ChatResponse>(&url, &request))
                 .await?;
 
             let mut message = Message::assistant("".to_string());
@@ -716,8 +762,9 @@ impl ChatAgent {
 
             Ok(())
         } else {
+            let url = client.chat_url();
             let res: ollama_client::ChatResponse =
-                client.post_json(&client.chat_url(), &request).await?;
+                retry.run(|| client.post_json(&url, &request)).await?;
 
             let mut message = ollama_client::message_from_ollama(&res.message);
             message.id = Some(id.clone());

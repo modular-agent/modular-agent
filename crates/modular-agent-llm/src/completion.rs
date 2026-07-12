@@ -4,6 +4,7 @@ use modular_agent_core::{
 };
 
 use crate::provider::{ModelIdentifier, ProviderKind};
+use crate::retry::RetryPolicy;
 
 #[cfg(feature = "openai")]
 use crate::openai_client;
@@ -18,11 +19,14 @@ const PORT_PROMPT: &str = "prompt";
 const PORT_RESET: &str = "reset";
 const PORT_RESPONSE: &str = "response";
 
+const CONFIG_MAX_RETRIES: &str = "max_retries";
 const CONFIG_MAX_TOKENS: &str = "max_tokens";
 const CONFIG_MODEL: &str = "model";
 const CONFIG_OPTIONS: &str = "options";
+const CONFIG_RETRY_BASE_DELAY_MS: &str = "retry_base_delay_ms";
 const CONFIG_SYSTEM: &str = "system";
 const CONFIG_TEMPERATURE: &str = "temperature";
+const CONFIG_TIMEOUT_SECS: &str = "timeout_secs";
 const CONFIG_TOP_P: &str = "top_p";
 const CONFIG_USE_CONTEXT: &str = "use_context";
 
@@ -37,6 +41,20 @@ const DEFAULT_CONFIG_MODEL: &str = "openai/gpt-3.5-turbo-instruct";
 ///
 /// # Ollama-specific Features
 /// - `use_context`: When enabled, maintains conversation context across requests
+///
+/// # Configuration
+/// - `model`: Provider-prefixed model name (default: "openai/gpt-3.5-turbo-instruct")
+/// - `system`: System prompt prepended to the request
+/// - `use_context`: Maintain conversation context across requests (Ollama only)
+/// - `max_tokens`: Maximum tokens to generate (0: use API default)
+/// - `temperature`: Sampling temperature (-1: use API default)
+/// - `top_p`: Nucleus sampling parameter (-1: use API default)
+/// - `options`: Additional request options as JSON
+/// - `max_retries`: Maximum automatic retries for retryable errors such as
+///   rate limits, server overload, and timeouts (default: 2)
+/// - `retry_base_delay_ms`: Base delay for exponential backoff between
+///   retries; a server-provided Retry-After takes precedence (default: 1000)
+/// - `timeout_secs`: Per-attempt deadline in seconds (default: 300, 0 = disabled)
 #[modular_agent(
     title = "Completion",
     category = CATEGORY,
@@ -49,6 +67,9 @@ const DEFAULT_CONFIG_MODEL: &str = "openai/gpt-3.5-turbo-instruct";
     number_config(name = CONFIG_TEMPERATURE, title = "Temperature", default = -1.0, description = "-1: use API default (0.0-2.0)", detail),
     number_config(name = CONFIG_TOP_P, title = "Top P", default = -1.0, description = "-1: use API default (0.0-1.0)", detail),
     object_config(name = CONFIG_OPTIONS, title = "Options", description = "Additional request options as JSON", detail),
+    integer_config(name = CONFIG_MAX_RETRIES, title = "Max Retries", default = 2, description = "Automatic retries for retryable errors", detail),
+    integer_config(name = CONFIG_RETRY_BASE_DELAY_MS, title = "Retry Base Delay (ms)", default = 1000, description = "Base delay for exponential backoff", detail),
+    integer_config(name = CONFIG_TIMEOUT_SECS, title = "Timeout (secs)", default = 300, description = "Per-attempt deadline; 0: disabled", detail),
     hint(width = 2, height = 2),
 )]
 pub struct CompletionAgent {
@@ -120,6 +141,14 @@ impl AsAgent for CompletionAgent {
         let temperature = config.get_number_or_default(CONFIG_TEMPERATURE);
         let top_p = config.get_number_or_default(CONFIG_TOP_P);
 
+        // Snapshot retry/timeout configs once per turn so a mid-turn config
+        // change cannot alter an in-flight retry loop.
+        let retry = RetryPolicy::from_configs(
+            config.get_integer_or_default(CONFIG_MAX_RETRIES),
+            config.get_integer_or_default(CONFIG_RETRY_BASE_DELAY_MS),
+            config.get_integer_or_default(CONFIG_TIMEOUT_SECS),
+        );
+
         // Route to appropriate provider
         match model_id.provider {
             #[cfg(feature = "claude")]
@@ -137,6 +166,7 @@ impl AsAgent for CompletionAgent {
                     max_tokens,
                     temperature,
                     top_p,
+                    retry,
                 )
                 .await
             }
@@ -151,6 +181,7 @@ impl AsAgent for CompletionAgent {
                     max_tokens,
                     temperature,
                     top_p,
+                    retry,
                 )
                 .await
             }
@@ -176,6 +207,7 @@ impl CompletionAgent {
         max_tokens: i64,
         temperature: f64,
         top_p: f64,
+        retry: RetryPolicy,
     ) -> Result<(), AgentError> {
         let client = self.openai_manager.get_client(self.ma())?;
 
@@ -202,9 +234,9 @@ impl CompletionAgent {
             request["top_p"] = top_p.into();
         }
 
-        let res: openai_client::CompletionResponse = client
-            .post_json(&client.completions_url(), &request)
-            .await?;
+        let url = client.completions_url();
+        let res: openai_client::CompletionResponse =
+            retry.run(|| client.post_json(&url, &request)).await?;
 
         let message = Message::assistant(res.choices[0].text.clone());
         self.output(ctx.clone(), PORT_MESSAGE.to_string(), message.into())
@@ -229,6 +261,7 @@ impl CompletionAgent {
         max_tokens: i64,
         temperature: f64,
         top_p: f64,
+        retry: RetryPolicy,
     ) -> Result<(), AgentError> {
         let client = self.ollama_manager.get_client(self.ma())?;
 
@@ -265,8 +298,9 @@ impl CompletionAgent {
             request["context"] = serde_json::to_value(context).unwrap_or(serde_json::Value::Null);
         }
 
+        let url = client.generate_url();
         let res: ollama_client::GenerateResponse =
-            client.post_json(&client.generate_url(), &request).await?;
+            retry.run(|| client.post_json(&url, &request)).await?;
 
         if use_context {
             self.context = res.context.clone().or(self.context.clone());

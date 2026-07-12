@@ -6,6 +6,7 @@ use modular_agent_core::{
 
 use crate::openai_client;
 use crate::provider::{ModelIdentifier, ProviderKind};
+use crate::retry::RetryPolicy;
 
 const CATEGORY: &str = "LLM";
 
@@ -13,11 +14,14 @@ const PORT_MESSAGE: &str = "message";
 const PORT_RESPONSE: &str = "response";
 const PORT_RESET: &str = "reset";
 
+const CONFIG_MAX_RETRIES: &str = "max_retries";
 const CONFIG_MAX_TOKENS: &str = "max_tokens";
 const CONFIG_MODEL: &str = "model";
 const CONFIG_OPTIONS: &str = "options";
+const CONFIG_RETRY_BASE_DELAY_MS: &str = "retry_base_delay_ms";
 const CONFIG_STREAM: &str = "stream";
 const CONFIG_TEMPERATURE: &str = "temperature";
+const CONFIG_TIMEOUT_SECS: &str = "timeout_secs";
 const CONFIG_TOOLS: &str = "tools";
 const CONFIG_TOP_P: &str = "top_p";
 const CONFIG_USE_CONVERSATION_STATE: &str = "use_conversation_state";
@@ -38,6 +42,12 @@ const DEFAULT_MODEL: &str = "openai/gpt-5-mini";
 /// - `use_conversation_state`: Use server-side conversation state
 /// - `tools`: Tool patterns to enable (regex, newline-separated)
 /// - `options`: Additional request options as JSON
+/// - `max_retries`: Maximum automatic retries for retryable errors such as
+///   rate limits, server overload, and timeouts (default: 2)
+/// - `retry_base_delay_ms`: Base delay for exponential backoff between
+///   retries; a server-provided Retry-After takes precedence (default: 1000)
+/// - `timeout_secs`: Per-attempt deadline in seconds; for streaming it covers
+///   stream establishment only (default: 300, 0 = disabled)
 ///
 /// # Ports
 /// - Input `message`: Message or array of messages to send
@@ -57,6 +67,9 @@ const DEFAULT_MODEL: &str = "openai/gpt-5-mini";
     number_config(name = CONFIG_TEMPERATURE, title = "Temperature", default = -1.0, description = "-1: use API default (0.0-2.0)", detail),
     number_config(name = CONFIG_TOP_P, title = "Top P", default = -1.0, description = "-1: use API default (0.0-1.0)", detail),
     object_config(name = CONFIG_OPTIONS, title = "Options", description = "Additional request options as JSON", detail),
+    integer_config(name = CONFIG_MAX_RETRIES, title = "Max Retries", default = 2, description = "Automatic retries for retryable errors", detail),
+    integer_config(name = CONFIG_RETRY_BASE_DELAY_MS, title = "Retry Base Delay (ms)", default = 1000, description = "Base delay for exponential backoff", detail),
+    integer_config(name = CONFIG_TIMEOUT_SECS, title = "Timeout (secs)", default = 300, description = "Per-attempt deadline; 0: disabled", detail),
     hint(width = 2, height = 2),
 )]
 pub struct ResponsesAgent {
@@ -140,6 +153,14 @@ impl AsAgent for ResponsesAgent {
         let temperature = config.get_number_or_default(CONFIG_TEMPERATURE);
         let top_p = config.get_number_or_default(CONFIG_TOP_P);
 
+        // Snapshot retry/timeout configs once per turn so a mid-turn config
+        // change cannot alter an in-flight retry loop.
+        let retry = RetryPolicy::from_configs(
+            config.get_integer_or_default(CONFIG_MAX_RETRIES),
+            config.get_integer_or_default(CONFIG_RETRY_BASE_DELAY_MS),
+            config.get_integer_or_default(CONFIG_TIMEOUT_SECS),
+        );
+
         self.process_response(
             ctx,
             messages,
@@ -151,6 +172,7 @@ impl AsAgent for ResponsesAgent {
             max_tokens,
             temperature,
             top_p,
+            retry,
         )
         .await
     }
@@ -170,6 +192,7 @@ impl ResponsesAgent {
         max_tokens: i64,
         temperature: f64,
         top_p: f64,
+        retry: RetryPolicy,
     ) -> Result<(), AgentError> {
         use modular_agent_core::tool::list_tool_infos_patterns;
 
@@ -236,10 +259,10 @@ impl ResponsesAgent {
 
         let id = uuid::Uuid::new_v4().to_string();
         if use_stream {
-            self.process_streaming(ctx, &client, &request, &id, use_conversation_state)
+            self.process_streaming(ctx, &client, &request, &id, use_conversation_state, retry)
                 .await
         } else {
-            self.process_non_streaming(ctx, &client, &request, &id, use_conversation_state)
+            self.process_non_streaming(ctx, &client, &request, &id, use_conversation_state, retry)
                 .await
         }
     }
@@ -251,9 +274,10 @@ impl ResponsesAgent {
         request: &serde_json::Value,
         id: &str,
         use_conversation_state: bool,
+        retry: RetryPolicy,
     ) -> Result<(), AgentError> {
-        let response: serde_json::Value =
-            client.post_json(&client.responses_url(), request).await?;
+        let url = client.responses_url();
+        let response: serde_json::Value = retry.run(|| client.post_json(&url, request)).await?;
 
         // Store response ID for conversation continuity
         if use_conversation_state && let Some(resp_id) = response.get("id").and_then(|v| v.as_str())
@@ -289,11 +313,15 @@ impl ResponsesAgent {
         request: &serde_json::Value,
         id: &str,
         use_conversation_state: bool,
+        retry: RetryPolicy,
     ) -> Result<(), AgentError> {
         use futures::StreamExt;
 
         let url = client.responses_url();
-        let mut stream = client.post_stream(&url, request).await?;
+        // Retry covers stream establishment only: once chunks have been
+        // emitted downstream they cannot be rolled back, so any failure
+        // after this point must propagate instead of being retried.
+        let mut stream = retry.run(|| client.post_stream(&url, request)).await?;
 
         let mut message = Message::assistant(String::new());
         message.id = Some(id.to_string());

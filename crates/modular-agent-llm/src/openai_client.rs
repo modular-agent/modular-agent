@@ -61,8 +61,15 @@ impl OpenAIManager {
             })
             .unwrap_or_else(|| DEFAULT_OPENAI_API_BASE.to_string());
 
+        // Timeouts keep a hung server from blocking process() forever;
+        // read_timeout is idle time between reads, so streaming is safe.
+        let http = reqwest::Client::builder()
+            .connect_timeout(std::time::Duration::from_secs(10))
+            .read_timeout(std::time::Duration::from_secs(120))
+            .build()
+            .map_err(|e| AgentError::IoError(format!("OpenAI client build error: {}", e)))?;
         let new_client = OpenAIClient {
-            http: reqwest::Client::new(),
+            http,
             api_key,
             api_base,
         };
@@ -113,7 +120,7 @@ impl OpenAIClient {
             .json(body)
             .send()
             .await
-            .map_err(|e| AgentError::IoError(format!("OpenAI request error: {}", e)))?;
+            .map_err(|e| crate::http_error::map_reqwest_error("OpenAI request error", e))?;
 
         let status = resp.status().as_u16();
         if !resp.status().is_success() {
@@ -124,7 +131,7 @@ impl OpenAIClient {
 
         resp.json()
             .await
-            .map_err(|e| AgentError::IoError(format!("OpenAI response parse error: {}", e)))
+            .map_err(|e| crate::http_error::map_reqwest_error("OpenAI response parse error", e))
     }
 
     /// POST and return an SSE stream of raw JSON data strings.
@@ -148,7 +155,7 @@ impl OpenAIClient {
             .json(body)
             .send()
             .await
-            .map_err(|e| AgentError::IoError(format!("OpenAI stream request error: {}", e)))?;
+            .map_err(|e| crate::http_error::map_reqwest_error("OpenAI stream request error", e))?;
 
         let status = resp.status().as_u16();
         if !resp.status().is_success() {

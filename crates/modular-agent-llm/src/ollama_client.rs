@@ -69,8 +69,15 @@ impl OllamaManager {
 
         let api_base = Self::get_ollama_url(ma);
         let api_key = Self::get_ollama_api_key(ma);
+        // Timeouts keep a hung server from blocking process() forever;
+        // read_timeout is idle time between reads, so streaming is safe.
+        let http = reqwest::Client::builder()
+            .connect_timeout(std::time::Duration::from_secs(10))
+            .read_timeout(std::time::Duration::from_secs(120))
+            .build()
+            .map_err(|e| AgentError::IoError(format!("Ollama client build error: {}", e)))?;
         let new_client = OllamaClient {
-            http: reqwest::Client::new(),
+            http,
             api_base,
             api_key,
         };
@@ -131,7 +138,7 @@ impl OllamaClient {
             .json(body)
             .send()
             .await
-            .map_err(|e| AgentError::IoError(format!("Ollama request error: {}", e)))?;
+            .map_err(|e| crate::http_error::map_reqwest_error("Ollama request error", e))?;
 
         let status = resp.status().as_u16();
         if !resp.status().is_success() {
@@ -142,7 +149,7 @@ impl OllamaClient {
 
         resp.json()
             .await
-            .map_err(|e| AgentError::IoError(format!("Ollama response parse error: {}", e)))
+            .map_err(|e| crate::http_error::map_reqwest_error("Ollama response parse error", e))
     }
 
     /// GET and parse typed response.
@@ -151,7 +158,7 @@ impl OllamaClient {
             .apply_auth(self.http.get(url))
             .send()
             .await
-            .map_err(|e| AgentError::IoError(format!("Ollama request error: {}", e)))?;
+            .map_err(|e| crate::http_error::map_reqwest_error("Ollama request error", e))?;
 
         let status = resp.status().as_u16();
         if !resp.status().is_success() {
@@ -162,7 +169,7 @@ impl OllamaClient {
 
         resp.json()
             .await
-            .map_err(|e| AgentError::IoError(format!("Ollama response parse error: {}", e)))
+            .map_err(|e| crate::http_error::map_reqwest_error("Ollama response parse error", e))
     }
 
     /// POST and return an NDJSON stream.
@@ -185,7 +192,7 @@ impl OllamaClient {
             .json(body)
             .send()
             .await
-            .map_err(|e| AgentError::IoError(format!("Ollama stream request error: {}", e)))?;
+            .map_err(|e| crate::http_error::map_reqwest_error("Ollama stream request error", e))?;
 
         let status = resp.status().as_u16();
         if !resp.status().is_success() {
@@ -198,7 +205,7 @@ impl OllamaClient {
         let string_stream = Box::pin(resp.bytes_stream().map(|result| {
             result
                 .map(|b| String::from_utf8_lossy(&b).into_owned())
-                .map_err(|e| AgentError::IoError(format!("Ollama stream error: {}", e)))
+                .map_err(|e| crate::http_error::map_reqwest_error("Ollama stream error", e))
         }));
         Ok(Box::pin(ndjson_stream::<T, _>(string_stream)))
     }
