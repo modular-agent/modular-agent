@@ -20,8 +20,7 @@ const IMAGE_BASE64_PREFIX: &str = "data:image/png;base64,";
 ///
 /// Supports multiple data types with immutable data structures for efficient cloning.
 /// Large data (String, Image, Tensor, etc.) is wrapped in `Arc` for reference-counted sharing.
-#[derive(Debug, Clone)]
-#[derive(Default)]
+#[derive(Debug, Clone, Default)]
 pub enum AgentValue {
     /// Empty value. Used as a trigger signal.
     #[default]
@@ -751,7 +750,6 @@ impl AgentValue {
         }
     }
 }
-
 
 impl PartialEq for AgentValue {
     fn eq(&self, other: &Self) -> bool {
@@ -1841,10 +1839,7 @@ mod tests {
             AgentValue::boolean(true).to_string(),
             Some("true".to_string())
         );
-        assert_eq!(
-            AgentValue::number(2.5).to_string(),
-            Some("2.5".to_string())
-        );
+        assert_eq!(AgentValue::number(2.5).to_string(), Some("2.5".to_string()));
         #[cfg(feature = "llm")]
         assert_eq!(
             AgentValue::message(Message::user("content".to_string())).to_string(),

@@ -3,6 +3,7 @@ use std::ops::Not;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::FnvIndexMap;
 use crate::agent::Agent;
 use crate::config::AgentConfigs;
 use crate::error::AgentError;
@@ -10,7 +11,6 @@ use crate::id::new_id;
 use crate::modular_agent::ModularAgent;
 use crate::spec::AgentSpec;
 use crate::value::AgentValue;
-use crate::FnvIndexMap;
 
 /// A map of agent definition names to their definitions.
 pub type AgentDefinitions = FnvIndexMap<String, AgentDefinition>;
@@ -630,22 +630,23 @@ impl AgentDefinition {
 
         // Reorder configs to match definition key order
         if let Some(ref mut spec_configs) = spec.configs
-            && let Some(ref def_configs) = self.configs {
-                let mut reordered = AgentConfigs::new();
-                // First: definition keys in definition order
-                for (key, _) in def_configs.iter() {
-                    if let Ok(value) = spec_configs.get(key) {
-                        reordered.set(key.clone(), value.clone());
-                    }
+            && let Some(ref def_configs) = self.configs
+        {
+            let mut reordered = AgentConfigs::new();
+            // First: definition keys in definition order
+            for (key, _) in def_configs.iter() {
+                if let Ok(value) = spec_configs.get(key) {
+                    reordered.set(key.clone(), value.clone());
                 }
-                // Then: remaining keys (stale `_`-prefixed, etc.)
-                for (key, value) in &*spec_configs {
-                    if !reordered.contains_key(key) {
-                        reordered.set(key.clone(), value.clone());
-                    }
-                }
-                *spec_configs = reordered;
             }
+            // Then: remaining keys (stale `_`-prefixed, etc.)
+            for (key, value) in &*spec_configs {
+                if !reordered.contains_key(key) {
+                    reordered.set(key.clone(), value.clone());
+                }
+            }
+            *spec_configs = reordered;
+        }
     }
 }
 

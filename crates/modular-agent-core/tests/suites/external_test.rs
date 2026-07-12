@@ -16,8 +16,7 @@ async fn test_external_routing() {
         .await
         .unwrap();
 
-    ma
-        .write_external_input("channel1".to_string(), AgentValue::string("hello"))
+    ma.write_external_input("channel1".to_string(), AgentValue::string("hello"))
         .await
         .unwrap();
 

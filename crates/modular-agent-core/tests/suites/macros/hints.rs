@@ -8,7 +8,7 @@ use modular_agent_core::{
     kind = "Test",
     title = "Hinted Agent",
     category = "Tests",
-    hint(color = 3, width = 2, height = 1),
+    hint(color = 3, width = 2, height = 1)
 )]
 struct HintedAgent {
     data: AgentData,
@@ -47,11 +47,7 @@ fn hint_integer_entries() {
 
 // --- Agent with no hints ---
 
-#[modular_agent(
-    kind = "Test",
-    title = "No Hints Agent",
-    category = "Tests",
-)]
+#[modular_agent(kind = "Test", title = "No Hints Agent", category = "Tests")]
 struct NoHintsAgent {
     data: AgentData,
 }
@@ -90,7 +86,7 @@ fn no_hints_yields_empty_map() {
     kind = "Test",
     title = "String Hint Agent",
     category = "Tests",
-    hint(label = "red", shape = "circle"),
+    hint(label = "red", shape = "circle")
 )]
 struct StringHintAgent {
     data: AgentData,
@@ -131,7 +127,7 @@ fn hint_string_entries() {
     kind = "Test",
     title = "Mixed Hint Agent",
     category = "Tests",
-    hint(color = 3, resizable = true, label = "custom"),
+    hint(color = 3, resizable = true, label = "custom")
 )]
 struct MixedHintAgent {
     data: AgentData,
@@ -174,7 +170,7 @@ fn hint_mixed_type_entries() {
     title = "Multi Hint Agent",
     category = "Tests",
     hint(color = 3),
-    hint(width = 2, height = 1),
+    hint(width = 2, height = 1)
 )]
 struct MultiHintAgent {
     data: AgentData,

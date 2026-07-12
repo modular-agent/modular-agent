@@ -363,10 +363,11 @@ fn expand_modular_agent(
 
     // Fall back to doc comments when no explicit `description` is provided.
     if parsed.description.is_none()
-        && let Some(doc) = extract_doc_comment(&item.attrs) {
-            let lit = syn::LitStr::new(&doc, Span::call_site());
-            parsed.description = Some(parse_quote! { #lit });
-        }
+        && let Some(doc) = extract_doc_comment(&item.attrs)
+    {
+        let lit = syn::LitStr::new(&doc, Span::call_site());
+        parsed.description = Some(parse_quote! { #lit });
+    }
 
     let ident = &item.ident;
     let generics = item.generics.clone();
@@ -1350,15 +1351,9 @@ fn parse_hint_pairs(list: MetaList) -> syn::Result<Vec<(Expr, Expr)>> {
     for meta in nested {
         match meta {
             Meta::NameValue(nv) => {
-                let key = nv
-                    .path
-                    .get_ident()
-                    .ok_or_else(|| {
-                        syn::Error::new_spanned(
-                            &nv.path,
-                            "hint key must be a simple identifier",
-                        )
-                    })?;
+                let key = nv.path.get_ident().ok_or_else(|| {
+                    syn::Error::new_spanned(&nv.path, "hint key must be a simple identifier")
+                })?;
                 let key_str = key.to_string();
                 let key_lit = syn::LitStr::new(&key_str, key.span());
                 pairs.push((parse_quote!(#key_lit), nv.value));
@@ -1383,9 +1378,10 @@ fn extract_doc_comment(attrs: &[syn::Attribute]) -> Option<String> {
             }
             if let Meta::NameValue(nv) = &attr.meta
                 && let Expr::Lit(lit) = &nv.value
-                    && let syn::Lit::Str(s) = &lit.lit {
-                        return Some(s.value());
-                    }
+                && let syn::Lit::Str(s) = &lit.lit
+            {
+                return Some(s.value());
+            }
             None
         })
         .collect();

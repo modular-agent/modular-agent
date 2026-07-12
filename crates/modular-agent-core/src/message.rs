@@ -130,11 +130,16 @@ pub async fn agent_out(
             }
         }
 
-        ma.agent_input(target_agent.clone(), ctx.clone(), target_port, value.clone())
-            .await
-            .unwrap_or_else(|e| {
-                log::error!("Failed to send message to {}: {}", target_agent, e);
-            });
+        ma.agent_input(
+            target_agent.clone(),
+            ctx.clone(),
+            target_port,
+            value.clone(),
+        )
+        .await
+        .unwrap_or_else(|e| {
+            log::error!("Failed to send message to {}: {}", target_agent, e);
+        });
     }
 }
 
@@ -169,11 +174,16 @@ pub async fn external_input(ma: &ModularAgent, name: String, ctx: AgentContext, 
                 continue;
             };
             for (target_agent, _source_port, target_port) in edges {
-                ma.agent_input(target_agent.clone(), ctx.clone(), target_port, value.clone())
-                    .await
-                    .unwrap_or_else(|e| {
-                        log::error!("Failed to send message to {}: {}", target_agent, e);
-                    });
+                ma.agent_input(
+                    target_agent.clone(),
+                    ctx.clone(),
+                    target_port,
+                    value.clone(),
+                )
+                .await
+                .unwrap_or_else(|e| {
+                    log::error!("Failed to send message to {}: {}", target_agent, e);
+                });
             }
         }
     }

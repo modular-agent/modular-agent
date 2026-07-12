@@ -860,9 +860,10 @@ impl ModularAgent {
             // remove the sender first to prevent new messages being sent
             let mut agent_txs = self.agent_txs.lock().unwrap();
             if let Some(tx) = agent_txs.swap_remove(agent_id)
-                && let Err(e) = tx.try_send(AgentMessage::Stop) {
-                    log::warn!("Failed to send stop message to agent {}: {}", agent_id, e);
-                }
+                && let Err(e) = tx.try_send(AgentMessage::Stop)
+            {
+                log::warn!("Failed to send stop message to agent {}: {}", agent_id, e);
+            }
         }
 
         let agent = {
@@ -1044,7 +1045,8 @@ impl ModularAgent {
         name: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
-        self.send_external_output(name, AgentContext::new(), value).await
+        self.send_external_output(name, AgentContext::new(), value)
+            .await
     }
 
     /// Write a value to the local variable channel.
@@ -1167,10 +1169,11 @@ impl ModularAgent {
                 match event_rx.recv().await {
                     Ok(event) => {
                         if let Some(mapped_event) = filter_map(event)
-                            && tx.send(mapped_event).is_err() {
-                                // Receiver dropped, task can exit
-                                break;
-                            }
+                            && tx.send(mapped_event).is_err()
+                        {
+                            // Receiver dropped, task can exit
+                            break;
+                        }
                     }
                     Err(RecvError::Lagged(n)) => {
                         log::warn!("Event subscriber lagged by {} events", n);

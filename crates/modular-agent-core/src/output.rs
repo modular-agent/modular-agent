@@ -123,7 +123,6 @@ impl<T: Agent> AgentOutput for T {
     }
 
     fn emit_error_raw(&self, message: String) {
-        self.ma()
-            .emit_agent_error(self.id().to_string(), message);
+        self.ma().emit_agent_error(self.id().to_string(), message);
     }
 }

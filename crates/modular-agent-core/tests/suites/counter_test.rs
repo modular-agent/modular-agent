@@ -38,8 +38,7 @@ async fn test_agent_start() {
     let ma = ModularAgent::init().unwrap();
     let def = ma.get_agent_definition(COUNTER_DEF).unwrap();
     let spec = def.to_spec();
-    let mut agent =
-        <CounterAgent as AsAgent>::new(ma.clone(), "agent_1".into(), spec).unwrap();
+    let mut agent = <CounterAgent as AsAgent>::new(ma.clone(), "agent_1".into(), spec).unwrap();
     Agent::start(&mut agent).await.unwrap();
 
     assert_eq!(Agent::status(&agent), &AgentStatus::Start);

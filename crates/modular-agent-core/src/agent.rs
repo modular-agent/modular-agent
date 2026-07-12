@@ -31,15 +31,10 @@ pub(crate) enum AgentMessage {
     },
 
     /// Configuration value update.
-    Config {
-        key: String,
-        value: AgentValue,
-    },
+    Config { key: String, value: AgentValue },
 
     /// Full configuration update.
-    Configs {
-        configs: AgentConfigs,
-    },
+    Configs { configs: AgentConfigs },
 
     /// Stop the agent.
     Stop,

@@ -11,8 +11,8 @@ use tokio::{
 };
 
 use crate::{
-    AgentContext, AgentData, AgentError, AgentSpec, AgentValue, AsAgent, ModularAgent, ModularAgentEvent,
-    modular_agent,
+    AgentContext, AgentData, AgentError, AgentSpec, AgentValue, AsAgent, ModularAgent,
+    ModularAgentEvent, modular_agent,
 };
 
 static PORT_VALUE: &str = "value";
@@ -64,7 +64,9 @@ pub const DEFAULT_OUTPUT_TIMEOUT: Duration = Duration::from_secs(1);
 fn external_output_rx() -> Result<ExternalOutputReceiver, AgentError> {
     EXTERNAL_OUTPUT_RX
         .with(|slot| slot.borrow().clone())
-        .ok_or_else(|| AgentError::SendMessageFailed("external output receiver not initialized".into()))
+        .ok_or_else(|| {
+            AgentError::SendMessageFailed("external output receiver not initialized".into())
+        })
 }
 
 pub async fn recv_external_output_with_timeout(
@@ -163,7 +165,10 @@ impl TestProbeAgent {
 }
 
 /// Helper to fetch the probe receiver for a TestProbeAgent by id.
-pub async fn probe_receiver(ma: &ModularAgent, agent_id: &str) -> Result<ProbeReceiver, AgentError> {
+pub async fn probe_receiver(
+    ma: &ModularAgent,
+    agent_id: &str,
+) -> Result<ProbeReceiver, AgentError> {
     let probe = ma
         .get_agent(agent_id)
         .ok_or_else(|| AgentError::AgentNotFound(agent_id.to_string()))?;

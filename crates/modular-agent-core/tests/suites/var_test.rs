@@ -13,9 +13,14 @@ async fn test_var_routing() {
         .await
         .unwrap();
 
-    test_utils::write_and_expect_local_value(&ma, &var_preset_id, "var1", AgentValue::string("hello"))
-        .await
-        .unwrap();
+    test_utils::write_and_expect_local_value(
+        &ma,
+        &var_preset_id,
+        "var1",
+        AgentValue::string("hello"),
+    )
+    .await
+    .unwrap();
 
     test_utils::expect_local_value(&var_preset_id, "var2", &AgentValue::string("hello"))
         .await

@@ -1,6 +1,6 @@
 use modular_agent_core::{
-    ModularAgent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
-    modular_agent, async_trait,
+    AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent, ModularAgent,
+    async_trait, modular_agent,
 };
 
 const CATEGORY: &str = "Core/Utils";
