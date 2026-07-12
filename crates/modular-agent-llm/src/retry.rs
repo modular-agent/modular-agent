@@ -196,12 +196,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_with_timeout_elapsed_maps_to_timeout() {
-        let result: Result<(), AgentError> =
-            with_timeout(Some(Duration::from_millis(5)), async {
-                tokio::time::sleep(Duration::from_secs(60)).await;
-                Ok(())
-            })
-            .await;
+        let result: Result<(), AgentError> = with_timeout(Some(Duration::from_millis(5)), async {
+            tokio::time::sleep(Duration::from_secs(60)).await;
+            Ok(())
+        })
+        .await;
         assert!(matches!(result, Err(AgentError::Timeout(_))));
     }
 }

@@ -56,7 +56,9 @@ const QUOTA_EXHAUSTED_PATTERNS: &[&str] = &[
 /// Returns `true` when the (lowercased) body contains quota/billing-exhaustion
 /// wording.
 pub(crate) fn mentions_quota_exhausted(lower_body: &str) -> bool {
-    QUOTA_EXHAUSTED_PATTERNS.iter().any(|p| lower_body.contains(p))
+    QUOTA_EXHAUSTED_PATTERNS
+        .iter()
+        .any(|p| lower_body.contains(p))
 }
 
 #[cfg(test)]

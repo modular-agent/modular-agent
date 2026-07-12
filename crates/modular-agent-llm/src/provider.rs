@@ -129,10 +129,12 @@ mod tests {
     fn test_parse_empty_model() {
         let result = ModelIdentifier::parse("");
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Model name cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Model name cannot be empty")
+        );
     }
 
     #[test]
@@ -176,10 +178,12 @@ mod tests {
     fn test_parse_no_prefix_error() {
         let result = ModelIdentifier::parse("gpt-5-nano");
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("requires a provider prefix"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("requires a provider prefix")
+        );
     }
 
     #[cfg(feature = "claude")]
