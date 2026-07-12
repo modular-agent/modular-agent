@@ -41,6 +41,11 @@ const DEFAULT_MODEL: &str = "openai/gpt-5-mini";
 /// - `stream`: Enable streaming mode
 /// - `use_conversation_state`: Use server-side conversation state
 /// - `tools`: Tool patterns to enable (regex, newline-separated)
+/// - `max_tokens`: Maximum output tokens (sent as `max_output_tokens`). `0`
+///   omits it and uses the API default; a positive value is clamped to the
+///   model's known limit (unknown models are left unclamped).
+/// - `temperature`: Sampling temperature (-1: use API default)
+/// - `top_p`: Nucleus sampling parameter (-1: use API default)
 /// - `options`: Additional request options as JSON
 /// - `max_retries`: Maximum automatic retries for retryable errors such as
 ///   rate limits, server overload, and timeouts (default: 2)
@@ -161,6 +166,10 @@ impl AsAgent for ResponsesAgent {
             config.get_integer_or_default(CONFIG_TIMEOUT_SECS),
         );
 
+        // Resolve the model's output-token limit once per turn; `None` (unknown
+        // model) leaves a configured max_tokens unclamped.
+        let model_max_tokens = crate::capabilities::resolve_entry(&model_id).max_tokens;
+
         self.process_response(
             ctx,
             messages,
@@ -170,6 +179,7 @@ impl AsAgent for ResponsesAgent {
             use_stream,
             use_conversation_state,
             max_tokens,
+            model_max_tokens,
             temperature,
             top_p,
             retry,
@@ -190,6 +200,7 @@ impl ResponsesAgent {
         use_stream: bool,
         use_conversation_state: bool,
         max_tokens: i64,
+        model_max_tokens: Option<u32>,
         temperature: f64,
         top_p: f64,
         retry: RetryPolicy,
@@ -247,8 +258,8 @@ impl ResponsesAgent {
 
         // Merge options
         openai_client::merge_options(&mut request, &config_options)?;
-        if max_tokens > 0 {
-            request["max_output_tokens"] = max_tokens.into();
+        if let Some(v) = crate::capabilities::clamp_max_tokens(max_tokens, model_max_tokens) {
+            request["max_output_tokens"] = v.into();
         }
         if temperature >= 0.0 {
             request["temperature"] = temperature.into();

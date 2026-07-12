@@ -52,7 +52,13 @@ const DEFAULT_CONFIG_MODEL: &str = "openai/gpt-5-nano";
 /// - `model`: Provider-prefixed model name (default: "openai/gpt-5-nano")
 /// - `stream`: Enable streaming mode
 /// - `tools`: Tool patterns to enable (regex, newline-separated)
-/// - `max_tokens`: Maximum tokens to generate (0: use API default)
+/// - `max_tokens`: Maximum output tokens. `0`: Claude uses the model's
+///   registry limit when streaming (8192 for unknown models, since Claude
+///   requires the field), but caps the default at 8192 when not streaming so
+///   a long generation cannot run past the per-attempt `timeout_secs`;
+///   OpenAI and Ollama omit the field and use the API default. A positive
+///   value is clamped to the model's known limit; models unknown to the
+///   capability registry are left unclamped.
 /// - `temperature`: Sampling temperature (-1: use API default)
 /// - `top_p`: Nucleus sampling parameter (-1: use API default)
 /// - `options`: Additional request options as JSON
@@ -117,6 +123,13 @@ impl AsAgent for ChatAgent {
         })
     }
 
+    // With no provider features enabled, every routing arm below is compiled
+    // out and the per-turn config snapshot goes unused; mirror the
+    // capabilities/retry dead-code allowance in lib.rs for that build.
+    #[cfg_attr(
+        not(any(feature = "openai", feature = "claude", feature = "ollama")),
+        allow(unused_variables)
+    )]
     async fn process(
         &mut self,
         ctx: AgentContext,
@@ -171,6 +184,11 @@ impl AsAgent for ChatAgent {
             config.get_integer_or_default(CONFIG_TIMEOUT_SECS),
         );
 
+        // Resolve the model's output-token limit once per turn. `None` means the
+        // registry doesn't know this model, in which case max_tokens is left
+        // unclamped (see clamp_max_tokens) and Claude uses its default.
+        let model_max_tokens = crate::capabilities::resolve_entry(&model_id).max_tokens;
+
         // Route to appropriate provider
         match model_id.provider {
             #[cfg(feature = "claude")]
@@ -183,6 +201,7 @@ impl AsAgent for ChatAgent {
                     config_tools,
                     use_stream,
                     max_tokens,
+                    model_max_tokens,
                     temperature,
                     top_p,
                     retry,
@@ -200,6 +219,7 @@ impl AsAgent for ChatAgent {
                     config_tools,
                     use_stream,
                     max_tokens,
+                    model_max_tokens,
                     temperature,
                     top_p,
                     retry,
@@ -217,6 +237,7 @@ impl AsAgent for ChatAgent {
                     config_tools,
                     use_stream,
                     max_tokens,
+                    model_max_tokens,
                     temperature,
                     top_p,
                     retry,
@@ -245,6 +266,7 @@ impl ChatAgent {
         config_tools: String,
         use_stream: bool,
         max_tokens: i64,
+        model_max_tokens: Option<u32>,
         temperature: f64,
         top_p: f64,
         retry: RetryPolicy,
@@ -289,8 +311,8 @@ impl ChatAgent {
         }
 
         openai_client::merge_options(&mut request, &config_options)?;
-        if max_tokens > 0 {
-            request["max_tokens"] = max_tokens.into();
+        if let Some(v) = crate::capabilities::clamp_max_tokens(max_tokens, model_max_tokens) {
+            request["max_tokens"] = v.into();
         }
         if temperature >= 0.0 {
             request["temperature"] = temperature.into();
@@ -414,6 +436,7 @@ impl ChatAgent {
         config_tools: String,
         use_stream: bool,
         max_tokens: i64,
+        model_max_tokens: Option<u32>,
         temperature: f64,
         top_p: f64,
         retry: RetryPolicy,
@@ -442,10 +465,26 @@ impl ChatAgent {
             )
         };
 
+        // Claude requires max_tokens, so a value must always be synthesized.
+        // Streaming requests default to the registry-resolved model cap
+        // (replacing the historical 8192 hardcode); Claude bills only actual
+        // output tokens, so the higher cap costs nothing on its own.
+        // Non-streaming requests keep the conservative 8192 default: a long
+        // generation can exceed the per-attempt timeout, which is retried and
+        // billed per attempt, and Anthropic itself steers large-max_tokens
+        // requests to streaming. An explicit max_tokens config still
+        // overrides this below (clamped to the model limit only).
+        let registry_max = model_max_tokens.unwrap_or(crate::capabilities::DEFAULT_MAX_TOKENS);
+        let default_max_tokens = if use_stream {
+            registry_max
+        } else {
+            registry_max.min(crate::capabilities::DEFAULT_MAX_TOKENS)
+        };
+
         // Build request
         let mut request = claude_client::ClaudeRequest {
             model: model_name.to_string(),
-            max_tokens: 8192,
+            max_tokens: default_max_tokens,
             messages: claude_messages,
             system: system.map(claude_client::ClaudeContent::Text),
             stream: if use_stream { Some(true) } else { None },
@@ -475,8 +514,8 @@ impl ChatAgent {
         }
 
         // First-class configs override options
-        if max_tokens > 0 {
-            request.max_tokens = u32::try_from(max_tokens).unwrap_or(8192);
+        if let Some(v) = crate::capabilities::clamp_max_tokens(max_tokens, model_max_tokens) {
+            request.max_tokens = v;
         }
         if temperature >= 0.0 {
             request.temperature = Some(temperature);
@@ -662,6 +701,7 @@ impl ChatAgent {
         config_tools: String,
         use_stream: bool,
         max_tokens: i64,
+        model_max_tokens: Option<u32>,
         temperature: f64,
         top_p: f64,
         retry: RetryPolicy,
@@ -672,6 +712,10 @@ impl ChatAgent {
         use modular_agent_core::tool::list_tool_infos_patterns;
 
         let client = self.ollama_manager.get_client(self.ma())?;
+
+        // Best-effort: probe /api/show once per model to cache its context
+        // length for later capability lookups. Never fails the request.
+        crate::capabilities::warm_ollama_context(&client, model_name).await;
 
         let tools: Vec<ollama_client::OllamaToolInfo> = if config_tools.is_empty() {
             vec![]
@@ -708,13 +752,14 @@ impl ChatAgent {
         }
 
         ollama_client::merge_options(&mut request, &config_options)?;
-        if max_tokens > 0 || temperature >= 0.0 || top_p >= 0.0 {
+        let num_predict = crate::capabilities::clamp_max_tokens(max_tokens, model_max_tokens);
+        if num_predict.is_some() || temperature >= 0.0 || top_p >= 0.0 {
             if !request.get("options").is_some_and(|v| v.is_object()) {
                 request["options"] = serde_json::json!({});
             }
             let opts = request["options"].as_object_mut().unwrap();
-            if max_tokens > 0 {
-                opts.insert("num_predict".into(), max_tokens.into());
+            if let Some(v) = num_predict {
+                opts.insert("num_predict".into(), v.into());
             }
             if temperature >= 0.0 {
                 opts.insert("temperature".into(), temperature.into());

@@ -46,7 +46,9 @@ const DEFAULT_CONFIG_MODEL: &str = "openai/gpt-3.5-turbo-instruct";
 /// - `model`: Provider-prefixed model name (default: "openai/gpt-3.5-turbo-instruct")
 /// - `system`: System prompt prepended to the request
 /// - `use_context`: Maintain conversation context across requests (Ollama only)
-/// - `max_tokens`: Maximum tokens to generate (0: use API default)
+/// - `max_tokens`: Maximum output tokens. `0` uses the API default; a positive
+///   value is clamped to the model's known limit (unknown models, including
+///   most local ones, are left unclamped).
 /// - `temperature`: Sampling temperature (-1: use API default)
 /// - `top_p`: Nucleus sampling parameter (-1: use API default)
 /// - `options`: Additional request options as JSON
@@ -104,6 +106,13 @@ impl AsAgent for CompletionAgent {
         Ok(())
     }
 
+    // Unlike ChatAgent, the Claude arm is a plain Err that consumes none of the
+    // per-turn config snapshot, so the snapshot goes unused unless openai or
+    // ollama is enabled (claude-only builds included).
+    #[cfg_attr(
+        not(any(feature = "openai", feature = "ollama")),
+        allow(unused_variables)
+    )]
     async fn process(
         &mut self,
         ctx: AgentContext,
@@ -149,6 +158,10 @@ impl AsAgent for CompletionAgent {
             config.get_integer_or_default(CONFIG_TIMEOUT_SECS),
         );
 
+        // Resolve the model's output-token limit once per turn; `None` (unknown
+        // model) leaves a configured max_tokens unclamped.
+        let model_max_tokens = crate::capabilities::resolve_entry(&model_id).max_tokens;
+
         // Route to appropriate provider
         match model_id.provider {
             #[cfg(feature = "claude")]
@@ -164,6 +177,7 @@ impl AsAgent for CompletionAgent {
                     config_options,
                     config_system,
                     max_tokens,
+                    model_max_tokens,
                     temperature,
                     top_p,
                     retry,
@@ -179,6 +193,7 @@ impl AsAgent for CompletionAgent {
                     config_options,
                     config_system,
                     max_tokens,
+                    model_max_tokens,
                     temperature,
                     top_p,
                     retry,
@@ -205,6 +220,7 @@ impl CompletionAgent {
         config_options: AgentValueMap<String, AgentValue>,
         config_system: String,
         max_tokens: i64,
+        model_max_tokens: Option<u32>,
         temperature: f64,
         top_p: f64,
         retry: RetryPolicy,
@@ -224,8 +240,8 @@ impl CompletionAgent {
         });
 
         openai_client::merge_options(&mut request, &config_options)?;
-        if max_tokens > 0 {
-            request["max_tokens"] = max_tokens.into();
+        if let Some(v) = crate::capabilities::clamp_max_tokens(max_tokens, model_max_tokens) {
+            request["max_tokens"] = v.into();
         }
         if temperature >= 0.0 {
             request["temperature"] = temperature.into();
@@ -259,11 +275,16 @@ impl CompletionAgent {
         config_options: AgentValueMap<String, AgentValue>,
         config_system: String,
         max_tokens: i64,
+        model_max_tokens: Option<u32>,
         temperature: f64,
         top_p: f64,
         retry: RetryPolicy,
     ) -> Result<(), AgentError> {
         let client = self.ollama_manager.get_client(self.ma())?;
+
+        // Best-effort: probe /api/show once per model to cache its context
+        // length for later capability lookups. Never fails the request.
+        crate::capabilities::warm_ollama_context(&client, model_name).await;
 
         let use_context = self.configs()?.get_bool_or_default(CONFIG_USE_CONTEXT);
 
@@ -278,13 +299,14 @@ impl CompletionAgent {
         }
 
         ollama_client::merge_options(&mut request, &config_options)?;
-        if max_tokens > 0 || temperature >= 0.0 || top_p >= 0.0 {
+        let num_predict = crate::capabilities::clamp_max_tokens(max_tokens, model_max_tokens);
+        if num_predict.is_some() || temperature >= 0.0 || top_p >= 0.0 {
             if !request.get("options").is_some_and(|v| v.is_object()) {
                 request["options"] = serde_json::json!({});
             }
             let opts = request["options"].as_object_mut().unwrap();
-            if max_tokens > 0 {
-                opts.insert("num_predict".into(), max_tokens.into());
+            if let Some(v) = num_predict {
+                opts.insert("num_predict".into(), v.into());
             }
             if temperature >= 0.0 {
                 opts.insert("temperature".into(), temperature.into());

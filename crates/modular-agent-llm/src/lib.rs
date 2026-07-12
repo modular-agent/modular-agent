@@ -4,6 +4,15 @@ pub mod doc;
 pub mod message;
 pub mod provider;
 
+// The registry itself is feature-independent, but its pub(crate) helpers
+// (resolve_entry, clamp_max_tokens, warm_ollama_context) are only consumed by
+// the provider request builders; silence dead-code when none are enabled.
+#[cfg_attr(
+    not(any(feature = "openai", feature = "claude", feature = "ollama")),
+    allow(dead_code)
+)]
+pub mod capabilities;
+
 pub mod chat;
 pub mod completion;
 pub mod embeddings;

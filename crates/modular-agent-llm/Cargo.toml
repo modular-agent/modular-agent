@@ -12,6 +12,7 @@ eventsource-stream = { version = "0.2", optional = true }
 futures = { version = "0.3.31", optional = true }
 icu_normalizer = "2.1.1"
 im = "15.1.0"
+log = "0.4"
 photon-rs = { version = "0.3.3", optional = true }
 reqwest = { version = "0.12.5", default-features = false, features = ["rustls-tls", "json", "stream"], optional = true }
 serde = { version = "1", features = ["derive"] }
