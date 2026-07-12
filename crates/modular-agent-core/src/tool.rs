@@ -849,6 +849,27 @@ impl AsAgent for CallToolMessageAgent {
             }
         }
 
+        // A response truncated by the token limit may carry incomplete tool-call
+        // arguments; report that back to the model instead of executing them.
+        // Placed after the dedup bookkeeping so a re-delivered final message does
+        // not emit duplicate synthetic results.
+        if message.stop_reason.as_deref() == Some("length") {
+            for call in &tool_calls {
+                let resp_msg = error_tool_result(
+                    call,
+                    format!(
+                        "Tool call \"{}\" was not executed: output hit the token \
+                         limit; arguments may be truncated. Re-issue with complete \
+                         arguments.",
+                        call.function.name
+                    ),
+                );
+                self.output(ctx.clone(), PORT_MESSAGE, AgentValue::message(resp_msg))
+                    .await?;
+            }
+            return Ok(());
+        }
+
         let resp_messages = call_tools(&ctx, &tool_calls).await?;
         for resp_msg in resp_messages {
             self.output(ctx.clone(), PORT_MESSAGE, AgentValue::message(resp_msg))

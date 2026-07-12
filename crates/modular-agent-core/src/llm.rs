@@ -33,6 +33,7 @@ use photon_rs::PhotonImage;
 /// * `tool_calls` - Tool invocations requested by the assistant
 /// * `tool_name` - Name of the tool (for tool role messages)
 /// * `is_error` - Marks a tool-result message as an error
+/// * `stop_reason` - Normalized reason the LLM stopped generating
 /// * `image` - Optional attached image (requires "image" feature)
 ///
 /// # Example
@@ -73,6 +74,11 @@ pub struct Message {
     /// Marks a tool-result message as an error, per Claude's `tool_result` `is_error`.
     pub is_error: Option<bool>,
 
+    /// Normalized reason the LLM stopped generating this message:
+    /// "stop" | "tool_use" | "length" | "error" | "aborted". Unknown
+    /// provider values are passed through unchanged.
+    pub stop_reason: Option<String>,
+
     /// Attached image for multimodal messages (requires "image" feature).
     #[cfg(feature = "image")]
     pub image: Option<Arc<PhotonImage>>,
@@ -96,6 +102,7 @@ impl Message {
             tool_calls: None,
             tool_name: None,
             is_error: None,
+            stop_reason: None,
 
             #[cfg(feature = "image")]
             image: None,
@@ -203,6 +210,12 @@ impl Serialize for Message {
         if let Some(is_error) = &self.is_error {
             map.insert("is_error".to_string(), serde_json::Value::Bool(*is_error));
         }
+        if let Some(stop_reason) = &self.stop_reason {
+            map.insert(
+                "stop_reason".to_string(),
+                serde_json::Value::String(stop_reason.clone()),
+            );
+        }
         #[cfg(feature = "image")]
         {
             if let Some(image) = &self.image {
@@ -257,6 +270,10 @@ impl<'de> Deserialize<'de> for Message {
             message.tool_name = tool_name.as_str().map(|s| s.to_string());
         }
         message.is_error = map.get("is_error").and_then(|v| v.as_bool());
+        message.stop_reason = map
+            .get("stop_reason")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
         #[cfg(feature = "image")]
         if let Some(image) = map.get("image") {
             let image_str = image
@@ -350,6 +367,11 @@ impl TryFrom<AgentValue> for Message {
                     .unwrap_or_default();
 
                 message.is_error = obj.get("is_error").and_then(|v| v.as_bool());
+
+                message.stop_reason = obj
+                    .get("stop_reason")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string());
 
                 if let Some(tool_name) = obj.get("tool_name") {
                     message.tool_name = Some(
@@ -612,6 +634,7 @@ mod tests {
             id: None,
             tool_name: None,
             is_error: None,
+            stop_reason: None,
             #[cfg(feature = "image")]
             image: None,
         };
@@ -669,6 +692,49 @@ mod tests {
 
         let json = serde_json::to_value(&msg).unwrap();
         assert!(json.as_object().unwrap().get("is_error").is_none());
+    }
+
+    #[test]
+    fn test_message_stop_reason_serde_round_trip() {
+        let mut msg = Message::assistant("partial answer".to_string());
+        msg.stop_reason = Some("length".to_string());
+
+        let json = serde_json::to_value(&msg).unwrap();
+        assert_eq!(json["stop_reason"], serde_json::json!("length"));
+
+        let restored: Message = serde_json::from_value(json).unwrap();
+        assert_eq!(restored.stop_reason.as_deref(), Some("length"));
+    }
+
+    #[test]
+    fn test_message_without_stop_reason_deserializes_to_none() {
+        // Presets saved before this field existed must load unchanged.
+        let json = serde_json::json!({
+            "role": "assistant",
+            "content": "ok",
+        });
+        let msg: Message = serde_json::from_value(json).unwrap();
+        assert_eq!(msg.stop_reason, None);
+    }
+
+    #[test]
+    fn test_message_stop_reason_none_serializes_without_key() {
+        let msg = Message::assistant("ok".to_string());
+        assert_eq!(msg.stop_reason, None);
+
+        let json = serde_json::to_value(&msg).unwrap();
+        assert!(json.as_object().unwrap().get("stop_reason").is_none());
+    }
+
+    #[test]
+    fn test_message_from_object_value_reads_stop_reason() {
+        let value = AgentValue::object(hashmap! {
+            "role".into() => AgentValue::string("assistant"),
+            "content".into() => AgentValue::string("truncated"),
+            "stop_reason".into() => AgentValue::string("length"),
+        });
+        let msg: Message = value.try_into().unwrap();
+        assert_eq!(msg.stop_reason.as_deref(), Some("length"));
     }
 
     #[test]
