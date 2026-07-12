@@ -115,8 +115,9 @@ impl ClaudeClient {
 
         let status = resp.status().as_u16();
         if !resp.status().is_success() {
+            let retry_after = crate::http_error::parse_retry_after(resp.headers());
             let body = resp.text().await.unwrap_or_default();
-            return Err(map_http_error(status, &body));
+            return Err(map_http_error(status, &body, retry_after));
         }
 
         let response: ClaudeResponse = resp
@@ -148,8 +149,9 @@ impl ClaudeClient {
 
         let status = resp.status().as_u16();
         if !resp.status().is_success() {
+            let retry_after = crate::http_error::parse_retry_after(resp.headers());
             let body = resp.text().await.unwrap_or_default();
-            return Err(map_http_error(status, &body));
+            return Err(map_http_error(status, &body, retry_after));
         }
 
         let stream = resp
@@ -171,14 +173,44 @@ impl ClaudeClient {
     }
 }
 
-fn map_http_error(status: u16, body: &str) -> AgentError {
+fn map_http_error(
+    status: u16,
+    body: &str,
+    retry_after: Option<std::time::Duration>,
+) -> AgentError {
+    // 429 takes precedence over overflow detection so throttling responses
+    // whose body happens to mention prompt size stay retryable.
+    if status == 429 {
+        let lower = body.to_lowercase();
+        if crate::http_error::mentions_quota_exhausted(&lower) {
+            return AgentError::InvalidConfig(format!("Claude quota exhausted: {}", body));
+        }
+        return AgentError::RateLimited {
+            message: format!("Claude rate limited: {}", body),
+            retry_after,
+        };
+    }
+    if is_context_overflow(status, body) {
+        return AgentError::ContextOverflow(format!("Claude context overflow: {}", body));
+    }
     match status {
         401 => AgentError::InvalidConfig(format!("Invalid Claude API key: {}", body)),
-        429 => AgentError::IoError(format!("Claude rate limited: {}", body)),
         400 => AgentError::InvalidValue(format!("Claude Bad Request: {}", body)),
-        529 => AgentError::IoError(format!("Claude overloaded: {}", body)),
+        500..=599 => AgentError::Overloaded(format!("Claude API Error ({}): {}", status, body)),
         _ => AgentError::IoError(format!("Claude API Error ({}): {}", status, body)),
     }
+}
+
+fn is_context_overflow(status: u16, body: &str) -> bool {
+    // 413 unambiguously means the request was too large
+    if status == 413 {
+        return true;
+    }
+    let lower = body.to_lowercase();
+    if crate::http_error::mentions_rate_limit(&lower) {
+        return false;
+    }
+    lower.contains("prompt is too long") || lower.contains("request_too_large")
 }
 
 // ============================================================================
@@ -1024,24 +1056,95 @@ mod tests {
     #[test]
     fn test_map_http_error() {
         assert!(matches!(
-            map_http_error(401, "Unauthorized"),
+            map_http_error(401, "Unauthorized", None),
             AgentError::InvalidConfig(_)
         ));
         assert!(matches!(
-            map_http_error(429, "Rate limited"),
-            AgentError::IoError(_)
-        ));
-        assert!(matches!(
-            map_http_error(400, "Bad request"),
+            map_http_error(400, "Bad request", None),
             AgentError::InvalidValue(_)
         ));
         assert!(matches!(
-            map_http_error(529, "Overloaded"),
+            map_http_error(418, "I'm a teapot", None),
             AgentError::IoError(_)
         ));
+    }
+
+    #[test]
+    fn test_map_http_error_rate_limited() {
+        let err = map_http_error(429, "Rate limited", None);
         assert!(matches!(
-            map_http_error(500, "Server error"),
-            AgentError::IoError(_)
+            err,
+            AgentError::RateLimited {
+                retry_after: None,
+                ..
+            }
+        ));
+
+        let retry_after = Some(std::time::Duration::from_secs(10));
+        let err = map_http_error(429, "Rate limited", retry_after);
+        assert!(
+            matches!(err, AgentError::RateLimited { retry_after: Some(d), .. } if d.as_secs() == 10)
+        );
+    }
+
+    #[test]
+    fn test_map_http_error_quota_exhausted_not_retryable() {
+        let err = map_http_error(
+            429,
+            "You exceeded your current quota, please check your plan and billing details.",
+            None,
+        );
+        assert!(matches!(err, AgentError::InvalidConfig(_)));
+        assert!(!err.is_retryable());
+    }
+
+    #[test]
+    fn test_map_http_error_overloaded() {
+        assert!(matches!(
+            map_http_error(529, "Overloaded", None),
+            AgentError::Overloaded(_)
+        ));
+        assert!(matches!(
+            map_http_error(500, "Server error", None),
+            AgentError::Overloaded(_)
+        ));
+        let err = map_http_error(529, "Overloaded", None);
+        if let AgentError::Overloaded(msg) = err {
+            assert!(msg.contains("529"), "msg was: {msg}");
+            assert!(msg.contains("Claude"), "msg was: {msg}");
+        } else {
+            panic!("Expected Overloaded");
+        }
+    }
+
+    #[test]
+    fn test_map_http_error_context_overflow() {
+        assert!(matches!(
+            map_http_error(400, "prompt is too long: 250000 tokens > 200000 maximum", None),
+            AgentError::ContextOverflow(_)
+        ));
+        assert!(matches!(
+            map_http_error(400, r#"{"error":{"type":"request_too_large"}}"#, None),
+            AgentError::ContextOverflow(_)
+        ));
+        // 413 is overflow by status alone
+        assert!(matches!(
+            map_http_error(413, "Payload Too Large", None),
+            AgentError::ContextOverflow(_)
+        ));
+    }
+
+    #[test]
+    fn test_map_http_error_rate_limit_wording_excluded_from_overflow() {
+        // A 429 whose body mentions prompt size must stay RateLimited
+        assert!(matches!(
+            map_http_error(429, "prompt is too long, rate limit", None),
+            AgentError::RateLimited { .. }
+        ));
+        // A 400 mentioning both overflow and rate limit wording is not overflow
+        assert!(matches!(
+            map_http_error(400, "prompt is too long; rate_limit_error", None),
+            AgentError::InvalidValue(_)
         ));
     }
 }

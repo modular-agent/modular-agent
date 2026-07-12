@@ -135,8 +135,9 @@ impl OllamaClient {
 
         let status = resp.status().as_u16();
         if !resp.status().is_success() {
+            let retry_after = crate::http_error::parse_retry_after(resp.headers());
             let body = resp.text().await.unwrap_or_default();
-            return Err(map_http_error(status, &body));
+            return Err(map_http_error(status, &body, retry_after));
         }
 
         resp.json()
@@ -154,8 +155,9 @@ impl OllamaClient {
 
         let status = resp.status().as_u16();
         if !resp.status().is_success() {
+            let retry_after = crate::http_error::parse_retry_after(resp.headers());
             let body = resp.text().await.unwrap_or_default();
-            return Err(map_http_error(status, &body));
+            return Err(map_http_error(status, &body, retry_after));
         }
 
         resp.json()
@@ -187,8 +189,9 @@ impl OllamaClient {
 
         let status = resp.status().as_u16();
         if !resp.status().is_success() {
+            let retry_after = crate::http_error::parse_retry_after(resp.headers());
             let body = resp.text().await.unwrap_or_default();
-            return Err(map_http_error(status, &body));
+            return Err(map_http_error(status, &body, retry_after));
         }
 
         // Map bytes stream to String chunks to avoid direct bytes crate dependency
@@ -295,13 +298,44 @@ where
     )
 }
 
-fn map_http_error(status: u16, body: &str) -> AgentError {
+fn map_http_error(
+    status: u16,
+    body: &str,
+    retry_after: Option<std::time::Duration>,
+) -> AgentError {
+    // 429 takes precedence over overflow detection so throttling responses
+    // whose body happens to mention context size stay retryable.
+    if status == 429 {
+        let lower = body.to_lowercase();
+        if crate::http_error::mentions_quota_exhausted(&lower) {
+            return AgentError::InvalidConfig(format!("Ollama quota exhausted: {}", body));
+        }
+        return AgentError::RateLimited {
+            message: format!("Ollama rate limited: {}", body),
+            retry_after,
+        };
+    }
+    if is_context_overflow(body) {
+        return AgentError::ContextOverflow(format!("Ollama context overflow: {}", body));
+    }
     match status {
         400 => AgentError::InvalidValue(format!("Ollama Bad Request: {}", body)),
         401 => AgentError::InvalidConfig(format!("Ollama authentication failed: {}", body)),
         404 => AgentError::InvalidConfig(format!("Ollama model not found: {}", body)),
+        // Ollama returns 500 for deterministic runtime failures (crashed llama
+        // runner, template errors), so only gateway/unavailable statuses are
+        // treated as transient.
+        502..=504 => AgentError::Overloaded(format!("Ollama API Error ({}): {}", status, body)),
         _ => AgentError::IoError(format!("Ollama API Error ({}): {}", status, body)),
     }
+}
+
+fn is_context_overflow(body: &str) -> bool {
+    let lower = body.to_lowercase();
+    if crate::http_error::mentions_rate_limit(&lower) {
+        return false;
+    }
+    lower.contains("context length") && lower.contains("exceed")
 }
 
 // ============================================================================
@@ -777,20 +811,108 @@ mod tests {
     #[test]
     fn test_map_http_error() {
         assert!(matches!(
-            map_http_error(400, "bad"),
+            map_http_error(400, "bad", None),
             AgentError::InvalidValue(_)
         ));
         assert!(matches!(
-            map_http_error(401, "unauthorized"),
+            map_http_error(401, "unauthorized", None),
             AgentError::InvalidConfig(_)
         ));
         assert!(matches!(
-            map_http_error(404, "not found"),
+            map_http_error(404, "not found", None),
             AgentError::InvalidConfig(_)
         ));
         assert!(matches!(
-            map_http_error(500, "internal"),
+            map_http_error(418, "teapot", None),
             AgentError::IoError(_)
+        ));
+    }
+
+    #[test]
+    fn test_map_http_error_rate_limited() {
+        let err = map_http_error(429, "rate limited", None);
+        assert!(matches!(
+            err,
+            AgentError::RateLimited {
+                retry_after: None,
+                ..
+            }
+        ));
+
+        let retry_after = Some(std::time::Duration::from_secs(7));
+        let err = map_http_error(429, "rate limited", retry_after);
+        assert!(
+            matches!(err, AgentError::RateLimited { retry_after: Some(d), .. } if d.as_secs() == 7)
+        );
+    }
+
+    #[test]
+    fn test_map_http_error_quota_exhausted_not_retryable() {
+        let err = map_http_error(
+            429,
+            "You exceeded your current quota, please check your plan and billing details.",
+            None,
+        );
+        assert!(matches!(err, AgentError::InvalidConfig(_)));
+        assert!(!err.is_retryable());
+    }
+
+    #[test]
+    fn test_map_http_error_overloaded() {
+        // Ollama 500 is typically a deterministic runtime failure, not transient.
+        assert!(matches!(
+            map_http_error(500, "internal", None),
+            AgentError::IoError(_)
+        ));
+        assert!(matches!(
+            map_http_error(503, "unavailable", None),
+            AgentError::Overloaded(_)
+        ));
+        assert!(matches!(
+            map_http_error(502, "bad gateway", None),
+            AgentError::Overloaded(_)
+        ));
+        assert!(matches!(
+            map_http_error(504, "gateway timeout", None),
+            AgentError::Overloaded(_)
+        ));
+        let err = map_http_error(503, "unavailable", None);
+        if let AgentError::Overloaded(msg) = err {
+            assert!(msg.contains("503"), "msg was: {msg}");
+            assert!(msg.contains("Ollama"), "msg was: {msg}");
+        } else {
+            panic!("Expected Overloaded");
+        }
+    }
+
+    #[test]
+    fn test_map_http_error_context_overflow() {
+        assert!(matches!(
+            map_http_error(
+                400,
+                "the prompt exceeds the maximum context length of 4096",
+                None
+            ),
+            AgentError::ContextOverflow(_)
+        ));
+        // "context length" alone is not enough
+        assert!(matches!(
+            map_http_error(400, "invalid context length option", None),
+            AgentError::InvalidValue(_)
+        ));
+    }
+
+    #[test]
+    fn test_map_http_error_rate_limit_wording_excluded_from_overflow() {
+        // A 429 whose body mentions context size must stay RateLimited
+        assert!(matches!(
+            map_http_error(429, "context length exceeded, rate limit", None),
+            AgentError::RateLimited { .. }
+        ));
+        // A 400 mentioning both overflow and rate limit wording is not overflow
+        assert!(matches!(
+            map_http_error(400, "context length exceeded due to rate_limit", None),
+            AgentError::InvalidValue(_)
         ));
     }
 }

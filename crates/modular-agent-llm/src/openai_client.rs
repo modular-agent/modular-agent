@@ -117,8 +117,9 @@ impl OpenAIClient {
 
         let status = resp.status().as_u16();
         if !resp.status().is_success() {
+            let retry_after = crate::http_error::parse_retry_after(resp.headers());
             let body = resp.text().await.unwrap_or_default();
-            return Err(map_http_error(status, &body));
+            return Err(map_http_error(status, &body, retry_after));
         }
 
         resp.json()
@@ -151,8 +152,9 @@ impl OpenAIClient {
 
         let status = resp.status().as_u16();
         if !resp.status().is_success() {
+            let retry_after = crate::http_error::parse_retry_after(resp.headers());
             let body = resp.text().await.unwrap_or_default();
-            return Err(map_http_error(status, &body));
+            return Err(map_http_error(status, &body, retry_after));
         }
 
         let stream = resp
@@ -173,13 +175,40 @@ impl OpenAIClient {
     }
 }
 
-fn map_http_error(status: u16, body: &str) -> AgentError {
+fn map_http_error(
+    status: u16,
+    body: &str,
+    retry_after: Option<std::time::Duration>,
+) -> AgentError {
+    // 429 takes precedence over overflow detection so throttling responses
+    // whose body happens to mention context size stay retryable.
+    if status == 429 {
+        let lower = body.to_lowercase();
+        if crate::http_error::mentions_quota_exhausted(&lower) {
+            return AgentError::InvalidConfig(format!("OpenAI quota exhausted: {}", body));
+        }
+        return AgentError::RateLimited {
+            message: format!("OpenAI rate limited: {}", body),
+            retry_after,
+        };
+    }
+    if is_context_overflow(body) {
+        return AgentError::ContextOverflow(format!("OpenAI context overflow: {}", body));
+    }
     match status {
         401 => AgentError::InvalidConfig(format!("Invalid OpenAI API key: {}", body)),
-        429 => AgentError::IoError(format!("OpenAI rate limited: {}", body)),
         400 => AgentError::InvalidValue(format!("OpenAI Bad Request: {}", body)),
+        500..=599 => AgentError::Overloaded(format!("OpenAI API Error ({}): {}", status, body)),
         _ => AgentError::IoError(format!("OpenAI API Error ({}): {}", status, body)),
     }
+}
+
+fn is_context_overflow(body: &str) -> bool {
+    let lower = body.to_lowercase();
+    if crate::http_error::mentions_rate_limit(&lower) {
+        return false;
+    }
+    lower.contains("exceeds the context window") || lower.contains("maximum context length")
 }
 
 // ============================================================================
@@ -947,20 +976,90 @@ mod tests {
     #[test]
     fn test_map_http_error() {
         assert!(matches!(
-            map_http_error(401, "Unauthorized"),
+            map_http_error(401, "Unauthorized", None),
             AgentError::InvalidConfig(_)
         ));
         assert!(matches!(
-            map_http_error(429, "Rate limited"),
-            AgentError::IoError(_)
-        ));
-        assert!(matches!(
-            map_http_error(400, "Bad request"),
+            map_http_error(400, "Bad request", None),
             AgentError::InvalidValue(_)
         ));
         assert!(matches!(
-            map_http_error(500, "Server error"),
+            map_http_error(418, "I'm a teapot", None),
             AgentError::IoError(_)
+        ));
+    }
+
+    #[test]
+    fn test_map_http_error_rate_limited() {
+        let err = map_http_error(429, "Rate limited", None);
+        assert!(matches!(
+            err,
+            AgentError::RateLimited {
+                retry_after: None,
+                ..
+            }
+        ));
+
+        let retry_after = Some(std::time::Duration::from_secs(30));
+        let err = map_http_error(429, "Rate limited", retry_after);
+        assert!(
+            matches!(err, AgentError::RateLimited { retry_after: Some(d), .. } if d.as_secs() == 30)
+        );
+    }
+
+    #[test]
+    fn test_map_http_error_quota_exhausted_not_retryable() {
+        let err = map_http_error(
+            429,
+            "You exceeded your current quota, please check your plan and billing details.",
+            None,
+        );
+        assert!(matches!(err, AgentError::InvalidConfig(_)));
+        assert!(!err.is_retryable());
+    }
+
+    #[test]
+    fn test_map_http_error_overloaded() {
+        assert!(matches!(
+            map_http_error(500, "Server error", None),
+            AgentError::Overloaded(_)
+        ));
+        assert!(matches!(
+            map_http_error(503, "Service unavailable", None),
+            AgentError::Overloaded(_)
+        ));
+        let err = map_http_error(500, "Server error", None);
+        if let AgentError::Overloaded(msg) = err {
+            assert!(msg.contains("500"), "msg was: {msg}");
+            assert!(msg.contains("OpenAI"), "msg was: {msg}");
+        } else {
+            panic!("Expected Overloaded");
+        }
+    }
+
+    #[test]
+    fn test_map_http_error_context_overflow() {
+        assert!(matches!(
+            map_http_error(400, "This model's maximum context length is 128000 tokens", None),
+            AgentError::ContextOverflow(_)
+        ));
+        assert!(matches!(
+            map_http_error(400, "Your input exceeds the context window of this model", None),
+            AgentError::ContextOverflow(_)
+        ));
+    }
+
+    #[test]
+    fn test_map_http_error_rate_limit_wording_excluded_from_overflow() {
+        // A 429 whose body mentions context size must stay RateLimited
+        assert!(matches!(
+            map_http_error(429, "maximum context length rate limit reached", None),
+            AgentError::RateLimited { .. }
+        ));
+        // A 400 mentioning both overflow and rate limit wording is not overflow
+        assert!(matches!(
+            map_http_error(400, "maximum context length; rate limit applies", None),
+            AgentError::InvalidValue(_)
         ));
     }
 

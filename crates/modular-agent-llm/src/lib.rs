@@ -11,6 +11,9 @@ pub mod embeddings;
 #[cfg(feature = "openai")]
 pub mod responses;
 
+#[cfg(any(feature = "openai", feature = "claude", feature = "ollama"))]
+pub(crate) mod http_error;
+
 #[cfg(feature = "openai")]
 pub(crate) mod openai_client;
 
