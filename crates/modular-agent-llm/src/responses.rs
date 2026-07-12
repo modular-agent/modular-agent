@@ -1,7 +1,7 @@
 use im::vector;
 use modular_agent_core::{
     Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AgentValueMap,
-    AsAgent, Message, ModularAgent, ToolCall, ToolCallFunction, async_trait, modular_agent,
+    AsAgent, Message, ModularAgent, ToolCall, ToolCallFunction, Usage, async_trait, modular_agent,
 };
 
 use crate::openai_client;
@@ -314,6 +314,7 @@ impl ResponsesAgent {
         let mut message = openai_client::response_output_to_message(&output)?;
         message.id = Some(id.to_string());
         message.stop_reason = stop_reason_from_response(&response, message.tool_calls.is_some());
+        message.usage = usage_from_response(&response);
 
         // Output message
         self.output(ctx.clone(), PORT_MESSAGE.to_string(), message.into())
@@ -445,8 +446,10 @@ impl ResponsesAgent {
                 | openai_client::ResponseStreamEvent::Failed { response } => {
                     // Terminal but unsuccessful; record the reason and let the
                     // trailing guard below emit the single final message.
+                    // Usage may legitimately be absent here, leaving None.
                     message.stop_reason =
                         stop_reason_from_response(&response, !tool_calls.is_empty());
+                    message.usage = usage_from_response(&response);
                 }
                 openai_client::ResponseStreamEvent::Completed { response } => {
                     // Emit the final, non-streaming message so downstream agents act on it once.
@@ -457,6 +460,7 @@ impl ResponsesAgent {
                     message.streaming = false;
                     message.stop_reason =
                         stop_reason_from_response(&response, !tool_calls.is_empty());
+                    message.usage = usage_from_response(&response);
                     self.output(
                         ctx.clone(),
                         PORT_MESSAGE.to_string(),
@@ -532,6 +536,35 @@ fn stop_reason_from_response(response: &serde_json::Value, has_tool_calls: bool)
         other => other,
     };
     Some(reason.to_string())
+}
+
+/// Extract normalized usage from a terminal Responses API `response` object.
+///
+/// Like Chat Completions, the API's `input_tokens` INCLUDES cached tokens,
+/// so cached is subtracted out to match the Anthropic-style accounting used
+/// by `Usage.input_tokens`. Lenient: `None` only when the `usage` object is
+/// absent entirely; missing individual fields default to 0.
+fn usage_from_response(response: &serde_json::Value) -> Option<Usage> {
+    let usage = response.get("usage")?.as_object()?;
+    let input = usage
+        .get("input_tokens")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+    let output = usage
+        .get("output_tokens")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+    let cached = usage
+        .get("input_tokens_details")
+        .and_then(|d| d.get("cached_tokens"))
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+    Some(Usage {
+        input_tokens: input.saturating_sub(cached),
+        output_tokens: output,
+        cache_read_tokens: cached,
+        cache_write_tokens: 0,
+    })
 }
 
 #[cfg(test)]
@@ -622,8 +655,109 @@ mod tests {
         assert_eq!(final_msg.stop_reason.as_deref(), Some("length"));
         assert_eq!(final_msg.content, "Hi");
         assert_eq!(final_msg.id.as_deref(), Some("m1"));
+        // No usage object on this terminal event, so it legitimately stays None
+        assert_eq!(final_msg.usage, None);
 
         ma.quit();
+    }
+
+    #[tokio::test]
+    async fn responses_stream_completed_usage_lands_on_final_message() {
+        let (ma, responses_id, probe_rx) = setup_responses_with_probe().await;
+
+        let chunks: Vec<Result<Option<String>, AgentError>> = vec![
+            Ok(Some(
+                r#"{"type":"response.output_text.delta","delta":"Hi"}"#.to_string(),
+            )),
+            Ok(Some(
+                r#"{"type":"response.completed","response":{"id":"resp_1","status":"completed","output":[],"usage":{"input_tokens":100,"output_tokens":20,"input_tokens_details":{"cached_tokens":60}}}}"#
+                    .to_string(),
+            )),
+            Ok(None), // [DONE] sentinel
+        ];
+        let mut message = Message::assistant(String::new());
+        message.id = Some("m1".to_string());
+        message.streaming = true;
+
+        {
+            let agent = ma.get_agent(&responses_id).unwrap();
+            let mut guard = agent.lock().await;
+            let responses = guard.as_agent_mut::<ResponsesAgent>().unwrap();
+            responses
+                .run_stream(
+                    &AgentContext::new(),
+                    futures::stream::iter(chunks),
+                    &mut message,
+                    false,
+                )
+                .await
+                .unwrap();
+        }
+
+        let final_msg = loop {
+            let (_ctx, value) = probe_rx.recv().await.unwrap();
+            let msg = value.as_message().unwrap().clone();
+            if !msg.streaming {
+                break msg;
+            }
+            assert_eq!(msg.usage, None, "partial emits must not carry usage");
+        };
+        assert_eq!(final_msg.stop_reason.as_deref(), Some("stop"));
+        assert_eq!(
+            final_msg.usage,
+            Some(Usage {
+                input_tokens: 40,
+                output_tokens: 20,
+                cache_read_tokens: 60,
+                cache_write_tokens: 0,
+            })
+        );
+
+        ma.quit();
+    }
+
+    #[test]
+    fn test_usage_from_response_normalizes_cached_tokens() {
+        let response = serde_json::json!({
+            "status": "completed",
+            "usage": {
+                "input_tokens": 100,
+                "output_tokens": 20,
+                "total_tokens": 120,
+                "input_tokens_details": {"cached_tokens": 60}
+            }
+        });
+        assert_eq!(
+            usage_from_response(&response),
+            Some(Usage {
+                input_tokens: 40,
+                output_tokens: 20,
+                cache_read_tokens: 60,
+                cache_write_tokens: 0,
+            })
+        );
+    }
+
+    #[test]
+    fn test_usage_from_response_without_details() {
+        let response = serde_json::json!({
+            "usage": {"input_tokens": 10, "output_tokens": 5}
+        });
+        assert_eq!(
+            usage_from_response(&response),
+            Some(Usage {
+                input_tokens: 10,
+                output_tokens: 5,
+                cache_read_tokens: 0,
+                cache_write_tokens: 0,
+            })
+        );
+    }
+
+    #[test]
+    fn test_usage_from_response_missing_usage() {
+        let response = serde_json::json!({"status": "completed"});
+        assert_eq!(usage_from_response(&response), None);
     }
 
     #[test]

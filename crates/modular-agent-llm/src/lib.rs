@@ -20,6 +20,7 @@ pub(crate) mod prepare;
 pub mod chat;
 pub mod completion;
 pub mod embeddings;
+pub mod usage;
 
 // With no provider features enabled, only `RetryPolicy::from_configs` is
 // reachable; the retry machinery itself is dead. Keep it compiled (so all

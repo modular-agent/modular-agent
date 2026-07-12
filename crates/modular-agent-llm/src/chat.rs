@@ -1,6 +1,6 @@
 use modular_agent_core::{
     Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AgentValueMap,
-    AsAgent, Message, ModularAgent, ToolCall, ToolCallFunction, async_trait, modular_agent,
+    AsAgent, Message, ModularAgent, ToolCall, ToolCallFunction, Usage, async_trait, modular_agent,
 };
 
 use crate::provider::{
@@ -61,7 +61,9 @@ const DEFAULT_CONFIG_MODEL: &str = "openai/gpt-5-nano";
 ///   capability registry are left unclamped.
 /// - `temperature`: Sampling temperature (-1: use API default)
 /// - `top_p`: Nucleus sampling parameter (-1: use API default)
-/// - `options`: Additional request options as JSON
+/// - `options`: Additional request options as JSON. For OpenAI, a `null`
+///   value removes the key from the request (e.g. `{"stream_options": null}`
+///   for OpenAI-compatible servers that reject the parameter)
 /// - `max_retries`: Maximum automatic retries for retryable errors such as
 ///   rate limits, server overload, and timeouts (default: 2)
 /// - `retry_base_delay_ms`: Base delay for exponential backoff between
@@ -322,6 +324,12 @@ impl ChatAgent {
         if !tools_json.is_empty() {
             request["tools"] = serde_json::Value::Array(tools_json);
         }
+        if use_stream {
+            // The usage-bearing final chunk is only sent when asked for. Set
+            // before merge_options so options `"stream_options": null` can
+            // strip the key for OpenAI-compatible servers that reject it.
+            request["stream_options"] = serde_json::json!({ "include_usage": true });
+        }
 
         openai_client::merge_options(&mut request, &config_options)?;
         if let Some(v) = crate::capabilities::clamp_max_tokens(max_tokens, model_max_tokens) {
@@ -363,6 +371,7 @@ impl ChatAgent {
             let res: openai_client::ChatCompletionResponse =
                 retry.run(|| client.post_json(&url, &request)).await?;
 
+            let usage = res.usage.as_ref().map(openai_client::usage_from_openai);
             for c in &res.choices {
                 let mut message = openai_client::message_from_chat_response(&c.message);
                 message.id = Some(id.clone());
@@ -370,6 +379,7 @@ impl ChatAgent {
                     .finish_reason
                     .as_deref()
                     .map(openai_client::normalize_finish_reason);
+                message.usage = usage;
 
                 self.output(
                     ctx.clone(),
@@ -416,6 +426,10 @@ impl ChatAgent {
         let mut content = String::new();
         let mut thinking = String::new();
         let mut finish_reason: Option<String> = None;
+        // With stream_options.include_usage, usage arrives in a final chunk
+        // whose choices array is empty; held back until the final emit so
+        // partial emissions never carry usage.
+        let mut usage: Option<Usage> = None;
         // Tool call fragments are accumulated by index and finalized only
         // after the stream completes; partial emits never carry tool_calls
         // so downstream tool execution acts on the final message alone.
@@ -441,6 +455,9 @@ impl ChatAgent {
                 if let Some(reason) = &c.finish_reason {
                     finish_reason = Some(reason.clone());
                 }
+            }
+            if let Some(u) = &chunk.usage {
+                usage = Some(openai_client::usage_from_openai(u));
             }
 
             message.content = content.clone();
@@ -475,6 +492,7 @@ impl ChatAgent {
         message.stop_reason = finish_reason
             .as_deref()
             .map(openai_client::normalize_finish_reason);
+        message.usage = usage;
         self.output(
             ctx.clone(),
             PORT_MESSAGE.to_string(),
@@ -643,6 +661,10 @@ impl ChatAgent {
         let mut thinking = String::new();
         let mut tool_calls: Vec<ToolCall> = Vec::new();
         let mut stop_reason: Option<String> = None;
+        // Accumulated field-wise: input/cache token counts arrive once on
+        // message_start, cumulative output_tokens on message_delta. Held
+        // back until MessageStop so partial emissions never carry usage.
+        let mut usage: Option<Usage> = None;
 
         // Track block types by index
         let mut block_types: std::collections::HashMap<usize, String> =
@@ -739,10 +761,16 @@ impl ChatAgent {
                         .await?;
                     }
                 }
+                claude_client::ClaudeStreamEvent::MessageStart { message: start } => {
+                    if let Some(u) = &start.usage {
+                        usage = Some(claude_client::usage_from_claude(u));
+                    }
+                }
                 claude_client::ClaudeStreamEvent::MessageStop {} => {
                     // Final output with all accumulated data
                     message.streaming = false;
                     message.stop_reason = stop_reason.clone();
+                    message.usage = usage;
                     message.content = content.clone();
                     if !thinking.is_empty() {
                         message.thinking = Some(thinking.clone());
@@ -757,9 +785,18 @@ impl ChatAgent {
                     )
                     .await?;
                 }
-                claude_client::ClaudeStreamEvent::MessageDelta { delta, .. } => {
+                claude_client::ClaudeStreamEvent::MessageDelta {
+                    delta,
+                    usage: delta_usage,
+                } => {
                     if let Some(reason) = delta.stop_reason {
                         stop_reason = Some(claude_client::normalize_stop_reason(&reason));
+                    }
+                    if let Some(u) = &delta_usage {
+                        // message_delta reports output_tokens cumulatively,
+                        // so the latest value overwrites.
+                        let acc = usage.get_or_insert_with(Usage::default);
+                        acc.output_tokens = u64::from(u.output_tokens);
                     }
                 }
                 claude_client::ClaudeStreamEvent::Error { error } => {
@@ -769,7 +806,7 @@ impl ChatAgent {
                     )));
                 }
                 _ => {
-                    // MessageStart, Ping - skip
+                    // Ping - skip
                 }
             }
         }
@@ -887,6 +924,7 @@ impl ChatAgent {
                 .done_reason
                 .as_deref()
                 .map(ollama_client::normalize_done_reason);
+            message.usage = ollama_client::usage_from_ollama(&res);
 
             self.output(
                 ctx.clone(),
@@ -962,6 +1000,9 @@ impl ChatAgent {
                     .done_reason
                     .as_deref()
                     .map(ollama_client::normalize_done_reason);
+                // Token counts ride only on the done=true chunk, so partial
+                // emits keep usage None.
+                message.usage = ollama_client::usage_from_ollama(&res);
             }
 
             self.output(
@@ -1051,7 +1092,7 @@ mod tests {
     }
 
     /// Drain probe emits until the final (streaming=false) message, asserting
-    /// every partial keeps stop_reason None.
+    /// every partial keeps stop_reason and usage None.
     async fn recv_final_message(probe_rx: &ProbeReceiver) -> Message {
         loop {
             let (_ctx, value) = probe_rx.recv().await.unwrap();
@@ -1060,6 +1101,7 @@ mod tests {
                 return msg;
             }
             assert_eq!(msg.stop_reason, None, "partial emits must keep None");
+            assert_eq!(msg.usage, None, "partial emits must not carry usage");
         }
     }
 
@@ -1075,6 +1117,11 @@ mod tests {
             )),
             Ok(Some(
                 r#"{"choices":[{"index":0,"delta":{"content":"lo"},"finish_reason":"length"}]}"#
+                    .to_string(),
+            )),
+            // stream_options.include_usage: final chunk with EMPTY choices
+            Ok(Some(
+                r#"{"choices":[],"usage":{"prompt_tokens":10,"completion_tokens":5,"prompt_tokens_details":{"cached_tokens":4}}}"#
                     .to_string(),
             )),
             Ok(None), // [DONE] sentinel
@@ -1098,6 +1145,15 @@ mod tests {
         assert_eq!(final_msg.stop_reason.as_deref(), Some("length"));
         assert_eq!(final_msg.content, "Hello");
         assert_eq!(final_msg.id.as_deref(), Some("m1"));
+        assert_eq!(
+            final_msg.usage,
+            Some(Usage {
+                input_tokens: 6,
+                output_tokens: 5,
+                cache_read_tokens: 4,
+                cache_write_tokens: 0,
+            })
+        );
 
         ma.quit();
     }
@@ -1144,9 +1200,13 @@ mod tests {
         let (ma, chat_id, probe_rx) = setup_chat_with_probe().await;
 
         let events: Vec<Result<claude_client::ClaudeStreamEvent, AgentError>> = [
+            // input/cache counts arrive on message_start with a small
+            // provisional output_tokens...
+            r#"{"type":"message_start","message":{"id":"msg_1","usage":{"input_tokens":25,"output_tokens":1,"cache_creation_input_tokens":3,"cache_read_input_tokens":7}}}"#,
             r#"{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}"#,
             r#"{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hi"}}"#,
-            r#"{"type":"message_delta","delta":{"stop_reason":"max_tokens"},"usage":{"input_tokens":1,"output_tokens":1}}"#,
+            // ...and message_delta carries the cumulative output_tokens.
+            r#"{"type":"message_delta","delta":{"stop_reason":"max_tokens"},"usage":{"output_tokens":12}}"#,
             r#"{"type":"message_stop"}"#,
         ]
         .iter()
@@ -1171,6 +1231,15 @@ mod tests {
         assert_eq!(final_msg.stop_reason.as_deref(), Some("length"));
         assert_eq!(final_msg.content, "Hi");
         assert_eq!(final_msg.id.as_deref(), Some("m1"));
+        assert_eq!(
+            final_msg.usage,
+            Some(Usage {
+                input_tokens: 25,
+                output_tokens: 12,
+                cache_read_tokens: 7,
+                cache_write_tokens: 3,
+            })
+        );
 
         ma.quit();
     }
@@ -1182,7 +1251,8 @@ mod tests {
 
         let chunks: Vec<Result<ollama_client::ChatResponse, AgentError>> = [
             r#"{"model":"m","created_at":"t","message":{"role":"assistant","content":"Hel"},"done":false}"#,
-            r#"{"model":"m","created_at":"t","message":{"role":"assistant","content":"lo"},"done":true,"done_reason":"stop"}"#,
+            // Token counts ride only on the final done=true chunk.
+            r#"{"model":"m","created_at":"t","message":{"role":"assistant","content":"lo"},"done":true,"done_reason":"stop","prompt_eval_count":26,"eval_count":42}"#,
         ]
         .iter()
         .map(|json| Ok(serde_json::from_str(json).unwrap()))
@@ -1206,6 +1276,15 @@ mod tests {
         assert_eq!(final_msg.stop_reason.as_deref(), Some("stop"));
         assert_eq!(final_msg.content, "Hello");
         assert_eq!(final_msg.id.as_deref(), Some("m1"));
+        assert_eq!(
+            final_msg.usage,
+            Some(Usage {
+                input_tokens: 26,
+                output_tokens: 42,
+                cache_read_tokens: 0,
+                cache_write_tokens: 0,
+            })
+        );
 
         ma.quit();
     }

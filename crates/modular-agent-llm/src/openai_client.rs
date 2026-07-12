@@ -2,7 +2,7 @@ use std::sync::{Arc, Mutex};
 
 use modular_agent_core::tool;
 use modular_agent_core::{
-    AgentError, AgentValue, AgentValueMap, Message, ModularAgent, ToolCall, ToolCallFunction,
+    AgentError, AgentValue, AgentValueMap, Message, ModularAgent, ToolCall, ToolCallFunction, Usage,
 };
 
 use crate::chat::ChatAgent;
@@ -221,6 +221,32 @@ fn is_context_overflow(body: &str) -> bool {
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub(crate) struct ChatCompletionResponse {
     pub choices: Vec<ChatChoice>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub usage: Option<OpenAIUsage>,
+    #[serde(flatten)]
+    pub extra: serde_json::Map<String, serde_json::Value>,
+}
+
+// All fields are defaulted/Option so OpenAI-compatible servers that report
+// less (or no) usage still parse. The flatten maps preserve unmodeled keys
+// (total_tokens, completion_tokens_details, ...) across the raw `response`
+// port re-serialization.
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+pub(crate) struct OpenAIUsage {
+    #[serde(default)]
+    pub prompt_tokens: u64,
+    #[serde(default)]
+    pub completion_tokens: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prompt_tokens_details: Option<PromptTokensDetails>,
+    #[serde(flatten)]
+    pub extra: serde_json::Map<String, serde_json::Value>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+pub(crate) struct PromptTokensDetails {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cached_tokens: Option<u64>,
     #[serde(flatten)]
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
@@ -256,9 +282,13 @@ pub(crate) struct ChatFunctionCall {
 
 // Streaming types
 
+// With `stream_options.include_usage`, the last chunk carries `usage` and an
+// EMPTY `choices` array; consumers must not index into choices.
 #[derive(serde::Deserialize, Clone)]
 pub(crate) struct ChatStreamChunk {
     pub choices: Vec<ChatStreamChoice>,
+    #[serde(default)]
+    pub usage: Option<OpenAIUsage>,
     #[serde(flatten)]
     #[allow(dead_code)]
     pub extra: serde_json::Map<String, serde_json::Value>,
@@ -484,6 +514,23 @@ pub fn message_from_chat_response(msg: &ChatResponseMessage) -> Message {
     }
 
     message
+}
+
+/// Normalize OpenAI usage to the framework `Usage`. OpenAI's `prompt_tokens`
+/// INCLUDES cached tokens, so cached is subtracted out to match the
+/// Anthropic-style accounting used by `Usage.input_tokens`.
+pub(crate) fn usage_from_openai(usage: &OpenAIUsage) -> Usage {
+    let cached = usage
+        .prompt_tokens_details
+        .as_ref()
+        .and_then(|d| d.cached_tokens)
+        .unwrap_or(0);
+    Usage {
+        input_tokens: usage.prompt_tokens.saturating_sub(cached),
+        output_tokens: usage.completion_tokens,
+        cache_read_tokens: cached,
+        cache_write_tokens: 0,
+    }
 }
 
 /// Normalize a Chat Completions `finish_reason` to the framework
@@ -764,6 +811,11 @@ pub(crate) fn prompt_cache_key(preset_id: &str, agent_id: &str) -> String {
 }
 
 /// Merge user options JSON into a request JSON object.
+///
+/// A `null` option removes the key from the request instead of serializing
+/// `"key": null` — the escape hatch for defaults this client sets
+/// unconditionally (e.g. `stream_options`) on OpenAI-compatible servers
+/// that reject the parameter regardless of its value.
 pub(crate) fn merge_options(
     request: &mut serde_json::Value,
     config_options: &AgentValueMap<String, AgentValue>,
@@ -775,7 +827,11 @@ pub(crate) fn merge_options(
         .map_err(|e| AgentError::InvalidValue(format!("Invalid JSON in options: {}", e)))?;
     if let (Some(req_obj), Some(opt_obj)) = (request.as_object_mut(), options_json.as_object()) {
         for (key, value) in opt_obj {
-            req_obj.insert(key.clone(), value.clone());
+            if value.is_null() {
+                req_obj.remove(key);
+            } else {
+                req_obj.insert(key.clone(), value.clone());
+            }
         }
     }
     Ok(())
@@ -932,7 +988,81 @@ mod tests {
         assert_eq!(resp.choices.len(), 1);
         assert_eq!(resp.choices[0].message.content, Some("Hello!".to_string()));
         assert_eq!(resp.extra.get("id").unwrap(), "chatcmpl-123");
-        assert!(resp.extra.contains_key("usage"));
+        // usage is consumed by the typed field, not the extra catch-all
+        assert!(!resp.extra.contains_key("usage"));
+        let usage = resp.usage.unwrap();
+        assert_eq!(usage.prompt_tokens, 10);
+        assert_eq!(usage.completion_tokens, 5);
+        // Unmodeled keys survive for the raw response port
+        assert_eq!(usage.extra.get("total_tokens").unwrap(), 15);
+    }
+
+    #[test]
+    fn test_serde_chat_completion_response_without_usage() {
+        let json = r#"{"choices": []}"#;
+        let resp: ChatCompletionResponse = serde_json::from_str(json).unwrap();
+        assert!(resp.usage.is_none());
+    }
+
+    #[test]
+    fn test_usage_from_openai_normalizes_cached_tokens() {
+        let json = r#"{
+            "prompt_tokens": 100,
+            "completion_tokens": 20,
+            "total_tokens": 120,
+            "prompt_tokens_details": {"cached_tokens": 60, "audio_tokens": 0}
+        }"#;
+        let usage: OpenAIUsage = serde_json::from_str(json).unwrap();
+        assert_eq!(
+            usage_from_openai(&usage),
+            Usage {
+                input_tokens: 40,
+                output_tokens: 20,
+                cache_read_tokens: 60,
+                cache_write_tokens: 0,
+            }
+        );
+    }
+
+    #[test]
+    fn test_usage_from_openai_without_details() {
+        let json = r#"{"prompt_tokens": 10, "completion_tokens": 5}"#;
+        let usage: OpenAIUsage = serde_json::from_str(json).unwrap();
+        assert_eq!(
+            usage_from_openai(&usage),
+            Usage {
+                input_tokens: 10,
+                output_tokens: 5,
+                cache_read_tokens: 0,
+                cache_write_tokens: 0,
+            }
+        );
+    }
+
+    #[test]
+    fn test_usage_from_openai_cached_exceeding_prompt_saturates() {
+        // Defensive: a server reporting cached > prompt must not underflow.
+        let json = r#"{
+            "prompt_tokens": 5,
+            "completion_tokens": 1,
+            "prompt_tokens_details": {"cached_tokens": 10}
+        }"#;
+        let usage: OpenAIUsage = serde_json::from_str(json).unwrap();
+        assert_eq!(usage_from_openai(&usage).input_tokens, 0);
+    }
+
+    #[test]
+    fn test_serde_chat_stream_chunk_usage_only_final_chunk() {
+        // With stream_options.include_usage, the final chunk has EMPTY
+        // choices and carries the usage object.
+        let json = r#"{
+            "id": "chatcmpl-123",
+            "choices": [],
+            "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}
+        }"#;
+        let chunk: ChatStreamChunk = serde_json::from_str(json).unwrap();
+        assert!(chunk.choices.is_empty());
+        assert_eq!(chunk.usage.unwrap().prompt_tokens, 10);
     }
 
     #[test]
@@ -1504,5 +1634,23 @@ mod tests {
         })];
         let msg = response_output_to_message(&output).unwrap();
         assert_eq!(msg.content, "[Refusal: I cannot do that.]");
+    }
+
+    // =========================================================================
+    // merge_options
+    // =========================================================================
+
+    #[test]
+    fn test_merge_options_inserts_and_null_removes_key() {
+        let mut request = serde_json::json!({
+            "model": "gpt-5-nano",
+            "stream_options": { "include_usage": true },
+        });
+        let mut options: AgentValueMap<String, AgentValue> = AgentValueMap::new();
+        options.insert("stream_options".into(), AgentValue::unit());
+        options.insert("seed".into(), AgentValue::integer(42));
+        merge_options(&mut request, &options).unwrap();
+        assert!(request.get("stream_options").is_none());
+        assert_eq!(request["seed"], 42);
     }
 }

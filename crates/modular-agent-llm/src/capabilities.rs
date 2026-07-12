@@ -59,6 +59,15 @@ pub enum ThinkingLevel {
 pub struct ModelCostRates {
     pub input: f64,
     pub output: f64,
+    /// Rate for input tokens read from the prompt cache. `None` means the
+    /// cached rate is unknown; cost consumers fall back to `input`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_read: Option<f64>,
+    /// Rate for input tokens written to the prompt cache. `None` means the
+    /// provider has no separate write billing (or it is unknown); cost
+    /// consumers fall back to `input`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_write: Option<f64>,
 }
 
 /// Fully resolved capabilities for one model. Every field has a value;
@@ -203,8 +212,7 @@ fn builtin(
     context_window: u32,
     max_tokens: u32,
     thinking_levels: Vec<(ThinkingLevel, Option<String>)>,
-    input_cost: f64,
-    output_cost: f64,
+    cost: ModelCostRates,
 ) -> BuiltinModel {
     BuiltinModel {
         provider,
@@ -214,12 +222,47 @@ fn builtin(
             max_tokens,
             reasoning: !thinking_levels.is_empty(),
             thinking_levels,
-            cost: Some(ModelCostRates {
-                input: input_cost,
-                output: output_cost,
-            }),
+            cost: Some(cost),
             image_input: true,
         },
+    }
+}
+
+/// Anthropic's published cache multipliers apply uniformly across current
+/// Claude models: reads are 0.1x input, 5-minute cache writes are 1.25x.
+///
+/// The write rate assumes the 5-minute TTL. 1-hour cache writes (ChatAgent
+/// `cache_retention = "long"`) are billed at 2x, but Anthropic reports one
+/// combined cache-write token count, so the rate cannot be picked per write;
+/// users on 1h retention can override `cache_write` via models.json.
+fn claude_cost(input: f64, output: f64) -> ModelCostRates {
+    ModelCostRates {
+        input,
+        output,
+        cache_read: Some(input * 0.1),
+        cache_write: Some(input * 1.25),
+    }
+}
+
+/// OpenAI gpt-5 family: published cached-input rate is 0.1x input; cache
+/// writes are not billed separately, so `cache_write` stays `None`.
+fn openai_gpt5_cost(input: f64, output: f64) -> ModelCostRates {
+    ModelCostRates {
+        input,
+        output,
+        cache_read: Some(input * 0.1),
+        cache_write: None,
+    }
+}
+
+/// Cost with no known cache rates (older OpenAI models: cached-input
+/// multipliers vary per model, so they are left for models.json overrides).
+fn plain_cost(input: f64, output: f64) -> ModelCostRates {
+    ModelCostRates {
+        input,
+        output,
+        cache_read: None,
+        cache_write: None,
     }
 }
 
@@ -276,8 +319,7 @@ static BUILTIN_MODELS: LazyLock<Vec<BuiltinModel>> = LazyLock::new(|| {
             1_000_000,
             128_000,
             adaptive_levels(),
-            10.0,
-            50.0,
+            claude_cost(10.0, 50.0),
         ),
         builtin(
             Claude,
@@ -285,8 +327,7 @@ static BUILTIN_MODELS: LazyLock<Vec<BuiltinModel>> = LazyLock::new(|| {
             1_000_000,
             128_000,
             adaptive_levels(),
-            5.0,
-            25.0,
+            claude_cost(5.0, 25.0),
         ),
         builtin(
             Claude,
@@ -294,8 +335,7 @@ static BUILTIN_MODELS: LazyLock<Vec<BuiltinModel>> = LazyLock::new(|| {
             1_000_000,
             128_000,
             adaptive_levels(),
-            5.0,
-            25.0,
+            claude_cost(5.0, 25.0),
         ),
         builtin(
             Claude,
@@ -303,8 +343,7 @@ static BUILTIN_MODELS: LazyLock<Vec<BuiltinModel>> = LazyLock::new(|| {
             1_000_000,
             128_000,
             adaptive_levels(),
-            5.0,
-            25.0,
+            claude_cost(5.0, 25.0),
         ),
         builtin(
             Claude,
@@ -312,8 +351,7 @@ static BUILTIN_MODELS: LazyLock<Vec<BuiltinModel>> = LazyLock::new(|| {
             1_000_000,
             64_000,
             adaptive_levels(),
-            3.0,
-            15.0,
+            claude_cost(3.0, 15.0),
         ),
         builtin(
             Claude,
@@ -321,8 +359,7 @@ static BUILTIN_MODELS: LazyLock<Vec<BuiltinModel>> = LazyLock::new(|| {
             200_000,
             64_000,
             budget_levels(),
-            1.0,
-            5.0,
+            claude_cost(1.0, 5.0),
         ),
         builtin(
             Claude,
@@ -330,8 +367,7 @@ static BUILTIN_MODELS: LazyLock<Vec<BuiltinModel>> = LazyLock::new(|| {
             200_000,
             64_000,
             budget_levels(),
-            3.0,
-            15.0,
+            claude_cost(3.0, 15.0),
         ),
         builtin(
             Claude,
@@ -339,8 +375,7 @@ static BUILTIN_MODELS: LazyLock<Vec<BuiltinModel>> = LazyLock::new(|| {
             200_000,
             64_000,
             budget_levels(),
-            5.0,
-            25.0,
+            claude_cost(5.0, 25.0),
         ),
         // OpenAI
         builtin(
@@ -349,8 +384,7 @@ static BUILTIN_MODELS: LazyLock<Vec<BuiltinModel>> = LazyLock::new(|| {
             400_000,
             128_000,
             openai_effort_levels("none"),
-            1.25,
-            10.0,
+            openai_gpt5_cost(1.25, 10.0),
         ),
         builtin(
             OpenAI,
@@ -358,8 +392,7 @@ static BUILTIN_MODELS: LazyLock<Vec<BuiltinModel>> = LazyLock::new(|| {
             400_000,
             128_000,
             openai_effort_levels("minimal"),
-            0.25,
-            2.0,
+            openai_gpt5_cost(0.25, 2.0),
         ),
         builtin(
             OpenAI,
@@ -367,8 +400,7 @@ static BUILTIN_MODELS: LazyLock<Vec<BuiltinModel>> = LazyLock::new(|| {
             400_000,
             128_000,
             openai_effort_levels("minimal"),
-            0.05,
-            0.40,
+            openai_gpt5_cost(0.05, 0.40),
         ),
         builtin(
             OpenAI,
@@ -376,8 +408,7 @@ static BUILTIN_MODELS: LazyLock<Vec<BuiltinModel>> = LazyLock::new(|| {
             400_000,
             128_000,
             openai_effort_levels("minimal"),
-            1.25,
-            10.0,
+            openai_gpt5_cost(1.25, 10.0),
         ),
         builtin(
             OpenAI,
@@ -385,8 +416,7 @@ static BUILTIN_MODELS: LazyLock<Vec<BuiltinModel>> = LazyLock::new(|| {
             1_047_576,
             32_768,
             vec![],
-            0.40,
-            1.60,
+            plain_cost(0.40, 1.60),
         ),
         builtin(
             OpenAI,
@@ -394,12 +424,32 @@ static BUILTIN_MODELS: LazyLock<Vec<BuiltinModel>> = LazyLock::new(|| {
             1_047_576,
             32_768,
             vec![],
-            0.10,
-            0.40,
+            plain_cost(0.10, 0.40),
         ),
-        builtin(OpenAI, "gpt-4.1", 1_047_576, 32_768, vec![], 2.0, 8.0),
-        builtin(OpenAI, "gpt-4o-mini", 128_000, 16_384, vec![], 0.15, 0.60),
-        builtin(OpenAI, "gpt-4o", 128_000, 16_384, vec![], 2.50, 10.0),
+        builtin(
+            OpenAI,
+            "gpt-4.1",
+            1_047_576,
+            32_768,
+            vec![],
+            plain_cost(2.0, 8.0),
+        ),
+        builtin(
+            OpenAI,
+            "gpt-4o-mini",
+            128_000,
+            16_384,
+            vec![],
+            plain_cost(0.15, 0.60),
+        ),
+        builtin(
+            OpenAI,
+            "gpt-4o",
+            128_000,
+            16_384,
+            vec![],
+            plain_cost(2.50, 10.0),
+        ),
     ]
 });
 
@@ -668,7 +718,9 @@ mod tests {
             caps.cost,
             Some(ModelCostRates {
                 input: 0.25,
-                output: 2.0
+                output: 2.0,
+                cache_read: Some(0.025),
+                cache_write: None,
             })
         );
 
@@ -678,6 +730,40 @@ mod tests {
             caps.thinking_levels[0],
             (ThinkingLevel::Minimal, Some("none".to_string()))
         );
+    }
+
+    #[test]
+    fn builtin_cache_rates() {
+        // Claude: reads 0.1x input, writes 1.25x input. Compare via the same
+        // float expressions the table uses (3.0 * 0.1 is not exactly 0.3).
+        let caps = lookup_capabilities(&id(ProviderKind::Claude, "claude-sonnet-4-6"));
+        assert_eq!(
+            caps.cost,
+            Some(ModelCostRates {
+                input: 3.0,
+                output: 15.0,
+                cache_read: Some(3.0 * 0.1),
+                cache_write: Some(3.0 * 1.25),
+            })
+        );
+
+        // OpenAI gpt-5 family: cached reads 0.1x input, no write billing.
+        let caps = lookup_capabilities(&id(ProviderKind::OpenAI, "gpt-5"));
+        assert_eq!(
+            caps.cost,
+            Some(ModelCostRates {
+                input: 1.25,
+                output: 10.0,
+                cache_read: Some(0.125),
+                cache_write: None,
+            })
+        );
+
+        // Older OpenAI models: cached rates unknown.
+        let caps = lookup_capabilities(&id(ProviderKind::OpenAI, "gpt-4o"));
+        let cost = caps.cost.expect("gpt-4o has cost");
+        assert_eq!(cost.cache_read, None);
+        assert_eq!(cost.cache_write, None);
     }
 
     #[test]
@@ -710,7 +796,9 @@ mod tests {
             caps.cost,
             Some(ModelCostRates {
                 input: 9.9,
-                output: 99.9
+                output: 99.9,
+                cache_read: None,
+                cache_write: None,
             })
         );
         // Non-overridden fields keep their built-in values.
@@ -730,7 +818,9 @@ mod tests {
             caps.cost,
             Some(ModelCostRates {
                 input: 1.0,
-                output: 2.0
+                output: 2.0,
+                cache_read: None,
+                cache_write: None,
             })
         );
         assert_eq!(caps.context_window, 1_000_000);
@@ -763,7 +853,9 @@ mod tests {
             caps.cost,
             Some(ModelCostRates {
                 input: 0.0,
-                output: 0.0
+                output: 0.0,
+                cache_read: None,
+                cache_write: None,
             })
         );
         assert!(caps.image_input);
@@ -952,7 +1044,9 @@ mod tests {
             entries["claude-sonnet-4-5"].cost,
             Some(ModelCostRates {
                 input: 2.5,
-                output: 12.5
+                output: 12.5,
+                cache_read: None,
+                cache_write: None,
             })
         );
         assert_eq!(
@@ -961,6 +1055,23 @@ mod tests {
                 (ThinkingLevel::Low, Some("low".to_string())),
                 (ThinkingLevel::High, Some("high".to_string())),
             ])
+        );
+    }
+
+    #[test]
+    fn parse_cost_with_cache_rates() {
+        let entries = parse_model_capabilities_json(
+            r#"{ "m": { "cost": { "input": 1.0, "output": 2.0, "cache_read": 0.1, "cache_write": 1.25 } } }"#,
+        )
+        .expect("must parse");
+        assert_eq!(
+            entries["m"].cost,
+            Some(ModelCostRates {
+                input: 1.0,
+                output: 2.0,
+                cache_read: Some(0.1),
+                cache_write: Some(1.25),
+            })
         );
     }
 

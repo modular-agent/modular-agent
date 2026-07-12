@@ -2,7 +2,7 @@ use std::sync::{Arc, Mutex};
 
 use modular_agent_core::tool;
 use modular_agent_core::{
-    AgentError, AgentValue, AgentValueMap, Message, ModularAgent, ToolCall, ToolCallFunction,
+    AgentError, AgentValue, AgentValueMap, Message, ModularAgent, ToolCall, ToolCallFunction, Usage,
 };
 
 use crate::chat::ChatAgent;
@@ -391,6 +391,11 @@ pub(crate) struct ChatResponse {
     pub done: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub done_reason: Option<String>,
+    // Token counts arrive only on the final (done=true) chunk when streaming.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prompt_eval_count: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub eval_count: Option<u64>,
     #[serde(flatten)]
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
@@ -465,6 +470,21 @@ pub(crate) fn message_from_ollama(msg: &OllamaChatMessage) -> Message {
         message.tool_calls = Some(calls);
     }
     message
+}
+
+/// Extract normalized usage from an Ollama chat response. Ollama has no
+/// prompt cache, so cache token counts stay 0. `None` when the response
+/// reports no token counts at all (e.g. a non-final streaming chunk).
+pub(crate) fn usage_from_ollama(res: &ChatResponse) -> Option<Usage> {
+    if res.prompt_eval_count.is_none() && res.eval_count.is_none() {
+        return None;
+    }
+    Some(Usage {
+        input_tokens: res.prompt_eval_count.unwrap_or(0),
+        output_tokens: res.eval_count.unwrap_or(0),
+        cache_read_tokens: 0,
+        cache_write_tokens: 0,
+    })
 }
 
 /// Normalize an Ollama `done_reason` to the framework stop_reason
@@ -677,7 +697,44 @@ mod tests {
         assert_eq!(resp.message.content, "Hello!");
         assert!(resp.done_reason.is_none());
         assert!(resp.extra.contains_key("total_duration"));
-        assert!(resp.extra.contains_key("eval_count"));
+        // eval_count is consumed by the typed field, not the extra catch-all
+        assert!(!resp.extra.contains_key("eval_count"));
+        assert_eq!(resp.eval_count, Some(42));
+    }
+
+    #[test]
+    fn test_usage_from_ollama_maps_eval_counts() {
+        let json = r#"{
+            "model": "llama3.2",
+            "created_at": "2024-01-01T00:00:00Z",
+            "message": {"role": "assistant", "content": "Hello!"},
+            "done": true,
+            "done_reason": "stop",
+            "prompt_eval_count": 26,
+            "eval_count": 42
+        }"#;
+        let resp: ChatResponse = serde_json::from_str(json).unwrap();
+        assert_eq!(
+            usage_from_ollama(&resp),
+            Some(Usage {
+                input_tokens: 26,
+                output_tokens: 42,
+                cache_read_tokens: 0,
+                cache_write_tokens: 0,
+            })
+        );
+    }
+
+    #[test]
+    fn test_usage_from_ollama_none_without_counts() {
+        let json = r#"{
+            "model": "llama3.2",
+            "created_at": "2024-01-01T00:00:00Z",
+            "message": {"role": "assistant", "content": "Hel"},
+            "done": false
+        }"#;
+        let resp: ChatResponse = serde_json::from_str(json).unwrap();
+        assert_eq!(usage_from_ollama(&resp), None);
     }
 
     #[test]

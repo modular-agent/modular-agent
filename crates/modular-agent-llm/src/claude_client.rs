@@ -2,7 +2,7 @@ use std::sync::{Arc, Mutex};
 
 use modular_agent_core::tool;
 use modular_agent_core::{
-    AgentError, AgentValue, Message, ModularAgent, ToolCall, ToolCallFunction,
+    AgentError, AgentValue, Message, ModularAgent, ToolCall, ToolCallFunction, Usage,
 };
 
 use crate::chat::ChatAgent;
@@ -354,10 +354,18 @@ pub(crate) enum ClaudeResponseBlock {
     RedactedThinking { data: String },
 }
 
+// Every field is defaulted because message_delta events may carry only
+// output_tokens; the cache fields are absent entirely on older responses.
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub(crate) struct ClaudeUsage {
+    #[serde(default)]
     pub input_tokens: u32,
+    #[serde(default)]
     pub output_tokens: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_creation_input_tokens: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_read_input_tokens: Option<u64>,
 }
 
 // Streaming types
@@ -366,10 +374,7 @@ pub(crate) struct ClaudeUsage {
 #[serde(tag = "type")]
 pub(crate) enum ClaudeStreamEvent {
     #[serde(rename = "message_start")]
-    MessageStart {
-        #[allow(dead_code)]
-        message: serde_json::Value,
-    },
+    MessageStart { message: ClaudeStreamMessageStart },
     #[serde(rename = "content_block_start")]
     ContentBlockStart {
         index: usize,
@@ -385,8 +390,8 @@ pub(crate) enum ClaudeStreamEvent {
     #[serde(rename = "message_delta")]
     MessageDelta {
         delta: ClaudeMessageDelta,
-        #[allow(dead_code)]
-        usage: ClaudeUsage,
+        #[serde(default)]
+        usage: Option<ClaudeUsage>,
     },
     #[serde(rename = "message_stop")]
     MessageStop {},
@@ -411,6 +416,13 @@ pub(crate) enum ClaudeDelta {
         #[allow(dead_code)]
         signature: String,
     },
+}
+
+/// Subset of the message_start payload; only usage is consumed.
+#[derive(serde::Deserialize)]
+pub(crate) struct ClaudeStreamMessageStart {
+    #[serde(default)]
+    pub usage: Option<ClaudeUsage>,
 }
 
 #[derive(serde::Deserialize)]
@@ -614,8 +626,20 @@ pub(crate) fn message_from_claude_response(response: &ClaudeResponse) -> Message
         message.thinking = Some(thinking);
     }
     message.stop_reason = response.stop_reason.as_deref().map(normalize_stop_reason);
+    message.usage = Some(usage_from_claude(&response.usage));
 
     message
+}
+
+/// Convert Claude usage to the framework `Usage`. Claude already reports
+/// `input_tokens` exclusive of cache reads/writes, so fields map directly.
+pub(crate) fn usage_from_claude(usage: &ClaudeUsage) -> Usage {
+    Usage {
+        input_tokens: u64::from(usage.input_tokens),
+        output_tokens: u64::from(usage.output_tokens),
+        cache_read_tokens: usage.cache_read_input_tokens.unwrap_or(0),
+        cache_write_tokens: usage.cache_creation_input_tokens.unwrap_or(0),
+    }
 }
 
 /// Normalize a Claude `stop_reason` to the framework stop_reason vocabulary.
@@ -877,6 +901,8 @@ mod tests {
             usage: ClaudeUsage {
                 input_tokens: 10,
                 output_tokens: 5,
+                cache_creation_input_tokens: None,
+                cache_read_input_tokens: None,
             },
         };
 
@@ -905,6 +931,8 @@ mod tests {
             usage: ClaudeUsage {
                 input_tokens: 20,
                 output_tokens: 15,
+                cache_creation_input_tokens: None,
+                cache_read_input_tokens: None,
             },
         };
 
@@ -928,11 +956,89 @@ mod tests {
             usage: ClaudeUsage {
                 input_tokens: 10,
                 output_tokens: 5,
+                cache_creation_input_tokens: None,
+                cache_read_input_tokens: None,
             },
         };
 
         let msg = message_from_claude_response(&response);
         assert_eq!(msg.stop_reason.as_deref(), Some("length"));
+    }
+
+    #[test]
+    fn test_message_from_claude_response_populates_usage() {
+        let response = ClaudeResponse {
+            id: "msg_123".to_string(),
+            content: vec![ClaudeResponseBlock::Text {
+                text: "Hi".to_string(),
+            }],
+            stop_reason: Some("end_turn".to_string()),
+            usage: ClaudeUsage {
+                input_tokens: 10,
+                output_tokens: 5,
+                cache_creation_input_tokens: Some(3),
+                cache_read_input_tokens: Some(7),
+            },
+        };
+
+        let msg = message_from_claude_response(&response);
+        assert_eq!(
+            msg.usage,
+            Some(Usage {
+                input_tokens: 10,
+                output_tokens: 5,
+                cache_read_tokens: 7,
+                cache_write_tokens: 3,
+            })
+        );
+    }
+
+    #[test]
+    fn test_serde_usage_with_cache_fields() {
+        let json = r#"{
+            "input_tokens": 10,
+            "output_tokens": 5,
+            "cache_creation_input_tokens": 3,
+            "cache_read_input_tokens": 7
+        }"#;
+        let usage: ClaudeUsage = serde_json::from_str(json).unwrap();
+        assert_eq!(
+            usage_from_claude(&usage),
+            Usage {
+                input_tokens: 10,
+                output_tokens: 5,
+                cache_read_tokens: 7,
+                cache_write_tokens: 3,
+            }
+        );
+    }
+
+    #[test]
+    fn test_serde_message_delta_usage_output_only() {
+        // Real message_delta events may report only cumulative output_tokens.
+        let json =
+            r#"{"type":"message_delta","delta":{"stop_reason":null},"usage":{"output_tokens":42}}"#;
+        let event: ClaudeStreamEvent = serde_json::from_str(json).unwrap();
+        let ClaudeStreamEvent::MessageDelta { usage, .. } = event else {
+            panic!("Expected MessageDelta event");
+        };
+        let usage = usage.unwrap();
+        assert_eq!(usage.input_tokens, 0);
+        assert_eq!(usage.output_tokens, 42);
+        assert_eq!(usage.cache_creation_input_tokens, None);
+        assert_eq!(usage.cache_read_input_tokens, None);
+    }
+
+    #[test]
+    fn test_serde_message_start_carries_usage() {
+        let json = r#"{"type":"message_start","message":{"id":"msg_1","role":"assistant","usage":{"input_tokens":25,"output_tokens":1,"cache_read_input_tokens":100}}}"#;
+        let event: ClaudeStreamEvent = serde_json::from_str(json).unwrap();
+        let ClaudeStreamEvent::MessageStart { message } = event else {
+            panic!("Expected MessageStart event");
+        };
+        let usage = message.usage.unwrap();
+        assert_eq!(usage.input_tokens, 25);
+        assert_eq!(usage.cache_read_input_tokens, Some(100));
     }
 
     #[test]
@@ -962,6 +1068,8 @@ mod tests {
             usage: ClaudeUsage {
                 input_tokens: 30,
                 output_tokens: 20,
+                cache_creation_input_tokens: None,
+                cache_read_input_tokens: None,
             },
         };
 
@@ -986,6 +1094,8 @@ mod tests {
             usage: ClaudeUsage {
                 input_tokens: 10,
                 output_tokens: 5,
+                cache_creation_input_tokens: None,
+                cache_read_input_tokens: None,
             },
         };
 
