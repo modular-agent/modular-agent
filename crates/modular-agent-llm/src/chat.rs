@@ -184,10 +184,24 @@ impl AsAgent for ChatAgent {
             config.get_integer_or_default(CONFIG_TIMEOUT_SECS),
         );
 
-        // Resolve the model's output-token limit once per turn. `None` means the
-        // registry doesn't know this model, in which case max_tokens is left
-        // unclamped (see clamp_max_tokens) and Claude uses its default.
-        let model_max_tokens = crate::capabilities::resolve_entry(&model_id).max_tokens;
+        // Resolve the model's registry entry once per turn. A `None`
+        // max_tokens means the registry doesn't know this model, in which
+        // case max_tokens is left unclamped (see clamp_max_tokens) and
+        // Claude uses its default.
+        let caps = crate::capabilities::resolve_entry(&model_id);
+        let model_max_tokens = caps.max_tokens;
+
+        // Single cross-provider normalization boundary (P-02), applied right
+        // before the provider-specific conversion below. Images are demoted
+        // only when the registry positively knows image_input == false
+        // (models.json or the Ollama /api/show capability probe): the
+        // conservative default would otherwise strip images from every model
+        // the registry doesn't list (e.g. unprobed local vision models).
+        let messages = crate::prepare::prepare_messages(
+            &messages,
+            model_id.provider,
+            caps.image_input == Some(false),
+        );
 
         // Route to appropriate provider
         match model_id.provider {
@@ -800,7 +814,10 @@ impl ChatAgent {
 
                     let tool_call = ToolCall {
                         function: ToolCallFunction {
-                            id: None,
+                            // Ollama sends no tool_call id; assign a stable
+                            // one at generation time so tool results can be
+                            // paired even after a provider switch (P-02).
+                            id: Some(uuid::Uuid::new_v4().to_string()),
                             name: call.function.name.clone(),
                             parameters,
                             parse_error: None,

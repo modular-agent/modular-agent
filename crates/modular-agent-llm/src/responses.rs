@@ -166,9 +166,18 @@ impl AsAgent for ResponsesAgent {
             config.get_integer_or_default(CONFIG_TIMEOUT_SECS),
         );
 
-        // Resolve the model's output-token limit once per turn; `None` (unknown
-        // model) leaves a configured max_tokens unclamped.
-        let model_max_tokens = crate::capabilities::resolve_entry(&model_id).max_tokens;
+        // Resolve the model's registry entry once per turn; a `None`
+        // max_tokens (unknown model) leaves a configured max_tokens unclamped.
+        let caps = crate::capabilities::resolve_entry(&model_id);
+        let model_max_tokens = caps.max_tokens;
+
+        // Single cross-provider normalization boundary (P-02); see ChatAgent
+        // for the image-demotion rationale.
+        let messages = crate::prepare::prepare_messages(
+            &messages,
+            model_id.provider,
+            caps.image_input == Some(false),
+        );
 
         self.process_response(
             ctx,

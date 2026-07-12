@@ -5,7 +5,8 @@
 //!
 //! 1. User-defined `models.json` (loaded via [`load_model_capabilities_json`])
 //! 2. Built-in static table (major official Claude / OpenAI models)
-//! 3. Measured Ollama context length (`/api/show`, cached per process)
+//! 3. Probed Ollama metadata (`/api/show`: context length and vision
+//!    capability, cached per process)
 //! 4. Conservative defaults (8192 tokens)
 //!
 //! All layers use longest-prefix matching on the model name, so snapshot
@@ -162,18 +163,26 @@ fn get_user_entries() -> &'static Mutex<HashMap<String, ModelCapabilitiesEntry>>
     USER_ENTRIES.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
-/// Measured Ollama context lengths, keyed by model name.
-/// `Some(n)`: measured; `None`: /api/show succeeded but exposed no
-/// context_length (cached to avoid re-querying every turn).
-/// Network errors are NOT cached so a transient failure retries next turn.
-/// The key omits the server URL: `ollama_url` is a global config, so a
-/// process effectively talks to one server.
+/// Metadata probed from one Ollama `/api/show` call. A `None` field means
+/// the response didn't expose it (older servers).
 #[cfg(feature = "ollama")]
-static OLLAMA_CONTEXT: OnceLock<Mutex<HashMap<String, Option<u32>>>> = OnceLock::new();
+#[derive(Debug, Clone, Copy)]
+struct OllamaProbe {
+    context_length: Option<u32>,
+    image_input: Option<bool>,
+}
+
+/// Probed Ollama metadata, keyed by model name. An entry means /api/show
+/// succeeded (cached to avoid re-querying every turn, even when all fields
+/// came back empty). Network errors are NOT cached so a transient failure
+/// retries next turn. The key omits the server URL: `ollama_url` is a global
+/// config, so a process effectively talks to one server.
+#[cfg(feature = "ollama")]
+static OLLAMA_PROBES: OnceLock<Mutex<HashMap<String, OllamaProbe>>> = OnceLock::new();
 
 #[cfg(feature = "ollama")]
-fn get_ollama_context_map() -> &'static Mutex<HashMap<String, Option<u32>>> {
-    OLLAMA_CONTEXT.get_or_init(|| Mutex::new(HashMap::new()))
+fn get_ollama_probe_map() -> &'static Mutex<HashMap<String, OllamaProbe>> {
+    OLLAMA_PROBES.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
 // ============================================================================
@@ -423,14 +432,15 @@ fn longest_prefix_match<'a, T>(
 pub(crate) fn resolve_entry(id: &ModelIdentifier) -> ModelCapabilitiesEntry {
     let mut merged = ModelCapabilitiesEntry::default();
 
-    // Layer 3: measured Ollama context (lowest of the known layers).
+    // Layer 3: probed Ollama metadata (lowest of the known layers).
     // Exact model-name key, no prefix match: the cache key is the very name
     // that was queried.
     #[cfg(feature = "ollama")]
     if id.provider == ProviderKind::Ollama
-        && let Some(Some(ctx)) = get_ollama_context_map().lock().unwrap().get(&id.model_name)
+        && let Some(probe) = get_ollama_probe_map().lock().unwrap().get(&id.model_name)
     {
-        merged.context_window = Some(*ctx);
+        merged.context_window = probe.context_length;
+        merged.image_input = probe.image_input;
     }
 
     // Layer 2: built-in static table — provider-scoped, longest prefix wins.
@@ -526,21 +536,24 @@ fn parse_model_capabilities_json(
 // ============================================================================
 
 /// Best-effort: query Ollama `/api/show` once per model and cache the
-/// measured context length for later [`lookup_capabilities`] calls.
-/// Failures are logged at warn level and never fail the caller.
+/// context length and vision capability for later [`lookup_capabilities`] /
+/// [`resolve_entry`] calls. Failures are logged at warn level and never fail
+/// the caller.
 ///
 /// Called from the Ollama chat/completion paths right after client
-/// acquisition. Request building currently doesn't consume `context_window`,
-/// so warm-after-resolve within the same turn is harmless; once P-19 makes
-/// the request path read `context_window`, callers must warm before
-/// resolving.
+/// acquisition, which is *after* the per-turn `resolve_entry` call: probed
+/// fields only take effect from a model's second turn onward. For the image
+/// demotion in `prepare_messages` this means the very first turn with an
+/// unprobed non-vision model is sent as-is (best-effort, same as before the
+/// probe existed); once P-19 makes the request path read `context_window`,
+/// callers must warm before resolving.
 #[cfg(feature = "ollama")]
 pub(crate) async fn warm_ollama_context(
     client: &crate::ollama_client::OllamaClient,
     model_name: &str,
 ) {
     // Fast path: already queried (hit or confirmed-absent).
-    if get_ollama_context_map()
+    if get_ollama_probe_map()
         .lock()
         .unwrap()
         .contains_key(model_name)
@@ -549,11 +562,14 @@ pub(crate) async fn warm_ollama_context(
     }
     match client.show_model_info(model_name).await {
         Ok(info) => {
-            let ctx = extract_context_length(&info);
-            get_ollama_context_map()
+            let probe = OllamaProbe {
+                context_length: extract_context_length(&info),
+                image_input: extract_image_input(&info),
+            };
+            get_ollama_probe_map()
                 .lock()
                 .unwrap()
-                .insert(model_name.to_string(), ctx);
+                .insert(model_name.to_string(), probe);
         }
         // Transient failures are not cached; next turn retries.
         Err(e) => log::warn!("Failed to probe Ollama model info for '{model_name}': {e}"),
@@ -574,6 +590,17 @@ fn extract_context_length(info: &serde_json::Value) -> Option<u32> {
             .map(|(_, v)| v)
     })?;
     u32::try_from(v.as_u64()?).ok()
+}
+
+/// `/api/show` lists model capabilities as strings, e.g.
+/// `{"capabilities": ["completion", "vision"]}`. Older Ollama servers omit
+/// the field, in which case vision support stays unknown (`None`) rather
+/// than assumed absent — image demotion must only fire on a positive
+/// "no vision" signal.
+#[cfg(feature = "ollama")]
+fn extract_image_input(info: &serde_json::Value) -> Option<bool> {
+    let caps = info.get("capabilities")?.as_array()?;
+    Some(caps.iter().any(|v| v.as_str() == Some("vision")))
 }
 
 // ============================================================================
@@ -743,42 +770,107 @@ mod tests {
         clear_user();
     }
 
-    // -- Ollama measured context --
+    // -- Ollama probed metadata --
+
+    #[cfg(feature = "ollama")]
+    fn set_probe(name: &str, probe: OllamaProbe) {
+        get_ollama_probe_map()
+            .lock()
+            .unwrap()
+            .insert(name.to_string(), probe);
+    }
+
+    #[cfg(feature = "ollama")]
+    fn remove_probe(name: &str) {
+        get_ollama_probe_map().lock().unwrap().remove(name);
+    }
 
     #[cfg(feature = "ollama")]
     #[test]
     fn ollama_measured_context_used() {
         let _guard = test_lock();
-        get_ollama_context_map()
-            .lock()
-            .unwrap()
-            .insert("testonly-ollama-model".into(), Some(131_072));
+        set_probe(
+            "testonly-ollama-model",
+            OllamaProbe {
+                context_length: Some(131_072),
+                image_input: None,
+            },
+        );
         let caps = lookup_capabilities(&id(ProviderKind::Ollama, "testonly-ollama-model"));
         assert_eq!(caps.context_window, 131_072);
-        // Only context_window is measured; the rest stays at defaults.
+        // Only context_window is probed here; the rest stays at defaults.
         assert_eq!(caps.max_tokens, DEFAULT_MAX_TOKENS);
-        get_ollama_context_map()
-            .lock()
-            .unwrap()
-            .remove("testonly-ollama-model");
+        remove_probe("testonly-ollama-model");
     }
 
     #[cfg(feature = "ollama")]
     #[test]
     fn ollama_user_json_beats_measured() {
         let _guard = test_lock();
-        get_ollama_context_map()
-            .lock()
-            .unwrap()
-            .insert("testonly-ollama-model2".into(), Some(131_072));
+        set_probe(
+            "testonly-ollama-model2",
+            OllamaProbe {
+                context_length: Some(131_072),
+                image_input: None,
+            },
+        );
         set_user(r#"{ "testonly-ollama-model2": { "context_window": 8000 } }"#);
         let caps = lookup_capabilities(&id(ProviderKind::Ollama, "testonly-ollama-model2"));
         assert_eq!(caps.context_window, 8000);
         clear_user();
-        get_ollama_context_map()
-            .lock()
-            .unwrap()
-            .remove("testonly-ollama-model2");
+        remove_probe("testonly-ollama-model2");
+    }
+
+    #[cfg(feature = "ollama")]
+    #[test]
+    fn ollama_probed_no_vision_enables_image_demotion() {
+        let _guard = test_lock();
+        set_probe(
+            "testonly-textonly-model",
+            OllamaProbe {
+                context_length: None,
+                image_input: Some(false),
+            },
+        );
+        // resolve_entry must yield the positive "no vision" signal that
+        // gates image demotion in prepare_messages.
+        let entry = resolve_entry(&id(ProviderKind::Ollama, "testonly-textonly-model"));
+        assert_eq!(entry.image_input, Some(false));
+        remove_probe("testonly-textonly-model");
+    }
+
+    #[cfg(feature = "ollama")]
+    #[test]
+    fn ollama_user_json_beats_probed_vision() {
+        let _guard = test_lock();
+        set_probe(
+            "testonly-vision-override",
+            OllamaProbe {
+                context_length: None,
+                image_input: Some(false),
+            },
+        );
+        set_user(r#"{ "testonly-vision-override": { "image_input": true } }"#);
+        let entry = resolve_entry(&id(ProviderKind::Ollama, "testonly-vision-override"));
+        assert_eq!(entry.image_input, Some(true));
+        clear_user();
+        remove_probe("testonly-vision-override");
+    }
+
+    #[cfg(feature = "ollama")]
+    #[test]
+    fn extract_image_input_variants() {
+        // Vision listed.
+        let info = serde_json::json!({ "capabilities": ["completion", "vision"] });
+        assert_eq!(extract_image_input(&info), Some(true));
+
+        // Capabilities present but no vision: a positive "no vision" signal.
+        let info = serde_json::json!({ "capabilities": ["completion", "tools"] });
+        assert_eq!(extract_image_input(&info), Some(false));
+
+        // Older servers omit the field entirely: unknown, never demote.
+        let info = serde_json::json!({ "model_info": {} });
+        assert_eq!(extract_image_input(&info), None);
     }
 
     #[cfg(feature = "ollama")]

@@ -13,6 +13,10 @@ pub mod provider;
 )]
 pub mod capabilities;
 
+// Provider-cross message normalization applied by ChatAgent/ResponsesAgent
+// right before provider-specific conversion (P-02).
+pub(crate) mod prepare;
+
 pub mod chat;
 pub mod completion;
 pub mod embeddings;
