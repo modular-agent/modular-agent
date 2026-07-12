@@ -6,7 +6,9 @@ use modular_agent_core::{
 };
 
 use crate::chat::ChatAgent;
-use crate::provider::{CONFIG_CLAUDE_API_BASE, CONFIG_CLAUDE_API_KEY, DEFAULT_CLAUDE_API_BASE};
+use crate::provider::{
+    CONFIG_CLAUDE_API_BASE, CONFIG_CLAUDE_API_KEY, CacheRetention, DEFAULT_CLAUDE_API_BASE,
+};
 const ANTHROPIC_VERSION: &str = "2023-06-01";
 
 // ============================================================================
@@ -226,7 +228,7 @@ pub(crate) struct ClaudeRequest {
     pub max_tokens: u32,
     pub messages: Vec<ClaudeMessage>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub system: Option<String>,
+    pub system: Option<ClaudeContent>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stream: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -252,13 +254,23 @@ pub(crate) enum ClaudeContent {
     Blocks(Vec<ClaudeContentBlock>),
 }
 
+// cache_control is only declared on the variants that can be the tail of a
+// system or user message; assistant-only blocks are never cache anchors.
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 #[serde(tag = "type")]
 pub(crate) enum ClaudeContentBlock {
     #[serde(rename = "text")]
-    Text { text: String },
+    Text {
+        text: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        cache_control: Option<CacheControl>,
+    },
     #[serde(rename = "image")]
-    Image { source: ClaudeImageSource },
+    Image {
+        source: ClaudeImageSource,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        cache_control: Option<CacheControl>,
+    },
     #[serde(rename = "tool_use")]
     ToolUse {
         id: String,
@@ -271,11 +283,21 @@ pub(crate) enum ClaudeContentBlock {
         content: String,
         #[serde(skip_serializing_if = "Option::is_none")]
         is_error: Option<bool>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        cache_control: Option<CacheControl>,
     },
     #[serde(rename = "thinking")]
     Thinking { thinking: String, signature: String },
     #[serde(rename = "redacted_thinking")]
     RedactedThinking { data: String },
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+pub(crate) struct CacheControl {
+    #[serde(rename = "type")]
+    pub control_type: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ttl: Option<String>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
@@ -292,6 +314,8 @@ pub(crate) struct ClaudeTool {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     pub input_schema: serde_json::Value,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cache_control: Option<CacheControl>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -461,6 +485,7 @@ pub(crate) fn messages_to_claude(
                         tool_use_id,
                         content: msg.content.clone(),
                         is_error,
+                        cache_control: None,
                     }]),
                 });
             }
@@ -495,10 +520,12 @@ fn build_user_content(msg: &Message) -> ClaudeContent {
                         media_type,
                         data,
                     },
+                    cache_control: None,
                 }];
                 if !msg.content.is_empty() {
                     blocks.push(ClaudeContentBlock::Text {
                         text: msg.content.clone(),
+                        cache_control: None,
                     });
                 }
                 return ClaudeContent::Blocks(blocks);
@@ -514,6 +541,7 @@ fn build_assistant_content(msg: &Message) -> ClaudeContent {
         if !msg.content.is_empty() {
             blocks.push(ClaudeContentBlock::Text {
                 text: msg.content.clone(),
+                cache_control: None,
             });
         }
         for call in tool_calls.iter() {
@@ -604,6 +632,76 @@ pub(crate) fn tool_info_to_claude_tool(info: tool::ToolInfo) -> ClaudeTool {
             Some(info.description)
         },
         input_schema,
+        cache_control: None,
+    }
+}
+
+// ============================================================================
+// Prompt caching
+// ============================================================================
+
+/// Attach `cache_control` markers to a built request: system tail, last tool
+/// definition, and the last content block of the last user message.
+pub(crate) fn apply_cache_control(request: &mut ClaudeRequest, retention: CacheRetention) {
+    let Some(marker) = cache_marker(retention) else {
+        return;
+    };
+
+    // Cache writes are billed at 1.25x, so skip single-shot requests (one
+    // message, no tools) where a later cache hit can never occur.
+    let has_tools = request.tools.as_ref().is_some_and(|t| !t.is_empty());
+    if !has_tools && request.messages.len() <= 1 {
+        return;
+    }
+
+    if let Some(system) = request.system.as_mut() {
+        attach_marker_to_content(system, &marker);
+    }
+    if let Some(tool) = request.tools.as_mut().and_then(|tools| tools.last_mut()) {
+        tool.cache_control = Some(marker.clone());
+    }
+    if let Some(msg) = request.messages.iter_mut().rev().find(|m| m.role == "user") {
+        attach_marker_to_content(&mut msg.content, &marker);
+    }
+}
+
+fn cache_marker(retention: CacheRetention) -> Option<CacheControl> {
+    let ttl = match retention {
+        CacheRetention::None => return None,
+        CacheRetention::Short => None,
+        CacheRetention::Long => Some("1h".to_string()),
+    };
+    Some(CacheControl {
+        control_type: "ephemeral".to_string(),
+        ttl,
+    })
+}
+
+fn attach_marker_to_content(content: &mut ClaudeContent, marker: &CacheControl) {
+    match content {
+        ClaudeContent::Text(text) => {
+            // cache_control can only live on a block, so promote the plain
+            // string form. Leave empty text alone: the API rejects empty
+            // text blocks.
+            if text.is_empty() {
+                return;
+            }
+            let text = std::mem::take(text);
+            *content = ClaudeContent::Blocks(vec![ClaudeContentBlock::Text {
+                text,
+                cache_control: Some(marker.clone()),
+            }]);
+        }
+        ClaudeContent::Blocks(blocks) => {
+            if let Some(
+                ClaudeContentBlock::Text { cache_control, .. }
+                | ClaudeContentBlock::Image { cache_control, .. }
+                | ClaudeContentBlock::ToolResult { cache_control, .. },
+            ) = blocks.last_mut()
+            {
+                *cache_control = Some(marker.clone());
+            }
+        }
     }
 }
 
@@ -667,6 +765,7 @@ mod tests {
                 tool_use_id,
                 content,
                 is_error,
+                ..
             } = &blocks[0]
             {
                 assert_eq!(tool_use_id, "toolu_123");
@@ -746,7 +845,7 @@ mod tests {
         if let ClaudeContent::Blocks(blocks) = &msgs[0].content {
             assert_eq!(blocks.len(), 2);
             assert!(
-                matches!(&blocks[0], ClaudeContentBlock::Text { text } if text == "Let me check.")
+                matches!(&blocks[0], ClaudeContentBlock::Text { text, .. } if text == "Let me check.")
             );
             assert!(
                 matches!(&blocks[1], ClaudeContentBlock::ToolUse { id, name, .. } if id == "toolu_abc" && name == "get_weather")
@@ -935,7 +1034,7 @@ mod tests {
                 role: "user".to_string(),
                 content: ClaudeContent::Text("Hello".to_string()),
             }],
-            system: Some("Be helpful.".to_string()),
+            system: Some(ClaudeContent::Text("Be helpful.".to_string())),
             stream: None,
             tools: None,
             thinking: None,
@@ -947,7 +1046,7 @@ mod tests {
         let parsed: ClaudeRequest = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed.model, "claude-sonnet-4-5-20250514");
         assert_eq!(parsed.max_tokens, 1024);
-        assert_eq!(parsed.system, Some("Be helpful.".to_string()));
+        assert!(matches!(&parsed.system, Some(ClaudeContent::Text(text)) if text == "Be helpful."));
     }
 
     #[test]
@@ -1141,6 +1240,209 @@ mod tests {
             map_http_error(413, "Payload Too Large", None),
             AgentError::ContextOverflow(_)
         ));
+    }
+
+    fn cache_test_request(
+        system: Option<&str>,
+        tools: Option<Vec<ClaudeTool>>,
+        messages: Vec<ClaudeMessage>,
+    ) -> ClaudeRequest {
+        ClaudeRequest {
+            model: "claude-sonnet-4-5-20250514".to_string(),
+            max_tokens: 1024,
+            messages,
+            system: system.map(|s| ClaudeContent::Text(s.to_string())),
+            stream: None,
+            tools,
+            thinking: None,
+            temperature: None,
+            top_p: None,
+        }
+    }
+
+    fn user_text(text: &str) -> ClaudeMessage {
+        ClaudeMessage {
+            role: "user".to_string(),
+            content: ClaudeContent::Text(text.to_string()),
+        }
+    }
+
+    fn assistant_text(text: &str) -> ClaudeMessage {
+        ClaudeMessage {
+            role: "assistant".to_string(),
+            content: ClaudeContent::Text(text.to_string()),
+        }
+    }
+
+    fn test_tool(name: &str) -> ClaudeTool {
+        ClaudeTool {
+            name: name.to_string(),
+            description: None,
+            input_schema: serde_json::json!({"type": "object"}),
+            cache_control: None,
+        }
+    }
+
+    #[test]
+    fn test_apply_cache_control_short_marker_placement() {
+        let mut request = cache_test_request(
+            Some("Be helpful."),
+            Some(vec![test_tool("tool_a"), test_tool("tool_b")]),
+            vec![user_text("first"), assistant_text("hi"), user_text("last")],
+        );
+
+        apply_cache_control(&mut request, CacheRetention::Short);
+        let json = serde_json::to_value(&request).unwrap();
+
+        assert_eq!(
+            json["system"][0]["cache_control"],
+            serde_json::json!({"type": "ephemeral"})
+        );
+        assert!(json["tools"][0].get("cache_control").is_none());
+        assert_eq!(
+            json["tools"][1]["cache_control"],
+            serde_json::json!({"type": "ephemeral"})
+        );
+        // Only the last user message is promoted to blocks and marked
+        assert_eq!(json["messages"][0]["content"], serde_json::json!("first"));
+        assert_eq!(
+            json["messages"][2]["content"][0]["cache_control"],
+            serde_json::json!({"type": "ephemeral"})
+        );
+    }
+
+    #[test]
+    fn test_apply_cache_control_long_ttl() {
+        let mut request = cache_test_request(
+            Some("Be helpful."),
+            Some(vec![test_tool("tool_a")]),
+            vec![user_text("hello")],
+        );
+
+        apply_cache_control(&mut request, CacheRetention::Long);
+        let json = serde_json::to_value(&request).unwrap();
+
+        let expected = serde_json::json!({"type": "ephemeral", "ttl": "1h"});
+        assert_eq!(json["system"][0]["cache_control"], expected);
+        assert_eq!(json["tools"][0]["cache_control"], expected);
+        assert_eq!(json["messages"][0]["content"][0]["cache_control"], expected);
+    }
+
+    #[test]
+    fn test_apply_cache_control_none_no_markers() {
+        let mut request = cache_test_request(
+            Some("Be helpful."),
+            Some(vec![test_tool("tool_a")]),
+            vec![user_text("first"), assistant_text("hi"), user_text("last")],
+        );
+
+        apply_cache_control(&mut request, CacheRetention::None);
+        let json = serde_json::to_string(&request).unwrap();
+
+        assert!(!json.contains("cache_control"), "json was: {json}");
+        // system stays in the plain string form when no marker is attached
+        let value: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(value["system"], serde_json::json!("Be helpful."));
+    }
+
+    #[test]
+    fn test_apply_cache_control_single_shot_guard() {
+        let mut request = cache_test_request(Some("Be helpful."), None, vec![user_text("hello")]);
+
+        apply_cache_control(&mut request, CacheRetention::Short);
+        let json = serde_json::to_string(&request).unwrap();
+
+        assert!(!json.contains("cache_control"), "json was: {json}");
+    }
+
+    #[test]
+    fn test_apply_cache_control_tools_override_guard() {
+        let mut request = cache_test_request(
+            None,
+            Some(vec![test_tool("tool_a")]),
+            vec![user_text("hello")],
+        );
+
+        apply_cache_control(&mut request, CacheRetention::Short);
+        let json = serde_json::to_value(&request).unwrap();
+
+        assert_eq!(
+            json["tools"][0]["cache_control"],
+            serde_json::json!({"type": "ephemeral"})
+        );
+        assert_eq!(
+            json["messages"][0]["content"][0]["cache_control"],
+            serde_json::json!({"type": "ephemeral"})
+        );
+    }
+
+    #[test]
+    fn test_apply_cache_control_multi_turn_without_tools() {
+        let mut request = cache_test_request(
+            None,
+            None,
+            vec![user_text("first"), assistant_text("hi"), user_text("last")],
+        );
+
+        apply_cache_control(&mut request, CacheRetention::Short);
+        let json = serde_json::to_value(&request).unwrap();
+
+        assert_eq!(
+            json["messages"][2]["content"][0]["cache_control"],
+            serde_json::json!({"type": "ephemeral"})
+        );
+    }
+
+    #[test]
+    fn test_apply_cache_control_converts_final_user_text_to_blocks() {
+        let mut request = cache_test_request(
+            None,
+            None,
+            vec![user_text("first"), assistant_text("hi"), user_text("last")],
+        );
+
+        apply_cache_control(&mut request, CacheRetention::Short);
+
+        if let ClaudeContent::Blocks(blocks) = &request.messages[2].content {
+            assert_eq!(blocks.len(), 1);
+            assert!(matches!(
+                &blocks[0],
+                ClaudeContentBlock::Text { text, cache_control: Some(_) } if text == "last"
+            ));
+        } else {
+            panic!("Expected final user message to be converted to Blocks");
+        }
+        // Earlier user message keeps the plain string form
+        assert!(matches!(
+            &request.messages[0].content,
+            ClaudeContent::Text(text) if text == "first"
+        ));
+    }
+
+    #[test]
+    fn test_apply_cache_control_marks_tool_result_tail() {
+        let tool_result = ClaudeMessage {
+            role: "user".to_string(),
+            content: ClaudeContent::Blocks(vec![ClaudeContentBlock::ToolResult {
+                tool_use_id: "toolu_1".to_string(),
+                content: "ok".to_string(),
+                is_error: None,
+                cache_control: None,
+            }]),
+        };
+        let mut request = cache_test_request(
+            None,
+            None,
+            vec![user_text("hello"), assistant_text("calling"), tool_result],
+        );
+
+        apply_cache_control(&mut request, CacheRetention::Short);
+        let json = serde_json::to_value(&request).unwrap();
+
+        assert_eq!(
+            json["messages"][2]["content"][0]["cache_control"],
+            serde_json::json!({"type": "ephemeral"})
+        );
     }
 
     #[test]

@@ -20,6 +20,27 @@ pub enum ProviderKind {
     Claude,
 }
 
+/// Prompt cache retention shared across providers (Claude cache_control,
+/// OpenAI prompt_cache_key; no-op for Ollama).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CacheRetention {
+    None,
+    Short,
+    Long,
+}
+
+impl CacheRetention {
+    /// Unrecognized values fall back to the default ("short") so a typo in a
+    /// preset degrades to normal caching instead of failing the request.
+    pub(crate) fn parse(s: &str) -> Self {
+        match s {
+            "none" => Self::None,
+            "long" => Self::Long,
+            _ => Self::Short,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct ModelIdentifier {
     pub provider: ProviderKind,
@@ -124,6 +145,15 @@ impl ModelIdentifier {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_cache_retention_parse() {
+        assert_eq!(CacheRetention::parse("none"), CacheRetention::None);
+        assert_eq!(CacheRetention::parse("short"), CacheRetention::Short);
+        assert_eq!(CacheRetention::parse("long"), CacheRetention::Long);
+        assert_eq!(CacheRetention::parse(""), CacheRetention::Short);
+        assert_eq!(CacheRetention::parse("weird"), CacheRetention::Short);
+    }
 
     #[test]
     fn test_parse_empty_model() {

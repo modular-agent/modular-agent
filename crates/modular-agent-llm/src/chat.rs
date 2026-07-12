@@ -5,8 +5,8 @@ use modular_agent_core::{
 
 use crate::provider::{
     CONFIG_CLAUDE_API_BASE, CONFIG_CLAUDE_API_KEY, CONFIG_OLLAMA_API_KEY, CONFIG_OLLAMA_URL,
-    CONFIG_OPENAI_API_BASE, CONFIG_OPENAI_API_KEY, DEFAULT_CLAUDE_API_BASE, DEFAULT_OLLAMA_URL,
-    DEFAULT_OPENAI_API_BASE, ModelIdentifier, ProviderKind,
+    CONFIG_OPENAI_API_BASE, CONFIG_OPENAI_API_KEY, CacheRetention, DEFAULT_CLAUDE_API_BASE,
+    DEFAULT_OLLAMA_URL, DEFAULT_OPENAI_API_BASE, ModelIdentifier, ProviderKind,
 };
 use crate::retry::RetryPolicy;
 
@@ -27,6 +27,7 @@ const PORT_MESSAGE: &str = "message";
 const PORT_RESPONSE: &str = "response";
 
 const CONFIG_MODEL: &str = "model";
+const CONFIG_CACHE_RETENTION: &str = "cache_retention";
 const CONFIG_MAX_RETRIES: &str = "max_retries";
 const CONFIG_MAX_TOKENS: &str = "max_tokens";
 const CONFIG_OPTIONS: &str = "options";
@@ -61,6 +62,13 @@ const DEFAULT_CONFIG_MODEL: &str = "openai/gpt-5-nano";
 ///   retries; a server-provided Retry-After takes precedence (default: 1000)
 /// - `timeout_secs`: Per-attempt deadline in seconds; for streaming it covers
 ///   stream establishment only (default: 300, 0 = disabled)
+/// - `cache_retention`: Prompt cache retention: "none", "short", or "long"
+///   (default: "short"; unrecognized values fall back to "short"). For Claude,
+///   attaches ephemeral cache_control markers ("long" uses a 1h TTL) only when
+///   tools are configured or the history is multi-turn, so single-shot
+///   requests avoid the cache-write surcharge. For OpenAI, sends a
+///   `prompt_cache_key` derived from the preset and agent IDs to improve
+///   cache routing. No-op for Ollama.
 #[modular_agent(
     title = "Chat",
     category = CATEGORY,
@@ -76,6 +84,7 @@ const DEFAULT_CONFIG_MODEL: &str = "openai/gpt-5-nano";
     integer_config(name = CONFIG_MAX_RETRIES, title = "Max Retries", default = 2, description = "Automatic retries for retryable errors", detail),
     integer_config(name = CONFIG_RETRY_BASE_DELAY_MS, title = "Retry Base Delay (ms)", default = 1000, description = "Base delay for exponential backoff", detail),
     integer_config(name = CONFIG_TIMEOUT_SECS, title = "Timeout (secs)", default = 300, description = "Per-attempt deadline; 0: disabled", detail),
+    string_config(name = CONFIG_CACHE_RETENTION, title = "Cache Retention", default = "short", description = "Prompt cache retention: none / short / long", detail),
     custom_global_config(name = CONFIG_CLAUDE_API_KEY, type_ = "password", default = AgentValue::string(""), title = "Claude API Key"),
     string_global_config(name = CONFIG_CLAUDE_API_BASE, title = "Claude API Base URL", default = DEFAULT_CLAUDE_API_BASE),
     custom_global_config(name = CONFIG_OPENAI_API_KEY, type_ = "password", default = AgentValue::string(""), title = "OpenAI API Key"),
@@ -151,6 +160,8 @@ impl AsAgent for ChatAgent {
         let max_tokens = config.get_integer_or_default(CONFIG_MAX_TOKENS);
         let temperature = config.get_number_or_default(CONFIG_TEMPERATURE);
         let top_p = config.get_number_or_default(CONFIG_TOP_P);
+        let cache_retention =
+            CacheRetention::parse(&config.get_string_or_default(CONFIG_CACHE_RETENTION));
 
         // Snapshot retry/timeout configs once per turn so a mid-turn config
         // change cannot alter an in-flight retry loop.
@@ -175,6 +186,7 @@ impl AsAgent for ChatAgent {
                     temperature,
                     top_p,
                     retry,
+                    cache_retention,
                 )
                 .await
             }
@@ -191,6 +203,7 @@ impl AsAgent for ChatAgent {
                     temperature,
                     top_p,
                     retry,
+                    cache_retention,
                 )
                 .await
             }
@@ -207,6 +220,7 @@ impl AsAgent for ChatAgent {
                     temperature,
                     top_p,
                     retry,
+                    cache_retention,
                 )
                 .await
             }
@@ -234,9 +248,15 @@ impl ChatAgent {
         temperature: f64,
         top_p: f64,
         retry: RetryPolicy,
+        cache_retention: CacheRetention,
     ) -> Result<(), AgentError> {
         use futures::StreamExt;
         use modular_agent_core::tool::list_tool_infos_patterns;
+
+        // Captured before building the request because a stable cache key must
+        // come from the agent's identity, not per-turn state.
+        let prompt_cache_key = (cache_retention != CacheRetention::None)
+            .then(|| openai_client::prompt_cache_key(self.preset_id(), self.id()));
 
         let client = self.openai_manager.get_client(self.ma())?;
 
@@ -277,6 +297,10 @@ impl ChatAgent {
         }
         if top_p >= 0.0 {
             request["top_p"] = top_p.into();
+        }
+        // Set after merge_options so user options cannot strip the key.
+        if let Some(key) = prompt_cache_key {
+            request["prompt_cache_key"] = key.into();
         }
 
         let id = uuid::Uuid::new_v4().to_string();
@@ -393,6 +417,7 @@ impl ChatAgent {
         temperature: f64,
         top_p: f64,
         retry: RetryPolicy,
+        cache_retention: CacheRetention,
     ) -> Result<(), AgentError> {
         use futures::StreamExt;
         use modular_agent_core::tool::list_tool_infos_patterns;
@@ -422,7 +447,7 @@ impl ChatAgent {
             model: model_name.to_string(),
             max_tokens: 8192,
             messages: claude_messages,
-            system,
+            system: system.map(claude_client::ClaudeContent::Text),
             stream: if use_stream { Some(true) } else { None },
             tools,
             thinking: None,
@@ -459,6 +484,10 @@ impl ChatAgent {
         if top_p >= 0.0 {
             request.top_p = Some(top_p);
         }
+
+        // Applied after the options merge so markers survive the round-trip
+        // and options cannot accidentally strip them.
+        claude_client::apply_cache_control(&mut request, cache_retention);
 
         let id = uuid::Uuid::new_v4().to_string();
         if use_stream {
@@ -636,6 +665,8 @@ impl ChatAgent {
         temperature: f64,
         top_p: f64,
         retry: RetryPolicy,
+        // Ollama has no prompt cache API; accepted only to keep call sites uniform.
+        _cache_retention: CacheRetention,
     ) -> Result<(), AgentError> {
         use futures::StreamExt;
         use modular_agent_core::tool::list_tool_infos_patterns;
