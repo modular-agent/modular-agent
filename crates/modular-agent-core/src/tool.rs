@@ -347,6 +347,19 @@ pub async fn call_tools(
     let mut resp_messages = vec![];
 
     for call in tool_calls {
+        // A provider argument string that failed to parse even after repair is
+        // reported back to the model rather than executed with bogus arguments.
+        if let Some(err) = &call.function.parse_error {
+            resp_messages.push(error_tool_result(
+                call,
+                format!(
+                    "Tool call arguments could not be parsed as JSON; the call was \
+                     not executed. Re-issue the call with valid JSON arguments. {}",
+                    err
+                ),
+            ));
+            continue;
+        }
         let args = match AgentValue::from_json(call.function.parameters.clone()) {
             Ok(args) => args,
             Err(e) => {
@@ -899,6 +912,7 @@ mod tests {
                 name: "my_tool".to_string(),
                 parameters: serde_json::json!({}),
                 id: Some("call42".to_string()),
+                parse_error: None,
             },
         };
         let msg = error_tool_result(&call, "something went wrong");

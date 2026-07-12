@@ -53,6 +53,7 @@ fn tool_call_message(tool_name: &str, id: Option<&str>, streaming: bool) -> Agen
                 id: id.map(|s| s.to_string()),
                 name: tool_name.to_string(),
                 parameters: serde_json::json!({}),
+                parse_error: None,
             },
         }]
         .into(),

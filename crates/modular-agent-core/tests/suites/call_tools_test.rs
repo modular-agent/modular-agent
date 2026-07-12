@@ -1,9 +1,7 @@
 extern crate modular_agent_core as ma;
 
 use ma::tool::{Tool, ToolInfo, call_tools, register_tool, unregister_tool};
-use ma::{
-    AgentContext, AgentError, AgentValue, Message, ToolCall, ToolCallFunction, async_trait,
-};
+use ma::{AgentContext, AgentError, AgentValue, Message, ToolCall, ToolCallFunction, async_trait};
 
 /// Test tool that always fails.
 struct FailingTool {
@@ -51,6 +49,7 @@ fn tool_call(name: &str, id: &str, parameters: serde_json::Value) -> ToolCall {
             name: name.to_string(),
             parameters,
             id: Some(id.to_string()),
+            parse_error: None,
         },
     }
 }
@@ -90,6 +89,28 @@ async fn failing_tool_yields_error_result_without_aborting_others() {
     assert_eq!(messages[1].content, "\"ok\"");
 
     unregister_tool(failing);
+    unregister_tool(succeeding);
+}
+
+#[tokio::test]
+async fn parse_error_call_yields_error_result_without_executing() {
+    let succeeding = "call_tools_test_parse_error_guard";
+    register_tool(SucceedingTool {
+        info: tool_info(succeeding),
+    });
+
+    let mut call = tool_call(succeeding, "call1", serde_json::json!({}));
+    call.function.parse_error = Some("expected value at line 1 column 1".to_string());
+
+    let ctx = AgentContext::new();
+    let calls = im::vector![call];
+    let messages = call_tools(&ctx, &calls).await.unwrap();
+
+    assert_eq!(messages.len(), 1);
+    assert_error_result(&messages[0], succeeding, "call1");
+    // The tool must not have run: a SucceedingTool result would be "ok".
+    assert_ne!(messages[0].content, "\"ok\"");
+
     unregister_tool(succeeding);
 }
 

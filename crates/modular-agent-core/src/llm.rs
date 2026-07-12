@@ -294,6 +294,12 @@ pub struct ToolCallFunction {
     /// Optional unique identifier for this tool call (for correlation).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
+
+    /// Set when the provider-sent argument string could not be parsed as
+    /// JSON even after repair; call_tools turns this into an is_error
+    /// tool result instead of executing the call.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub parse_error: Option<String>,
 }
 
 impl TryFrom<AgentValue> for Message {
@@ -387,6 +393,7 @@ impl TryFrom<AgentValue> for Message {
                                 id,
                                 name: tool_name.to_string(),
                                 parameters: parameters.to_json(),
+                                parse_error: None,
                             },
                         };
                         calls.push(call);
@@ -442,6 +449,37 @@ mod tests {
     // Message tests
 
     #[test]
+    fn test_tool_call_function_parse_error_serde() {
+        // None must not emit the key, so presets saved before this field
+        // existed round-trip unchanged.
+        let func = ToolCallFunction {
+            name: "t".to_string(),
+            parameters: serde_json::json!({}),
+            id: Some("call1".to_string()),
+            parse_error: None,
+        };
+        let json = serde_json::to_value(&func).unwrap();
+        assert!(json.get("parse_error").is_none());
+        let restored: ToolCallFunction = serde_json::from_value(json).unwrap();
+        assert_eq!(restored.parse_error, None);
+
+        // Some round-trips.
+        let func = ToolCallFunction {
+            name: "t".to_string(),
+            parameters: serde_json::json!({}),
+            id: Some("call1".to_string()),
+            parse_error: Some("bad json".to_string()),
+        };
+        let json = serde_json::to_value(&func).unwrap();
+        assert_eq!(
+            json.get("parse_error").and_then(|v| v.as_str()),
+            Some("bad json")
+        );
+        let restored: ToolCallFunction = serde_json::from_value(json).unwrap();
+        assert_eq!(restored.parse_error.as_deref(), Some("bad json"));
+    }
+
+    #[test]
     fn test_message_to_from_agent_value() {
         let msg = Message::user("What is the weather today?".to_string());
 
@@ -464,6 +502,7 @@ mod tests {
                 id: Some("call1".to_string()),
                 name: "get_weather".to_string(),
                 parameters: serde_json::json!({"location": "San Francisco"}),
+                parse_error: None,
             },
         }]);
 
@@ -567,6 +606,7 @@ mod tests {
                     id: Some("call1".to_string()),
                     name: "active_applications".to_string(),
                     parameters: serde_json::json!({}),
+                    parse_error: None,
                 },
             }]),
             id: None,
