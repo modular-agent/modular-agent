@@ -43,7 +43,7 @@ use crate::provider::{ModelIdentifier, ProviderKind};
 /// "off" is represented as the *absence* of a level (`Option<ThinkingLevel>`
 /// on the consumer side), not as a variant, so that
 /// [`ModelCapabilities::thinking_levels`] only lists levels a model supports.
-/// Consumed by the thinking-level configuration work (P-17).
+/// Consumed by the `thinking_level` agent configuration.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ThinkingLevel {
@@ -51,6 +51,54 @@ pub enum ThinkingLevel {
     Low,
     Medium,
     High,
+}
+
+impl ThinkingLevel {
+    /// Parse the `thinking_level` config value. "off" and anything
+    /// unrecognized both map to `None` so a typo degrades to no thinking
+    /// instead of an error mid-flow.
+    pub(crate) fn parse(s: &str) -> Option<Self> {
+        match s {
+            "minimal" => Some(Self::Minimal),
+            "low" => Some(Self::Low),
+            "medium" => Some(Self::Medium),
+            "high" => Some(Self::High),
+            _ => None,
+        }
+    }
+
+    /// Ordinal used for nearest-level clamping.
+    fn rank(self) -> i32 {
+        match self {
+            Self::Minimal => 0,
+            Self::Low => 1,
+            Self::Medium => 2,
+            Self::High => 3,
+        }
+    }
+}
+
+/// Clamp a requested thinking level to the nearest level the model supports,
+/// returning that level's registry entry (level + provider-side parameter).
+///
+/// `None` requested means "off" and always yields `None`. An empty
+/// `supported` list (model without thinking support) silently yields `None`
+/// as well, so presets can set a thinking level once and still work on
+/// non-reasoning models. Ties between an equally-distant lower and higher
+/// level resolve to the lower (cheaper) one.
+pub(crate) fn clamp_thinking_level(
+    requested: Option<ThinkingLevel>,
+    supported: &[(ThinkingLevel, Option<String>)],
+) -> Option<(ThinkingLevel, Option<String>)> {
+    let requested = requested?;
+    supported
+        .iter()
+        .min_by_key(|(level, _)| {
+            let distance = (level.rank() - requested.rank()).abs();
+            // Secondary key makes the lower level win an equal distance.
+            (distance, level.rank())
+        })
+        .cloned()
 }
 
 /// API cost rates in USD per million tokens.
@@ -82,8 +130,9 @@ pub struct ModelCapabilities {
     pub reasoning: bool,
     /// Supported thinking levels. The `Option<String>` is the provider-side
     /// parameter value for that level (OpenAI `reasoning_effort`, Claude
-    /// adaptive `effort`); `None` means the provider's token-budget mechanism
-    /// (Claude `budget_tokens`) whose amount is chosen by the caller (P-17).
+    /// adaptive `effort`); `None` means there is no per-level parameter and
+    /// the caller maps the level to the provider mechanism itself (Claude
+    /// `budget_tokens` amounts, Ollama's boolean `think` flag).
     /// Empty means thinking is unsupported.
     pub thinking_levels: Vec<(ThinkingLevel, Option<String>)>,
     /// Cost rates in USD per Mtok; `None` when unknown.
@@ -179,6 +228,7 @@ fn get_user_entries() -> &'static Mutex<HashMap<String, ModelCapabilitiesEntry>>
 struct OllamaProbe {
     context_length: Option<u32>,
     image_input: Option<bool>,
+    thinking: Option<bool>,
 }
 
 /// Probed Ollama metadata, keyed by model name. An entry means /api/show
@@ -269,8 +319,10 @@ fn plain_cost(input: f64, output: f64) -> ModelCostRates {
 /// Claude adaptive thinking with effort levels. `Minimal` is absent because
 /// Claude's effort vocabulary for these models is low/medium/high (plus
 /// xhigh/max, which `ThinkingLevel` intentionally cannot represent — its
-/// variants mirror the P-17 config vocabulary). `budget_tokens` does not
+/// variants mirror the `thinking_level` config vocabulary). `budget_tokens` does not
 /// apply here: it is rejected or deprecated on adaptive-thinking models.
+/// The effort string reaches the API as `output_config.effort` alongside
+/// `thinking: {"type": "adaptive"}`.
 fn adaptive_levels() -> Vec<(ThinkingLevel, Option<String>)> {
     use ThinkingLevel::*;
     vec![
@@ -281,7 +333,7 @@ fn adaptive_levels() -> Vec<(ThinkingLevel, Option<String>)> {
 }
 
 /// Claude `budget_tokens` thinking: the budget amount per level is chosen by
-/// the caller (P-17), hence no provider-side parameter value.
+/// the caller, hence no provider-side parameter value.
 fn budget_levels() -> Vec<(ThinkingLevel, Option<String>)> {
     use ThinkingLevel::*;
     vec![(Minimal, None), (Low, None), (Medium, None), (High, None)]
@@ -491,6 +543,14 @@ pub(crate) fn resolve_entry(id: &ModelIdentifier) -> ModelCapabilitiesEntry {
     {
         merged.context_window = probe.context_length;
         merged.image_input = probe.image_input;
+        // Ollama's request-side `think` flag is boolean, so a probed
+        // "thinking" capability maps to every level with no per-level
+        // parameter; "capabilities present but no thinking" is a positive
+        // "unsupported" signal (empty list).
+        merged.thinking_levels = probe
+            .thinking
+            .map(|t| if t { ollama_thinking_levels() } else { vec![] });
+        merged.reasoning = probe.thinking;
     }
 
     // Layer 2: built-in static table — provider-scoped, longest prefix wins.
@@ -586,9 +646,9 @@ fn parse_model_capabilities_json(
 // ============================================================================
 
 /// Best-effort: query Ollama `/api/show` once per model and cache the
-/// context length and vision capability for later [`lookup_capabilities`] /
-/// [`resolve_entry`] calls. Failures are logged at warn level and never fail
-/// the caller.
+/// context length plus vision/thinking capabilities for later
+/// [`lookup_capabilities`] / [`resolve_entry`] calls. Failures are logged at
+/// warn level and never fail the caller.
 ///
 /// Called from the Ollama chat/completion paths right after client
 /// acquisition, which is *after* the per-turn `resolve_entry` call: probed
@@ -614,7 +674,8 @@ pub(crate) async fn warm_ollama_context(
         Ok(info) => {
             let probe = OllamaProbe {
                 context_length: extract_context_length(&info),
-                image_input: extract_image_input(&info),
+                image_input: extract_capability(&info, "vision"),
+                thinking: extract_capability(&info, "thinking"),
             };
             get_ollama_probe_map()
                 .lock()
@@ -643,14 +704,23 @@ fn extract_context_length(info: &serde_json::Value) -> Option<u32> {
 }
 
 /// `/api/show` lists model capabilities as strings, e.g.
-/// `{"capabilities": ["completion", "vision"]}`. Older Ollama servers omit
-/// the field, in which case vision support stays unknown (`None`) rather
-/// than assumed absent — image demotion must only fire on a positive
+/// `{"capabilities": ["completion", "vision", "thinking"]}`. Older Ollama
+/// servers omit the field, in which case support stays unknown (`None`)
+/// rather than assumed absent — image demotion must only fire on a positive
 /// "no vision" signal.
 #[cfg(feature = "ollama")]
-fn extract_image_input(info: &serde_json::Value) -> Option<bool> {
+fn extract_capability(info: &serde_json::Value, name: &str) -> Option<bool> {
     let caps = info.get("capabilities")?.as_array()?;
-    Some(caps.iter().any(|v| v.as_str() == Some("vision")))
+    Some(caps.iter().any(|v| v.as_str() == Some(name)))
+}
+
+/// Ollama's `think` request flag is boolean, so a model that reports the
+/// "thinking" capability supports every level, with the boolean conversion
+/// left to the caller (no per-level parameter).
+#[cfg(feature = "ollama")]
+fn ollama_thinking_levels() -> Vec<(ThinkingLevel, Option<String>)> {
+    use ThinkingLevel::*;
+    vec![(Minimal, None), (Low, None), (Medium, None), (High, None)]
 }
 
 // ============================================================================
@@ -886,6 +956,7 @@ mod tests {
             OllamaProbe {
                 context_length: Some(131_072),
                 image_input: None,
+                thinking: None,
             },
         );
         let caps = lookup_capabilities(&id(ProviderKind::Ollama, "testonly-ollama-model"));
@@ -904,6 +975,7 @@ mod tests {
             OllamaProbe {
                 context_length: Some(131_072),
                 image_input: None,
+                thinking: None,
             },
         );
         set_user(r#"{ "testonly-ollama-model2": { "context_window": 8000 } }"#);
@@ -922,6 +994,7 @@ mod tests {
             OllamaProbe {
                 context_length: None,
                 image_input: Some(false),
+                thinking: None,
             },
         );
         // resolve_entry must yield the positive "no vision" signal that
@@ -940,6 +1013,7 @@ mod tests {
             OllamaProbe {
                 context_length: None,
                 image_input: Some(false),
+                thinking: None,
             },
         );
         set_user(r#"{ "testonly-vision-override": { "image_input": true } }"#);
@@ -951,18 +1025,72 @@ mod tests {
 
     #[cfg(feature = "ollama")]
     #[test]
-    fn extract_image_input_variants() {
-        // Vision listed.
-        let info = serde_json::json!({ "capabilities": ["completion", "vision"] });
-        assert_eq!(extract_image_input(&info), Some(true));
+    fn ollama_probed_thinking_enables_levels() {
+        let _guard = test_lock();
+        set_probe(
+            "testonly-thinking-model",
+            OllamaProbe {
+                context_length: None,
+                image_input: None,
+                thinking: Some(true),
+            },
+        );
+        // The probed capability must reach the per-turn clamp so that
+        // thinking_level actually produces `think: true` on Ollama.
+        let entry = resolve_entry(&id(ProviderKind::Ollama, "testonly-thinking-model"));
+        assert_eq!(
+            clamp_thinking_level(
+                Some(ThinkingLevel::High),
+                entry.thinking_levels.as_deref().unwrap_or(&[]),
+            ),
+            Some((ThinkingLevel::High, None))
+        );
+        let caps = lookup_capabilities(&id(ProviderKind::Ollama, "testonly-thinking-model"));
+        assert!(caps.reasoning);
+        remove_probe("testonly-thinking-model");
+    }
 
-        // Capabilities present but no vision: a positive "no vision" signal.
+    #[cfg(feature = "ollama")]
+    #[test]
+    fn ollama_probed_no_thinking_stays_off() {
+        let _guard = test_lock();
+        set_probe(
+            "testonly-nothinking-model",
+            OllamaProbe {
+                context_length: None,
+                image_input: None,
+                thinking: Some(false),
+            },
+        );
+        let entry = resolve_entry(&id(ProviderKind::Ollama, "testonly-nothinking-model"));
+        assert_eq!(entry.thinking_levels, Some(vec![]));
+        assert_eq!(
+            clamp_thinking_level(
+                Some(ThinkingLevel::High),
+                entry.thinking_levels.as_deref().unwrap_or(&[]),
+            ),
+            None
+        );
+        remove_probe("testonly-nothinking-model");
+    }
+
+    #[cfg(feature = "ollama")]
+    #[test]
+    fn extract_capability_variants() {
+        // Listed capabilities are positive signals.
+        let info = serde_json::json!({ "capabilities": ["completion", "vision", "thinking"] });
+        assert_eq!(extract_capability(&info, "vision"), Some(true));
+        assert_eq!(extract_capability(&info, "thinking"), Some(true));
+
+        // Capabilities present but missing: a positive "unsupported" signal.
         let info = serde_json::json!({ "capabilities": ["completion", "tools"] });
-        assert_eq!(extract_image_input(&info), Some(false));
+        assert_eq!(extract_capability(&info, "vision"), Some(false));
+        assert_eq!(extract_capability(&info, "thinking"), Some(false));
 
-        // Older servers omit the field entirely: unknown, never demote.
+        // Older servers omit the field entirely: unknown.
         let info = serde_json::json!({ "model_info": {} });
-        assert_eq!(extract_image_input(&info), None);
+        assert_eq!(extract_capability(&info, "vision"), None);
+        assert_eq!(extract_capability(&info, "thinking"), None);
     }
 
     #[cfg(feature = "ollama")]
@@ -1023,6 +1151,70 @@ mod tests {
     fn clamp_saturates_above_u32() {
         assert_eq!(clamp_max_tokens(i64::MAX, None), Some(u32::MAX));
         assert_eq!(clamp_max_tokens(i64::MAX, Some(64_000)), Some(64_000));
+    }
+
+    // -- thinking level parsing and clamping --
+
+    #[test]
+    fn thinking_level_parse_values() {
+        assert_eq!(
+            ThinkingLevel::parse("minimal"),
+            Some(ThinkingLevel::Minimal)
+        );
+        assert_eq!(ThinkingLevel::parse("low"), Some(ThinkingLevel::Low));
+        assert_eq!(ThinkingLevel::parse("medium"), Some(ThinkingLevel::Medium));
+        assert_eq!(ThinkingLevel::parse("high"), Some(ThinkingLevel::High));
+        assert_eq!(ThinkingLevel::parse("off"), None);
+        assert_eq!(ThinkingLevel::parse(""), None);
+        assert_eq!(ThinkingLevel::parse("HIGH"), None);
+    }
+
+    #[test]
+    fn clamp_thinking_exact_match() {
+        let supported = budget_levels();
+        assert_eq!(
+            clamp_thinking_level(Some(ThinkingLevel::Medium), &supported),
+            Some((ThinkingLevel::Medium, None))
+        );
+    }
+
+    #[test]
+    fn clamp_thinking_rounds_up_to_nearest() {
+        // Adaptive models have no Minimal; the nearest supported level is Low.
+        let supported = adaptive_levels();
+        assert_eq!(
+            clamp_thinking_level(Some(ThinkingLevel::Minimal), &supported),
+            Some((ThinkingLevel::Low, Some("low".to_string())))
+        );
+    }
+
+    #[test]
+    fn clamp_thinking_rounds_down_to_nearest() {
+        let supported = vec![(ThinkingLevel::Low, Some("low".to_string()))];
+        assert_eq!(
+            clamp_thinking_level(Some(ThinkingLevel::High), &supported),
+            Some((ThinkingLevel::Low, Some("low".to_string())))
+        );
+    }
+
+    #[test]
+    fn clamp_thinking_tie_prefers_lower_level() {
+        // Medium is equidistant from Low and High; the cheaper Low wins.
+        let supported = vec![(ThinkingLevel::Low, None), (ThinkingLevel::High, None)];
+        assert_eq!(
+            clamp_thinking_level(Some(ThinkingLevel::Medium), &supported),
+            Some((ThinkingLevel::Low, None))
+        );
+    }
+
+    #[test]
+    fn clamp_thinking_unsupported_model_is_off() {
+        assert_eq!(clamp_thinking_level(Some(ThinkingLevel::High), &[]), None);
+    }
+
+    #[test]
+    fn clamp_thinking_off_stays_off() {
+        assert_eq!(clamp_thinking_level(None, &budget_levels()), None);
     }
 
     // -- JSON parsing --

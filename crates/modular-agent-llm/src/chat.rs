@@ -37,6 +37,7 @@ const CONFIG_OPTIONS: &str = "options";
 const CONFIG_RETRY_BASE_DELAY_MS: &str = "retry_base_delay_ms";
 const CONFIG_STREAM: &str = "stream";
 const CONFIG_TEMPERATURE: &str = "temperature";
+const CONFIG_THINKING_LEVEL: &str = "thinking_level";
 const CONFIG_TIMEOUT_SECS: &str = "timeout_secs";
 const CONFIG_TOOLS: &str = "tools";
 const CONFIG_TOP_P: &str = "top_p";
@@ -84,6 +85,22 @@ const DEFAULT_CONFIG_MODEL: &str = "openai/gpt-5-nano";
 ///   capability registry are left unclamped.
 /// - `temperature`: Sampling temperature (-1: use API default)
 /// - `top_p`: Nucleus sampling parameter (-1: use API default)
+/// - `thinking_level`: Reasoning intensity: "off", "minimal", "low",
+///   "medium", or "high" (default: "off"; unrecognized values act as "off").
+///   Clamped to the nearest level the model supports according to the
+///   capability registry; models without thinking support silently run with
+///   thinking off, so one preset works across models. Provider mapping:
+///   Claude budget-mechanism models get `thinking.budget_tokens`
+///   (minimal=1024, low=2048, medium=8192, high=16384; the budget is added
+///   to max_tokens, re-clamped to the model limit, and shrunk when needed
+///   so it stays below the final max_tokens), Claude adaptive-thinking
+///   models get `thinking: adaptive` + `output_config.effort`, OpenAI gets
+///   `reasoning_effort`, Ollama gets `think: true` (support is probed from
+///   the server per model, taking effect from the model's second turn
+///   unless a models.json entry declares it). When thinking is enabled on a
+///   Claude request,
+///   `temperature` and `top_p` are not sent (the API rejects them); if
+///   configured, a warning is logged
 /// - `options`: Additional request options as JSON. For OpenAI, a `null`
 ///   value removes the key from the request (e.g. `{"stream_options": null}`
 ///   for OpenAI-compatible servers that reject the parameter)
@@ -112,6 +129,7 @@ const DEFAULT_CONFIG_MODEL: &str = "openai/gpt-5-nano";
     integer_config(name = CONFIG_MAX_TOKENS, title = "Max Tokens", default = 0, description = "0: use API default", detail),
     number_config(name = CONFIG_TEMPERATURE, title = "Temperature", default = -1.0, description = "-1: use API default (0.0-2.0)", detail),
     number_config(name = CONFIG_TOP_P, title = "Top P", default = -1.0, description = "-1: use API default (0.0-1.0)", detail),
+    string_config(name = CONFIG_THINKING_LEVEL, title = "Thinking Level", default = "off", description = "Reasoning intensity: off / minimal / low / medium / high", detail),
     object_config(name = CONFIG_OPTIONS, title = "Options", description = "Additional request options as JSON", detail),
     integer_config(name = CONFIG_MAX_RETRIES, title = "Max Retries", default = 2, description = "Automatic retries for retryable errors", detail),
     integer_config(name = CONFIG_RETRY_BASE_DELAY_MS, title = "Retry Base Delay (ms)", default = 1000, description = "Base delay for exponential backoff", detail),
@@ -217,6 +235,16 @@ impl AsAgent for ChatAgent {
         let caps = crate::capabilities::resolve_entry(&model_id);
         let model_max_tokens = caps.max_tokens;
 
+        // Clamp the requested thinking level to what the model supports; an
+        // unknown or non-reasoning model degrades to "off" so one preset
+        // works across models.
+        let thinking = crate::capabilities::clamp_thinking_level(
+            crate::capabilities::ThinkingLevel::parse(
+                &config.get_string_or_default(CONFIG_THINKING_LEVEL),
+            ),
+            caps.thinking_levels.as_deref().unwrap_or(&[]),
+        );
+
         // Single cross-provider normalization boundary (P-02), applied right
         // before the provider-specific conversion below. Images are demoted
         // only when the registry positively knows image_input == false
@@ -244,6 +272,7 @@ impl AsAgent for ChatAgent {
                     model_max_tokens,
                     temperature,
                     top_p,
+                    thinking,
                     retry,
                     cache_retention,
                 )
@@ -262,6 +291,7 @@ impl AsAgent for ChatAgent {
                     model_max_tokens,
                     temperature,
                     top_p,
+                    thinking,
                     retry,
                     cache_retention,
                 )
@@ -280,6 +310,7 @@ impl AsAgent for ChatAgent {
                     model_max_tokens,
                     temperature,
                     top_p,
+                    thinking,
                     retry,
                     cache_retention,
                 )
@@ -309,6 +340,7 @@ impl ChatAgent {
         model_max_tokens: Option<u32>,
         temperature: f64,
         top_p: f64,
+        thinking: Option<(crate::capabilities::ThinkingLevel, Option<String>)>,
         retry: RetryPolicy,
         cache_retention: CacheRetention,
     ) -> Result<(), AgentError> {
@@ -365,6 +397,7 @@ impl ChatAgent {
         if top_p >= 0.0 {
             request["top_p"] = top_p.into();
         }
+        apply_openai_thinking(&mut request, &thinking);
         // Set after merge_options so user options cannot strip the key.
         if let Some(key) = prompt_cache_key {
             request["prompt_cache_key"] = key.into();
@@ -674,6 +707,7 @@ impl ChatAgent {
         model_max_tokens: Option<u32>,
         temperature: f64,
         top_p: f64,
+        thinking: Option<(crate::capabilities::ThinkingLevel, Option<String>)>,
         retry: RetryPolicy,
         cache_retention: CacheRetention,
     ) -> Result<(), AgentError> {
@@ -724,6 +758,7 @@ impl ChatAgent {
             stream: if use_stream { Some(true) } else { None },
             tools,
             thinking: None,
+            output_config: None,
             temperature: None,
             top_p: None,
         };
@@ -758,6 +793,11 @@ impl ChatAgent {
             request.top_p = Some(top_p);
         }
 
+        // Applied after the first-class overrides so the budget rides on the
+        // final max_tokens value, and so temperature/top_p suppression sees
+        // everything that would otherwise be sent.
+        apply_claude_thinking(&mut request, thinking, model_max_tokens);
+
         // Thinking blocks may only be sent while the request enables
         // extended thinking (the API rejects them otherwise), so a history
         // recorded with thinking on must degrade to text once the option is
@@ -765,7 +805,10 @@ impl ChatAgent {
         // thinking config is known.
         if !matches!(
             request.thinking,
-            Some(claude_client::ClaudeThinkingConfig::Enabled { .. })
+            Some(
+                claude_client::ClaudeThinkingConfig::Enabled { .. }
+                    | claude_client::ClaudeThinkingConfig::Adaptive {}
+            )
         ) {
             claude_client::strip_thinking_blocks(&mut request.messages);
         }
@@ -1113,6 +1156,7 @@ impl ChatAgent {
         model_max_tokens: Option<u32>,
         temperature: f64,
         top_p: f64,
+        thinking: Option<(crate::capabilities::ThinkingLevel, Option<String>)>,
         retry: RetryPolicy,
         // Ollama has no prompt cache API; accepted only to keep call sites uniform.
         _cache_retention: CacheRetention,
@@ -1122,7 +1166,8 @@ impl ChatAgent {
         let client = self.ollama_manager.get_client(self.ma())?;
 
         // Best-effort: probe /api/show once per model to cache its context
-        // length for later capability lookups. Never fails the request.
+        // length and vision/thinking capabilities for later capability
+        // lookups. Never fails the request.
         crate::capabilities::warm_ollama_context(&client, model_name).await;
 
         let tools: Vec<ollama_client::OllamaToolInfo> = if config_tools.is_empty() {
@@ -1176,6 +1221,7 @@ impl ChatAgent {
                 opts.insert("top_p".into(), top_p.into());
             }
         }
+        apply_ollama_thinking(&mut request, &thinking);
 
         let id = uuid::Uuid::new_v4().to_string();
         if use_stream {
@@ -1379,6 +1425,100 @@ impl ChatAgent {
         }
 
         Ok(())
+    }
+}
+
+/// Convert a clamped thinking level into the Claude request shape.
+///
+/// Budget-mechanism entries (registry param `None`) enable extended thinking
+/// with a per-level token budget; the budget is added on top of max_tokens —
+/// thinking tokens are spent before the visible answer, so keeping max_tokens
+/// unchanged would shrink the answer — and re-clamped to the model limit.
+/// Anthropic requires `budget_tokens` strictly below `max_tokens`, so when
+/// the model limit caps max_tokens at or below the level's budget (reachable
+/// via models.json `max_tokens` overrides) the budget shrinks to half the
+/// final max_tokens, and thinking degrades to off entirely when even the
+/// API-minimum budget leaves no answer room — both with a warning.
+/// Adaptive entries (param `Some(effort)`) switch to adaptive thinking
+/// steered by `output_config.effort`. Either way the API rejects
+/// temperature/top_p alongside thinking, so both are dropped with a warning
+/// when set.
+#[cfg(feature = "claude")]
+fn apply_claude_thinking(
+    request: &mut claude_client::ClaudeRequest,
+    thinking: Option<(crate::capabilities::ThinkingLevel, Option<String>)>,
+    model_max_tokens: Option<u32>,
+) {
+    let Some((level, param)) = thinking else {
+        return;
+    };
+    match param {
+        Some(effort) => {
+            request.thinking = Some(claude_client::ClaudeThinkingConfig::Adaptive {});
+            request.output_config = Some(claude_client::ClaudeOutputConfig { effort });
+        }
+        None => {
+            let mut budget = claude_client::thinking_budget_tokens(level);
+            let raised = request.max_tokens.saturating_add(budget);
+            // Same rule as clamp_max_tokens: an unknown model limit leaves
+            // the value unclamped.
+            let max_tokens = match model_max_tokens {
+                Some(limit) => raised.min(limit),
+                None => raised,
+            };
+            // Anthropic rejects budget_tokens >= max_tokens, which the clamp
+            // alone allows when the model limit is at or below the level's
+            // budget: split the window instead so the visible answer keeps
+            // room, or degrade to off when even the minimum budget can't fit.
+            if budget >= max_tokens {
+                let shrunk = max_tokens / 2;
+                if shrunk < claude_client::MIN_THINKING_BUDGET_TOKENS {
+                    log::warn!(
+                        "Disabling thinking: max_tokens {max_tokens} leaves no room for the minimum thinking budget"
+                    );
+                    return;
+                }
+                log::warn!(
+                    "Shrinking thinking budget from {budget} to {shrunk}: it must stay below max_tokens {max_tokens}"
+                );
+                budget = shrunk;
+            }
+            request.thinking = Some(claude_client::ClaudeThinkingConfig::Enabled {
+                budget_tokens: budget,
+            });
+            request.max_tokens = max_tokens;
+        }
+    }
+    if request.temperature.take().is_some() {
+        log::warn!("Ignoring temperature: Claude rejects it when thinking is enabled");
+    }
+    if request.top_p.take().is_some() {
+        log::warn!("Ignoring top_p: Claude rejects it when thinking is enabled");
+    }
+}
+
+/// Send the clamped thinking level as the Chat Completions `reasoning_effort`
+/// parameter. Registry entries without a provider-side value cannot be
+/// expressed on OpenAI and are skipped.
+#[cfg(feature = "openai")]
+fn apply_openai_thinking(
+    request: &mut serde_json::Value,
+    thinking: &Option<(crate::capabilities::ThinkingLevel, Option<String>)>,
+) {
+    if let Some((_, Some(effort))) = thinking {
+        request["reasoning_effort"] = effort.clone().into();
+    }
+}
+
+/// Ollama thinking is a boolean switch: any enabled level maps to a
+/// top-level `think: true` (per-level intensity is not expressible there).
+#[cfg(feature = "ollama")]
+fn apply_ollama_thinking(
+    request: &mut serde_json::Value,
+    thinking: &Option<(crate::capabilities::ThinkingLevel, Option<String>)>,
+) {
+    if thinking.is_some() {
+        request["think"] = true.into();
     }
 }
 
@@ -1979,5 +2119,213 @@ mod tests {
         assert!(done["streaming"].is_null(), "final must not be streaming");
 
         ma.quit();
+    }
+
+    // -- thinking_level request building --
+
+    #[cfg(any(feature = "claude", feature = "openai", feature = "ollama"))]
+    use crate::capabilities::ThinkingLevel;
+
+    #[cfg(feature = "claude")]
+    fn base_claude_request() -> claude_client::ClaudeRequest {
+        claude_client::ClaudeRequest {
+            model: "claude-test".to_string(),
+            max_tokens: 8192,
+            messages: vec![],
+            system: None,
+            stream: None,
+            tools: None,
+            thinking: None,
+            output_config: None,
+            temperature: Some(0.7),
+            top_p: Some(0.9),
+        }
+    }
+
+    #[cfg(feature = "claude")]
+    #[test]
+    fn claude_budget_thinking_adds_budget_and_suppresses_sampling() {
+        let mut request = base_claude_request();
+        apply_claude_thinking(
+            &mut request,
+            Some((ThinkingLevel::Medium, None)),
+            Some(64_000),
+        );
+
+        assert!(matches!(
+            request.thinking,
+            Some(claude_client::ClaudeThinkingConfig::Enabled {
+                budget_tokens: 8192
+            })
+        ));
+        // Budget rides on top of the configured max_tokens.
+        assert_eq!(request.max_tokens, 8192 + 8192);
+        assert!(request.output_config.is_none());
+        // Anthropic rejects sampling params alongside thinking.
+        assert_eq!(request.temperature, None);
+        assert_eq!(request.top_p, None);
+    }
+
+    #[cfg(feature = "claude")]
+    #[test]
+    fn claude_budget_thinking_reclamps_to_model_limit() {
+        let mut request = base_claude_request();
+        request.max_tokens = 60_000;
+        apply_claude_thinking(
+            &mut request,
+            Some((ThinkingLevel::High, None)),
+            Some(64_000),
+        );
+
+        assert!(matches!(
+            request.thinking,
+            Some(claude_client::ClaudeThinkingConfig::Enabled {
+                budget_tokens: 16_384
+            })
+        ));
+        assert_eq!(request.max_tokens, 64_000);
+    }
+
+    #[cfg(feature = "claude")]
+    #[test]
+    fn claude_budget_thinking_shrinks_budget_below_small_model_limit() {
+        // models.json can cap a budget-mechanism model's max_tokens at or
+        // below the level budget; Anthropic requires budget < max_tokens.
+        let mut request = base_claude_request();
+        apply_claude_thinking(&mut request, Some((ThinkingLevel::High, None)), Some(8192));
+
+        assert!(matches!(
+            request.thinking,
+            Some(claude_client::ClaudeThinkingConfig::Enabled {
+                budget_tokens: 4096
+            })
+        ));
+        assert_eq!(request.max_tokens, 8192);
+        // Thinking stays on, so sampling params are still suppressed.
+        assert_eq!(request.temperature, None);
+        assert_eq!(request.top_p, None);
+    }
+
+    #[cfg(feature = "claude")]
+    #[test]
+    fn claude_budget_thinking_degrades_to_off_when_no_budget_room() {
+        // A limit too small for even the API-minimum budget (1024) plus
+        // answer room must disable thinking rather than send a 400-bound
+        // request.
+        let mut request = base_claude_request();
+        request.max_tokens = 2000;
+        apply_claude_thinking(&mut request, Some((ThinkingLevel::High, None)), Some(2000));
+
+        assert!(request.thinking.is_none());
+        assert_eq!(request.max_tokens, 2000);
+        // Thinking is off, so sampling params remain valid and are kept.
+        assert_eq!(request.temperature, Some(0.7));
+        assert_eq!(request.top_p, Some(0.9));
+    }
+
+    #[cfg(feature = "claude")]
+    #[test]
+    fn claude_budget_thinking_budget_always_below_max_tokens() {
+        use ThinkingLevel::*;
+        // The Anthropic invariant budget_tokens < max_tokens must hold for
+        // every level/limit combination that keeps thinking enabled.
+        for level in [Minimal, Low, Medium, High] {
+            for limit in [2049_u32, 4096, 8192, 16_384, 64_000] {
+                let mut request = base_claude_request();
+                request.max_tokens = limit.min(8192);
+                apply_claude_thinking(&mut request, Some((level, None)), Some(limit));
+                if let Some(claude_client::ClaudeThinkingConfig::Enabled { budget_tokens }) =
+                    request.thinking
+                {
+                    assert!(
+                        budget_tokens < request.max_tokens,
+                        "level {level:?} limit {limit}: budget {budget_tokens} >= max_tokens {}",
+                        request.max_tokens
+                    );
+                }
+            }
+        }
+    }
+
+    #[cfg(feature = "claude")]
+    #[test]
+    fn claude_budget_thinking_unknown_limit_not_clamped() {
+        let mut request = base_claude_request();
+        apply_claude_thinking(&mut request, Some((ThinkingLevel::Minimal, None)), None);
+        assert_eq!(request.max_tokens, 8192 + 1024);
+    }
+
+    #[cfg(feature = "claude")]
+    #[test]
+    fn claude_adaptive_thinking_sets_effort() {
+        let mut request = base_claude_request();
+        apply_claude_thinking(
+            &mut request,
+            Some((ThinkingLevel::High, Some("high".to_string()))),
+            Some(64_000),
+        );
+
+        // Adaptive mode: no budget arithmetic, effort in output_config.
+        assert_eq!(request.max_tokens, 8192);
+        assert_eq!(request.temperature, None);
+        assert_eq!(request.top_p, None);
+        let json = serde_json::to_value(&request).expect("serialize");
+        assert_eq!(json["thinking"], serde_json::json!({ "type": "adaptive" }));
+        assert_eq!(
+            json["output_config"],
+            serde_json::json!({ "effort": "high" })
+        );
+    }
+
+    #[cfg(feature = "claude")]
+    #[test]
+    fn claude_thinking_off_leaves_request_unchanged() {
+        let mut request = base_claude_request();
+        apply_claude_thinking(&mut request, None, Some(64_000));
+
+        assert!(request.thinking.is_none());
+        assert!(request.output_config.is_none());
+        assert_eq!(request.max_tokens, 8192);
+        assert_eq!(request.temperature, Some(0.7));
+        assert_eq!(request.top_p, Some(0.9));
+    }
+
+    #[cfg(feature = "openai")]
+    #[test]
+    fn openai_thinking_sets_reasoning_effort() {
+        let mut request = serde_json::json!({ "model": "gpt-5" });
+        apply_openai_thinking(
+            &mut request,
+            &Some((ThinkingLevel::Low, Some("low".to_string()))),
+        );
+        assert_eq!(request["reasoning_effort"], serde_json::json!("low"));
+    }
+
+    #[cfg(feature = "openai")]
+    #[test]
+    fn openai_thinking_off_by_default() {
+        let mut request = serde_json::json!({ "model": "gpt-5" });
+        apply_openai_thinking(&mut request, &None);
+        assert!(request.get("reasoning_effort").is_none());
+
+        // A registry entry without a provider-side value has nothing to send.
+        apply_openai_thinking(&mut request, &Some((ThinkingLevel::Low, None)));
+        assert!(request.get("reasoning_effort").is_none());
+    }
+
+    #[cfg(feature = "ollama")]
+    #[test]
+    fn ollama_thinking_sets_think_flag() {
+        let mut request = serde_json::json!({ "model": "qwen3" });
+        apply_ollama_thinking(&mut request, &Some((ThinkingLevel::Medium, None)));
+        assert_eq!(request["think"], serde_json::json!(true));
+    }
+
+    #[cfg(feature = "ollama")]
+    #[test]
+    fn ollama_thinking_off_by_default() {
+        let mut request = serde_json::json!({ "model": "qwen3" });
+        apply_ollama_thinking(&mut request, &None);
+        assert!(request.get("think").is_none());
     }
 }

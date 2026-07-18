@@ -237,6 +237,8 @@ pub(crate) struct ClaudeRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub thinking: Option<ClaudeThinkingConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub output_config: Option<ClaudeOutputConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub temperature: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub top_p: Option<f64>,
@@ -324,8 +326,33 @@ pub(crate) struct ClaudeTool {
 pub(crate) enum ClaudeThinkingConfig {
     #[serde(rename = "enabled")]
     Enabled { budget_tokens: u32 },
+    #[serde(rename = "adaptive")]
+    Adaptive {},
     #[serde(rename = "disabled")]
     Disabled {},
+}
+
+/// Output-level controls; `effort` steers adaptive-thinking depth
+/// (low/medium/high) on models that take `thinking: {"type": "adaptive"}`.
+#[derive(serde::Serialize, serde::Deserialize)]
+pub(crate) struct ClaudeOutputConfig {
+    pub effort: String,
+}
+
+/// Anthropic's minimum accepted `thinking.budget_tokens`.
+pub(crate) const MIN_THINKING_BUDGET_TOKENS: u32 = 1024;
+
+/// Thinking token budget per level for Claude models on the `budget_tokens`
+/// mechanism. Values follow pi-agent's per-level budgets; the API
+/// minimum is 1024.
+pub(crate) fn thinking_budget_tokens(level: crate::capabilities::ThinkingLevel) -> u32 {
+    use crate::capabilities::ThinkingLevel::*;
+    match level {
+        Minimal => MIN_THINKING_BUDGET_TOKENS,
+        Low => 2048,
+        Medium => 8192,
+        High => 16384,
+    }
 }
 
 // Response types
@@ -1487,6 +1514,7 @@ mod tests {
             stream: None,
             tools: None,
             thinking: None,
+            output_config: None,
             temperature: None,
             top_p: None,
         };
@@ -1508,6 +1536,7 @@ mod tests {
             stream: None,
             tools: None,
             thinking: None,
+            output_config: None,
             temperature: None,
             top_p: None,
         };
@@ -1517,6 +1546,7 @@ mod tests {
         assert!(!json.as_object().unwrap().contains_key("stream"));
         assert!(!json.as_object().unwrap().contains_key("tools"));
         assert!(!json.as_object().unwrap().contains_key("thinking"));
+        assert!(!json.as_object().unwrap().contains_key("output_config"));
         assert!(!json.as_object().unwrap().contains_key("temperature"));
         assert!(!json.as_object().unwrap().contains_key("top_p"));
     }
@@ -1704,6 +1734,7 @@ mod tests {
             stream: None,
             tools,
             thinking: None,
+            output_config: None,
             temperature: None,
             top_p: None,
         }
