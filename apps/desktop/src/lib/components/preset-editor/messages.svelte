@@ -1,14 +1,17 @@
 <script lang="ts" module>
+  import type { MessageContent } from "./message-content";
+
   interface Message {
     type?: string;
     role?: string;
-    content?: string | string[];
+    content?: MessageContent;
+    // Legacy top-level thinking key from old presets/histories.
     thinking?: string;
     tool_calls?: any[];
     tool_name?: string;
     image?: string;
     data?: {
-      content: string | string[];
+      content: MessageContent;
     };
   }
 
@@ -26,6 +29,7 @@
   import * as Avatar from "$lib/components/ui/avatar/index.js";
   import * as Item from "$lib/components/ui/item/index.js";
   import { truncate } from "$lib/modular_agent";
+  import { extractImageSrcs, extractText, extractThinking } from "./message-content";
 
   let { messages }: Props = $props();
 
@@ -39,16 +43,15 @@
         }
         let html = "";
         let content = msg.data?.content || msg.content;
-        if (msg.thinking) {
-          const open = content ? "" : "open";
-          html += `<p><details ${open}><summary>${escapeHtml(truncate(msg.thinking, 30))}</summary><p>${escapeHtml(msg.thinking)}</p></details></p><br/>`;
+        let text = extractText(content);
+        // Thinking blocks take priority; legacy messages carry a top-level key.
+        let thinking = extractThinking(content) ?? msg.thinking;
+        if (thinking) {
+          const open = text ? "" : "open";
+          html += `<p><details ${open}><summary>${escapeHtml(truncate(thinking, 30))}</summary><p>${escapeHtml(thinking)}</p></details></p><br/>`;
         }
         if (role === "ai") {
-          if (typeof content === "string") {
-            html += renderMarkdown(content);
-          } else if (Array.isArray(content)) {
-            html += renderMarkdown(content.join("\n\n"));
-          }
+          html += renderMarkdown(text);
           if (msg.tool_calls && msg.tool_calls.length > 0) {
             for (const toolCall of msg.tool_calls) {
               html += `<p><details><summary>Tool Call: ${escapeHtml(toolCall?.function?.name ?? "unknown")}</summary><pre>${sanitizeHtml(
@@ -57,21 +60,11 @@
             }
           }
         } else if (role === "tool") {
-          let toolContent;
-          if (typeof content === "string") {
-            toolContent = sanitizeHtml(content);
-          } else if (Array.isArray(content)) {
-            toolContent = sanitizeHtml(content.join("\n\n"));
-          }
-          html += `<p><details open><summary>Tool Response: ${escapeHtml(msg.tool_name || "unknown")}</summary><pre>${toolContent}</pre></details></p><br/>`;
+          html += `<p><details open><summary>Tool Response: ${escapeHtml(msg.tool_name || "unknown")}</summary><pre>${sanitizeHtml(text)}</pre></details></p><br/>`;
         } else {
-          if (typeof content === "string") {
-            html += sanitizeHtml(JSON.stringify(content, null, 2));
-          } else if (Array.isArray(content)) {
-            html += sanitizeHtml(JSON.stringify(content.join("\n\n"), null, 2));
-          }
+          html += sanitizeHtml(JSON.stringify(text, null, 2));
         }
-        return { role, html, image: msg.image };
+        return { role, html, image: msg.image, blockImages: extractImageSrcs(content) };
       })
       .filter(({ role }) => role !== "system");
   });
@@ -108,6 +101,15 @@
           {:else}
             {message.html}
           {/if}
+          {#each message.blockImages as src}
+            {#if src && isSafeImageSrc(src)}
+              <div class="mt-2">
+                <img {src} alt="" class="max-w-full p-2" />
+              </div>
+            {:else}
+              <div class="mt-2 text-xs text-muted-foreground">[image unavailable]</div>
+            {/if}
+          {/each}
           {#if message.image && isSafeImageSrc(message.image)}
             <div class="mt-2">
               <img src={message.image} alt="" class="max-w-full p-2" />
