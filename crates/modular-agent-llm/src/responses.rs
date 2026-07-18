@@ -254,7 +254,7 @@ impl ResponsesAgent {
                         } else {
                             serde_json::Value::String(info.description)
                         },
-                        "parameters": info.parameters.unwrap_or(serde_json::json!({})),
+                        "parameters": info.parameters,
                     })
                 })
                 .collect()

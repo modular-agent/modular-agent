@@ -536,7 +536,7 @@ pub(crate) fn message_to_ollama(msg: &Message) -> OllamaChatMessage {
 
 /// Convert a framework ToolInfo to an Ollama tool definition.
 pub(crate) fn tool_info_to_ollama(info: tool::ToolInfo) -> OllamaToolInfo {
-    let parameters = info.parameters.unwrap_or_else(|| serde_json::json!({}));
+    let parameters = info.parameters;
     OllamaToolInfo {
         tool_type: "function".to_string(),
         function: OllamaToolFunctionInfo {
@@ -860,16 +860,16 @@ mod tests {
 
     #[test]
     fn test_tool_info_to_ollama() {
-        let info = tool::ToolInfo {
-            name: "get_weather".to_string(),
-            description: "Get weather".to_string(),
-            parameters: Some(serde_json::json!({
+        let info = tool::ToolInfo::new(
+            "get_weather",
+            "Get weather",
+            Some(serde_json::json!({
                 "type": "object",
                 "properties": {
                     "location": { "type": "string" }
                 }
             })),
-        };
+        );
         let tool = tool_info_to_ollama(info);
         assert_eq!(tool.tool_type, "function");
         assert_eq!(tool.function.name, "get_weather");
@@ -879,13 +879,12 @@ mod tests {
 
     #[test]
     fn test_tool_info_to_ollama_no_params() {
-        let info = tool::ToolInfo {
-            name: "list_items".to_string(),
-            description: "List items".to_string(),
-            parameters: None,
-        };
+        let info = tool::ToolInfo::new("list_items", "List items", None);
         let tool = tool_info_to_ollama(info);
-        assert_eq!(tool.function.parameters, serde_json::json!({}));
+        assert_eq!(
+            tool.function.parameters,
+            serde_json::json!({"type": "object", "properties": {}})
+        );
     }
 
     // =========================================================================

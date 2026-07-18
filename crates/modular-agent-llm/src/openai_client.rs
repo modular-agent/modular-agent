@@ -557,7 +557,7 @@ pub fn tool_info_to_chat_tool_json(info: tool::ToolInfo) -> serde_json::Value {
             } else {
                 serde_json::Value::String(info.description)
             },
-            "parameters": info.parameters.unwrap_or(serde_json::json!({}))
+            "parameters": info.parameters
         }
     })
 }

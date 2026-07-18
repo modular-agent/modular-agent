@@ -656,9 +656,7 @@ pub(crate) fn normalize_stop_reason(raw: &str) -> String {
 
 /// Convert a framework ToolInfo to a Claude Tool definition.
 pub(crate) fn tool_info_to_claude_tool(info: tool::ToolInfo) -> ClaudeTool {
-    let input_schema = info
-        .parameters
-        .unwrap_or_else(|| serde_json::json!({"type": "object"}));
+    let input_schema = info.parameters;
     ClaudeTool {
         name: info.name,
         description: if info.description.is_empty() {
@@ -1106,17 +1104,17 @@ mod tests {
 
     #[test]
     fn test_tool_info_to_claude_tool() {
-        let info = tool::ToolInfo {
-            name: "get_weather".to_string(),
-            description: "Get current weather".to_string(),
-            parameters: Some(serde_json::json!({
+        let info = tool::ToolInfo::new(
+            "get_weather",
+            "Get current weather",
+            Some(serde_json::json!({
                 "type": "object",
                 "properties": {
                     "location": { "type": "string" }
                 },
                 "required": ["location"]
             })),
-        };
+        );
 
         let tool = tool_info_to_claude_tool(info);
         assert_eq!(tool.name, "get_weather");
@@ -1126,16 +1124,15 @@ mod tests {
 
     #[test]
     fn test_tool_info_to_claude_tool_no_params() {
-        let info = tool::ToolInfo {
-            name: "list_items".to_string(),
-            description: "".to_string(),
-            parameters: None,
-        };
+        let info = tool::ToolInfo::new("list_items", "", None);
 
         let tool = tool_info_to_claude_tool(info);
         assert_eq!(tool.name, "list_items");
         assert!(tool.description.is_none());
-        assert_eq!(tool.input_schema, serde_json::json!({"type": "object"}));
+        assert_eq!(
+            tool.input_schema,
+            serde_json::json!({"type": "object", "properties": {}})
+        );
     }
 
     #[test]
