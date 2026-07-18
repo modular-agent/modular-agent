@@ -2,7 +2,8 @@ use std::sync::{Arc, Mutex};
 
 use modular_agent_core::tool;
 use modular_agent_core::{
-    AgentError, AgentValue, Message, ModularAgent, ToolCall, ToolCallFunction, Usage,
+    AgentError, AgentValue, ContentBlock, Message, MessageContent, ModularAgent, ToolCall,
+    ToolCallFunction, Usage,
 };
 
 use crate::chat::ChatAgent;
@@ -412,10 +413,7 @@ pub(crate) enum ClaudeDelta {
     #[serde(rename = "thinking_delta")]
     ThinkingDelta { thinking: String },
     #[serde(rename = "signature_delta")]
-    SignatureDelta {
-        #[allow(dead_code)]
-        signature: String,
-    },
+    SignatureDelta { signature: String },
 }
 
 /// Subset of the message_start payload; only usage is consumed.
@@ -459,8 +457,9 @@ pub(crate) fn messages_to_claude(
 
         match msg.role.as_str() {
             "system" => {
-                if !msg.content.is_empty() {
-                    system_parts.push(msg.content.clone());
+                let text = msg.text();
+                if !text.is_empty() {
+                    system_parts.push(text);
                 }
             }
             "user" => {
@@ -493,7 +492,7 @@ pub(crate) fn messages_to_claude(
                     role: "user".to_string(),
                     content: ClaudeContent::Blocks(vec![ClaudeContentBlock::ToolResult {
                         tool_use_id,
-                        content: msg.content.clone(),
+                        content: msg.text(),
                         is_error,
                         cache_control: None,
                     }]),
@@ -503,7 +502,7 @@ pub(crate) fn messages_to_claude(
                 // Treat unknown roles as user messages
                 claude_messages.push(ClaudeMessage {
                     role: "user".to_string(),
-                    content: ClaudeContent::Text(msg.content.clone()),
+                    content: ClaudeContent::Text(msg.text()),
                 });
             }
         }
@@ -519,41 +518,125 @@ pub(crate) fn messages_to_claude(
 }
 
 fn build_user_content(msg: &Message) -> ClaudeContent {
-    #[cfg(feature = "image")]
-    {
-        if let Some(image) = &msg.image {
-            let base64_str = image.get_base64();
-            if let Some((media_type, data)) = parse_base64_image(&base64_str) {
-                let mut blocks = vec![ClaudeContentBlock::Image {
-                    source: ClaudeImageSource {
-                        source_type: "base64".to_string(),
-                        media_type,
-                        data,
-                    },
-                    cache_control: None,
-                }];
-                if !msg.content.is_empty() {
-                    blocks.push(ClaudeContentBlock::Text {
-                        text: msg.content.clone(),
-                        cache_control: None,
-                    });
-                }
-                return ClaudeContent::Blocks(blocks);
-            }
-        }
-    }
-    ClaudeContent::Text(msg.content.clone())
-}
+    let mut blocks: Vec<ClaudeContentBlock> = Vec::new();
 
-fn build_assistant_content(msg: &Message) -> ClaudeContent {
-    if let Some(tool_calls) = &msg.tool_calls {
-        let mut blocks: Vec<ClaudeContentBlock> = Vec::new();
-        if !msg.content.is_empty() {
-            blocks.push(ClaudeContentBlock::Text {
-                text: msg.content.clone(),
+    #[cfg(feature = "image")]
+    if let Some(image) = &msg.image {
+        let base64_str = image.get_base64();
+        if let Some((media_type, data)) = parse_base64_image(&base64_str) {
+            blocks.push(ClaudeContentBlock::Image {
+                source: ClaudeImageSource {
+                    source_type: "base64".to_string(),
+                    media_type,
+                    data,
+                },
                 cache_control: None,
             });
         }
+    }
+
+    match &msg.content {
+        MessageContent::Text(text) => {
+            if blocks.is_empty() {
+                return ClaudeContent::Text(text.clone());
+            }
+            if !text.is_empty() {
+                blocks.push(ClaudeContentBlock::Text {
+                    text: text.clone(),
+                    cache_control: None,
+                });
+            }
+        }
+        MessageContent::Blocks(content_blocks) => {
+            for block in content_blocks {
+                match block {
+                    ContentBlock::Text { text } if !text.is_empty() => {
+                        blocks.push(ClaudeContentBlock::Text {
+                            text: text.clone(),
+                            cache_control: None,
+                        });
+                    }
+                    ContentBlock::Image { data, mime_type } => {
+                        blocks.push(ClaudeContentBlock::Image {
+                            source: ClaudeImageSource {
+                                source_type: "base64".to_string(),
+                                media_type: mime_type.clone(),
+                                data: data.clone(),
+                            },
+                            cache_control: None,
+                        });
+                    }
+                    // Thinking has no user-side representation.
+                    _ => {}
+                }
+            }
+            if blocks.is_empty() {
+                return ClaudeContent::Text(msg.text());
+            }
+        }
+    }
+    ClaudeContent::Blocks(blocks)
+}
+
+fn build_assistant_content(msg: &Message) -> ClaudeContent {
+    // The plain-text fast path keeps the legacy request shape for the
+    // common case of a text-only turn without tool calls.
+    if msg.tool_calls.is_none()
+        && let MessageContent::Text(text) = &msg.content
+    {
+        return ClaudeContent::Text(text.clone());
+    }
+
+    let mut blocks: Vec<ClaudeContentBlock> = Vec::new();
+    match &msg.content {
+        MessageContent::Text(text) => {
+            if !text.is_empty() {
+                blocks.push(ClaudeContentBlock::Text {
+                    text: text.clone(),
+                    cache_control: None,
+                });
+            }
+        }
+        MessageContent::Blocks(content_blocks) => {
+            // Replay blocks in provider order: Claude requires the signed
+            // thinking / redacted_thinking blocks of the previous assistant
+            // turn to come back verbatim (and before text/tool_use) when
+            // extended thinking is combined with tool use.
+            for block in content_blocks {
+                match block {
+                    ContentBlock::Text { text } if !text.is_empty() => {
+                        blocks.push(ClaudeContentBlock::Text {
+                            text: text.clone(),
+                            cache_control: None,
+                        });
+                    }
+                    ContentBlock::Thinking {
+                        thinking,
+                        signature,
+                        redacted,
+                    } => {
+                        if *redacted {
+                            blocks.push(ClaudeContentBlock::RedactedThinking {
+                                data: thinking.clone(),
+                            });
+                        } else if let Some(signature) = signature {
+                            blocks.push(ClaudeContentBlock::Thinking {
+                                thinking: thinking.clone(),
+                                signature: signature.clone(),
+                            });
+                        }
+                        // Unsigned thinking (another provider's trace or a
+                        // legacy top-level thinking field) cannot pass
+                        // Claude's signature verification; skip it.
+                    }
+                    // Other block kinds (e.g. images) have no assistant-side
+                    // representation in the Claude request format.
+                    _ => {}
+                }
+            }
+        }
+    }
+    if let Some(tool_calls) = &msg.tool_calls {
         for call in tool_calls.iter() {
             let id = call
                 .function
@@ -566,13 +649,45 @@ fn build_assistant_content(msg: &Message) -> ClaudeContent {
                 input: call.function.parameters.clone(),
             });
         }
-        ClaudeContent::Blocks(blocks)
-    } else {
-        ClaudeContent::Text(msg.content.clone())
+    }
+    if blocks.is_empty() {
+        // Nothing replayable (e.g. only unsigned thinking): fall back to
+        // the flattened text so the turn is still represented.
+        return ClaudeContent::Text(msg.text());
+    }
+    ClaudeContent::Blocks(blocks)
+}
+
+/// Remove thinking / redacted_thinking blocks from a built request's
+/// messages.
+///
+/// Applied when the outgoing request does not enable extended thinking:
+/// Anthropic rejects thinking blocks in input unless thinking is on, so a
+/// history recorded while thinking was enabled must degrade to its text
+/// form once the option is removed. (Signatures are also model-bound, so
+/// they could not be validated across such a config change anyway.)
+pub(crate) fn strip_thinking_blocks(messages: &mut [ClaudeMessage]) {
+    for msg in messages {
+        let ClaudeContent::Blocks(blocks) = &mut msg.content else {
+            continue;
+        };
+        blocks.retain(|b| {
+            !matches!(
+                b,
+                ClaudeContentBlock::Thinking { .. } | ClaudeContentBlock::RedactedThinking { .. }
+            )
+        });
+        if blocks.is_empty() {
+            // Same shape a thinking-only turn produced before content
+            // blocks existed: empty text content.
+            msg.content = ClaudeContent::Text(String::new());
+        }
     }
 }
 
 /// Parse a data URI (e.g., `data:image/png;base64,<data>`) into (media_type, data).
+/// Only reachable from the `image` feature's attachment path in non-test builds.
+#[cfg_attr(not(feature = "image"), allow(dead_code))]
 pub(crate) fn parse_base64_image(data_uri: &str) -> Option<(String, String)> {
     let stripped = data_uri.strip_prefix("data:")?;
     let (header, data) = stripped.split_once(",")?;
@@ -581,15 +696,18 @@ pub(crate) fn parse_base64_image(data_uri: &str) -> Option<(String, String)> {
 }
 
 /// Convert a Claude API response to an internal Message.
+///
+/// Thinking blocks keep their signature and redacted_thinking keeps its
+/// encrypted payload (as a redacted Thinking block), in provider order, so
+/// the assistant turn can be replayed verbatim on the next request.
 pub(crate) fn message_from_claude_response(response: &ClaudeResponse) -> Message {
-    let mut content = String::new();
+    let mut blocks: Vec<ContentBlock> = Vec::new();
     let mut tool_calls: Vec<ToolCall> = Vec::new();
-    let mut thinking = String::new();
 
     for block in &response.content {
         match block {
             ClaudeResponseBlock::Text { text } => {
-                content.push_str(text);
+                blocks.push(ContentBlock::Text { text: text.clone() });
             }
             ClaudeResponseBlock::ToolUse { id, name, input } => {
                 tool_calls.push(ToolCall {
@@ -602,28 +720,29 @@ pub(crate) fn message_from_claude_response(response: &ClaudeResponse) -> Message
                 });
             }
             ClaudeResponseBlock::Thinking {
-                thinking: thought, ..
+                thinking,
+                signature,
             } => {
-                if !thinking.is_empty() {
-                    thinking.push('\n');
-                }
-                thinking.push_str(thought);
+                blocks.push(ContentBlock::Thinking {
+                    thinking: thinking.clone(),
+                    signature: (!signature.is_empty()).then(|| signature.clone()),
+                    redacted: false,
+                });
             }
-            ClaudeResponseBlock::RedactedThinking { .. } => {
-                if !thinking.is_empty() {
-                    thinking.push('\n');
-                }
-                thinking.push_str("[redacted]");
+            ClaudeResponseBlock::RedactedThinking { data } => {
+                blocks.push(ContentBlock::Thinking {
+                    thinking: data.clone(),
+                    signature: None,
+                    redacted: true,
+                });
             }
         }
     }
 
-    let mut message = Message::assistant(content);
+    let mut message = Message::assistant(String::new());
+    message.content = crate::content::content_from_blocks(&blocks);
     if !tool_calls.is_empty() {
         message.tool_calls = Some(tool_calls.into());
-    }
-    if !thinking.is_empty() {
-        message.thinking = Some(thinking);
     }
     message.stop_reason = response.stop_reason.as_deref().map(normalize_stop_reason);
     message.usage = Some(usage_from_claude(&response.usage));
@@ -905,9 +1024,11 @@ mod tests {
         };
 
         let msg = message_from_claude_response(&response);
-        assert_eq!(msg.content, "Hello!");
+        assert_eq!(msg.text(), "Hello!");
+        // Text-only responses keep the legacy plain-text content form.
+        assert!(matches!(&msg.content, MessageContent::Text(_)));
         assert!(msg.tool_calls.is_none());
-        assert!(msg.thinking.is_none());
+        assert!(msg.thinking().is_none());
         assert_eq!(msg.stop_reason.as_deref(), Some("stop"));
     }
 
@@ -935,7 +1056,7 @@ mod tests {
         };
 
         let msg = message_from_claude_response(&response);
-        assert_eq!(msg.content, "I'll check the weather.");
+        assert_eq!(msg.text(), "I'll check the weather.");
         let tool_calls = msg.tool_calls.unwrap();
         assert_eq!(tool_calls.len(), 1);
         assert_eq!(tool_calls[0].function.name, "get_weather");
@@ -1072,8 +1193,22 @@ mod tests {
         };
 
         let msg = message_from_claude_response(&response);
-        assert_eq!(msg.content, "The answer is 42.");
-        assert_eq!(msg.thinking, Some("Let me think...".to_string()));
+        assert_eq!(msg.text(), "The answer is 42.");
+        assert_eq!(msg.thinking(), Some("Let me think...".to_string()));
+        // The signature must be preserved for replay, in provider order.
+        assert_eq!(
+            msg.content,
+            MessageContent::Blocks(vec![
+                ContentBlock::Thinking {
+                    thinking: "Let me think...".to_string(),
+                    signature: Some("sig123".to_string()),
+                    redacted: false,
+                },
+                ContentBlock::Text {
+                    text: "The answer is 42.".to_string(),
+                },
+            ])
+        );
     }
 
     #[test]
@@ -1098,8 +1233,174 @@ mod tests {
         };
 
         let msg = message_from_claude_response(&response);
-        assert_eq!(msg.content, "Result.");
-        assert_eq!(msg.thinking, Some("[redacted]".to_string()));
+        assert_eq!(msg.text(), "Result.");
+        // The encrypted payload is preserved verbatim as a redacted block.
+        assert_eq!(
+            msg.content,
+            MessageContent::Blocks(vec![
+                ContentBlock::Thinking {
+                    thinking: "encrypted_data".to_string(),
+                    signature: None,
+                    redacted: true,
+                },
+                ContentBlock::Text {
+                    text: "Result.".to_string(),
+                },
+            ])
+        );
+        // The accessor must not leak the ciphertext to consumers.
+        assert_eq!(msg.thinking().as_deref(), Some("[redacted]"));
+    }
+
+    #[test]
+    fn test_build_assistant_content_replays_thinking_blocks() {
+        // Full round trip of the extended thinking + tool use continuation:
+        // response → Message → serde (history persistence) → request.
+        let response = ClaudeResponse {
+            id: "msg_123".to_string(),
+            content: vec![
+                ClaudeResponseBlock::Thinking {
+                    thinking: "Let me think...".to_string(),
+                    signature: "sig123".to_string(),
+                },
+                ClaudeResponseBlock::RedactedThinking {
+                    data: "encrypted_data".to_string(),
+                },
+                ClaudeResponseBlock::Text {
+                    text: "Checking.".to_string(),
+                },
+                ClaudeResponseBlock::ToolUse {
+                    id: "toolu_abc".to_string(),
+                    name: "get_weather".to_string(),
+                    input: serde_json::json!({"location": "Tokyo"}),
+                },
+            ],
+            stop_reason: Some("tool_use".to_string()),
+            usage: ClaudeUsage {
+                input_tokens: 10,
+                output_tokens: 5,
+                cache_creation_input_tokens: None,
+                cache_read_input_tokens: None,
+            },
+        };
+
+        let msg = message_from_claude_response(&response);
+        let json = serde_json::to_value(&msg).unwrap();
+        let msg: Message = serde_json::from_value(json).unwrap();
+
+        let content = build_assistant_content(&msg);
+        let json = serde_json::to_value(&content).unwrap();
+        assert_eq!(
+            json,
+            serde_json::json!([
+                {"type": "thinking", "thinking": "Let me think...", "signature": "sig123"},
+                {"type": "redacted_thinking", "data": "encrypted_data"},
+                {"type": "text", "text": "Checking."},
+                {"type": "tool_use", "id": "toolu_abc", "name": "get_weather",
+                 "input": {"location": "Tokyo"}},
+            ])
+        );
+    }
+
+    #[test]
+    fn test_build_assistant_content_skips_unsigned_thinking() {
+        // Legacy top-level thinking (or another provider's trace) has no
+        // signature and must not be replayed as a thinking block.
+        let json = serde_json::json!({
+            "role": "assistant",
+            "content": "Answer.",
+            "thinking": "old trace",
+        });
+        let msg: Message = serde_json::from_value(json).unwrap();
+
+        let content = build_assistant_content(&msg);
+        let json = serde_json::to_value(&content).unwrap();
+        assert_eq!(
+            json,
+            serde_json::json!([{"type": "text", "text": "Answer."}])
+        );
+    }
+
+    #[test]
+    fn test_build_user_content_image_blocks_in_order() {
+        let mut msg = Message::user(String::new());
+        msg.content = modular_agent_core::MessageContent::Blocks(vec![
+            ContentBlock::Image {
+                data: "iVBORw0KGgo=".to_string(),
+                mime_type: "image/png".to_string(),
+            },
+            ContentBlock::Text {
+                text: "what is this?".to_string(),
+            },
+        ]);
+
+        let content = build_user_content(&msg);
+        let json = serde_json::to_value(&content).unwrap();
+        assert_eq!(
+            json,
+            serde_json::json!([
+                {"type": "image", "source": {
+                    "type": "base64", "media_type": "image/png", "data": "iVBORw0KGgo="}},
+                {"type": "text", "text": "what is this?"},
+            ])
+        );
+    }
+
+    #[test]
+    fn test_strip_thinking_blocks_degrades_to_replayable_content() {
+        // A history recorded with thinking enabled must still be sendable
+        // after the option is removed: the API rejects thinking blocks in
+        // input when thinking is off.
+        let mut messages = vec![ClaudeMessage {
+            role: "assistant".to_string(),
+            content: ClaudeContent::Blocks(vec![
+                ClaudeContentBlock::Thinking {
+                    thinking: "Let me think...".to_string(),
+                    signature: "sig123".to_string(),
+                },
+                ClaudeContentBlock::RedactedThinking {
+                    data: "encrypted_data".to_string(),
+                },
+                ClaudeContentBlock::Text {
+                    text: "Checking.".to_string(),
+                    cache_control: None,
+                },
+                ClaudeContentBlock::ToolUse {
+                    id: "toolu_abc".to_string(),
+                    name: "get_weather".to_string(),
+                    input: serde_json::json!({}),
+                },
+            ]),
+        }];
+
+        strip_thinking_blocks(&mut messages);
+        let json = serde_json::to_value(&messages[0].content).unwrap();
+        assert_eq!(
+            json,
+            serde_json::json!([
+                {"type": "text", "text": "Checking."},
+                {"type": "tool_use", "id": "toolu_abc", "name": "get_weather", "input": {}},
+            ])
+        );
+    }
+
+    #[test]
+    fn test_strip_thinking_blocks_thinking_only_becomes_empty_text() {
+        let mut messages = vec![ClaudeMessage {
+            role: "assistant".to_string(),
+            content: ClaudeContent::Blocks(vec![ClaudeContentBlock::Thinking {
+                thinking: "only thinking".to_string(),
+                signature: "sig".to_string(),
+            }]),
+        }];
+
+        strip_thinking_blocks(&mut messages);
+        // Same shape a thinking-only turn produced before content blocks
+        // existed.
+        assert!(matches!(
+            &messages[0].content,
+            ClaudeContent::Text(text) if text.is_empty()
+        ));
     }
 
     #[test]

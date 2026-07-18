@@ -2,7 +2,8 @@ use std::sync::{Arc, Mutex};
 
 use modular_agent_core::tool;
 use modular_agent_core::{
-    AgentError, AgentValue, AgentValueMap, Message, ModularAgent, ToolCall, ToolCallFunction, Usage,
+    AgentError, AgentValue, AgentValueMap, ContentBlock, Message, MessageContent, ModularAgent,
+    ToolCall, ToolCallFunction, Usage,
 };
 
 use crate::chat::ChatAgent;
@@ -416,7 +417,7 @@ pub fn message_to_chat_json(msg: &Message) -> serde_json::Value {
     match msg.role.as_str() {
         "system" => serde_json::json!({
             "role": "system",
-            "content": msg.content
+            "content": msg.text()
         }),
         "user" => {
             #[cfg(feature = "image")]
@@ -425,7 +426,7 @@ pub fn message_to_chat_json(msg: &Message) -> serde_json::Value {
                     return serde_json::json!({
                         "role": "user",
                         "content": [
-                            { "type": "text", "text": msg.content },
+                            { "type": "text", "text": msg.text() },
                             {
                                 "type": "image_url",
                                 "image_url": {
@@ -437,15 +438,21 @@ pub fn message_to_chat_json(msg: &Message) -> serde_json::Value {
                     });
                 }
             }
+            if let Some(parts) = chat_content_parts(msg) {
+                return serde_json::json!({
+                    "role": "user",
+                    "content": parts
+                });
+            }
             serde_json::json!({
                 "role": "user",
-                "content": msg.content
+                "content": msg.text()
             })
         }
         "assistant" => {
             let mut json = serde_json::json!({
                 "role": "assistant",
-                "content": msg.content
+                "content": msg.text()
             });
             if let Some(tool_calls) = &msg.tool_calls {
                 let tc: Vec<serde_json::Value> = tool_calls
@@ -468,14 +475,48 @@ pub fn message_to_chat_json(msg: &Message) -> serde_json::Value {
         }
         "tool" => serde_json::json!({
             "role": "tool",
-            "content": msg.content,
+            "content": msg.text(),
             "tool_call_id": msg.id.clone().unwrap_or_default()
         }),
         _ => serde_json::json!({
             "role": "user",
-            "content": msg.content
+            "content": msg.text()
         }),
     }
+}
+
+/// Chat Completions content parts for a message carrying image blocks, in
+/// block order. `None` when the content has no image blocks, so plain text
+/// keeps the legacy string form. Without this, image blocks accepted by
+/// Message deserialization would be silently dropped from the request.
+fn chat_content_parts(msg: &Message) -> Option<Vec<serde_json::Value>> {
+    let MessageContent::Blocks(blocks) = &msg.content else {
+        return None;
+    };
+    if !blocks
+        .iter()
+        .any(|b| matches!(b, ContentBlock::Image { .. }))
+    {
+        return None;
+    }
+    Some(
+        blocks
+            .iter()
+            .filter_map(|b| match b {
+                ContentBlock::Text { text } if !text.is_empty() => {
+                    Some(serde_json::json!({ "type": "text", "text": text }))
+                }
+                ContentBlock::Image { data, mime_type } => Some(serde_json::json!({
+                    "type": "image_url",
+                    "image_url": {
+                        "url": format!("data:{mime_type};base64,{data}"),
+                        "detail": "auto"
+                    }
+                })),
+                _ => None,
+            })
+            .collect(),
+    )
 }
 
 /// Convert Chat Completions API response message to internal Message.
@@ -489,7 +530,7 @@ pub fn message_from_chat_response(msg: &ChatResponseMessage) -> Message {
         .map(|r| format!("Refusal: {}", r))
         .unwrap_or_default();
     if !thinking.is_empty() {
-        message.thinking = Some(thinking);
+        message.content = crate::content::content_with_thinking(&thinking, &message.text());
     }
 
     if let Some(tool_calls) = &msg.tool_calls {
@@ -643,12 +684,12 @@ pub fn messages_to_response_input(
                 input_items.push(serde_json::json!({
                     "type": "function_call_output",
                     "call_id": call_id,
-                    "output": msg.content,
+                    "output": msg.text(),
                 }));
             }
             "assistant" => {
                 if let Some(tool_calls) = &msg.tool_calls {
-                    if !msg.content.is_empty() {
+                    if !msg.text().is_empty() {
                         build_response_message_item(&mut input_items, "assistant", msg)?;
                     }
                     for tc in tool_calls.iter() {
@@ -688,31 +729,52 @@ fn build_response_message_item(
     msg: &Message,
 ) -> Result<(), AgentError> {
     #[cfg(feature = "image")]
-    let item = if let Some(image) = &msg.image {
-        serde_json::json!({
+    if let Some(image) = &msg.image {
+        input_items.push(serde_json::json!({
             "type": "message",
             "role": role_str,
             "content": [
-                { "type": "input_text", "text": msg.content },
+                { "type": "input_text", "text": msg.text() },
                 { "type": "input_image", "detail": "auto", "image_url": image.get_base64() }
             ]
-        })
-    } else {
-        serde_json::json!({
+        }));
+        return Ok(());
+    }
+
+    // Image blocks map to input_image parts in block order; plain text keeps
+    // the legacy string form.
+    if let MessageContent::Blocks(blocks) = &msg.content
+        && blocks
+            .iter()
+            .any(|b| matches!(b, ContentBlock::Image { .. }))
+    {
+        let parts: Vec<serde_json::Value> = blocks
+            .iter()
+            .filter_map(|b| match b {
+                ContentBlock::Text { text } if !text.is_empty() => {
+                    Some(serde_json::json!({ "type": "input_text", "text": text }))
+                }
+                ContentBlock::Image { data, mime_type } => Some(serde_json::json!({
+                    "type": "input_image",
+                    "detail": "auto",
+                    "image_url": format!("data:{mime_type};base64,{data}")
+                })),
+                _ => None,
+            })
+            .collect();
+        input_items.push(serde_json::json!({
             "type": "message",
             "role": role_str,
-            "content": msg.content
-        })
-    };
+            "content": parts
+        }));
+        return Ok(());
+    }
 
-    #[cfg(not(feature = "image"))]
-    let item = serde_json::json!({
+    input_items.push(serde_json::json!({
         "type": "message",
         "role": role_str,
-        "content": msg.content
-    });
-
-    input_items.push(item);
+        "content": msg.text()
+    }));
     Ok(())
 }
 
@@ -917,9 +979,9 @@ mod tests {
             tool_calls: None,
         };
         let result = message_from_chat_response(&msg);
-        assert_eq!(result.content, "Hello!");
+        assert_eq!(result.text(), "Hello!");
         assert!(result.tool_calls.is_none());
-        assert!(result.thinking.is_none());
+        assert!(result.thinking().is_none());
     }
 
     #[test]
@@ -938,7 +1000,7 @@ mod tests {
             }]),
         };
         let result = message_from_chat_response(&msg);
-        assert_eq!(result.content, "I'll check.");
+        assert_eq!(result.text(), "I'll check.");
         let tool_calls = result.tool_calls.unwrap();
         assert_eq!(tool_calls.len(), 1);
         assert_eq!(tool_calls[0].function.name, "get_weather");
@@ -955,7 +1017,7 @@ mod tests {
         };
         let result = message_from_chat_response(&msg);
         assert_eq!(
-            result.thinking,
+            result.thinking(),
             Some("Refusal: I cannot do that.".to_string())
         );
     }
@@ -1464,6 +1526,56 @@ mod tests {
     }
 
     #[test]
+    fn test_response_input_user_image_blocks() {
+        let mut msg = Message::user(String::new());
+        msg.content = MessageContent::Blocks(vec![
+            ContentBlock::Image {
+                data: "iVBORw0KGgo=".to_string(),
+                mime_type: "image/png".to_string(),
+            },
+            ContentBlock::Text {
+                text: "what is this?".to_string(),
+            },
+        ]);
+        let messages = vector![AgentValue::from(msg)];
+        let items = messages_to_response_input(&messages).unwrap();
+
+        assert_eq!(items.len(), 1);
+        assert_eq!(
+            items[0]["content"],
+            serde_json::json!([
+                {"type": "input_image", "detail": "auto",
+                 "image_url": "data:image/png;base64,iVBORw0KGgo="},
+                {"type": "input_text", "text": "what is this?"},
+            ])
+        );
+    }
+
+    #[test]
+    fn test_message_to_chat_json_user_image_blocks() {
+        let mut msg = Message::user(String::new());
+        msg.content = MessageContent::Blocks(vec![
+            ContentBlock::Text {
+                text: "what is this?".to_string(),
+            },
+            ContentBlock::Image {
+                data: "iVBORw0KGgo=".to_string(),
+                mime_type: "image/png".to_string(),
+            },
+        ]);
+
+        let json = message_to_chat_json(&msg);
+        assert_eq!(
+            json["content"],
+            serde_json::json!([
+                {"type": "text", "text": "what is this?"},
+                {"type": "image_url", "image_url": {
+                    "url": "data:image/png;base64,iVBORw0KGgo=", "detail": "auto"}},
+            ])
+        );
+    }
+
+    #[test]
     fn test_response_input_assistant_without_tool_calls() {
         let messages = vector![AgentValue::from(Message::assistant("Hi there".to_string()))];
         let items = messages_to_response_input(&messages).unwrap();
@@ -1596,7 +1708,7 @@ mod tests {
             ]
         })];
         let msg = response_output_to_message(&output).unwrap();
-        assert_eq!(msg.content, "Hello!");
+        assert_eq!(msg.text(), "Hello!");
         assert!(msg.tool_calls.is_none());
     }
 
@@ -1616,7 +1728,7 @@ mod tests {
             }),
         ];
         let msg = response_output_to_message(&output).unwrap();
-        assert_eq!(msg.content, "I'll check.");
+        assert_eq!(msg.text(), "I'll check.");
         let tool_calls = msg.tool_calls.unwrap();
         assert_eq!(tool_calls.len(), 1);
         assert_eq!(tool_calls[0].function.name, "get_weather");
@@ -1633,7 +1745,7 @@ mod tests {
             ]
         })];
         let msg = response_output_to_message(&output).unwrap();
-        assert_eq!(msg.content, "[Refusal: I cannot do that.]");
+        assert_eq!(msg.text(), "[Refusal: I cannot do that.]");
     }
 
     // =========================================================================

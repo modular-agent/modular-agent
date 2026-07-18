@@ -339,7 +339,8 @@ impl ResponsesAgent {
 
         // Non-streaming turns still surface completion on the event port as a
         // single Done, so event consumers work regardless of the stream config.
-        self.emit_event(&ctx, MessageEvent::Done { message }).await?;
+        self.emit_event(&ctx, MessageEvent::Done { message })
+            .await?;
 
         // Output raw response
         let out_response = AgentValue::from_serialize(&response)?;
@@ -380,7 +381,11 @@ impl ResponsesAgent {
             // so an emit failure here must not mask it.
             if let Some(message) = crate::chat::stream_error_final(message) {
                 let _ = self
-                    .output(ctx.clone(), PORT_MESSAGE.to_string(), message.clone().into())
+                    .output(
+                        ctx.clone(),
+                        PORT_MESSAGE.to_string(),
+                        message.clone().into(),
+                    )
                     .await;
                 let _ = self
                     .emit_event(
@@ -442,7 +447,7 @@ impl ResponsesAgent {
             match event {
                 openai_client::ResponseStreamEvent::OutputTextDelta { delta } => {
                     content.push_str(&delta);
-                    message.content = content.clone();
+                    message.content = content.clone().into();
                     self.emit_event(
                         ctx,
                         MessageEvent::TextDelta {
@@ -544,7 +549,7 @@ impl ResponsesAgent {
                 }
                 openai_client::ResponseStreamEvent::Completed { response } => {
                     // Emit the final, non-streaming message so downstream agents act on it once.
-                    message.content = content.clone();
+                    message.content = content.clone().into();
                     if !tool_calls.is_empty() {
                         message.tool_calls = Some(tool_calls.clone().into());
                     }
@@ -588,7 +593,7 @@ impl ResponsesAgent {
         // recorded in the arms above). Guarantee exactly one streaming=false
         // final emit per turn so accumulated tool_calls still run.
         if message.streaming {
-            message.content = content;
+            message.content = content.into();
             if !tool_calls.is_empty() {
                 message.tool_calls = Some(tool_calls.into());
             }
@@ -626,7 +631,8 @@ impl ResponsesAgent {
             return Ok(());
         }
         let value: AgentValue = event.try_into()?;
-        self.output(ctx.clone(), PORT_EVENT.to_string(), value).await
+        self.output(ctx.clone(), PORT_EVENT.to_string(), value)
+            .await
     }
 }
 
@@ -778,7 +784,7 @@ mod tests {
             assert_eq!(msg.stop_reason, None, "partial emits must keep None");
         };
         assert_eq!(final_msg.stop_reason.as_deref(), Some("length"));
-        assert_eq!(final_msg.content, "Hi");
+        assert_eq!(final_msg.text(), "Hi");
         assert_eq!(final_msg.id.as_deref(), Some("m1"));
         // No usage object on this terminal event, so it legitimately stays None
         assert_eq!(final_msg.usage, None);
@@ -917,10 +923,7 @@ mod tests {
         );
 
         assert_eq!(events[2].get("index").unwrap().as_i64(), Some(0));
-        assert_eq!(
-            events[3].get_str("delta"),
-            Some(r#"{"city":"Tokyo"}"#)
-        );
+        assert_eq!(events[3].get_str("delta"), Some(r#"{"city":"Tokyo"}"#));
         assert_eq!(
             events[4]
                 .get("tool_call")
@@ -985,7 +988,7 @@ mod tests {
         let (_ctx, value) = probe_rx.recv().await.unwrap();
         let msg = value.as_message().unwrap();
         assert!(!msg.streaming);
-        assert_eq!(msg.content, "Hi");
+        assert_eq!(msg.text(), "Hi");
         assert_eq!(msg.stop_reason.as_deref(), Some("stop"));
 
         ma.quit();

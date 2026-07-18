@@ -13,7 +13,7 @@
 use std::collections::{HashMap, HashSet};
 
 use im::Vector;
-use modular_agent_core::{AgentValue, Message, ToolCall};
+use modular_agent_core::{AgentValue, ContentBlock, Message, MessageContent, ToolCall};
 
 use crate::provider::ProviderKind;
 
@@ -21,7 +21,6 @@ use crate::provider::ProviderKind;
 /// (mirrors pi-agent's `insertSyntheticToolResults`).
 const NO_RESULT_CONTENT: &str = "No result provided";
 
-#[cfg(feature = "image")]
 const IMAGE_PLACEHOLDER: &str = "[Image omitted: model does not support image input]";
 
 /// Roles the target's converter handles natively. "developer" survives only
@@ -189,14 +188,18 @@ fn plan_call_ids(
 fn normalize_single(msg: &Message, target: ProviderKind, demote_images: bool) -> Option<Message> {
     let role_change = !is_known_role(target, &msg.role);
 
+    // Image blocks don't require the image feature (they are plain base64
+    // data), so they are checked unconditionally.
+    let has_block_images = matches!(
+        &msg.content,
+        MessageContent::Blocks(blocks)
+            if blocks.iter().any(|b| matches!(b, ContentBlock::Image { .. }))
+    );
     #[cfg(feature = "image")]
-    let image_change = demote_images && msg.image.is_some();
+    let has_attached_image = msg.image.is_some();
     #[cfg(not(feature = "image"))]
-    let image_change = {
-        // Without the image feature this crate never attaches images.
-        let _ = demote_images;
-        false
-    };
+    let has_attached_image = false;
+    let image_change = demote_images && (has_attached_image || has_block_images);
 
     if !role_change && !image_change {
         return None;
@@ -205,13 +208,16 @@ fn normalize_single(msg: &Message, target: ProviderKind, demote_images: bool) ->
     if role_change {
         m.role = "user".to_string();
     }
-    #[cfg(feature = "image")]
     if image_change {
-        m.image = None;
-        m.content = if m.content.is_empty() {
-            IMAGE_PLACEHOLDER.to_string()
+        #[cfg(feature = "image")]
+        {
+            m.image = None;
+        }
+        let text = m.text();
+        m.content = if text.is_empty() {
+            IMAGE_PLACEHOLDER.to_string().into()
         } else {
-            format!("{}\n\n{}", m.content, IMAGE_PLACEHOLDER)
+            format!("{}\n\n{}", text, IMAGE_PLACEHOLDER).into()
         };
     }
     Some(m)
@@ -239,8 +245,8 @@ fn prepare_plain(
 /// Demote it to plain user text so the content survives.
 fn demote_orphan_tool_result(msg: &Message) -> Message {
     let content = match &msg.tool_name {
-        Some(name) => format!("[Tool result from '{}']\n{}", name, msg.content),
-        None => format!("[Tool result]\n{}", msg.content),
+        Some(name) => format!("[Tool result from '{}']\n{}", name, msg.text()),
+        None => format!("[Tool result]\n{}", msg.text()),
     };
     Message::user(content)
 }
@@ -460,7 +466,7 @@ mod tests {
         // Result side carries the same id so the pair stays matched.
         assert_eq!(get(&out, 2).id.as_deref(), Some(id));
         // No synthetic message was inserted.
-        assert_eq!(get(&out, 2).content, "22C");
+        assert_eq!(get(&out, 2).text(), "22C");
     }
 
     #[test]
@@ -627,13 +633,13 @@ mod tests {
         assert_eq!(out.len(), 5);
         let synth = get(&out, 3);
         assert_eq!(synth.role, "tool");
-        assert_eq!(synth.content, NO_RESULT_CONTENT);
+        assert_eq!(synth.text(), NO_RESULT_CONTENT);
         assert_eq!(synth.is_error, Some(true));
         assert_eq!(synth.id.as_deref(), Some("call_b"));
         assert_eq!(synth.tool_name.as_deref(), Some("tool_b"));
         // The user turn follows the synthetic result.
         assert_eq!(get(&out, 4).role, "user");
-        assert_eq!(get(&out, 4).content, "next");
+        assert_eq!(get(&out, 4).text(), "next");
     }
 
     #[test]
@@ -647,7 +653,7 @@ mod tests {
         assert_eq!(out.len(), 3);
         let synth = get(&out, 2);
         assert_eq!(synth.role, "tool");
-        assert_eq!(synth.content, NO_RESULT_CONTENT);
+        assert_eq!(synth.text(), NO_RESULT_CONTENT);
         assert_eq!(synth.is_error, Some(true));
         assert_eq!(synth.id.as_deref(), Some("call_x"));
     }
@@ -694,10 +700,10 @@ mod tests {
             assert_eq!(get(&out, i).role, "user");
             assert_eq!(get(&out, i).id, None);
         }
-        assert!(get(&out, 0).content.contains("trimmed result"));
-        assert!(get(&out, 0).content.contains("tool_a"));
+        assert!(get(&out, 0).text().contains("trimmed result"));
+        assert!(get(&out, 0).text().contains("tool_a"));
         assert_eq!(get(&out, 2).role, "user");
-        assert_eq!(get(&out, 2).content, "next");
+        assert_eq!(get(&out, 2).text(), "next");
     }
 
     #[test]
@@ -718,7 +724,7 @@ mod tests {
         assert_eq!(synth.id.as_deref(), Some("call_a"));
         let late = get(&out, 3);
         assert_eq!(late.role, "user");
-        assert!(late.content.contains("real result"));
+        assert!(late.text().contains("real result"));
         // Exactly one tool-role message for the call.
         let tool_count = out
             .iter()
@@ -738,9 +744,9 @@ mod tests {
 
         assert_eq!(out.len(), 3);
         assert_eq!(get(&out, 1).role, "tool");
-        assert_eq!(get(&out, 1).content, "first");
+        assert_eq!(get(&out, 1).text(), "first");
         assert_eq!(get(&out, 2).role, "user");
-        assert!(get(&out, 2).content.contains("second"));
+        assert!(get(&out, 2).text().contains("second"));
     }
 
     // -- mismatched-id recovery (old Claude double-UUID histories) --
@@ -757,7 +763,7 @@ mod tests {
 
         assert_eq!(out.len(), 2);
         assert_eq!(get(&out, 1).id.as_deref(), Some("uuid_call_side"));
-        assert_eq!(get(&out, 1).content, "22C");
+        assert_eq!(get(&out, 1).text(), "22C");
         assert_eq!(get(&out, 1).role, "tool");
     }
 
@@ -797,9 +803,9 @@ mod tests {
         let idb = ids[1].as_deref().expect("idb");
         assert_ne!(ida, idb);
         assert_eq!(get(&out, 1).id.as_deref(), Some(idb));
-        assert_eq!(get(&out, 1).content, "rb");
+        assert_eq!(get(&out, 1).text(), "rb");
         assert_eq!(get(&out, 2).id.as_deref(), Some(ida));
-        assert_eq!(get(&out, 2).content, "ra");
+        assert_eq!(get(&out, 2).text(), "ra");
     }
 
     // -- no-op on clean histories --
@@ -837,7 +843,7 @@ mod tests {
         let ids = call_ids(get(&out, 1));
         assert_eq!(ids[0].as_deref(), Some("toolu_ok1"));
         assert_eq!(get(&out, 2).id.as_deref(), Some("toolu_ok1"));
-        assert_eq!(get(&out, 2).content, "done");
+        assert_eq!(get(&out, 2).text(), "done");
     }
 
     #[test]
@@ -867,7 +873,7 @@ mod tests {
         assert_eq!(out[1].as_str(), Some("interleaved"));
         assert_eq!(get(&out, 2).role, "tool");
         assert_eq!(get(&out, 2).id.as_deref(), Some("call_a"));
-        assert_eq!(get(&out, 2).content, "real");
+        assert_eq!(get(&out, 2).text(), "real");
     }
 
     // -- role fallback --
@@ -880,7 +886,7 @@ mod tests {
         ))];
         let out = prepare_messages(&history, ProviderKind::Ollama, false);
         assert_eq!(get(&out, 0).role, "user");
-        assert_eq!(get(&out, 0).content, "legacy");
+        assert_eq!(get(&out, 0).text(), "legacy");
     }
 
     #[test]
@@ -906,7 +912,7 @@ mod tests {
             ))];
             let out = prepare_messages(&history, target, false);
             assert_eq!(get(&out, 0).role, "user");
-            assert_eq!(get(&out, 0).content, "policy");
+            assert_eq!(get(&out, 0).text(), "policy");
         }
     }
 
@@ -929,8 +935,8 @@ mod tests {
 
         let msg = get(&out, 0);
         assert!(msg.image.is_none());
-        assert!(msg.content.contains("what is this?"), "{}", msg.content);
-        assert!(msg.content.contains(IMAGE_PLACEHOLDER), "{}", msg.content);
+        assert!(msg.text().contains("what is this?"), "{}", msg.text());
+        assert!(msg.text().contains(IMAGE_PLACEHOLDER), "{}", msg.text());
     }
 
     #[cfg(feature = "image")]
@@ -941,7 +947,42 @@ mod tests {
 
         let msg = get(&out, 0);
         assert!(msg.image.is_none());
-        assert_eq!(msg.content, IMAGE_PLACEHOLDER);
+        assert_eq!(msg.text(), IMAGE_PLACEHOLDER);
+    }
+
+    #[test]
+    fn image_blocks_demoted_to_placeholder_for_non_vision_target() {
+        let mut msg = Message::user(String::new());
+        msg.content = MessageContent::Blocks(vec![
+            ContentBlock::Image {
+                data: "iVBORw0KGgo=".to_string(),
+                mime_type: "image/png".to_string(),
+            },
+            ContentBlock::Text {
+                text: "what is this?".to_string(),
+            },
+        ]);
+        let history = vector![AgentValue::from(msg)];
+        let out = prepare_messages(&history, ProviderKind::OpenAI, true);
+
+        let msg = get(&out, 0);
+        assert!(msg.text().contains("what is this?"), "{}", msg.text());
+        assert!(msg.text().contains(IMAGE_PLACEHOLDER), "{}", msg.text());
+        // The image data itself is gone from the outgoing content.
+        assert!(matches!(&msg.content, MessageContent::Text(_)));
+    }
+
+    #[test]
+    fn image_blocks_preserved_for_vision_target() {
+        let mut msg = Message::user(String::new());
+        msg.content = MessageContent::Blocks(vec![ContentBlock::Image {
+            data: "iVBORw0KGgo=".to_string(),
+            mime_type: "image/png".to_string(),
+        }]);
+        let history = vector![AgentValue::from(msg.clone())];
+        let out = prepare_messages(&history, ProviderKind::OpenAI, false);
+
+        assert_eq!(get(&out, 0).content, msg.content);
     }
 
     #[cfg(feature = "image")]
@@ -952,6 +993,6 @@ mod tests {
 
         let msg = get(&out, 0);
         assert!(msg.image.is_some());
-        assert_eq!(msg.content, "what is this?");
+        assert_eq!(msg.text(), "what is this?");
     }
 }

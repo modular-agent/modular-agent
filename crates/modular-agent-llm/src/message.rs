@@ -1,7 +1,7 @@
 use im::{Vector, vector};
 use modular_agent_core::{
     Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
-    Message, ModularAgent, async_trait, modular_agent,
+    ContentBlock, Message, MessageContent, ModularAgent, async_trait, modular_agent,
 };
 
 const CATEGORY: &str = "LLM/Message";
@@ -423,7 +423,7 @@ impl AsAgent for MessagesForPromptAgent {
         let mut system_message: Option<AgentValue> = None;
         if messages.front().unwrap().as_message().unwrap().role == "system" {
             let msg = messages.pop_front().unwrap();
-            total_size += msg.as_message().unwrap().content.len();
+            total_size += msg.as_message().unwrap().text().len();
             system_message = Some(msg);
         }
 
@@ -432,7 +432,8 @@ impl AsAgent for MessagesForPromptAgent {
         while !messages.is_empty() {
             let value = messages.pop_back().unwrap();
             let msg = value.as_message().unwrap();
-            let mut msg_size = msg.content.len();
+            #[cfg_attr(not(feature = "image"), allow(unused_mut))]
+            let mut msg_size = msg.text().len();
 
             #[cfg(feature = "image")]
             {
@@ -448,10 +449,7 @@ impl AsAgent for MessagesForPromptAgent {
             }
             total_size += msg_size;
 
-            if msg.thinking.is_some() {
-                // Remove thinking
-                let mut m = msg.clone();
-                m.thinking = None;
+            if let Some(m) = strip_unsigned_thinking(msg) {
                 selected_messages.push(AgentValue::message(m));
             } else {
                 selected_messages.push(value);
@@ -480,6 +478,46 @@ impl AsAgent for MessagesForPromptAgent {
     }
 }
 
+/// Drop unsigned thinking blocks to save prompt budget when trimming
+/// history, flattening back to the legacy string form when only text
+/// remains. Signed and redacted blocks survive untouched: Claude requires
+/// them verbatim when an extended-thinking + tool-use turn is replayed,
+/// so removing them would fail the continuation request. Returns `None`
+/// when the message has nothing to strip.
+fn strip_unsigned_thinking(msg: &Message) -> Option<Message> {
+    fn is_unsigned(block: &ContentBlock) -> bool {
+        matches!(
+            block,
+            ContentBlock::Thinking {
+                signature: None,
+                redacted: false,
+                ..
+            }
+        )
+    }
+
+    let MessageContent::Blocks(blocks) = &msg.content else {
+        return None;
+    };
+    if !blocks.iter().any(is_unsigned) {
+        return None;
+    }
+    let kept: Vec<ContentBlock> = blocks.iter().filter(|b| !is_unsigned(b)).cloned().collect();
+    let mut m = msg.clone();
+    m.content = if kept.iter().all(|b| matches!(b, ContentBlock::Text { .. })) {
+        kept.iter()
+            .filter_map(|b| match b {
+                ContentBlock::Text { text } => Some(text.as_str()),
+                _ => None,
+            })
+            .collect::<String>()
+            .into()
+    } else {
+        MessageContent::Blocks(kept)
+    };
+    Some(m)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -495,7 +533,7 @@ mod tests {
         assert!(result.is_message());
         let result_msg = result.as_message().unwrap();
         assert_eq!(result_msg.role, "user");
-        assert_eq!(result_msg.content, "Hello");
+        assert_eq!(result_msg.text(), "Hello");
 
         // string + assistant
         // result should be an array with user and assistant messages
@@ -507,10 +545,10 @@ mod tests {
         assert_eq!(arr.len(), 2);
         let msg0 = &arr[0].as_message().unwrap();
         assert_eq!(msg0.role, "user");
-        assert_eq!(msg0.content, "How are you?");
+        assert_eq!(msg0.text(), "How are you?");
         let msg1 = &arr[1].as_message().unwrap();
         assert_eq!(msg1.role, "assistant");
-        assert_eq!(msg1.content, "Hello");
+        assert_eq!(msg1.text(), "Hello");
 
         // object + user
         // result should be an array with the original object and the new user message
@@ -525,10 +563,10 @@ mod tests {
         assert_eq!(arr.len(), 2);
         let msg0 = &arr[0].as_message().unwrap();
         assert_eq!(msg0.role, "system");
-        assert_eq!(msg0.content, "I am fine.");
+        assert_eq!(msg0.text(), "I am fine.");
         let msg1 = &arr[1].as_message().unwrap();
         assert_eq!(msg1.role, "user");
-        assert_eq!(msg1.content, "Hello");
+        assert_eq!(msg1.text(), "Hello");
 
         // array + user
         // result should be the original array with the new user message appended
@@ -549,13 +587,13 @@ mod tests {
         assert_eq!(arr.len(), 3);
         let msg0 = &arr[0].as_message().unwrap();
         assert_eq!(msg0.role, "system");
-        assert_eq!(msg0.content, "Welcome!");
+        assert_eq!(msg0.text(), "Welcome!");
         let msg1 = &arr[1].as_message().unwrap();
         assert_eq!(msg1.role, "assistant");
-        assert_eq!(msg1.content, "Hello!");
+        assert_eq!(msg1.text(), "Hello!");
         let msg2 = &arr[2].as_message().unwrap();
         assert_eq!(msg2.role, "user");
-        assert_eq!(msg2.content, "How are you?");
+        assert_eq!(msg2.text(), "How are you?");
 
         // image + user
         #[cfg(feature = "image")]
@@ -568,8 +606,82 @@ mod tests {
             assert_eq!(arr.len(), 1);
             let msg0 = &arr[0].as_message().unwrap();
             assert_eq!(msg0.role, "user");
-            assert_eq!(msg0.content, "Check this image");
+            assert_eq!(msg0.text(), "Check this image");
             assert!(msg0.image.is_some());
         }
+    }
+
+    #[test]
+    fn test_strip_unsigned_thinking_flattens_to_text() {
+        let mut msg = Message::assistant(String::new());
+        msg.content = MessageContent::Blocks(vec![
+            ContentBlock::Thinking {
+                thinking: "unsigned trace".to_string(),
+                signature: None,
+                redacted: false,
+            },
+            ContentBlock::Text {
+                text: "answer".to_string(),
+            },
+        ]);
+        let stripped = strip_unsigned_thinking(&msg).expect("should strip");
+        assert_eq!(stripped.content, MessageContent::Text("answer".to_string()));
+    }
+
+    #[test]
+    fn test_strip_unsigned_thinking_keeps_signed_and_redacted_blocks() {
+        // Signed / redacted thinking must survive trimming: Claude replays
+        // them on extended-thinking + tool-use continuations.
+        let signed = ContentBlock::Thinking {
+            thinking: "signed trace".to_string(),
+            signature: Some("sig123".to_string()),
+            redacted: false,
+        };
+        let redacted = ContentBlock::Thinking {
+            thinking: "ciphertext".to_string(),
+            signature: None,
+            redacted: true,
+        };
+        let text = ContentBlock::Text {
+            text: "answer".to_string(),
+        };
+
+        let mut msg = Message::assistant(String::new());
+        msg.content = MessageContent::Blocks(vec![
+            signed.clone(),
+            ContentBlock::Thinking {
+                thinking: "unsigned trace".to_string(),
+                signature: None,
+                redacted: false,
+            },
+            redacted.clone(),
+            text.clone(),
+        ]);
+        let stripped = strip_unsigned_thinking(&msg).expect("should strip");
+        assert_eq!(
+            stripped.content,
+            MessageContent::Blocks(vec![signed, redacted, text])
+        );
+    }
+
+    #[test]
+    fn test_strip_unsigned_thinking_none_when_nothing_to_strip() {
+        // Plain text and fully signed content pass through untouched so the
+        // caller keeps the original AgentValue.
+        let msg = Message::assistant("plain".to_string());
+        assert!(strip_unsigned_thinking(&msg).is_none());
+
+        let mut msg = Message::assistant(String::new());
+        msg.content = MessageContent::Blocks(vec![
+            ContentBlock::Thinking {
+                thinking: "signed".to_string(),
+                signature: Some("sig".to_string()),
+                redacted: false,
+            },
+            ContentBlock::Text {
+                text: "answer".to_string(),
+            },
+        ]);
+        assert!(strip_unsigned_thinking(&msg).is_none());
     }
 }

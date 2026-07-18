@@ -412,7 +412,8 @@ impl ChatAgent {
                 )
                 .await?;
 
-                self.emit_event(&ctx, MessageEvent::Done { message }).await?;
+                self.emit_event(&ctx, MessageEvent::Done { message })
+                    .await?;
 
                 let out_response = AgentValue::from_serialize(&res)?;
                 self.output(ctx.clone(), PORT_RESPONSE.to_string(), out_response)
@@ -439,7 +440,8 @@ impl ChatAgent {
             return Ok(());
         }
         let value: AgentValue = event.try_into()?;
-        self.output(ctx.clone(), PORT_EVENT.to_string(), value).await
+        self.output(ctx.clone(), PORT_EVENT.to_string(), value)
+            .await
     }
 
     /// Emit a final same-id message marking a mid-stream failure so message
@@ -458,7 +460,11 @@ impl ChatAgent {
             return;
         };
         let _ = self
-            .output(ctx.clone(), PORT_MESSAGE.to_string(), message.clone().into())
+            .output(
+                ctx.clone(),
+                PORT_MESSAGE.to_string(),
+                message.clone().into(),
+            )
             .await;
         let _ = self
             .emit_event(
@@ -521,7 +527,8 @@ impl ChatAgent {
                 if let Some(ref delta_content) = c.delta.content {
                     content.push_str(delta_content);
                     if !delta_content.is_empty() {
-                        message.content = content.clone();
+                        message.content =
+                            crate::content::content_with_thinking(&thinking, &content);
                         self.emit_event(
                             ctx,
                             MessageEvent::TextDelta {
@@ -574,7 +581,7 @@ impl ChatAgent {
                 if let Some(refusal) = &c.delta.refusal {
                     let delta = format!("Refusal: {}", refusal);
                     thinking.push_str(&delta);
-                    message.thinking = Some(thinking.clone());
+                    message.content = crate::content::content_with_thinking(&thinking, &content);
                     self.emit_event(
                         ctx,
                         MessageEvent::ThinkingDelta {
@@ -592,10 +599,7 @@ impl ChatAgent {
                 usage = Some(openai_client::usage_from_openai(u));
             }
 
-            message.content = content.clone();
-            if !thinking.is_empty() {
-                message.thinking = Some(thinking.clone());
-            }
+            message.content = crate::content::content_with_thinking(&thinking, &content);
 
             if emit_partials {
                 self.output(
@@ -614,10 +618,7 @@ impl ChatAgent {
 
         // All in-loop emits are partial; emit the finalized message exactly
         // once so tool calls are executed a single time per turn.
-        message.content = content;
-        if !thinking.is_empty() {
-            message.thinking = Some(thinking);
-        }
+        message.content = crate::content::content_with_thinking(&thinking, &content);
         // The Chat Completions stream has no per-call end marker, so
         // ToolCallEnd events fire at finalization time, each partial extended
         // by the calls finalized so far (still streaming=true, before Done).
@@ -757,6 +758,18 @@ impl ChatAgent {
             request.top_p = Some(top_p);
         }
 
+        // Thinking blocks may only be sent while the request enables
+        // extended thinking (the API rejects them otherwise), so a history
+        // recorded with thinking on must degrade to text once the option is
+        // removed. Decided after the options merge, where the final
+        // thinking config is known.
+        if !matches!(
+            request.thinking,
+            Some(claude_client::ClaudeThinkingConfig::Enabled { .. })
+        ) {
+            claude_client::strip_thinking_blocks(&mut request.messages);
+        }
+
         // Applied after the options merge so markers survive the round-trip
         // and options cannot accidentally strip them.
         claude_client::apply_cache_control(&mut request, cache_retention);
@@ -792,7 +805,8 @@ impl ChatAgent {
             )
             .await?;
 
-            self.emit_event(&ctx, MessageEvent::Done { message }).await?;
+            self.emit_event(&ctx, MessageEvent::Done { message })
+                .await?;
 
             let out_response = AgentValue::from_serialize(&response)?;
             self.output(ctx.clone(), PORT_RESPONSE.to_string(), out_response)
@@ -814,6 +828,7 @@ impl ChatAgent {
         message: &mut Message,
     ) -> Result<(), AgentError> {
         use futures::StreamExt;
+        use modular_agent_core::ContentBlock;
 
         // get_bool_or with an explicit true keeps the fallback aligned with
         // the declared config default when the key is absent (old spec not
@@ -830,8 +845,6 @@ impl ChatAgent {
         )
         .await?;
 
-        let mut content = String::new();
-        let mut thinking = String::new();
         let mut tool_calls: Vec<ToolCall> = Vec::new();
         let mut stop_reason: Option<String> = None;
         // Accumulated field-wise: input/cache token counts arrive once on
@@ -839,8 +852,12 @@ impl ChatAgent {
         // back until MessageStop so partial emissions never carry usage.
         let mut usage: Option<Usage> = None;
 
-        // Track block types by index
-        let mut block_types: std::collections::HashMap<usize, String> =
+        // Content accumulates as ordered blocks so thinking signatures and
+        // redacted payloads survive for replay. block_pos maps the
+        // provider's content-block index to the position in `blocks`;
+        // tool_use blocks are accumulated separately and have no entry.
+        let mut blocks: Vec<ContentBlock> = Vec::new();
+        let mut block_pos: std::collections::HashMap<usize, usize> =
             std::collections::HashMap::new();
         let mut current_tool_id: Option<String> = None;
         let mut current_tool_name: Option<String> = None;
@@ -854,11 +871,11 @@ impl ChatAgent {
                     index,
                     content_block,
                 } => match &content_block {
-                    claude_client::ClaudeResponseBlock::Text { .. } => {
-                        block_types.insert(index, "text".to_string());
+                    claude_client::ClaudeResponseBlock::Text { text } => {
+                        block_pos.insert(index, blocks.len());
+                        blocks.push(ContentBlock::Text { text: text.clone() });
                     }
                     claude_client::ClaudeResponseBlock::ToolUse { id, name, .. } => {
-                        block_types.insert(index, "tool_use".to_string());
                         current_tool_id = Some(id.clone());
                         current_tool_name = Some(name.clone());
                         current_tool_arguments.clear();
@@ -875,18 +892,36 @@ impl ChatAgent {
                         )
                         .await?;
                     }
-                    claude_client::ClaudeResponseBlock::Thinking { .. } => {
-                        block_types.insert(index, "thinking".to_string());
+                    claude_client::ClaudeResponseBlock::Thinking {
+                        thinking,
+                        signature,
+                    } => {
+                        block_pos.insert(index, blocks.len());
+                        blocks.push(ContentBlock::Thinking {
+                            thinking: thinking.clone(),
+                            signature: (!signature.is_empty()).then(|| signature.clone()),
+                            redacted: false,
+                        });
                     }
-                    claude_client::ClaudeResponseBlock::RedactedThinking { .. } => {
-                        block_types.insert(index, "redacted_thinking".to_string());
-                        let delta = if thinking.is_empty() {
-                            "[redacted]".to_string()
-                        } else {
+                    claude_client::ClaudeResponseBlock::RedactedThinking { data } => {
+                        // The encrypted payload is stored verbatim for
+                        // replay; the human-readable event stream gets a
+                        // placeholder instead.
+                        let delta = if blocks
+                            .iter()
+                            .any(|b| matches!(b, ContentBlock::Thinking { .. }))
+                        {
                             "\n[redacted]".to_string()
+                        } else {
+                            "[redacted]".to_string()
                         };
-                        thinking.push_str(&delta);
-                        message.thinking = Some(thinking.clone());
+                        block_pos.insert(index, blocks.len());
+                        blocks.push(ContentBlock::Thinking {
+                            thinking: data.clone(),
+                            signature: None,
+                            redacted: true,
+                        });
+                        message.content = crate::content::content_from_blocks(&blocks);
                         self.emit_event(
                             ctx,
                             MessageEvent::ThinkingDelta {
@@ -898,15 +933,12 @@ impl ChatAgent {
                     }
                 },
                 claude_client::ClaudeStreamEvent::ContentBlockDelta { index, delta } => {
-                    let block_type = block_types.get(&index).map(|s| s.as_str());
+                    let block = block_pos.get(&index).map(|pos| &mut blocks[*pos]);
                     match delta {
                         claude_client::ClaudeDelta::TextDelta { text } => {
-                            if block_type == Some("text") {
-                                content.push_str(&text);
-                                message.content = content.clone();
-                                if !thinking.is_empty() {
-                                    message.thinking = Some(thinking.clone());
-                                }
+                            if let Some(ContentBlock::Text { text: acc }) = block {
+                                acc.push_str(&text);
+                                message.content = crate::content::content_from_blocks(&blocks);
                                 if !tool_calls.is_empty() {
                                     message.tool_calls = Some(tool_calls.clone().into());
                                 }
@@ -929,16 +961,18 @@ impl ChatAgent {
                             }
                         }
                         claude_client::ClaudeDelta::ThinkingDelta { thinking: thought } => {
-                            thinking.push_str(&thought);
-                            message.thinking = Some(thinking.clone());
-                            self.emit_event(
-                                ctx,
-                                MessageEvent::ThinkingDelta {
-                                    delta: thought,
-                                    partial: message.clone(),
-                                },
-                            )
-                            .await?;
+                            if let Some(ContentBlock::Thinking { thinking: acc, .. }) = block {
+                                acc.push_str(&thought);
+                                message.content = crate::content::content_from_blocks(&blocks);
+                                self.emit_event(
+                                    ctx,
+                                    MessageEvent::ThinkingDelta {
+                                        delta: thought,
+                                        partial: message.clone(),
+                                    },
+                                )
+                                .await?;
+                            }
                         }
                         claude_client::ClaudeDelta::InputJsonDelta { partial_json } => {
                             current_tool_arguments.push_str(&partial_json);
@@ -954,8 +988,13 @@ impl ChatAgent {
                             )
                             .await?;
                         }
-                        claude_client::ClaudeDelta::SignatureDelta { .. } => {
-                            // Skip signature deltas
+                        claude_client::ClaudeDelta::SignatureDelta { signature } => {
+                            // Signatures may arrive fragmented; accumulate
+                            // them onto the current thinking block so the
+                            // turn can be replayed with tool use.
+                            if let Some(ContentBlock::Thinking { signature: sig, .. }) = block {
+                                sig.get_or_insert_with(String::new).push_str(&signature);
+                            }
                         }
                     }
                 }
@@ -975,10 +1014,7 @@ impl ChatAgent {
                         tool_calls.push(tool_call.clone());
                         current_tool_arguments.clear();
 
-                        message.content = content.clone();
-                        if !thinking.is_empty() {
-                            message.thinking = Some(thinking.clone());
-                        }
+                        message.content = crate::content::content_from_blocks(&blocks);
                         message.tool_calls = Some(tool_calls.clone().into());
                         self.emit_event(
                             ctx,
@@ -1016,10 +1052,7 @@ impl ChatAgent {
                     message.streaming = false;
                     message.stop_reason = stop_reason.clone();
                     message.usage = usage;
-                    message.content = content.clone();
-                    if !thinking.is_empty() {
-                        message.thinking = Some(thinking.clone());
-                    }
+                    message.content = crate::content::content_from_blocks(&blocks);
                     if !tool_calls.is_empty() {
                         message.tool_calls = Some(tool_calls.clone().into());
                     }
@@ -1185,7 +1218,8 @@ impl ChatAgent {
             )
             .await?;
 
-            self.emit_event(&ctx, MessageEvent::Done { message }).await?;
+            self.emit_event(&ctx, MessageEvent::Done { message })
+                .await?;
 
             let out_response = AgentValue::from_serialize(&res)?;
             self.output(ctx.clone(), PORT_RESPONSE.to_string(), out_response)
@@ -1239,10 +1273,7 @@ impl ChatAgent {
             // Delta events are emitted before message.streaming is flipped
             // for a done=true chunk, so their partials always carry
             // streaming=true even when the data arrived on the final chunk.
-            message.content = content.clone();
-            if !thinking.is_empty() {
-                message.thinking = Some(thinking.clone());
-            }
+            message.content = crate::content::content_with_thinking(&thinking, &content);
             if !res.message.content.is_empty() {
                 self.emit_event(
                     ctx,
@@ -1473,7 +1504,7 @@ mod tests {
 
         let final_msg = recv_final_message(&probe_rx).await;
         assert_eq!(final_msg.stop_reason.as_deref(), Some("length"));
-        assert_eq!(final_msg.content, "Hello");
+        assert_eq!(final_msg.text(), "Hello");
         assert_eq!(final_msg.id.as_deref(), Some("m1"));
         assert_eq!(
             final_msg.usage,
@@ -1518,7 +1549,7 @@ mod tests {
 
         let final_msg = recv_final_message(&probe_rx).await;
         assert_eq!(final_msg.stop_reason.as_deref(), Some("error"));
-        assert_eq!(final_msg.content, "partial");
+        assert_eq!(final_msg.text(), "partial");
         assert_eq!(final_msg.id.as_deref(), Some("m1"));
 
         ma.quit();
@@ -1559,7 +1590,7 @@ mod tests {
 
         let final_msg = recv_final_message(&probe_rx).await;
         assert_eq!(final_msg.stop_reason.as_deref(), Some("length"));
-        assert_eq!(final_msg.content, "Hi");
+        assert_eq!(final_msg.text(), "Hi");
         assert_eq!(final_msg.id.as_deref(), Some("m1"));
         assert_eq!(
             final_msg.usage,
@@ -1604,7 +1635,7 @@ mod tests {
 
         let final_msg = recv_final_message(&probe_rx).await;
         assert_eq!(final_msg.stop_reason.as_deref(), Some("stop"));
-        assert_eq!(final_msg.content, "Hello");
+        assert_eq!(final_msg.text(), "Hello");
         assert_eq!(final_msg.id.as_deref(), Some("m1"));
         assert_eq!(
             final_msg.usage,
@@ -1644,7 +1675,7 @@ mod tests {
         assert!(!message.streaming);
         assert_eq!(message.stop_reason.as_deref(), Some("error"));
         assert!(message.tool_calls.is_none());
-        assert_eq!(message.content, "partial");
+        assert_eq!(message.text(), "partial");
         assert_eq!(message.id.as_deref(), Some("msg-1"));
     }
 
@@ -1800,7 +1831,7 @@ mod tests {
         let (_ctx, value) = probe_rx.recv().await.unwrap();
         let msg = value.as_message().unwrap();
         assert!(!msg.streaming);
-        assert_eq!(msg.content, "Hello");
+        assert_eq!(msg.text(), "Hello");
         assert_eq!(msg.stop_reason.as_deref(), Some("stop"));
 
         ma.quit();
@@ -1815,6 +1846,8 @@ mod tests {
             r#"{"type":"message_start","message":{"id":"msg_1","usage":{"input_tokens":5,"output_tokens":1}}}"#,
             r#"{"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":"","signature":""}}"#,
             r#"{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"Let me think"}}"#,
+            r#"{"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"sig-"}}"#,
+            r#"{"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"abc"}}"#,
             r#"{"type":"content_block_stop","index":0}"#,
             r#"{"type":"content_block_start","index":1,"content_block":{"type":"text","text":""}}"#,
             r#"{"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"Hi"}}"#,
@@ -1858,8 +1891,9 @@ mod tests {
         );
 
         assert_eq!(events[1]["delta"], serde_json::json!("Let me think"));
+        // Thinking-bearing partials serialize content as a block array.
         assert_eq!(
-            events[1]["partial"]["thinking"],
+            events[1]["partial"]["content"][0]["thinking"],
             serde_json::json!("Let me think")
         );
 
@@ -1874,7 +1908,14 @@ mod tests {
         );
 
         let done = &events[6]["message"];
-        assert_eq!(done["content"], serde_json::json!("Hi"));
+        // Ordered blocks with the accumulated signature, ready for replay.
+        assert_eq!(
+            done["content"],
+            serde_json::json!([
+                {"type": "thinking", "thinking": "Let me think", "signature": "sig-abc"},
+                {"type": "text", "text": "Hi"},
+            ])
+        );
         assert_eq!(done["stop_reason"], serde_json::json!("tool_use"));
         assert!(done["streaming"].is_null(), "final must not be streaming");
 

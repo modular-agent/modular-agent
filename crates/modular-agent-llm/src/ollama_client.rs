@@ -2,7 +2,8 @@ use std::sync::{Arc, Mutex};
 
 use modular_agent_core::tool;
 use modular_agent_core::{
-    AgentError, AgentValue, AgentValueMap, Message, ModularAgent, ToolCall, ToolCallFunction, Usage,
+    AgentError, AgentValue, AgentValueMap, ContentBlock, Message, MessageContent, ModularAgent,
+    ToolCall, ToolCallFunction, Usage,
 };
 
 use crate::chat::ChatAgent;
@@ -449,7 +450,7 @@ pub(crate) fn message_from_ollama(msg: &OllamaChatMessage) -> Message {
     if let Some(thinking) = &msg.thinking
         && !thinking.is_empty()
     {
-        message.thinking = Some(thinking.clone());
+        message.content = crate::content::content_with_thinking(thinking, &msg.content);
     }
     if !msg.tool_calls.is_empty() {
         let mut calls = vector![];
@@ -502,7 +503,7 @@ pub(crate) fn normalize_done_reason(raw: &str) -> String {
 pub(crate) fn message_to_ollama(msg: &Message) -> OllamaChatMessage {
     let mut omsg = OllamaChatMessage {
         role: msg.role.clone(),
-        content: msg.content.clone(),
+        content: msg.text(),
         tool_calls: vec![],
         images: None,
         thinking: None,
@@ -520,15 +521,29 @@ pub(crate) fn message_to_ollama(msg: &Message) -> OllamaChatMessage {
             .collect();
     }
 
+    let mut images: Vec<String> = Vec::new();
+
     #[cfg(feature = "image")]
-    {
-        if let Some(img) = &msg.image {
-            let img_str = img
-                .get_base64()
+    if let Some(img) = &msg.image {
+        images.push(
+            img.get_base64()
                 .trim_start_matches("data:image/png;base64,")
-                .to_string();
-            omsg.images = Some(vec![img_str]);
+                .to_string(),
+        );
+    }
+
+    // Image blocks carry raw base64 data, which is exactly what Ollama's
+    // `images` field expects; without this they would be silently dropped.
+    if let MessageContent::Blocks(blocks) = &msg.content {
+        for block in blocks {
+            if let ContentBlock::Image { data, .. } = block {
+                images.push(data.clone());
+            }
         }
+    }
+
+    if !images.is_empty() {
+        omsg.images = Some(images);
     }
 
     omsg
@@ -624,6 +639,24 @@ mod tests {
     }
 
     #[test]
+    fn test_message_to_ollama_image_blocks() {
+        let mut msg = Message::user(String::new());
+        msg.content = MessageContent::Blocks(vec![
+            ContentBlock::Image {
+                data: "iVBORw0KGgo=".to_string(),
+                mime_type: "image/png".to_string(),
+            },
+            ContentBlock::Text {
+                text: "what is this?".to_string(),
+            },
+        ]);
+
+        let omsg = message_to_ollama(&msg);
+        assert_eq!(omsg.content, "what is this?");
+        assert_eq!(omsg.images, Some(vec!["iVBORw0KGgo=".to_string()]));
+    }
+
+    #[test]
     fn test_message_from_ollama_text() {
         let omsg = OllamaChatMessage {
             role: "assistant".to_string(),
@@ -633,10 +666,10 @@ mod tests {
             thinking: None,
         };
         let msg = message_from_ollama(&omsg);
-        assert_eq!(msg.content, "Hello!");
+        assert_eq!(msg.text(), "Hello!");
         assert_eq!(msg.role, "assistant");
         assert!(msg.tool_calls.is_none());
-        assert!(msg.thinking.is_none());
+        assert!(msg.thinking().is_none());
     }
 
     #[test]
@@ -670,8 +703,8 @@ mod tests {
             thinking: Some("Let me think...".to_string()),
         };
         let msg = message_from_ollama(&omsg);
-        assert_eq!(msg.content, "Answer");
-        assert_eq!(msg.thinking, Some("Let me think...".to_string()));
+        assert_eq!(msg.text(), "Answer");
+        assert_eq!(msg.thinking(), Some("Let me think...".to_string()));
     }
 
     // =========================================================================

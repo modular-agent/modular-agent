@@ -37,6 +37,10 @@ pub mod responses;
 #[cfg(any(feature = "openai", feature = "claude", feature = "ollama"))]
 pub(crate) mod http_error;
 
+// MessageContent assembly shared by the provider response converters.
+#[cfg(any(feature = "openai", feature = "claude", feature = "ollama"))]
+pub(crate) mod content;
+
 // Only the providers that transport tool arguments as strings need the
 // repair parser; Ollama sends them as already-parsed JSON.
 #[cfg(any(feature = "openai", feature = "claude"))]
