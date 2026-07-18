@@ -17,9 +17,12 @@
 
 use std::{
     collections::{BTreeMap, HashMap, HashSet, VecDeque},
+    future::Future,
     sync::{Arc, Mutex, OnceLock, RwLock},
     time::Duration,
 };
+
+use tokio_util::sync::CancellationToken;
 
 use crate::{
     Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentStatus, AgentValue,
@@ -58,6 +61,31 @@ const DEFAULT_MAX_ITERATIONS: i64 = 25;
 /// Fallback parallel-tool concurrency cap when `max_concurrency` config is
 /// unset or unreadable.
 const DEFAULT_MAX_CONCURRENCY: i64 = 8;
+
+/// Content of the synthetic tool result emitted for a tool call whose
+/// execution was cancelled before a real result was produced. Carrying the
+/// original tool_call id keeps the message history consistent for the model.
+const ABORTED_TOOL_RESULT: &str = "Operation aborted";
+
+/// Runs `fut` to completion unless `cancel` fires first.
+///
+/// Returns `None` when cancelled (dropping `fut` mid-flight). A token that is
+/// already cancelled short-circuits before `fut` is first polled.
+async fn run_unless_cancelled<T>(
+    cancel: Option<&CancellationToken>,
+    fut: impl Future<Output = T>,
+) -> Option<T> {
+    match cancel {
+        Some(token) => {
+            tokio::select! {
+                biased;
+                _ = token.cancelled() => None,
+                r = fut => Some(r),
+            }
+        }
+        None => Some(fut.await),
+    }
+}
 
 /// How a tool may be scheduled relative to other calls in the same batch.
 ///
@@ -400,6 +428,10 @@ pub async fn call_tool(
     name: &str,
     args: AgentValue,
 ) -> Result<AgentValue, AgentError> {
+    if ctx.is_cancelled() {
+        return Err(AgentError::Cancelled);
+    }
+
     let tool = {
         let guard = registry().read().unwrap();
         guard.get_tool(name)
@@ -605,27 +637,62 @@ async fn execute_tool_call(ctx: &AgentContext, call: &ToolCall) -> Message {
 
 /// Runs the accumulated batch of `Parallel` calls concurrently, bounded by
 /// `max_concurrency`, and appends the results to `out` in the batch's order.
+///
+/// Returns `false` when `cancel` fired mid-batch. Even then `out` gains one
+/// message per batch entry: in-flight calls are dropped and reported with a
+/// synthetic aborted result, but calls that already completed keep their
+/// real result — their side effects happened, so reporting them aborted
+/// would mislead the model into re-issuing them.
 async fn flush_parallel_batch(
     ctx: &AgentContext,
     batch: &mut Vec<&ToolCall>,
     max_concurrency: usize,
     out: &mut Vec<Message>,
-) {
+    cancel: Option<&CancellationToken>,
+) -> bool {
     if batch.is_empty() {
-        return;
+        return true;
     }
     // Materialize the futures before streaming: mapping lazily inside
     // stream::iter trips a higher-ranked lifetime inference error when the
     // stream is held across an await in the caller.
     let mut futures = Vec::with_capacity(batch.len());
-    for call in batch.drain(..) {
-        futures.push(execute_tool_call(ctx, call));
+    for (index, &call) in batch.iter().enumerate() {
+        futures.push(async move { (index, execute_tool_call(ctx, call).await) });
     }
-    // `buffered` (unlike `buffer_unordered`) yields results in input order.
-    let mut results = stream::iter(futures).buffered(max_concurrency);
-    while let Some(msg) = results.next().await {
-        out.push(msg);
+    // `buffer_unordered` with explicit indices instead of the in-order
+    // `buffered`: a completed result must be observable even while an
+    // earlier call is still running, or cancellation would discard it.
+    let mut results = stream::iter(futures).buffer_unordered(max_concurrency);
+    let mut slots: Vec<Option<Message>> = Vec::new();
+    slots.resize_with(batch.len(), || None);
+    let mut aborted = false;
+    loop {
+        match run_unless_cancelled(cancel, results.next()).await {
+            Some(Some((index, msg))) => slots[index] = Some(msg),
+            Some(None) => break,
+            None => {
+                aborted = true;
+                break;
+            }
+        }
     }
+    if aborted {
+        // Salvage results that completed but were not yet yielded by the
+        // stream; only still-pending calls are left to the aborted fill.
+        use futures_util::FutureExt;
+        while let Some(Some((index, msg))) = results.next().now_or_never() {
+            slots[index] = Some(msg);
+        }
+    }
+    drop(results);
+    for (slot, call) in slots.iter_mut().zip(batch.drain(..)) {
+        out.push(match slot.take() {
+            Some(msg) => msg,
+            None => error_tool_result(call, ABORTED_TOOL_RESULT),
+        });
+    }
+    !aborted
 }
 
 /// Executes multiple tool calls and returns the results as messages.
@@ -647,6 +714,17 @@ async fn flush_parallel_batch(
 ///   in the registry) acts as a barrier: every earlier call must finish
 ///   first, and the sequential call runs alone.
 ///
+/// # Cancellation
+///
+/// When `ctx` carries a cancellation token (see
+/// [`AgentContext::cancel_token`]) and it fires mid-execution, in-flight
+/// calls are dropped and every call without a real result receives a
+/// synthetic `is_error` tool message with content `"Operation aborted"`,
+/// carrying the original tool_call id. Calls that already completed keep
+/// their real result. This keeps the message history consistent: the model
+/// sees a result for every call it issued, and finished side effects are
+/// not misreported as aborted.
+///
 /// # Arguments
 ///
 /// * `ctx` - The agent context for the invocations
@@ -666,7 +744,13 @@ pub async fn call_tools(
         return Ok(vector![]);
     };
     let max_concurrency = max_concurrency.max(1);
+    let cancel = ctx.cancel_token();
 
+    // Results land in input order throughout (flush_parallel_batch appends
+    // its whole batch in order and sequential calls are barriers), so at any
+    // point the calls still lacking a result are exactly
+    // tool_calls[resp_messages.len()..].
+    let mut aborted = false;
     let mut resp_messages = Vec::with_capacity(tool_calls.len());
     let mut parallel_batch: Vec<&ToolCall> = Vec::new();
     for call in tool_calls {
@@ -681,22 +765,48 @@ pub async fn call_tools(
         }
         // A Sequential call is a barrier: flush the pending parallel batch
         // first, then run the sequential call with nothing else in flight.
-        flush_parallel_batch(
+        if !flush_parallel_batch(
             ctx,
             &mut parallel_batch,
             max_concurrency,
             &mut resp_messages,
+            cancel,
         )
-        .await;
-        resp_messages.push(execute_tool_call(ctx, call).await);
+        .await
+        {
+            aborted = true;
+            break;
+        }
+        match run_unless_cancelled(cancel, execute_tool_call(ctx, call)).await {
+            Some(msg) => resp_messages.push(msg),
+            None => {
+                aborted = true;
+                break;
+            }
+        }
     }
-    flush_parallel_batch(
-        ctx,
-        &mut parallel_batch,
-        max_concurrency,
-        &mut resp_messages,
-    )
-    .await;
+    if !aborted
+        && !flush_parallel_batch(
+            ctx,
+            &mut parallel_batch,
+            max_concurrency,
+            &mut resp_messages,
+            cancel,
+        )
+        .await
+    {
+        aborted = true;
+    }
+
+    // History consistency on cancellation: every tool_call the model issued
+    // must receive a result, so calls interrupted or never started get a
+    // synthetic aborted result carrying the original tool_call id (mirrors
+    // the stop_reason == "length" guard in CallToolMessageAgent).
+    if aborted {
+        for call in tool_calls.iter().skip(resp_messages.len()) {
+            resp_messages.push(error_tool_result(call, ABORTED_TOOL_RESULT));
+        }
+    }
 
     Ok(resp_messages.into())
 }
@@ -971,13 +1081,21 @@ impl PresetTool {
     /// `0` waits indefinitely. The timeout is read at call time so runtime config
     /// changes take effect. On timeout an `AgentError::Timeout` is returned, which
     /// the LLM tool-call path (`call_tools`) turns into an `is_error` tool result.
+    ///
+    /// When `ctx` carries a cancellation token, the wait also aborts as soon
+    /// as the token fires, returning [`AgentError::Cancelled`].
     async fn tool_call(
         &self,
         ctx: AgentContext,
         args: AgentValue,
     ) -> Result<AgentValue, AgentError> {
+        if ctx.is_cancelled() {
+            return Err(AgentError::Cancelled);
+        }
+
         // Kick off the tool call while holding the lock, then drop it before awaiting the result
         let ctx_id = ctx.id();
+        let cancel = ctx.cancel_token().cloned();
         let (rx, timeout_secs, pending) = {
             let mut guard = self.agent.lock().await;
             let Some(preset_tool_agent) = guard.as_agent_mut::<PresetToolAgent>() else {
@@ -985,6 +1103,12 @@ impl PresetTool {
                     "Agent is not PresetToolAgent".to_string(),
                 ));
             };
+            // Cancellation may have fired while waiting for the agent lock.
+            // Check again immediately before pending state is registered and
+            // `tool_in` is emitted.
+            if ctx.is_cancelled() {
+                return Err(AgentError::Cancelled);
+            }
             let timeout_secs = preset_tool_agent
                 .configs()
                 .map(|c| c.get_integer_or(CONFIG_TIMEOUT_SECS, DEFAULT_TIMEOUT_SECS))
@@ -994,31 +1118,49 @@ impl PresetTool {
             (rx, timeout_secs, pending)
         };
 
-        if timeout_secs <= 0 {
-            return rx
-                .await
-                .map_err(|_| AgentError::Other("tool_out dropped".to_string()));
+        // Deregister the pending sender however this future ends — including
+        // being dropped mid-await: call_tools races this whole future against
+        // the flow token and drops it on cancellation without polling it
+        // again, so cleanup after the await would never run. The pending map
+        // is keyed by context id, which is shared by every tool call in the
+        // same flow (including an LLM retry after an error), so a leftover
+        // sender would deliver a late tool_out to whichever call registers
+        // under the same id next. PresetTool registers with
+        // ExecutionMode::Sequential and call_tools never runs a Sequential
+        // call concurrently with anything, so within a flow no newer call can
+        // have registered a sender while this one is alive — the guard cannot
+        // remove a newer call's sender.
+        struct PendingGuard {
+            pending: Arc<Mutex<HashMap<usize, oneshot::Sender<AgentValue>>>>,
+            ctx_id: usize,
         }
-
-        match tokio::time::timeout(Duration::from_secs(timeout_secs as u64), rx).await {
-            Ok(result) => result.map_err(|_| AgentError::Other("tool_out dropped".to_string())),
-            Err(_) => {
-                // The pending map is keyed by context id, which is shared by every
-                // tool call in the same flow (including an LLM retry after this
-                // error). Drop the stale sender now, otherwise a late tool_out from
-                // this timed-out invocation would be delivered to whichever call
-                // registers under the same id next. PresetTool registers with
-                // ExecutionMode::Sequential and call_tools never runs a Sequential
-                // call concurrently with anything, so within a flow no newer call
-                // can have registered a sender yet — this cannot remove a newer
-                // call's sender.
-                pending.lock().unwrap().remove(&ctx_id);
-                Err(AgentError::Timeout(format!(
-                    "Tool call timed out after {} seconds",
-                    timeout_secs
-                )))
+        impl Drop for PendingGuard {
+            fn drop(&mut self) {
+                self.pending.lock().unwrap().remove(&self.ctx_id);
             }
         }
+        let _guard = PendingGuard { pending, ctx_id };
+
+        let wait = async {
+            let rx = async {
+                rx.await
+                    .map_err(|_| AgentError::Other("tool_out dropped".to_string()))
+            };
+            if timeout_secs <= 0 {
+                rx.await
+            } else {
+                match tokio::time::timeout(Duration::from_secs(timeout_secs as u64), rx).await {
+                    Ok(result) => result,
+                    Err(_) => Err(AgentError::Timeout(format!(
+                        "Tool call timed out after {} seconds",
+                        timeout_secs
+                    ))),
+                }
+            }
+        };
+        run_unless_cancelled(cancel.as_ref(), wait)
+            .await
+            .unwrap_or(Err(AgentError::Cancelled))
     }
 }
 
@@ -2031,6 +2173,149 @@ mod tests {
             expect_no_event(&fixture.limit).await;
 
             fixture.ma.quit();
+        }
+    }
+
+    mod cancellation {
+        use super::*;
+        use std::time::Duration;
+
+        /// Tool that never finishes on its own.
+        struct SlowTool {
+            info: ToolInfo,
+        }
+
+        #[async_trait]
+        impl Tool for SlowTool {
+            fn info(&self) -> &ToolInfo {
+                &self.info
+            }
+
+            async fn call(
+                &self,
+                _ctx: AgentContext,
+                _args: AgentValue,
+            ) -> Result<AgentValue, AgentError> {
+                tokio::time::sleep(Duration::from_secs(30)).await;
+                Ok(AgentValue::string("done"))
+            }
+        }
+
+        /// Tool that completes immediately.
+        struct FastTool {
+            info: ToolInfo,
+        }
+
+        #[async_trait]
+        impl Tool for FastTool {
+            fn info(&self) -> &ToolInfo {
+                &self.info
+            }
+
+            async fn call(
+                &self,
+                _ctx: AgentContext,
+                _args: AgentValue,
+            ) -> Result<AgentValue, AgentError> {
+                Ok(AgentValue::string("fast done"))
+            }
+        }
+
+        fn slow_call(name: &str, id: &str) -> ToolCall {
+            ToolCall {
+                function: ToolCallFunction {
+                    name: name.to_string(),
+                    parameters: serde_json::json!({}),
+                    id: Some(id.to_string()),
+                    parse_error: None,
+                },
+            }
+        }
+
+        #[tokio::test]
+        async fn cancelled_call_tools_synthesizes_aborted_results() {
+            // Unique name: the registry is process-global and shared with
+            // other tests running in parallel.
+            let tool_name = "cancel_test_slow_tool";
+            register_tool(SlowTool {
+                info: ToolInfo::new(tool_name, "sleeps forever for cancellation tests", None),
+            });
+
+            let token = CancellationToken::new();
+            let ctx = AgentContext::new().with_cancel_token(token.clone());
+            let calls: Vector<ToolCall> =
+                vector![slow_call(tool_name, "c1"), slow_call(tool_name, "c2")];
+
+            tokio::spawn(async move {
+                tokio::time::sleep(Duration::from_millis(50)).await;
+                token.cancel();
+            });
+
+            let msgs = tokio::time::timeout(Duration::from_secs(5), call_tools(&ctx, &calls, 8))
+                .await
+                .expect("cancelled call_tools must return promptly")
+                .unwrap();
+
+            // Every issued tool_call receives a result carrying its id.
+            assert_eq!(msgs.len(), 2);
+            for (msg, id) in msgs.iter().zip(["c1", "c2"]) {
+                assert_eq!(msg.role, "tool");
+                assert_eq!(msg.id.as_deref(), Some(id));
+                assert_eq!(msg.is_error, Some(true));
+                assert_eq!(msg.text(), ABORTED_TOOL_RESULT);
+            }
+
+            unregister_tool(tool_name);
+        }
+
+        #[tokio::test]
+        async fn cancellation_keeps_results_of_completed_parallel_calls() {
+            // Unique names: the registry is process-global and shared with
+            // other tests running in parallel.
+            let slow_name = "cancel_test_slow_parallel_tool";
+            let fast_name = "cancel_test_fast_parallel_tool";
+            register_tool(SlowTool {
+                info: ToolInfo::new(slow_name, "sleeps forever for cancellation tests", None)
+                    .with_execution_mode(ExecutionMode::Parallel),
+            });
+            register_tool(FastTool {
+                info: ToolInfo::new(
+                    fast_name,
+                    "completes immediately for cancellation tests",
+                    None,
+                )
+                .with_execution_mode(ExecutionMode::Parallel),
+            });
+
+            let token = CancellationToken::new();
+            let ctx = AgentContext::new().with_cancel_token(token.clone());
+            // The fast call sits behind the still-running slow call in input
+            // order — its completed result must survive the abort.
+            let calls: Vector<ToolCall> =
+                vector![slow_call(slow_name, "c1"), slow_call(fast_name, "c2")];
+
+            tokio::spawn(async move {
+                tokio::time::sleep(Duration::from_millis(50)).await;
+                token.cancel();
+            });
+
+            let msgs = tokio::time::timeout(Duration::from_secs(5), call_tools(&ctx, &calls, 8))
+                .await
+                .expect("cancelled call_tools must return promptly")
+                .unwrap();
+
+            assert_eq!(msgs.len(), 2);
+            assert_eq!(msgs[0].id.as_deref(), Some("c1"));
+            assert_eq!(msgs[0].is_error, Some(true));
+            assert_eq!(msgs[0].text(), ABORTED_TOOL_RESULT);
+            // The completed call keeps its real result instead of being
+            // misreported as aborted.
+            assert_eq!(msgs[1].id.as_deref(), Some("c2"));
+            assert_eq!(msgs[1].is_error, None);
+            assert!(msgs[1].text().contains("fast done"));
+
+            unregister_tool(slow_name);
+            unregister_tool(fast_name);
         }
     }
 }

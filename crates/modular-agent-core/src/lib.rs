@@ -74,6 +74,9 @@ pub use photon_rs::{self, PhotonImage};
 // re-export im
 pub use im;
 
+// re-export CancellationToken (used by AgentContext and ModularAgent cancellation APIs)
+pub use tokio_util::sync::CancellationToken;
+
 // re-export inventory
 pub use inventory;
 

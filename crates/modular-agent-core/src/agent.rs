@@ -187,6 +187,28 @@ pub trait HasAgentData {
 ///
 /// Implement this trait instead of `Agent` directly.
 /// The `Agent` trait is automatically implemented for all types that implement `AsAgent`.
+///
+/// # Cancellation safety
+///
+/// The agent loop races [`process()`](Self::process) against the agent's
+/// cancellation token, which fires when the agent (or its whole preset) is
+/// stopped. On cancellation the in-flight `process()` future is **dropped at
+/// whatever await point it has reached** — implementations must not rely on
+/// running to completion. In particular, outputs emitted before the drop
+/// stay emitted, and internal bookkeeping updated across await points (e.g.
+/// entries in a pending map) may be left behind; keep such state consistent
+/// at every await point or clean it up in [`stop()`](Self::stop).
+///
+/// Flow-level aborts ([`ModularAgent::abort_context`](crate::ModularAgent::abort_context))
+/// are cooperative: the context's token fires, but messages carrying it are
+/// still delivered so that wind-down outputs (e.g. an aborted final message
+/// replacing a dangling partial in history) can traverse the graph.
+/// Implementations that initiate external work (network requests, DB writes,
+/// message posts) must therefore check
+/// [`ctx.is_cancelled()`](crate::AgentContext::is_cancelled) before starting
+/// it, and may select on
+/// [`ctx.cancel_token()`](crate::AgentContext::cancel_token) at long awaits
+/// to wind down gracefully.
 #[async_trait]
 pub trait AsAgent: HasAgentData + Send + Sync + 'static {
     /// Constructs a new agent instance.
@@ -218,6 +240,13 @@ pub trait AsAgent: HasAgentData + Send + Sync + 'static {
     /// Processes an input message.
     ///
     /// Override to implement the agent's main logic.
+    ///
+    /// This method may be cancelled by being dropped at any await point (see
+    /// the [trait-level docs](AsAgent#cancellation-safety)). Long-running
+    /// implementations can additionally observe
+    /// [`AgentContext::cancel_token`] to abort gracefully when the flow is
+    /// cancelled via [`ModularAgent::abort_context`], recording the
+    /// interruption as [`AgentError::Cancelled`].
     async fn process(
         &mut self,
         _ctx: AgentContext,

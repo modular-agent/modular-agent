@@ -27,7 +27,9 @@ rmcp = { version = "0.13.0", features = ["client", "transport-child-process"], o
 serde = { version = "1", features = ["derive", "rc"] }
 serde_json = { version = "1" }
 thiserror = "2"
-tokio = { version = "1", features = ["rt", "rt-multi-thread", "sync", "time"] }
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "sync", "time", "macros"] }
+# default-features = false: only CancellationToken (tokio_util::sync) is used.
+tokio-util = { version = "0.7", default-features = false }
 
 modular-agent-macros = { workspace = true }
 

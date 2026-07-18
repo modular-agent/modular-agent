@@ -1,6 +1,8 @@
+use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use serde::{Deserialize, Serialize};
+use tokio_util::sync::CancellationToken;
 
 use crate::error::AgentError;
 use crate::value::AgentValue;
@@ -26,6 +28,18 @@ pub struct AgentContext {
     /// Frame stack for tracking branching (e.g., map operations).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     frames: Option<im::Vector<Frame>>,
+
+    /// Cancellation token for aborting processing of this flow.
+    ///
+    /// Attached by the agent loop before `process()` is invoked; never
+    /// serialized. Cancellation is cooperative: long-running agents observe
+    /// it via [`cancel_token()`](Self::cancel_token) to abort gracefully.
+    ///
+    /// Arc-wrapped so the orchestrator's context-token registry can hold a
+    /// `Weak` reference and detect when a flow has ended (no context clone
+    /// holds the token anymore).
+    #[serde(skip)]
+    cancel: Option<Arc<CancellationToken>>,
 }
 
 /// Frame type for map operations.
@@ -44,6 +58,7 @@ impl AgentContext {
             id: new_id(),
             vars: None,
             frames: None,
+            cancel: None,
         }
     }
 
@@ -71,7 +86,35 @@ impl AgentContext {
             id: self.id,
             vars: Some(vars),
             frames: self.frames.clone(),
+            cancel: self.cancel.clone(),
         }
+    }
+
+    // Cancellation
+
+    /// Returns the cancellation token attached to this context, if any.
+    ///
+    /// Long-running `process()` implementations can `select!` on
+    /// `token.cancelled()` to abort gracefully when the flow is cancelled
+    /// via [`ModularAgent::abort_context`](crate::ModularAgent::abort_context)
+    /// (the token is shared by every agent handling the same flow).
+    pub fn cancel_token(&self) -> Option<&CancellationToken> {
+        self.cancel.as_deref()
+    }
+
+    /// Returns a new context carrying the given cancellation token.
+    pub fn with_cancel_token(&self, token: impl Into<Arc<CancellationToken>>) -> Self {
+        Self {
+            id: self.id,
+            vars: self.vars.clone(),
+            frames: self.frames.clone(),
+            cancel: Some(token.into()),
+        }
+    }
+
+    /// Returns `true` if this context carries a token that has been cancelled.
+    pub fn is_cancelled(&self) -> bool {
+        self.cancel.as_ref().is_some_and(|t| t.is_cancelled())
     }
 }
 
@@ -149,6 +192,7 @@ impl AgentContext {
             id: self.id,
             vars: self.vars.clone(),
             frames: Some(frames),
+            cancel: self.cancel.clone(),
         }
     }
 
@@ -250,6 +294,7 @@ impl AgentContext {
                     id: self.id,
                     vars: self.vars.clone(),
                     frames: new_frames,
+                    cancel: self.cancel.clone(),
                 },
             );
         }

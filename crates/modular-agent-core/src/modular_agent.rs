@@ -1,7 +1,9 @@
-use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex, Weak};
 
 use serde_json::Value;
 use tokio::sync::{Mutex as AsyncMutex, broadcast, broadcast::error::RecvError, mpsc};
+use tokio_util::sync::CancellationToken;
 
 use crate::FnvIndexMap;
 use crate::agent::{Agent, AgentMessage, AgentStatus, agent_new};
@@ -18,6 +20,17 @@ use crate::value::AgentValue;
 
 const MESSAGE_LIMIT: usize = 1024;
 const EVENT_CHANNEL_CAPACITY: usize = 256;
+
+/// Registry size at which dead context-token entries are pruned. Entries are
+/// `Weak` and die with their flow (contexts hold the only strong references).
+/// The registry may exceed this threshold when more flows are genuinely live:
+/// live entries must remain tracked so every flow stays abortable.
+const CONTEXT_TOKEN_PRUNE_THRESHOLD: usize = 1024;
+
+/// Distinguishes which agent-loop incarnation owns the `agent_tokens` slot,
+/// so a draining old loop cannot clobber the token installed for a restarted
+/// agent's new loop (tokens themselves have no identity to compare).
+static AGENT_TOKEN_GENERATION: AtomicU64 = AtomicU64::new(1);
 
 /// The central orchestrator for the modular agent system.
 ///
@@ -91,6 +104,15 @@ pub struct ModularAgent {
     // agent def name -> config
     pub(crate) global_configs_map: Arc<Mutex<FnvIndexMap<String, AgentConfigs>>>,
 
+    // preset id -> parent cancellation token for the preset's agents
+    pub(crate) preset_tokens: Arc<Mutex<FnvIndexMap<String, CancellationToken>>>,
+
+    // agent id -> (loop generation, current cancellation token of that loop)
+    pub(crate) agent_tokens: Arc<Mutex<FnvIndexMap<String, (u64, CancellationToken)>>>,
+
+    // context id -> cancellation token (weak: dies with the flow's contexts)
+    pub(crate) context_tokens: Arc<Mutex<FnvIndexMap<usize, Weak<CancellationToken>>>>,
+
     // message sender
     pub(crate) tx: Arc<Mutex<Option<mpsc::Sender<AgentEventMessage>>>>,
 
@@ -120,6 +142,9 @@ impl ModularAgent {
             defs: Default::default(),
             presets: Default::default(),
             global_configs_map: Default::default(),
+            preset_tokens: Default::default(),
+            agent_tokens: Default::default(),
+            context_tokens: Default::default(),
             tx: Arc::new(Mutex::new(None)),
             observers: tx,
         }
@@ -347,6 +372,7 @@ impl ModularAgent {
             let mut presets = self.presets.lock().unwrap();
             presets.swap_remove(id);
         }
+        self.remove_preset_token(id);
 
         Ok(())
     }
@@ -785,6 +811,135 @@ impl ModularAgent {
         }
     }
 
+    // Cancellation tokens
+
+    /// Returns the parent cancellation token for a preset, creating it if needed.
+    fn preset_token(&self, preset_id: &str) -> CancellationToken {
+        let mut tokens = self.preset_tokens.lock().unwrap();
+        tokens.entry(preset_id.to_string()).or_default().clone()
+    }
+
+    /// Installs a fresh (uncancelled) parent token for a preset.
+    ///
+    /// A fired `CancellationToken` cannot be reset, so this is called when a
+    /// preset starts to replace the token cancelled by a previous stop.
+    pub(crate) fn reset_preset_token(&self, preset_id: &str) {
+        let mut tokens = self.preset_tokens.lock().unwrap();
+        tokens.insert(preset_id.to_string(), CancellationToken::new());
+    }
+
+    /// Cancels the preset's parent token, aborting the in-flight `process()`
+    /// of every agent in the preset at once.
+    ///
+    /// The entry is kept (in its cancelled state) for the duration of the
+    /// stop sequence so agent tokens renewed while agents are still being
+    /// stopped are born cancelled and queued inputs are skipped instead of
+    /// processed. [`Preset::stop`](crate::preset::Preset::stop) removes the
+    /// entry once every agent has stopped, so a later `start_agent` derives
+    /// a live token instead of a child of the fired one.
+    pub(crate) fn cancel_preset_token(&self, preset_id: &str) {
+        let token = self.preset_tokens.lock().unwrap().get(preset_id).cloned();
+        if let Some(token) = token {
+            token.cancel();
+        }
+    }
+
+    pub(crate) fn remove_preset_token(&self, preset_id: &str) {
+        self.preset_tokens.lock().unwrap().swap_remove(preset_id);
+    }
+
+    /// Creates and tracks a fresh cancellation token for an agent as a child
+    /// of its preset's parent token. The returned generation identifies the
+    /// agent-loop incarnation that owns the slot.
+    fn create_agent_token(&self, preset_id: &str, agent_id: &str) -> (u64, CancellationToken) {
+        let generation = AGENT_TOKEN_GENERATION.fetch_add(1, Ordering::Relaxed);
+        let token = self.preset_token(preset_id).child_token();
+        self.agent_tokens
+            .lock()
+            .unwrap()
+            .insert(agent_id.to_string(), (generation, token.clone()));
+        (generation, token)
+    }
+
+    /// Replaces a fired agent token with a fresh child of the preset token.
+    ///
+    /// Called by the agent loop after its token fired. Returns `None` when
+    /// the slot no longer belongs to the calling loop — either
+    /// [`stop_agent`](Self::stop_agent) removed the entry, a restarted
+    /// agent's new loop installed its own token (different generation), or
+    /// the whole preset was removed. The caller then keeps its fired token
+    /// so queued inputs are skipped until the `Stop` message arrives.
+    fn renew_agent_token(
+        &self,
+        preset_id: &str,
+        agent_id: &str,
+        generation: u64,
+    ) -> Option<CancellationToken> {
+        // Look up (never create) the parent: a lagging loop must not
+        // resurrect the token entry of a removed preset.
+        let parent = self.preset_tokens.lock().unwrap().get(preset_id).cloned()?;
+        let fresh = parent.child_token();
+        let mut tokens = self.agent_tokens.lock().unwrap();
+        let slot = tokens.get_mut(agent_id)?;
+        if slot.0 != generation {
+            return None;
+        }
+        slot.1 = fresh.clone();
+        Some(fresh)
+    }
+
+    /// Returns the cancellation token for a context, creating it if needed.
+    ///
+    /// The registry holds `Weak` references: an entry dies when the flow's
+    /// last context clone is dropped, so lookups for finished flows fail and
+    /// dead entries can be pruned. Pruning starts once the registry reaches
+    /// [`CONTEXT_TOKEN_PRUNE_THRESHOLD`], but live entries are never evicted.
+    pub(crate) fn context_token(&self, ctx_id: usize) -> Arc<CancellationToken> {
+        let mut tokens = self.context_tokens.lock().unwrap();
+        if let Some(token) = tokens.get(&ctx_id).and_then(Weak::upgrade) {
+            return token;
+        }
+        if tokens.len() >= CONTEXT_TOKEN_PRUNE_THRESHOLD {
+            tokens.retain(|_, weak| weak.strong_count() > 0);
+        }
+        let token = Arc::new(CancellationToken::new());
+        tokens.insert(ctx_id, Arc::downgrade(&token));
+        token
+    }
+
+    /// Aborts the flow identified by `ctx_id`.
+    ///
+    /// Cancels the context's cancellation token, which every agent handling
+    /// the flow received via [`AgentContext::cancel_token`]. Cancellation is
+    /// cooperative for work already in flight: agents that `select!` on the
+    /// token (LLM streaming loops, [`PresetToolAgent`](crate::tool::PresetToolAgent)
+    /// result waits) abort promptly with [`AgentError::Cancelled`], while
+    /// agents that ignore it run to completion. Inputs dispatched after the
+    /// token fires are skipped before `process()` is called. The cancelled
+    /// token stays alive as long as any context of the flow does, so queued
+    /// and cyclic inputs for the flow are skipped too.
+    ///
+    /// Returns `false` when no live flow is tracked under `ctx_id` (the flow
+    /// already finished, or never reached an agent): nothing is cancelled.
+    pub fn abort_context(&self, ctx_id: usize) -> bool {
+        let token = self
+            .context_tokens
+            .lock()
+            .unwrap()
+            .get(&ctx_id)
+            .and_then(Weak::upgrade);
+        match token {
+            Some(token) => {
+                token.cancel();
+                true
+            }
+            None => {
+                log::warn!("abort_context: no live flow for context {}", ctx_id);
+                false
+            }
+        }
+    }
+
     /// Start an agent by id.
     ///
     /// Creates a message channel for the agent and spawns its event loop.
@@ -801,9 +956,9 @@ impl ModularAgent {
             };
             a.clone()
         };
-        let def_name = {
+        let (def_name, preset_id) = {
             let agent = agent.lock().await;
-            agent.def_name().to_string()
+            (agent.def_name().to_string(), agent.preset_id().to_string())
         };
         let uses_native_thread = {
             let defs = self.defs.lock().unwrap();
@@ -829,27 +984,67 @@ impl ModularAgent {
 
             let agent_clone = agent.clone();
             let agent_id_clone = agent_id.to_string();
+            let ma = self.clone();
+            // Created before spawning so stop_agent can cancel it immediately.
+            let (generation, mut token) = self.create_agent_token(&preset_id, agent_id);
 
             let agent_loop = async move {
-                {
+                // Race start() against the token too: a start() stuck on
+                // slow I/O holds the agent lock, and without the race
+                // stop_agent would block on that lock until start() returns
+                // on its own.
+                let start = async {
                     let mut agent_guard = agent_clone.lock().await;
-                    if let Err(e) = agent_guard.start().await {
-                        log::error!("Failed to start agent {}: {}", agent_id_clone, e);
+                    agent_guard.start().await
+                };
+                tokio::select! {
+                    biased;
+                    _ = token.cancelled() => {
+                        log::info!("Start cancelled: {}", agent_id_clone);
                         return;
+                    }
+                    r = start => {
+                        if let Err(e) = r {
+                            log::error!("Failed to start agent {}: {}", agent_id_clone, e);
+                            return;
+                        }
                     }
                 }
 
                 while let Some(message) = rx.recv().await {
                     match message {
                         AgentMessage::Input { ctx, port, value } => {
-                            agent_clone
-                                .lock()
-                                .await
-                                .process(ctx, port, value)
-                                .await
-                                .unwrap_or_else(|e| {
+                            // Attach the flow's cancellation token so
+                            // downstream awaits (tool result waits, LLM
+                            // streams) can observe per-context aborts.
+                            let ctx = if ctx.cancel_token().is_none() {
+                                ctx.with_cancel_token(ma.context_token(ctx.id()))
+                            } else {
+                                ctx
+                            };
+                            let fut =
+                                async { agent_clone.lock().await.process(ctx, port, value).await };
+                            tokio::select! {
+                                biased;
+                                _ = token.cancelled() => {
+                                    log::info!("Process cancelled: {}", agent_id_clone);
+                                    // Dropping the future aborts any in-flight
+                                    // I/O and releases the agent lock. A fired
+                                    // token cannot be reset, so install a fresh
+                                    // one unless this loop no longer owns the
+                                    // token slot (agent stopping or restarted).
+                                    if let Some(fresh) = ma.renew_agent_token(
+                                        &preset_id,
+                                        &agent_id_clone,
+                                        generation,
+                                    ) {
+                                        token = fresh;
+                                    }
+                                }
+                                r = fut => r.unwrap_or_else(|e| {
                                     log::error!("Process Error {}: {}", agent_id_clone, e);
-                                });
+                                }),
+                            }
                         }
                         AgentMessage::Config { key, value } => {
                             agent_clone
@@ -905,6 +1100,17 @@ impl ModularAgent {
             {
                 log::warn!("Failed to send stop message to agent {}: {}", agent_id, e);
             }
+        }
+
+        // Cancel BEFORE awaiting the agent lock: a long-running process()
+        // holds the lock, and cancelling makes the agent loop drop that
+        // future (releasing the lock) instead of blocking stop until it
+        // completes. Removing the entry first keeps the fired token in the
+        // loop so inputs queued ahead of Stop are skipped rather than
+        // processed with a renewed token.
+        let token = self.agent_tokens.lock().unwrap().swap_remove(agent_id);
+        if let Some((_, token)) = token {
+            token.cancel();
         }
 
         let agent = {
@@ -1314,4 +1520,21 @@ pub enum ModularAgentEvent {
     ///
     /// Fields: `(channel_name, value)`
     ExternalOutput(String, AgentValue),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn live_context_tokens_are_not_evicted_at_prune_threshold() {
+        let ma = ModularAgent::new();
+        let tokens: Vec<_> = (0..=CONTEXT_TOKEN_PRUNE_THRESHOLD)
+            .map(|ctx_id| ma.context_token(ctx_id))
+            .collect();
+
+        assert_eq!(tokens.len(), CONTEXT_TOKEN_PRUNE_THRESHOLD + 1);
+        assert!(ma.abort_context(0));
+        assert!(tokens[0].is_cancelled());
+    }
 }

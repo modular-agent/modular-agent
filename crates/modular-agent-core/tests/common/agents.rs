@@ -6,6 +6,7 @@ use modular_agent_core::{
 const CATEGORY: &str = "Core/Utils";
 
 const PORT_IN: &str = "in";
+const PORT_OUT: &str = "out";
 const PORT_RESET: &str = "reset";
 const PORT_COUNT: &str = "count";
 const CONFIG_INITIAL_COUNT: &str = "initial_count";
@@ -23,6 +24,82 @@ const GLOBAL_STRING: &str = "global_string";
 pub struct CounterAgent {
     data: AgentData,
     pub count: i64,
+}
+
+/// Emits "started", then sleeps for a long time without observing
+/// cancellation. Used to verify that stop_agent does not block behind a
+/// long-running process().
+#[modular_agent(
+    title = "Stuck Sleep",
+    category = CATEGORY,
+    inputs = [PORT_IN],
+    outputs = [PORT_OUT],
+)]
+pub struct StuckSleepAgent {
+    data: AgentData,
+}
+
+#[async_trait]
+impl AsAgent for StuckSleepAgent {
+    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+        Ok(Self {
+            data: AgentData::new(ma, id, spec),
+        })
+    }
+
+    async fn process(
+        &mut self,
+        ctx: AgentContext,
+        _port: String,
+        _value: AgentValue,
+    ) -> Result<(), AgentError> {
+        self.output(ctx.clone(), PORT_OUT, AgentValue::string("started"))
+            .await?;
+        tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+        self.output(ctx, PORT_OUT, AgentValue::string("done")).await
+    }
+}
+
+/// Emits "started", then waits on the context cancel token. Emits "aborted"
+/// when the flow is cancelled, "done" if it times out after a long sleep.
+#[modular_agent(
+    title = "Cancel Wait",
+    category = CATEGORY,
+    inputs = [PORT_IN],
+    outputs = [PORT_OUT],
+)]
+pub struct CancelWaitAgent {
+    data: AgentData,
+}
+
+#[async_trait]
+impl AsAgent for CancelWaitAgent {
+    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+        Ok(Self {
+            data: AgentData::new(ma, id, spec),
+        })
+    }
+
+    async fn process(
+        &mut self,
+        ctx: AgentContext,
+        _port: String,
+        _value: AgentValue,
+    ) -> Result<(), AgentError> {
+        self.output(ctx.clone(), PORT_OUT, AgentValue::string("started"))
+            .await?;
+        let Some(token) = ctx.cancel_token().cloned() else {
+            return Err(AgentError::Other("no cancel token in context".into()));
+        };
+        tokio::select! {
+            _ = token.cancelled() => {
+                self.output(ctx, PORT_OUT, AgentValue::string("aborted")).await
+            }
+            _ = tokio::time::sleep(std::time::Duration::from_secs(30)) => {
+                self.output(ctx, PORT_OUT, AgentValue::string("done")).await
+            }
+        }
+    }
 }
 
 #[async_trait]

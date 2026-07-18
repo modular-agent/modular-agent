@@ -130,6 +130,10 @@ impl Preset {
         }
         self.running = true;
 
+        // A previous stop left the preset's parent cancellation token fired;
+        // install a fresh one before agents derive their child tokens.
+        ma.reset_preset_token(&self.id);
+
         for agent in self.spec.agents.iter() {
             if agent.disabled {
                 continue;
@@ -144,11 +148,19 @@ impl Preset {
 
     /// Stops all agents in this preset.
     pub async fn stop(&mut self, ma: &ModularAgent) -> Result<(), AgentError> {
+        // Cancel every agent's in-flight process() up front so the
+        // per-agent stops below are not serialized behind long-running work.
+        ma.cancel_preset_token(&self.id);
+
         for agent in self.spec.agents.iter() {
             ma.stop_agent(&agent.id).await.unwrap_or_else(|e| {
                 log::error!("Failed to stop agent {}: {}", agent.id, e);
             });
         }
+        // Every agent has stopped; drop the fired parent token so a later
+        // start_agent derives a live token instead of a born-cancelled child
+        // that would silently skip all inputs.
+        ma.remove_preset_token(&self.id);
         self.running = false;
         Ok(())
     }
