@@ -14,6 +14,9 @@ fnv = "1"
 im = { workspace = true }
 indexmap = { version = "2", features = ["serde"] }
 inventory = "0.3"
+# default-features = false: default features pull schema-resolving backends
+# (file/http via reqwest) that are unneeded for validating local tool schemas.
+jsonschema = { version = "0.48.1", optional = true, default-features = false }
 log = "0.4"
 photon-rs = { version = "0.3.3", optional = true }
 regex = { version = "1.12.2", optional = true }
@@ -35,7 +38,7 @@ env_logger = "0.11"
 default = ["file", "image", "llm", "mcp"]
 file = []
 image = ["photon-rs"]
-llm = ["regex"]
+llm = ["regex", "jsonschema"]
 mcp = ["rmcp", "llm"]
 test-utils = []
 

@@ -348,11 +348,142 @@ pub fn error_tool_result(call: &ToolCall, e: impl ToString) -> Message {
     msg
 }
 
+/// Returns whether `value` validates against `schema`, treating an
+/// uncompilable schema as non-matching.
+fn schema_accepts(schema: &serde_json::Value, value: &serde_json::Value) -> bool {
+    jsonschema::validator_for(schema)
+        .map(|v| v.is_valid(value))
+        .unwrap_or(false)
+}
+
+/// Coerces primitive values in-place toward `schema` where an unambiguous
+/// string-to-primitive conversion exists.
+///
+/// LLMs frequently emit numbers and booleans as JSON strings (`"42"`,
+/// `"true"`); this repairs such calls instead of bouncing them back to the
+/// model. Only lossless conversions are applied — `"42.5"` is never coerced
+/// to an integer — and values already matching the schema type are left
+/// untouched. Recurses into object `properties` and array `items`. For
+/// `anyOf`/`oneOf`, an already-valid value is kept as-is; otherwise coercion
+/// is tried against each variant and the first result that validates wins.
+/// Sibling keywords (`type`/`properties`/`items`) are still applied after
+/// `anyOf`/`oneOf` handling, since schemas like
+/// `{"properties": ..., "anyOf": [{"required": ...}]}` rely on property
+/// coercion even when a variant already accepts the value. When nothing
+/// applies the value is left unchanged so validation can report the error.
+fn coerce_by_schema(value: &mut serde_json::Value, schema: &serde_json::Value) {
+    let Some(schema_obj) = schema.as_object() else {
+        return;
+    };
+
+    for key in ["anyOf", "oneOf"] {
+        let Some(variants) = schema_obj.get(key).and_then(|v| v.as_array()) else {
+            continue;
+        };
+        if !variants.iter().any(|v| schema_accepts(v, value)) {
+            for variant in variants {
+                let mut candidate = value.clone();
+                coerce_by_schema(&mut candidate, variant);
+                if schema_accepts(variant, &candidate) {
+                    *value = candidate;
+                    break;
+                }
+            }
+        }
+        break;
+    }
+
+    match schema_obj.get("type").and_then(|t| t.as_str()) {
+        Some("integer") => {
+            // i64 parsing rejects fractional strings, so "42.5" is never
+            // silently truncated.
+            if let Some(s) = value.as_str()
+                && let Ok(i) = s.parse::<i64>()
+            {
+                *value = serde_json::Value::from(i);
+            }
+        }
+        Some("number") => {
+            // from_f64 rejects NaN/infinity, which have no JSON representation.
+            if let Some(s) = value.as_str()
+                && let Ok(f) = s.parse::<f64>()
+                && let Some(n) = serde_json::Number::from_f64(f)
+            {
+                *value = serde_json::Value::Number(n);
+            }
+        }
+        Some("boolean") => match value.as_str() {
+            Some("true") => *value = serde_json::Value::Bool(true),
+            Some("false") => *value = serde_json::Value::Bool(false),
+            _ => {}
+        },
+        _ => {}
+    }
+
+    if let Some(props) = schema_obj.get("properties").and_then(|p| p.as_object())
+        && let Some(map) = value.as_object_mut()
+    {
+        for (name, prop_schema) in props {
+            if let Some(v) = map.get_mut(name) {
+                coerce_by_schema(v, prop_schema);
+            }
+        }
+    }
+
+    if let Some(items) = schema_obj.get("items")
+        && let Some(arr) = value.as_array_mut()
+    {
+        for v in arr {
+            coerce_by_schema(v, items);
+        }
+    }
+}
+
+/// Validates (and lightly coerces) tool-call arguments against a tool's
+/// JSON Schema.
+///
+/// [`coerce_by_schema`] is applied first, so string-encoded primitives from
+/// the model are repaired before validation. All validation errors are
+/// collected with their instance paths into one readable string. If the
+/// schema itself fails to compile (e.g. supplied by a misbehaving MCP
+/// server), validation and coercion are skipped with a warning — a broken
+/// schema must not block tool execution.
+fn validate_tool_args(
+    schema: &serde_json::Value,
+    args: &mut serde_json::Value,
+) -> Result<(), String> {
+    let validator = match jsonschema::validator_for(schema) {
+        Ok(v) => v,
+        Err(e) => {
+            log::warn!(
+                "Tool parameter schema failed to compile; skipping argument validation: {}",
+                e
+            );
+            return Ok(());
+        }
+    };
+
+    coerce_by_schema(args, schema);
+
+    let errors = validator
+        .iter_errors(args)
+        .map(|e| format!("at '{}': {}", e.instance_path(), e))
+        .collect::<Vec<_>>();
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors.join("; "))
+    }
+}
+
 /// Executes multiple tool calls and returns the results as messages.
 ///
 /// Processes each tool call sequentially and returns tool response messages
-/// suitable for continuing an LLM conversation. A failure of one call
-/// (unparseable parameters or a tool error) does not abort the others: it is
+/// suitable for continuing an LLM conversation. Before execution, each call's
+/// arguments are validated against the tool's JSON Schema with lightweight
+/// type coercion (see [`coerce_by_schema`]); the coerced arguments are what
+/// the tool receives. A failure of one call (unparseable parameters, schema
+/// validation failure, or a tool error) does not abort the others: it is
 /// returned as a tool message with `is_error: Some(true)` so the LLM can
 /// recover.
 ///
@@ -387,7 +518,25 @@ pub async fn call_tools(
             ));
             continue;
         }
-        let args = match AgentValue::from_json(call.function.parameters.clone()) {
+        // Validate and coerce arguments against the tool's declared schema
+        // before execution. An unknown tool falls through unchanged so
+        // call_tool() reports the not-found error as usual.
+        let mut parameters = call.function.parameters.clone();
+        if let Some(tool) = get_tool(call.function.name.as_str())
+            && let Err(msg) = validate_tool_args(&tool.info().parameters, &mut parameters)
+        {
+            resp_messages.push(error_tool_result(
+                call,
+                format!(
+                    "Tool call arguments failed schema validation; the call was \
+                     not executed. Re-issue the call with corrected arguments. \
+                     Errors: {}",
+                    msg
+                ),
+            ));
+            continue;
+        }
+        let args = match AgentValue::from_json(parameters) {
             Ok(args) => args,
             Err(e) => {
                 resp_messages.push(error_tool_result(
@@ -1149,6 +1298,276 @@ mod tests {
         assert!(!is_valid_tool_name("my.tool"));
         assert!(!is_valid_tool_name("ツール"));
         assert!(!is_valid_tool_name("tool@1"));
+    }
+
+    mod arg_validation {
+        use super::*;
+        use serde_json::json;
+
+        /// Tool that echoes its arguments back, exposing what reached it
+        /// after validation and coercion.
+        struct EchoTool {
+            info: ToolInfo,
+        }
+
+        #[async_trait]
+        impl Tool for EchoTool {
+            fn info(&self) -> &ToolInfo {
+                &self.info
+            }
+
+            async fn call(
+                &self,
+                _ctx: AgentContext,
+                args: AgentValue,
+            ) -> Result<AgentValue, AgentError> {
+                Ok(args)
+            }
+        }
+
+        fn register_echo(name: &str, schema: Option<serde_json::Value>) {
+            register_tool(EchoTool {
+                info: ToolInfo::new(name, "echoes args", schema),
+            });
+        }
+
+        fn call(name: &str, id: &str, params: serde_json::Value) -> ToolCall {
+            ToolCall {
+                function: ToolCallFunction {
+                    name: name.to_string(),
+                    parameters: params,
+                    id: Some(id.to_string()),
+                    parse_error: None,
+                },
+            }
+        }
+
+        fn content_json(msg: &Message) -> serde_json::Value {
+            serde_json::from_str(&msg.content).unwrap()
+        }
+
+        #[test]
+        fn coerce_does_not_truncate_float_string_to_integer() {
+            let schema = json!({"type": "integer"});
+            let mut v = json!("42.5");
+            coerce_by_schema(&mut v, &schema);
+            assert_eq!(v, json!("42.5"));
+        }
+
+        #[test]
+        fn coerce_number_accepts_float_string_and_keeps_integer() {
+            let schema = json!({"type": "number"});
+            let mut v = json!("42.5");
+            coerce_by_schema(&mut v, &schema);
+            assert_eq!(v, json!(42.5));
+
+            // An integer is already a valid number and must stay untouched.
+            let mut v = json!(3);
+            coerce_by_schema(&mut v, &schema);
+            assert_eq!(v, json!(3));
+        }
+
+        #[test]
+        fn coerce_array_items() {
+            let schema = json!({"type": "array", "items": {"type": "integer"}});
+            let mut v = json!(["1", 2, "3"]);
+            coerce_by_schema(&mut v, &schema);
+            assert_eq!(v, json!([1, 2, 3]));
+        }
+
+        #[tokio::test]
+        async fn string_primitives_coerced_before_tool_call() {
+            let name = "p14_coerce_prims";
+            register_echo(
+                name,
+                Some(json!({
+                    "type": "object",
+                    "properties": {
+                        "count": {"type": "integer"},
+                        "flag": {"type": "boolean"}
+                    },
+                    "required": ["count", "flag"]
+                })),
+            );
+
+            let calls = vector![call(name, "c1", json!({"count": "42", "flag": "true"}))];
+            let msgs = call_tools(&AgentContext::new(), &calls).await.unwrap();
+            unregister_tool(name);
+
+            assert_eq!(msgs.len(), 1);
+            assert_eq!(msgs[0].is_error, None);
+            assert_eq!(msgs[0].id.as_deref(), Some("c1"));
+            assert_eq!(content_json(&msgs[0]), json!({"count": 42, "flag": true}));
+        }
+
+        #[tokio::test]
+        async fn nested_object_property_coerced() {
+            let name = "p14_coerce_nested";
+            register_echo(
+                name,
+                Some(json!({
+                    "type": "object",
+                    "properties": {
+                        "outer": {
+                            "type": "object",
+                            "properties": {"n": {"type": "integer"}}
+                        }
+                    }
+                })),
+            );
+
+            let calls = vector![call(name, "c1", json!({"outer": {"n": "7"}}))];
+            let msgs = call_tools(&AgentContext::new(), &calls).await.unwrap();
+            unregister_tool(name);
+
+            assert_eq!(msgs.len(), 1);
+            assert_eq!(msgs[0].is_error, None);
+            assert_eq!(content_json(&msgs[0]), json!({"outer": {"n": 7}}));
+        }
+
+        #[tokio::test]
+        async fn validation_failure_reports_error_and_batch_continues() {
+            let name = "p14_validation_failure";
+            register_echo(
+                name,
+                Some(json!({
+                    "type": "object",
+                    "properties": {"count": {"type": "integer"}},
+                    "required": ["count"]
+                })),
+            );
+
+            let calls = vector![
+                call(name, "bad", json!({"count": "abc"})),
+                call(name, "good", json!({"count": "5"})),
+            ];
+            let msgs = call_tools(&AgentContext::new(), &calls).await.unwrap();
+            unregister_tool(name);
+
+            assert_eq!(msgs.len(), 2);
+            assert_eq!(msgs[0].is_error, Some(true));
+            assert_eq!(msgs[0].id.as_deref(), Some("bad"));
+            assert!(msgs[0].content.contains("not executed"));
+            assert!(msgs[0].content.contains("/count"));
+
+            // The failure of the first call must not abort the second.
+            assert_eq!(msgs[1].is_error, None);
+            assert_eq!(msgs[1].id.as_deref(), Some("good"));
+            assert_eq!(content_json(&msgs[1]), json!({"count": 5}));
+        }
+
+        #[tokio::test]
+        async fn validation_failure_collects_all_errors() {
+            let name = "p14_all_errors";
+            register_echo(
+                name,
+                Some(json!({
+                    "type": "object",
+                    "properties": {
+                        "count": {"type": "integer"},
+                        "flag": {"type": "boolean"}
+                    },
+                    "required": ["count", "flag"]
+                })),
+            );
+
+            let calls = vector![call(name, "bad", json!({"count": "abc", "flag": "xyz"}))];
+            let msgs = call_tools(&AgentContext::new(), &calls).await.unwrap();
+            unregister_tool(name);
+
+            assert_eq!(msgs.len(), 1);
+            assert_eq!(msgs[0].is_error, Some(true));
+            // Every invalid path must be reported, not just the first error.
+            assert!(msgs[0].content.contains("/count"));
+            assert!(msgs[0].content.contains("/flag"));
+        }
+
+        #[tokio::test]
+        async fn default_empty_object_schema_accepts_arbitrary_args() {
+            let name = "p14_default_schema";
+            register_echo(name, None);
+
+            let args = json!({"anything": [1, 2, 3], "nested": {"x": "y"}});
+            let calls = vector![call(name, "c1", args.clone())];
+            let msgs = call_tools(&AgentContext::new(), &calls).await.unwrap();
+            unregister_tool(name);
+
+            assert_eq!(msgs.len(), 1);
+            assert_eq!(msgs[0].is_error, None);
+            assert_eq!(content_json(&msgs[0]), args);
+        }
+
+        #[tokio::test]
+        async fn uncompilable_schema_skips_validation_and_executes() {
+            let name = "p14_broken_schema";
+            register_echo(name, Some(json!({"type": 123})));
+
+            let args = json!({"x": "1"});
+            let calls = vector![call(name, "c1", args.clone())];
+            let msgs = call_tools(&AgentContext::new(), &calls).await.unwrap();
+            unregister_tool(name);
+
+            assert_eq!(msgs.len(), 1);
+            assert_eq!(msgs[0].is_error, None);
+            // Coercion is also skipped: the original string arrives untouched.
+            assert_eq!(content_json(&msgs[0]), args);
+        }
+
+        #[tokio::test]
+        async fn any_of_coercion_picks_validating_variant() {
+            let name = "p14_any_of";
+            register_echo(
+                name,
+                Some(json!({
+                    "type": "object",
+                    "properties": {
+                        "v": {"anyOf": [{"type": "integer"}, {"type": "boolean"}]}
+                    }
+                })),
+            );
+
+            let calls = vector![
+                call(name, "c1", json!({"v": "true"})),
+                call(name, "c2", json!({"v": "7"})),
+                call(name, "c3", json!({"v": 5})),
+            ];
+            let msgs = call_tools(&AgentContext::new(), &calls).await.unwrap();
+            unregister_tool(name);
+
+            assert_eq!(msgs.len(), 3);
+            // "true" fails the integer variant but coerces to the boolean one.
+            assert_eq!(content_json(&msgs[0]), json!({"v": true}));
+            assert_eq!(content_json(&msgs[1]), json!({"v": 7}));
+            // An already-valid value is left untouched.
+            assert_eq!(content_json(&msgs[2]), json!({"v": 5}));
+        }
+
+        #[tokio::test]
+        async fn any_of_with_sibling_properties_still_coerces() {
+            let name = "p14_any_of_siblings";
+            // Common "at least one of" pattern: anyOf lists required variants
+            // while sibling properties carry the type information. A variant
+            // accepting the raw object must not skip property coercion.
+            register_echo(
+                name,
+                Some(json!({
+                    "type": "object",
+                    "properties": {
+                        "a": {"type": "integer"},
+                        "b": {"type": "integer"}
+                    },
+                    "anyOf": [{"required": ["a"]}, {"required": ["b"]}]
+                })),
+            );
+
+            let calls = vector![call(name, "c1", json!({"a": "5"}))];
+            let msgs = call_tools(&AgentContext::new(), &calls).await.unwrap();
+            unregister_tool(name);
+
+            assert_eq!(msgs.len(), 1);
+            assert_eq!(msgs[0].is_error, None);
+            assert_eq!(content_json(&msgs[0]), json!({"a": 5}));
+        }
     }
 
     #[cfg(feature = "test-utils")]
