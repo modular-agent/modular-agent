@@ -661,6 +661,20 @@ impl ModularAgent {
         Ok(())
     }
 
+    /// Returns true if any connection originates from `source_agent`'s `port`.
+    ///
+    /// Producers can use this to skip building expensive values for ports
+    /// nobody listens to; `agent_out` would only drop them after the
+    /// conversion cost has already been paid.
+    pub fn has_connections(&self, source_agent: &str, port: &str) -> bool {
+        let connections = self.connections.lock().unwrap();
+        connections.get(source_agent).is_some_and(|targets| {
+            targets
+                .iter()
+                .any(|(_, source_port, _)| source_port == port)
+        })
+    }
+
     /// Add agents and connections to the specified preset.
     ///
     /// The ids of the given agents and connections are changed to new unique ids.

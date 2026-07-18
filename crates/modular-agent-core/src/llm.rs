@@ -331,7 +331,7 @@ pub struct Usage {
 ///
 /// Represents a single tool invocation as part of an LLM response.
 /// The assistant may request multiple tool calls in a single message.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ToolCall {
     /// The function to be called.
     pub function: ToolCallFunction,
@@ -341,7 +341,7 @@ pub struct ToolCall {
 ///
 /// Contains the function name, parameters, and optional call ID
 /// for correlating tool calls with their results.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ToolCallFunction {
     /// Name of the function/tool to invoke.
     pub name: String,
@@ -358,6 +358,110 @@ pub struct ToolCallFunction {
     /// tool result instead of executing the call.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub parse_error: Option<String>,
+}
+
+/// A typed streaming event describing the progress of one assistant [`Message`].
+///
+/// Providers emit these events while generating a response so downstream
+/// agents can distinguish incremental deltas from the final message instead
+/// of relying on repeated partial-`Message` re-sends. Each incremental event
+/// carries both the `delta` (just the new fragment) and the accumulated
+/// `partial` message, so consumers can either append deltas or replace the
+/// whole message — a single accumulation loop suffices.
+///
+/// Serialized as an internally tagged JSON object: the `type` field holds the
+/// snake_case variant name (e.g. `"text_delta"`, `"tool_call_end"`, `"done"`)
+/// and the variant fields are inlined alongside it.
+///
+/// # Variants
+///
+/// * `Start` - Generation began; `partial` is the (usually empty) initial message
+/// * `TextDelta` - New text content was appended to `partial.content`
+/// * `ThinkingDelta` - New thinking text was appended to `partial.thinking`
+/// * `ToolCallStart` - The assistant began emitting the tool call at `index`
+/// * `ToolCallDelta` - New argument text for the tool call at `index`
+/// * `ToolCallEnd` - The tool call at `index` is complete and parsed
+/// * `Done` - Generation finished; `message` is the final complete message
+/// * `Error` - Generation failed; `message` holds what was accumulated so far
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum MessageEvent {
+    /// Generation of a new assistant message has started.
+    Start {
+        /// The initial (typically empty) accumulated message.
+        partial: Message,
+    },
+
+    /// A fragment of text content was generated.
+    TextDelta {
+        /// The newly generated text fragment.
+        delta: String,
+        /// The accumulated message including this delta.
+        partial: Message,
+    },
+
+    /// A fragment of thinking/reasoning text was generated.
+    ThinkingDelta {
+        /// The newly generated thinking fragment.
+        delta: String,
+        /// The accumulated message including this delta.
+        partial: Message,
+    },
+
+    /// The assistant started emitting a tool call.
+    ToolCallStart {
+        /// Zero-based position of the tool call within the message.
+        index: usize,
+        /// The accumulated message so far.
+        partial: Message,
+    },
+
+    /// A fragment of tool-call arguments was generated.
+    ToolCallDelta {
+        /// Zero-based position of the tool call within the message.
+        index: usize,
+        /// The newly generated argument text fragment.
+        delta: String,
+        /// The accumulated message so far.
+        partial: Message,
+    },
+
+    /// A tool call is complete and its arguments have been parsed.
+    ToolCallEnd {
+        /// Zero-based position of the tool call within the message.
+        index: usize,
+        /// The completed tool call.
+        tool_call: ToolCall,
+        /// The accumulated message including this tool call.
+        partial: Message,
+    },
+
+    /// Generation finished successfully.
+    Done {
+        /// The final complete message.
+        message: Message,
+    },
+
+    /// Generation failed.
+    Error {
+        /// The message accumulated before the failure.
+        message: Message,
+        /// Description of the failure.
+        error: String,
+    },
+}
+
+impl TryFrom<MessageEvent> for AgentValue {
+    type Error = AgentError;
+
+    fn try_from(event: MessageEvent) -> Result<Self, AgentError> {
+        // Route through serde_json so the tagged representation on a port
+        // matches the serialized form exactly (including the "type" field).
+        let json = serde_json::to_value(&event).map_err(|e| {
+            AgentError::InvalidValue(format!("Failed to serialize MessageEvent: {e}"))
+        })?;
+        AgentValue::from_json(json)
+    }
 }
 
 impl TryFrom<AgentValue> for Message {
@@ -880,6 +984,142 @@ mod tests {
         });
         let msg: Message = serde_json::from_value(json).unwrap();
         assert_eq!(msg.usage, None);
+    }
+
+    // MessageEvent tests
+
+    #[test]
+    fn test_message_event_text_delta_serde_round_trip() {
+        let mut partial = Message::assistant("Hel".to_string());
+        partial.streaming = true;
+        let event = MessageEvent::TextDelta {
+            delta: "l".to_string(),
+            partial,
+        };
+
+        let json = serde_json::to_value(&event).unwrap();
+        assert_eq!(json["type"], serde_json::json!("text_delta"));
+        assert_eq!(json["delta"], serde_json::json!("l"));
+        assert_eq!(json["partial"]["content"], serde_json::json!("Hel"));
+
+        let restored: MessageEvent = serde_json::from_value(json).unwrap();
+        assert_eq!(restored, event);
+        // Message's PartialEq covers only id/role/content, so fields the
+        // handwritten serde must preserve are asserted directly.
+        let MessageEvent::TextDelta { delta, partial } = restored else {
+            panic!("wrong variant");
+        };
+        assert_eq!(delta, "l");
+        assert!(partial.streaming);
+    }
+
+    #[test]
+    fn test_message_event_done_serde_round_trip() {
+        let mut msg = Message::assistant("Hello".to_string());
+        msg.id = Some("msg1".to_string());
+        msg.stop_reason = Some("stop".to_string());
+        msg.usage = Some(Usage {
+            input_tokens: 10,
+            output_tokens: 5,
+            cache_read_tokens: 2,
+            cache_write_tokens: 1,
+        });
+        let event = MessageEvent::Done {
+            message: msg.clone(),
+        };
+
+        let json = serde_json::to_value(&event).unwrap();
+        assert_eq!(json["type"], serde_json::json!("done"));
+        assert_eq!(json["message"]["role"], serde_json::json!("assistant"));
+        assert_eq!(json["message"]["content"], serde_json::json!("Hello"));
+
+        let restored: MessageEvent = serde_json::from_value(json).unwrap();
+        assert_eq!(restored, event);
+        // Message's PartialEq covers only id/role/content, so fields the
+        // handwritten serde must preserve are asserted directly.
+        let MessageEvent::Done { message } = restored else {
+            panic!("wrong variant");
+        };
+        assert!(!message.streaming);
+        assert_eq!(message.stop_reason, msg.stop_reason);
+        assert_eq!(message.usage, msg.usage);
+    }
+
+    #[test]
+    fn test_message_event_tool_call_end_serde_round_trip() {
+        let tool_call = ToolCall {
+            function: ToolCallFunction {
+                id: Some("call1".to_string()),
+                name: "get_weather".to_string(),
+                parameters: serde_json::json!({"location": "Tokyo"}),
+                parse_error: None,
+            },
+        };
+        let mut partial = Message::assistant("".to_string());
+        partial.streaming = true;
+        partial.tool_calls = Some(vector![tool_call.clone()]);
+        let event = MessageEvent::ToolCallEnd {
+            index: 0,
+            tool_call,
+            partial,
+        };
+
+        let json = serde_json::to_value(&event).unwrap();
+        assert_eq!(json["type"], serde_json::json!("tool_call_end"));
+        assert_eq!(json["index"], serde_json::json!(0));
+        assert_eq!(
+            json["tool_call"]["function"]["name"],
+            serde_json::json!("get_weather")
+        );
+
+        let restored: MessageEvent = serde_json::from_value(json).unwrap();
+        assert_eq!(restored, event);
+        // Message's PartialEq covers only id/role/content, so fields the
+        // handwritten serde must preserve are asserted directly.
+        let MessageEvent::ToolCallEnd {
+            index,
+            tool_call,
+            partial,
+        } = restored
+        else {
+            panic!("wrong variant");
+        };
+        assert_eq!(index, 0);
+        assert_eq!(tool_call.function.name, "get_weather");
+        assert_eq!(
+            tool_call.function.parameters,
+            serde_json::json!({"location": "Tokyo"})
+        );
+        assert!(partial.streaming);
+        let restored_calls = partial.tool_calls.unwrap();
+        assert_eq!(restored_calls.len(), 1);
+        assert_eq!(restored_calls[0].function.id, Some("call1".to_string()));
+    }
+
+    #[test]
+    fn test_message_event_to_agent_value() {
+        let event = MessageEvent::Done {
+            message: Message::assistant("Hello".to_string()),
+        };
+
+        let value = AgentValue::try_from(event).unwrap();
+        assert!(value.is_object());
+        assert_eq!(value.get_str("type"), Some("done"));
+        let message = value.get("message").unwrap();
+        assert_eq!(message.get_str("role"), Some("assistant"));
+        assert_eq!(message.get_str("content"), Some("Hello"));
+    }
+
+    #[test]
+    fn test_message_event_error_to_agent_value() {
+        let event = MessageEvent::Error {
+            message: Message::assistant("partial".to_string()),
+            error: "connection reset".to_string(),
+        };
+
+        let value = AgentValue::try_from(event).unwrap();
+        assert_eq!(value.get_str("type"), Some("error"));
+        assert_eq!(value.get_str("error"), Some("connection reset"));
     }
 
     #[test]
