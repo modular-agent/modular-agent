@@ -57,7 +57,9 @@ const DEFAULT_CONFIG_MODEL: &str = "openai/gpt-5-nano";
 /// - Output `message`: Assistant message. When streaming, accumulated partial
 ///   messages (`streaming` = true) are re-sent per delta (unless
 ///   `emit_partial_messages` is false), always followed by exactly one final
-///   message (`streaming` = false)
+///   message (`streaming` = false). A mid-stream failure or a cancelled flow
+///   (`ModularAgent::abort_context`) still gets that final: same id, the
+///   partial content so far, and `stop_reason` "error" or "aborted"
 /// - Output `response`: Raw provider response (per-chunk when streaming)
 /// - Output `event`: Typed `MessageEvent` object whose `type` field is one of
 ///   `start`, `text_delta`, `thinking_delta`, `tool_call_start`,
@@ -180,6 +182,15 @@ impl AsAgent for ChatAgent {
         _port: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
+        // An aborted flow feeds synthetic "Operation aborted" tool results
+        // back into this agent; without this guard each such trigger would
+        // issue one more full-price LLM request (indefinitely with
+        // stream=false, since the non-streaming request has no later
+        // cancellation point).
+        if ctx.is_cancelled() {
+            return Err(AgentError::Cancelled);
+        }
+
         let config_model = self.configs()?.get_string_or_default(CONFIG_MODEL);
         if config_model.is_empty() {
             return Ok(());
@@ -409,7 +420,11 @@ impl ChatAgent {
             // Retry covers stream establishment only: once chunks have been
             // emitted downstream they cannot be rolled back, so any failure
             // after this point must propagate instead of being retried.
-            let stream = retry.run(|| client.post_stream(&url, &request)).await?;
+            let stream = request_or_cancelled(
+                ctx.cancel_token(),
+                retry.run(|| client.post_stream(&url, &request)),
+            )
+            .await?;
 
             let mut message = Message::assistant("".to_string());
             message.id = Some(id.clone());
@@ -425,8 +440,11 @@ impl ChatAgent {
             Ok(())
         } else {
             let url = client.chat_completions_url();
-            let res: openai_client::ChatCompletionResponse =
-                retry.run(|| client.post_json(&url, &request)).await?;
+            let res: openai_client::ChatCompletionResponse = request_or_cancelled(
+                ctx.cancel_token(),
+                retry.run(|| client.post_json(&url, &request)),
+            )
+            .await?;
 
             let usage = res.usage.as_ref().map(openai_client::usage_from_openai);
             for c in &res.choices {
@@ -477,8 +495,9 @@ impl ChatAgent {
             .await
     }
 
-    /// Emit a final same-id message marking a mid-stream failure so message
-    /// history replaces the dangling partial with an error-terminated one,
+    /// Emit a final same-id message marking a mid-stream failure
+    /// (stop_reason "error") or cancellation (stop_reason "aborted") so
+    /// message history replaces the dangling partial with a terminated one,
     /// plus a matching `Error` event on the `event` port.
     /// Best effort: the original stream error is the more useful signal, so
     /// an emit failure here must not mask it.
@@ -489,7 +508,7 @@ impl ChatAgent {
         message: Message,
         error: &AgentError,
     ) {
-        let Some(message) = stream_error_final(message) else {
+        let Some(message) = stream_error_final(message, error) else {
             return;
         };
         let _ = self
@@ -520,8 +539,6 @@ impl ChatAgent {
         mut stream: impl futures::Stream<Item = Result<Option<String>, AgentError>> + Unpin,
         message: &mut Message,
     ) -> Result<(), AgentError> {
-        use futures::StreamExt;
-
         // get_bool_or with an explicit true keeps the fallback aligned with
         // the declared config default when the key is absent (old spec not
         // yet reconciled).
@@ -549,7 +566,7 @@ impl ChatAgent {
         // so downstream tool execution acts on the final message alone.
         let mut pending: std::collections::BTreeMap<u32, openai_client::PendingToolCall> =
             std::collections::BTreeMap::new();
-        while let Some(res) = stream.next().await {
+        while let Some(res) = next_or_cancelled(&mut stream, ctx.cancel_token()).await? {
             let Some(data) = res? else {
                 continue; // [DONE] sentinel
             };
@@ -822,7 +839,11 @@ impl ChatAgent {
             // Retry covers stream establishment only: once chunks have been
             // emitted downstream they cannot be rolled back, so any failure
             // after this point must propagate instead of being retried.
-            let stream = retry.run(|| client.create_message_stream(&request)).await?;
+            let stream = request_or_cancelled(
+                ctx.cancel_token(),
+                retry.run(|| client.create_message_stream(&request)),
+            )
+            .await?;
 
             let mut message = Message::assistant(String::new());
             message.id = Some(id.clone());
@@ -836,7 +857,11 @@ impl ChatAgent {
 
             Ok(())
         } else {
-            let response = retry.run(|| client.create_message(&request)).await?;
+            let response = request_or_cancelled(
+                ctx.cancel_token(),
+                retry.run(|| client.create_message(&request)),
+            )
+            .await?;
 
             let mut message = claude_client::message_from_claude_response(&response);
             message.id = Some(id.clone());
@@ -870,7 +895,6 @@ impl ChatAgent {
         + Unpin,
         message: &mut Message,
     ) -> Result<(), AgentError> {
-        use futures::StreamExt;
         use modular_agent_core::ContentBlock;
 
         // get_bool_or with an explicit true keeps the fallback aligned with
@@ -906,7 +930,7 @@ impl ChatAgent {
         let mut current_tool_name: Option<String> = None;
         let mut current_tool_arguments = String::new();
 
-        while let Some(event) = stream.next().await {
+        while let Some(event) = next_or_cancelled(&mut stream, ctx.cancel_token()).await? {
             let event = event?;
 
             match event {
@@ -1229,9 +1253,13 @@ impl ChatAgent {
             // Retry covers stream establishment only: once chunks have been
             // emitted downstream they cannot be rolled back, so any failure
             // after this point must propagate instead of being retried.
-            let stream = retry
-                .run(|| client.post_ndjson_stream::<ollama_client::ChatResponse>(&url, &request))
-                .await?;
+            let stream = request_or_cancelled(
+                ctx.cancel_token(),
+                retry.run(|| {
+                    client.post_ndjson_stream::<ollama_client::ChatResponse>(&url, &request)
+                }),
+            )
+            .await?;
 
             let mut message = Message::assistant("".to_string());
             message.id = Some(id.clone());
@@ -1246,8 +1274,11 @@ impl ChatAgent {
             Ok(())
         } else {
             let url = client.chat_url();
-            let res: ollama_client::ChatResponse =
-                retry.run(|| client.post_json(&url, &request)).await?;
+            let res: ollama_client::ChatResponse = request_or_cancelled(
+                ctx.cancel_token(),
+                retry.run(|| client.post_json(&url, &request)),
+            )
+            .await?;
 
             let mut message = ollama_client::message_from_ollama(&res.message);
             message.id = Some(id.clone());
@@ -1288,8 +1319,6 @@ impl ChatAgent {
         >,
         message: &mut Message,
     ) -> Result<(), AgentError> {
-        use futures::StreamExt;
-
         // get_bool_or with an explicit true keeps the fallback aligned with
         // the declared config default when the key is absent (old spec not
         // yet reconciled).
@@ -1308,7 +1337,7 @@ impl ChatAgent {
         let mut content = String::new();
         let mut thinking = String::new();
         let mut tool_calls: Vec<ToolCall> = vec![];
-        while let Some(res) = stream.next().await {
+        while let Some(res) = next_or_cancelled(&mut stream, ctx.cancel_token()).await? {
             let res = res?;
 
             content.push_str(&res.message.content);
@@ -1522,19 +1551,75 @@ fn apply_ollama_thinking(
     }
 }
 
-/// Build the error-marked final message for a stream that failed mid-turn,
-/// or `None` if the turn already delivered its final message (`streaming`
-/// flips to false only at final-emit time, so emitting again would clobber a
-/// successful final with the same id). Accumulated tool_calls from partial
-/// emits are dropped: the model never finished the turn, so they must not
-/// reach the tool executor.
+/// Await the next item of an established stream, racing it against the
+/// flow's cancellation token. The moment the token fires (e.g. via
+/// `ModularAgent::abort_context`) this returns `Err(AgentError::Cancelled)`
+/// so the stream loop bails out and its caller can emit the
+/// `stop_reason = "aborted"` final message. Without a token this is a plain
+/// `stream.next().await`. Biased so a fired token wins even when the next
+/// chunk is already buffered.
 #[cfg(any(feature = "openai", feature = "claude", feature = "ollama"))]
-pub(crate) fn stream_error_final(mut message: Message) -> Option<Message> {
+pub(crate) async fn next_or_cancelled<S>(
+    stream: &mut S,
+    cancel: Option<&modular_agent_core::CancellationToken>,
+) -> Result<Option<S::Item>, AgentError>
+where
+    S: futures::Stream + Unpin,
+{
+    use futures::StreamExt;
+    match cancel {
+        Some(token) => tokio::select! {
+            biased;
+            _ = token.cancelled() => Err(AgentError::Cancelled),
+            item = stream.next() => Ok(item),
+        },
+        None => Ok(stream.next().await),
+    }
+}
+
+/// Race an LLM request — including its whole retry/backoff loop — against
+/// the flow's cancellation token, so an aborted flow drops the in-flight
+/// request (and any remaining retries) instead of running them to
+/// completion. Establishment-only: nothing has been emitted downstream yet,
+/// so dropping here is history-safe. Without a token this is a plain await.
+#[cfg(any(feature = "openai", feature = "claude", feature = "ollama"))]
+pub(crate) async fn request_or_cancelled<T>(
+    cancel: Option<&modular_agent_core::CancellationToken>,
+    fut: impl std::future::Future<Output = Result<T, AgentError>>,
+) -> Result<T, AgentError> {
+    match cancel {
+        Some(token) => tokio::select! {
+            biased;
+            _ = token.cancelled() => Err(AgentError::Cancelled),
+            r = fut => r,
+        },
+        None => fut.await,
+    }
+}
+
+/// Build the final message for a stream that failed or was cancelled
+/// mid-turn, or `None` if the turn already delivered its final message
+/// (`streaming` flips to false only at final-emit time, so emitting again
+/// would clobber a successful final with the same id). The stop_reason is
+/// "aborted" for a cancellation and "error" otherwise; either way the same
+/// message id and the partial content accumulated so far are preserved so
+/// history keeps the id-dedup replacement working. Accumulated tool_calls
+/// from partial emits are dropped: the model never finished the turn, so
+/// they must not reach the tool executor.
+#[cfg(any(feature = "openai", feature = "claude", feature = "ollama"))]
+pub(crate) fn stream_error_final(mut message: Message, error: &AgentError) -> Option<Message> {
     if !message.streaming {
         return None;
     }
     message.streaming = false;
-    message.stop_reason = Some("error".to_string());
+    message.stop_reason = Some(
+        if matches!(error, AgentError::Cancelled) {
+            "aborted"
+        } else {
+            "error"
+        }
+        .to_string(),
+    );
     message.tool_calls = None;
     Some(message)
 }
@@ -1695,6 +1780,132 @@ mod tests {
         ma.quit();
     }
 
+    /// Chain a tail onto `items` that fires `token` when polled and then
+    /// stays pending, deterministically simulating a flow abort arriving
+    /// mid-stream: the loop consumes every item, then blocks on the next
+    /// chunk until the cancellation wakes it.
+    fn cancel_after<T>(
+        items: Vec<T>,
+        token: modular_agent_core::CancellationToken,
+    ) -> impl futures::Stream<Item = T> + Unpin {
+        use futures::StreamExt;
+        futures::stream::iter(items).chain(futures::stream::poll_fn(move |_| {
+            token.cancel();
+            std::task::Poll::Pending
+        }))
+    }
+
+    #[cfg(feature = "openai")]
+    #[tokio::test]
+    async fn openai_stream_cancel_emits_same_id_aborted_final() {
+        let (ma, chat_id, probe_rx) = setup_chat_with_probe().await;
+
+        let token = modular_agent_core::CancellationToken::new();
+        let chunks: Vec<Result<Option<String>, AgentError>> = vec![Ok(Some(
+            r#"{"choices":[{"index":0,"delta":{"content":"partial"},"finish_reason":null}]}"#
+                .to_string(),
+        ))];
+        let stream = cancel_after(chunks, token.clone());
+        let mut message = streaming_seed_message("m1");
+
+        {
+            let agent = ma.get_agent(&chat_id).unwrap();
+            let mut guard = agent.lock().await;
+            let chat = guard.as_agent_mut::<ChatAgent>().unwrap();
+            let ctx = AgentContext::new().with_cancel_token(token);
+            // Same sequence as the process_* call sites: intercept the
+            // Cancelled, then emit the aborted-marked final for the
+            // dangling partial.
+            let err = chat
+                .run_openai_stream(&ctx, stream, &mut message)
+                .await
+                .unwrap_err();
+            assert!(matches!(err, AgentError::Cancelled));
+            chat.emit_stream_error_message(&ctx, message, &err).await;
+        }
+
+        let final_msg = recv_final_message(&probe_rx).await;
+        assert_eq!(final_msg.stop_reason.as_deref(), Some("aborted"));
+        assert_eq!(final_msg.text(), "partial");
+        assert_eq!(final_msg.id.as_deref(), Some("m1"));
+
+        ma.quit();
+    }
+
+    #[cfg(feature = "claude")]
+    #[tokio::test]
+    async fn claude_stream_cancel_emits_same_id_aborted_final() {
+        let (ma, chat_id, probe_rx) = setup_chat_with_probe().await;
+
+        let token = modular_agent_core::CancellationToken::new();
+        let events: Vec<Result<claude_client::ClaudeStreamEvent, AgentError>> = [
+            r#"{"type":"message_start","message":{"id":"msg_1","usage":{"input_tokens":5,"output_tokens":1}}}"#,
+            r#"{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}"#,
+            r#"{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"partial"}}"#,
+        ]
+        .iter()
+        .map(|json| Ok(serde_json::from_str(json).unwrap()))
+        .collect();
+        let stream = cancel_after(events, token.clone());
+        let mut message = streaming_seed_message("m1");
+
+        {
+            let agent = ma.get_agent(&chat_id).unwrap();
+            let mut guard = agent.lock().await;
+            let chat = guard.as_agent_mut::<ChatAgent>().unwrap();
+            let ctx = AgentContext::new().with_cancel_token(token);
+            let err = chat
+                .run_claude_stream(&ctx, stream, &mut message)
+                .await
+                .unwrap_err();
+            assert!(matches!(err, AgentError::Cancelled));
+            chat.emit_stream_error_message(&ctx, message, &err).await;
+        }
+
+        let final_msg = recv_final_message(&probe_rx).await;
+        assert_eq!(final_msg.stop_reason.as_deref(), Some("aborted"));
+        assert_eq!(final_msg.text(), "partial");
+        assert_eq!(final_msg.id.as_deref(), Some("m1"));
+
+        ma.quit();
+    }
+
+    #[cfg(feature = "ollama")]
+    #[tokio::test]
+    async fn ollama_stream_cancel_emits_same_id_aborted_final() {
+        let (ma, chat_id, probe_rx) = setup_chat_with_probe().await;
+
+        let token = modular_agent_core::CancellationToken::new();
+        let chunks: Vec<Result<ollama_client::ChatResponse, AgentError>> = vec![Ok(
+            serde_json::from_str(
+                r#"{"model":"m","created_at":"t","message":{"role":"assistant","content":"partial"},"done":false}"#,
+            )
+            .unwrap(),
+        )];
+        let stream = cancel_after(chunks, token.clone());
+        let mut message = streaming_seed_message("m1");
+
+        {
+            let agent = ma.get_agent(&chat_id).unwrap();
+            let mut guard = agent.lock().await;
+            let chat = guard.as_agent_mut::<ChatAgent>().unwrap();
+            let ctx = AgentContext::new().with_cancel_token(token);
+            let err = chat
+                .run_ollama_stream(&ctx, Box::pin(stream), &mut message)
+                .await
+                .unwrap_err();
+            assert!(matches!(err, AgentError::Cancelled));
+            chat.emit_stream_error_message(&ctx, message, &err).await;
+        }
+
+        let final_msg = recv_final_message(&probe_rx).await;
+        assert_eq!(final_msg.stop_reason.as_deref(), Some("aborted"));
+        assert_eq!(final_msg.text(), "partial");
+        assert_eq!(final_msg.id.as_deref(), Some("m1"));
+
+        ma.quit();
+    }
+
     #[cfg(feature = "claude")]
     #[tokio::test]
     async fn claude_stream_stop_reason_lands_on_final_message() {
@@ -1810,10 +2021,24 @@ mod tests {
 
     #[test]
     fn stream_error_final_marks_error_and_strips_tool_calls() {
-        let message =
-            stream_error_final(partial_message_with_tool_calls()).expect("should emit final");
+        let message = stream_error_final(
+            partial_message_with_tool_calls(),
+            &AgentError::IoError("connection reset".into()),
+        )
+        .expect("should emit final");
         assert!(!message.streaming);
         assert_eq!(message.stop_reason.as_deref(), Some("error"));
+        assert!(message.tool_calls.is_none());
+        assert_eq!(message.text(), "partial");
+        assert_eq!(message.id.as_deref(), Some("msg-1"));
+    }
+
+    #[test]
+    fn stream_error_final_marks_cancellation_as_aborted() {
+        let message = stream_error_final(partial_message_with_tool_calls(), &AgentError::Cancelled)
+            .expect("should emit final");
+        assert!(!message.streaming);
+        assert_eq!(message.stop_reason.as_deref(), Some("aborted"));
         assert!(message.tool_calls.is_none());
         assert_eq!(message.text(), "partial");
         assert_eq!(message.id.as_deref(), Some("msg-1"));
@@ -1824,7 +2049,7 @@ mod tests {
         let mut message = partial_message_with_tool_calls();
         message.streaming = false;
         message.stop_reason = Some("stop".to_string());
-        assert!(stream_error_final(message).is_none());
+        assert!(stream_error_final(message, &AgentError::Cancelled).is_none());
     }
 
     /// Drain event-port emits until a terminal `done`/`error` event,

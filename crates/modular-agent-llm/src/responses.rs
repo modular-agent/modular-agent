@@ -63,7 +63,10 @@ const DEFAULT_MODEL: &str = "openai/gpt-5-mini";
 /// # Ports
 /// - Input `message`: Message or array of messages to send
 /// - Input `reset`: Any value to reset conversation state
-/// - Output `message`: Assistant's response message
+/// - Output `message`: Assistant's response message. A mid-stream failure or
+///   a cancelled flow (`ModularAgent::abort_context`) still emits one final
+///   message: same id, the partial content so far, and `stop_reason` "error"
+///   or "aborted"
 /// - Output `response`: Raw API response
 /// - Output `event`: Typed stream events (`MessageEvent` object with a `type`
 ///   field: `start`, `text_delta`, `tool_call_start`, `tool_call_delta`,
@@ -125,6 +128,13 @@ impl AsAgent for ResponsesAgent {
         if port == PORT_RESET {
             self.last_response_id = None;
             return Ok(());
+        }
+
+        // An aborted flow feeds synthetic "Operation aborted" tool results
+        // back into this agent; without this guard each such trigger would
+        // issue one more full-price LLM request.
+        if ctx.is_cancelled() {
+            return Err(AgentError::Cancelled);
         }
 
         let config = self.configs()?;
@@ -309,7 +319,11 @@ impl ResponsesAgent {
         retry: RetryPolicy,
     ) -> Result<(), AgentError> {
         let url = client.responses_url();
-        let response: serde_json::Value = retry.run(|| client.post_json(&url, request)).await?;
+        let response: serde_json::Value = crate::chat::request_or_cancelled(
+            ctx.cancel_token(),
+            retry.run(|| client.post_json(&url, request)),
+        )
+        .await?;
 
         // Store response ID for conversation continuity
         if use_conversation_state && let Some(resp_id) = response.get("id").and_then(|v| v.as_str())
@@ -363,7 +377,11 @@ impl ResponsesAgent {
         // Retry covers stream establishment only: once chunks have been
         // emitted downstream they cannot be rolled back, so any failure
         // after this point must propagate instead of being retried.
-        let stream = retry.run(|| client.post_stream(&url, request)).await?;
+        let stream = crate::chat::request_or_cancelled(
+            ctx.cancel_token(),
+            retry.run(|| client.post_stream(&url, request)),
+        )
+        .await?;
 
         let mut message = Message::assistant(String::new());
         message.id = Some(id.to_string());
@@ -375,11 +393,12 @@ impl ResponsesAgent {
             .run_stream(&ctx, stream, &mut message, use_conversation_state)
             .await
         {
-            // Mark the mid-stream failure on a final same-id emit so message
-            // history replaces the dangling partial with an error-terminated
+            // Mark the mid-stream failure (stop_reason "error") or
+            // cancellation (stop_reason "aborted") on a final same-id emit so
+            // message history replaces the dangling partial with a terminated
             // one. Best effort: the stream error is the more useful signal,
             // so an emit failure here must not mask it.
-            if let Some(message) = crate::chat::stream_error_final(message) {
+            if let Some(message) = crate::chat::stream_error_final(message, &e) {
                 let _ = self
                     .output(
                         ctx.clone(),
@@ -413,8 +432,6 @@ impl ResponsesAgent {
         message: &mut Message,
         use_conversation_state: bool,
     ) -> Result<(), AgentError> {
-        use futures::StreamExt;
-
         // get_bool_or with an explicit true keeps the fallback aligned with
         // the declared config default when the key is absent (old spec not
         // yet reconciled).
@@ -437,7 +454,9 @@ impl ResponsesAgent {
         )
         .await?;
 
-        while let Some(res) = stream.next().await {
+        while let Some(res) =
+            crate::chat::next_or_cancelled(&mut stream, ctx.cancel_token()).await?
+        {
             let Some(data) = res? else {
                 continue; // [DONE] sentinel
             };
@@ -788,6 +807,66 @@ mod tests {
         assert_eq!(final_msg.id.as_deref(), Some("m1"));
         // No usage object on this terminal event, so it legitimately stays None
         assert_eq!(final_msg.usage, None);
+
+        ma.quit();
+    }
+
+    #[tokio::test]
+    async fn responses_stream_cancel_returns_cancelled_and_builds_aborted_final() {
+        let (ma, responses_id, probe_rx) = setup_responses_with_probe(PORT_MESSAGE).await;
+
+        // One text delta, then a tail that fires the flow token when polled
+        // and stays pending — a deterministic mid-stream abort.
+        let token = modular_agent_core::CancellationToken::new();
+        let fire = token.clone();
+        let chunks: Vec<Result<Option<String>, AgentError>> = vec![Ok(Some(
+            r#"{"type":"response.output_text.delta","delta":"partial"}"#.to_string(),
+        ))];
+        let stream = {
+            use futures::StreamExt;
+            futures::stream::iter(chunks).chain(futures::stream::poll_fn(move |_| {
+                fire.cancel();
+                std::task::Poll::Pending
+            }))
+        };
+        let mut message = Message::assistant(String::new());
+        message.id = Some("m1".to_string());
+        message.streaming = true;
+
+        {
+            let agent = ma.get_agent(&responses_id).unwrap();
+            let mut guard = agent.lock().await;
+            let responses = guard.as_agent_mut::<ResponsesAgent>().unwrap();
+            let ctx = AgentContext::new().with_cancel_token(token);
+            let err = responses
+                .run_stream(&ctx, stream, &mut message, false)
+                .await
+                .unwrap_err();
+            assert!(matches!(err, AgentError::Cancelled));
+
+            // Same sequence as process_streaming: the aborted-marked final
+            // replaces the dangling partial in message history.
+            let final_msg =
+                crate::chat::stream_error_final(message, &err).expect("should build final");
+            assert_eq!(final_msg.stop_reason.as_deref(), Some("aborted"));
+            assert_eq!(final_msg.text(), "partial");
+            assert_eq!(final_msg.id.as_deref(), Some("m1"));
+            responses
+                .output(ctx, PORT_MESSAGE.to_string(), final_msg.into())
+                .await
+                .unwrap();
+        }
+
+        let final_msg = loop {
+            let (_ctx, value) = probe_rx.recv().await.unwrap();
+            let msg = value.as_message().unwrap().clone();
+            if !msg.streaming {
+                break msg;
+            }
+        };
+        assert_eq!(final_msg.stop_reason.as_deref(), Some("aborted"));
+        assert_eq!(final_msg.text(), "partial");
+        assert_eq!(final_msg.id.as_deref(), Some("m1"));
 
         ma.quit();
     }
