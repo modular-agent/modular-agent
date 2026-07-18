@@ -85,6 +85,13 @@ pub struct ToolInfo {
     pub name: String,
 
     /// Human-readable description of what the tool does.
+    ///
+    /// Per Claude's tool-use guidance, the description is the single most
+    /// important factor for tool-calling performance. Write a detailed
+    /// description (3-4+ sentences) covering what the tool does, when it
+    /// should (and should not) be used, what each parameter means, and any
+    /// caveats or limitations. Registering a tool with a missing or very
+    /// short description logs a warning (see [`register_tool`]).
     pub description: String,
 
     /// JSON Schema describing the tool's parameters.
@@ -219,7 +226,11 @@ impl ToolRegistry {
 
     /// Registers a tool with the registry.
     fn register_tool<T: Tool + Send + Sync + 'static>(&mut self, tool: T) {
-        let name = tool.info().name.to_string();
+        let info = tool.info();
+        if let Some(warning) = description_warning(&info.name, &info.description) {
+            log::warn!("{}", warning);
+        }
+        let name = info.name.to_string();
         let entry = ToolEntry::new(tool);
         self.tools.insert(name, entry);
     }
@@ -248,11 +259,42 @@ fn registry() -> &'static RwLock<ToolRegistry> {
 /// The tool will be available for lookup and invocation by its name.
 /// If a tool with the same name already exists, it will be replaced.
 ///
+/// A missing or very short description logs a warning at registration time,
+/// but never rejects the registration. See [`ToolInfo::description`] for
+/// description best practices.
+///
 /// # Arguments
 ///
 /// * `tool` - The tool implementation to register
 pub fn register_tool<T: Tool + Send + Sync + 'static>(tool: T) {
     registry().write().unwrap().register_tool(tool);
+}
+
+/// Minimum description length (in characters) below which registration warns.
+const MIN_DESCRIPTION_CHARS: usize = 10;
+
+/// Returns a warning message when a tool description is too weak to guide
+/// tool selection — missing, whitespace-only, or shorter than
+/// [`MIN_DESCRIPTION_CHARS`] characters — or `None` when it is adequate.
+fn description_warning(name: &str, description: &str) -> Option<String> {
+    let trimmed = description.trim();
+    if trimmed.is_empty() {
+        Some(format!(
+            "Tool '{}' is registered without a description; the description is \
+             the most important factor for tool-calling performance and should \
+             explain what the tool does, when to use it, and what its \
+             parameters mean",
+            name
+        ))
+    } else if trimmed.chars().count() < MIN_DESCRIPTION_CHARS {
+        Some(format!(
+            "Tool '{}' has a very short description {:?}; detailed descriptions \
+             (3-4+ sentences) significantly improve tool-calling performance",
+            name, trimmed
+        ))
+    } else {
+        None
+    }
 }
 
 /// Returns whether a tool name satisfies the `^[a-zA-Z0-9_-]{1,64}$` pattern
@@ -1401,6 +1443,30 @@ mod tests {
             .get(CONFIG_TIMEOUT_SECS)
             .expect("timeout_secs config should be present");
         assert_eq!(spec.value, AgentValue::integer(DEFAULT_TIMEOUT_SECS));
+    }
+
+    #[test]
+    fn test_description_warning_flags_weak_descriptions() {
+        let warning = description_warning("my_tool", "").expect("empty should warn");
+        assert!(warning.contains("my_tool"));
+
+        let warning = description_warning("my_tool", "  \t\n  ").expect("whitespace should warn");
+        assert!(warning.contains("my_tool"));
+
+        // 9 characters (including the space) is below the threshold.
+        let warning = description_warning("my_tool", "too short").expect("short should warn");
+        assert!(warning.contains("my_tool"));
+        assert!(warning.contains("too short"));
+    }
+
+    #[test]
+    fn test_description_warning_accepts_adequate_descriptions() {
+        assert!(description_warning("t", "0123456789").is_none());
+        assert!(
+            description_warning("t", "Fetches the current weather for a given city.").is_none()
+        );
+        // Threshold counts characters, not bytes: 12 chars, 36 bytes.
+        assert!(description_warning("t", "ツールの詳細な説明です。").is_none());
     }
 
     #[test]
