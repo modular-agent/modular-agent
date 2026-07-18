@@ -62,7 +62,7 @@ fn assert_error_result(msg: &Message, tool_name: &str, id: &str) {
     assert_eq!(msg.tool_name.as_deref(), Some(tool_name));
     assert_eq!(msg.id.as_deref(), Some(id));
     assert_eq!(msg.is_error, Some(true));
-    assert!(!msg.content.is_empty());
+    assert!(!msg.text().is_empty());
 }
 
 #[tokio::test]
@@ -89,7 +89,7 @@ async fn failing_tool_yields_error_result_without_aborting_others() {
     assert_eq!(messages[1].tool_name.as_deref(), Some(succeeding));
     assert_eq!(messages[1].id.as_deref(), Some("call2"));
     assert_eq!(messages[1].is_error, None);
-    assert_eq!(messages[1].content, "\"ok\"");
+    assert_eq!(messages[1].text(), "\"ok\"");
 
     unregister_tool(failing);
     unregister_tool(succeeding);
@@ -112,7 +112,7 @@ async fn parse_error_call_yields_error_result_without_executing() {
     assert_eq!(messages.len(), 1);
     assert_error_result(&messages[0], succeeding, "call1");
     // The tool must not have run: a SucceedingTool result would be "ok".
-    assert_ne!(messages[0].content, "\"ok\"");
+    assert_ne!(messages[0].text(), "\"ok\"");
 
     unregister_tool(succeeding);
 }
@@ -271,7 +271,7 @@ async fn parallel_tools_genuinely_overlap() {
     assert_eq!(messages.len(), 2);
     for msg in &messages {
         assert_eq!(msg.is_error, None);
-        assert_eq!(msg.content, "\"ok\"");
+        assert_eq!(msg.text(), "\"ok\"");
     }
 }
 
@@ -306,9 +306,9 @@ async fn parallel_results_keep_input_order() {
 
     assert_eq!(messages.len(), 2);
     assert_eq!(messages[0].tool_name.as_deref(), Some(slow));
-    assert_eq!(messages[0].content, "\"slow\"");
+    assert_eq!(messages[0].text(), "\"slow\"");
     assert_eq!(messages[1].tool_name.as_deref(), Some(fast));
-    assert_eq!(messages[1].content, "\"fast\"");
+    assert_eq!(messages[1].text(), "\"fast\"");
 }
 
 #[tokio::test]
@@ -432,7 +432,7 @@ async fn failing_parallel_call_yields_error_without_affecting_others() {
     assert_eq!(messages.len(), 2);
     assert_error_result(&messages[0], failing, "c1");
     assert_eq!(messages[1].is_error, None);
-    assert_eq!(messages[1].content, "\"ok\"");
+    assert_eq!(messages[1].text(), "\"ok\"");
 }
 
 #[tokio::test]

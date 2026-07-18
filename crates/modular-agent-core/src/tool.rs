@@ -1420,7 +1420,7 @@ mod tests {
         assert_eq!(msg.tool_name.as_deref(), Some("my_tool"));
         assert_eq!(msg.id.as_deref(), Some("call42"));
         assert_eq!(msg.is_error, Some(true));
-        assert_eq!(msg.content, "something went wrong");
+        assert_eq!(msg.text(), "something went wrong");
     }
 
     #[test]
@@ -1522,7 +1522,7 @@ mod tests {
         }
 
         fn content_json(msg: &Message) -> serde_json::Value {
-            serde_json::from_str(&msg.content).unwrap()
+            serde_json::from_str(&msg.text()).unwrap()
         }
 
         #[test]
@@ -1626,8 +1626,8 @@ mod tests {
             assert_eq!(msgs.len(), 2);
             assert_eq!(msgs[0].is_error, Some(true));
             assert_eq!(msgs[0].id.as_deref(), Some("bad"));
-            assert!(msgs[0].content.contains("not executed"));
-            assert!(msgs[0].content.contains("/count"));
+            assert!(msgs[0].text().contains("not executed"));
+            assert!(msgs[0].text().contains("/count"));
 
             // The failure of the first call must not abort the second.
             assert_eq!(msgs[1].is_error, None);
@@ -1657,8 +1657,8 @@ mod tests {
             assert_eq!(msgs.len(), 1);
             assert_eq!(msgs[0].is_error, Some(true));
             // Every invalid path must be reported, not just the first error.
-            assert!(msgs[0].content.contains("/count"));
-            assert!(msgs[0].content.contains("/flag"));
+            assert!(msgs[0].text().contains("/count"));
+            assert!(msgs[0].text().contains("/flag"));
         }
 
         #[tokio::test]
@@ -1943,7 +1943,7 @@ mod tests {
             assert_eq!(notice.role, "assistant");
             assert!(!notice.streaming);
             assert!(notice.tool_calls.is_none());
-            assert!(notice.content.contains("max_iterations of 2"));
+            assert!(notice.text().contains("max_iterations of 2"));
             expect_no_event(&fixture.forwarded).await;
 
             // A re-delivered duplicate of the blocked message (same id) is

@@ -512,7 +512,7 @@ impl AgentValue {
             AgentValue::Integer(i) => Some(i.to_string()),
             AgentValue::Number(n) => Some(n.to_string()),
             #[cfg(feature = "llm")]
-            AgentValue::Message(m) => Some(m.content.clone()),
+            AgentValue::Message(m) => Some(m.text()),
             _ => None,
         }
     }
@@ -1333,12 +1333,12 @@ mod tests {
         {
             let mut msg = AgentValue::message(Message::user("hello".to_string()));
             assert!(msg.as_message().is_some());
-            assert_eq!(msg.as_message().unwrap().content, "hello");
+            assert_eq!(msg.as_message().unwrap().text(), "hello");
             assert!(msg.as_message_mut().is_some());
             if let Some(m) = msg.as_message_mut() {
-                m.content = "world".to_string();
+                m.content = "world".into();
             }
-            assert_eq!(msg.as_message().unwrap().content, "world");
+            assert_eq!(msg.as_message().unwrap().text(), "world");
             assert!(msg.into_message().is_some());
         }
     }

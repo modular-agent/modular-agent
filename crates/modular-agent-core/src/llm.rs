@@ -16,6 +16,117 @@ use crate::value::AgentValue;
 #[cfg(feature = "image")]
 use photon_rs::PhotonImage;
 
+/// One block of structured [`Message`] content.
+///
+/// Serialized as an internally tagged object (`{"type": "text", ...}`) so
+/// block arrays in preset JSON stay self-describing.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ContentBlock {
+    /// Plain text content.
+    Text {
+        /// The text.
+        text: String,
+    },
+
+    /// Reasoning/thinking trace from an extended thinking model.
+    Thinking {
+        /// The thinking text. For redacted blocks this holds the provider's
+        /// opaque encrypted payload verbatim.
+        thinking: String,
+
+        /// Provider signature that must be replayed together with the
+        /// thinking text when re-sending assistant history (Claude requires
+        /// it for extended thinking + tool use continuations).
+        #[serde(skip_serializing_if = "Option::is_none", default)]
+        signature: Option<String>,
+
+        /// True when the provider returned an encrypted `redacted_thinking`
+        /// payload instead of readable text.
+        #[serde(skip_serializing_if = "std::ops::Not::not", default)]
+        redacted: bool,
+    },
+
+    /// Inline image content (requires "image" feature).
+    #[cfg(feature = "image")]
+    Image {
+        /// Base64-encoded image data.
+        data: String,
+
+        /// MIME type of the image, e.g. "image/png".
+        mime_type: String,
+    },
+}
+
+/// Content of a [`Message`]: plain text or a sequence of [`ContentBlock`]s.
+///
+/// Plain text serializes as a JSON string — the pre-block format — so
+/// text-only histories written by this version can still be read by older
+/// versions. Block content serializes as a tagged array and is only
+/// produced when a message actually carries thinking or image blocks.
+#[derive(Debug, Clone, PartialEq)]
+pub enum MessageContent {
+    /// Plain text content (the common case).
+    Text(String),
+
+    /// Structured content preserving provider block order.
+    Blocks(Vec<ContentBlock>),
+}
+
+impl Default for MessageContent {
+    fn default() -> Self {
+        MessageContent::Text(String::new())
+    }
+}
+
+impl From<String> for MessageContent {
+    fn from(s: String) -> Self {
+        MessageContent::Text(s)
+    }
+}
+
+impl From<&str> for MessageContent {
+    fn from(s: &str) -> Self {
+        MessageContent::Text(s.to_string())
+    }
+}
+
+impl MessageContent {
+    /// Concatenated text of all text content.
+    pub fn text(&self) -> String {
+        match self {
+            MessageContent::Text(s) => s.clone(),
+            MessageContent::Blocks(blocks) => blocks
+                .iter()
+                .filter_map(|b| match b {
+                    ContentBlock::Text { text } => Some(text.as_str()),
+                    _ => None,
+                })
+                .collect(),
+        }
+    }
+}
+
+/// Absorbs the legacy top-level `thinking` string field into a leading
+/// Thinking block. Providers emit thinking before the answer text, so the
+/// absorbed block leads.
+fn absorb_legacy_thinking(content: MessageContent, thinking: String) -> MessageContent {
+    let mut blocks = match content {
+        MessageContent::Text(s) if s.is_empty() => vec![],
+        MessageContent::Text(s) => vec![ContentBlock::Text { text: s }],
+        MessageContent::Blocks(blocks) => blocks,
+    };
+    blocks.insert(
+        0,
+        ContentBlock::Thinking {
+            thinking,
+            signature: None,
+            redacted: false,
+        },
+    );
+    MessageContent::Blocks(blocks)
+}
+
 /// A chat message in an LLM conversation.
 ///
 /// Represents messages exchanged between users, assistants, and tools in a conversation.
@@ -26,9 +137,8 @@ use photon_rs::PhotonImage;
 ///
 /// * `id` - Optional unique identifier for the message
 /// * `role` - The role of the message sender ("user", "assistant", "system", "tool")
-/// * `content` - The text content of the message
+/// * `content` - The content of the message: plain text or structured blocks
 /// * `tokens` - Optional token count for the message
-/// * `thinking` - Optional reasoning/thinking trace (for extended thinking models)
 /// * `streaming` - Whether this is a partial streaming response
 /// * `tool_calls` - Tool invocations requested by the assistant
 /// * `tool_name` - Name of the tool (for tool role messages)
@@ -54,14 +164,13 @@ pub struct Message {
     /// Role of the message sender: "user", "assistant", "system", or "tool".
     pub role: String,
 
-    /// Text content of the message.
-    pub content: String,
+    /// Content of the message: plain text or structured blocks. Use
+    /// [`Message::text`] for the concatenated text and [`Message::thinking`]
+    /// for the thinking trace.
+    pub content: MessageContent,
 
     /// Token count for this message (if available).
     pub tokens: Option<usize>,
-
-    /// Reasoning/thinking trace for extended thinking models.
-    pub thinking: Option<String>,
 
     /// Whether this is a partial streaming response.
     pub streaming: bool,
@@ -101,10 +210,9 @@ impl Message {
         Self {
             id: None,
             role,
-            content,
+            content: MessageContent::Text(content),
             tokens: None,
             streaming: false,
-            thinking: None,
             tool_calls: None,
             tool_name: None,
             is_error: None,
@@ -156,6 +264,36 @@ impl Message {
         self.image = Some(image);
         self
     }
+
+    /// Concatenated text of all text content — the common read path.
+    pub fn text(&self) -> String {
+        self.content.text()
+    }
+
+    /// Concatenated thinking text, or `None` when the message has no
+    /// thinking blocks. Replaces the former `thinking` field: redacted
+    /// blocks surface as a `"[redacted]"` placeholder (their `thinking`
+    /// holds an opaque encrypted payload meant only for provider replay)
+    /// and multiple blocks are joined with a newline, preserving the old
+    /// field's observable form.
+    pub fn thinking(&self) -> Option<String> {
+        let MessageContent::Blocks(blocks) = &self.content else {
+            return None;
+        };
+        let parts: Vec<&str> = blocks
+            .iter()
+            .filter_map(|b| match b {
+                ContentBlock::Thinking { redacted: true, .. } => Some("[redacted]"),
+                ContentBlock::Thinking { thinking, .. } => Some(thinking.as_str()),
+                _ => None,
+            })
+            .collect();
+        if parts.is_empty() {
+            None
+        } else {
+            Some(parts.join("\n"))
+        }
+    }
 }
 
 impl PartialEq for Message {
@@ -177,20 +315,28 @@ impl Serialize for Message {
             "role".to_string(),
             serde_json::Value::String(self.role.clone()),
         );
-        map.insert(
-            "content".to_string(),
-            serde_json::Value::String(self.content.clone()),
-        );
+        // Text-only content keeps the legacy string form so histories that
+        // never used thinking or image blocks stay readable by older
+        // versions. Only block content that cannot be flattened to plain
+        // text is written as an array.
+        let content_value = match &self.content {
+            MessageContent::Text(s) => serde_json::Value::String(s.clone()),
+            MessageContent::Blocks(blocks)
+                if blocks
+                    .iter()
+                    .all(|b| matches!(b, ContentBlock::Text { .. })) =>
+            {
+                serde_json::Value::String(self.content.text())
+            }
+            MessageContent::Blocks(blocks) => {
+                serde_json::to_value(blocks).map_err(serde::ser::Error::custom)?
+            }
+        };
+        map.insert("content".to_string(), content_value);
         if let Some(tokens) = &self.tokens {
             map.insert(
                 "tokens".to_string(),
                 serde_json::Value::Number((*tokens).into()),
-            );
-        }
-        if let Some(thinking) = &self.thinking {
-            map.insert(
-                "thinking".to_string(),
-                serde_json::Value::String(thinking.clone()),
             );
         }
         if self.streaming {
@@ -260,16 +406,30 @@ impl<'de> Deserialize<'de> for Message {
                 .to_string();
         }
         if let Some(content) = map.get("content") {
-            message.content = content
-                .as_str()
-                .ok_or_else(|| serde::de::Error::custom("content must be a string"))?
-                .to_string();
+            message.content = match content {
+                serde_json::Value::String(s) => MessageContent::Text(s.clone()),
+                serde_json::Value::Array(_) => {
+                    let blocks: Vec<ContentBlock> = serde_json::from_value(content.clone())
+                        .map_err(|e| {
+                            serde::de::Error::custom(format!("invalid content blocks: {e}"))
+                        })?;
+                    MessageContent::Blocks(blocks)
+                }
+                _ => {
+                    return Err(serde::de::Error::custom(
+                        "content must be a string or an array of content blocks",
+                    ));
+                }
+            };
         }
         if let Some(tokens) = map.get("tokens") {
             message.tokens = tokens.as_u64().map(|u| u as usize);
         }
-        if let Some(thinking) = map.get("thinking") {
-            message.thinking = thinking.as_str().map(|s| s.to_string());
+        // Legacy top-level "thinking" field (pre content-block format) is
+        // absorbed as a leading Thinking block.
+        if let Some(thinking) = map.get("thinking").and_then(|v| v.as_str()) {
+            message.content =
+                absorb_legacy_thinking(std::mem::take(&mut message.content), thinking.to_string());
         }
         if let Some(streaming) = map.get("streaming") {
             message.streaming = streaming.as_bool().unwrap_or(false);
@@ -376,8 +536,8 @@ pub struct ToolCallFunction {
 /// # Variants
 ///
 /// * `Start` - Generation began; `partial` is the (usually empty) initial message
-/// * `TextDelta` - New text content was appended to `partial.content`
-/// * `ThinkingDelta` - New thinking text was appended to `partial.thinking`
+/// * `TextDelta` - New text content was appended to `partial`'s text content
+/// * `ThinkingDelta` - New thinking text was appended to `partial`'s thinking block
 /// * `ToolCallStart` - The assistant began emitting the tool call at `index`
 /// * `ToolCallDelta` - New argument text for the tool call at `index`
 /// * `ToolCallEnd` - The tool call at `index` is complete and parsed
@@ -484,16 +644,27 @@ impl TryFrom<AgentValue> for Message {
                     .and_then(|r| r.as_str())
                     .unwrap_or("user")
                     .to_string();
-                let content = obj
-                    .get("content")
-                    .and_then(|c| c.as_str())
-                    .ok_or_else(|| {
-                        AgentError::InvalidValue(
-                            "Message object missing 'content' field".to_string(),
-                        )
-                    })?
-                    .to_string();
-                let mut message = Message::new(role, content);
+                let content_value = obj.get("content").ok_or_else(|| {
+                    AgentError::InvalidValue("Message object missing 'content' field".to_string())
+                })?;
+                let content = match content_value {
+                    AgentValue::String(s) => MessageContent::Text(s.to_string()),
+                    AgentValue::Array(_) => {
+                        let blocks: Vec<ContentBlock> =
+                            serde_json::from_value(content_value.to_json()).map_err(|e| {
+                                AgentError::InvalidValue(format!("Invalid content blocks: {e}"))
+                            })?;
+                        MessageContent::Blocks(blocks)
+                    }
+                    _ => {
+                        return Err(AgentError::InvalidValue(
+                            "'content' field must be a string or an array of content blocks"
+                                .to_string(),
+                        ));
+                    }
+                };
+                let mut message = Message::new(role, String::new());
+                message.content = content;
 
                 let id = obj
                     .get("id")
@@ -501,10 +672,14 @@ impl TryFrom<AgentValue> for Message {
                     .map(|s| s.to_string());
                 message.id = id;
 
-                message.thinking = obj
-                    .get("thinking")
-                    .and_then(|t| t.as_str())
-                    .map(|s| s.to_string());
+                // Legacy top-level "thinking" field is absorbed as a leading
+                // Thinking block, mirroring the serde path.
+                if let Some(thinking) = obj.get("thinking").and_then(|t| t.as_str()) {
+                    message.content = absorb_legacy_thinking(
+                        std::mem::take(&mut message.content),
+                        thinking.to_string(),
+                    );
+                }
 
                 message.streaming = obj
                     .get("streaming")
@@ -660,11 +835,11 @@ mod tests {
         assert!(value.is_message());
         let msg_ref = value.as_message().unwrap();
         assert_eq!(msg_ref.role, "user");
-        assert_eq!(msg_ref.content, "What is the weather today?");
+        assert_eq!(msg_ref.text(), "What is the weather today?");
 
         let msg_converted: Message = value.try_into().unwrap();
         assert_eq!(msg_converted.role, "user");
-        assert_eq!(msg_converted.content, "What is the weather today?");
+        assert_eq!(msg_converted.text(), "What is the weather today?");
     }
 
     #[test]
@@ -683,7 +858,7 @@ mod tests {
         assert!(value.is_message());
         let msg_ref = value.as_message().unwrap();
         assert_eq!(msg_ref.role, "assistant");
-        assert_eq!(msg_ref.content, "");
+        assert_eq!(msg_ref.text(), "");
         let tool_calls = msg_ref.tool_calls.as_ref().unwrap();
         assert_eq!(tool_calls.len(), 1);
         let first_call = &tool_calls[0];
@@ -693,7 +868,7 @@ mod tests {
         let msg_converted: Message = value.try_into().unwrap();
         dbg!(&msg_converted);
         assert_eq!(msg_converted.role, "assistant");
-        assert_eq!(msg_converted.content, "");
+        assert_eq!(msg_converted.text(), "");
         let tool_calls = msg_converted.tool_calls.unwrap();
         assert_eq!(tool_calls.len(), 1);
         assert_eq!(tool_calls[0].function.name, "get_weather");
@@ -711,12 +886,12 @@ mod tests {
         let msg_ref = value.as_message().unwrap();
         assert_eq!(msg_ref.role, "tool");
         assert_eq!(msg_ref.tool_name.as_deref().unwrap(), "get_time");
-        assert_eq!(msg_ref.content, "2025-01-02 03:04:05");
+        assert_eq!(msg_ref.text(), "2025-01-02 03:04:05");
 
         let msg_converted: Message = value.try_into().unwrap();
         assert_eq!(msg_converted.role, "tool");
-        assert_eq!(msg_converted.tool_name.unwrap(), "get_time");
-        assert_eq!(msg_converted.content, "2025-01-02 03:04:05");
+        assert_eq!(msg_converted.tool_name.as_deref(), Some("get_time"));
+        assert_eq!(msg_converted.text(), "2025-01-02 03:04:05");
     }
 
     #[test]
@@ -724,7 +899,7 @@ mod tests {
         let value = AgentValue::string("Just a simple message");
         let msg: Message = value.try_into().unwrap();
         assert_eq!(msg.role, "user");
-        assert_eq!(msg.content, "Just a simple message");
+        assert_eq!(msg.text(), "Just a simple message");
     }
 
     #[test]
@@ -736,7 +911,7 @@ mod tests {
         });
         let msg: Message = value.try_into().unwrap();
         assert_eq!(msg.role, "assistant");
-        assert_eq!(msg.content, "Here is some information.");
+        assert_eq!(msg.text(), "Here is some information.");
     }
 
     #[test]
@@ -770,9 +945,8 @@ mod tests {
     fn test_message_to_agent_value_with_tool_calls() {
         let message = Message {
             role: "assistant".to_string(),
-            content: "".to_string(),
+            content: MessageContent::default(),
             tokens: None,
-            thinking: None,
             streaming: false,
             tool_calls: Some(vector![ToolCall {
                 function: ToolCallFunction {
@@ -795,7 +969,7 @@ mod tests {
         let msg_ref = value.as_message().unwrap();
 
         assert_eq!(msg_ref.role, "assistant");
-        assert_eq!(msg_ref.content, "");
+        assert_eq!(msg_ref.text(), "");
 
         let tool_calls = msg_ref.tool_calls.as_ref().unwrap();
         assert_eq!(tool_calls.len(), 1);
@@ -1134,5 +1308,132 @@ mod tests {
         let mut msg4 = Message::user("hello".to_string());
         msg4.id = Some("123".to_string());
         assert_ne!(msg1, msg4);
+    }
+
+    // Content block tests
+
+    #[test]
+    fn test_message_legacy_thinking_field_absorbed_on_deserialize() {
+        let json = serde_json::json!({
+            "role": "assistant",
+            "content": "hi",
+            "thinking": "t",
+        });
+        let msg: Message = serde_json::from_value(json).unwrap();
+        assert_eq!(
+            msg.content,
+            MessageContent::Blocks(vec![
+                ContentBlock::Thinking {
+                    thinking: "t".to_string(),
+                    signature: None,
+                    redacted: false,
+                },
+                ContentBlock::Text {
+                    text: "hi".to_string()
+                },
+            ])
+        );
+        assert_eq!(msg.text(), "hi");
+        assert_eq!(msg.thinking().as_deref(), Some("t"));
+    }
+
+    #[test]
+    fn test_message_pure_text_serializes_as_plain_string() {
+        let msg = Message::assistant("hello".to_string());
+        let json = serde_json::to_value(&msg).unwrap();
+        assert_eq!(json["content"], serde_json::json!("hello"));
+
+        // Text-only block content is also flattened to the legacy string form.
+        let mut msg = Message::assistant(String::new());
+        msg.content = MessageContent::Blocks(vec![
+            ContentBlock::Text {
+                text: "hel".to_string(),
+            },
+            ContentBlock::Text {
+                text: "lo".to_string(),
+            },
+        ]);
+        let json = serde_json::to_value(&msg).unwrap();
+        assert_eq!(json["content"], serde_json::json!("hello"));
+    }
+
+    #[test]
+    fn test_message_thinking_blocks_serde_round_trip() {
+        let mut msg = Message::assistant(String::new());
+        msg.content = MessageContent::Blocks(vec![
+            ContentBlock::Thinking {
+                thinking: "reasoning".to_string(),
+                signature: Some("sig123".to_string()),
+                redacted: false,
+            },
+            ContentBlock::Thinking {
+                thinking: "opaque-payload".to_string(),
+                signature: None,
+                redacted: true,
+            },
+            ContentBlock::Text {
+                text: "answer".to_string(),
+            },
+        ]);
+
+        let json = serde_json::to_value(&msg).unwrap();
+        assert!(json["content"].is_array());
+        // The legacy top-level "thinking" key is no longer written.
+        assert!(json.get("thinking").is_none());
+
+        let restored: Message = serde_json::from_value(json).unwrap();
+        assert_eq!(restored.content, msg.content);
+    }
+
+    #[test]
+    fn test_message_thinking_redacts_and_joins_with_newline() {
+        // The former `thinking` field surfaced "[redacted]" for redacted
+        // blocks and joined multiple traces with a newline; the accessor
+        // must not leak the encrypted payload stored in redacted blocks.
+        let mut msg = Message::assistant(String::new());
+        msg.content = MessageContent::Blocks(vec![
+            ContentBlock::Thinking {
+                thinking: "Let me think...".to_string(),
+                signature: Some("sig".to_string()),
+                redacted: false,
+            },
+            ContentBlock::Thinking {
+                thinking: "EqQBCgIYAg-ciphertext".to_string(),
+                signature: None,
+                redacted: true,
+            },
+            ContentBlock::Text {
+                text: "answer".to_string(),
+            },
+        ]);
+        assert_eq!(
+            msg.thinking().as_deref(),
+            Some("Let me think...\n[redacted]")
+        );
+    }
+
+    #[test]
+    fn test_message_mixed_block_order_preserved() {
+        let blocks = vec![
+            ContentBlock::Text {
+                text: "before".to_string(),
+            },
+            ContentBlock::Thinking {
+                thinking: "mid".to_string(),
+                signature: Some("s".to_string()),
+                redacted: false,
+            },
+            ContentBlock::Text {
+                text: "after".to_string(),
+            },
+        ];
+        let mut msg = Message::assistant(String::new());
+        msg.content = MessageContent::Blocks(blocks.clone());
+
+        let json = serde_json::to_value(&msg).unwrap();
+        let restored: Message = serde_json::from_value(json).unwrap();
+        assert_eq!(restored.content, MessageContent::Blocks(blocks));
+        assert_eq!(restored.text(), "beforeafter");
+        assert_eq!(restored.thinking().as_deref(), Some("mid"));
     }
 }

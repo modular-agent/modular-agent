@@ -188,7 +188,7 @@ async fn length_stop_reason_skips_execution_and_synthesizes_error_results() {
         assert_eq!(resp.id.as_deref(), Some(expected_id));
         assert_eq!(resp.tool_name.as_deref(), Some(tool_name));
         assert_eq!(resp.is_error, Some(true));
-        assert!(resp.content.contains("token limit"));
+        assert!(resp.text().contains("token limit"));
     }
     assert_eq!(count.load(Ordering::SeqCst), 0);
 
