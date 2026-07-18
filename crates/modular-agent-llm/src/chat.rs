@@ -1,6 +1,7 @@
 use modular_agent_core::{
     Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AgentValueMap,
-    AsAgent, Message, ModularAgent, ToolCall, ToolCallFunction, Usage, async_trait, modular_agent,
+    AsAgent, Message, MessageEvent, ModularAgent, ToolCall, ToolCallFunction, Usage, async_trait,
+    modular_agent,
 };
 
 use crate::provider::{
@@ -25,9 +26,11 @@ const CATEGORY: &str = "LLM";
 
 const PORT_MESSAGE: &str = "message";
 const PORT_RESPONSE: &str = "response";
+const PORT_EVENT: &str = "event";
 
 const CONFIG_MODEL: &str = "model";
 const CONFIG_CACHE_RETENTION: &str = "cache_retention";
+const CONFIG_EMIT_PARTIAL_MESSAGES: &str = "emit_partial_messages";
 const CONFIG_MAX_RETRIES: &str = "max_retries";
 const CONFIG_MAX_TOKENS: &str = "max_tokens";
 const CONFIG_OPTIONS: &str = "options";
@@ -48,9 +51,29 @@ const DEFAULT_CONFIG_MODEL: &str = "openai/gpt-5-nano";
 /// - `claude/claude-sonnet-4-5-20250514` - Uses Claude API
 /// - `openai/qwen/qwen3-vl-8b` - Slashes after the prefix are preserved in model name
 ///
+/// # Ports
+/// - Input `message`: User/tool message (or message array) to send to the model
+/// - Output `message`: Assistant message. When streaming, accumulated partial
+///   messages (`streaming` = true) are re-sent per delta (unless
+///   `emit_partial_messages` is false), always followed by exactly one final
+///   message (`streaming` = false)
+/// - Output `response`: Raw provider response (per-chunk when streaming)
+/// - Output `event`: Typed `MessageEvent` object whose `type` field is one of
+///   `start`, `text_delta`, `thinking_delta`, `tool_call_start`,
+///   `tool_call_delta`, `tool_call_end`, `done`, `error`. Incremental events
+///   carry both the `delta` and the accumulated `partial` message; `done`
+///   carries the same final message emitted on the `message` port and is
+///   emitted after it (as is `error` relative to its error-marked final).
+///   Always emitted regardless of `emit_partial_messages`; a non-streaming
+///   turn emits `done` only — one per choice when the OpenAI `n` option
+///   requests several
+///
 /// # Configuration
 /// - `model`: Provider-prefixed model name (default: "openai/gpt-5-nano")
 /// - `stream`: Enable streaming mode
+/// - `emit_partial_messages`: Re-send accumulated partial messages on the
+///   `message` port while streaming. When false, only the final message is
+///   emitted there; the `event` port is unaffected (default: true)
 /// - `tools`: Tool patterns to enable (regex, newline-separated)
 /// - `max_tokens`: Maximum output tokens. `0`: Claude uses the model's
 ///   registry limit when streaming (8192 for unknown models, since Claude
@@ -81,9 +104,10 @@ const DEFAULT_CONFIG_MODEL: &str = "openai/gpt-5-nano";
     title = "Chat",
     category = CATEGORY,
     inputs = [PORT_MESSAGE],
-    outputs = [PORT_MESSAGE, PORT_RESPONSE],
+    outputs = [PORT_MESSAGE, PORT_RESPONSE, PORT_EVENT],
     string_config(name = CONFIG_MODEL, default = DEFAULT_CONFIG_MODEL),
     boolean_config(name = CONFIG_STREAM, title = "Stream"),
+    boolean_config(name = CONFIG_EMIT_PARTIAL_MESSAGES, title = "Emit Partial Messages", default = true, description = "Re-send partial messages on the message port while streaming", detail),
     text_config(name = CONFIG_TOOLS),
     integer_config(name = CONFIG_MAX_TOKENS, title = "Max Tokens", default = 0, description = "0: use API default", detail),
     number_config(name = CONFIG_TEMPERATURE, title = "Temperature", default = -1.0, description = "-1: use API default (0.0-2.0)", detail),
@@ -361,7 +385,7 @@ impl ChatAgent {
             message.streaming = true;
 
             if let Err(e) = self.run_openai_stream(&ctx, stream, &mut message).await {
-                self.emit_stream_error_message(&ctx, message).await;
+                self.emit_stream_error_message(&ctx, message, &e).await;
                 return Err(e);
             }
 
@@ -388,6 +412,8 @@ impl ChatAgent {
                 )
                 .await?;
 
+                self.emit_event(&ctx, MessageEvent::Done { message }).await?;
+
                 let out_response = AgentValue::from_serialize(&res)?;
                 self.output(ctx.clone(), PORT_RESPONSE.to_string(), out_response)
                     .await?;
@@ -397,17 +423,51 @@ impl ChatAgent {
         }
     }
 
+    /// Emit a typed [`MessageEvent`] on the `event` port. Unlike the
+    /// `message` port this is never gated by `emit_partial_messages`, so
+    /// downstream consumers get the full delta stream.
+    #[cfg(any(feature = "openai", feature = "claude", feature = "ollama"))]
+    async fn emit_event(
+        &mut self,
+        ctx: &AgentContext,
+        event: MessageEvent,
+    ) -> Result<(), AgentError> {
+        // Events are dropped by routing when nothing is connected, but only
+        // after the per-delta serde conversion below has been paid; skip it
+        // up front so presets that ignore the event port pay nothing.
+        if !self.ma().has_connections(self.id(), PORT_EVENT) {
+            return Ok(());
+        }
+        let value: AgentValue = event.try_into()?;
+        self.output(ctx.clone(), PORT_EVENT.to_string(), value).await
+    }
+
     /// Emit a final same-id message marking a mid-stream failure so message
-    /// history replaces the dangling partial with an error-terminated one.
+    /// history replaces the dangling partial with an error-terminated one,
+    /// plus a matching `Error` event on the `event` port.
     /// Best effort: the original stream error is the more useful signal, so
     /// an emit failure here must not mask it.
     #[cfg(any(feature = "openai", feature = "claude", feature = "ollama"))]
-    async fn emit_stream_error_message(&mut self, ctx: &AgentContext, message: Message) {
+    async fn emit_stream_error_message(
+        &mut self,
+        ctx: &AgentContext,
+        message: Message,
+        error: &AgentError,
+    ) {
         let Some(message) = stream_error_final(message) else {
             return;
         };
         let _ = self
-            .output(ctx.clone(), PORT_MESSAGE.to_string(), message.into())
+            .output(ctx.clone(), PORT_MESSAGE.to_string(), message.clone().into())
+            .await;
+        let _ = self
+            .emit_event(
+                ctx,
+                MessageEvent::Error {
+                    message,
+                    error: error.to_string(),
+                },
+            )
             .await;
     }
 
@@ -422,6 +482,21 @@ impl ChatAgent {
         message: &mut Message,
     ) -> Result<(), AgentError> {
         use futures::StreamExt;
+
+        // get_bool_or with an explicit true keeps the fallback aligned with
+        // the declared config default when the key is absent (old spec not
+        // yet reconciled).
+        let emit_partials = self
+            .configs()?
+            .get_bool_or(CONFIG_EMIT_PARTIAL_MESSAGES, true);
+
+        self.emit_event(
+            ctx,
+            MessageEvent::Start {
+                partial: message.clone(),
+            },
+        )
+        .await?;
 
         let mut content = String::new();
         let mut thinking = String::new();
@@ -445,12 +520,69 @@ impl ChatAgent {
             for c in &chunk.choices {
                 if let Some(ref delta_content) = c.delta.content {
                     content.push_str(delta_content);
+                    if !delta_content.is_empty() {
+                        message.content = content.clone();
+                        self.emit_event(
+                            ctx,
+                            MessageEvent::TextDelta {
+                                delta: delta_content.clone(),
+                                partial: message.clone(),
+                            },
+                        )
+                        .await?;
+                    }
                 }
                 if let Some(tc) = &c.delta.tool_calls {
-                    openai_client::accumulate_tool_call_chunks(&mut pending, tc);
+                    for call in tc {
+                        let is_new = !pending.contains_key(&call.index);
+                        openai_client::accumulate_tool_call_chunks(
+                            &mut pending,
+                            std::slice::from_ref(call),
+                        );
+                        // OpenAI-compatible servers may number tool_call
+                        // chunks from a non-zero base, so the event index is
+                        // the call's rank in the pending map — the position
+                        // it takes in the final tool_calls array — keeping
+                        // Start/Delta consistent with ToolCallEnd below.
+                        let index = pending.range(..=call.index).count() - 1;
+                        if is_new {
+                            self.emit_event(
+                                ctx,
+                                MessageEvent::ToolCallStart {
+                                    index,
+                                    partial: message.clone(),
+                                },
+                            )
+                            .await?;
+                        }
+                        if let Some(args) =
+                            call.function.as_ref().and_then(|f| f.arguments.as_ref())
+                            && !args.is_empty()
+                        {
+                            self.emit_event(
+                                ctx,
+                                MessageEvent::ToolCallDelta {
+                                    index,
+                                    delta: args.clone(),
+                                    partial: message.clone(),
+                                },
+                            )
+                            .await?;
+                        }
+                    }
                 }
                 if let Some(refusal) = &c.delta.refusal {
-                    thinking.push_str(&format!("Refusal: {}", refusal));
+                    let delta = format!("Refusal: {}", refusal);
+                    thinking.push_str(&delta);
+                    message.thinking = Some(thinking.clone());
+                    self.emit_event(
+                        ctx,
+                        MessageEvent::ThinkingDelta {
+                            delta,
+                            partial: message.clone(),
+                        },
+                    )
+                    .await?;
                 }
                 if let Some(reason) = &c.finish_reason {
                     finish_reason = Some(reason.clone());
@@ -465,12 +597,14 @@ impl ChatAgent {
                 message.thinking = Some(thinking.clone());
             }
 
-            self.output(
-                ctx.clone(),
-                PORT_MESSAGE.to_string(),
-                message.clone().into(),
-            )
-            .await?;
+            if emit_partials {
+                self.output(
+                    ctx.clone(),
+                    PORT_MESSAGE.to_string(),
+                    message.clone().into(),
+                )
+                .await?;
+            }
 
             let out_response: serde_json::Value = serde_json::from_str(&data).unwrap_or_default();
             let out_response = AgentValue::from_serialize(&out_response)?;
@@ -484,9 +618,23 @@ impl ChatAgent {
         if !thinking.is_empty() {
             message.thinking = Some(thinking);
         }
+        // The Chat Completions stream has no per-call end marker, so
+        // ToolCallEnd events fire at finalization time, each partial extended
+        // by the calls finalized so far (still streaming=true, before Done).
         let tool_calls = openai_client::finalize_pending_tool_calls(pending);
-        if !tool_calls.is_empty() {
-            message.tool_calls = Some(tool_calls.into());
+        let mut finalized: Vec<ToolCall> = Vec::with_capacity(tool_calls.len());
+        for (index, tool_call) in tool_calls.into_iter().enumerate() {
+            finalized.push(tool_call.clone());
+            message.tool_calls = Some(finalized.clone().into());
+            self.emit_event(
+                ctx,
+                MessageEvent::ToolCallEnd {
+                    index,
+                    tool_call,
+                    partial: message.clone(),
+                },
+            )
+            .await?;
         }
         message.streaming = false;
         message.stop_reason = finish_reason
@@ -497,6 +645,14 @@ impl ChatAgent {
             ctx.clone(),
             PORT_MESSAGE.to_string(),
             message.clone().into(),
+        )
+        .await?;
+
+        self.emit_event(
+            ctx,
+            MessageEvent::Done {
+                message: message.clone(),
+            },
         )
         .await?;
 
@@ -618,7 +774,7 @@ impl ChatAgent {
             message.streaming = true;
 
             if let Err(e) = self.run_claude_stream(&ctx, stream, &mut message).await {
-                self.emit_stream_error_message(&ctx, message).await;
+                self.emit_stream_error_message(&ctx, message, &e).await;
                 return Err(e);
             }
 
@@ -635,6 +791,8 @@ impl ChatAgent {
                 message.clone().into(),
             )
             .await?;
+
+            self.emit_event(&ctx, MessageEvent::Done { message }).await?;
 
             let out_response = AgentValue::from_serialize(&response)?;
             self.output(ctx.clone(), PORT_RESPONSE.to_string(), out_response)
@@ -656,6 +814,21 @@ impl ChatAgent {
         message: &mut Message,
     ) -> Result<(), AgentError> {
         use futures::StreamExt;
+
+        // get_bool_or with an explicit true keeps the fallback aligned with
+        // the declared config default when the key is absent (old spec not
+        // yet reconciled).
+        let emit_partials = self
+            .configs()?
+            .get_bool_or(CONFIG_EMIT_PARTIAL_MESSAGES, true);
+
+        self.emit_event(
+            ctx,
+            MessageEvent::Start {
+                partial: message.clone(),
+            },
+        )
+        .await?;
 
         let mut content = String::new();
         let mut thinking = String::new();
@@ -689,16 +862,39 @@ impl ChatAgent {
                         current_tool_id = Some(id.clone());
                         current_tool_name = Some(name.clone());
                         current_tool_arguments.clear();
+                        // The event index is the position this call will
+                        // occupy in tool_calls once ContentBlockStop
+                        // finalizes it, not the content-block index (text /
+                        // thinking blocks share that space).
+                        self.emit_event(
+                            ctx,
+                            MessageEvent::ToolCallStart {
+                                index: tool_calls.len(),
+                                partial: message.clone(),
+                            },
+                        )
+                        .await?;
                     }
                     claude_client::ClaudeResponseBlock::Thinking { .. } => {
                         block_types.insert(index, "thinking".to_string());
                     }
                     claude_client::ClaudeResponseBlock::RedactedThinking { .. } => {
                         block_types.insert(index, "redacted_thinking".to_string());
-                        if !thinking.is_empty() {
-                            thinking.push('\n');
-                        }
-                        thinking.push_str("[redacted]");
+                        let delta = if thinking.is_empty() {
+                            "[redacted]".to_string()
+                        } else {
+                            "\n[redacted]".to_string()
+                        };
+                        thinking.push_str(&delta);
+                        message.thinking = Some(thinking.clone());
+                        self.emit_event(
+                            ctx,
+                            MessageEvent::ThinkingDelta {
+                                delta,
+                                partial: message.clone(),
+                            },
+                        )
+                        .await?;
                     }
                 },
                 claude_client::ClaudeStreamEvent::ContentBlockDelta { index, delta } => {
@@ -714,19 +910,49 @@ impl ChatAgent {
                                 if !tool_calls.is_empty() {
                                     message.tool_calls = Some(tool_calls.clone().into());
                                 }
-                                self.output(
-                                    ctx.clone(),
-                                    PORT_MESSAGE.to_string(),
-                                    message.clone().into(),
+                                self.emit_event(
+                                    ctx,
+                                    MessageEvent::TextDelta {
+                                        delta: text,
+                                        partial: message.clone(),
+                                    },
                                 )
                                 .await?;
+                                if emit_partials {
+                                    self.output(
+                                        ctx.clone(),
+                                        PORT_MESSAGE.to_string(),
+                                        message.clone().into(),
+                                    )
+                                    .await?;
+                                }
                             }
                         }
                         claude_client::ClaudeDelta::ThinkingDelta { thinking: thought } => {
                             thinking.push_str(&thought);
+                            message.thinking = Some(thinking.clone());
+                            self.emit_event(
+                                ctx,
+                                MessageEvent::ThinkingDelta {
+                                    delta: thought,
+                                    partial: message.clone(),
+                                },
+                            )
+                            .await?;
                         }
                         claude_client::ClaudeDelta::InputJsonDelta { partial_json } => {
                             current_tool_arguments.push_str(&partial_json);
+                            // Same index rule as ToolCallStart above: the
+                            // in-flight call finalizes at tool_calls.len().
+                            self.emit_event(
+                                ctx,
+                                MessageEvent::ToolCallDelta {
+                                    index: tool_calls.len(),
+                                    delta: partial_json,
+                                    partial: message.clone(),
+                                },
+                            )
+                            .await?;
                         }
                         claude_client::ClaudeDelta::SignatureDelta { .. } => {
                             // Skip signature deltas
@@ -738,14 +964,15 @@ impl ChatAgent {
                     if let Some(name) = current_tool_name.take() {
                         let (parameters, parse_error) =
                             crate::json_repair::parse_tool_arguments(&current_tool_arguments);
-                        tool_calls.push(ToolCall {
+                        let tool_call = ToolCall {
                             function: ToolCallFunction {
                                 id: current_tool_id.take(),
                                 name,
                                 parameters,
                                 parse_error,
                             },
-                        });
+                        };
+                        tool_calls.push(tool_call.clone());
                         current_tool_arguments.clear();
 
                         message.content = content.clone();
@@ -753,12 +980,23 @@ impl ChatAgent {
                             message.thinking = Some(thinking.clone());
                         }
                         message.tool_calls = Some(tool_calls.clone().into());
-                        self.output(
-                            ctx.clone(),
-                            PORT_MESSAGE.to_string(),
-                            message.clone().into(),
+                        self.emit_event(
+                            ctx,
+                            MessageEvent::ToolCallEnd {
+                                index: tool_calls.len() - 1,
+                                tool_call,
+                                partial: message.clone(),
+                            },
                         )
                         .await?;
+                        if emit_partials {
+                            self.output(
+                                ctx.clone(),
+                                PORT_MESSAGE.to_string(),
+                                message.clone().into(),
+                            )
+                            .await?;
+                        }
                     }
                 }
                 claude_client::ClaudeStreamEvent::MessageStart { message: start } => {
@@ -767,6 +1005,13 @@ impl ChatAgent {
                     }
                 }
                 claude_client::ClaudeStreamEvent::MessageStop {} => {
+                    // claude_client also maps an SSE "[DONE]" terminator to
+                    // MessageStop (some gateways append it after
+                    // message_stop), so re-entry after the turn is finalized
+                    // must be a no-op or tools would execute twice.
+                    if !message.streaming {
+                        continue;
+                    }
                     // Final output with all accumulated data
                     message.streaming = false;
                     message.stop_reason = stop_reason.clone();
@@ -782,6 +1027,13 @@ impl ChatAgent {
                         ctx.clone(),
                         PORT_MESSAGE.to_string(),
                         message.clone().into(),
+                    )
+                    .await?;
+                    self.emit_event(
+                        ctx,
+                        MessageEvent::Done {
+                            message: message.clone(),
+                        },
                     )
                     .await?;
                 }
@@ -908,7 +1160,7 @@ impl ChatAgent {
             message.streaming = true;
 
             if let Err(e) = self.run_ollama_stream(&ctx, stream, &mut message).await {
-                self.emit_stream_error_message(&ctx, message).await;
+                self.emit_stream_error_message(&ctx, message, &e).await;
                 return Err(e);
             }
 
@@ -933,6 +1185,8 @@ impl ChatAgent {
             )
             .await?;
 
+            self.emit_event(&ctx, MessageEvent::Done { message }).await?;
+
             let out_response = AgentValue::from_serialize(&res)?;
             self.output(ctx.clone(), PORT_RESPONSE.to_string(), out_response)
                 .await?;
@@ -956,6 +1210,21 @@ impl ChatAgent {
     ) -> Result<(), AgentError> {
         use futures::StreamExt;
 
+        // get_bool_or with an explicit true keeps the fallback aligned with
+        // the declared config default when the key is absent (old spec not
+        // yet reconciled).
+        let emit_partials = self
+            .configs()?
+            .get_bool_or(CONFIG_EMIT_PARTIAL_MESSAGES, true);
+
+        self.emit_event(
+            ctx,
+            MessageEvent::Start {
+                partial: message.clone(),
+            },
+        )
+        .await?;
+
         let mut content = String::new();
         let mut thinking = String::new();
         let mut tool_calls: Vec<ToolCall> = vec![];
@@ -966,6 +1235,37 @@ impl ChatAgent {
             if let Some(thinking_str) = res.message.thinking.as_ref() {
                 thinking.push_str(thinking_str);
             }
+
+            // Delta events are emitted before message.streaming is flipped
+            // for a done=true chunk, so their partials always carry
+            // streaming=true even when the data arrived on the final chunk.
+            message.content = content.clone();
+            if !thinking.is_empty() {
+                message.thinking = Some(thinking.clone());
+            }
+            if !res.message.content.is_empty() {
+                self.emit_event(
+                    ctx,
+                    MessageEvent::TextDelta {
+                        delta: res.message.content.clone(),
+                        partial: message.clone(),
+                    },
+                )
+                .await?;
+            }
+            if let Some(thinking_str) = res.message.thinking.as_ref()
+                && !thinking_str.is_empty()
+            {
+                self.emit_event(
+                    ctx,
+                    MessageEvent::ThinkingDelta {
+                        delta: thinking_str.clone(),
+                        partial: message.clone(),
+                    },
+                )
+                .await?;
+            }
+
             for call in &res.message.tool_calls {
                 let mut parameters = call.function.arguments.clone();
                 if let Some(props) = parameters.as_object().and_then(|obj| obj.get("properties")) {
@@ -983,16 +1283,30 @@ impl ChatAgent {
                         parse_error: None,
                     },
                 };
-                tool_calls.push(tool_call);
+                // Ollama delivers each tool call whole, so Start and End are
+                // emitted back to back; End's partial includes the call.
+                let index = tool_calls.len();
+                self.emit_event(
+                    ctx,
+                    MessageEvent::ToolCallStart {
+                        index,
+                        partial: message.clone(),
+                    },
+                )
+                .await?;
+                tool_calls.push(tool_call.clone());
+                message.tool_calls = Some(tool_calls.clone().into());
+                self.emit_event(
+                    ctx,
+                    MessageEvent::ToolCallEnd {
+                        index,
+                        tool_call,
+                        partial: message.clone(),
+                    },
+                )
+                .await?;
             }
 
-            message.content = content.clone();
-            if !thinking.is_empty() {
-                message.thinking = Some(thinking.clone());
-            }
-            if !tool_calls.is_empty() {
-                message.tool_calls = Some(tool_calls.clone().into());
-            }
             // Only the final chunk (done=true) is a non-streaming emit.
             message.streaming = !res.done;
             if res.done {
@@ -1005,12 +1319,24 @@ impl ChatAgent {
                 message.usage = ollama_client::usage_from_ollama(&res);
             }
 
-            self.output(
-                ctx.clone(),
-                PORT_MESSAGE.to_string(),
-                message.clone().into(),
-            )
-            .await?;
+            if res.done || emit_partials {
+                self.output(
+                    ctx.clone(),
+                    PORT_MESSAGE.to_string(),
+                    message.clone().into(),
+                )
+                .await?;
+            }
+
+            if res.done {
+                self.emit_event(
+                    ctx,
+                    MessageEvent::Done {
+                        message: message.clone(),
+                    },
+                )
+                .await?;
+            }
 
             let out_response = AgentValue::from_serialize(&res)?;
             self.output(ctx.clone(), PORT_RESPONSE.to_string(), out_response)
@@ -1050,9 +1376,9 @@ mod tests {
     use modular_agent_core::ConnectionSpec;
     use modular_agent_core::test_utils::{ProbeReceiver, TestProbeAgent, probe_receiver};
 
-    /// Build a running preset with a ChatAgent whose `message` port feeds a
+    /// Build a running preset with a ChatAgent whose `source_port` feeds a
     /// probe, so stream-loop emits can be observed end to end.
-    async fn setup_chat_with_probe() -> (ModularAgent, String, ProbeReceiver) {
+    async fn setup_chat_probe_on(source_port: &str) -> (ModularAgent, String, ProbeReceiver) {
         let ma = ModularAgent::init().unwrap();
         ma.ready().await.unwrap();
 
@@ -1071,7 +1397,7 @@ mod tests {
             &preset_id,
             ConnectionSpec {
                 source: chat_id.clone(),
-                source_handle: PORT_MESSAGE.into(),
+                source_handle: source_port.into(),
                 target: probe_id.clone(),
                 target_handle: "value".into(),
             },
@@ -1082,6 +1408,10 @@ mod tests {
         let probe_rx = probe_receiver(&ma, &probe_id).await.unwrap();
 
         (ma, chat_id, probe_rx)
+    }
+
+    async fn setup_chat_with_probe() -> (ModularAgent, String, ProbeReceiver) {
+        setup_chat_probe_on(PORT_MESSAGE).await
     }
 
     fn streaming_seed_message(id: &str) -> Message {
@@ -1182,8 +1512,8 @@ mod tests {
             let result = chat
                 .run_openai_stream(&ctx, futures::stream::iter(chunks), &mut message)
                 .await;
-            assert!(result.is_err());
-            chat.emit_stream_error_message(&ctx, message).await;
+            let err = result.unwrap_err();
+            chat.emit_stream_error_message(&ctx, message, &err).await;
         }
 
         let final_msg = recv_final_message(&probe_rx).await;
@@ -1324,5 +1654,289 @@ mod tests {
         message.streaming = false;
         message.stop_reason = Some("stop".to_string());
         assert!(stream_error_final(message).is_none());
+    }
+
+    /// Drain event-port emits until a terminal `done`/`error` event,
+    /// returning each event as its JSON representation.
+    async fn recv_events_until_terminal(probe_rx: &ProbeReceiver) -> Vec<serde_json::Value> {
+        let mut events = Vec::new();
+        loop {
+            let (_ctx, value) = probe_rx.recv().await.unwrap();
+            let json = value.to_json();
+            let terminal = matches!(json["type"].as_str(), Some("done") | Some("error"));
+            events.push(json);
+            if terminal {
+                return events;
+            }
+        }
+    }
+
+    fn event_types(events: &[serde_json::Value]) -> Vec<&str> {
+        events
+            .iter()
+            .map(|e| e["type"].as_str().unwrap_or("<untyped>"))
+            .collect()
+    }
+
+    #[cfg(feature = "openai")]
+    #[tokio::test]
+    async fn openai_stream_emits_typed_event_sequence() {
+        let (ma, chat_id, probe_rx) = setup_chat_probe_on(PORT_EVENT).await;
+
+        let chunks: Vec<Result<Option<String>, AgentError>> = vec![
+            Ok(Some(
+                r#"{"choices":[{"index":0,"delta":{"content":"Hel"},"finish_reason":null}]}"#
+                    .to_string(),
+            )),
+            // First fragment of the tool call carries id/name plus a partial
+            // argument string; the second completes the arguments.
+            Ok(Some(
+                r#"{"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_a","function":{"name":"get_weather","arguments":"{\"city\":"}}]},"finish_reason":null}]}"#
+                    .to_string(),
+            )),
+            Ok(Some(
+                r#"{"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\"Tokyo\"}"}}]},"finish_reason":"tool_calls"}]}"#
+                    .to_string(),
+            )),
+            Ok(None), // [DONE] sentinel
+        ];
+        let mut message = streaming_seed_message("m1");
+
+        {
+            let agent = ma.get_agent(&chat_id).unwrap();
+            let mut guard = agent.lock().await;
+            let chat = guard.as_agent_mut::<ChatAgent>().unwrap();
+            chat.run_openai_stream(
+                &AgentContext::new(),
+                futures::stream::iter(chunks),
+                &mut message,
+            )
+            .await
+            .unwrap();
+        }
+
+        let events = recv_events_until_terminal(&probe_rx).await;
+        assert_eq!(
+            event_types(&events),
+            vec![
+                "start",
+                "text_delta",
+                "tool_call_start",
+                "tool_call_delta",
+                "tool_call_delta",
+                "tool_call_end",
+                "done",
+            ]
+        );
+
+        // Incremental events carry streaming=true partials.
+        assert_eq!(events[1]["delta"], serde_json::json!("Hel"));
+        assert_eq!(events[1]["partial"]["content"], serde_json::json!("Hel"));
+        assert_eq!(events[1]["partial"]["streaming"], serde_json::json!(true));
+
+        // The tool call finalizes with parsed arguments before Done.
+        assert_eq!(events[5]["index"], serde_json::json!(0));
+        assert_eq!(
+            events[5]["tool_call"]["function"]["name"],
+            serde_json::json!("get_weather")
+        );
+        assert_eq!(
+            events[5]["tool_call"]["function"]["parameters"],
+            serde_json::json!({"city": "Tokyo"})
+        );
+        assert_eq!(events[5]["partial"]["streaming"], serde_json::json!(true));
+
+        // Done carries the same final message as the message port.
+        let done = &events[6]["message"];
+        assert_eq!(done["content"], serde_json::json!("Hel"));
+        assert_eq!(done["stop_reason"], serde_json::json!("tool_use"));
+        assert!(done["streaming"].is_null(), "final must not be streaming");
+        assert_eq!(
+            done["tool_calls"][0]["function"]["name"],
+            serde_json::json!("get_weather")
+        );
+
+        ma.quit();
+    }
+
+    #[cfg(feature = "openai")]
+    #[tokio::test]
+    async fn openai_stream_suppresses_partials_when_config_disabled() {
+        let (ma, chat_id, probe_rx) = setup_chat_with_probe().await;
+
+        let chunks: Vec<Result<Option<String>, AgentError>> = vec![
+            Ok(Some(
+                r#"{"choices":[{"index":0,"delta":{"content":"Hel"},"finish_reason":null}]}"#
+                    .to_string(),
+            )),
+            Ok(Some(
+                r#"{"choices":[{"index":0,"delta":{"content":"lo"},"finish_reason":"stop"}]}"#
+                    .to_string(),
+            )),
+            Ok(None),
+        ];
+        let mut message = streaming_seed_message("m1");
+
+        {
+            let agent = ma.get_agent(&chat_id).unwrap();
+            let mut guard = agent.lock().await;
+            let chat = guard.as_agent_mut::<ChatAgent>().unwrap();
+            chat.set_config(
+                CONFIG_EMIT_PARTIAL_MESSAGES.to_string(),
+                AgentValue::boolean(false),
+            )
+            .unwrap();
+            chat.run_openai_stream(
+                &AgentContext::new(),
+                futures::stream::iter(chunks),
+                &mut message,
+            )
+            .await
+            .unwrap();
+        }
+
+        // With partials suppressed the very first message-port emit is
+        // already the final one.
+        let (_ctx, value) = probe_rx.recv().await.unwrap();
+        let msg = value.as_message().unwrap();
+        assert!(!msg.streaming);
+        assert_eq!(msg.content, "Hello");
+        assert_eq!(msg.stop_reason.as_deref(), Some("stop"));
+
+        ma.quit();
+    }
+
+    #[cfg(feature = "claude")]
+    #[tokio::test]
+    async fn claude_stream_emits_typed_event_sequence() {
+        let (ma, chat_id, probe_rx) = setup_chat_probe_on(PORT_EVENT).await;
+
+        let events_in: Vec<Result<claude_client::ClaudeStreamEvent, AgentError>> = [
+            r#"{"type":"message_start","message":{"id":"msg_1","usage":{"input_tokens":5,"output_tokens":1}}}"#,
+            r#"{"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":"","signature":""}}"#,
+            r#"{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"Let me think"}}"#,
+            r#"{"type":"content_block_stop","index":0}"#,
+            r#"{"type":"content_block_start","index":1,"content_block":{"type":"text","text":""}}"#,
+            r#"{"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"Hi"}}"#,
+            r#"{"type":"content_block_stop","index":1}"#,
+            r#"{"type":"content_block_start","index":2,"content_block":{"type":"tool_use","id":"tu_1","name":"get_weather","input":{}}}"#,
+            r#"{"type":"content_block_delta","index":2,"delta":{"type":"input_json_delta","partial_json":"{\"city\":\"Tokyo\"}"}}"#,
+            r#"{"type":"content_block_stop","index":2}"#,
+            r#"{"type":"message_delta","delta":{"stop_reason":"tool_use"},"usage":{"output_tokens":9}}"#,
+            r#"{"type":"message_stop"}"#,
+        ]
+        .iter()
+        .map(|json| Ok(serde_json::from_str(json).unwrap()))
+        .collect();
+        let mut message = streaming_seed_message("m1");
+
+        {
+            let agent = ma.get_agent(&chat_id).unwrap();
+            let mut guard = agent.lock().await;
+            let chat = guard.as_agent_mut::<ChatAgent>().unwrap();
+            chat.run_claude_stream(
+                &AgentContext::new(),
+                futures::stream::iter(events_in),
+                &mut message,
+            )
+            .await
+            .unwrap();
+        }
+
+        let events = recv_events_until_terminal(&probe_rx).await;
+        assert_eq!(
+            event_types(&events),
+            vec![
+                "start",
+                "thinking_delta",
+                "text_delta",
+                "tool_call_start",
+                "tool_call_delta",
+                "tool_call_end",
+                "done",
+            ]
+        );
+
+        assert_eq!(events[1]["delta"], serde_json::json!("Let me think"));
+        assert_eq!(
+            events[1]["partial"]["thinking"],
+            serde_json::json!("Let me think")
+        );
+
+        // Tool-call events index by position in tool_calls, not by the
+        // provider's content-block index (2 here).
+        assert_eq!(events[3]["index"], serde_json::json!(0));
+        assert_eq!(events[4]["index"], serde_json::json!(0));
+        assert_eq!(events[5]["index"], serde_json::json!(0));
+        assert_eq!(
+            events[5]["tool_call"]["function"]["parameters"],
+            serde_json::json!({"city": "Tokyo"})
+        );
+
+        let done = &events[6]["message"];
+        assert_eq!(done["content"], serde_json::json!("Hi"));
+        assert_eq!(done["stop_reason"], serde_json::json!("tool_use"));
+        assert!(done["streaming"].is_null(), "final must not be streaming");
+
+        ma.quit();
+    }
+
+    #[cfg(feature = "ollama")]
+    #[tokio::test]
+    async fn ollama_stream_emits_typed_event_sequence() {
+        let (ma, chat_id, probe_rx) = setup_chat_probe_on(PORT_EVENT).await;
+
+        let chunks: Vec<Result<ollama_client::ChatResponse, AgentError>> = [
+            r#"{"model":"m","created_at":"t","message":{"role":"assistant","content":"Hel"},"done":false}"#,
+            // Ollama delivers the tool call whole in a single chunk.
+            r#"{"model":"m","created_at":"t","message":{"role":"assistant","content":"","tool_calls":[{"function":{"name":"get_weather","arguments":{"city":"Tokyo"}}}]},"done":false}"#,
+            r#"{"model":"m","created_at":"t","message":{"role":"assistant","content":"lo"},"done":true,"done_reason":"stop"}"#,
+        ]
+        .iter()
+        .map(|json| Ok(serde_json::from_str(json).unwrap()))
+        .collect();
+        let mut message = streaming_seed_message("m1");
+
+        {
+            let agent = ma.get_agent(&chat_id).unwrap();
+            let mut guard = agent.lock().await;
+            let chat = guard.as_agent_mut::<ChatAgent>().unwrap();
+            chat.run_ollama_stream(
+                &AgentContext::new(),
+                Box::pin(futures::stream::iter(chunks)),
+                &mut message,
+            )
+            .await
+            .unwrap();
+        }
+
+        let events = recv_events_until_terminal(&probe_rx).await;
+        assert_eq!(
+            event_types(&events),
+            vec![
+                "start",
+                "text_delta",
+                "tool_call_start",
+                "tool_call_end",
+                "text_delta",
+                "done",
+            ]
+        );
+
+        // Even the delta arriving on the done=true chunk is a streaming partial.
+        assert_eq!(events[4]["delta"], serde_json::json!("lo"));
+        assert_eq!(events[4]["partial"]["streaming"], serde_json::json!(true));
+
+        assert_eq!(
+            events[3]["tool_call"]["function"]["name"],
+            serde_json::json!("get_weather")
+        );
+
+        let done = &events[5]["message"];
+        assert_eq!(done["content"], serde_json::json!("Hello"));
+        assert_eq!(done["stop_reason"], serde_json::json!("stop"));
+        assert!(done["streaming"].is_null(), "final must not be streaming");
+
+        ma.quit();
     }
 }

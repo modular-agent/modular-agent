@@ -1,7 +1,8 @@
 use im::vector;
 use modular_agent_core::{
     Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AgentValueMap,
-    AsAgent, Message, ModularAgent, ToolCall, ToolCallFunction, Usage, async_trait, modular_agent,
+    AsAgent, Message, MessageEvent, ModularAgent, ToolCall, ToolCallFunction, Usage, async_trait,
+    modular_agent,
 };
 
 use crate::openai_client;
@@ -10,10 +11,12 @@ use crate::retry::RetryPolicy;
 
 const CATEGORY: &str = "LLM";
 
+const PORT_EVENT: &str = "event";
 const PORT_MESSAGE: &str = "message";
 const PORT_RESPONSE: &str = "response";
 const PORT_RESET: &str = "reset";
 
+const CONFIG_EMIT_PARTIAL_MESSAGES: &str = "emit_partial_messages";
 const CONFIG_MAX_RETRIES: &str = "max_retries";
 const CONFIG_MAX_TOKENS: &str = "max_tokens";
 const CONFIG_MODEL: &str = "model";
@@ -53,20 +56,29 @@ const DEFAULT_MODEL: &str = "openai/gpt-5-mini";
 ///   retries; a server-provided Retry-After takes precedence (default: 1000)
 /// - `timeout_secs`: Per-attempt deadline in seconds; for streaming it covers
 ///   stream establishment only (default: 300, 0 = disabled)
+/// - `emit_partial_messages`: When false, skip the accumulated partial
+///   (streaming = true) emissions on the `message` port; the final message is
+///   still emitted there. The `event` port is unaffected (default: true)
 ///
 /// # Ports
 /// - Input `message`: Message or array of messages to send
 /// - Input `reset`: Any value to reset conversation state
 /// - Output `message`: Assistant's response message
 /// - Output `response`: Raw API response
+/// - Output `event`: Typed stream events (`MessageEvent` object with a `type`
+///   field: `start`, `text_delta`, `tool_call_start`, `tool_call_delta`,
+///   `tool_call_end`, `done`, `error`). Streaming turns emit the full
+///   sequence; non-streaming turns emit a single `done`. `done`/`error` are
+///   emitted after the corresponding final message on the `message` port
 #[modular_agent(
     title = "Responses",
     category = CATEGORY,
     inputs = [PORT_MESSAGE, PORT_RESET],
-    outputs = [PORT_MESSAGE, PORT_RESPONSE],
+    outputs = [PORT_MESSAGE, PORT_RESPONSE, PORT_EVENT],
     string_config(name = CONFIG_MODEL, default = DEFAULT_MODEL),
     boolean_config(name = CONFIG_STREAM, title = "Stream"),
     boolean_config(name = CONFIG_USE_CONVERSATION_STATE, title = "Use Conversation State"),
+    boolean_config(name = CONFIG_EMIT_PARTIAL_MESSAGES, title = "Emit Partial Messages", default = true, description = "Re-send partial messages on the message port while streaming", detail),
     text_config(name = CONFIG_TOOLS),
     integer_config(name = CONFIG_MAX_TOKENS, title = "Max Tokens", default = 0, description = "0: use API default", detail),
     number_config(name = CONFIG_TEMPERATURE, title = "Temperature", default = -1.0, description = "-1: use API default (0.0-2.0)", detail),
@@ -316,9 +328,18 @@ impl ResponsesAgent {
         message.stop_reason = stop_reason_from_response(&response, message.tool_calls.is_some());
         message.usage = usage_from_response(&response);
 
-        // Output message
-        self.output(ctx.clone(), PORT_MESSAGE.to_string(), message.into())
-            .await?;
+        // Output message before the Done event: ChatAgent's ordering, so a
+        // `done`-triggered consumer always sees the final message routed.
+        self.output(
+            ctx.clone(),
+            PORT_MESSAGE.to_string(),
+            message.clone().into(),
+        )
+        .await?;
+
+        // Non-streaming turns still surface completion on the event port as a
+        // single Done, so event consumers work regardless of the stream config.
+        self.emit_event(&ctx, MessageEvent::Done { message }).await?;
 
         // Output raw response
         let out_response = AgentValue::from_serialize(&response)?;
@@ -359,7 +380,16 @@ impl ResponsesAgent {
             // so an emit failure here must not mask it.
             if let Some(message) = crate::chat::stream_error_final(message) {
                 let _ = self
-                    .output(ctx.clone(), PORT_MESSAGE.to_string(), message.into())
+                    .output(ctx.clone(), PORT_MESSAGE.to_string(), message.clone().into())
+                    .await;
+                let _ = self
+                    .emit_event(
+                        &ctx,
+                        MessageEvent::Error {
+                            message,
+                            error: e.to_string(),
+                        },
+                    )
                     .await;
             }
             return Err(e);
@@ -380,11 +410,27 @@ impl ResponsesAgent {
     ) -> Result<(), AgentError> {
         use futures::StreamExt;
 
+        // get_bool_or with an explicit true keeps the fallback aligned with
+        // the declared config default when the key is absent (old spec not
+        // yet reconciled).
+        let emit_partial = self
+            .configs()?
+            .get_bool_or(CONFIG_EMIT_PARTIAL_MESSAGES, true);
+
         let mut content = String::new();
         let mut tool_calls: Vec<ToolCall> = Vec::new();
         let mut current_tool_name: Option<String> = None;
         let mut current_tool_call_id: Option<String> = None;
         let mut current_tool_arguments = String::new();
+
+        // Exactly one Start per streamed turn, before any delta arrives.
+        self.emit_event(
+            ctx,
+            MessageEvent::Start {
+                partial: message.clone(),
+            },
+        )
+        .await?;
 
         while let Some(res) = stream.next().await {
             let Some(data) = res? else {
@@ -397,15 +443,38 @@ impl ResponsesAgent {
                 openai_client::ResponseStreamEvent::OutputTextDelta { delta } => {
                     content.push_str(&delta);
                     message.content = content.clone();
-                    self.output(
-                        ctx.clone(),
-                        PORT_MESSAGE.to_string(),
-                        message.clone().into(),
+                    self.emit_event(
+                        ctx,
+                        MessageEvent::TextDelta {
+                            delta,
+                            partial: message.clone(),
+                        },
                     )
                     .await?;
+                    if emit_partial {
+                        self.output(
+                            ctx.clone(),
+                            PORT_MESSAGE.to_string(),
+                            message.clone().into(),
+                        )
+                        .await?;
+                    }
                 }
                 openai_client::ResponseStreamEvent::FunctionCallArgumentsDelta { delta } => {
                     current_tool_arguments.push_str(&delta);
+                    // A stray delta without a preceding output_item.added has
+                    // no tool call to attribute to, so no event for it.
+                    if current_tool_name.is_some() {
+                        self.emit_event(
+                            ctx,
+                            MessageEvent::ToolCallDelta {
+                                index: tool_calls.len(),
+                                delta,
+                                partial: message.clone(),
+                            },
+                        )
+                        .await?;
+                    }
                 }
                 openai_client::ResponseStreamEvent::OutputItemAdded { item } => {
                     if let Some(name) = item.get("name").and_then(|v| v.as_str()) {
@@ -415,6 +484,16 @@ impl ResponsesAgent {
                             .and_then(|v| v.as_str())
                             .map(|s| s.to_string());
                         current_tool_arguments.clear();
+                        // The in-flight call lands at tool_calls.len() once
+                        // finalized, so Start/Delta/End share that index.
+                        self.emit_event(
+                            ctx,
+                            MessageEvent::ToolCallStart {
+                                index: tool_calls.len(),
+                                partial: message.clone(),
+                            },
+                        )
+                        .await?;
                     }
                 }
                 openai_client::ResponseStreamEvent::OutputItemDone { .. } => {
@@ -430,16 +509,28 @@ impl ResponsesAgent {
                                 parse_error,
                             },
                         };
-                        tool_calls.push(tool_call);
+                        let index = tool_calls.len();
+                        tool_calls.push(tool_call.clone());
                         message.tool_calls = Some(tool_calls.clone().into());
                         current_tool_arguments.clear();
 
-                        self.output(
-                            ctx.clone(),
-                            PORT_MESSAGE.to_string(),
-                            message.clone().into(),
+                        self.emit_event(
+                            ctx,
+                            MessageEvent::ToolCallEnd {
+                                index,
+                                tool_call,
+                                partial: message.clone(),
+                            },
                         )
                         .await?;
+                        if emit_partial {
+                            self.output(
+                                ctx.clone(),
+                                PORT_MESSAGE.to_string(),
+                                message.clone().into(),
+                            )
+                            .await?;
+                        }
                     }
                 }
                 openai_client::ResponseStreamEvent::Incomplete { response }
@@ -461,10 +552,19 @@ impl ResponsesAgent {
                     message.stop_reason =
                         stop_reason_from_response(&response, !tool_calls.is_empty());
                     message.usage = usage_from_response(&response);
+                    // Final message first, Done after (ChatAgent's ordering),
+                    // so a `done`-triggered consumer sees the final routed.
                     self.output(
                         ctx.clone(),
                         PORT_MESSAGE.to_string(),
                         message.clone().into(),
+                    )
+                    .await?;
+                    self.emit_event(
+                        ctx,
+                        MessageEvent::Done {
+                            message: message.clone(),
+                        },
                     )
                     .await?;
 
@@ -499,9 +599,34 @@ impl ResponsesAgent {
                 message.clone().into(),
             )
             .await?;
+            self.emit_event(
+                ctx,
+                MessageEvent::Done {
+                    message: message.clone(),
+                },
+            )
+            .await?;
         }
 
         Ok(())
+    }
+
+    /// Emit a typed stream event on the `event` port. Unlike message-port
+    /// partials, event emission is unconditional: `emit_partial_messages`
+    /// only gates the legacy accumulated-Message re-sends.
+    async fn emit_event(
+        &mut self,
+        ctx: &AgentContext,
+        event: MessageEvent,
+    ) -> Result<(), AgentError> {
+        // Events are dropped by routing when nothing is connected, but only
+        // after the per-delta serde conversion below has been paid; skip it
+        // up front so presets that ignore the event port pay nothing.
+        if !self.ma().has_connections(self.id(), PORT_EVENT) {
+            return Ok(());
+        }
+        let value: AgentValue = event.try_into()?;
+        self.output(ctx.clone(), PORT_EVENT.to_string(), value).await
     }
 }
 
@@ -574,9 +699,9 @@ mod tests {
     use modular_agent_core::ConnectionSpec;
     use modular_agent_core::test_utils::{ProbeReceiver, TestProbeAgent, probe_receiver};
 
-    /// Build a running preset with a ResponsesAgent whose `message` port
+    /// Build a running preset with a ResponsesAgent whose `port` output
     /// feeds a probe, so stream-loop emits can be observed end to end.
-    async fn setup_responses_with_probe() -> (ModularAgent, String, ProbeReceiver) {
+    async fn setup_responses_with_probe(port: &str) -> (ModularAgent, String, ProbeReceiver) {
         let ma = ModularAgent::init().unwrap();
         ma.ready().await.unwrap();
 
@@ -595,7 +720,7 @@ mod tests {
             &preset_id,
             ConnectionSpec {
                 source: responses_id.clone(),
-                source_handle: PORT_MESSAGE.into(),
+                source_handle: port.into(),
                 target: probe_id.clone(),
                 target_handle: "value".into(),
             },
@@ -610,7 +735,7 @@ mod tests {
 
     #[tokio::test]
     async fn responses_stream_incomplete_status_lands_on_final_message() {
-        let (ma, responses_id, probe_rx) = setup_responses_with_probe().await;
+        let (ma, responses_id, probe_rx) = setup_responses_with_probe(PORT_MESSAGE).await;
 
         // An incomplete turn: text deltas, then response.incomplete instead
         // of response.completed. The trailing guard must still emit exactly
@@ -663,7 +788,7 @@ mod tests {
 
     #[tokio::test]
     async fn responses_stream_completed_usage_lands_on_final_message() {
-        let (ma, responses_id, probe_rx) = setup_responses_with_probe().await;
+        let (ma, responses_id, probe_rx) = setup_responses_with_probe(PORT_MESSAGE).await;
 
         let chunks: Vec<Result<Option<String>, AgentError>> = vec![
             Ok(Some(
@@ -712,6 +837,156 @@ mod tests {
                 cache_write_tokens: 0,
             })
         );
+
+        ma.quit();
+    }
+
+    #[tokio::test]
+    async fn responses_stream_emits_typed_event_sequence() {
+        let (ma, responses_id, probe_rx) = setup_responses_with_probe(PORT_EVENT).await;
+
+        // A streamed turn with text and one tool call must produce the full
+        // event contract: Start, TextDelta, ToolCallStart, ToolCallDelta,
+        // ToolCallEnd, Done — in that order.
+        let chunks: Vec<Result<Option<String>, AgentError>> = vec![
+            Ok(Some(
+                r#"{"type":"response.output_text.delta","delta":"Hi"}"#.to_string(),
+            )),
+            Ok(Some(
+                r#"{"type":"response.output_item.added","item":{"type":"function_call","name":"get_weather","call_id":"call_1"}}"#
+                    .to_string(),
+            )),
+            Ok(Some(
+                r#"{"type":"response.function_call_arguments.delta","delta":"{\"city\":\"Tokyo\"}"}"#
+                    .to_string(),
+            )),
+            Ok(Some(
+                r#"{"type":"response.output_item.done","item":{}}"#.to_string(),
+            )),
+            Ok(Some(
+                r#"{"type":"response.completed","response":{"id":"resp_1","status":"completed","output":[]}}"#
+                    .to_string(),
+            )),
+            Ok(None), // [DONE] sentinel
+        ];
+        let mut message = Message::assistant(String::new());
+        message.id = Some("m1".to_string());
+        message.streaming = true;
+
+        {
+            let agent = ma.get_agent(&responses_id).unwrap();
+            let mut guard = agent.lock().await;
+            let responses = guard.as_agent_mut::<ResponsesAgent>().unwrap();
+            responses
+                .run_stream(
+                    &AgentContext::new(),
+                    futures::stream::iter(chunks),
+                    &mut message,
+                    false,
+                )
+                .await
+                .unwrap();
+        }
+
+        let mut events = Vec::new();
+        for _ in 0..6 {
+            let (_ctx, value) = probe_rx.recv().await.unwrap();
+            events.push(value);
+        }
+        let types: Vec<&str> = events.iter().map(|v| v.get_str("type").unwrap()).collect();
+        assert_eq!(
+            types,
+            vec![
+                "start",
+                "text_delta",
+                "tool_call_start",
+                "tool_call_delta",
+                "tool_call_end",
+                "done",
+            ]
+        );
+
+        let start_partial = events[0].get("partial").unwrap();
+        assert_eq!(start_partial.get_str("role"), Some("assistant"));
+        assert_eq!(start_partial.get_bool("streaming"), Some(true));
+
+        assert_eq!(events[1].get_str("delta"), Some("Hi"));
+        assert_eq!(
+            events[1].get("partial").unwrap().get_str("content"),
+            Some("Hi")
+        );
+
+        assert_eq!(events[2].get("index").unwrap().as_i64(), Some(0));
+        assert_eq!(
+            events[3].get_str("delta"),
+            Some(r#"{"city":"Tokyo"}"#)
+        );
+        assert_eq!(
+            events[4]
+                .get("tool_call")
+                .unwrap()
+                .get("function")
+                .unwrap()
+                .get_str("name"),
+            Some("get_weather")
+        );
+
+        let done_msg = events[5].get("message").unwrap();
+        // Message serialization omits `streaming` when false, so the final
+        // message must lack the key entirely rather than carry `false`.
+        assert_eq!(done_msg.get_bool("streaming"), None);
+        assert_eq!(done_msg.get_str("content"), Some("Hi"));
+        assert_eq!(done_msg.get_str("stop_reason"), Some("tool_use"));
+
+        ma.quit();
+    }
+
+    #[tokio::test]
+    async fn responses_stream_emit_partial_messages_false_skips_partials() {
+        let (ma, responses_id, probe_rx) = setup_responses_with_probe(PORT_MESSAGE).await;
+
+        let chunks: Vec<Result<Option<String>, AgentError>> = vec![
+            Ok(Some(
+                r#"{"type":"response.output_text.delta","delta":"Hi"}"#.to_string(),
+            )),
+            Ok(Some(
+                r#"{"type":"response.completed","response":{"id":"resp_1","status":"completed","output":[]}}"#
+                    .to_string(),
+            )),
+            Ok(None), // [DONE] sentinel
+        ];
+        let mut message = Message::assistant(String::new());
+        message.id = Some("m1".to_string());
+        message.streaming = true;
+
+        {
+            let agent = ma.get_agent(&responses_id).unwrap();
+            let mut guard = agent.lock().await;
+            guard
+                .set_config(
+                    CONFIG_EMIT_PARTIAL_MESSAGES.to_string(),
+                    AgentValue::boolean(false),
+                )
+                .unwrap();
+            let responses = guard.as_agent_mut::<ResponsesAgent>().unwrap();
+            responses
+                .run_stream(
+                    &AgentContext::new(),
+                    futures::stream::iter(chunks),
+                    &mut message,
+                    false,
+                )
+                .await
+                .unwrap();
+        }
+
+        // The very first message-port emit must already be the final one:
+        // partials are suppressed while the final always goes out.
+        let (_ctx, value) = probe_rx.recv().await.unwrap();
+        let msg = value.as_message().unwrap();
+        assert!(!msg.streaming);
+        assert_eq!(msg.content, "Hi");
+        assert_eq!(msg.stop_reason.as_deref(), Some("stop"));
 
         ma.quit();
     }
