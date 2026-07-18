@@ -11,6 +11,9 @@ readme = "../README.md"
 [dependencies]
 async-trait = "0.1"
 fnv = "1"
+# default-features = false + alloc: only the order-preserving stream
+# combinators (buffered) are needed for parallel tool execution.
+futures-util = { version = "0.3", optional = true, default-features = false, features = ["alloc"] }
 im = { workspace = true }
 indexmap = { version = "2", features = ["serde"] }
 inventory = "0.3"
@@ -38,7 +41,7 @@ env_logger = "0.11"
 default = ["file", "image", "llm", "mcp"]
 file = []
 image = ["photon-rs"]
-llm = ["regex", "jsonschema"]
+llm = ["regex", "jsonschema", "futures-util"]
 mcp = ["rmcp", "llm"]
 test-utils = []
 

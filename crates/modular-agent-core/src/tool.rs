@@ -25,6 +25,7 @@ use crate::{
     Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentStatus, AgentValue,
     AsAgent, Message, ModularAgent, SharedAgent, ToolCall, async_trait, modular_agent,
 };
+use futures_util::{StreamExt, stream};
 use im::{Vector, vector};
 use regex::RegexSet;
 use tokio::sync::oneshot;
@@ -46,12 +47,33 @@ const CONFIG_TOOL_DESCRIPTION: &str = "description";
 const CONFIG_TOOL_PARAMETERS: &str = "parameters";
 const CONFIG_TIMEOUT_SECS: &str = "timeout_secs";
 const CONFIG_MAX_ITERATIONS: &str = "max_iterations";
+const CONFIG_MAX_CONCURRENCY: &str = "max_concurrency";
 
 /// Fallback timeout (seconds) when `timeout_secs` config is unset or unreadable.
 const DEFAULT_TIMEOUT_SECS: i64 = 60;
 
 /// Fallback loop limit when `max_iterations` config is unset or unreadable.
 const DEFAULT_MAX_ITERATIONS: i64 = 25;
+
+/// Fallback parallel-tool concurrency cap when `max_concurrency` config is
+/// unset or unreadable.
+const DEFAULT_MAX_CONCURRENCY: i64 = 8;
+
+/// How a tool may be scheduled relative to other calls in the same batch.
+///
+/// Tools with side effects (database writes, message posting, workflow
+/// invocations) must stay [`Sequential`](ExecutionMode::Sequential) so their
+/// effects happen one at a time and in input order.
+/// [`Parallel`](ExecutionMode::Parallel) is opt-in for independent,
+/// read-only tools where concurrent execution is safe.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum ExecutionMode {
+    /// Never runs concurrently with any other tool call (the default).
+    #[default]
+    Sequential,
+    /// May run concurrently with adjacent `Parallel` calls.
+    Parallel,
+}
 
 /// Metadata describing a tool available for LLM function calling.
 ///
@@ -70,10 +92,15 @@ pub struct ToolInfo {
     /// Defaults to `{"type": "object", "properties": {}}` when no schema
     /// is provided (see [`ToolInfo::new`]).
     pub parameters: serde_json::Value,
+
+    /// How this tool may be scheduled relative to other calls in the same
+    /// batch (see [`ExecutionMode`]). Internal execution metadata — never
+    /// sent to the LLM.
+    pub execution_mode: ExecutionMode,
 }
 
 impl ToolInfo {
-    /// Creates a new `ToolInfo`.
+    /// Creates a new `ToolInfo` with the default `Sequential` execution mode.
     ///
     /// When `parameters` is `None`, the empty-object JSON Schema
     /// `{"type": "object", "properties": {}}` is used so providers always
@@ -88,7 +115,15 @@ impl ToolInfo {
             description: description.into(),
             parameters: parameters
                 .unwrap_or_else(|| serde_json::json!({"type": "object", "properties": {}})),
+            execution_mode: ExecutionMode::default(),
         }
+    }
+
+    /// Sets the execution mode, typically to opt a read-only tool into
+    /// parallel scheduling (see [`ExecutionMode`]).
+    pub fn with_execution_mode(mut self, mode: ExecutionMode) -> Self {
+        self.execution_mode = mode;
+        self
     }
 }
 
@@ -476,87 +511,150 @@ fn validate_tool_args(
     }
 }
 
+/// Executes a single tool call, funneling every failure (unparseable
+/// parameters, schema validation failure, tool error) through
+/// [`error_tool_result`] so a failing call never aborts its siblings.
+async fn execute_tool_call(ctx: &AgentContext, call: &ToolCall) -> Message {
+    // A provider argument string that failed to parse even after repair is
+    // reported back to the model rather than executed with bogus arguments.
+    if let Some(err) = &call.function.parse_error {
+        return error_tool_result(
+            call,
+            format!(
+                "Tool call arguments could not be parsed as JSON; the call was \
+                 not executed. Re-issue the call with valid JSON arguments. {}",
+                err
+            ),
+        );
+    }
+    // Validate and coerce arguments against the tool's declared schema
+    // before execution. An unknown tool falls through unchanged so
+    // call_tool() reports the not-found error as usual.
+    let mut parameters = call.function.parameters.clone();
+    if let Some(tool) = get_tool(call.function.name.as_str())
+        && let Err(msg) = validate_tool_args(&tool.info().parameters, &mut parameters)
+    {
+        return error_tool_result(
+            call,
+            format!(
+                "Tool call arguments failed schema validation; the call was \
+                 not executed. Re-issue the call with corrected arguments. \
+                 Errors: {}",
+                msg
+            ),
+        );
+    }
+    let args = match AgentValue::from_json(parameters) {
+        Ok(args) => args,
+        Err(e) => {
+            return error_tool_result(call, format!("Failed to parse tool call parameters: {}", e));
+        }
+    };
+    match call_tool(ctx.clone(), call.function.name.as_str(), args).await {
+        Ok(tool_resp) => {
+            let mut msg =
+                Message::tool(call.function.name.clone(), tool_resp.to_json().to_string());
+            msg.id = call.function.id.clone();
+            msg
+        }
+        Err(e) => error_tool_result(call, e),
+    }
+}
+
+/// Runs the accumulated batch of `Parallel` calls concurrently, bounded by
+/// `max_concurrency`, and appends the results to `out` in the batch's order.
+async fn flush_parallel_batch(
+    ctx: &AgentContext,
+    batch: &mut Vec<&ToolCall>,
+    max_concurrency: usize,
+    out: &mut Vec<Message>,
+) {
+    if batch.is_empty() {
+        return;
+    }
+    // Materialize the futures before streaming: mapping lazily inside
+    // stream::iter trips a higher-ranked lifetime inference error when the
+    // stream is held across an await in the caller.
+    let mut futures = Vec::with_capacity(batch.len());
+    for call in batch.drain(..) {
+        futures.push(execute_tool_call(ctx, call));
+    }
+    // `buffered` (unlike `buffer_unordered`) yields results in input order.
+    let mut results = stream::iter(futures).buffered(max_concurrency);
+    while let Some(msg) = results.next().await {
+        out.push(msg);
+    }
+}
+
 /// Executes multiple tool calls and returns the results as messages.
 ///
-/// Processes each tool call sequentially and returns tool response messages
-/// suitable for continuing an LLM conversation. Before execution, each call's
-/// arguments are validated against the tool's JSON Schema with lightweight
-/// type coercion (see [`coerce_by_schema`]); the coerced arguments are what
-/// the tool receives. A failure of one call (unparseable parameters, schema
-/// validation failure, or a tool error) does not abort the others: it is
-/// returned as a tool message with `is_error: Some(true)` so the LLM can
-/// recover.
+/// Returns tool response messages suitable for continuing an LLM
+/// conversation, always in the same order as `tool_calls` regardless of
+/// completion order. Before execution, each call's arguments are validated
+/// against the tool's JSON Schema with lightweight type coercion (see
+/// [`coerce_by_schema`]); the coerced arguments are what the tool receives.
+/// A failure of one call (unparseable parameters, schema validation failure,
+/// or a tool error) does not abort the others: it is returned as a tool
+/// message with `is_error: Some(true)` so the LLM can recover.
+///
+/// Scheduling follows each tool's [`ExecutionMode`]:
+///
+/// * Consecutive calls to `Parallel` tools are executed concurrently, with
+///   at most `max_concurrency` calls in flight at once.
+/// * A call to a `Sequential` tool (the default, including tools not found
+///   in the registry) acts as a barrier: every earlier call must finish
+///   first, and the sequential call runs alone.
 ///
 /// # Arguments
 ///
 /// * `ctx` - The agent context for the invocations
 /// * `tool_calls` - The tool calls to execute
+/// * `max_concurrency` - Upper bound on concurrently running `Parallel`
+///   calls; values below 1 are treated as 1
 ///
 /// # Returns
 ///
-/// A vector of tool response messages, one for each tool call.
+/// A vector of tool response messages, one for each tool call, in input order.
 pub async fn call_tools(
     ctx: &AgentContext,
     tool_calls: &Vector<ToolCall>,
+    max_concurrency: usize,
 ) -> Result<Vector<Message>, AgentError> {
     if tool_calls.is_empty() {
         return Ok(vector![]);
     };
-    let mut resp_messages = vec![];
+    let max_concurrency = max_concurrency.max(1);
 
+    let mut resp_messages = Vec::with_capacity(tool_calls.len());
+    let mut parallel_batch: Vec<&ToolCall> = Vec::new();
     for call in tool_calls {
-        // A provider argument string that failed to parse even after repair is
-        // reported back to the model rather than executed with bogus arguments.
-        if let Some(err) = &call.function.parse_error {
-            resp_messages.push(error_tool_result(
-                call,
-                format!(
-                    "Tool call arguments could not be parsed as JSON; the call was \
-                     not executed. Re-issue the call with valid JSON arguments. {}",
-                    err
-                ),
-            ));
+        // An unknown tool counts as Sequential so it flows through
+        // execute_tool_call alone and call_tool() reports the not-found error.
+        let mode = get_tool(call.function.name.as_str())
+            .map(|tool| tool.info().execution_mode)
+            .unwrap_or_default();
+        if mode == ExecutionMode::Parallel {
+            parallel_batch.push(call);
             continue;
         }
-        // Validate and coerce arguments against the tool's declared schema
-        // before execution. An unknown tool falls through unchanged so
-        // call_tool() reports the not-found error as usual.
-        let mut parameters = call.function.parameters.clone();
-        if let Some(tool) = get_tool(call.function.name.as_str())
-            && let Err(msg) = validate_tool_args(&tool.info().parameters, &mut parameters)
-        {
-            resp_messages.push(error_tool_result(
-                call,
-                format!(
-                    "Tool call arguments failed schema validation; the call was \
-                     not executed. Re-issue the call with corrected arguments. \
-                     Errors: {}",
-                    msg
-                ),
-            ));
-            continue;
-        }
-        let args = match AgentValue::from_json(parameters) {
-            Ok(args) => args,
-            Err(e) => {
-                resp_messages.push(error_tool_result(
-                    call,
-                    format!("Failed to parse tool call parameters: {}", e),
-                ));
-                continue;
-            }
-        };
-        let tool_resp = match call_tool(ctx.clone(), call.function.name.as_str(), args).await {
-            Ok(resp) => resp,
-            Err(e) => {
-                resp_messages.push(error_tool_result(call, e));
-                continue;
-            }
-        };
-        let mut msg = Message::tool(call.function.name.clone(), tool_resp.to_json().to_string());
-        msg.id = call.function.id.clone();
-        resp_messages.push(msg);
+        // A Sequential call is a barrier: flush the pending parallel batch
+        // first, then run the sequential call with nothing else in flight.
+        flush_parallel_batch(
+            ctx,
+            &mut parallel_batch,
+            max_concurrency,
+            &mut resp_messages,
+        )
+        .await;
+        resp_messages.push(execute_tool_call(ctx, call).await);
     }
+    flush_parallel_batch(
+        ctx,
+        &mut parallel_batch,
+        max_concurrency,
+        &mut resp_messages,
+    )
+    .await;
 
     Ok(resp_messages.into())
 }
@@ -867,9 +965,11 @@ impl PresetTool {
                 // tool call in the same flow (including an LLM retry after this
                 // error). Drop the stale sender now, otherwise a late tool_out from
                 // this timed-out invocation would be delivered to whichever call
-                // registers under the same id next. Tool calls within a flow run
-                // sequentially (call_tools awaits each call), so this cannot remove
-                // a newer call's sender.
+                // registers under the same id next. PresetTool registers with
+                // ExecutionMode::Sequential and call_tools never runs a Sequential
+                // call concurrently with anything, so within a flow no newer call
+                // can have registered a sender yet — this cannot remove a newer
+                // call's sender.
                 pending.lock().unwrap().remove(&ctx_id);
                 Err(AgentError::Timeout(format!(
                     "Tool call timed out after {} seconds",
@@ -894,11 +994,16 @@ impl Tool for PresetTool {
 /// Agent that processes tool calls from LLM messages.
 ///
 /// When an LLM response contains tool calls, this agent executes them
-/// and outputs the results as tool response messages.
+/// and outputs the results as tool response messages. Consecutive calls to
+/// tools registered with `ExecutionMode::Parallel` run concurrently (bounded
+/// by `max_concurrency`); calls to `Sequential` tools — the default — run one
+/// at a time and act as barriers. Results are emitted in input order.
 ///
 /// # Configuration
 ///
 /// * `tools` - Optional regex patterns to filter which tools can be called
+/// * `max_concurrency` - Maximum number of `Parallel`-mode tool calls in
+///   flight at once; values below 1 are treated as 1 (default: 8)
 ///
 /// # Ports
 ///
@@ -910,6 +1015,7 @@ impl Tool for PresetTool {
     inputs=[PORT_MESSAGE],
     outputs=[PORT_MESSAGE],
     string_config(name=CONFIG_TOOLS),
+    integer_config(name=CONFIG_MAX_CONCURRENCY, default=8),
 )]
 pub struct CallToolMessageAgent {
     data: AgentData,
@@ -1036,7 +1142,14 @@ impl AsAgent for CallToolMessageAgent {
             return Ok(());
         }
 
-        let resp_messages = call_tools(&ctx, &tool_calls).await?;
+        // Read at call time (like timeout_secs) so runtime config changes
+        // take effect without a restart.
+        let max_concurrency = self
+            .configs()?
+            .get_integer_or(CONFIG_MAX_CONCURRENCY, DEFAULT_MAX_CONCURRENCY)
+            .max(1) as usize;
+
+        let resp_messages = call_tools(&ctx, &tool_calls, max_concurrency).await?;
         for resp_msg in resp_messages {
             self.output(ctx.clone(), PORT_MESSAGE, AgentValue::message(resp_msg))
                 .await?;
@@ -1391,7 +1504,7 @@ mod tests {
             );
 
             let calls = vector![call(name, "c1", json!({"count": "42", "flag": "true"}))];
-            let msgs = call_tools(&AgentContext::new(), &calls).await.unwrap();
+            let msgs = call_tools(&AgentContext::new(), &calls, 8).await.unwrap();
             unregister_tool(name);
 
             assert_eq!(msgs.len(), 1);
@@ -1417,7 +1530,7 @@ mod tests {
             );
 
             let calls = vector![call(name, "c1", json!({"outer": {"n": "7"}}))];
-            let msgs = call_tools(&AgentContext::new(), &calls).await.unwrap();
+            let msgs = call_tools(&AgentContext::new(), &calls, 8).await.unwrap();
             unregister_tool(name);
 
             assert_eq!(msgs.len(), 1);
@@ -1441,7 +1554,7 @@ mod tests {
                 call(name, "bad", json!({"count": "abc"})),
                 call(name, "good", json!({"count": "5"})),
             ];
-            let msgs = call_tools(&AgentContext::new(), &calls).await.unwrap();
+            let msgs = call_tools(&AgentContext::new(), &calls, 8).await.unwrap();
             unregister_tool(name);
 
             assert_eq!(msgs.len(), 2);
@@ -1472,7 +1585,7 @@ mod tests {
             );
 
             let calls = vector![call(name, "bad", json!({"count": "abc", "flag": "xyz"}))];
-            let msgs = call_tools(&AgentContext::new(), &calls).await.unwrap();
+            let msgs = call_tools(&AgentContext::new(), &calls, 8).await.unwrap();
             unregister_tool(name);
 
             assert_eq!(msgs.len(), 1);
@@ -1489,7 +1602,7 @@ mod tests {
 
             let args = json!({"anything": [1, 2, 3], "nested": {"x": "y"}});
             let calls = vector![call(name, "c1", args.clone())];
-            let msgs = call_tools(&AgentContext::new(), &calls).await.unwrap();
+            let msgs = call_tools(&AgentContext::new(), &calls, 8).await.unwrap();
             unregister_tool(name);
 
             assert_eq!(msgs.len(), 1);
@@ -1504,7 +1617,7 @@ mod tests {
 
             let args = json!({"x": "1"});
             let calls = vector![call(name, "c1", args.clone())];
-            let msgs = call_tools(&AgentContext::new(), &calls).await.unwrap();
+            let msgs = call_tools(&AgentContext::new(), &calls, 8).await.unwrap();
             unregister_tool(name);
 
             assert_eq!(msgs.len(), 1);
@@ -1531,7 +1644,7 @@ mod tests {
                 call(name, "c2", json!({"v": "7"})),
                 call(name, "c3", json!({"v": 5})),
             ];
-            let msgs = call_tools(&AgentContext::new(), &calls).await.unwrap();
+            let msgs = call_tools(&AgentContext::new(), &calls, 8).await.unwrap();
             unregister_tool(name);
 
             assert_eq!(msgs.len(), 3);
@@ -1561,7 +1674,7 @@ mod tests {
             );
 
             let calls = vector![call(name, "c1", json!({"a": "5"}))];
-            let msgs = call_tools(&AgentContext::new(), &calls).await.unwrap();
+            let msgs = call_tools(&AgentContext::new(), &calls, 8).await.unwrap();
             unregister_tool(name);
 
             assert_eq!(msgs.len(), 1);
