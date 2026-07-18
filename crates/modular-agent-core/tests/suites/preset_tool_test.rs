@@ -64,7 +64,7 @@ async fn configs_changed_reregisters_running_tool() {
     let tool = get_tool(new_name).unwrap();
     assert_eq!(tool.info().name, new_name);
     assert_eq!(tool.info().description, "new description");
-    assert_eq!(tool.info().parameters, Some(parameters));
+    assert_eq!(tool.info().parameters, parameters);
 
     agent.lock().await.stop().await.unwrap();
     assert!(get_tool(new_name).is_none());

@@ -34,11 +34,7 @@ impl Tool for CountingTool {
 fn register_counting_tool(name: &str) -> Arc<AtomicUsize> {
     let count = Arc::new(AtomicUsize::new(0));
     register_tool(CountingTool {
-        info: ToolInfo {
-            name: name.to_string(),
-            description: String::new(),
-            parameters: None,
-        },
+        info: ToolInfo::new(name, "", None),
         count: count.clone(),
     });
     count

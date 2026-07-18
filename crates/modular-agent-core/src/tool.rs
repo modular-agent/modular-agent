@@ -65,8 +65,31 @@ pub struct ToolInfo {
     /// Human-readable description of what the tool does.
     pub description: String,
 
-    /// JSON Schema describing the tool's parameters (optional).
-    pub parameters: Option<serde_json::Value>,
+    /// JSON Schema describing the tool's parameters.
+    ///
+    /// Defaults to `{"type": "object", "properties": {}}` when no schema
+    /// is provided (see [`ToolInfo::new`]).
+    pub parameters: serde_json::Value,
+}
+
+impl ToolInfo {
+    /// Creates a new `ToolInfo`.
+    ///
+    /// When `parameters` is `None`, the empty-object JSON Schema
+    /// `{"type": "object", "properties": {}}` is used so providers always
+    /// receive a valid schema.
+    pub fn new(
+        name: impl Into<String>,
+        description: impl Into<String>,
+        parameters: Option<serde_json::Value>,
+    ) -> Self {
+        Self {
+            name: name.into(),
+            description: description.into(),
+            parameters: parameters
+                .unwrap_or_else(|| serde_json::json!({"type": "object", "properties": {}})),
+        }
+    }
 }
 
 /// Trait for implementing callable tools.
@@ -122,9 +145,7 @@ impl From<ToolInfo> for AgentValue {
             "description".to_string(),
             AgentValue::from(info.description),
         );
-        if let Some(params) = &info.parameters
-            && let Ok(params_value) = AgentValue::from_serialize(params)
-        {
+        if let Ok(params_value) = AgentValue::from_serialize(&info.parameters) {
             obj.insert("parameters".to_string(), params_value);
         }
         AgentValue::object(obj.into())
@@ -650,11 +671,7 @@ impl PresetTool {
         agent: SharedAgent,
     ) -> Self {
         Self {
-            info: ToolInfo {
-                name,
-                description,
-                parameters,
-            },
+            info: ToolInfo::new(name, description, parameters),
             agent,
         }
     }
@@ -1065,6 +1082,23 @@ impl AsAgent for CallToolAgent {
 mod tests {
     use super::*;
     use crate::ToolCallFunction;
+
+    #[test]
+    fn test_tool_info_new_parameters_default() {
+        let info = ToolInfo::new("t", "d", None);
+        assert_eq!(
+            info.parameters,
+            serde_json::json!({"type": "object", "properties": {}})
+        );
+
+        let schema = serde_json::json!({
+            "type": "object",
+            "properties": {"x": {"type": "string"}},
+            "required": ["x"]
+        });
+        let info = ToolInfo::new("t", "d", Some(schema.clone()));
+        assert_eq!(info.parameters, schema);
+    }
 
     #[test]
     fn test_error_tool_result_shape() {

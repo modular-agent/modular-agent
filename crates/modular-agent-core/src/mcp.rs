@@ -82,11 +82,11 @@ impl MCPTool {
         server_config: MCPServerConfig,
         tool: rmcp::model::Tool,
     ) -> Self {
-        let info = ToolInfo {
+        let info = ToolInfo::new(
             name,
-            description: tool.description.clone().unwrap_or_default().into_owned(),
-            parameters: serde_json::to_value(&tool.input_schema).ok(),
-        };
+            tool.description.clone().unwrap_or_default().into_owned(),
+            serde_json::to_value(&tool.input_schema).ok(),
+        );
         Self {
             server_name,
             server_config,

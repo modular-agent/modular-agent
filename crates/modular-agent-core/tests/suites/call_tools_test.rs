@@ -36,11 +36,7 @@ impl Tool for SucceedingTool {
 }
 
 fn tool_info(name: &str) -> ToolInfo {
-    ToolInfo {
-        name: name.to_string(),
-        description: String::new(),
-        parameters: None,
-    }
+    ToolInfo::new(name, "", None)
 }
 
 fn tool_call(name: &str, id: &str, parameters: serde_json::Value) -> ToolCall {
