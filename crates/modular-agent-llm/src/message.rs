@@ -1,7 +1,10 @@
+use std::sync::Arc;
+
 use im::{Vector, vector};
 use modular_agent_core::{
     Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
-    ContentBlock, Message, MessageContent, ModularAgent, async_trait, modular_agent,
+    ContentBlock, InMemorySessionStore, JsonlSessionStore, Message, MessageContent, ModularAgent,
+    SessionEntry, SessionMeta, SessionStore, async_trait, build_context, modular_agent,
 };
 
 const CATEGORY: &str = "LLM/Message";
@@ -9,11 +12,17 @@ const CATEGORY: &str = "LLM/Message";
 const PORT_MESSAGE: &str = "message";
 const PORT_MESSAGES: &str = "messages";
 const PORT_RESET: &str = "reset";
+const PORT_SESSION_ID: &str = "session_id";
 
 const CONFIG_MAX_SIZE: &str = "max_size";
 const CONFIG_MESSAGE: &str = "message";
-const CONFIG_MESSAGES: &str = "messages";
 const CONFIG_PREAMBLE: &str = "preamble";
+const CONFIG_SESSION_DIR: &str = "session_dir";
+const CONFIG_SESSION_ID: &str = "session_id";
+
+/// Old presets stored the history in a hidden `messages` config;
+/// `reconcile_spec()` renames it to `_messages` for lazy migration.
+const STALE_CONFIG_MESSAGES: &str = "_messages";
 
 // Assistant Message Agent
 #[modular_agent(
@@ -268,37 +277,229 @@ impl AsAgent for PreambleAgent {
     }
 }
 
-/// Store and accumulate messages.
+/// Accumulate messages in an append-only session store.
 ///
-/// It stores the received messages internally and outputs them.
-/// When max_size > 0, the number of stored messages is limited to max_size.
-/// The stored messages are retained even if the agent is stopped.
-/// When an input is received on reset, the stored messages are cleared.
+/// Received messages are appended to a session (an append-only conversation
+/// log) and the full conversation context is emitted after every input. With
+/// an empty `session_dir` the history lives in memory only and is retained
+/// across agent stop/start within the same process; with a non-empty
+/// `session_dir` each session is persisted as
+/// `<session_dir>/<session_id>.jsonl` and survives restarts. The history is
+/// never trimmed here — limiting the context size is the job of downstream
+/// agents such as `MessagesForPromptAgent`.
+///
+/// Only finalized messages (`streaming == false`) reach the store. Partial
+/// streaming messages are held in a single in-memory slot — each partial
+/// replaces the previous one, and the slot is cleared when the final message
+/// with the same id arrives — and appear only at the end of the emitted
+/// context, never in the store.
+///
+/// An input on `reset` starts a new session: a fresh `session_id` is issued,
+/// written back to the config, and emitted on the `session_id` port, then an
+/// empty array is emitted on `messages`. The previous session is left
+/// untouched; to resume a past conversation, set `session_id` to its id and
+/// restart the agent.
+///
+/// `session_dir` is applied when the agent starts. Changing it while the
+/// agent is running makes further inputs fail with a config error until the
+/// agent is restarted.
+///
+/// Presets saved before session support carried the history in a hidden
+/// `messages` config. On the first start that history is imported once into
+/// the session store (only if the session has no messages yet); the stale
+/// config key is dropped afterwards.
+///
+/// # Ports
+/// - Input `message`: Message or array of messages to append. A unit value
+///   emits the current context without appending
+/// - Input `reset`: Start a new session and emit an empty array
+/// - Output `messages`: Conversation context as an array of messages
+/// - Output `session_id`: The freshly issued session id, emitted when
+///   `reset` switches to a new session
+///
+/// # Configuration
+/// - `session_dir`: Directory for JSONL session files. Empty: keep the
+///   history in memory only. Applied on start; a runtime change requires a
+///   restart (default: "")
+/// - `session_id`: Session to resume on start. Empty: a new session is
+///   created and its id is written back to this config (default: "")
 #[modular_agent(
     title="Messages",
     category=CATEGORY,
     inputs=[PORT_MESSAGE, PORT_RESET],
-    outputs=[PORT_MESSAGES],
-    integer_config(name=CONFIG_MAX_SIZE),
-    array_config(name=CONFIG_MESSAGES, hidden),
+    outputs=[PORT_MESSAGES, PORT_SESSION_ID],
+    string_config(name=CONFIG_SESSION_DIR, default=""),
+    string_config(name=CONFIG_SESSION_ID, default=""),
     hint(width = 2, height = 1),
 )]
 pub struct MessagesAgent {
     data: AgentData,
+
+    /// Active store tagged with the `session_dir` it was created for. The
+    /// agent instance owns its store; keeping the same in-memory store here
+    /// across stop()/start() preserves the history for the empty
+    /// `session_dir` case.
+    store: Option<(String, Arc<dyn SessionStore>)>,
+
+    /// Session the agent appends to, resolved in `start()`.
+    session_id: Option<String>,
+
+    /// In-memory cache of the session's entries, replayed in `start()`.
+    entries: Vec<SessionEntry>,
+
+    /// Latest partial streaming message; never appended to the store.
+    partial: Option<Message>,
+
+    /// History read from the stale `_messages` config, imported into the
+    /// store once on the first `start()`.
+    pending_import: Option<Vec<Message>>,
 }
 
 impl MessagesAgent {
-    fn reset_messages(&mut self) -> Result<(), AgentError> {
-        self.set_config(CONFIG_MESSAGES.to_string(), AgentValue::array_default())
+    fn resolve_store(&mut self) -> Result<Arc<dyn SessionStore>, AgentError> {
+        let dir = self.configs()?.get_string_or_default(CONFIG_SESSION_DIR);
+        if let Some((store_dir, store)) = &self.store
+            && *store_dir == dir
+        {
+            return Ok(store.clone());
+        }
+        let store: Arc<dyn SessionStore> = if dir.is_empty() {
+            Arc::new(InMemorySessionStore::new())
+        } else {
+            Arc::new(JsonlSessionStore::new(&dir))
+        };
+        self.store = Some((dir, store.clone()));
+        Ok(store)
+    }
+
+    fn store(&self) -> Result<Arc<dyn SessionStore>, AgentError> {
+        let (store_dir, store) = self
+            .store
+            .as_ref()
+            .ok_or_else(|| AgentError::Other("Session store is not initialized".to_string()))?;
+        // The store is bound to session_dir in start(). Failing loudly on a
+        // runtime mismatch beats silently writing into the old directory
+        // while the config points at the new one.
+        let dir = self.configs()?.get_string_or_default(CONFIG_SESSION_DIR);
+        if *store_dir != dir {
+            return Err(AgentError::InvalidConfig(
+                "session_dir changed while the agent is running; restart the agent to apply it"
+                    .to_string(),
+            ));
+        }
+        Ok(store.clone())
+    }
+
+    /// The emitted context: the stored entries passed through
+    /// [`build_context`], with the current partial message (if any) last.
+    fn context_value(&self) -> AgentValue {
+        let mut messages: Vector<AgentValue> = build_context(&self.entries)
+            .into_iter()
+            .map(AgentValue::from)
+            .collect();
+        if let Some(partial) = &self.partial {
+            messages.push_back(partial.clone().into());
+        }
+        AgentValue::array(messages)
     }
 }
 
 #[async_trait]
 impl AsAgent for MessagesAgent {
     fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+        // Read the stale key here: AgentData::new() strips `_`-prefixed
+        // config keys preserved by reconcile_spec().
+        let pending_import: Option<Vec<Message>> = spec
+            .configs
+            .as_ref()
+            .and_then(|c| c.get(STALE_CONFIG_MESSAGES).ok())
+            .and_then(|v| v.to_message_value())
+            .map(|v| {
+                let arr = if v.is_array() {
+                    v.into_array().unwrap_or_default()
+                } else {
+                    vector![v]
+                };
+                arr.iter().filter_map(|m| m.as_message().cloned()).collect()
+            })
+            .filter(|messages: &Vec<Message>| !messages.is_empty());
+
         Ok(Self {
             data: AgentData::new(ma, id, spec),
+            store: None,
+            session_id: None,
+            entries: Vec::new(),
+            partial: None,
+            pending_import,
         })
+    }
+
+    async fn start(&mut self) -> Result<(), AgentError> {
+        let store = self.resolve_store()?;
+
+        let configured_id = self.configs()?.get_string_or_default(CONFIG_SESSION_ID);
+        let (session_id, entries) = if configured_id.is_empty() {
+            let id = store.create(SessionMeta::new()).await?;
+            self.set_config(
+                CONFIG_SESSION_ID.to_string(),
+                AgentValue::string(id.clone()),
+            )?;
+            // Push the issued id to the UI; set_config alone emits no event.
+            self.emit_config_updated(CONFIG_SESSION_ID, AgentValue::string(id.clone()));
+            (id, Vec::new())
+        } else {
+            match store.load(&configured_id).await {
+                Ok(entries) => (configured_id, entries),
+                Err(load_err) => {
+                    // The configured id may point at a session this store has
+                    // never seen (e.g. an in-memory store after a process
+                    // restart). Recreate it as an empty session; if even that
+                    // fails, the load error was real and wins.
+                    let meta = SessionMeta {
+                        id: configured_id.clone(),
+                        ..SessionMeta::new()
+                    };
+                    if store.create(meta).await.is_err() {
+                        return Err(load_err);
+                    }
+                    (configured_id, Vec::new())
+                }
+            }
+        };
+        self.session_id = Some(session_id.clone());
+        self.entries = entries;
+        self.partial = None;
+
+        // One-way migration of the pre-session `messages` config. The
+        // pending history is cleared only once the import is resolved: a
+        // mid-import append failure below keeps it, so a retried start()
+        // lands in the warn branch and reports the partial state instead of
+        // dropping the tail silently.
+        if let Some(imported) = self.pending_import.clone() {
+            let has_messages = self
+                .entries
+                .iter()
+                .any(|e| matches!(e, SessionEntry::Message { .. }));
+            if has_messages {
+                log::warn!(
+                    "Skipping legacy `messages` history import ({} messages): \
+                     session {session_id} already has messages",
+                    imported.len()
+                );
+            } else {
+                for message in imported {
+                    if message.streaming {
+                        continue;
+                    }
+                    let entry = SessionEntry::message(message);
+                    store.append(&session_id, entry.clone()).await?;
+                    self.entries.push(entry);
+                }
+            }
+            self.pending_import = None;
+        }
+
+        Ok(())
     }
 
     async fn process(
@@ -308,15 +509,29 @@ impl AsAgent for MessagesAgent {
         value: AgentValue,
     ) -> Result<(), AgentError> {
         if port == PORT_RESET {
-            self.reset_messages()?;
+            let store = self.store()?;
+            let id = store.create(SessionMeta::new()).await?;
+            self.set_config(
+                CONFIG_SESSION_ID.to_string(),
+                AgentValue::string(id.clone()),
+            )?;
+            // Push the issued id to the UI; set_config alone emits no event.
+            self.emit_config_updated(CONFIG_SESSION_ID, AgentValue::string(id.clone()));
+            self.session_id = Some(id.clone());
+            self.entries.clear();
+            self.partial = None;
+            // Publish the switch before the (ambiguous) empty context so
+            // downstream agents can tell a reset from an empty session.
+            self.output(ctx.clone(), PORT_SESSION_ID, AgentValue::string(id))
+                .await?;
             self.output(ctx, PORT_MESSAGES, AgentValue::array_default())
                 .await?;
             return Ok(());
         }
 
         if value.is_unit() {
-            let messages = self.configs()?.get(CONFIG_MESSAGES)?;
-            self.output(ctx, PORT_MESSAGES, messages.clone()).await?;
+            let messages = self.context_value();
+            self.output(ctx, PORT_MESSAGES, messages).await?;
             return Ok(());
         }
 
@@ -332,37 +547,38 @@ impl AsAgent for MessagesAgent {
             return Ok(());
         }
 
-        let first_in_message_id = in_messages
-            .front()
-            .unwrap()
-            .as_message()
-            .ok_or_else(|| {
+        let store = self.store()?;
+        let session_id = self
+            .session_id
+            .clone()
+            .ok_or_else(|| AgentError::Other("Session is not initialized".to_string()))?;
+
+        for value in &in_messages {
+            let message = value.as_message().ok_or_else(|| {
                 AgentError::InvalidValue("Input contains non-Message values".to_string())
-            })?
-            .id
-            .clone();
-
-        let mut messages = self.configs()?.get_array_or_default(CONFIG_MESSAGES);
-        if !messages.is_empty() && first_in_message_id.is_some() {
-            let last_message = messages.last().unwrap().as_message().ok_or_else(|| {
-                AgentError::InvalidValue("Stored messages contain non-Message values".to_string())
             })?;
-            if last_message.id == first_in_message_id {
-                // Update the last message
-                messages.pop_back();
+
+            if message.streaming {
+                // Partials never reach the store: the latest one replaces the
+                // previous in a single in-memory slot.
+                self.partial = Some(message.clone());
+                continue;
             }
-        }
-        messages.append(in_messages);
 
-        let mlen = messages.len() as i64;
-        let max_size = self.configs()?.get_integer_or_default(CONFIG_MAX_SIZE);
-        if max_size > 0 && mlen > max_size {
-            messages = messages.skip((mlen - max_size) as usize)
+            if let Some(partial) = &self.partial
+                && partial.id.is_some()
+                && partial.id == message.id
+            {
+                self.partial = None;
+            }
+
+            let entry = SessionEntry::message(message.clone());
+            store.append(&session_id, entry.clone()).await?;
+            self.entries.push(entry);
         }
 
-        let arr = AgentValue::array(messages);
-        self.set_config(CONFIG_MESSAGES.to_string(), arr.clone())?;
-        self.output(ctx, PORT_MESSAGES, arr).await?;
+        let messages = self.context_value();
+        self.output(ctx, PORT_MESSAGES, messages).await?;
 
         Ok(())
     }
@@ -522,6 +738,319 @@ fn strip_unsigned_thinking(msg: &Message) -> Option<Message> {
 mod tests {
     use super::*;
     use im::hashmap;
+    use modular_agent_core::test_utils::{ProbeReceiver, TestProbeAgent, probe_receiver};
+    use modular_agent_core::{AgentStatus, ConnectionSpec};
+
+    /// `start_preset` returns before the spawned agent loop has run
+    /// `AsAgent::start`; wait until the status flips to `Start` (set under
+    /// the same lock as `start()`, so seeing it means `start()` finished).
+    async fn wait_until_started(ma: &ModularAgent, agent_id: &str) {
+        for _ in 0..200 {
+            {
+                let agent = ma.get_agent(agent_id).unwrap();
+                let guard = agent.lock().await;
+                if *guard.status() == AgentStatus::Start {
+                    return;
+                }
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+        panic!("agent {agent_id} did not start in time");
+    }
+
+    /// Build a running preset with a MessagesAgent (configured via
+    /// `configs`) whose `messages` and `session_id` ports each feed a probe.
+    async fn setup_messages_agent(
+        configs: Vec<(&str, AgentValue)>,
+    ) -> (ModularAgent, String, String, ProbeReceiver, ProbeReceiver) {
+        let ma = ModularAgent::init().unwrap();
+        ma.ready().await.unwrap();
+
+        let preset_id = ma.new_preset().unwrap();
+        let def = ma.get_agent_definition(MessagesAgent::DEF_NAME).unwrap();
+        let mut spec = def.to_spec();
+        {
+            let spec_configs = spec.configs.as_mut().unwrap();
+            for (key, value) in configs {
+                spec_configs.set(key.into(), value);
+            }
+        }
+        let agent_id = ma.add_agent(preset_id.clone(), spec).await.unwrap();
+
+        let probe_def = ma.get_agent_definition(TestProbeAgent::DEF_NAME).unwrap();
+        let probe_id = ma
+            .add_agent(preset_id.clone(), probe_def.to_spec())
+            .await
+            .unwrap();
+        ma.add_connection(
+            &preset_id,
+            ConnectionSpec {
+                source: agent_id.clone(),
+                source_handle: PORT_MESSAGES.into(),
+                target: probe_id.clone(),
+                target_handle: "value".into(),
+            },
+        )
+        .await
+        .unwrap();
+
+        let session_probe_id = ma
+            .add_agent(preset_id.clone(), probe_def.to_spec())
+            .await
+            .unwrap();
+        ma.add_connection(
+            &preset_id,
+            ConnectionSpec {
+                source: agent_id.clone(),
+                source_handle: PORT_SESSION_ID.into(),
+                target: session_probe_id.clone(),
+                target_handle: "value".into(),
+            },
+        )
+        .await
+        .unwrap();
+
+        ma.start_preset(&preset_id).await.unwrap();
+        wait_until_started(&ma, &agent_id).await;
+        let probe_rx = probe_receiver(&ma, &probe_id).await.unwrap();
+        let session_rx = probe_receiver(&ma, &session_probe_id).await.unwrap();
+
+        (ma, preset_id, agent_id, probe_rx, session_rx)
+    }
+
+    async fn send(ma: &ModularAgent, agent_id: &str, port: &str, value: AgentValue) {
+        let agent = ma.get_agent(agent_id).unwrap();
+        let mut guard = agent.lock().await;
+        let messages_agent = guard.as_agent_mut::<MessagesAgent>().unwrap();
+        AsAgent::process(messages_agent, AgentContext::new(), port.to_string(), value)
+            .await
+            .unwrap();
+    }
+
+    async fn session_id_config(ma: &ModularAgent, agent_id: &str) -> String {
+        let agent = ma.get_agent(agent_id).unwrap();
+        let guard = agent.lock().await;
+        guard
+            .configs()
+            .unwrap()
+            .get_string_or_default(CONFIG_SESSION_ID)
+    }
+
+    async fn recv_messages(probe_rx: &ProbeReceiver) -> Vec<Message> {
+        let (_ctx, value) = probe_rx.recv().await.unwrap();
+        value
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v.as_message().unwrap().clone())
+            .collect()
+    }
+
+    #[tokio::test]
+    async fn messages_agent_persists_only_finalized_messages() {
+        let dir = tempfile::tempdir().unwrap();
+        let (ma, _preset_id, agent_id, probe_rx, _session_rx) = setup_messages_agent(vec![(
+            CONFIG_SESSION_DIR,
+            AgentValue::string(dir.path().to_string_lossy()),
+        )])
+        .await;
+
+        let mut partial = Message::assistant("Hel".to_string());
+        partial.id = Some("m1".to_string());
+        partial.streaming = true;
+        send(&ma, &agent_id, PORT_MESSAGE, partial.into()).await;
+
+        // The partial appears in the emitted context...
+        let messages = recv_messages(&probe_rx).await;
+        assert_eq!(messages.len(), 1);
+        assert!(messages[0].streaming);
+        assert_eq!(messages[0].text(), "Hel");
+
+        let mut fin = Message::assistant("Hello".to_string());
+        fin.id = Some("m1".to_string());
+        send(&ma, &agent_id, PORT_MESSAGE, fin.into()).await;
+
+        // ...and the final with the same id replaces it: exactly one copy.
+        let messages = recv_messages(&probe_rx).await;
+        assert_eq!(messages.len(), 1);
+        assert!(!messages[0].streaming);
+        assert_eq!(messages[0].text(), "Hello");
+
+        // A fresh replay of the same session contains only the final message.
+        let session_id = session_id_config(&ma, &agent_id).await;
+        let store = JsonlSessionStore::new(dir.path());
+        let entries = store.load(&session_id).await.unwrap();
+        assert_eq!(entries.len(), 1);
+        let SessionEntry::Message { message, .. } = &entries[0] else {
+            panic!("expected a Message entry");
+        };
+        assert!(!message.streaming);
+        assert_eq!(message.text(), "Hello");
+    }
+
+    #[tokio::test]
+    async fn messages_agent_reset_starts_new_session_and_keeps_old_one() {
+        let dir = tempfile::tempdir().unwrap();
+        let (ma, _preset_id, agent_id, probe_rx, session_rx) = setup_messages_agent(vec![(
+            CONFIG_SESSION_DIR,
+            AgentValue::string(dir.path().to_string_lossy()),
+        )])
+        .await;
+
+        send(
+            &ma,
+            &agent_id,
+            PORT_MESSAGE,
+            Message::user("hello".to_string()).into(),
+        )
+        .await;
+        assert_eq!(recv_messages(&probe_rx).await.len(), 1);
+        let old_session_id = session_id_config(&ma, &agent_id).await;
+
+        send(&ma, &agent_id, PORT_RESET, AgentValue::unit()).await;
+        assert_eq!(recv_messages(&probe_rx).await.len(), 0);
+
+        // A new session id was issued and written back to the config.
+        let new_session_id = session_id_config(&ma, &agent_id).await;
+        assert_ne!(new_session_id, old_session_id);
+        assert!(!new_session_id.is_empty());
+
+        // The switch was also published on the session_id output port.
+        let (_ctx, value) = session_rx.recv().await.unwrap();
+        assert_eq!(value.as_str(), Some(new_session_id.as_str()));
+
+        // The old session file still exists with its entries.
+        assert!(dir.path().join(format!("{old_session_id}.jsonl")).exists());
+        let store = JsonlSessionStore::new(dir.path());
+        let old_entries = store.load(&old_session_id).await.unwrap();
+        assert_eq!(old_entries.len(), 1);
+
+        // New inputs land in the new session only.
+        send(
+            &ma,
+            &agent_id,
+            PORT_MESSAGE,
+            Message::user("next".to_string()).into(),
+        )
+        .await;
+        let messages = recv_messages(&probe_rx).await;
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0].text(), "next");
+    }
+
+    #[tokio::test]
+    async fn messages_agent_resumes_existing_session() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = JsonlSessionStore::new(dir.path());
+        let session_id = store.create(SessionMeta::new()).await.unwrap();
+        store
+            .append(
+                &session_id,
+                SessionEntry::message(Message::user("a".to_string())),
+            )
+            .await
+            .unwrap();
+        store
+            .append(
+                &session_id,
+                SessionEntry::message(Message::assistant("b".to_string())),
+            )
+            .await
+            .unwrap();
+
+        let (ma, _preset_id, agent_id, probe_rx, _session_rx) = setup_messages_agent(vec![
+            (
+                CONFIG_SESSION_DIR,
+                AgentValue::string(dir.path().to_string_lossy()),
+            ),
+            (CONFIG_SESSION_ID, AgentValue::string(session_id.clone())),
+        ])
+        .await;
+
+        // start() replayed the history: a unit input emits it as-is.
+        send(&ma, &agent_id, PORT_MESSAGE, AgentValue::unit()).await;
+        let messages = recv_messages(&probe_rx).await;
+        assert_eq!(messages.len(), 2);
+        assert_eq!(messages[0].text(), "a");
+        assert_eq!(messages[1].text(), "b");
+
+        // The next appended message extends the same session.
+        send(
+            &ma,
+            &agent_id,
+            PORT_MESSAGE,
+            Message::user("c".to_string()).into(),
+        )
+        .await;
+        let messages = recv_messages(&probe_rx).await;
+        assert_eq!(messages.len(), 3);
+        assert_eq!(messages[2].text(), "c");
+        assert_eq!(store.load(&session_id).await.unwrap().len(), 3);
+    }
+
+    #[tokio::test]
+    async fn messages_agent_migrates_stale_messages_config_once() {
+        let old_messages = AgentValue::array(vector![
+            AgentValue::object(hashmap! {
+                "role".into() => AgentValue::string("user"),
+                "content".into() => AgentValue::string("old user"),
+            }),
+            AgentValue::object(hashmap! {
+                "role".into() => AgentValue::string("assistant"),
+                "content".into() => AgentValue::string("old assistant"),
+            }),
+        ]);
+        let (ma, preset_id, agent_id, probe_rx, _session_rx) =
+            setup_messages_agent(vec![(STALE_CONFIG_MESSAGES, old_messages)]).await;
+
+        // The old history landed in the (in-memory) store.
+        send(&ma, &agent_id, PORT_MESSAGE, AgentValue::unit()).await;
+        let messages = recv_messages(&probe_rx).await;
+        assert_eq!(messages.len(), 2);
+        assert_eq!(messages[0].text(), "old user");
+        assert_eq!(messages[1].text(), "old assistant");
+
+        // A stop()/start() cycle must not import again; the in-memory store
+        // is retained across the cycle.
+        ma.stop_preset(&preset_id).await.unwrap();
+        ma.start_preset(&preset_id).await.unwrap();
+        wait_until_started(&ma, &agent_id).await;
+
+        send(&ma, &agent_id, PORT_MESSAGE, AgentValue::unit()).await;
+        let messages = recv_messages(&probe_rx).await;
+        assert_eq!(messages.len(), 2);
+        assert_eq!(messages[0].text(), "old user");
+        assert_eq!(messages[1].text(), "old assistant");
+    }
+
+    #[tokio::test]
+    async fn messages_agent_unit_outputs_context_and_array_appends_in_order() {
+        let (ma, _preset_id, agent_id, probe_rx, _session_rx) = setup_messages_agent(vec![]).await;
+
+        // Unit input on an empty session emits an empty array.
+        send(&ma, &agent_id, PORT_MESSAGE, AgentValue::unit()).await;
+        assert_eq!(recv_messages(&probe_rx).await.len(), 0);
+
+        // An array input appends multiple messages in order.
+        let batch = AgentValue::array(vector![
+            Message::user("a".to_string()).into(),
+            Message::assistant("b".to_string()).into(),
+        ]);
+        send(&ma, &agent_id, PORT_MESSAGE, batch).await;
+        let messages = recv_messages(&probe_rx).await;
+        assert_eq!(messages.len(), 2);
+        assert_eq!(messages[0].text(), "a");
+        assert_eq!(messages[0].role, "user");
+        assert_eq!(messages[1].text(), "b");
+        assert_eq!(messages[1].role, "assistant");
+
+        // Unit input re-emits the current context unchanged.
+        send(&ma, &agent_id, PORT_MESSAGE, AgentValue::unit()).await;
+        let messages = recv_messages(&probe_rx).await;
+        assert_eq!(messages.len(), 2);
+        assert_eq!(messages[0].text(), "a");
+        assert_eq!(messages[1].text(), "b");
+    }
 
     #[test]
     fn test_add_message() {

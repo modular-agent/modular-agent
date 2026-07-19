@@ -686,8 +686,9 @@ mod tests {
 
     #[test]
     fn leading_orphan_tool_results_demoted_to_user_text() {
-        // Front-trimming (MessagesAgent max_size) removes the assistant call
-        // turn but keeps its results at the head of the history.
+        // Front-trimming of the history (e.g. MessagesForPromptAgent
+        // max_size) removes the assistant call turn but keeps its results at
+        // the head of the history.
         let history = vector![
             tool_result(Some("call_gone"), "tool_a", "trimmed result"),
             tool_result(Some("call_gone2"), "tool_b", "trimmed result 2"),
