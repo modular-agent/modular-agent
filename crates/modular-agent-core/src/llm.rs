@@ -256,6 +256,23 @@ impl Message {
         message
     }
 
+    /// Creates a tool response message with structured content.
+    ///
+    /// Like [`Message::tool`], but accepts [`MessageContent`] directly so a
+    /// tool result can carry content blocks (e.g. images) instead of plain
+    /// text.
+    ///
+    /// # Arguments
+    ///
+    /// * `tool_name` - The name of the tool that produced this result
+    /// * `content` - The tool's output/result as message content
+    pub fn tool_with_content(tool_name: String, content: MessageContent) -> Self {
+        let mut message = Message::new("tool".to_string(), String::new());
+        message.content = content;
+        message.tool_name = Some(tool_name);
+        message
+    }
+
     /// Attaches an image to this message (builder pattern).
     ///
     /// Only available when the "image" feature is enabled.

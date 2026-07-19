@@ -14,7 +14,7 @@ use crate::error::AgentError;
 use crate::llm::Message;
 
 #[cfg(feature = "image")]
-const IMAGE_BASE64_PREFIX: &str = "data:image/png;base64,";
+pub(crate) const IMAGE_BASE64_PREFIX: &str = "data:image/png;base64,";
 
 /// The value type passed between agents.
 ///

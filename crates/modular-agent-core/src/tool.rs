@@ -26,8 +26,11 @@ use tokio_util::sync::CancellationToken;
 
 use crate::{
     Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentStatus, AgentValue,
-    AsAgent, Message, ModularAgent, SharedAgent, ToolCall, async_trait, modular_agent,
+    AsAgent, Message, MessageContent, ModularAgent, SharedAgent, ToolCall, async_trait,
+    modular_agent,
 };
+#[cfg(feature = "image")]
+use crate::{ContentBlock, value::IMAGE_BASE64_PREFIX};
 use futures_util::{StreamExt, stream};
 use im::{Vector, vector};
 use regex::RegexSet;
@@ -626,12 +629,60 @@ async fn execute_tool_call(ctx: &AgentContext, call: &ToolCall) -> Message {
     };
     match call_tool(ctx.clone(), call.function.name.as_str(), args).await {
         Ok(tool_resp) => {
-            let mut msg =
-                Message::tool(call.function.name.clone(), tool_resp.to_json().to_string());
+            let mut msg = Message::tool_with_content(
+                call.function.name.clone(),
+                tool_result_content(&tool_resp),
+            );
             msg.id = call.function.id.clone();
             msg
         }
         Err(e) => error_tool_result(call, e),
+    }
+}
+
+/// Builds the message content for a successful tool response.
+///
+/// An image result — or an array containing at least one image — becomes
+/// structured content blocks so multimodal LLM clients can send the image
+/// itself instead of an opaque base64 string. Every other value keeps the
+/// legacy stringified-JSON form byte-for-byte: persisted sessions and
+/// downstream consumers compare against that exact string, so it must not
+/// change shape.
+fn tool_result_content(resp: &AgentValue) -> MessageContent {
+    #[cfg(feature = "image")]
+    match resp {
+        AgentValue::Image(img) => {
+            return MessageContent::Blocks(vec![image_block(img)]);
+        }
+        AgentValue::Array(arr) if arr.iter().any(|v| matches!(v, AgentValue::Image(_))) => {
+            let blocks = arr
+                .iter()
+                .map(|v| match v {
+                    AgentValue::Image(img) => image_block(img),
+                    other => ContentBlock::Text {
+                        text: other.to_json().to_string(),
+                    },
+                })
+                .collect();
+            return MessageContent::Blocks(blocks);
+        }
+        _ => {}
+    }
+    MessageContent::Text(resp.to_json().to_string())
+}
+
+/// Converts a tool-result image into an image content block.
+///
+/// `get_base64()` returns a PNG data URL, while [`ContentBlock::Image`]
+/// carries the raw base64 payload and the MIME type separately.
+#[cfg(feature = "image")]
+fn image_block(img: &photon_rs::PhotonImage) -> ContentBlock {
+    ContentBlock::Image {
+        data: img
+            .get_base64()
+            .trim_start_matches(IMAGE_BASE64_PREFIX)
+            .to_string(),
+        mime_type: "image/png".to_string(),
     }
 }
 
@@ -1888,6 +1939,134 @@ mod tests {
             assert_eq!(msgs.len(), 1);
             assert_eq!(msgs[0].is_error, None);
             assert_eq!(content_json(&msgs[0]), json!({"a": 5}));
+        }
+    }
+
+    mod result_content {
+        use super::*;
+
+        /// Tool that returns a fixed value regardless of its arguments.
+        struct FixedTool {
+            info: ToolInfo,
+            value: AgentValue,
+        }
+
+        #[async_trait]
+        impl Tool for FixedTool {
+            fn info(&self) -> &ToolInfo {
+                &self.info
+            }
+
+            async fn call(
+                &self,
+                _ctx: AgentContext,
+                _args: AgentValue,
+            ) -> Result<AgentValue, AgentError> {
+                Ok(self.value.clone())
+            }
+        }
+
+        fn register_fixed(name: &str, value: AgentValue) {
+            register_tool(FixedTool {
+                info: ToolInfo::new(name, "returns a fixed value for tests", None),
+                value,
+            });
+        }
+
+        fn call(name: &str, id: &str) -> ToolCall {
+            ToolCall {
+                function: ToolCallFunction {
+                    name: name.to_string(),
+                    parameters: serde_json::json!({}),
+                    id: Some(id.to_string()),
+                    parse_error: None,
+                },
+            }
+        }
+
+        async fn run_single(name: &str) -> Message {
+            let calls = vector![call(name, "c1")];
+            let mut msgs = call_tools(&AgentContext::new(), &calls, 8).await.unwrap();
+            unregister_tool(name);
+            assert_eq!(msgs.len(), 1);
+            msgs.remove(0)
+        }
+
+        #[cfg(feature = "image")]
+        #[tokio::test]
+        async fn image_result_becomes_single_image_block() {
+            let name = "result_content_image";
+            register_fixed(name, AgentValue::image_default());
+
+            let msg = run_single(name).await;
+            assert_eq!(msg.role, "tool");
+            assert_eq!(msg.tool_name.as_deref(), Some(name));
+            assert_eq!(msg.id.as_deref(), Some("c1"));
+            assert_eq!(msg.is_error, None);
+
+            let MessageContent::Blocks(blocks) = &msg.content else {
+                panic!("expected block content, got {:?}", msg.content);
+            };
+            assert_eq!(blocks.len(), 1);
+            let ContentBlock::Image { data, mime_type } = &blocks[0] else {
+                panic!("expected image block, got {:?}", blocks[0]);
+            };
+            assert_eq!(mime_type, "image/png");
+            assert!(!data.starts_with("data:"));
+            assert!(!data.is_empty());
+        }
+
+        #[cfg(feature = "image")]
+        #[tokio::test]
+        async fn mixed_array_result_becomes_ordered_blocks() {
+            let name = "result_content_mixed_array";
+            register_fixed(
+                name,
+                AgentValue::array(vector![
+                    AgentValue::image_default(),
+                    AgentValue::string("caption"),
+                ]),
+            );
+
+            let msg = run_single(name).await;
+            let MessageContent::Blocks(blocks) = &msg.content else {
+                panic!("expected block content, got {:?}", msg.content);
+            };
+            assert_eq!(blocks.len(), 2);
+            assert!(matches!(&blocks[0], ContentBlock::Image { .. }));
+            let ContentBlock::Text { text } = &blocks[1] else {
+                panic!("expected text block, got {:?}", blocks[1]);
+            };
+            // Non-image array elements keep their stringified-JSON form.
+            assert_eq!(text, "\"caption\"");
+        }
+
+        #[tokio::test]
+        async fn non_image_results_keep_legacy_text_form() {
+            let object = AgentValue::from_json(serde_json::json!({"a": 1, "b": "x"})).unwrap();
+            let imageless_array = AgentValue::from_json(serde_json::json!([1, "two", null])).unwrap();
+            let cases = [
+                ("result_content_object", object),
+                ("result_content_string", AgentValue::string("plain")),
+                ("result_content_array", imageless_array),
+            ];
+            for (name, value) in cases {
+                let expected = value.to_json().to_string();
+                register_fixed(name, value);
+                let msg = run_single(name).await;
+                assert_eq!(msg.content, MessageContent::Text(expected));
+            }
+        }
+
+        #[tokio::test]
+        async fn error_result_stays_text() {
+            // An unregistered tool routes through error_tool_result.
+            let calls = vector![call("result_content_no_such_tool", "c1")];
+            let msgs = call_tools(&AgentContext::new(), &calls, 8).await.unwrap();
+            assert_eq!(msgs.len(), 1);
+            assert_eq!(msgs[0].is_error, Some(true));
+            assert!(matches!(msgs[0].content, MessageContent::Text(_)));
+            assert!(msgs[0].text().contains("not found"));
         }
     }
 
