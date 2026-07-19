@@ -18,6 +18,12 @@ pub mod capabilities;
 pub(crate) mod prepare;
 
 pub mod chat;
+
+// CompactMessagesAgent issues a summarization request, so the node exists
+// only when at least one provider feature is enabled.
+#[cfg(any(feature = "openai", feature = "claude", feature = "ollama"))]
+pub mod compact;
+
 pub mod completion;
 pub mod embeddings;
 pub mod usage;

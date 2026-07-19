@@ -4,8 +4,8 @@ use im::{Vector, vector};
 use modular_agent_core::{
     Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
     ContentBlock, InMemorySessionStore, JsonlSessionStore, Message, MessageContent, ModularAgent,
-    SessionEntry, SessionMeta, SessionStore, async_trait, build_context, estimate_message_tokens,
-    modular_agent,
+    SessionEntry, SessionMeta, SessionStore, async_trait, build_context, estimate_context_tokens,
+    estimate_message_tokens, modular_agent,
 };
 
 const CATEGORY: &str = "LLM/Message";
@@ -25,6 +25,11 @@ const CONFIG_SESSION_ID: &str = "session_id";
 /// Old presets stored the history in a hidden `messages` config;
 /// `reconcile_spec()` renames it to `_messages` for lazy migration.
 const STALE_CONFIG_MESSAGES: &str = "_messages";
+
+/// Must match the prefix `build_context` (modular-agent-core) puts on the
+/// injected summary message; used to recognize a genuine head message the
+/// compactor mistook for an injected summary.
+const SUMMARY_PREFIX: &str = "[Conversation summary]\n";
 
 // Assistant Message Agent
 #[modular_agent(
@@ -302,6 +307,21 @@ impl AsAgent for PreambleAgent {
 /// untouched; to resume a past conversation, set `session_id` to its id and
 /// restart the agent.
 ///
+/// The `message` port also accepts a compaction record — an object whose
+/// `type` key is `"compaction"` — as emitted by the `compaction` output of
+/// the Compact Messages agent. The record is stored as a non-destructive
+/// compaction marker (its `dropped` count resolved to the first kept entry
+/// id) and **nothing is emitted**: emitting would re-send the compacted
+/// context and re-trigger a downstream Chat agent. From the next input on,
+/// the emitted context starts with the summary followed by the kept
+/// messages. A record whose `previous_summary` baseline no longer matches
+/// the session's latest compaction — or whose `dropped` count exceeds the
+/// session's messages, or whose `tokens_before` is more than twice the
+/// session's current estimate (first compactions only, which carry no
+/// baseline to compare) — is discarded with a warning instead of being
+/// recorded: the summarization call behind a record takes seconds, and a
+/// `reset` or a second compaction in that window makes the record stale.
+///
 /// `session_dir` is applied when the agent starts. Changing it while the
 /// agent is running makes further inputs fail with a config error until the
 /// agent is restarted.
@@ -313,7 +333,12 @@ impl AsAgent for PreambleAgent {
 ///
 /// # Ports
 /// - Input `message`: Message or array of messages to append. A unit value
-///   emits the current context without appending
+///   emits the current context without appending. A compaction record
+///   (object with `type` `"compaction"`, a non-empty `summary`, a
+///   non-negative integer `dropped`, an optional `tokens_before`, and an
+///   optional `previous_summary` baseline) appends a compaction marker to
+///   the session and emits nothing; a record with a stale baseline is
+///   discarded
 /// - Input `reset`: Start a new session and emit an empty array
 /// - Output `messages`: Conversation context as an array of messages
 /// - Output `session_id`: The freshly issued session id, emitted when
@@ -390,6 +415,172 @@ impl MessagesAgent {
             ));
         }
         Ok(store.clone())
+    }
+
+    /// Record a compaction marker received on the `message` port (emitted by
+    /// `CompactMessagesAgent`'s `compaction` output).
+    ///
+    /// The record's `dropped` count refers to the context the compactor
+    /// received, whose head is the previous compaction's first kept entry
+    /// (or the log's head when none exists). Skipping `dropped` Message
+    /// entries from there yields the new `first_kept_id`. The entry is
+    /// appended to the store and the cache, but nothing is emitted:
+    /// re-emitting the compacted context would re-trigger the downstream
+    /// ChatAgent and issue a duplicate request. The next turn picks the
+    /// compaction up naturally via [`build_context`]. The partial slot is
+    /// left untouched.
+    ///
+    /// The record's `previous_summary` identifies the baseline it was
+    /// computed against; a record whose baseline no longer matches the
+    /// session's latest compaction is *discarded* with a warning. The
+    /// summarization call takes seconds, so a stale record is realistic:
+    /// a `reset` can swap in a fresh session while the call is in flight
+    /// (applying the old conversation's summary would leak it into the new
+    /// session), and a second same-baseline compaction can race the first
+    /// (resolving it against the newer compaction would silently drop
+    /// messages its summary does not cover). A first compaction carries no
+    /// baseline, so it is sanity-checked by size instead: a record whose
+    /// `tokens_before` is more than twice the session's current estimate
+    /// cannot describe this session and is discarded.
+    async fn record_compaction(&mut self, value: &AgentValue) -> Result<(), AgentError> {
+        let summary = value
+            .get_str("summary")
+            .filter(|s| !s.is_empty())
+            .ok_or_else(|| {
+                AgentError::InvalidValue(
+                    "Compaction record must have a non-empty summary".to_string(),
+                )
+            })?
+            .to_string();
+        let dropped = value
+            .get("dropped")
+            .and_then(|v| v.as_i64())
+            .filter(|d| *d >= 0)
+            .ok_or_else(|| {
+                AgentError::InvalidValue(
+                    "Compaction record must have a non-negative integer dropped count".to_string(),
+                )
+            })? as usize;
+        let tokens_before = value
+            .get("tokens_before")
+            .and_then(|v| v.as_i64())
+            .and_then(|v| u64::try_from(v).ok());
+        let previous_summary = value.get_str("previous_summary").map(str::to_string);
+
+        let store = self.store()?;
+        let session_id = self
+            .session_id
+            .clone()
+            .ok_or_else(|| AgentError::Other("Session is not initialized".to_string()))?;
+
+        let last_compaction = self
+            .entries
+            .iter()
+            .enumerate()
+            .rev()
+            .find_map(|(i, e)| match e {
+                SessionEntry::Compaction {
+                    summary,
+                    first_kept_id,
+                    ..
+                } => Some((i, summary.clone(), first_kept_id.clone())),
+                _ => None,
+            });
+
+        // Where the compactor's received context started. The record's
+        // baseline (`previous_summary`) must agree with the session's state;
+        // otherwise the record is stale and applying it would corrupt the
+        // session.
+        let start = match (&previous_summary, &last_compaction) {
+            // Baseline is the latest compaction: its first kept Message
+            // entry, or the entry right after it when the id is unknown.
+            (Some(previous), Some((compaction_index, last_summary, first_kept_id)))
+                if previous == last_summary =>
+            {
+                self.entries
+                    .iter()
+                    .position(
+                        |e| matches!(e, SessionEntry::Message { id, .. } if id == first_kept_id),
+                    )
+                    .unwrap_or(compaction_index + 1)
+            }
+            // No compaction on either side: the record claims to cover this
+            // session's head. With no baseline to compare, cross-check the
+            // record's size instead: the compactor computed `tokens_before`
+            // from a context that must be a prefix of this session's
+            // entries, so the session's own estimate can only be larger
+            // (the tail may have grown since), never substantially smaller.
+            // A much smaller session means the record came from a different
+            // session — a reset raced the in-flight summarization call. The
+            // factor of 2 absorbs usage-anchor drift (a fresh reply
+            // re-anchoring a heuristically estimated tail).
+            (None, None) => {
+                if let Some(tokens_before) = tokens_before {
+                    let current = estimate_context_tokens(&build_context(&self.entries));
+                    if tokens_before > current.saturating_mul(2) {
+                        log::warn!(
+                            "Discarding a compaction record sized for another session \
+                             (record covers ~{tokens_before} tokens, session holds \
+                             ~{current}); the session has likely been reset since"
+                        );
+                        return Ok(());
+                    }
+                }
+                0
+            }
+            // A baseline with no compaction on file: the compactor mistook a
+            // genuine head message for an injected summary. It excluded that
+            // head from `dropped`, so the walk must skip the matching entry
+            // too.
+            (Some(previous), None) => {
+                let head = self.entries.iter().position(|e| {
+                    matches!(e, SessionEntry::Message { message, .. }
+                        if message.role == "user"
+                            && message.text() == format!("{SUMMARY_PREFIX}{previous}"))
+                });
+                let Some(head_index) = head else {
+                    log::warn!(
+                        "Discarding a compaction record computed against an unknown \
+                         previous summary; the session has likely been reset since"
+                    );
+                    return Ok(());
+                };
+                head_index + 1
+            }
+            _ => {
+                log::warn!(
+                    "Discarding a stale compaction record: its baseline does not match \
+                     the session's latest compaction"
+                );
+                return Ok(());
+            }
+        };
+
+        let first_kept_id = self.entries[start..]
+            .iter()
+            .filter_map(|e| match e {
+                SessionEntry::Message { id, .. } => Some(id),
+                _ => None,
+            })
+            .nth(dropped)
+            .cloned();
+        let Some(first_kept_id) = first_kept_id else {
+            // A consistent record always resolves (the compactor keeps at
+            // least one message), so exhaustion means the record belongs to
+            // another state of the world — e.g. a session reset during the
+            // summarization call. Recording it anyway would inject a foreign
+            // summary into this session.
+            log::warn!(
+                "Discarding a compaction record: its dropped count {dropped} exceeds \
+                 the session's messages"
+            );
+            return Ok(());
+        };
+
+        let entry = SessionEntry::compaction(summary, first_kept_id, tokens_before);
+        store.append(&session_id, entry.clone()).await?;
+        self.entries.push(entry);
+        Ok(())
     }
 
     /// The emitted context: the stored entries passed through
@@ -535,6 +726,12 @@ impl AsAgent for MessagesAgent {
             let messages = self.context_value();
             self.output(ctx, PORT_MESSAGES, messages).await?;
             return Ok(());
+        }
+
+        // Dispatch by shape, before message conversion: Message objects carry
+        // role/content and never a "type" key, so this cannot collide.
+        if value.get_str("type") == Some("compaction") {
+            return self.record_compaction(&value).await;
         }
 
         let in_message = value.to_message_value().ok_or_else(|| {
@@ -1103,6 +1300,331 @@ mod tests {
         assert_eq!(messages.len(), 2);
         assert_eq!(messages[0].text(), "a");
         assert_eq!(messages[1].text(), "b");
+    }
+
+    fn compaction_record(
+        summary: Option<&str>,
+        dropped: Option<i64>,
+        tokens_before: Option<i64>,
+    ) -> AgentValue {
+        compaction_record_with_previous(summary, dropped, tokens_before, None)
+    }
+
+    fn compaction_record_with_previous(
+        summary: Option<&str>,
+        dropped: Option<i64>,
+        tokens_before: Option<i64>,
+        previous_summary: Option<&str>,
+    ) -> AgentValue {
+        let mut map = hashmap! {
+            "type".to_string() => AgentValue::string("compaction"),
+        };
+        if let Some(s) = summary {
+            map.insert("summary".to_string(), AgentValue::string(s));
+        }
+        if let Some(d) = dropped {
+            map.insert("dropped".to_string(), AgentValue::integer(d));
+        }
+        if let Some(t) = tokens_before {
+            map.insert("tokens_before".to_string(), AgentValue::integer(t));
+        }
+        if let Some(p) = previous_summary {
+            map.insert("previous_summary".to_string(), AgentValue::string(p));
+        }
+        AgentValue::object(map)
+    }
+
+    fn message_entry_ids(entries: &[SessionEntry]) -> Vec<String> {
+        entries
+            .iter()
+            .filter_map(|e| match e {
+                SessionEntry::Message { id, .. } => Some(id.clone()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[tokio::test]
+    async fn messages_agent_compaction_record_appends_marker_and_emits_nothing() {
+        let dir = tempfile::tempdir().unwrap();
+        let (ma, _preset_id, agent_id, probe_rx, _session_rx) = setup_messages_agent(vec![(
+            CONFIG_SESSION_DIR,
+            AgentValue::string(dir.path().to_string_lossy()),
+        )])
+        .await;
+
+        let batch = AgentValue::array(vector![
+            Message::user("a".to_string()).into(),
+            Message::assistant("b".to_string()).into(),
+            Message::user("c".to_string()).into(),
+            Message::assistant("d".to_string()).into(),
+        ]);
+        send(&ma, &agent_id, PORT_MESSAGE, batch).await;
+        assert_eq!(recv_messages(&probe_rx).await.len(), 4);
+
+        // The record appends a marker and emits nothing (an emit here would
+        // re-trigger a downstream ChatAgent with the compacted context).
+        send(
+            &ma,
+            &agent_id,
+            PORT_MESSAGE,
+            compaction_record(Some("S"), Some(2), Some(3)),
+        )
+        .await;
+        assert!(
+            probe_rx
+                .recv_with_timeout(std::time::Duration::from_millis(100))
+                .await
+                .is_err()
+        );
+
+        // The marker landed in the store, dropped=2 resolved to the third
+        // message's entry id.
+        let session_id = session_id_config(&ma, &agent_id).await;
+        let store = JsonlSessionStore::new(dir.path());
+        let entries = store.load(&session_id).await.unwrap();
+        assert_eq!(entries.len(), 5);
+        let msg_ids = message_entry_ids(&entries);
+        let SessionEntry::Compaction {
+            summary,
+            first_kept_id,
+            tokens_before,
+            ..
+        } = &entries[4]
+        else {
+            panic!("expected a Compaction entry");
+        };
+        assert_eq!(summary, "S");
+        assert_eq!(*first_kept_id, msg_ids[2]);
+        assert_eq!(*tokens_before, Some(3));
+
+        // The next input emits the compacted context via build_context.
+        send(&ma, &agent_id, PORT_MESSAGE, AgentValue::unit()).await;
+        let messages = recv_messages(&probe_rx).await;
+        assert_eq!(messages.len(), 3);
+        assert_eq!(messages[0].role, "user");
+        assert_eq!(messages[0].text(), "[Conversation summary]\nS");
+        assert_eq!(messages[1].text(), "c");
+        assert_eq!(messages[2].text(), "d");
+
+        // A second compaction counts dropped from the first one's kept head:
+        // context was [summary, c, d, e], dropped=1 skips "c", keeping "d".
+        // Its record carries the first summary as its baseline.
+        send(
+            &ma,
+            &agent_id,
+            PORT_MESSAGE,
+            Message::user("e".to_string()).into(),
+        )
+        .await;
+        assert_eq!(recv_messages(&probe_rx).await.len(), 4);
+        send(
+            &ma,
+            &agent_id,
+            PORT_MESSAGE,
+            compaction_record_with_previous(Some("S2"), Some(1), None, Some("S")),
+        )
+        .await;
+
+        let entries = store.load(&session_id).await.unwrap();
+        let msg_ids = message_entry_ids(&entries);
+        let Some(SessionEntry::Compaction {
+            summary,
+            first_kept_id,
+            ..
+        }) = entries.last()
+        else {
+            panic!("expected a Compaction entry");
+        };
+        assert_eq!(summary, "S2");
+        assert_eq!(*first_kept_id, msg_ids[3]);
+
+        send(&ma, &agent_id, PORT_MESSAGE, AgentValue::unit()).await;
+        let messages = recv_messages(&probe_rx).await;
+        assert_eq!(messages.len(), 3);
+        assert_eq!(messages[0].text(), "[Conversation summary]\nS2");
+        assert_eq!(messages[1].text(), "d");
+        assert_eq!(messages[2].text(), "e");
+    }
+
+    #[tokio::test]
+    async fn messages_agent_compaction_dropped_beyond_history_discards_record() {
+        let (ma, _preset_id, agent_id, probe_rx, _session_rx) = setup_messages_agent(vec![]).await;
+
+        let batch = AgentValue::array(vector![
+            Message::user("a".to_string()).into(),
+            Message::assistant("b".to_string()).into(),
+        ]);
+        send(&ma, &agent_id, PORT_MESSAGE, batch).await;
+        assert_eq!(recv_messages(&probe_rx).await.len(), 2);
+
+        // dropped exceeds the history: the record cannot describe this
+        // session (e.g. it raced a reset), so it is discarded — recording
+        // it would inject a foreign summary.
+        send(
+            &ma,
+            &agent_id,
+            PORT_MESSAGE,
+            compaction_record(Some("S"), Some(10), None),
+        )
+        .await;
+
+        send(&ma, &agent_id, PORT_MESSAGE, AgentValue::unit()).await;
+        let messages = recv_messages(&probe_rx).await;
+        assert_eq!(messages.len(), 2);
+        assert_eq!(messages[0].text(), "a");
+        assert_eq!(messages[1].text(), "b");
+    }
+
+    #[tokio::test]
+    async fn messages_agent_discards_oversized_first_compaction_record() {
+        let (ma, _preset_id, agent_id, probe_rx, _session_rx) = setup_messages_agent(vec![]).await;
+
+        let batch = AgentValue::array(vector![
+            Message::user("a".to_string()).into(),
+            Message::assistant("b".to_string()).into(),
+            Message::user("c".to_string()).into(),
+        ]);
+        send(&ma, &agent_id, PORT_MESSAGE, batch).await;
+        assert_eq!(recv_messages(&probe_rx).await.len(), 3);
+
+        // A first compaction record (no baseline) sized for a ~200k-token
+        // context cannot describe this tiny session: it was computed from
+        // another session across a reset and must be discarded.
+        send(
+            &ma,
+            &agent_id,
+            PORT_MESSAGE,
+            compaction_record(Some("S"), Some(1), Some(200_000)),
+        )
+        .await;
+
+        send(&ma, &agent_id, PORT_MESSAGE, AgentValue::unit()).await;
+        let messages = recv_messages(&probe_rx).await;
+        assert_eq!(messages.len(), 3);
+        assert_eq!(messages[0].text(), "a");
+        assert_eq!(messages[1].text(), "b");
+        assert_eq!(messages[2].text(), "c");
+    }
+
+    #[tokio::test]
+    async fn messages_agent_discards_stale_compaction_records() {
+        let (ma, _preset_id, agent_id, probe_rx, _session_rx) = setup_messages_agent(vec![]).await;
+
+        let batch = AgentValue::array(vector![
+            Message::user("a".to_string()).into(),
+            Message::assistant("b".to_string()).into(),
+            Message::user("c".to_string()).into(),
+        ]);
+        send(&ma, &agent_id, PORT_MESSAGE, batch).await;
+        assert_eq!(recv_messages(&probe_rx).await.len(), 3);
+
+        send(
+            &ma,
+            &agent_id,
+            PORT_MESSAGE,
+            compaction_record(Some("S"), Some(1), None),
+        )
+        .await;
+
+        // A record computed before the compaction above (no baseline) and
+        // one computed against a different summary are both stale.
+        send(
+            &ma,
+            &agent_id,
+            PORT_MESSAGE,
+            compaction_record(Some("stale"), Some(1), None),
+        )
+        .await;
+        send(
+            &ma,
+            &agent_id,
+            PORT_MESSAGE,
+            compaction_record_with_previous(Some("stale"), Some(1), None, Some("other")),
+        )
+        .await;
+
+        // Only the first compaction took effect: [summary S, b, c].
+        send(&ma, &agent_id, PORT_MESSAGE, AgentValue::unit()).await;
+        let messages = recv_messages(&probe_rx).await;
+        assert_eq!(messages.len(), 3);
+        assert_eq!(messages[0].text(), "[Conversation summary]\nS");
+        assert_eq!(messages[1].text(), "b");
+        assert_eq!(messages[2].text(), "c");
+
+        // A reset swaps in a fresh session; a record from the old
+        // conversation (baseline = old summary) must not leak into it.
+        send(&ma, &agent_id, PORT_RESET, AgentValue::unit()).await;
+        assert_eq!(recv_messages(&probe_rx).await.len(), 0);
+        send(
+            &ma,
+            &agent_id,
+            PORT_MESSAGE,
+            compaction_record_with_previous(Some("S2"), Some(1), None, Some("S")),
+        )
+        .await;
+
+        send(&ma, &agent_id, PORT_MESSAGE, AgentValue::unit()).await;
+        assert_eq!(recv_messages(&probe_rx).await.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn messages_agent_compaction_resolves_pseudo_summary_head() {
+        // A genuine first user message that happens to carry the summary
+        // prefix: the compactor excludes it from `dropped`, and the walk
+        // must skip the matching head entry to stay aligned.
+        let (ma, _preset_id, agent_id, probe_rx, _session_rx) = setup_messages_agent(vec![]).await;
+
+        let batch = AgentValue::array(vector![
+            Message::user("[Conversation summary]\nold".to_string()).into(),
+            Message::user("m1".to_string()).into(),
+            Message::assistant("m2".to_string()).into(),
+            Message::user("m3".to_string()).into(),
+        ]);
+        send(&ma, &agent_id, PORT_MESSAGE, batch).await;
+        assert_eq!(recv_messages(&probe_rx).await.len(), 4);
+
+        send(
+            &ma,
+            &agent_id,
+            PORT_MESSAGE,
+            compaction_record_with_previous(Some("S"), Some(2), None, Some("old")),
+        )
+        .await;
+
+        // dropped=2 skips m1 and m2 counted from *after* the pseudo-summary
+        // head, so the kept tail starts at m3 — matching the compactor.
+        send(&ma, &agent_id, PORT_MESSAGE, AgentValue::unit()).await;
+        let messages = recv_messages(&probe_rx).await;
+        assert_eq!(messages.len(), 2);
+        assert_eq!(messages[0].text(), "[Conversation summary]\nS");
+        assert_eq!(messages[1].text(), "m3");
+    }
+
+    #[tokio::test]
+    async fn messages_agent_invalid_compaction_record_errors() {
+        let (ma, _preset_id, agent_id, _probe_rx, _session_rx) = setup_messages_agent(vec![]).await;
+
+        let agent = ma.get_agent(&agent_id).unwrap();
+        let mut guard = agent.lock().await;
+        let messages_agent = guard.as_agent_mut::<MessagesAgent>().unwrap();
+
+        // Missing summary, missing dropped, and negative dropped all fail.
+        for record in [
+            compaction_record(None, Some(1), None),
+            compaction_record(Some(""), Some(1), None),
+            compaction_record(Some("S"), None, None),
+            compaction_record(Some("S"), Some(-1), None),
+        ] {
+            let result = AsAgent::process(
+                messages_agent,
+                AgentContext::new(),
+                PORT_MESSAGE.to_string(),
+                record,
+            )
+            .await;
+            assert!(matches!(result, Err(AgentError::InvalidValue(_))));
+        }
     }
 
     #[test]
