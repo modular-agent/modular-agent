@@ -56,6 +56,8 @@ mod value;
 
 #[cfg(feature = "llm")]
 pub mod llm;
+#[cfg(feature = "llm")]
+pub mod session;
 pub mod tool;
 
 #[cfg(feature = "mcp")]
@@ -105,5 +107,9 @@ pub use modular_agent::{ModularAgent, ModularAgentEvent, SharedAgent};
 pub use output::AgentOutput;
 pub use preset::{Preset, PresetInfo};
 pub use registry::AgentRegistration;
+#[cfg(feature = "llm")]
+pub use session::{
+    InMemorySessionStore, JsonlSessionStore, SessionEntry, SessionMeta, SessionStore, build_context,
+};
 pub use spec::{AgentSpec, ConnectionSpec, PresetSpec, PresetSpecs};
 pub use value::{AgentValue, AgentValueMap};

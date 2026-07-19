@@ -10,6 +10,9 @@ readme = "../README.md"
 
 [dependencies]
 async-trait = "0.1"
+# default-features = false + clock: only Utc::now() is needed for RFC3339
+# session timestamps.
+chrono = { version = "0.4", optional = true, default-features = false, features = ["clock"] }
 fnv = "1"
 # default-features = false + alloc: only the order-preserving stream
 # combinators (buffered) are needed for parallel tool execution.
@@ -30,6 +33,9 @@ thiserror = "2"
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "sync", "time", "macros"] }
 # default-features = false: only CancellationToken (tokio_util::sync) is used.
 tokio-util = { version = "0.7", default-features = false }
+# v4: random session/entry ids that stay unique across process restarts
+# (the counter-based internal id generator is not).
+uuid = { version = "1", optional = true, features = ["v4"] }
 
 modular-agent-macros = { workspace = true }
 
@@ -38,12 +44,14 @@ tokio = { version = "1", features = ["macros", "io-util", "io-std", "signal"] }
 serial_test = "3"
 clap = { version = "4", features = ["derive"] }
 env_logger = "0.11"
+tempfile = "3"
 
 [features]
 default = ["file", "image", "llm", "mcp"]
 file = []
 image = ["photon-rs"]
-llm = ["regex", "jsonschema", "futures-util"]
+# tokio/fs + tokio/io-util: used only by the session module (JSONL persistence).
+llm = ["regex", "jsonschema", "futures-util", "uuid", "chrono", "tokio/fs", "tokio/io-util"]
 mcp = ["rmcp", "llm"]
 test-utils = []
 
