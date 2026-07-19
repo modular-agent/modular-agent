@@ -4,7 +4,8 @@ use im::{Vector, vector};
 use modular_agent_core::{
     Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
     ContentBlock, InMemorySessionStore, JsonlSessionStore, Message, MessageContent, ModularAgent,
-    SessionEntry, SessionMeta, SessionStore, async_trait, build_context, modular_agent,
+    SessionEntry, SessionMeta, SessionStore, async_trait, build_context, estimate_message_tokens,
+    modular_agent,
 };
 
 const CATEGORY: &str = "LLM/Message";
@@ -15,6 +16,7 @@ const PORT_RESET: &str = "reset";
 const PORT_SESSION_ID: &str = "session_id";
 
 const CONFIG_MAX_SIZE: &str = "max_size";
+const CONFIG_MAX_TOKENS: &str = "max_tokens";
 const CONFIG_MESSAGE: &str = "message";
 const CONFIG_PREAMBLE: &str = "preamble";
 const CONFIG_SESSION_DIR: &str = "session_dir";
@@ -584,15 +586,37 @@ impl AsAgent for MessagesAgent {
     }
 }
 
-/// Convert to messages for prompt.
+/// Trim a message history to fit a prompt budget.
 ///
-/// It selects messages to fit within max_size.
-/// The prompt order is (system, ) user, (assistant, user)*.
+/// Selects messages from newest to oldest until the budget is exhausted,
+/// so the most recent conversation always survives. A leading system
+/// message is always kept and counts against the budget. After selection,
+/// non-user messages are dropped from the front until the first
+/// non-system message is a user message, yielding the (system,) user,
+/// (assistant, user)* order providers expect. Unsigned thinking blocks
+/// are stripped from the selected messages; signed and redacted blocks
+/// are preserved for provider replay. When neither budget is set (both
+/// <= 0), the input passes through unchanged; an empty input emits
+/// nothing.
+///
+/// # Ports
+/// - Input `messages`: Message or array of messages (full history)
+/// - Output `messages`: The trimmed message array
+///
+/// # Configuration
+/// - `max_tokens`: Token budget, using the core `estimate_message_tokens`
+///   heuristic (chars/4, flat cost per image). Takes precedence over
+///   `max_size` when > 0. In this mode each message is measured after
+///   unsigned thinking is stripped — the form actually sent (default: 0)
+/// - `max_size`: Legacy byte budget: text bytes, tool-call name and
+///   serialized parameter bytes, and estimated image file sizes. Used
+///   only when `max_tokens` <= 0 (default: 0)
 #[modular_agent(
     title="Messages for Prompt",
     category=CATEGORY,
     inputs=[PORT_MESSAGES],
     outputs=[PORT_MESSAGES],
+    integer_config(name=CONFIG_MAX_TOKENS),
     integer_config(name=CONFIG_MAX_SIZE),
     hint(width = 2, height = 1),
 )]
@@ -614,8 +638,10 @@ impl AsAgent for MessagesForPromptAgent {
         _port: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
-        let max_size = self.configs()?.get_integer_or_default(CONFIG_MAX_SIZE);
-        if max_size <= 0 {
+        let configs = self.configs()?;
+        let max_size = configs.get_integer_or_default(CONFIG_MAX_SIZE);
+        let max_tokens = configs.get_integer_or_default(CONFIG_MAX_TOKENS);
+        if max_size <= 0 && max_tokens <= 0 {
             // Just output the input messages
             self.output(ctx, PORT_MESSAGES, value).await?;
             return Ok(());
@@ -633,13 +659,26 @@ impl AsAgent for MessagesForPromptAgent {
             return Ok(());
         }
 
-        let mut total_size = 0;
+        // The estimated-token budget is more faithful to what providers
+        // actually charge, so it takes precedence over the byte budget.
+        let use_tokens = max_tokens > 0;
+        let budget = if use_tokens {
+            max_tokens as u64
+        } else {
+            max_size as u64
+        };
+        let mut total: u64 = 0;
 
         // Extract system message if exists
         let mut system_message: Option<AgentValue> = None;
         if messages.front().unwrap().as_message().unwrap().role == "system" {
             let msg = messages.pop_front().unwrap();
-            total_size += msg.as_message().unwrap().text().len();
+            let m = msg.as_message().unwrap();
+            total += if use_tokens {
+                estimate_message_tokens(m)
+            } else {
+                m.text().len() as u64
+            };
             system_message = Some(msg);
         }
 
@@ -648,24 +687,38 @@ impl AsAgent for MessagesForPromptAgent {
         while !messages.is_empty() {
             let value = messages.pop_back().unwrap();
             let msg = value.as_message().unwrap();
-            #[cfg_attr(not(feature = "image"), allow(unused_mut))]
-            let mut msg_size = msg.text().len();
 
-            #[cfg(feature = "image")]
-            {
+            // Stripping happens before measuring: the stripped form is what
+            // actually gets sent, so it is what must fit the budget.
+            let stripped = strip_unsigned_thinking(msg);
+
+            let msg_size: u64 = if use_tokens {
+                estimate_message_tokens(stripped.as_ref().unwrap_or(msg))
+            } else {
+                let mut size = msg.text().len() as u64;
+
+                #[cfg(feature = "image")]
                 if let Some(img) = &msg.image {
-                    msg_size += img.get_estimated_filesize() as usize;
+                    size += img.get_estimated_filesize();
                 }
-            }
 
-            // Do we need to consider tool_calls size?
+                if let Some(tool_calls) = &msg.tool_calls {
+                    for call in tool_calls {
+                        size += call.function.name.len() as u64;
+                        size += serde_json::to_string(&call.function.parameters)
+                            .map_or(0, |s| s.len() as u64);
+                    }
+                }
 
-            if total_size + msg_size > max_size as usize {
+                size
+            };
+
+            if total + msg_size > budget {
                 break;
             }
-            total_size += msg_size;
+            total += msg_size;
 
-            if let Some(m) = strip_unsigned_thinking(msg) {
+            if let Some(m) = stripped {
                 selected_messages.push(AgentValue::message(m));
             } else {
                 selected_messages.push(value);
@@ -1212,5 +1265,131 @@ mod tests {
             },
         ]);
         assert!(strip_unsigned_thinking(&msg).is_none());
+    }
+
+    /// Build a running preset with a MessagesForPromptAgent (configured via
+    /// `configs`) whose `messages` port feeds a probe.
+    async fn setup_prompt_agent(
+        configs: Vec<(&str, AgentValue)>,
+    ) -> (ModularAgent, String, ProbeReceiver) {
+        let ma = ModularAgent::init().unwrap();
+        ma.ready().await.unwrap();
+
+        let preset_id = ma.new_preset().unwrap();
+        let def = ma
+            .get_agent_definition(MessagesForPromptAgent::DEF_NAME)
+            .unwrap();
+        let mut spec = def.to_spec();
+        {
+            let spec_configs = spec.configs.as_mut().unwrap();
+            for (key, value) in configs {
+                spec_configs.set(key.into(), value);
+            }
+        }
+        let agent_id = ma.add_agent(preset_id.clone(), spec).await.unwrap();
+
+        let probe_def = ma.get_agent_definition(TestProbeAgent::DEF_NAME).unwrap();
+        let probe_id = ma
+            .add_agent(preset_id.clone(), probe_def.to_spec())
+            .await
+            .unwrap();
+        ma.add_connection(
+            &preset_id,
+            ConnectionSpec {
+                source: agent_id.clone(),
+                source_handle: PORT_MESSAGES.into(),
+                target: probe_id.clone(),
+                target_handle: "value".into(),
+            },
+        )
+        .await
+        .unwrap();
+
+        ma.start_preset(&preset_id).await.unwrap();
+        wait_until_started(&ma, &agent_id).await;
+        let probe_rx = probe_receiver(&ma, &probe_id).await.unwrap();
+
+        (ma, agent_id, probe_rx)
+    }
+
+    async fn send_to_prompt_agent(ma: &ModularAgent, agent_id: &str, value: AgentValue) {
+        let agent = ma.get_agent(agent_id).unwrap();
+        let mut guard = agent.lock().await;
+        let prompt_agent = guard.as_agent_mut::<MessagesForPromptAgent>().unwrap();
+        AsAgent::process(
+            prompt_agent,
+            AgentContext::new(),
+            PORT_MESSAGES.to_string(),
+            value,
+        )
+        .await
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn messages_for_prompt_max_tokens_keeps_newest_and_system() {
+        let (ma, agent_id, probe_rx) =
+            setup_prompt_agent(vec![(CONFIG_MAX_TOKENS, AgentValue::integer(10))]).await;
+
+        // system: 4 chars = 1 token; old pair: 20 tokens each; recent
+        // user: 2 tokens. Budget 10 fits system + recent user only.
+        let input = AgentValue::array(vector![
+            Message::system("sys.".to_string()).into(),
+            Message::user("x".repeat(80)).into(),
+            Message::assistant("y".repeat(80)).into(),
+            Message::user("recent q".to_string()).into(),
+        ]);
+        send_to_prompt_agent(&ma, &agent_id, input).await;
+
+        let messages = recv_messages(&probe_rx).await;
+        assert_eq!(messages.len(), 2);
+        assert_eq!(messages[0].role, "system");
+        assert_eq!(messages[0].text(), "sys.");
+        assert_eq!(messages[1].role, "user");
+        assert_eq!(messages[1].text(), "recent q");
+    }
+
+    #[tokio::test]
+    async fn messages_for_prompt_max_tokens_first_message_is_user() {
+        let (ma, agent_id, probe_rx) =
+            setup_prompt_agent(vec![(CONFIG_MAX_TOKENS, AgentValue::integer(5))]).await;
+
+        // The oldest user message (10 tokens) breaks the budget, leaving
+        // the selection headed by an assistant message that must be popped.
+        let input = AgentValue::array(vector![
+            Message::user("a".repeat(40)).into(),
+            Message::assistant("bbbb".to_string()).into(),
+            Message::user("cccc".to_string()).into(),
+        ]);
+        send_to_prompt_agent(&ma, &agent_id, input).await;
+
+        let messages = recv_messages(&probe_rx).await;
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0].role, "user");
+        assert_eq!(messages[0].text(), "cccc");
+    }
+
+    #[tokio::test]
+    async fn messages_for_prompt_max_tokens_takes_precedence_over_max_size() {
+        // max_size alone would trim everything; the generous token budget
+        // must win and keep the whole history.
+        let (ma, agent_id, probe_rx) = setup_prompt_agent(vec![
+            (CONFIG_MAX_SIZE, AgentValue::integer(1)),
+            (CONFIG_MAX_TOKENS, AgentValue::integer(1000)),
+        ])
+        .await;
+
+        let input = AgentValue::array(vector![
+            Message::user("hello".to_string()).into(),
+            Message::assistant("world".to_string()).into(),
+            Message::user("again".to_string()).into(),
+        ]);
+        send_to_prompt_agent(&ma, &agent_id, input).await;
+
+        let messages = recv_messages(&probe_rx).await;
+        assert_eq!(messages.len(), 3);
+        assert_eq!(messages[0].text(), "hello");
+        assert_eq!(messages[1].text(), "world");
+        assert_eq!(messages[2].text(), "again");
     }
 }
