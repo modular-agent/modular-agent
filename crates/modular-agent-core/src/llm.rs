@@ -487,6 +487,92 @@ pub struct Usage {
     pub cache_write_tokens: u64,
 }
 
+/// Flat token cost charged for each image, whether an inline content
+/// block or an attached `image` field. Roughly a 1024x1024 image on
+/// current providers; the exact cost varies by provider and resolution,
+/// so a single conservative constant keeps the estimate simple.
+#[cfg(feature = "image")]
+const IMAGE_TOKENS: u64 = 1200;
+
+/// Estimates the token count of a single [`Message`].
+///
+/// Uses the chars/4 heuristic: English text averages about four
+/// characters per token, so the total character count divided by four
+/// (rounded up) is a serviceable estimate without pulling in a
+/// tokenizer. Counted characters are:
+///
+/// - all text content,
+/// - all thinking content, including redacted payloads — they are
+///   replayed to the provider verbatim, so they occupy context,
+/// - for each tool call, the function name plus its serialized
+///   parameters.
+///
+/// Each image — an inline content block or the attached `image` field —
+/// adds a flat 1200 tokens (`IMAGE_TOKENS`) instead of a character
+/// count.
+pub fn estimate_message_tokens(m: &Message) -> u64 {
+    let mut chars: usize = 0;
+    #[cfg_attr(not(feature = "image"), allow(unused_mut))]
+    let mut image_tokens: u64 = 0;
+
+    match &m.content {
+        MessageContent::Text(s) => chars += s.len(),
+        MessageContent::Blocks(blocks) => {
+            for block in blocks {
+                match block {
+                    ContentBlock::Text { text } => chars += text.len(),
+                    ContentBlock::Thinking { thinking, .. } => chars += thinking.len(),
+
+                    #[cfg(feature = "image")]
+                    ContentBlock::Image { .. } => image_tokens += IMAGE_TOKENS,
+                }
+            }
+        }
+    }
+
+    if let Some(tool_calls) = &m.tool_calls {
+        for call in tool_calls {
+            chars += call.function.name.len();
+            chars += serde_json::to_string(&call.function.parameters).map_or(0, |s| s.len());
+        }
+    }
+
+    #[cfg(feature = "image")]
+    if m.image.is_some() {
+        image_tokens += IMAGE_TOKENS;
+    }
+
+    (chars as u64).div_ceil(4) + image_tokens
+}
+
+/// Estimates the total token count of a conversation context.
+///
+/// Hybrid estimation: provider-reported [`Usage`] is exact, so the
+/// latest assistant message carrying `usage` serves as an anchor. Its
+/// `input_tokens + output_tokens + cache_read_tokens +
+/// cache_write_tokens` already accounts for the entire context up to and
+/// including that message, so only messages after the anchor are
+/// estimated with [`estimate_message_tokens`]. When no message carries
+/// usage, every message is estimated.
+pub fn estimate_context_tokens(messages: &[Message]) -> u64 {
+    for (i, m) in messages.iter().enumerate().rev() {
+        if m.role == "assistant"
+            && let Some(usage) = &m.usage
+        {
+            let anchor = usage.input_tokens
+                + usage.output_tokens
+                + usage.cache_read_tokens
+                + usage.cache_write_tokens;
+            return anchor
+                + messages[i + 1..]
+                    .iter()
+                    .map(estimate_message_tokens)
+                    .sum::<u64>();
+        }
+    }
+    messages.iter().map(estimate_message_tokens).sum()
+}
+
 /// A tool call requested by the assistant.
 ///
 /// Represents a single tool invocation as part of an LLM response.
@@ -1435,5 +1521,113 @@ mod tests {
         assert_eq!(restored.content, MessageContent::Blocks(blocks));
         assert_eq!(restored.text(), "beforeafter");
         assert_eq!(restored.thinking().as_deref(), Some("mid"));
+    }
+
+    // Token estimation tests
+
+    #[test]
+    fn test_estimate_message_tokens_rounds_up() {
+        // 5 chars / 4 rounds up to 2.
+        let msg = Message::user("hello".to_string());
+        assert_eq!(estimate_message_tokens(&msg), 2);
+
+        // 4 chars is exactly 1 token.
+        let msg = Message::user("abcd".to_string());
+        assert_eq!(estimate_message_tokens(&msg), 1);
+    }
+
+    #[test]
+    fn test_estimate_message_tokens_counts_tool_calls() {
+        let parameters = serde_json::json!({"location": "Tokyo"});
+        let mut msg = Message::assistant(String::new());
+        msg.tool_calls = Some(vector![ToolCall {
+            function: ToolCallFunction {
+                id: Some("call1".to_string()),
+                name: "get_weather".to_string(),
+                parameters: parameters.clone(),
+                parse_error: None,
+            },
+        }]);
+
+        let chars = "get_weather".len() + serde_json::to_string(&parameters).unwrap().len();
+        assert_eq!(estimate_message_tokens(&msg), (chars as u64).div_ceil(4));
+    }
+
+    #[test]
+    fn test_estimate_message_tokens_counts_thinking_blocks() {
+        let mut msg = Message::assistant(String::new());
+        msg.content = MessageContent::Blocks(vec![
+            ContentBlock::Thinking {
+                thinking: "abcd".to_string(),
+                signature: None,
+                redacted: false,
+            },
+            // Redacted payloads are replayed to the provider, so they count.
+            ContentBlock::Thinking {
+                thinking: "wxyz".to_string(),
+                signature: None,
+                redacted: true,
+            },
+            ContentBlock::Text {
+                text: "efgh".to_string(),
+            },
+        ]);
+        assert_eq!(estimate_message_tokens(&msg), 3);
+    }
+
+    #[cfg(feature = "image")]
+    #[test]
+    fn test_estimate_message_tokens_image_block_adds_flat_cost() {
+        let mut msg = Message::user(String::new());
+        msg.content = MessageContent::Blocks(vec![
+            ContentBlock::Text {
+                text: "abcd".to_string(),
+            },
+            ContentBlock::Image {
+                data: "base64-payload-not-counted-as-chars".to_string(),
+                mime_type: "image/png".to_string(),
+            },
+        ]);
+        assert_eq!(estimate_message_tokens(&msg), 1 + 1200);
+    }
+
+    #[test]
+    fn test_estimate_context_tokens_anchors_on_latest_usage() {
+        let mut anchored = Message::assistant("answer".to_string());
+        anchored.usage = Some(Usage {
+            input_tokens: 100,
+            output_tokens: 20,
+            cache_read_tokens: 50,
+            cache_write_tokens: 10,
+        });
+        // Covered by the anchor, must not be estimated.
+        let earlier = Message::user("long history covered by the anchor".to_string());
+        // 8 chars -> 2 tokens estimated on top of the anchor.
+        let trailing = Message::user("12345678".to_string());
+
+        let messages = vec![earlier, anchored, trailing];
+        assert_eq!(estimate_context_tokens(&messages), 180 + 2);
+    }
+
+    #[test]
+    fn test_estimate_context_tokens_sums_all_without_usage() {
+        let messages = vec![
+            Message::user("abcd".to_string()),          // 1 token
+            Message::assistant("efghijkl".to_string()), // 2 tokens
+        ];
+        assert_eq!(estimate_context_tokens(&messages), 3);
+    }
+
+    #[test]
+    fn test_estimate_context_tokens_usage_on_last_message() {
+        let mut msg = Message::assistant("whatever".to_string());
+        msg.usage = Some(Usage {
+            input_tokens: 7,
+            output_tokens: 3,
+            cache_read_tokens: 0,
+            cache_write_tokens: 0,
+        });
+        let messages = vec![Message::user("earlier".to_string()), msg];
+        assert_eq!(estimate_context_tokens(&messages), 10);
     }
 }

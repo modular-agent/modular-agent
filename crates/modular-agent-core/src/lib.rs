@@ -102,6 +102,7 @@ pub use error::AgentError;
 #[cfg(feature = "llm")]
 pub use llm::{
     ContentBlock, Message, MessageContent, MessageEvent, ToolCall, ToolCallFunction, Usage,
+    estimate_context_tokens, estimate_message_tokens,
 };
 pub use modular_agent::{ModularAgent, ModularAgentEvent, SharedAgent};
 pub use output::AgentOutput;
