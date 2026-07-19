@@ -25,6 +25,27 @@ pub(crate) fn content_from_blocks(blocks: &[ContentBlock]) -> MessageContent {
     }
 }
 
+/// Flattened text form of message content for string-only sinks: providers
+/// whose tool role only accepts a string (OpenAI, Ollama), orphan tool-result
+/// demotion, and the compaction transcript. Text blocks pass through and each
+/// image block becomes an `[image: <mime_type>]` placeholder line, so the
+/// model at least learns an image was returned instead of it being silently
+/// dropped. Plain-text content is returned verbatim.
+pub(crate) fn tool_result_fallback_text(content: &MessageContent) -> String {
+    let MessageContent::Blocks(blocks) = content else {
+        return content.text();
+    };
+    let parts: Vec<String> = blocks
+        .iter()
+        .filter_map(|b| match b {
+            ContentBlock::Text { text } if !text.is_empty() => Some(text.clone()),
+            ContentBlock::Image { mime_type, .. } => Some(format!("[image: {mime_type}]")),
+            _ => None,
+        })
+        .collect();
+    parts.join("\n")
+}
+
 /// Text content preceded by an unsigned thinking block; used by providers
 /// that report thinking as a separate plain string (Ollama, OpenAI refusal).
 /// Plain text when there is no thinking, so the common case keeps the legacy

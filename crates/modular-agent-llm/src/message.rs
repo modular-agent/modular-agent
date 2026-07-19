@@ -894,6 +894,18 @@ impl AsAgent for MessagesForPromptAgent {
             } else {
                 let mut size = msg.text().len() as u64;
 
+                // text() skips image blocks, but their base64 payloads are
+                // sent to the provider, so they must count toward the budget
+                // — otherwise image tool results measure as ~0 bytes and
+                // trimming never triggers.
+                if let MessageContent::Blocks(blocks) = &msg.content {
+                    for block in blocks {
+                        if let ContentBlock::Image { data, .. } = block {
+                            size += data.len() as u64;
+                        }
+                    }
+                }
+
                 #[cfg(feature = "image")]
                 if let Some(img) = &msg.image {
                     size += img.get_estimated_filesize();
@@ -1913,5 +1925,34 @@ mod tests {
         assert_eq!(messages[0].text(), "hello");
         assert_eq!(messages[1].text(), "world");
         assert_eq!(messages[2].text(), "again");
+    }
+
+    #[tokio::test]
+    async fn messages_for_prompt_max_size_counts_image_blocks() {
+        // An image tool result has no text, but its base64 payload is sent
+        // to the provider, so it must count toward the byte budget.
+        let (ma, agent_id, probe_rx) =
+            setup_prompt_agent(vec![(CONFIG_MAX_SIZE, AgentValue::integer(100))]).await;
+
+        let image_result = Message::tool_with_content(
+            "screenshot".to_string(),
+            MessageContent::Blocks(vec![ContentBlock::Image {
+                data: "A".repeat(500),
+                mime_type: "image/png".to_string(),
+            }]),
+        );
+        let input = AgentValue::array(vector![
+            Message::user("old question".to_string()).into(),
+            image_result.into(),
+            Message::user("recent q".to_string()).into(),
+        ]);
+        send_to_prompt_agent(&ma, &agent_id, input).await;
+
+        // The 500-byte image breaks the 100-byte budget, so only the newest
+        // user message survives.
+        let messages = recv_messages(&probe_rx).await;
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0].role, "user");
+        assert_eq!(messages[0].text(), "recent q");
     }
 }

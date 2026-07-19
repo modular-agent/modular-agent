@@ -473,9 +473,11 @@ pub fn message_to_chat_json(msg: &Message) -> serde_json::Value {
             }
             json
         }
+        // The Chat Completions tool role only accepts a string, so block
+        // results degrade to text with image placeholders.
         "tool" => serde_json::json!({
             "role": "tool",
-            "content": msg.text(),
+            "content": crate::content::tool_result_fallback_text(&msg.content),
             "tool_call_id": msg.id.clone().unwrap_or_default()
         }),
         _ => serde_json::json!({
@@ -681,10 +683,12 @@ pub fn messages_to_response_input(
                     .id
                     .clone()
                     .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+                // function_call_output's `output` only accepts a string, so
+                // block results degrade to text with image placeholders.
                 input_items.push(serde_json::json!({
                     "type": "function_call_output",
                     "call_id": call_id,
-                    "output": msg.text(),
+                    "output": crate::content::tool_result_fallback_text(&msg.content),
                 }));
             }
             "assistant" => {
@@ -1573,6 +1577,52 @@ mod tests {
                     "url": "data:image/png;base64,iVBORw0KGgo=", "detail": "auto"}},
             ])
         );
+    }
+
+    #[test]
+    fn test_message_to_chat_json_tool_result_blocks_fallback() {
+        let mut msg = Message::tool_with_content(
+            "my_tool".to_string(),
+            MessageContent::Blocks(vec![
+                ContentBlock::Text {
+                    text: "caption".to_string(),
+                },
+                ContentBlock::Image {
+                    data: "iVBORw0KGgo=".to_string(),
+                    mime_type: "image/png".to_string(),
+                },
+            ]),
+        );
+        msg.id = Some("call_img".to_string());
+
+        let json = message_to_chat_json(&msg);
+        assert_eq!(json["content"], "caption\n[image: image/png]");
+        assert_eq!(json["tool_call_id"], "call_img");
+    }
+
+    #[test]
+    fn test_message_to_chat_json_tool_result_text_unchanged() {
+        let mut msg = Message::tool("my_tool".to_string(), "plain result".to_string());
+        msg.id = Some("call_txt".to_string());
+
+        let json = message_to_chat_json(&msg);
+        assert_eq!(json["content"], "plain result");
+    }
+
+    #[test]
+    fn test_response_input_tool_result_blocks_fallback() {
+        let mut msg = Message::tool_with_content(
+            "my_tool".to_string(),
+            MessageContent::Blocks(vec![ContentBlock::Image {
+                data: "iVBORw0KGgo=".to_string(),
+                mime_type: "image/png".to_string(),
+            }]),
+        );
+        msg.id = Some("call_img".to_string());
+
+        let items = messages_to_response_input(&vector![AgentValue::from(msg)]).unwrap();
+        assert_eq!(items[0]["type"], "function_call_output");
+        assert_eq!(items[0]["output"], "[image: image/png]");
     }
 
     #[test]

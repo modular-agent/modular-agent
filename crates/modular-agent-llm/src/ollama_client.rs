@@ -501,9 +501,16 @@ pub(crate) fn normalize_done_reason(raw: &str) -> String {
 
 /// Convert an internal Message to an Ollama API chat message.
 pub(crate) fn message_to_ollama(msg: &Message) -> OllamaChatMessage {
+    // Ollama's tool role only accepts string content, so block results
+    // degrade to text with image placeholders.
+    let content = if msg.role == "tool" {
+        crate::content::tool_result_fallback_text(&msg.content)
+    } else {
+        msg.text()
+    };
     let mut omsg = OllamaChatMessage {
         role: msg.role.clone(),
-        content: msg.text(),
+        content,
         tool_calls: vec![],
         images: None,
         thinking: None,
@@ -636,6 +643,25 @@ mod tests {
         let omsg = message_to_ollama(&msg);
         assert_eq!(omsg.content, "result");
         assert!(omsg.tool_calls.is_empty());
+    }
+
+    #[test]
+    fn test_message_to_ollama_tool_result_blocks_fallback() {
+        let msg = Message::tool_with_content(
+            "my_tool".to_string(),
+            MessageContent::Blocks(vec![
+                ContentBlock::Text {
+                    text: "caption".to_string(),
+                },
+                ContentBlock::Image {
+                    data: "iVBORw0KGgo=".to_string(),
+                    mime_type: "image/png".to_string(),
+                },
+            ]),
+        );
+
+        let omsg = message_to_ollama(&msg);
+        assert_eq!(omsg.content, "caption\n[image: image/png]");
     }
 
     #[test]

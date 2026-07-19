@@ -244,9 +244,13 @@ fn prepare_plain(
 /// message: strict providers reject unpaired or duplicate tool results.
 /// Demote it to plain user text so the content survives.
 fn demote_orphan_tool_result(msg: &Message) -> Message {
+    // Flatten through the same fallback the string-only tool paths use:
+    // text() would silently drop image blocks, losing any trace that the
+    // tool returned an image.
+    let body = crate::content::tool_result_fallback_text(&msg.content);
     let content = match &msg.tool_name {
-        Some(name) => format!("[Tool result from '{}']\n{}", name, msg.text()),
-        None => format!("[Tool result]\n{}", msg.text()),
+        Some(name) => format!("[Tool result from '{}']\n{}", name, body),
+        None => format!("[Tool result]\n{}", body),
     };
     Message::user(content)
 }
@@ -705,6 +709,30 @@ mod tests {
         assert!(get(&out, 0).text().contains("tool_a"));
         assert_eq!(get(&out, 2).role, "user");
         assert_eq!(get(&out, 2).text(), "next");
+    }
+
+    #[test]
+    fn demoted_orphan_image_tool_result_keeps_placeholder() {
+        // An image-only tool result demoted to user text must keep at least
+        // an [image: ...] placeholder instead of an empty body.
+        let mut msg = Message::tool_with_content(
+            "screenshot".to_string(),
+            MessageContent::Blocks(vec![ContentBlock::Image {
+                data: "base64data".to_string(),
+                mime_type: "image/png".to_string(),
+            }]),
+        );
+        msg.id = Some("call_gone".to_string());
+        let history = vector![
+            AgentValue::from(msg),
+            AgentValue::from(Message::user("next".to_string())),
+        ];
+        let out = prepare_messages(&history, ProviderKind::Claude, false);
+
+        assert_eq!(out.len(), 2);
+        assert_eq!(get(&out, 0).role, "user");
+        assert!(get(&out, 0).text().contains("screenshot"));
+        assert!(get(&out, 0).text().contains("[image: image/png]"));
     }
 
     #[test]

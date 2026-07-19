@@ -283,7 +283,7 @@ pub(crate) enum ClaudeContentBlock {
     #[serde(rename = "tool_result")]
     ToolResult {
         tool_use_id: String,
-        content: String,
+        content: ClaudeToolResultContent,
         #[serde(skip_serializing_if = "Option::is_none")]
         is_error: Option<bool>,
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -293,6 +293,16 @@ pub(crate) enum ClaudeContentBlock {
     Thinking { thinking: String, signature: String },
     #[serde(rename = "redacted_thinking")]
     RedactedThinking { data: String },
+}
+
+/// `tool_result.content` accepts either a plain string or an array of
+/// text/image blocks. The string form is kept for text-only results so the
+/// wire format stays identical to what older releases sent.
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+#[serde(untagged)]
+pub(crate) enum ClaudeToolResultContent {
+    Text(String),
+    Blocks(Vec<ClaudeContentBlock>),
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
@@ -519,7 +529,7 @@ pub(crate) fn messages_to_claude(
                     role: "user".to_string(),
                     content: ClaudeContent::Blocks(vec![ClaudeContentBlock::ToolResult {
                         tool_use_id,
-                        content: msg.text(),
+                        content: build_tool_result_content(msg),
                         is_error,
                         cache_control: None,
                     }]),
@@ -542,6 +552,43 @@ pub(crate) fn messages_to_claude(
     };
 
     (system, claude_messages)
+}
+
+/// Build `tool_result.content` from a tool-role message. Block content maps
+/// to Claude's text/image blocks so tool results carrying images reach the
+/// model instead of being flattened to text (which drops them); anything
+/// else keeps the legacy plain-string form.
+fn build_tool_result_content(msg: &Message) -> ClaudeToolResultContent {
+    let MessageContent::Blocks(content_blocks) = &msg.content else {
+        return ClaudeToolResultContent::Text(msg.text());
+    };
+    let mut blocks: Vec<ClaudeContentBlock> = Vec::new();
+    for block in content_blocks {
+        match block {
+            ContentBlock::Text { text } if !text.is_empty() => {
+                blocks.push(ClaudeContentBlock::Text {
+                    text: text.clone(),
+                    cache_control: None,
+                });
+            }
+            ContentBlock::Image { data, mime_type } => {
+                blocks.push(ClaudeContentBlock::Image {
+                    source: ClaudeImageSource {
+                        source_type: "base64".to_string(),
+                        media_type: mime_type.clone(),
+                        data: data.clone(),
+                    },
+                    cache_control: None,
+                });
+            }
+            // Thinking cannot legitimately appear in a tool result.
+            _ => {}
+        }
+    }
+    if blocks.is_empty() {
+        return ClaudeToolResultContent::Text(msg.text());
+    }
+    ClaudeToolResultContent::Blocks(blocks)
 }
 
 fn build_user_content(msg: &Message) -> ClaudeContent {
@@ -948,7 +995,9 @@ mod tests {
             } = &blocks[0]
             {
                 assert_eq!(tool_use_id, "toolu_123");
-                assert_eq!(content, r#"{"result": "ok"}"#);
+                assert!(
+                    matches!(content, ClaudeToolResultContent::Text(s) if s == r#"{"result": "ok"}"#)
+                );
                 assert_eq!(is_error, &None);
             } else {
                 panic!("Expected ToolResult block");
@@ -975,6 +1024,50 @@ mod tests {
         } else {
             panic!("Expected Blocks content");
         }
+    }
+
+    #[test]
+    fn test_messages_to_claude_tool_result_block_content() {
+        let mut tool_msg = Message::tool_with_content(
+            "my_tool".to_string(),
+            MessageContent::Blocks(vec![
+                ContentBlock::Text {
+                    text: "caption".to_string(),
+                },
+                ContentBlock::Image {
+                    data: "iVBORw0KGgo=".to_string(),
+                    mime_type: "image/png".to_string(),
+                },
+            ]),
+        );
+        tool_msg.id = Some("toolu_img".to_string());
+
+        let messages = vector![AgentValue::from(tool_msg)];
+        let (_, msgs) = messages_to_claude(&messages);
+
+        let json = serde_json::to_value(&msgs[0]).unwrap();
+        assert_eq!(
+            json["content"][0]["content"],
+            serde_json::json!([
+                {"type": "text", "text": "caption"},
+                {"type": "image", "source": {
+                    "type": "base64", "media_type": "image/png", "data": "iVBORw0KGgo="}},
+            ]),
+            "json was: {json}"
+        );
+    }
+
+    #[test]
+    fn test_messages_to_claude_tool_result_text_stays_string() {
+        let mut tool_msg = Message::tool("my_tool".to_string(), "plain result".to_string());
+        tool_msg.id = Some("toolu_txt".to_string());
+
+        let messages = vector![AgentValue::from(tool_msg)];
+        let (_, msgs) = messages_to_claude(&messages);
+
+        // Lock the wire format: text-only results keep the plain-string form.
+        let json = serde_json::to_value(&msgs[0]).unwrap();
+        assert_eq!(json["content"][0]["content"], "plain result");
     }
 
     #[test]
@@ -1905,7 +1998,7 @@ mod tests {
             role: "user".to_string(),
             content: ClaudeContent::Blocks(vec![ClaudeContentBlock::ToolResult {
                 tool_use_id: "toolu_1".to_string(),
-                content: "ok".to_string(),
+                content: ClaudeToolResultContent::Text("ok".to_string()),
                 is_error: None,
                 cache_control: None,
             }]),

@@ -43,8 +43,9 @@ pub mod responses;
 #[cfg(any(feature = "openai", feature = "claude", feature = "ollama"))]
 pub(crate) mod http_error;
 
-// MessageContent assembly shared by the provider response converters.
-#[cfg(any(feature = "openai", feature = "claude", feature = "ollama"))]
+// MessageContent assembly shared by the provider response converters, plus
+// the string-only flattening fallback also used by feature-independent code
+// (prepare, compact), so the module is not gated on provider features.
 pub(crate) mod content;
 
 // Only the providers that transport tool arguments as strings need the

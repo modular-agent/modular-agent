@@ -523,14 +523,17 @@ fn build_summary_prompt(
 
 /// Renders dropped messages as a plain-text transcript for the
 /// summarization prompt. Tool calls are listed by name and arguments so
-/// decisions carried through tools survive into the summary.
+/// decisions carried through tools survive into the summary; image blocks
+/// leave an `[image: <mime_type>]` placeholder so the summary keeps a
+/// record that a tool returned an image.
 fn render_transcript(messages: &[Message]) -> String {
     let mut out = String::new();
     for m in messages {
         out.push('[');
         out.push_str(&m.role);
         out.push_str("]\n");
-        let text = m.text();
+        // Not text(): that drops image blocks without a trace.
+        let text = crate::content::tool_result_fallback_text(&m.content);
         if !text.is_empty() {
             out.push_str(&text);
             out.push('\n');
@@ -551,10 +554,28 @@ mod tests {
     use super::*;
     use im::vector;
     use modular_agent_core::test_utils::{ProbeReceiver, TestProbeAgent, probe_receiver};
-    use modular_agent_core::{AgentStatus, ConnectionSpec, ToolCall, ToolCallFunction};
+    use modular_agent_core::{
+        AgentStatus, ConnectionSpec, ContentBlock, MessageContent, ToolCall, ToolCallFunction,
+    };
 
     fn user(text: &str) -> Message {
         Message::user(text.to_string())
+    }
+
+    #[test]
+    fn render_transcript_marks_image_tool_results() {
+        // A dropped image-only tool result must leave a trace in the
+        // summarization prompt, not an empty [tool] entry.
+        let msg = Message::tool_with_content(
+            "screenshot".to_string(),
+            MessageContent::Blocks(vec![ContentBlock::Image {
+                data: "base64data".to_string(),
+                mime_type: "image/png".to_string(),
+            }]),
+        );
+        let out = render_transcript(&[msg]);
+        assert!(out.contains("[tool]"));
+        assert!(out.contains("[image: image/png]"));
     }
 
     fn assistant(text: &str) -> Message {
