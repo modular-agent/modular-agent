@@ -1,6 +1,6 @@
 [package]
 name = "modular-agent-llm"
-version = "0.12.1"
+version = "0.13.0"
 description = "LLM Agents for Modular Agent"
 authors = ["Akira Ishino <akira@lumilab.jp>"]
 edition = "2024"
@@ -23,12 +23,12 @@ tokio = { version = "1.48.0", features = ["macros", "rt-multi-thread", "time"] }
 tokio-stream = "0.1"
 uuid = { version = "1.18.1", features = ["v4"] }
 
-modular-agent-core = "0.23.1"
+modular-agent-core = "0.24.0"
 
 [dev-dependencies]
 tempfile = "3"
 tokio = { version = "1.48.0", features = ["macros", "rt-multi-thread", "time"] }
-modular-agent-core = { version = "0.23.1", features = ["test-utils"] }
+modular-agent-core = { version = "0.24.0", features = ["test-utils"] }
 
 [features]
 default = ["image", "claude", "ollama", "openai"]
@@ -36,6 +36,3 @@ claude = ["reqwest", "eventsource-stream", "futures"]
 image = ["photon-rs"]
 ollama = ["reqwest", "futures"]
 openai = ["reqwest", "eventsource-stream", "futures"]
-
-[patch.crates-io]
-modular-agent-core = { path = "../modular-agent-core/modular-agent-core" }
