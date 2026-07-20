@@ -1,6 +1,6 @@
 [package]
 name = "modular-agent-cli"
-version = "0.2.0"
+version = "0.3.0"
 description = "CLI runner for Modular Agent"
 authors = ["Akira Ishino <akira@lumilab.jp>"]
 edition = "2024"
