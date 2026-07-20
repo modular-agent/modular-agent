@@ -1,6 +1,6 @@
 {
   "name": "modular-agent-desktop",
-  "version": "0.16.0",
+  "version": "0.17.0",
   "description": "",
   "type": "module",
   "private": true,
@@ -32,7 +32,7 @@
     "mode-watcher": "^1.1.0",
     "nanoid": "^5.1.16",
     "svelte-sonner": "^1.1.1",
-    "tauri-plugin-modular-agent-api": "^0.14.1"
+    "tauri-plugin-modular-agent-api": "^0.15.0"
   },
   "devDependencies": {
     "@internationalized/date": "^3.12.2",

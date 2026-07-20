@@ -2,12 +2,12 @@
 core:
   default_path: "../../modular-agent-core/modular-agent-core"
   git_url: "https://github.com/modular-agent/modular-agent-core.git"
-  default_version: "0.23.1"
+  default_version: "0.24.0"
 
 plugin:
   default_path: "../../tauri-plugin-modular-agent"
   git_url: "https://github.com/modular-agent/tauri-plugin-modular-agent.git"
-  default_version: "0.14.1"
+  default_version: "0.15.0"
 
 agents:
   - name: modular-agent-audio

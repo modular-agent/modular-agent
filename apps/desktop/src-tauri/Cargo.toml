@@ -1,6 +1,6 @@
 [package]
 name = "modular-agent-desktop"
-version = "0.16.0"
+version = "0.17.0"
 description = "Modular Agent Desktop Application"
 authors = ["Akira Ishino <akira@lumilab.jp>"]
 edition = "2021"
@@ -32,8 +32,8 @@ tauri-plugin-dialog = "2"
 tauri-plugin-log = "2"
 tauri-plugin-store = "2"
 tokio = { version = "1", features = ["full"] }
-modular-agent-core = "0.23.1"
-tauri-plugin-modular-agent = "0.14.1"
+modular-agent-core = "0.24.0"
+tauri-plugin-modular-agent = "0.15.0"
 modular-agent-audio = { git = "https://github.com/modular-agent/modular-agent-audio.git" }
 modular-agent-lifelog = { git = "https://github.com/modular-agent/modular-agent-lifelog.git" }
 modular-agent-llm = { git = "https://github.com/modular-agent/modular-agent-llm.git" }

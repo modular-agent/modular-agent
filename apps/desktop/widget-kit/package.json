@@ -18,6 +18,6 @@
   "peerDependencies": {
     "@xyflow/svelte": "^1.0.0",
     "svelte": "^5.0.0",
-    "tauri-plugin-modular-agent-api": ">=0.14.0"
+    "tauri-plugin-modular-agent-api": ">=0.15.0"
   }
 }
