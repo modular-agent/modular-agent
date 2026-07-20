@@ -2,7 +2,7 @@
 core:
   default_path: "../modular-agent-core/modular-agent-core"
   git_url: "https://github.com/modular-agent/modular-agent-core.git"
-  default_version: "0.23.1"
+  default_version: "0.24.0"
 
 agents:
   - name: modular-agent-audio
