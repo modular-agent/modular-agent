@@ -1,6 +1,6 @@
 [package]
 name = "modular-agent-web"
-version = "0.6.0"
+version = "0.7.0"
 description = "Web Agents for Modular Agent"
 authors = ["Akira Ishino <akira@lumilab.jp>"]
 edition = "2024"
@@ -15,10 +15,11 @@ serde_json = "1"
 url = "2.5.7"
 yt-transcript-rs = { version = "0.1.8", optional = true }
 
-modular-agent-core = "0.23.0"
+modular-agent-core = "0.24.0"
 
 [features]
-default = ["fetch-url", "html-scraper", "html-to-markdown", "reqwest/default-tls", "yt-transcript"]
+default = ["rustls-tls", "fetch-url", "html-scraper", "html-to-markdown", "yt-transcript"]
+default-tls = ["reqwest/default-tls"]
 rustls-tls = ["reqwest/rustls-tls"]
 fetch-url = []
 html-scraper = ["scraper"]
