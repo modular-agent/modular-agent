@@ -7,6 +7,7 @@ import type { useSvelteFlow } from "@xyflow/svelte";
 import { toast } from "svelte-sonner";
 import {
   getAgentSpec,
+  getPresetInfo,
   getPresetSpec,
   setAgentConfigs,
   startPreset as startPresetAPI,
@@ -28,10 +29,12 @@ import {
   importPreset as importPresetAPI,
   savePreset as savePresetAPI,
   newPresetWithName,
+  presetToFlow,
   resolveColorCss,
   KIND_COLOR_DEFAULTS,
 } from "$lib/agent";
 import { coreSettingsStore } from "$lib/core-settings-store.svelte";
+import { sharedPresetEvents } from "$lib/shared.svelte";
 import { tabStore } from "$lib/tab-store.svelte";
 import { titlebarState } from "$lib/titlebar-state.svelte";
 import type { PresetFlow, PresetNode, PresetEdge } from "$lib/types";
@@ -54,6 +57,7 @@ import {
   type NodePositionDelta,
 } from "./history.svelte";
 import { InspectorState, EXTENSION_KEYS } from "./inspector-state.svelte";
+import { reconcileFlow } from "./merge";
 
 async function withErrorToast<T>(fn: () => Promise<T>, message: string): Promise<T | undefined> {
   try {
@@ -75,6 +79,8 @@ async function withErrorLog<T>(fn: () => Promise<T>, message: string): Promise<T
 }
 
 const BG_COLORS = ["bg-background dark:bg-background", "bg-muted dark:bg-muted"];
+
+const EXTERNAL_MERGE_DEBOUNCE_MS = 300;
 
 export type EditorStateProps = {
   preset_id: () => string;
@@ -149,12 +155,45 @@ export class EditorState {
   // Drag state for undo
   private dragStartPositions: Map<string, { x: number; y: number }> | null = null;
 
+  // External change merge: last consumed structure-change seq and debounce timer
+  private lastStructureSeq = 0;
+  private externalMergeTimer: ReturnType<typeof setTimeout> | null = null;
+  // Generation token: only the most recently started merge/reload may apply
+  // its fetched snapshot, so overlapping runs cannot finish out of order.
+  private mergeGen = 0;
+
   // Inspector sync: track last synced data ref to detect actual data changes
   private _lastSyncedData: any = null;
 
   constructor(props: EditorStateProps) {
     this.props = props;
     this.history = getOrCreateHistory(props.preset_id(), coreSettingsStore.maxHistoryLength);
+
+    // Ignore structure changes that predate the loaded flow (e.g. tab reopen).
+    // The baseline is captured by the host before the flow fetch, so a change
+    // landing mid-fetch still satisfies seq > lastStructureSeq and merges.
+    this.lastStructureSeq =
+      props.flow().baseStructureSeq ??
+      sharedPresetEvents.structureChanged[props.preset_id()] ??
+      0;
+
+    // Merge externally-originated structure changes into the canvas.
+    // Tracks only this preset's key in the shared record.
+    $effect(() => {
+      const seq = sharedPresetEvents.structureChanged[this.preset_id] ?? 0;
+      untrack(() => {
+        if (seq > this.lastStructureSeq) {
+          this.lastStructureSeq = seq;
+          this.scheduleExternalMerge();
+        }
+      });
+      return () => {
+        if (this.externalMergeTimer !== null) {
+          clearTimeout(this.externalMergeTimer);
+          this.externalMergeTimer = null;
+        }
+      };
+    });
 
     // Subscribe to runtime settings changes
     $effect(() => {
@@ -175,9 +214,16 @@ export class EditorState {
       });
     });
 
-    // Sync nodes/edges from flow data
+    // Sync nodes/edges from flow data. Keyed off the arrays' identities, not
+    // the flow object's: a name-only flow update (e.g. a rename) keeps the
+    // same arrays and must not roll the canvas back to load-time state.
+    let lastSyncedFlowNodes: PresetNode[] | null = null;
+    let lastSyncedFlowEdges: PresetEdge[] | null = null;
     $effect.pre(() => {
       const flow = this.props.flow();
+      if (flow.nodes === lastSyncedFlowNodes && flow.edges === lastSyncedFlowEdges) return;
+      lastSyncedFlowNodes = flow.nodes;
+      lastSyncedFlowEdges = flow.edges;
       this.nodes = [...flow.nodes];
       this.edges = [...flow.edges];
     });
@@ -834,6 +880,94 @@ export class EditorState {
       return { ...edge, style: newStyle };
     });
     if (changed) this.edges = newEdges;
+  }
+
+  // --- External change merge ---
+
+  private isTabOpen(): boolean {
+    return tabStore.tabs.some((t) => t.id === this.preset_id);
+  }
+
+  /** Debounced trigger for merging externally-originated structure changes. */
+  private scheduleExternalMerge() {
+    if (this.externalMergeTimer !== null) clearTimeout(this.externalMergeTimer);
+    this.externalMergeTimer = setTimeout(() => {
+      this.externalMergeTimer = null;
+      // Re-arm while a local interaction is in flight. The local result wins
+      // afterwards because our own echo is origin-filtered.
+      if (this.resizing || this.dragStartPositions !== null || this.history.executing) {
+        this.scheduleExternalMerge();
+        return;
+      }
+      void this.applyExternalChanges();
+    }, EXTERNAL_MERGE_DEBOUNCE_MS);
+  }
+
+  /**
+   * Fetch the current backend state and merge it into the canvas, preserving
+   * selection and undo history for everything that survived. Never writes to
+   * the host's flow record — that would roll the canvas back to load-time state.
+   */
+  private async applyExternalChanges() {
+    if (!this.isTabOpen()) return;
+    const gen = ++this.mergeGen;
+    const mutationSeq = this.history.mutationSeq;
+    try {
+      const info = await getPresetInfo(this.preset_id);
+      const spec = await getPresetSpec(this.preset_id);
+      // A newer merge/reload started during IPC — let it win
+      if (gen !== this.mergeGen) return;
+      // Tab may have been closed during IPC (e.g. external preset removal)
+      if (!this.isTabOpen()) return;
+      if (!info || !spec) return;
+      // A local edit started or completed during IPC: the fetched snapshot
+      // may predate it, so discard it and re-arm instead of applying.
+      if (
+        this.resizing ||
+        this.dragStartPositions !== null ||
+        this.history.executing ||
+        this.history.mutationSeq !== mutationSeq
+      ) {
+        this.scheduleExternalMerge();
+        return;
+      }
+
+      const target = presetToFlow(info, spec);
+      const result = reconcileFlow(this.nodes, this.edges, target);
+      if (result.changed) {
+        this.nodes = result.nodes;
+        this.edges = result.edges;
+        this.history.purgeInvalidated(result.removedAgentIds, result.removedConnKeys);
+        // Backend content diverged from the last save
+        this.history.savedIndex = -1;
+      }
+      this.running = target.running;
+    } catch (e) {
+      console.error("Failed to merge external changes:", e);
+      await this.reloadFromBackend();
+    }
+  }
+
+  /** Full rebuild from the backend; last-resort recovery when merging fails. */
+  private async reloadFromBackend() {
+    if (!this.isTabOpen()) return;
+    const gen = ++this.mergeGen;
+    try {
+      const info = await getPresetInfo(this.preset_id);
+      const spec = await getPresetSpec(this.preset_id);
+      if (gen !== this.mergeGen) return;
+      if (!this.isTabOpen()) return;
+      if (!info || !spec) return;
+
+      const flow = presetToFlow(info, spec);
+      this.nodes = [...flow.nodes];
+      this.edges = [...flow.edges];
+      this.running = flow.running;
+      this.history.clear();
+    } catch (e) {
+      console.error("Failed to reload preset:", e);
+      toast.error("Failed to reload preset", { description: String(e) });
+    }
   }
 
   // --- Context menu ---

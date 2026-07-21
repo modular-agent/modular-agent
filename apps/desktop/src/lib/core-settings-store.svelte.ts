@@ -5,6 +5,8 @@ export const CORE_DEFAULTS = {
   connectionOpacity: 0.8,
   gridGap: 240,
   maxHistoryLength: 2000,
+  mcpServerEnabled: false,
+  mcpServerPort: 8765,
   showGrid: true,
   snapEnabled: true,
   snapGridSize: 240,

@@ -4,23 +4,45 @@ import type { AgentSpec, PresetInfo, Viewport } from "tauri-plugin-modular-agent
 // Messages
 
 export type AgentConfigUpdatedMessage = {
+  origin: string | null;
   agent_id: string;
   key: string;
   value: any;
 };
 
 export type AgentErrorMessage = {
+  origin: string | null;
   agent_id: string;
   message: string;
 };
 
 export type AgentInMessage = {
+  origin: string | null;
   agent_id: string;
   port: string;
 };
 
 export type AgentSpecUpdatedMessage = {
+  origin: string | null;
   agent_id: string;
+};
+
+export type PresetStructureChangedMessage = {
+  origin: string | null;
+  preset_id: string;
+};
+
+export type PresetRemovedMessage = {
+  origin: string | null;
+  preset_id: string;
+  name: string | null;
+};
+
+export type PresetRenamedMessage = {
+  origin: string | null;
+  id: string;
+  oldName: string | null;
+  newName: string;
 };
 
 // for SvelteFlow
@@ -32,6 +54,12 @@ export type PresetFlow = {
   edges: PresetEdge[];
   running: boolean;
   viewport: Viewport | null;
+  /**
+   * Structure-change seq observed just before this flow was fetched. The
+   * editor uses it as the merge baseline so a change landing during the
+   * fetch still triggers a merge after mount.
+   */
+  baseStructureSeq?: number;
 };
 
 export type PresetNode = Node & {
@@ -55,6 +83,11 @@ export type CoreSettings = {
   grid_gap?: number;
   max_history_length?: number;
   connection_opacity?: number;
+  mcp_server_enabled?: boolean;
+  mcp_server_port?: number;
+  // Read-only on the frontend: the backend generates and persists the token
+  // and ignores any token echoed back through set_core_settings.
+  mcp_server_token?: string | null;
 };
 
 export type PresetInfoExt = PresetInfo & {

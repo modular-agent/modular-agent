@@ -1,11 +1,22 @@
 import { listen } from "@tauri-apps/api/event";
 
+import { tabStore } from "$lib/tab-store.svelte";
+
 import type {
   AgentConfigUpdatedMessage,
   AgentErrorMessage,
   AgentInMessage,
   AgentSpecUpdatedMessage,
+  PresetRemovedMessage,
+  PresetStructureChangedMessage,
 } from "./types";
+
+// Origin convention: "desktop" is our own echo (ignore); "mcp" and null
+// (agent runtime internal) are external and must be reflected.
+const SELF_ORIGIN = "desktop";
+export function isExternalOrigin(origin: string | null | undefined): boolean {
+  return origin !== SELF_ORIGIN; // null counts as external
+}
 
 let eventSeq = 0;
 
@@ -43,9 +54,17 @@ class SharedAgentEvents {
 
 export const sharedAgentEvents = new SharedAgentEvents();
 
+class SharedPresetEvents {
+  // presetId → latest seq of an externally-originated structure change
+  structureChanged = $state<Record<string, number>>({});
+}
+
+export const sharedPresetEvents = new SharedPresetEvents();
+
 // Tauri event listeners (module-level, live for the app's lifetime)
 $effect.root(() => {
   listen<AgentConfigUpdatedMessage>("ma:agent_config_updated", (event) => {
+    if (!isExternalOrigin(event.payload.origin)) return;
     const { agent_id, key, value } = event.payload;
     const agent = sharedAgentEvents.agents[agent_id];
     if (!agent) return;
@@ -67,9 +86,26 @@ $effect.root(() => {
   });
 
   listen<AgentSpecUpdatedMessage>("ma:agent_spec_updated", (event) => {
+    if (!isExternalOrigin(event.payload.origin)) return;
     const { agent_id } = event.payload;
     const agent = sharedAgentEvents.agents[agent_id];
     if (!agent) return;
     agent.specUpdated = ++eventSeq;
+  });
+
+  listen<PresetStructureChangedMessage>("ma:preset_structure_changed", (event) => {
+    if (!isExternalOrigin(event.payload.origin)) return;
+    const { preset_id } = event.payload;
+    sharedPresetEvents.structureChanged[preset_id] = ++eventSeq;
+  });
+
+  listen<PresetRemovedMessage>("ma:preset_removed", (event) => {
+    if (!isExternalOrigin(event.payload.origin)) return;
+    const { preset_id } = event.payload;
+    // Closing the tab triggers editor-host's cleanup, which unloads the
+    // (already removed) preset from the backend idempotently.
+    if (tabStore.tabs.find((t) => t.id === preset_id)) {
+      tabStore.closeTab(preset_id);
+    }
   });
 });

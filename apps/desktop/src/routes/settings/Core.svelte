@@ -1,10 +1,16 @@
 <script lang="ts">
   import { onMount } from "svelte";
 
+  import { writeText } from "@tauri-apps/plugin-clipboard-manager";
+
   import { resetMode, setMode } from "mode-watcher";
   import { toast } from "svelte-sonner";
 
   import { getAgentDefinitions, getCoreSettings, setCoreSettings } from "$lib/agent";
+  import {
+    getCoreSettings as fetchCoreSettings,
+    regenerateMcpServerToken,
+  } from "$lib/modular_agent";
   import { Button } from "$lib/components/ui/button/index.js";
   import * as Card from "$lib/components/ui/card/index.js";
   import { FieldGroup, Field, FieldLabel } from "$lib/components/ui/field/index.js";
@@ -26,6 +32,9 @@
   let connection_opacity = $state(CORE_DEFAULTS.connectionOpacity * 100);
   let grid_gap = $state(CORE_DEFAULTS.gridGap);
   let max_history_length = $state(CORE_DEFAULTS.maxHistoryLength);
+  let mcp_server_enabled = $state(CORE_DEFAULTS.mcpServerEnabled);
+  let mcp_server_port = $state<number>(CORE_DEFAULTS.mcpServerPort);
+  let mcp_server_token = $state("");
   let run_in_background = $state(false);
   let shortcut_keys = $state<Record<string, string>>({});
   let show_grid = $state(true);
@@ -74,6 +83,9 @@
     );
     grid_gap = settings["grid_gap"] ?? CORE_DEFAULTS.gridGap;
     max_history_length = settings["max_history_length"] ?? CORE_DEFAULTS.maxHistoryLength;
+    mcp_server_enabled = settings["mcp_server_enabled"] ?? CORE_DEFAULTS.mcpServerEnabled;
+    mcp_server_port = settings["mcp_server_port"] ?? CORE_DEFAULTS.mcpServerPort;
+    mcp_server_token = settings["mcp_server_token"] ?? "";
     run_in_background = settings["run_in_background"] ?? false;
     show_grid = settings["show_grid"] ?? true;
     snap_enabled = settings["snap_enabled"] ?? true;
@@ -92,13 +104,15 @@
     initialGlobalShortcut = keys["global_shortcut"] ?? "";
   });
 
-  // Auto-save helper (silent on success, toast on error)
+  // Auto-save helper (silent on success, toast on error). The backend error
+  // is shown as the description: it distinguishes an actual save failure from
+  // "saved, but applying failed" (e.g. the MCP server port is already in use).
   async function autoSave(partial: Partial<CoreSettings>) {
     try {
       await setCoreSettings(partial);
     } catch (e) {
-      toast.error("Failed to save settings");
-      console.error("Failed to save settings:", e);
+      toast.error("Failed to apply settings", { description: String(e) });
+      console.error("Failed to apply settings:", e);
     }
   }
 
@@ -143,6 +157,67 @@
 
   function blurOnEnter(e: KeyboardEvent) {
     if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+  }
+
+  // MCP Server
+
+  const mcpConnectCommand = $derived(
+    `claude mcp add --transport http modular-agent http://127.0.0.1:${mcp_server_port}/mcp` +
+      (mcp_server_token ? ` --header "Authorization: Bearer ${mcp_server_token}"` : ""),
+  );
+
+  // The backend generates the token on first enable; re-read the persisted
+  // settings so it can be shown without restarting the settings page.
+  async function refreshMcpToken() {
+    try {
+      const fresh = await fetchCoreSettings();
+      mcp_server_token = fresh.mcp_server_token ?? "";
+    } catch (e) {
+      console.error("Failed to refresh MCP server token:", e);
+    }
+  }
+
+  async function toggleMcpServer(v: boolean) {
+    await autoSave({ mcp_server_enabled: v });
+    await refreshMcpToken();
+  }
+
+  // Guard against invalid port values: a cleared number input binds null,
+  // which the backend would silently turn into the default port (restarting
+  // the server on it). Restore the last saved value instead of saving.
+  async function saveMcpPort() {
+    if (
+      typeof mcp_server_port !== "number" ||
+      !Number.isInteger(mcp_server_port) ||
+      mcp_server_port < 1 ||
+      mcp_server_port > 65535
+    ) {
+      toast.error("MCP server port must be an integer between 1 and 65535");
+      mcp_server_port = getCoreSettings().mcp_server_port ?? CORE_DEFAULTS.mcpServerPort;
+      return;
+    }
+    await autoSave({ mcp_server_port });
+  }
+
+  async function regenerateToken() {
+    try {
+      const token = await regenerateMcpServerToken();
+      mcp_server_token = token;
+      toast.success("MCP server token regenerated", { description: token });
+    } catch (e) {
+      toast.error("Failed to regenerate token", { description: String(e) });
+      console.error("Failed to regenerate token:", e);
+    }
+  }
+
+  async function copyToClipboard(text: string) {
+    try {
+      await writeText(text);
+      toast.success("Copied to clipboard");
+    } catch (e) {
+      toast.error("Failed to copy");
+      console.error("Failed to copy:", e);
+    }
   }
 </script>
 
@@ -249,6 +324,76 @@
           onkeydown={blurOnEnter}
           class="max-w-xs"
         />
+      </Field>
+
+      <div class="font-semibold mt-4">MCP Server</div>
+
+      <Field orientation="horizontal">
+        <Switch bind:checked={mcp_server_enabled} onCheckedChange={toggleMcpServer} />
+        <FieldLabel>Enable MCP Server</FieldLabel>
+      </Field>
+
+      <Field orientation="vertical">
+        <FieldLabel>MCP Server Port</FieldLabel>
+        <Input
+          type="number"
+          min={1}
+          max={65535}
+          bind:value={mcp_server_port}
+          onchange={saveMcpPort}
+          onkeydown={blurOnEnter}
+          class="max-w-xs"
+        />
+      </Field>
+
+      <Field orientation="vertical" class="gap-1">
+        <FieldLabel>Access Token</FieldLabel>
+        <div class="flex items-center gap-2">
+          <code
+            class="flex-1 max-w-xl overflow-x-auto rounded bg-muted px-2 py-1.5 text-xs whitespace-nowrap"
+          >
+            {mcp_server_token || "(generated when the server is enabled)"}
+          </code>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            class="h-8 px-2 text-xs"
+            disabled={!mcp_server_token}
+            onclick={() => copyToClipboard(mcp_server_token)}
+          >
+            Copy
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            class="h-8 px-2 text-xs"
+            onclick={regenerateToken}
+          >
+            Regenerate
+          </Button>
+        </div>
+      </Field>
+
+      <Field orientation="vertical" class="gap-1">
+        <FieldLabel>Connect from Claude Code</FieldLabel>
+        <div class="flex items-center gap-2">
+          <code
+            class="flex-1 max-w-xl overflow-x-auto rounded bg-muted px-2 py-1.5 text-xs whitespace-nowrap"
+          >
+            {mcpConnectCommand}
+          </code>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            class="h-8 px-2 text-xs"
+            onclick={() => copyToClipboard(mcpConnectCommand)}
+          >
+            Copy
+          </Button>
+        </div>
       </Field>
 
       <div class="font-semibold mt-4">Global Shortcut</div>

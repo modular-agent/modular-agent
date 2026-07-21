@@ -24,6 +24,7 @@ import {
 import type { PresetNode, PresetEdge } from "$lib/types";
 
 import type { EditorState } from "./context.svelte";
+import { connKey } from "./merge";
 
 // --- Command interface ---
 
@@ -33,6 +34,11 @@ export interface Command {
   undo(editor: EditorState): Promise<void>;
   /** Remap a node/edge ID when another command's execute/undo re-creates entities with new IDs. */
   remapId?(oldId: string, newId: string): void;
+  /**
+   * React to agents/connections removed by an external edit. May trim internal
+   * deltas in place. Return false to discard the command from the history.
+   */
+  pruneExternalRemovals?(removedAgentIds: Set<string>, removedConnKeys: Set<string>): boolean;
 }
 
 // --- Helper ---
@@ -61,6 +67,13 @@ export class CommandHistory {
   savedIndex = $state(0);
   dirty = $derived(this.undoStack.length !== this.savedIndex);
   executing = false;
+  /**
+   * Monotonic counter of local mutations (command execute/undo/redo/push).
+   * The external merge snapshots it before fetching backend state and aborts
+   * if it changed, so a stale snapshot never overwrites a local edit that
+   * completed while the fetch was in flight.
+   */
+  mutationSeq = 0;
   private lastPushTime = 0;
   private maxLength: number;
   /** Temporary storage for ID remaps reported by commands during execute/undo. */
@@ -91,12 +104,14 @@ export class CommandHistory {
       this.redoStack = [];
       this.lastPushTime = Date.now();
     } finally {
+      this.mutationSeq++;
       this.executing = false;
     }
   }
 
   /** Push a command that was already executed (for operations where SvelteFlow handles the initial execution). */
   push(cmd: Command): void {
+    this.mutationSeq++;
     if (this.savedIndex > this.undoStack.length) this.savedIndex = -1;
     this.undoStack = [...this.undoStack, cmd];
     this.trimUndo();
@@ -106,6 +121,7 @@ export class CommandHistory {
 
   /** Push with coalescing for config changes. If the last command is an UpdateConfigCommand for the same node+key within the window, merge instead of pushing. */
   pushCoalescing(cmd: UpdateConfigCommand): void {
+    this.mutationSeq++;
     const now = Date.now();
     if (
       this.undoStack.length > 0 &&
@@ -150,6 +166,7 @@ export class CommandHistory {
       toast.error("Undo failed", { description: String(e) });
       return false;
     } finally {
+      this.mutationSeq++;
       this.executing = false;
     }
   }
@@ -172,6 +189,7 @@ export class CommandHistory {
       toast.error("Redo failed", { description: String(e) });
       return false;
     } finally {
+      this.mutationSeq++;
       this.executing = false;
     }
   }
@@ -180,6 +198,27 @@ export class CommandHistory {
     this.undoStack = [];
     this.redoStack = [];
     this.savedIndex = -1;
+  }
+
+  /**
+   * Drop commands that reference agents/connections removed by an external
+   * edit, so undo/redo never tries to touch entities that no longer exist.
+   * Commands without pruneExternalRemovals are unaffected.
+   */
+  purgeInvalidated(removedAgentIds: Set<string>, removedConnKeys: Set<string>): void {
+    if (removedAgentIds.size === 0 && removedConnKeys.size === 0) return;
+    const keep = (c: Command) =>
+      c.pruneExternalRemovals?.(removedAgentIds, removedConnKeys) ?? true;
+    const newUndo = this.undoStack.filter(keep);
+    const newRedo = this.redoStack.filter(keep);
+    if (
+      newUndo.length !== this.undoStack.length ||
+      newRedo.length !== this.redoStack.length
+    ) {
+      this.undoStack = newUndo;
+      this.redoStack = newRedo;
+      this.savedIndex = -1;
+    }
   }
 
   private trimUndo() {
@@ -267,6 +306,10 @@ export class AddAgentCommand implements Command {
     if (this.node && this.node.id === oldId) {
       this.node = { ...this.node, id: newId, data: { ...this.node.data, id: newId } };
     }
+  }
+
+  pruneExternalRemovals(removedAgentIds: Set<string>): boolean {
+    return this.node === null || !removedAgentIds.has(this.node.id);
   }
 }
 
@@ -374,6 +417,24 @@ export class DeleteCommand implements Command {
       return changed ? updated : e;
     });
   }
+
+  pruneExternalRemovals(removedAgentIds: Set<string>, removedConnKeys: Set<string>): boolean {
+    // Both endpoints of saved edges matter: undo must not re-create an edge
+    // pointing at an externally-removed neighbor.
+    if (this.deletedNodes.some((n) => removedAgentIds.has(n.id))) return false;
+    if (
+      this.deletedEdges.some(
+        (e) => removedAgentIds.has(e.source) || removedAgentIds.has(e.target),
+      )
+    )
+      return false;
+    // Drop saved edges whose connection was removed externally (endpoints
+    // surviving), so undo/redo cannot resurrect the deleted connection.
+    this.deletedEdges = this.deletedEdges.filter(
+      (e) => !removedConnKeys.has(connKey(e.source, e.sourceHandle, e.target, e.targetHandle)),
+    );
+    return true;
+  }
 }
 
 // ── CutCommand ──
@@ -435,6 +496,14 @@ export class AddConnectionCommand implements Command {
     if (this.edge.target === oldId) { updated.target = newId; changed = true; }
     if (changed) this.edge = updated;
   }
+
+  pruneExternalRemovals(removedAgentIds: Set<string>, removedConnKeys: Set<string>): boolean {
+    if (removedAgentIds.has(this.edge.source) || removedAgentIds.has(this.edge.target))
+      return false;
+    return !removedConnKeys.has(
+      connKey(this.edge.source, this.edge.sourceHandle, this.edge.target, this.edge.targetHandle),
+    );
+  }
 }
 
 // ── MoveNodesCommand ──
@@ -478,6 +547,11 @@ export class MoveNodesCommand implements Command {
       d.id === oldId ? { ...d, id: newId } : d,
     );
   }
+
+  pruneExternalRemovals(removedAgentIds: Set<string>): boolean {
+    this.deltas = this.deltas.filter((d) => !removedAgentIds.has(d.id));
+    return this.deltas.length > 0;
+  }
 }
 
 // ── ResizeNodeCommand ──
@@ -514,6 +588,10 @@ export class ResizeNodeCommand implements Command {
 
   remapId(oldId: string, newId: string) {
     if (this.nodeId === oldId) this.nodeId = newId;
+  }
+
+  pruneExternalRemovals(removedAgentIds: Set<string>): boolean {
+    return !removedAgentIds.has(this.nodeId);
   }
 }
 
@@ -643,6 +721,27 @@ export class PasteCommand implements Command {
       return changed ? updated : c;
     });
   }
+
+  pruneExternalRemovals(removedAgentIds: Set<string>, removedConnKeys: Set<string>): boolean {
+    // Both endpoints of saved edges matter: undo must not re-create an edge
+    // pointing at an externally-removed neighbor.
+    if (this.pastedNodes.some((n) => removedAgentIds.has(n.id))) return false;
+    if (
+      this.pastedEdges.some(
+        (e) => removedAgentIds.has(e.source) || removedAgentIds.has(e.target),
+      )
+    )
+      return false;
+    // Drop pasted edges whose connection was removed externally (endpoints
+    // surviving), so redo cannot resurrect the deleted connection.
+    this.pastedEdges = this.pastedEdges.filter(
+      (e) => !removedConnKeys.has(connKey(e.source, e.sourceHandle, e.target, e.targetHandle)),
+    );
+    this.connectionSpecs = this.connectionSpecs.filter(
+      (c) => !removedConnKeys.has(connKey(c.source, c.source_handle, c.target, c.target_handle)),
+    );
+    return true;
+  }
 }
 
 // ── UpdateConfigCommand ──
@@ -684,6 +783,10 @@ export class UpdateConfigCommand implements Command {
   remapId(oldId: string, newId: string) {
     if (this.nodeId === oldId) this.nodeId = newId;
   }
+
+  pruneExternalRemovals(removedAgentIds: Set<string>): boolean {
+    return !removedAgentIds.has(this.nodeId);
+  }
 }
 
 // ── UpdateTitleCommand ──
@@ -707,6 +810,10 @@ export class UpdateTitleCommand implements Command {
 
   remapId(oldId: string, newId: string) {
     if (this.nodeId === oldId) this.nodeId = newId;
+  }
+
+  pruneExternalRemovals(removedAgentIds: Set<string>): boolean {
+    return !removedAgentIds.has(this.nodeId);
   }
 }
 
@@ -736,6 +843,10 @@ export class UpdateExtensionCommand implements Command {
 
   remapId(oldId: string, newId: string) {
     if (this.nodeId === oldId) this.nodeId = newId;
+  }
+
+  pruneExternalRemovals(removedAgentIds: Set<string>): boolean {
+    return !removedAgentIds.has(this.nodeId);
   }
 }
 
@@ -769,6 +880,11 @@ export class BatchUpdateExtensionCommand implements Command {
 
   remapId(oldId: string, newId: string) {
     this.deltas = this.deltas.map((d) => (d.id === oldId ? { ...d, id: newId } : d));
+  }
+
+  pruneExternalRemovals(removedAgentIds: Set<string>): boolean {
+    this.deltas = this.deltas.filter((d) => !removedAgentIds.has(d.id));
+    return this.deltas.length > 0;
   }
 }
 
@@ -817,6 +933,11 @@ export class ToggleDisabledCommand implements Command {
       d.id === oldId ? { ...d, id: newId } : d,
     );
   }
+
+  pruneExternalRemovals(removedAgentIds: Set<string>): boolean {
+    this.deltas = this.deltas.filter((d) => !removedAgentIds.has(d.id));
+    return this.deltas.length > 0;
+  }
 }
 
 // ── ToggleShowErrCommand ──
@@ -846,6 +967,11 @@ export class ToggleShowErrCommand implements Command {
     this.deltas = this.deltas.map((d) =>
       d.id === oldId ? { ...d, id: newId } : d,
     );
+  }
+
+  pruneExternalRemovals(removedAgentIds: Set<string>): boolean {
+    this.deltas = this.deltas.filter((d) => !removedAgentIds.has(d.id));
+    return this.deltas.length > 0;
   }
 }
 

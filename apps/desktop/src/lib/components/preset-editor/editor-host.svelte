@@ -9,8 +9,9 @@
 
   import { presetToFlow } from "$lib/agent";
   import { closePreset } from "$lib/modular_agent";
+  import { sharedPresetEvents } from "$lib/shared.svelte";
   import { tabStore } from "$lib/tab-store.svelte";
-  import type { PresetFlow } from "$lib/types";
+  import type { PresetFlow, PresetRenamedMessage } from "$lib/types";
 
   import EditorInstance from "./editor-instance.svelte";
 
@@ -18,9 +19,13 @@
   let flows = $state.raw<Record<string, PresetFlow>>({});
   let loading = $state<Set<string>>(new Set());
 
-  // Listen for preset rename events (from move operations)
+  // Listen for preset rename events (from move operations).
+  // Deliberately not origin-filtered: sidebar renames arrive as our own echo
+  // and this is the only path that updates tab names. The flow update below
+  // changes only `name` and keeps the nodes/edges array identities, which the
+  // editor's flow-sync effect relies on to leave the canvas untouched.
   onMount(() => {
-    const unlisten = listen<{ id: string; newName: string }>(
+    const unlisten = listen<PresetRenamedMessage>(
       "ma:preset_renamed",
       (event) => {
         const { id, newName } = event.payload;
@@ -61,6 +66,10 @@
 
   async function loadFlow(id: string) {
     loading = new Set([...loading, id]);
+    // Capture the merge baseline before the fetch: a structure change that
+    // lands while the IPC is in flight bumps the seq past this value, so the
+    // editor still schedules a merge for it after mount.
+    const baseStructureSeq = sharedPresetEvents.structureChanged[id] ?? 0;
     try {
       const info = await getPresetInfo(id);
       // Re-check after await — tab might have been closed during IPC
@@ -72,6 +81,7 @@
         return;
       }
       const flow = presetToFlow(info, spec);
+      flow.baseStructureSeq = baseStructureSeq;
       // Check tab still exists before setting
       if (tabStore.tabs.find((t) => t.id === id)) {
         flows = { ...flows, [id]: flow };

@@ -28,6 +28,11 @@ export async function setGlobalConfigs(defName: string, configs: AgentConfigs): 
   await invoke("set_global_configs_cmd", { defName, configs });
 }
 
+/** Generate a fresh MCP server token and restart the server with it. Returns the new token. */
+export async function regenerateMcpServerToken(): Promise<string> {
+  return await invoke("regenerate_mcp_server_token_cmd");
+}
+
 // utilities
 
 export function truncate(str: string, maxLength: number, suffix: string = "..."): string {

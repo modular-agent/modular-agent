@@ -90,6 +90,8 @@
     getAgentSpec(id).then((spec) => {
       if (spec) {
         updateNodeData(id, { ...spec });
+        // The update may have changed port_colors; recolor outgoing edges
+        editor.refreshEdgeColorsForNode(id, spec.port_colors ?? null);
       }
     });
   });
