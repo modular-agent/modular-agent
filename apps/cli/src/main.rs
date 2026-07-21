@@ -1,6 +1,7 @@
 use clap::Parser;
+use modular_agent_core::mcp_server::{McpServerConfig, start_mcp_server};
 use modular_agent_core::{AgentError, AgentValue, ModularAgent, ModularAgentEvent};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::select;
 
@@ -20,6 +21,14 @@ struct Args {
     /// Name of the output channel
     #[arg(short, long, default_value = "output")]
     output: String,
+
+    /// Serve the built-in MCP server on this port (binds 127.0.0.1 only)
+    #[arg(long, value_name = "PORT")]
+    mcp_port: Option<u16>,
+
+    /// Bearer token required for MCP requests (omit to disable auth)
+    #[arg(long, value_name = "TOKEN", requires = "mcp_port")]
+    mcp_token: Option<String>,
 
     /// Verbose output
     #[arg(short, long)]
@@ -51,17 +60,45 @@ async fn main() -> Result<(), AgentError> {
 
     // Subscribe to external output BEFORE starting preset (avoid race condition)
     let output_channel = args.output.clone();
-    let mut output_rx = ma.subscribe_to_event(move |event| {
-        if let ModularAgentEvent::ExternalOutput(name, value) = event {
-            if name == output_channel {
-                return Some(value);
-            }
+    let mut output_rx = ma.subscribe_to_event(move |envelope| {
+        if let ModularAgentEvent::ExternalOutput(name, value) = envelope.event
+            && name == output_channel
+        {
+            return Some(value);
         }
         None
     });
 
-    // Load and start preset
+    // Load the preset first so MCP clients can see it as soon as the server
+    // is up, but start the MCP server before starting the preset: a bind
+    // failure (e.g. port already in use) must not leave running agents
+    // behind without their stop() hooks being called.
     let preset_id = ma.open_preset_from_file(&args.preset, None).await?;
+
+    // Optionally serve the built-in MCP server so external agents (e.g.
+    // Claude Code) can inspect and edit the running flow.
+    let mcp_server = match args.mcp_port {
+        Some(port) => {
+            // save_preset writes relative to this dir; the directory of the
+            // preset being run is the only presets root the CLI knows about.
+            let presets_dir = match Path::new(&args.preset).parent() {
+                Some(dir) if !dir.as_os_str().is_empty() => dir.to_path_buf(),
+                _ => PathBuf::from("."),
+            };
+            let config = McpServerConfig {
+                port,
+                presets_dir: Some(presets_dir),
+                token: args.mcp_token.clone(),
+            };
+            let handle = start_mcp_server(ma.clone(), config).await?;
+            if args.verbose {
+                eprintln!("MCP server listening on http://127.0.0.1:{}/mcp", port);
+            }
+            Some(handle)
+        }
+        None => None,
+    };
+
     ma.start_preset(&preset_id).await?;
 
     if args.verbose {
@@ -107,7 +144,11 @@ async fn main() -> Result<(), AgentError> {
         }
     }
 
-    // Graceful shutdown
+    // Graceful shutdown: stop the MCP server first so no external edits
+    // arrive while the preset is being torn down.
+    if let Some(server) = mcp_server {
+        server.stop().await;
+    }
     ma.stop_preset(&preset_id).await?;
     ma.quit();
 

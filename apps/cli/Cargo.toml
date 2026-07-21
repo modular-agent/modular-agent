@@ -1,6 +1,6 @@
 [package]
 name = "modular-agent-cli"
-version = "0.3.0"
+version = "0.4.0"
 description = "CLI runner for Modular Agent"
 authors = ["Akira Ishino <akira@lumilab.jp>"]
 edition = "2024"
@@ -17,9 +17,31 @@ env_logger = "0.11"
 log = "0.4"
 serde_json = "1"
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros", "io-util", "io-std", "signal", "sync"] }
-modular-agent-core = "0.24.0"
+modular-agent-core = { version = "0.25.0", features = ["mcp-server"] }
 modular-agent-llm = { git = "https://github.com/modular-agent/modular-agent-llm.git" }
 modular-agent-slack = { git = "https://github.com/modular-agent/modular-agent-slack.git" }
 modular-agent-sqlx = { git = "https://github.com/modular-agent/modular-agent-sqlx.git" }
 modular-agent-std = { git = "https://github.com/modular-agent/modular-agent-std.git" }
 modular-agent-web = { git = "https://github.com/modular-agent/modular-agent-web.git" }
+
+# core 0.25.0 is not yet published to crates.io; build against the sibling
+# checkout until it is released.
+[patch.crates-io]
+modular-agent-core = { path = "../modular-agent-core/modular-agent-core" }
+
+# The upstream agent repos still require core ^0.24, which the path-patched
+# 0.25 cannot satisfy — cargo would silently resolve a second, registry copy
+# of core whose inventory-based agent registry is disjoint from the app's, so
+# none of these crates' agents would be registered. Use the sibling checkouts
+# (core dep bumped to 0.25) until the repos are updated. Cargo.lock must
+# contain exactly one modular-agent-core entry.
+[patch."https://github.com/modular-agent/modular-agent-llm.git"]
+modular-agent-llm = { path = "../modular-agent-llm" }
+[patch."https://github.com/modular-agent/modular-agent-slack.git"]
+modular-agent-slack = { path = "../modular-agent-slack" }
+[patch."https://github.com/modular-agent/modular-agent-sqlx.git"]
+modular-agent-sqlx = { path = "../modular-agent-sqlx" }
+[patch."https://github.com/modular-agent/modular-agent-std.git"]
+modular-agent-std = { path = "../modular-agent-std" }
+[patch."https://github.com/modular-agent/modular-agent-web.git"]
+modular-agent-web = { path = "../modular-agent-web" }

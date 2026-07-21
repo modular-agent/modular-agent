@@ -3,17 +3,8 @@
 //! Each `use` pulls in the crate, causing #[modular_agent] registrations
 //! to be linked via the `inventory` crate.
 
-#[allow(unused_imports)]
-use modular_agent_llm;
-
-#[allow(unused_imports)]
-use modular_agent_slack;
-
-#[allow(unused_imports)]
-use modular_agent_sqlx;
-
-#[allow(unused_imports)]
-use modular_agent_std;
-
-#[allow(unused_imports)]
-use modular_agent_web;
+use modular_agent_llm as _;
+use modular_agent_slack as _;
+use modular_agent_sqlx as _;
+use modular_agent_std as _;
+use modular_agent_web as _;
