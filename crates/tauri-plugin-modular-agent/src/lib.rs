@@ -60,7 +60,7 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             commands::write_external_input,
         ])
         .setup(|app, _api| {
-            let ma = ModularAgent::init()?;
+            let ma = ModularAgent::init()?.with_origin("desktop");
             app.manage(ma);
             Ok(())
         })
