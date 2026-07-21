@@ -109,7 +109,8 @@ VERIFYING A FLOW
    source (e.g. a Slack message).
 3. Poll get_external_outputs and get_agent_errors. Both return latest_seq;
    pass it back as since_seq on the next call to receive only new records.
-   dropped > 0 means the buffer overflowed and some records were lost.
+   dropped > 0 means the collector fell behind the event stream and some
+   records were lost before capture.
 4. stop_preset when done.
 
 WORKED EXAMPLE - "listen to a Slack channel, send each message to a chat
@@ -1157,7 +1158,7 @@ impl McpServer {
 
     /// Get recent agent errors (from running presets). Poll with since_seq
     /// set to the previous latest_seq to receive only new records; dropped
-    /// counts events lost to buffer overflow.
+    /// counts events lost when the collector fell behind the event stream.
     #[tool]
     async fn get_agent_errors(
         &self,
@@ -1183,7 +1184,8 @@ impl McpServer {
 
     /// Get recent external output values (from running presets). Poll with
     /// since_seq set to the previous latest_seq to receive only new records;
-    /// dropped counts events lost to buffer overflow.
+    /// dropped counts events lost when the collector fell behind the event
+    /// stream.
     #[tool]
     async fn get_external_outputs(
         &self,

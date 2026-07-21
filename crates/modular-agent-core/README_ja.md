@@ -40,14 +40,14 @@ modular-agent-core は、複数のエージェントをオーケストレーシ�
 
 ```toml
 [dependencies]
-modular-agent-core = "0.23"
+modular-agent-core = "0.25"
 ```
 
 デフォルト Feature を無効にする場合:
 
 ```toml
 [dependencies]
-modular-agent-core = { version = "0.23", default-features = false, features = ["llm"] }
+modular-agent-core = { version = "0.25", default-features = false, features = ["llm"] }
 ```
 
 ## クイックスタート
@@ -94,7 +94,50 @@ async fn main() -> Result<(), AgentError> {
 | `image`      | 有効       | photon-rs による画像処理                        |
 | `llm`        | 有効       | Message / ToolCall 型による LLM 連携            |
 | `mcp`        | 有効       | Model Context Protocol 連携                     |
+| `mcp-server` | 無効       | 内蔵 MCP サーバー（`file` を含む）              |
 | `test-utils` | 無効       | テストユーティリティ                            |
+
+## 外部エージェントによる編集（MCP サーバー）
+
+`mcp-server` feature を有効にすると、ホストアプリケーションは実行中の `ModularAgent` を localhost の MCP エンドポイントとして公開でき、Claude Code などの外部 AI エージェントが自然言語からエージェント定義の参照、プリセットの構築・編集、実行中フローの動作確認を行えるようになります。
+
+```toml
+modular-agent-core = { version = "0.25", features = ["mcp-server"] }
+```
+
+```rust
+use modular_agent_core::mcp_server::{McpServerConfig, start_mcp_server};
+
+// http://127.0.0.1:8765/mcp で streamable HTTP を提供（localhost のみ）。
+let handle = start_mcp_server(
+    ma.clone(),
+    McpServerConfig {
+        port: 8765,
+        // save_preset ツールの保存先ルート。None なら保存不可。
+        presets_dir: Some("/path/to/presets".into()),
+        // 必須の Bearer トークン。None なら認証なし。
+        token: Some("secret".into()),
+    },
+)
+.await?;
+// ...
+handle.stop().await;
+```
+
+Claude Code からの接続:
+
+```bash
+claude mcp add --transport http modular-agent http://127.0.0.1:8765/mcp \
+    --header "Authorization: Bearer secret"
+```
+
+たとえば次のように依頼します:
+
+> Slack チャンネルを listen して、メッセージを Chat エージェントに送り、返答をチャンネルに投稿するフローを作って
+
+外部エージェントは通常、`list_agent_definitions` でカタログを取得したあと、`create_preset` → `add_agent` ×4（Slack Listener / Slack To Message / Chat / Slack Post）→ `add_connection` ×3 → `save_preset` の順にツールを呼びます。さらに `start_preset` で実行し、`write_external_input` でテスト値を投入して `get_external_outputs` / `get_agent_errors` をポーリングすれば、フローをエンドツーエンドで動作確認できます。両ポーリングツールは `latest_seq`（そのレスポンスで返した最後のレコードの seq）を返し、次の呼び出しで `since_seq` として渡すと新しいレコードだけを受け取れます。`dropped > 0` はイベントコレクタが broadcast ストリームに追いつけず、一部のイベントをキャプチャできなかったことを示します。なお、キャプチャバッファ自体は種別ごとに最新 200 レコードのみ保持するため、ポーリングが間に合わなかったレコードは `dropped` に反映されずに押し出されることがあります。構造変更は `ModularAgentEvent::PresetStructureChanged` を emit するため、ホスト（modular-agent-desktop など）は UI をライブ更新できます。ツールは全 17 種で、定義参照・プリセット CRUD・エージェント/接続編集・設定更新・start/stop・実行時検証をカバーします。
+
+サーバーは `127.0.0.1` のみにバインドします。`token` を設定した場合、すべてのリクエストに `Authorization: Bearer <token>` ヘッダーが必須で、ない場合は 401 で拒否されます。トークンなしでは認証がないため、有効化は明示的に行ってください。`modular-agent-desktop` では Settings → Core から（トークンは自動生成）、`modular-agent-cli` では `--mcp-port <PORT>` と `--mcp-token <TOKEN>` フラグで有効化します。
 
 ## ドキュメント
 
