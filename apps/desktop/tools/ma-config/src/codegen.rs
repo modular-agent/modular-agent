@@ -3,10 +3,15 @@ use std::path::Path;
 
 use toml_edit::{Array, DocumentMut, InlineTable, Item, Table, Value};
 
-use crate::config::{AgentSource, BuildConfig, DepConfig};
+use crate::config::{AgentEntry, AgentSource, BuildConfig, DepConfig};
+use crate::registry::{self, Registry};
 
 /// Update `src-tauri/Cargo.toml` with the selected agents as dependencies.
-pub fn update_cargo_toml(config: &BuildConfig, tauri_root: &Path) -> Result<(), String> {
+pub fn update_cargo_toml(
+    config: &BuildConfig,
+    registry: &Registry,
+    tauri_root: &Path,
+) -> Result<(), String> {
     let cargo_path = tauri_root.join("Cargo.toml");
     let original =
         fs::read_to_string(&cargo_path).map_err(|e| format!("Failed to read Cargo.toml: {e}"))?;
@@ -19,10 +24,10 @@ pub fn update_cargo_toml(config: &BuildConfig, tauri_root: &Path) -> Result<(), 
         .map_err(|e| format!("Failed to parse Cargo.toml: {e}"))?;
 
     // Update dependencies
-    update_dependencies(&mut doc, config)?;
+    update_dependencies(&mut doc, config, registry)?;
 
-    // Update [patch.crates-io] for core/plugin when using Path or Git
-    update_patch_section(&mut doc, config);
+    // Local overrides go into [patch] so [dependencies] keeps canonical sources
+    update_patch_section(&mut doc, config, registry);
 
     fs::write(&cargo_path, doc.to_string()).map_err(|e| format!("Failed to write Cargo.toml: {e}"))
 }
@@ -46,7 +51,11 @@ pub fn generate_agents_rs(config: &BuildConfig, tauri_root: &Path) -> Result<(),
     fs::write(&agents_path, content).map_err(|e| format!("Failed to write agents.rs: {e}"))
 }
 
-fn update_dependencies(doc: &mut DocumentMut, config: &BuildConfig) -> Result<(), String> {
+fn update_dependencies(
+    doc: &mut DocumentMut,
+    config: &BuildConfig,
+    registry: &Registry,
+) -> Result<(), String> {
     let deps = doc["dependencies"]
         .as_table_mut()
         .ok_or("Missing [dependencies] in Cargo.toml")?;
@@ -87,9 +96,18 @@ fn update_dependencies(doc: &mut DocumentMut, config: &BuildConfig) -> Result<()
         Item::Value(dep_config_to_dep_value(&config.plugin)),
     );
 
-    // Add selected agents
+    // Add selected agents. A local path for a known agent is expressed as the
+    // canonical git URL here plus a [patch] entry, so reverting to the
+    // canonical source only requires deleting the patch section.
     for agent in &config.agents {
-        let mut dep = source_to_inline_table(&agent.source);
+        let mut dep = match agent_patch_git_url(agent, registry) {
+            Some(url) => {
+                let mut table = InlineTable::new();
+                table.insert("git", Value::from(url));
+                table
+            }
+            None => source_to_inline_table(&agent.source),
+        };
         if let Some(features) = &agent.crate_features {
             dep.insert("default-features", Value::from(false));
             let mut features_array = Array::new();
@@ -114,36 +132,78 @@ fn dep_config_to_dep_value(dep_config: &DepConfig) -> Value {
     }
 }
 
-/// Build [patch.crates-io] section for core and plugin when they use Path or Git.
-fn update_patch_section(doc: &mut DocumentMut, config: &BuildConfig) {
+/// Canonical git URL for an agent whose local path should be expressed as a
+/// [patch] entry. Returns `None` when the source goes inline into
+/// [dependencies] (git/registry sources, or custom agents unknown to the
+/// registry, which have no canonical URL to patch against).
+fn agent_patch_git_url<'a>(agent: &AgentEntry, registry: &'a Registry) -> Option<&'a str> {
+    if !matches!(agent.source, AgentSource::Path { .. }) {
+        return None;
+    }
+    registry::find_by_name(&registry.agents, &agent.name).map(|k| k.git_url.as_str())
+}
+
+/// Build [patch.crates-io] for core/plugin overrides and [patch."<git-url>"]
+/// for agents overridden with a local path.
+fn update_patch_section(doc: &mut DocumentMut, config: &BuildConfig, registry: &Registry) {
     // Remove existing [patch] section first
     doc.remove("patch");
 
-    let mut patches: Vec<(&str, &AgentSource)> = Vec::new();
-
+    let mut crates_io_table = Table::new();
     if !matches!(config.core.source, AgentSource::Registry { .. }) {
-        patches.push(("modular-agent-core", &config.core.source));
+        crates_io_table.insert(
+            "modular-agent-core",
+            Item::Value(Value::InlineTable(source_to_inline_table(
+                &config.core.source,
+            ))),
+        );
     }
     if !matches!(config.plugin.source, AgentSource::Registry { .. }) {
-        patches.push(("tauri-plugin-modular-agent", &config.plugin.source));
-    }
-
-    if patches.is_empty() {
-        return;
-    }
-
-    // Build [patch.crates-io] table
-    let mut crates_io_table = Table::new();
-    for (name, source) in patches {
         crates_io_table.insert(
-            name,
-            Item::Value(Value::InlineTable(source_to_inline_table(source))),
+            "tauri-plugin-modular-agent",
+            Item::Value(Value::InlineTable(source_to_inline_table(
+                &config.plugin.source,
+            ))),
         );
     }
 
+    let git_patches: Vec<(&str, &AgentEntry)> = config
+        .agents
+        .iter()
+        .filter_map(|agent| agent_patch_git_url(agent, registry).map(|url| (url, agent)))
+        .collect();
+
+    if crates_io_table.is_empty() && git_patches.is_empty() {
+        return;
+    }
+
+    let comment = "\n# Local source overrides (generated by ma-config).\n\
+                   # Delete these [patch] sections to build from the canonical sources above.\n";
+    let mut commented = false;
+
     let mut patch_table = Table::new();
     patch_table.set_implicit(true);
-    patch_table.insert("crates-io", Item::Table(crates_io_table));
+
+    if !crates_io_table.is_empty() {
+        crates_io_table.decor_mut().set_prefix(comment);
+        commented = true;
+        patch_table.insert("crates-io", Item::Table(crates_io_table));
+    }
+
+    for (url, agent) in git_patches {
+        let item = patch_table.entry(url).or_insert(Item::Table(Table::new()));
+        if let Some(table) = item.as_table_mut() {
+            if !commented {
+                table.decor_mut().set_prefix(comment);
+                commented = true;
+            }
+            table.insert(
+                &agent.name,
+                Item::Value(Value::InlineTable(source_to_inline_table(&agent.source))),
+            );
+        }
+    }
+
     doc.insert("patch", Item::Table(patch_table));
 }
 
@@ -224,4 +284,130 @@ pub fn validate_paths(config: &BuildConfig, tauri_root: &Path) -> Vec<String> {
         }
     }
     warnings
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::registry::{DepDefaults, KnownAgent};
+
+    fn test_registry() -> Registry {
+        Registry {
+            core: DepDefaults {
+                default_path: "../../modular-agent-core/modular-agent-core".into(),
+                git_url: "https://github.com/modular-agent/modular-agent-core.git".into(),
+                default_version: "0.25.0".into(),
+            },
+            plugin: DepDefaults {
+                default_path: "../../tauri-plugin-modular-agent".into(),
+                git_url: "https://github.com/modular-agent/tauri-plugin-modular-agent.git".into(),
+                default_version: "0.16.0".into(),
+            },
+            agents: vec![KnownAgent {
+                name: "modular-agent-std".into(),
+                description: "Standard agents".into(),
+                git_url: "https://github.com/modular-agent/modular-agent-std.git".into(),
+                available_features: vec![],
+                default_features: vec![],
+                conflicts: vec![],
+                is_default: true,
+            }],
+        }
+    }
+
+    fn test_config() -> BuildConfig {
+        BuildConfig {
+            core: DepConfig {
+                default_version: "0.25.0".into(),
+                source: AgentSource::Path {
+                    path: "../../modular-agent-core/modular-agent-core".into(),
+                },
+            },
+            plugin: DepConfig {
+                default_version: "0.16.0".into(),
+                source: AgentSource::Registry {
+                    version: "0.16.0".into(),
+                },
+            },
+            agents: vec![
+                AgentEntry {
+                    name: "modular-agent-std".into(),
+                    source: AgentSource::Path {
+                        path: "../../modular-agent-std".into(),
+                    },
+                    crate_features: None,
+                },
+                AgentEntry {
+                    name: "modular-agent-custom".into(),
+                    source: AgentSource::Path {
+                        path: "../../modular-agent-custom".into(),
+                    },
+                    crate_features: None,
+                },
+            ],
+        }
+    }
+
+    #[test]
+    fn local_paths_become_patches_not_dependency_rewrites() {
+        let mut doc: DocumentMut = "[dependencies]\nserde = \"1\"\n\
+             modular-agent-std = { path = \"stale\" }\n"
+            .parse()
+            .unwrap();
+        let config = test_config();
+        let registry = test_registry();
+
+        update_dependencies(&mut doc, &config, &registry).unwrap();
+        update_patch_section(&mut doc, &config, &registry);
+        let out = doc.to_string();
+
+        // Known agent keeps its canonical git URL in [dependencies]...
+        assert!(out.contains(
+            "modular-agent-std = { git = \"https://github.com/modular-agent/modular-agent-std.git\" }"
+        ));
+        // ...and its local path lives in a deletable [patch] section.
+        assert!(
+            out.contains("[patch.\"https://github.com/modular-agent/modular-agent-std.git\"]")
+        );
+        assert!(out.contains("modular-agent-std = { path = \"../../modular-agent-std\" }"));
+
+        // Custom agent without a registry entry falls back to an inline path.
+        assert!(out.contains("modular-agent-custom = { path = \"../../modular-agent-custom\" }"));
+
+        // Core path override goes into [patch.crates-io]; version stays in deps.
+        assert!(out.contains("[patch.crates-io]"));
+        assert!(out.contains(
+            "modular-agent-core = { version = \"0.25.0\", features = [\"mcp-server\"] }"
+        ));
+
+        // Plugin from crates.io needs no patch entry.
+        assert!(!out.contains("tauri-plugin-modular-agent = { path"));
+    }
+
+    #[test]
+    fn no_patch_section_when_everything_is_canonical() {
+        let mut doc: DocumentMut = "[dependencies]\nserde = \"1\"\n\n[patch.crates-io]\n\
+             modular-agent-core = { path = \"old\" }\n"
+            .parse()
+            .unwrap();
+        let mut config = test_config();
+        config.core.source = AgentSource::Registry {
+            version: "0.25.0".into(),
+        };
+        config.agents = vec![AgentEntry {
+            name: "modular-agent-std".into(),
+            source: AgentSource::Git {
+                url: "https://github.com/modular-agent/modular-agent-std.git".into(),
+                tag: None,
+            },
+            crate_features: None,
+        }];
+        let registry = test_registry();
+
+        update_dependencies(&mut doc, &config, &registry).unwrap();
+        update_patch_section(&mut doc, &config, &registry);
+        let out = doc.to_string();
+
+        assert!(!out.contains("[patch"));
+    }
 }

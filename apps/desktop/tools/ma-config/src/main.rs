@@ -103,7 +103,7 @@ fn run(args: Args) -> Result<(), String> {
 
     // Generate files
     println!("Updating src-tauri/Cargo.toml...");
-    codegen::update_cargo_toml(&build_config, &tauri_root)?;
+    codegen::update_cargo_toml(&build_config, &registry, &tauri_root)?;
 
     println!("Generating src-tauri/src/agents.rs...");
     codegen::generate_agents_rs(&build_config, &tauri_root)?;
