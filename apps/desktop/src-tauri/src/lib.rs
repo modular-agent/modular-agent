@@ -112,10 +112,11 @@ pub fn run() {
             modular_agent_desktop::app::open_preset_cmd,
             modular_agent_desktop::settings::get_core_settings_cmd,
             modular_agent_desktop::settings::set_core_settings_cmd,
+            modular_agent_desktop::settings::regenerate_mcp_server_token_cmd,
             modular_agent_desktop::settings::set_global_configs_cmd,
         ])
-        .on_window_event(|window, event| match event {
-            tauri::WindowEvent::CloseRequested { api, .. } => {
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 #[cfg(not(target_os = "macos"))]
                 {
                     window.hide().unwrap();
@@ -138,7 +139,6 @@ pub fn run() {
                     window.app_handle().exit(0);
                 }
             }
-            _ => {}
         })
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
@@ -150,6 +150,7 @@ pub fn run() {
                         .unwrap_or_else(|e| {
                             log::error!("Failed to start agents: {}", e);
                         });
+                    modular_agent_desktop::settings::init_mcp_server(app).await;
                     log::info!("Module Agent Desktop is ready.");
                 });
             }

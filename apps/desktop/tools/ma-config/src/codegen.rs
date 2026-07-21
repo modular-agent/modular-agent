@@ -40,10 +40,7 @@ pub fn generate_agents_rs(config: &BuildConfig, tauri_root: &Path) -> Result<(),
 
     for agent in &config.agents {
         let crate_name = agent.rust_crate_name();
-        content.push_str(&format!(
-            "\n#[allow(unused_imports)]\n\
-             use {crate_name};\n"
-        ));
+        content.push_str(&format!("\nuse {crate_name} as _;\n"));
     }
 
     fs::write(&agents_path, content).map_err(|e| format!("Failed to write agents.rs: {e}"))
@@ -70,11 +67,18 @@ fn update_dependencies(doc: &mut DocumentMut, config: &BuildConfig) -> Result<()
         deps.remove(&key);
     }
 
-    // Add core — always as version string in [dependencies].
+    // Add core — always as version in [dependencies].
     // Path/Git override goes into [patch.crates-io].
+    // The desktop app embeds the flow-editing MCP server (toggled at runtime
+    // via Core Settings), so the "mcp-server" feature is always required.
+    let mut core_dep = InlineTable::new();
+    core_dep.insert("version", dep_config_to_dep_value(&config.core));
+    let mut core_features = Array::new();
+    core_features.push("mcp-server");
+    core_dep.insert("features", Value::from(core_features));
     deps.insert(
         "modular-agent-core",
-        Item::Value(dep_config_to_dep_value(&config.core)),
+        Item::Value(Value::InlineTable(core_dep)),
     );
 
     // Add plugin — same strategy as core.

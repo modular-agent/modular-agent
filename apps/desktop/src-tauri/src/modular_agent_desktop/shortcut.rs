@@ -30,12 +30,10 @@ pub fn init(app: &AppHandle) -> Result<()> {
                 .with_shortcut(shortcut)?
                 .with_handler(move |app, key, event| {
                     log::info!("handle shortcut {:?} {:?}", key, event);
-                    if event.state == ShortcutState::Pressed {
-                        if key == &shortcut {
-                            modular_agent_desktop::window::show_main(app).unwrap_or_else(|e| {
-                                log::error!("Failed to show main window: {}", e);
-                            });
-                        }
+                    if event.state == ShortcutState::Pressed && key == &shortcut {
+                        modular_agent_desktop::window::show_main(app).unwrap_or_else(|e| {
+                            log::error!("Failed to show main window: {}", e);
+                        });
                     }
                 })
                 .build(),

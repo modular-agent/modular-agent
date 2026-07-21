@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-use std::sync::Arc;
 use std::{path::PathBuf, sync::Mutex};
 
 use anyhow::{anyhow, bail, Context as _, Result};
@@ -16,27 +14,19 @@ use crate::modular_agent_desktop::{
     observer::start_modular_agent_observer, settings::CoreSettings,
 };
 
-static MODULAR_AGENT_PATH: &'static str = ".modular_agent";
-static MODULAR_AGENT_PRESETS_PATH: &'static str = "presets";
+static MODULAR_AGENT_PATH: &str = ".modular_agent";
+static MODULAR_AGENT_PRESETS_PATH: &str = "presets";
 
 const EMIT_PRESET_LIST_CHANGED: &str = "ma:preset_list_changed";
-const EMIT_PRESET_RENAMED: &str = "ma:preset_renamed";
 
 #[derive(Clone, Serialize)]
 struct PresetListChangedPayload {
     path: String,
 }
 
-#[derive(Clone, Serialize)]
-struct PresetRenamedPayload {
-    id: String,
-    #[serde(rename = "newName")]
-    new_name: String,
-}
-
 /// Extract parent directory path from a preset name.
 /// e.g., "Category/MyPreset" -> "Category", "MyPreset" -> ""
-fn parent_preset_path(name: &str) -> String {
+pub(crate) fn parent_preset_path(name: &str) -> String {
     match name.rfind('/') {
         Some(i) => name[..i].to_string(),
         None => String::new(),
@@ -45,17 +35,11 @@ fn parent_preset_path(name: &str) -> String {
 
 pub struct ModularAgentApp {
     ma: ModularAgent,
-
-    /// Map of preset name to preset ID.
-    presets: Arc<Mutex<HashMap<String, String>>>,
 }
 
 impl ModularAgentApp {
     pub fn new(ma: &ModularAgent) -> Self {
-        Self {
-            ma: ma.clone(),
-            presets: Arc::new(Mutex::new(HashMap::new())),
-        }
+        Self { ma: ma.clone() }
     }
 
     // Preset
@@ -65,9 +49,7 @@ impl ModularAgentApp {
         if !is_valid_preset_name(&name) {
             return Err(anyhow!("Invalid preset name: {}", name));
         }
-        let id = self.ma.new_preset_with_name(name.clone())?;
-        let mut presets = self.presets.lock().unwrap();
-        presets.insert(name, id.clone());
+        let id = self.ma.new_preset_with_name(name)?;
         Ok(id)
     }
 
@@ -76,9 +58,7 @@ impl ModularAgentApp {
         if !is_valid_preset_name(&name) {
             return Err(anyhow!("Invalid preset name: {}", name));
         }
-        let id = self.ma.add_preset_with_name(spec, name.clone())?;
-        let mut presets = self.presets.lock().unwrap();
-        presets.insert(name, id.clone());
+        let id = self.ma.add_preset_with_name(spec, name)?;
         Ok(id)
     }
 
@@ -87,8 +67,9 @@ impl ModularAgentApp {
             return Err(anyhow!("Invalid preset name: {}", name));
         }
 
-        // Check if the preset already exists
-        if let Some(id) = self.get_preset_id(&name) {
+        // Return the live instance if the preset is already loaded in core
+        // (regardless of who created it).
+        if let Some(id) = self.ma.find_preset_id_by_name(&name) {
             return Ok(id);
         }
 
@@ -96,29 +77,18 @@ impl ModularAgentApp {
         let path = preset_path(&name)?;
         let id = self
             .ma
-            .open_preset_from_file(path.to_string_lossy().as_ref(), Some(name.clone()))
+            .open_preset_from_file(path.to_string_lossy().as_ref(), Some(name))
             .await?;
-
-        // Store into the presets map
-        {
-            let mut presets = self.presets.lock().unwrap();
-            presets.insert(name, id.clone());
-        }
 
         Ok(id)
     }
 
     /// Delete a preset by the given name, and delete its file.
     pub async fn delete_preset(&self, name: &str) -> Result<()> {
-        // If the preset is opened, remove it from ModularAgent core.
-        if let Some(preset_id) = self.get_preset_id(name) {
+        // If the preset is loaded in core, remove it first (core emits the
+        // removal event so the UI can close any open tab).
+        if let Some(preset_id) = self.ma.find_preset_id_by_name(name) {
             self.ma.remove_preset(&preset_id).await?;
-        }
-
-        // Remove from the presets HashMap
-        {
-            let mut presets = self.presets.lock().unwrap();
-            presets.remove(name);
         }
 
         // Delete the file from disk
@@ -149,9 +119,10 @@ impl ModularAgentApp {
         }
 
         // Block renaming running presets
-        if let Some(id) = self.get_preset_id(name) {
+        let live_id = self.ma.find_preset_id_by_name(name);
+        if let Some(id) = &live_id {
             let infos = self.ma.get_preset_infos().await;
-            if infos.iter().any(|p| p.id == id && p.running) {
+            if infos.iter().any(|p| &p.id == id && p.running) {
                 bail!("Cannot rename a running preset. Stop it first.");
             }
         }
@@ -166,35 +137,37 @@ impl ModularAgentApp {
             bail!("A preset with this name already exists: {}", new_name);
         }
 
-        // Ensure target directory exists
-        if let Some(parent) = new_path.parent() {
-            if !parent.exists() {
-                std::fs::create_dir_all(parent)?;
-            }
+        // Rename in core first: on a name conflict this fails before any
+        // file has been touched. Core emits the rename event for the UI.
+        if let Some(id) = &live_id {
+            self.ma.rename_preset(id, new_name.to_string()).await?;
         }
 
-        // Rename file — source and target are always under ~/.modular_agent/presets/
-        std::fs::rename(&old_path, &new_path)
-            .with_context(|| format!("Failed to rename preset: {} -> {}", name, new_name))?;
-
-        // Update in-memory state if preset is open
-        if let Some(id) = self.get_preset_id(name) {
-            {
-                let mut presets = self.presets.lock().unwrap();
-                presets.remove(name);
-                presets.insert(new_name.to_string(), id.clone());
+        // Move the file. If this fails, roll back the core rename so the live
+        // preset does not diverge from its backing file (a diverged name would
+        // let open/delete by the old name spawn a duplicate or orphan the live
+        // instance).
+        let fs_result = (|| -> Result<()> {
+            if let Some(parent) = new_path.parent() {
+                if !parent.exists() {
+                    std::fs::create_dir_all(parent)?;
+                }
             }
-            // Update core Preset.name
-            if let Err(e) = self.ma.rename_preset(&id, new_name.to_string()).await {
-                log::warn!("rename_preset: rename_preset({}) failed: {}", id, e);
+            // Source and target are always under ~/.modular_agent/presets/
+            std::fs::rename(&old_path, &new_path)
+                .with_context(|| format!("Failed to rename preset: {} -> {}", name, new_name))
+        })();
+        if let Err(e) = fs_result {
+            if let Some(id) = &live_id {
+                if let Err(re) = self.ma.rename_preset(id, name.to_string()).await {
+                    log::error!(
+                        "Failed to roll back core rename of preset {}: {}",
+                        new_name,
+                        re
+                    );
+                }
             }
-            let _ = app.emit(
-                EMIT_PRESET_RENAMED,
-                PresetRenamedPayload {
-                    id,
-                    new_name: new_name.to_string(),
-                },
-            );
+            return Err(e);
         }
 
         // Update auto_start_presets
@@ -279,24 +252,20 @@ impl ModularAgentApp {
             bail!("A folder with this name already exists: {}", new_path_str);
         }
 
-        // Block if any preset inside the folder is running
-        let infos_needed: Vec<String> = {
-            let presets = self.presets.lock().unwrap();
-            presets
-                .iter()
-                .filter(|(name, _)| name.starts_with(&self_prefix))
-                .map(|(_, id)| id.clone())
-                .collect()
-        };
-        if !infos_needed.is_empty() {
-            let infos = self.ma.get_preset_infos().await;
-            for id in &infos_needed {
-                if infos.iter().any(|p| &p.id == id && p.running) {
-                    bail!(
-                        "Cannot rename folder: a preset inside it is running. Stop it first."
-                    );
-                }
+        // Collect live presets inside the folder; block the rename while any
+        // of them is running.
+        let mut affected: Vec<(String, String)> = Vec::new();
+        for info in self.ma.get_preset_infos().await {
+            let Some(preset_name) = info.name.as_deref() else {
+                continue;
+            };
+            if !preset_name.starts_with(&self_prefix) {
+                continue;
             }
+            if info.running {
+                bail!("Cannot rename folder: a preset inside it is running. Stop it first.");
+            }
+            affected.push((preset_name.to_string(), info.id));
         }
 
         // Ensure target parent directory exists
@@ -310,35 +279,15 @@ impl ModularAgentApp {
         std::fs::rename(&old_dir, &new_dir)
             .with_context(|| format!("Failed to rename folder: {} -> {}", path, new_path_str))?;
 
-        // Update all open presets that were inside the renamed folder
-        let old_prefix = format!("{}/", path);
+        // Rename all live presets that were inside the renamed folder.
+        // Core emits the rename events for the UI.
+        let old_prefix = self_prefix;
         let new_prefix = format!("{}/", new_path_str);
-        let affected: Vec<(String, String)> = {
-            let presets = self.presets.lock().unwrap();
-            presets
-                .iter()
-                .filter(|(name, _)| name.starts_with(&old_prefix))
-                .map(|(name, id)| (name.clone(), id.clone()))
-                .collect()
-        };
-
         for (old_name, id) in &affected {
             let new_name = format!("{}{}", new_prefix, &old_name[old_prefix.len()..]);
-            {
-                let mut presets = self.presets.lock().unwrap();
-                presets.remove(old_name);
-                presets.insert(new_name.clone(), id.clone());
-            }
-            if let Err(e) = self.ma.rename_preset(id, new_name.clone()).await {
+            if let Err(e) = self.ma.rename_preset(id, new_name).await {
                 log::warn!("rename_folder: rename_preset({}) failed: {}", id, e);
             }
-            let _ = app.emit(
-                EMIT_PRESET_RENAMED,
-                PresetRenamedPayload {
-                    id: id.clone(),
-                    new_name,
-                },
-            );
         }
 
         // Update auto_start_presets for all affected entries
@@ -461,18 +410,7 @@ impl ModularAgentApp {
             log::warn!("close_preset: remove_preset({}) failed: {}", preset_id, e);
         }
 
-        // Remove from our name→ID HashMap (reverse lookup by value)
-        {
-            let mut presets = self.presets.lock().unwrap();
-            presets.retain(|_, v| v != preset_id);
-        }
-
         Ok(true)
-    }
-
-    fn get_preset_id(&self, name: &str) -> Option<String> {
-        let presets = self.presets.lock().unwrap();
-        presets.get(name).cloned()
     }
 }
 
@@ -486,7 +424,7 @@ pub fn init(app: &AppHandle) -> Result<()> {
 pub async fn ready(app: &AppHandle) -> Result<()> {
     let asapp = app.state::<ModularAgentApp>();
     let ma = &asapp.ma;
-    start_modular_agent_observer(&ma, app.clone());
+    start_modular_agent_observer(ma, app.clone());
 
     start_mcp_services().await?;
 
@@ -543,7 +481,7 @@ fn modular_agent_dir() -> Result<PathBuf> {
     Ok(modular_agent_dir)
 }
 
-fn presets_dir() -> Result<PathBuf> {
+pub(crate) fn presets_dir() -> Result<PathBuf> {
     let modular_agent_dir = modular_agent_dir()?;
     let presets_dir = modular_agent_dir.join(MODULAR_AGENT_PRESETS_PATH);
     Ok(presets_dir)
@@ -879,7 +817,7 @@ pub fn save_as_preset_cmd(
             .map(|d| d.join(&parent_dir).exists())
             .unwrap_or(true);
 
-    // Add to core engine with spec content + register name→ID mapping
+    // Add to core engine with spec content
     let id = asapp
         .add_preset_with_name(spec.clone(), name.clone())
         .map_err(|e| e.to_string())?;
