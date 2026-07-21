@@ -4,12 +4,12 @@ resolver = "2"
 
 [workspace.package]
 edition = "2024"
-version = "0.24.0"
+version = "0.25.0"
 description = "Modular Agent Core"
 authors = ["Akira Ishino <akira@lumilab.jp>"]
 license = "Apache-2.0 OR MIT"
 repository = "https://github.com/modular-agent/modular-agent-core"
 
 [workspace.dependencies]
-modular-agent-macros = { version = "0.24.0", path = "modular-agent-macros" }
+modular-agent-macros = { version = "0.25.0", path = "modular-agent-macros" }
 im = { version = "15.1.0", features = ["serde"] }

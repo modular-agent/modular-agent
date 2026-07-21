@@ -92,6 +92,10 @@ pub enum AgentError {
     #[error("Preset {0} not found")]
     PresetNotFound(String),
 
+    /// A preset with this name already exists.
+    #[error("Preset name \"{0}\" already exists")]
+    PresetNameExists(String),
+
     /// Agent definition was not found.
     #[error("Agent {0} definition not found")]
     AgentDefinitionNotFound(String),

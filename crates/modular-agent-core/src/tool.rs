@@ -2044,7 +2044,8 @@ mod tests {
         #[tokio::test]
         async fn non_image_results_keep_legacy_text_form() {
             let object = AgentValue::from_json(serde_json::json!({"a": 1, "b": "x"})).unwrap();
-            let imageless_array = AgentValue::from_json(serde_json::json!([1, "two", null])).unwrap();
+            let imageless_array =
+                AgentValue::from_json(serde_json::json!([1, "two", null])).unwrap();
             let cases = [
                 ("result_content_object", object),
                 ("result_content_string", AgentValue::string("plain")),

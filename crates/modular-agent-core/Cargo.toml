@@ -10,6 +10,8 @@ readme = "../README.md"
 
 [dependencies]
 async-trait = "0.1"
+# mcp-server only: serves the rmcp streamable-http tower service.
+axum = { version = "0.8", optional = true }
 # default-features = false + clock: only Utc::now() is needed for RFC3339
 # session timestamps.
 chrono = { version = "0.4", optional = true, default-features = false, features = ["clock"] }
@@ -27,6 +29,9 @@ log = "0.4"
 photon-rs = { version = "0.3.3", optional = true }
 regex = { version = "1.12.2", optional = true }
 rmcp = { version = "0.13.0", features = ["client", "transport-child-process"], optional = true }
+# mcp-server only: JsonSchema derive for MCP tool parameter types (same major
+# version as rmcp's schemars so the derives are compatible).
+schemars = { version = "1", optional = true }
 serde = { version = "1", features = ["derive", "rc"] }
 serde_json = { version = "1" }
 thiserror = "2"
@@ -53,6 +58,19 @@ image = ["photon-rs"]
 # tokio/fs + tokio/io-util: used only by the session module (JSONL persistence).
 llm = ["regex", "jsonschema", "futures-util", "uuid", "chrono", "tokio/fs", "tokio/io-util"]
 mcp = ["rmcp", "llm"]
+# Built-in MCP server (streamable HTTP) exposing flow-editing tools to
+# external agents. Implies "file" because the save_preset tool writes presets
+# to disk.
+mcp-server = [
+    "file",
+    "rmcp",
+    "rmcp/server",
+    "rmcp/macros",
+    "rmcp/transport-streamable-http-server",
+    "dep:axum",
+    "dep:schemars",
+    "tokio/net",
+]
 test-utils = []
 
 [[test]]

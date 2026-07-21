@@ -45,8 +45,8 @@ thread_local! {
 }
 
 pub fn subscribe_external_output_observer(ma: &ModularAgent) -> Result<(), AgentError> {
-    let output_event_rx = ma.subscribe_to_event(|event| {
-        if let ModularAgentEvent::ExternalOutput(name, value) = event {
+    let output_event_rx = ma.subscribe_to_event(|envelope| {
+        if let ModularAgentEvent::ExternalOutput(name, value) = envelope.event {
             Some((name, value))
         } else {
             None

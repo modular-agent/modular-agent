@@ -101,6 +101,14 @@ pub struct ModularAgent {
     // presets (preset id -> preset)
     pub(crate) presets: Arc<Mutex<FnvIndexMap<String, Arc<AsyncMutex<Preset>>>>>,
 
+    /// name -> preset id: the single source of truth for preset name lookup
+    /// and uniqueness. Mutated only by `add_preset_raw`, `rename_preset`,
+    /// and `remove_preset`.
+    ///
+    /// Lock order: never acquire `presets` or a preset's async mutex while
+    /// holding this lock.
+    pub(crate) preset_names: Arc<Mutex<FnvIndexMap<String, String>>>,
+
     // agent def name -> config
     pub(crate) global_configs_map: Arc<Mutex<FnvIndexMap<String, AgentConfigs>>>,
 
@@ -117,7 +125,12 @@ pub struct ModularAgent {
     pub(crate) tx: Arc<Mutex<Option<mpsc::Sender<AgentEventMessage>>>>,
 
     // observers
-    pub(crate) observers: broadcast::Sender<ModularAgentEvent>,
+    pub(crate) observers: broadcast::Sender<EventEnvelope>,
+
+    /// Origin tag stamped onto the [`EventEnvelope`] of every event emitted
+    /// through this handle. Carried per clone (not shared) so tagged entry
+    /// points can coexist with the untagged handles produced by `base()`.
+    pub(crate) origin: Option<Arc<str>>,
 }
 
 impl Default for ModularAgent {
@@ -141,12 +154,40 @@ impl ModularAgent {
             connections: Default::default(),
             defs: Default::default(),
             presets: Default::default(),
+            preset_names: Default::default(),
             global_configs_map: Default::default(),
             preset_tokens: Default::default(),
             agent_tokens: Default::default(),
             context_tokens: Default::default(),
             tx: Arc::new(Mutex::new(None)),
             observers: tx,
+            origin: None,
+        }
+    }
+
+    /// Returns a clone of this handle that stamps `origin` onto the
+    /// [`EventEnvelope`] of every event emitted through it.
+    ///
+    /// Use this to attribute changes made through a specific entry point
+    /// (e.g. a host UI or an external editing server) so subscribers can
+    /// distinguish them from runtime-originated events, which carry `None`.
+    pub fn with_origin(&self, origin: impl Into<Arc<str>>) -> Self {
+        Self {
+            origin: Some(origin.into()),
+            ..self.clone()
+        }
+    }
+
+    /// Returns a clone of this handle with no origin tag.
+    ///
+    /// Invariant: every handle stored beyond the current call (agent data,
+    /// spawned loops) must be created through this method. Otherwise runtime
+    /// events emitted later would be attributed to whichever tagged entry
+    /// point happened to create the agent or loop.
+    pub(crate) fn base(&self) -> Self {
+        Self {
+            origin: None,
+            ..self.clone()
         }
     }
 
@@ -278,6 +319,14 @@ impl ModularAgent {
         presets.get(id).cloned()
     }
 
+    /// Find the id of a live preset by its name.
+    ///
+    /// Returns `None` when no preset with the given name is loaded.
+    pub fn find_preset_id_by_name(&self, name: &str) -> Option<String> {
+        let names = self.preset_names.lock().unwrap();
+        names.get(name).cloned()
+    }
+
     /// Add a new preset with the given spec, and returns the id of the new preset.
     ///
     /// The ids of the given spec, including agents and connections, are changed to new unique ids.
@@ -299,10 +348,20 @@ impl ModularAgent {
 
     fn add_preset_raw(&self, spec: PresetSpec, name: Option<String>) -> Result<String, AgentError> {
         let mut preset = Preset::new(spec);
-        if let Some(name) = name {
-            preset.set_name(name);
+        if let Some(name) = &name {
+            preset.set_name(name.clone());
         }
         let id = preset.id().to_string();
+
+        // Reserve the name first so a duplicate fails before any agents are
+        // created; the reservation is rolled back if a later step fails.
+        if let Some(name) = &name {
+            let mut names = self.preset_names.lock().unwrap();
+            if names.contains_key(name) {
+                return Err(AgentError::PresetNameExists(name.clone()));
+            }
+            names.insert(name.clone(), id.clone());
+        }
 
         // add agents
         for agent in &preset.spec().agents {
@@ -320,34 +379,87 @@ impl ModularAgent {
         }
 
         // add the given preset into presets
-        let mut presets = self.presets.lock().unwrap();
-        if presets.contains_key(&id) {
+        let inserted = {
+            let mut presets = self.presets.lock().unwrap();
+            if presets.contains_key(&id) {
+                false
+            } else {
+                presets.insert(id.clone(), Arc::new(AsyncMutex::new(preset)));
+                true
+            }
+        };
+        if !inserted {
+            if let Some(name) = &name {
+                self.preset_names.lock().unwrap().swap_remove(name);
+            }
             return Err(AgentError::DuplicateId(id));
         }
-        presets.insert(id.to_string(), Arc::new(AsyncMutex::new(preset)));
+
+        self.emit_preset_added(id.clone(), name);
 
         Ok(id)
     }
 
     /// Rename a preset by id.
+    ///
+    /// Fails with [`AgentError::PresetNameExists`] when another preset
+    /// already uses `new_name`. Renaming a preset to its current name is a
+    /// no-op and succeeds. Emits [`ModularAgentEvent::PresetRenamed`].
     pub async fn rename_preset(&self, id: &str, new_name: String) -> Result<(), AgentError> {
         let preset = self
             .get_preset(id)
             .ok_or_else(|| AgentError::PresetNotFound(id.to_string()))?;
-        let mut preset = preset.lock().await;
-        preset.set_name(new_name);
+
+        {
+            let mut names = self.preset_names.lock().unwrap();
+            if let Some(owner) = names.get(&new_name)
+                && owner != id
+            {
+                return Err(AgentError::PresetNameExists(new_name));
+            }
+            // Remove by id so a previously unnamed preset gaining its first
+            // name is handled too.
+            names.retain(|_, v| v != id);
+            names.insert(new_name.clone(), id.to_string());
+        }
+
+        // Re-check liveness after reserving the name: a concurrent
+        // remove_preset may have completed (including its name-index
+        // cleanup) between get_preset above and the insert, which would
+        // leave the new entry pointing at a dead id forever. The lock-order
+        // rule (never take `presets` while holding `preset_names`) forces
+        // this check to come after the insert; either remove_preset's
+        // cleanup runs after our insert and clears it, or we observe the id
+        // gone here and roll the reservation back.
+        if !self.presets.lock().unwrap().contains_key(id) {
+            let mut names = self.preset_names.lock().unwrap();
+            if names.get(&new_name).is_some_and(|owner| owner == id) {
+                names.swap_remove(&new_name);
+            }
+            return Err(AgentError::PresetNotFound(id.to_string()));
+        }
+
+        let old_name = {
+            let mut preset = preset.lock().await;
+            let old_name = preset.name().map(str::to_string);
+            preset.set_name(new_name.clone());
+            old_name
+        };
+        self.emit_preset_renamed(id.to_string(), old_name, new_name);
         Ok(())
     }
 
     /// Remove a preset by id.
     ///
     /// Stops the preset if running, then removes all associated agents and connections.
+    /// Emits [`ModularAgentEvent::PresetRemoved`] after teardown.
     pub async fn remove_preset(&self, id: &str) -> Result<(), AgentError> {
         let preset = self
             .get_preset(id)
             .ok_or_else(|| AgentError::PresetNotFound(id.to_string()))?;
 
         let mut preset = preset.lock().await;
+        let name = preset.name().map(str::to_string);
         preset.stop(self).await.unwrap_or_else(|e| {
             log::error!("Failed to stop preset {}: {}", id, e);
         });
@@ -372,7 +484,10 @@ impl ModularAgent {
             let mut presets = self.presets.lock().unwrap();
             presets.swap_remove(id);
         }
+        self.preset_names.lock().unwrap().retain(|_, v| v != id);
         self.remove_preset_token(id);
+
+        self.emit_preset_removed(id.to_string(), name);
 
         Ok(())
     }
@@ -430,7 +545,9 @@ impl ModularAgent {
     /// Save a preset to a JSON file.
     ///
     /// Serializes the current preset state (including agent configs) to JSON
-    /// and writes it to the specified path.
+    /// and writes it to the specified path. Emits
+    /// [`ModularAgentEvent::PresetSaved`] when the preset has a name; unnamed
+    /// presets have no list entry to refresh, so no event is emitted for them.
     #[cfg(feature = "file")]
     pub async fn save_preset(&self, id: &str, path: &str) -> Result<(), AgentError> {
         let Some(preset_spec) = self.get_preset_spec(id).await else {
@@ -438,6 +555,9 @@ impl ModularAgent {
         };
         let json_str = preset_spec.to_json()?;
         std::fs::write(path, json_str).map_err(|e| AgentError::IoError(e.to_string()))?;
+        if let Some(name) = self.get_preset_info(id).await.and_then(|info| info.name) {
+            self.emit_preset_saved(id.to_string(), name);
+        }
         Ok(())
     }
 
@@ -472,6 +592,8 @@ impl ModularAgent {
             .ok_or_else(|| AgentError::PresetNotFound(id.to_string()))?;
         let mut preset = preset.lock().await;
         preset.update_spec(value)?;
+        drop(preset);
+        self.emit_preset_structure_changed(id.to_string());
         Ok(())
     }
 
@@ -556,6 +678,10 @@ impl ModularAgent {
     }
 
     /// Update the agent spec by id.
+    ///
+    /// Emits [`ModularAgentEvent::AgentSpecUpdated`], and additionally
+    /// [`ModularAgentEvent::PresetStructureChanged`] when the patch contains
+    /// keys other than `configs`.
     pub async fn update_agent_spec(&self, agent_id: &str, value: &Value) -> Result<(), AgentError> {
         let agent = {
             let agents = self.agents.lock().unwrap();
@@ -564,8 +690,23 @@ impl ModularAgent {
             };
             agent.clone()
         };
-        let mut agent = agent.lock().await;
-        agent.update_spec(value)?;
+        let preset_id = {
+            let mut agent = agent.lock().await;
+            agent.update_spec(value)?;
+            agent.preset_id().to_string()
+        };
+
+        self.emit_agent_spec_updated(agent_id.to_string());
+
+        // Any non-config key (ports, title, layout, ...) may change how hosts
+        // render the preset, so treat those patches as structural. Config-only
+        // patches stay quiet here; they are covered by AgentSpecUpdated.
+        let structural = value
+            .as_object()
+            .is_some_and(|map| map.keys().any(|key| key != "configs"));
+        if structural {
+            self.emit_preset_structure_changed(preset_id);
+        }
         Ok(())
     }
 
@@ -593,10 +734,13 @@ impl ModularAgent {
 
         let id = new_id();
         spec.id = id.clone();
-        self.add_agent_internal(preset_id, spec.clone())?;
+        self.add_agent_internal(preset_id.clone(), spec.clone())?;
 
         let mut preset = preset.lock().await;
         preset.add_agent(spec.clone());
+        drop(preset);
+
+        self.emit_preset_structure_changed(preset_id);
 
         Ok(id)
     }
@@ -607,7 +751,9 @@ impl ModularAgent {
             return Err(AgentError::AgentAlreadyExists(spec.id.to_string()));
         }
         let spec_id = spec.id.clone();
-        let mut agent = agent_new(self.clone(), spec_id.clone(), spec)?;
+        // base(): the agent keeps this handle for its lifetime, so runtime
+        // events it emits later must not inherit the creator's origin tag.
+        let mut agent = agent_new(self.base(), spec_id.clone(), spec)?;
         agent.set_preset_id(preset_id);
         agents.insert(spec_id, Arc::new(AsyncMutex::new(agent)));
         Ok(())
@@ -651,8 +797,13 @@ impl ModularAgent {
             .get_preset(preset_id)
             .ok_or_else(|| AgentError::PresetNotFound(preset_id.to_string()))?;
         let mut preset = preset.lock().await;
-        preset.add_connection(connection.clone());
-        self.add_connection_internal(connection)?;
+        // Register the routing entry first: it is the fallible step
+        // (duplicate detection), and a failure must leave the preset spec
+        // untouched so no spec change ever goes unannounced.
+        self.add_connection_internal(connection.clone())?;
+        preset.add_connection(connection);
+        drop(preset);
+        self.emit_preset_structure_changed(preset_id.to_string());
         Ok(())
     }
 
@@ -718,15 +869,51 @@ impl ModularAgent {
             .ok_or_else(|| AgentError::PresetNotFound(preset_id.to_string()))?;
         let mut preset = preset.lock().await;
 
+        // Track progress so a mid-batch failure can be rolled back: a
+        // partial batch must not leave agents in the spec (or the runtime
+        // maps) while returning an error without any event.
+        let mut added_agents = 0;
+        let mut added_connections = 0;
+        let mut result = Ok(());
+
         for agent in &agents {
-            self.add_agent_internal(preset_id.to_string(), agent.clone())?;
+            if let Err(e) = self.add_agent_internal(preset_id.to_string(), agent.clone()) {
+                result = Err(e);
+                break;
+            }
             preset.add_agent(agent.clone());
+            added_agents += 1;
         }
 
-        for connection in &connections {
-            self.add_connection_internal(connection.clone())?;
-            preset.add_connection(connection.clone());
+        if result.is_ok() {
+            for connection in &connections {
+                if let Err(e) = self.add_connection_internal(connection.clone()) {
+                    result = Err(e);
+                    break;
+                }
+                preset.add_connection(connection.clone());
+                added_connections += 1;
+            }
         }
+
+        if let Err(e) = result {
+            for connection in connections.iter().take(added_connections) {
+                preset.remove_connection(connection);
+                self.remove_connection_internal(connection);
+            }
+            // The rolled-back agents were never started, so no stop or
+            // channel teardown is needed; dropping the map entries undoes
+            // add_agent_internal completely.
+            let mut agents_map = self.agents.lock().unwrap();
+            for agent in agents.iter().take(added_agents) {
+                preset.remove_agent(&agent.id);
+                agents_map.swap_remove(&agent.id);
+            }
+            return Err(e);
+        }
+        drop(preset);
+
+        self.emit_preset_structure_changed(preset_id.to_string());
 
         Ok((agents, connections))
     }
@@ -735,14 +922,32 @@ impl ModularAgent {
     ///
     /// If the agent is running, it will be stopped first.
     pub async fn remove_agent(&self, preset_id: &str, agent_id: &str) -> Result<(), AgentError> {
-        {
-            let preset = self
-                .get_preset(preset_id)
-                .ok_or_else(|| AgentError::PresetNotFound(preset_id.to_string()))?;
+        let preset = self
+            .get_preset(preset_id)
+            .ok_or_else(|| AgentError::PresetNotFound(preset_id.to_string()))?;
+
+        // Tear down the runtime instance before touching the spec so a
+        // failure leaves the spec unchanged and no spec change ever goes
+        // unannounced. An agent can exist in the spec without a runtime
+        // instance (its definition was unknown when the preset was added);
+        // such an agent is still removable from the spec.
+        let runtime_removed = match self.remove_agent_internal(agent_id).await {
+            Ok(()) => true,
+            Err(AgentError::AgentNotFound(_)) => false,
+            Err(e) => return Err(e),
+        };
+
+        let spec_removed = {
             let mut preset = preset.lock().await;
+            let count_before = preset.spec().agents.len();
             preset.remove_agent(agent_id);
+            preset.spec().agents.len() != count_before
+        };
+
+        if !runtime_removed && !spec_removed {
+            return Err(AgentError::AgentNotFound(agent_id.to_string()));
         }
-        self.remove_agent_internal(agent_id).await?;
+        self.emit_preset_structure_changed(preset_id.to_string());
         Ok(())
     }
 
@@ -794,6 +999,8 @@ impl ModularAgent {
             )));
         };
         self.remove_connection_internal(&connection);
+        drop(preset);
+        self.emit_preset_structure_changed(preset_id.to_string());
         Ok(())
     }
 
@@ -984,7 +1191,9 @@ impl ModularAgent {
 
             let agent_clone = agent.clone();
             let agent_id_clone = agent_id.to_string();
-            let ma = self.clone();
+            // base(): the agent loop outlives this call, so it must not
+            // stamp runtime events with the caller's origin.
+            let ma = self.base();
             // Created before spawning so stop_agent can cancel it immediately.
             let (generation, mut token) = self.create_agent_token(&preset_id, agent_id);
 
@@ -1130,6 +1339,13 @@ impl ModularAgent {
     }
 
     /// Set configs for an agent by id.
+    ///
+    /// Emits [`ModularAgentEvent::AgentConfigUpdated`] for each key once the
+    /// configs have been handed to the agent. When the agent is running, the
+    /// configs travel through its message channel and are applied
+    /// asynchronously: the events report successful delivery, not completed
+    /// application. Events are emitted regardless of whether a key's value
+    /// actually changed.
     pub async fn set_agent_configs(
         &self,
         agent_id: String,
@@ -1150,12 +1366,20 @@ impl ModularAgent {
                 a.clone()
             };
             agent.lock().await.set_configs(configs.clone())?;
+            for (key, value) in configs {
+                self.emit_agent_config_updated(agent_id.clone(), key, value);
+            }
             return Ok(());
         };
-        let message = AgentMessage::Configs { configs };
+        let message = AgentMessage::Configs {
+            configs: configs.clone(),
+        };
         tx.send(message).await.map_err(|_| {
             AgentError::SendMessageFailed("Failed to send config message".to_string())
         })?;
+        for (key, value) in configs {
+            self.emit_agent_config_updated(agent_id.clone(), key, value);
+        }
         Ok(())
     }
 
@@ -1325,8 +1549,9 @@ impl ModularAgent {
             *tx_lock = Some(tx);
         }
 
-        // spawn the main loop
-        let ma = self.clone();
+        // spawn the main loop; base() so events emitted while routing
+        // messages are never attributed to the caller of ready().
+        let ma = self.base();
         tokio::spawn(async move {
             while let Some(message) = rx.recv().await {
                 use AgentEventMessage::*;
@@ -1354,11 +1579,12 @@ impl ModularAgent {
 
     /// Subscribe to all `ModularAgent` events.
     ///
-    /// Returns a broadcast receiver that receives all [`ModularAgentEvent`]s.
+    /// Returns a broadcast receiver of [`EventEnvelope`]s, each carrying a
+    /// [`ModularAgentEvent`] together with the origin of the change.
     /// For filtered subscriptions, use [`subscribe_to_event`](Self::subscribe_to_event).
     ///
     /// **Note**: Subscribe before starting presets to avoid missing events.
-    pub fn subscribe(&self) -> broadcast::Receiver<ModularAgentEvent> {
+    pub fn subscribe(&self) -> broadcast::Receiver<EventEnvelope> {
         self.observers.subscribe()
     }
 
@@ -1373,8 +1599,8 @@ impl ModularAgent {
     ///
     /// # Arguments
     ///
-    /// * `filter_map` - A closure that receives each event and returns `Some(T)` for
-    ///   events you want to receive, or `None` to skip them.
+    /// * `filter_map` - A closure that receives each [`EventEnvelope`] and returns
+    ///   `Some(T)` for events you want to receive, or `None` to skip them.
     ///
     /// # Returns
     ///
@@ -1388,8 +1614,8 @@ impl ModularAgent {
     /// # async fn example(ma: &ModularAgent) {
     /// // Subscribe to a specific channel's output
     /// let output_channel = "output".to_string();
-    /// let mut output_rx = ma.subscribe_to_event(move |event| {
-    ///     if let ModularAgentEvent::ExternalOutput(name, value) = event {
+    /// let mut output_rx = ma.subscribe_to_event(move |envelope| {
+    ///     if let ModularAgentEvent::ExternalOutput(name, value) = envelope.event {
     ///         if name == output_channel {
     ///             return Some(value);
     ///         }
@@ -1405,7 +1631,7 @@ impl ModularAgent {
     /// ```
     pub fn subscribe_to_event<F, T>(&self, mut filter_map: F) -> mpsc::UnboundedReceiver<T>
     where
-        F: FnMut(ModularAgentEvent) -> Option<T> + Send + 'static,
+        F: FnMut(EventEnvelope) -> Option<T> + Send + 'static,
         T: Send + 'static,
     {
         let (tx, rx) = mpsc::unbounded_channel();
@@ -1414,8 +1640,8 @@ impl ModularAgent {
         tokio::spawn(async move {
             loop {
                 match event_rx.recv().await {
-                    Ok(event) => {
-                        if let Some(mapped_event) = filter_map(event)
+                    Ok(envelope) => {
+                        if let Some(mapped_event) = filter_map(envelope)
                             && tx.send(mapped_event).is_err()
                         {
                             // Receiver dropped, task can exit
@@ -1456,6 +1682,36 @@ impl ModularAgent {
         self.notify_observers(ModularAgentEvent::AgentSpecUpdated(agent_id));
     }
 
+    pub(crate) fn emit_preset_structure_changed(&self, preset_id: String) {
+        self.notify_observers(ModularAgentEvent::PresetStructureChanged { preset_id });
+    }
+
+    pub(crate) fn emit_preset_added(&self, preset_id: String, name: Option<String>) {
+        self.notify_observers(ModularAgentEvent::PresetAdded { preset_id, name });
+    }
+
+    pub(crate) fn emit_preset_removed(&self, preset_id: String, name: Option<String>) {
+        self.notify_observers(ModularAgentEvent::PresetRemoved { preset_id, name });
+    }
+
+    pub(crate) fn emit_preset_renamed(
+        &self,
+        preset_id: String,
+        old_name: Option<String>,
+        new_name: String,
+    ) {
+        self.notify_observers(ModularAgentEvent::PresetRenamed {
+            preset_id,
+            old_name,
+            new_name,
+        });
+    }
+
+    #[cfg(feature = "file")]
+    pub(crate) fn emit_preset_saved(&self, preset_id: String, name: String) {
+        self.notify_observers(ModularAgentEvent::PresetSaved { preset_id, name });
+    }
+
     pub(crate) fn emit_external_output(&self, name: String, value: AgentValue) {
         // // ignore local variables
         // if name.starts_with('%') {
@@ -1464,9 +1720,25 @@ impl ModularAgent {
         self.notify_observers(ModularAgentEvent::ExternalOutput(name, value));
     }
 
+    /// The single point where events are wrapped into envelopes, so every
+    /// emitted event carries exactly the origin of the handle it went through.
     fn notify_observers(&self, event: ModularAgentEvent) {
-        let _ = self.observers.send(event);
+        let _ = self.observers.send(EventEnvelope {
+            origin: self.origin.clone(),
+            event,
+        });
     }
+}
+
+/// Carrier for a [`ModularAgentEvent`] together with the origin of the change.
+///
+/// `origin` identifies the entry point that performed the mutation which
+/// produced the event (see [`ModularAgent::with_origin`]). `None` means the
+/// event originated inside the agent runtime itself.
+#[derive(Clone, Debug)]
+pub struct EventEnvelope {
+    pub origin: Option<Arc<str>>,
+    pub event: ModularAgentEvent,
 }
 
 /// Events emitted by [`ModularAgent`] during operation.
@@ -1481,8 +1753,8 @@ impl ModularAgent {
 ///
 /// # fn example(ma: &ModularAgent) {
 /// // Subscribe to all external output events
-/// let mut rx = ma.subscribe_to_event(|event| {
-///     if let ModularAgentEvent::ExternalOutput(name, value) = event {
+/// let mut rx = ma.subscribe_to_event(|envelope| {
+///     if let ModularAgentEvent::ExternalOutput(name, value) = envelope.event {
 ///         Some((name, value))
 ///     } else {
 ///         None
@@ -1491,6 +1763,7 @@ impl ModularAgent {
 /// # }
 /// ```
 #[derive(Clone, Debug)]
+#[non_exhaustive]
 pub enum ModularAgentEvent {
     /// An agent's configuration was updated.
     ///
@@ -1511,6 +1784,53 @@ pub enum ModularAgentEvent {
     ///
     /// Fields: `(agent_id)`
     AgentSpecUpdated(String),
+
+    /// A preset's structure (agents, connections, or non-config spec keys)
+    /// was changed.
+    ///
+    /// Emitted by [`ModularAgent::add_agent`], [`ModularAgent::remove_agent`],
+    /// [`ModularAgent::add_connection`], [`ModularAgent::remove_connection`],
+    /// [`ModularAgent::add_agents_and_connections`],
+    /// [`ModularAgent::update_preset_spec`], and by
+    /// [`ModularAgent::update_agent_spec`] when the patch contains keys other
+    /// than `configs`, so hosts can refresh their view of the preset.
+    PresetStructureChanged { preset_id: String },
+
+    /// A preset was added.
+    ///
+    /// Emitted whenever a preset is created or loaded
+    /// ([`ModularAgent::new_preset`], [`ModularAgent::add_preset`], their
+    /// named variants, and `open_preset_from_file`).
+    PresetAdded {
+        preset_id: String,
+        name: Option<String>,
+    },
+
+    /// A preset was removed.
+    ///
+    /// Emitted by [`ModularAgent::remove_preset`] after the preset and its
+    /// agents have been torn down, so hosts can close any view of it.
+    PresetRemoved {
+        preset_id: String,
+        name: Option<String>,
+    },
+
+    /// A preset was renamed.
+    ///
+    /// Emitted by [`ModularAgent::rename_preset`]. `old_name` is `None` when
+    /// the preset had no name before.
+    PresetRenamed {
+        preset_id: String,
+        old_name: Option<String>,
+        new_name: String,
+    },
+
+    /// A named preset was saved to disk.
+    ///
+    /// Emitted by [`ModularAgent::save_preset`]; unnamed presets produce no
+    /// event.
+    #[cfg(feature = "file")]
+    PresetSaved { preset_id: String, name: String },
 
     /// A value was written to an external output channel.
     ///

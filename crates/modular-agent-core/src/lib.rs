@@ -36,6 +36,7 @@
 //! - `image` - Image processing with photon-rs (enabled by default)
 //! - `llm` - LLM integration with Message/ToolCall types (enabled by default)
 //! - `mcp` - Model Context Protocol integration (enabled by default)
+//! - `mcp-server` - Built-in MCP server exposing flow-editing tools over streamable HTTP
 //! - `test-utils` - Testing utilities including TestProbeAgent
 
 mod agent;
@@ -62,6 +63,9 @@ pub mod tool;
 
 #[cfg(feature = "mcp")]
 pub mod mcp;
+
+#[cfg(feature = "mcp-server")]
+pub mod mcp_server;
 
 #[cfg(feature = "test-utils")]
 pub mod test_utils;
@@ -104,7 +108,7 @@ pub use llm::{
     ContentBlock, Message, MessageContent, MessageEvent, ToolCall, ToolCallFunction, Usage,
     estimate_context_tokens, estimate_message_tokens,
 };
-pub use modular_agent::{ModularAgent, ModularAgentEvent, SharedAgent};
+pub use modular_agent::{EventEnvelope, ModularAgent, ModularAgentEvent, SharedAgent};
 pub use output::AgentOutput;
 pub use preset::{Preset, PresetInfo};
 pub use registry::AgentRegistration;

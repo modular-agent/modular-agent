@@ -49,8 +49,8 @@ async fn main() -> Result<(), AgentError> {
 
     // Subscribe to external output BEFORE starting preset (avoid race condition)
     let output_channel = args.output.clone();
-    let mut output_rx = ma.subscribe_to_event(move |event| {
-        if let ModularAgentEvent::ExternalOutput(name, value) = event
+    let mut output_rx = ma.subscribe_to_event(move |envelope| {
+        if let ModularAgentEvent::ExternalOutput(name, value) = envelope.event
             && name == output_channel
         {
             return Some(value);
