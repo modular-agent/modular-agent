@@ -1,6 +1,6 @@
 [package]
 name = "modular-agent-std"
-version = "0.14.0"
+version = "0.15.0"
 description = "Standard Agents of Modular Agent"
 authors = ["Akira Ishino <akira@lumilab.jp>"]
 edition = "2024"
