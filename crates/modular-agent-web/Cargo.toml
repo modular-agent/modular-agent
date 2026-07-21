@@ -1,6 +1,6 @@
 [package]
 name = "modular-agent-web"
-version = "0.7.0"
+version = "0.8.0"
 description = "Web Agents for Modular Agent"
 authors = ["Akira Ishino <akira@lumilab.jp>"]
 edition = "2024"
