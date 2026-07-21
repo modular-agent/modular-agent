@@ -105,7 +105,7 @@ fn run(args: Args) -> Result<(), String> {
     codegen::generate_agents_rs(&build_config, &cli_root)?;
 
     println!("Updating Cargo.toml...");
-    codegen::update_cargo_toml(&build_config, &cli_root)?;
+    codegen::update_cargo_toml(&build_config, &registry, &cli_root)?;
 
     println!("Updating src/main.rs...");
     codegen::update_main_rs(&cli_root)?;
