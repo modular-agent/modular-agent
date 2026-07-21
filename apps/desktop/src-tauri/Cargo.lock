@@ -1018,9 +1018,9 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "4.6.2"
+version = "4.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dd059f9da4f5c36b3787f65d38ccaab1cc315f07b01f89abc8359ee6a8205011"
+checksum = "0fb99565819980999fb7b4a1796046a5c949e6d4ff132cf5fadf5a641e20d776"
 dependencies = [
  "clap_builder",
 ]
@@ -2024,6 +2024,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "drm"
+version = "0.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7a41816e58f47f49acfd956651055ddcf137c4882c2098c30c448817af21183a"
+dependencies = [
+ "bitflags 2.13.1",
+ "bytemuck",
+ "bytemuck_derive",
+ "drm-ffi",
+ "drm-fourcc",
+ "libc",
+ "rustix 1.1.4",
+]
+
+[[package]]
 name = "drm-ffi"
 version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2654,7 +2669,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ce852e998d3ca5e4a97014fb31c940dc5ef344ec7d364984525fd11e8a547e6a"
 dependencies = [
  "bitflags 2.13.1",
- "drm",
+ "drm 0.14.1",
  "drm-fourcc",
  "gbm-sys",
  "libc",
@@ -2782,9 +2797,9 @@ dependencies = [
 
 [[package]]
 name = "get-size-derive2"
-version = "0.10.2"
+version = "0.10.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "33ce01473d0fed9913c71114f0384807cdf584673424d093c102263645bf2a31"
+checksum = "c736d226c32e496b8377813b52269e11ad3a48d8373b68862d0364f04fd1229d"
 dependencies = [
  "attribute-derive",
  "quote",
@@ -3421,9 +3436,9 @@ dependencies = [
 
 [[package]]
 name = "hyper"
-version = "1.10.1"
+version = "1.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "55281c53a1894c864990125767da440a4e630446785086f52523b20033b74498"
+checksum = "d22053281f852e11534f5198498373cbb59295120a20771d90f7ed1897490a72"
 dependencies = [
  "atomic-waker",
  "bytes",
@@ -4083,9 +4098,9 @@ dependencies = [
 
 [[package]]
 name = "jsonschema"
-version = "0.48.1"
+version = "0.48.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9baf521a926fd1e6f94af6922be9686b61c8a89a5fb7e14d6a1e21b79738d4cc"
+checksum = "39d785c0683d1027839f1ac6a43b6d07c63d58ecd363d8146dda4531d53465a1"
 dependencies = [
  "ahash",
  "bytecount",
@@ -4104,15 +4119,16 @@ dependencies = [
  "regex",
  "serde",
  "serde_json",
+ "strum 0.28.0",
  "unicode-general-category",
  "uuid-simd",
 ]
 
 [[package]]
 name = "jsonschema-regex"
-version = "0.48.1"
+version = "0.48.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d668f4775619127513d9a4f190704d20a66d20ccf0efc258f8ed42548e5fd7cd"
+checksum = "917b3be16b2662538aafb55201790561e1f1ad1a0454baf42f33bd9de343778b"
 dependencies = [
  "regex-syntax",
 ]
@@ -4210,9 +4226,9 @@ dependencies = [
 
 [[package]]
 name = "libc"
-version = "0.2.186"
+version = "0.2.187"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "68ab91017fe16c622486840e4c83c9a37afeff978bd239b5293d61ece587de66"
+checksum = "a7743783ea728ef5c31194c6590797eed286449b4a4e87d626d8a51f0a94e732"
 
 [[package]]
 name = "libdbus-sys"
@@ -4302,11 +4318,11 @@ dependencies = [
 
 [[package]]
 name = "libwayshot-xcap"
-version = "0.3.2"
+version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "558a3a7ca16a17a14adf8f051b3adcd7766d397532f5f6d6a48034db11e54c22"
+checksum = "ea8a46e4d016ef464e386e4970f5415fe0939c2d63abe0c2f539c05ef88c5fe5"
 dependencies = [
- "drm",
+ "drm 0.15.0",
  "gbm",
  "gl",
  "image 0.25.10",
@@ -4629,7 +4645,8 @@ dependencies = [
 
 [[package]]
 name = "modular-agent-audio"
-version = "0.3.0"
+version = "0.4.0"
+source = "git+https://github.com/modular-agent/modular-agent-audio.git#0653fbb7033ddce3be191bd3809dc32c25d2892a"
 dependencies = [
  "base64 0.22.1",
  "log",
@@ -4640,6 +4657,8 @@ dependencies = [
 [[package]]
 name = "modular-agent-core"
 version = "0.25.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "92ee484c7db39d939e575dd0d09ed32945ba5ae2c5171b66d2d7edcb0b95587e"
 dependencies = [
  "async-trait",
  "axum",
@@ -4666,7 +4685,7 @@ dependencies = [
 
 [[package]]
 name = "modular-agent-desktop"
-version = "0.17.0"
+version = "0.18.0"
 dependencies = [
  "anyhow",
  "ctrlc",
@@ -4702,7 +4721,8 @@ dependencies = [
 
 [[package]]
 name = "modular-agent-lifelog"
-version = "0.8.0"
+version = "0.9.0"
+source = "git+https://github.com/modular-agent/modular-agent-lifelog.git#be142b9a36f7cdaa3409d3ff8a15dc208c0ba04e"
 dependencies = [
  "active-win-pos-rs",
  "base64 0.22.1",
@@ -4718,7 +4738,8 @@ dependencies = [
 
 [[package]]
 name = "modular-agent-llm"
-version = "0.13.0"
+version = "0.14.0"
+source = "git+https://github.com/modular-agent/modular-agent-llm.git#0ad01683af84263a2403a4bd62f8cf292f1c1b7c"
 dependencies = [
  "async-trait",
  "eventsource-stream",
@@ -4741,6 +4762,8 @@ dependencies = [
 [[package]]
 name = "modular-agent-macros"
 version = "0.25.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3cfd839057a939770a4637f3482eb7abe25e72ab01c12935c308510d557ad2e6"
 dependencies = [
  "im",
  "proc-macro2",
@@ -4750,7 +4773,8 @@ dependencies = [
 
 [[package]]
 name = "modular-agent-monty"
-version = "0.2.0"
+version = "0.3.0"
+source = "git+https://github.com/modular-agent/modular-agent-monty.git#9ab3405fae35d0f3bb75cdd0d68c380fc1eefb98"
 dependencies = [
  "get-size2",
  "im",
@@ -4763,7 +4787,8 @@ dependencies = [
 
 [[package]]
 name = "modular-agent-slack"
-version = "0.4.1"
+version = "0.5.0"
+source = "git+https://github.com/modular-agent/modular-agent-slack.git#094412179cb2357e24655909bd461801f4427f65"
 dependencies = [
  "chrono",
  "im",
@@ -4781,7 +4806,8 @@ dependencies = [
 
 [[package]]
 name = "modular-agent-sqlx"
-version = "0.4.0"
+version = "0.5.0"
+source = "git+https://github.com/modular-agent/modular-agent-sqlx.git#29124c8217a568b56cd78438adfc28fb6a7b5ee7"
 dependencies = [
  "futures-util",
  "im",
@@ -4793,7 +4819,8 @@ dependencies = [
 
 [[package]]
 name = "modular-agent-std"
-version = "0.14.0"
+version = "0.15.0"
+source = "git+https://github.com/modular-agent/modular-agent-std.git#f6179fc4cf76db8931bcd73fabf0ff7ee6d0e5f0"
 dependencies = [
  "chrono",
  "cron",
@@ -4812,7 +4839,8 @@ dependencies = [
 
 [[package]]
 name = "modular-agent-voicevox"
-version = "0.4.0"
+version = "0.5.0"
+source = "git+https://github.com/modular-agent/modular-agent-voicevox.git#ac709ffc5fe2bc00f306fc60e49b202bfe5f3417"
 dependencies = [
  "base64 0.22.1",
  "modular-agent-core",
@@ -4824,7 +4852,8 @@ dependencies = [
 
 [[package]]
 name = "modular-agent-web"
-version = "0.7.0"
+version = "0.8.0"
+source = "git+https://github.com/modular-agent/modular-agent-web.git#1e2726f3d05b338dec4a87820f4f0bc20d5722a1"
 dependencies = [
  "html-to-markdown-rs",
  "modular-agent-core",
@@ -4861,7 +4890,7 @@ dependencies = [
 [[package]]
 name = "monty"
 version = "0.0.19-beta.4"
-source = "git+https://github.com/pydantic/monty#3d25a554c055a6f7bb1a506498357b580487c76e"
+source = "git+https://github.com/pydantic/monty#400115b840a20fcad64e1f4a2472eb0252729392"
 dependencies = [
  "ahash",
  "chrono",
@@ -4884,7 +4913,7 @@ dependencies = [
  "serde",
  "smallvec",
  "speedate",
- "strum",
+ "strum 0.27.2",
  "unicode-general-category",
  "unicode-normalization",
  "unicode_names2",
@@ -4893,7 +4922,7 @@ dependencies = [
 [[package]]
 name = "monty-macros"
 version = "0.0.19-beta.4"
-source = "git+https://github.com/pydantic/monty#3d25a554c055a6f7bb1a506498357b580487c76e"
+source = "git+https://github.com/pydantic/monty#400115b840a20fcad64e1f4a2472eb0252729392"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -6790,9 +6819,9 @@ dependencies = [
 
 [[package]]
 name = "referencing"
-version = "0.48.1"
+version = "0.48.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "df843f41f0cb459649f64a8b6b10579cf454f7a7420dc702767c81a26f23d780"
+checksum = "2d2b21a85c07fcf1cb95ff7ab8a687fcd37fa70db59975b5a032abdaadfdf42e"
 dependencies = [
  "ahash",
  "fluent-uri",
@@ -8028,8 +8057,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "aba069c070b5e213f2a094deb7e5ed50ecb092be36102a4f4042e8d2056d060e"
 dependencies = [
  "lexical-parse-float",
- "strum",
- "strum_macros",
+ "strum 0.27.2",
+ "strum_macros 0.27.2",
 ]
 
 [[package]]
@@ -8348,7 +8377,16 @@ version = "0.27.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "af23d6f6c1a224baef9d3f61e287d2761385a5b88fdab4eb4c6f11aeb54c4bcf"
 dependencies = [
- "strum_macros",
+ "strum_macros 0.27.2",
+]
+
+[[package]]
+name = "strum"
+version = "0.28.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9628de9b8791db39ceda2b119bbe13134770b56c138ec1d3af810d045c04f9bd"
+dependencies = [
+ "strum_macros 0.28.0",
 ]
 
 [[package]]
@@ -8356,6 +8394,18 @@ name = "strum_macros"
 version = "0.27.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7695ce3845ea4b33927c055a39dc438a45b059f7c1b3d91d38d10355fb8cbca7"
+dependencies = [
+ "heck 0.5.0",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
+]
+
+[[package]]
+name = "strum_macros"
+version = "0.28.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ab85eea0270ee17587ed4156089e10b9e6880ee688791d45a905f5b1ca36f664"
 dependencies = [
  "heck 0.5.0",
  "proc-macro2",
@@ -8928,6 +8978,8 @@ dependencies = [
 [[package]]
 name = "tauri-plugin-modular-agent"
 version = "0.16.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "38015af820e4e7dc2a250014c6ef5948a00f112e1a9f6c6fd64ed45f37ad8823"
 dependencies = [
  "im",
  "modular-agent-core",
@@ -9153,7 +9205,7 @@ dependencies = [
  "icu_segmenter",
  "itertools 0.14.0",
  "memchr",
- "strum",
+ "strum 0.27.2",
  "thiserror 2.0.19",
  "tokenizers",
 ]
@@ -9231,9 +9283,9 @@ dependencies = [
 
 [[package]]
 name = "time"
-version = "0.3.53"
+version = "0.3.54"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "18dfaaeddcb932337b5e7866ee7d0ce9b76d2fd092997146f187ec09b4558a50"
+checksum = "3e1d5e639ff6bab73cb6885cc7e7b1de96c3f32c68ec55f3952614bec1092244"
 dependencies = [
  "deranged",
  "libc",
@@ -9253,9 +9305,9 @@ checksum = "9e1c906769ad99c88eaa54e728060edef082f8e358ff32030cb7c7d315e81109"
 
 [[package]]
 name = "time-macros"
-version = "0.2.31"
+version = "0.2.32"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c431b87111666e491a90baa837f914fb45cd5dc3c268591b0220ff5057f2085f"
+checksum = "7e689342a48d2ea927c87ea50cabf8594854bf940e9310208848d680d668ed85"
 dependencies = [
  "num-conv",
  "time-core",
@@ -9333,9 +9385,9 @@ dependencies = [
 
 [[package]]
 name = "tokio"
-version = "1.53.0"
+version = "1.53.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d988bcd52dbe076d3d46903332f58c912b87a2c49b1428419a5845154762ffee"
+checksum = "202caea871b69668250d242070849eb495be178ed697a3e98aebce5bc81a0bed"
 dependencies = [
  "bytes",
  "libc",
@@ -11381,18 +11433,18 @@ dependencies = [
 
 [[package]]
 name = "zerocopy"
-version = "0.8.54"
+version = "0.8.55"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b7cbbc0a705a0fd05cc3676525980d2bf5a9bc4adac6d6475209a7887cf59d19"
+checksum = "b5a105cd7b140f6eeec8acff2ea38135d3cab283ada58540f629fe51e46696eb"
 dependencies = [
  "zerocopy-derive",
 ]
 
 [[package]]
 name = "zerocopy-derive"
-version = "0.8.54"
+version = "0.8.55"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e2e817b7b52d0c7358d3246da9d69935ebb18116b2b102b4230dac079b4862f5"
+checksum = "0fe976fb70c78cd64cccfe3a6fc142244e8a77b70959b30faf9d0ac37ee228eb"
 dependencies = [
  "proc-macro2",
  "quote",
