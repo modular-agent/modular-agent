@@ -4,6 +4,7 @@ use modular_agent_core::{
     AgentConfigSpec, AgentConfigSpecs, AgentConfigs, AgentContext, AgentData, AgentError,
     AgentOutput, AgentSpec, AgentValue, AsAgent, ModularAgent, async_trait, modular_agent,
 };
+use regex::Regex;
 
 use crate::data::get_nested_value;
 
@@ -41,6 +42,18 @@ impl CondOp {
     }
 }
 
+/// A compiled regex literal. `regex::Regex` does not implement `PartialEq`, which `CondLit`
+/// needs for the derived equality used in unit tests, so it is wrapped here and compared by
+/// its source pattern.
+#[derive(Clone, Debug)]
+struct CondRegex(Regex);
+
+impl PartialEq for CondRegex {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.as_str() == other.0.as_str()
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 enum CondLit {
     /// Kept apart from `Number` so that integers beyond f64's exact range compare exactly.
@@ -49,6 +62,8 @@ enum CondLit {
     String(String),
     Boolean(bool),
     Null,
+    /// A regular expression matched against the string value in full (anchored `^(?:...)$`).
+    Regex(CondRegex),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -123,37 +138,62 @@ fn parse_cond(src: &str) -> Result<Cond, AgentError> {
         )));
     }
 
-    let json: serde_json::Value = serde_json::from_str(rest).map_err(|e| {
-        AgentError::InvalidConfig(format!("Invalid condition literal `{}`: {}", rest, e))
-    })?;
+    // A regex literal is `/pattern/`. It is handled before JSON parsing so that a leading
+    // `/` is never read as an (invalid) JSON value. The pattern is everything between the
+    // first and last `/`; requiring the closing `/` to be the last character means a `/`
+    // inside the pattern needs no escaping (`/a/b/` is the pattern `a/b`).
+    let lit = if let Some(after_open) = rest.strip_prefix('/') {
+        let Some(pattern) = after_open.strip_suffix('/') else {
+            return Err(AgentError::InvalidConfig(format!(
+                "Regex literal must be closed with a `/`: {}",
+                src
+            )));
+        };
+        // Validate the bare pattern first: an unbalanced pattern such as `a)|(b` is invalid
+        // on its own but would merge with the anchoring wrapper below into a valid -
+        // and unanchored - regex instead of being reported as an error.
+        Regex::new(pattern).map_err(|e| {
+            AgentError::InvalidConfig(format!("Invalid regex literal `/{}/`: {}", pattern, e))
+        })?;
+        // Anchor the whole match. `(?:...)` groups the pattern so an alternation such as
+        // `a|b` is anchored as a whole rather than as `^a` or `b$`.
+        let re = Regex::new(&format!("^(?:{pattern})$")).map_err(|e| {
+            AgentError::InvalidConfig(format!("Invalid regex literal `/{}/`: {}", pattern, e))
+        })?;
+        CondLit::Regex(CondRegex(re))
+    } else {
+        let json: serde_json::Value = serde_json::from_str(rest).map_err(|e| {
+            AgentError::InvalidConfig(format!("Invalid condition literal `{}`: {}", rest, e))
+        })?;
 
-    let lit = match json {
-        serde_json::Value::Null => CondLit::Null,
-        serde_json::Value::Bool(b) => CondLit::Boolean(b),
-        serde_json::Value::Number(n) => {
-            if let Some(i) = n.as_i64() {
-                CondLit::Integer(i)
-            } else if let Some(f) = n.as_f64() {
-                CondLit::Number(f)
-            } else {
+        match json {
+            serde_json::Value::Null => CondLit::Null,
+            serde_json::Value::Bool(b) => CondLit::Boolean(b),
+            serde_json::Value::Number(n) => {
+                if let Some(i) = n.as_i64() {
+                    CondLit::Integer(i)
+                } else if let Some(f) = n.as_f64() {
+                    CondLit::Number(f)
+                } else {
+                    return Err(AgentError::InvalidConfig(format!(
+                        "Condition literal is not representable as a number: {}",
+                        rest
+                    )));
+                }
+            }
+            serde_json::Value::String(s) => CondLit::String(s),
+            _ => {
                 return Err(AgentError::InvalidConfig(format!(
-                    "Condition literal is not representable as a number: {}",
+                    "Array and object condition literals are not supported: {}",
                     rest
                 )));
             }
         }
-        serde_json::Value::String(s) => CondLit::String(s),
-        _ => {
-            return Err(AgentError::InvalidConfig(format!(
-                "Array and object condition literals are not supported: {}",
-                rest
-            )));
-        }
     };
 
-    if op.is_order() && matches!(lit, CondLit::Boolean(_) | CondLit::Null) {
+    if op.is_order() && matches!(lit, CondLit::Boolean(_) | CondLit::Null | CondLit::Regex(_)) {
         return Err(AgentError::InvalidConfig(format!(
-            "Order comparison is not supported for boolean or null literals: {}",
+            "Order comparison is not supported for boolean, null or regex literals: {}",
             src
         )));
     }
@@ -181,6 +221,8 @@ fn eq_cond(lit: &CondLit, value: &AgentValue) -> bool {
         CondLit::String(s) => value.as_str() == Some(s.as_str()),
         CondLit::Boolean(b) => value.as_bool() == Some(*b),
         CondLit::Null => value.is_unit(),
+        // A non-string value never matches, so `==` is false and `!=` (its negation) is true.
+        CondLit::Regex(re) => value.as_str().is_some_and(|s| re.0.is_match(s)),
     }
 }
 
@@ -193,7 +235,8 @@ fn cmp_cond(lit: &CondLit, value: &AgentValue) -> Option<Ordering> {
         },
         CondLit::Number(n) => value.as_f64().and_then(|v| v.partial_cmp(n)),
         CondLit::String(s) => value.as_str().map(|v| v.cmp(s.as_str())),
-        CondLit::Boolean(_) | CondLit::Null => None,
+        // Order comparisons against these are rejected at parse time; unreachable in practice.
+        CondLit::Boolean(_) | CondLit::Null | CondLit::Regex(_) => None,
     }
 }
 
@@ -236,10 +279,19 @@ fn eval_cond(cond: &Cond, value: &AgentValue) -> bool {
 
 /// Routes the input value to `t` or `f` depending on a condition.
 ///
-/// The condition is written as `[path] <operator> <JSON literal>`, for example `> 10`,
+/// The condition is written as `[path] <operator> <literal>`, for example `> 10`,
 /// `== "abc"` or `user.age >= 18`. Supported operators are `==`, `!=`, `>`, `>=`, `<` and
-/// `<=`; supported literals are numbers, strings, booleans and `null`. Order operators
-/// reject boolean and null literals at parse time.
+/// `<=`; supported literals are numbers, strings, booleans, `null` and regular expressions.
+/// Order operators reject boolean, null and regex literals at parse time.
+///
+/// A regex literal is written between slashes, `== /err.*/`, and is matched against a string
+/// value in full: the pattern is implicitly anchored as `^(?:...)$`, so `/err.*/` matches
+/// `"error"` but not `"my error"` - write `/.*err.*/` for a substring match. Use the inline
+/// `(?i)` flag for a case-insensitive match, as in `/(?i)error/`. A non-string value (a
+/// number, an object, or an unresolved path) never matches, so `==` is false and `!=` is
+/// true for it. A `/` inside the pattern needs no escaping as long as the literal still ends
+/// with a `/` (`/a/b/` is the pattern `a/b`). An invalid regex is a configuration error,
+/// reported the same way as any other invalid condition.
 ///
 /// The path is a dot-separated list of object keys. When it is omitted, the input value
 /// itself is tested. Whether or not a path is used, the value emitted on `t` / `f` is
@@ -348,9 +400,13 @@ impl AsAgent for IfAgent {
 /// error, while an invalid condition loaded from a preset is only kept as never-matching.
 ///
 /// Condition syntax and comparison semantics are the same as the If agent:
-/// `[path] <operator> <JSON literal>` with `==`, `!=`, `>`, `>=`, `<`, `<=` and number,
-/// string, boolean or null literals. Values that cannot be compared with a literal do not
-/// match that condition instead of raising an error.
+/// `[path] <operator> <literal>` with `==`, `!=`, `>`, `>=`, `<`, `<=` and number, string,
+/// boolean, null or regex literals; order operators reject boolean, null and regex literals.
+/// A regex literal such as `== /err.*/` matches a string
+/// value in full (implicitly anchored as `^(?:...)$`; use `(?i)` for case-insensitivity), and
+/// a non-string value never matches it. Values that cannot be compared with a literal do not
+/// match that condition instead of raising an error, and an invalid regex is kept as a
+/// never-matching condition like any other invalid one.
 ///
 /// Each condition carries its own optional path, so different conditions can look at
 /// different fields of the same input. The condition tests the value at the path, but the
@@ -723,5 +779,123 @@ mod tests {
         // Equality with the same literals stays valid
         assert!(parse_cond("== true").is_ok());
         assert!(parse_cond("!= null").is_ok());
+    }
+
+    #[test]
+    fn test_parse_cond_regex() {
+        // `== /pattern/` yields a Regex literal, anchored as a full match
+        assert_eq!(
+            parse_cond("== /err.*/").expect("valid"),
+            Cond {
+                path: vec![],
+                op: CondOp::Eq,
+                lit: CondLit::Regex(CondRegex(Regex::new("^(?:err.*)$").unwrap())),
+            }
+        );
+        // A path together with `!=`
+        assert_eq!(
+            parse_cond("status != /ok/").expect("valid"),
+            Cond {
+                path: vec!["status".to_string()],
+                op: CondOp::Ne,
+                lit: CondLit::Regex(CondRegex(Regex::new("^(?:ok)$").unwrap())),
+            }
+        );
+        // A `/` inside the pattern needs no escaping; the last `/` closes the literal
+        assert_eq!(
+            parse_cond("== /a/b/").expect("valid"),
+            Cond {
+                path: vec![],
+                op: CondOp::Eq,
+                lit: CondLit::Regex(CondRegex(Regex::new("^(?:a/b)$").unwrap())),
+            }
+        );
+        // Operator characters inside the pattern are taken literally
+        assert_eq!(
+            parse_cond("== /a=b/").expect("valid"),
+            Cond {
+                path: vec![],
+                op: CondOp::Eq,
+                lit: CondLit::Regex(CondRegex(Regex::new("^(?:a=b)$").unwrap())),
+            }
+        );
+        // `//` is the empty pattern, not an error
+        assert_eq!(
+            parse_cond("== //").expect("valid"),
+            Cond {
+                path: vec![],
+                op: CondOp::Eq,
+                lit: CondLit::Regex(CondRegex(Regex::new("^(?:)$").unwrap())),
+            }
+        );
+    }
+
+    #[test]
+    fn test_parse_cond_regex_errors() {
+        // Missing closing `/`
+        assert!(parse_cond("== /abc").is_err());
+        assert!(parse_cond("== /").is_err());
+        // Invalid regex pattern
+        assert!(parse_cond("== /[/").is_err());
+        // An unbalanced pattern is rejected instead of merging with the `^(?:...)$`
+        // anchoring wrapper into a valid but unanchored regex
+        assert!(parse_cond("== /a)|(b/").is_err());
+        assert!(parse_cond("== /)(/").is_err());
+        // Order operators reject a regex literal at parse time
+        assert!(parse_cond("> /a/").is_err());
+        assert!(parse_cond(">= /a/").is_err());
+    }
+
+    #[test]
+    fn test_eval_cond_regex() {
+        // Full match: `/err.*/` matches "error" but not the substring in "my error"
+        let cond = parse_cond("== /err.*/").expect("valid");
+        assert!(eval_cond(&cond, &AgentValue::string("error")));
+        assert!(!eval_cond(&cond, &AgentValue::string("my error")));
+
+        // `!=` is the exact negation
+        let ne = parse_cond("!= /err.*/").expect("valid");
+        assert!(!eval_cond(&ne, &AgentValue::string("error")));
+        assert!(eval_cond(&ne, &AgentValue::string("my error")));
+
+        // `(?i)` makes the match case-insensitive
+        let ci = parse_cond("== /(?i)error/").expect("valid");
+        assert!(eval_cond(&ci, &AgentValue::string("ERROR")));
+
+        // Path-based match
+        let value = AgentValue::object(im::hashmap! {
+            "status".to_string() => AgentValue::string("error".to_string()),
+        });
+        assert!(eval_cond(
+            &parse_cond("status == /err.*/").expect("valid"),
+            &value
+        ));
+        assert!(!eval_cond(
+            &parse_cond("status == /ok/").expect("valid"),
+            &value
+        ));
+
+        // The empty pattern `//` matches only the empty string
+        let empty = parse_cond("== //").expect("valid");
+        assert!(eval_cond(&empty, &AgentValue::string("")));
+        assert!(!eval_cond(&empty, &AgentValue::string("a")));
+
+        // A non-string target never matches: `==` is false, `!=` is true
+        let num = AgentValue::integer(10);
+        assert!(!eval_cond(&parse_cond("== /10/").expect("valid"), &num));
+        assert!(eval_cond(&parse_cond("!= /10/").expect("valid"), &num));
+
+        // An unresolved path is unit, which is not a string either
+        let obj = AgentValue::object(im::hashmap! {
+            "name".to_string() => AgentValue::string("a".to_string()),
+        });
+        assert!(!eval_cond(
+            &parse_cond("missing == /.*/").expect("valid"),
+            &obj
+        ));
+        assert!(eval_cond(
+            &parse_cond("missing != /.*/").expect("valid"),
+            &obj
+        ));
     }
 }

@@ -95,6 +95,65 @@ async fn test_if_string_eq() {
 }
 
 #[tokio::test]
+async fn test_if_regex() {
+    let ma = test_utils::setup_modular_agent().await;
+
+    let preset_id = test_utils::open_and_start_preset(&ma, PRESET)
+        .await
+        .unwrap();
+
+    // A regex literal matches the string value in full
+    test_utils::write_and_expect_local_value(
+        &ma,
+        &preset_id,
+        "if_cond",
+        AgentValue::string("== /h.*/"),
+    )
+    .await
+    .unwrap();
+
+    test_utils::write_and_expect_local_value(&ma, &preset_id, "if_in", AgentValue::string("hello"))
+        .await
+        .unwrap();
+    test_utils::expect_local_value(&preset_id, "if_t", &AgentValue::string("hello"))
+        .await
+        .unwrap();
+
+    test_utils::write_and_expect_local_value(&ma, &preset_id, "if_in", AgentValue::string("world"))
+        .await
+        .unwrap();
+    test_utils::expect_local_value(&preset_id, "if_f", &AgentValue::string("world"))
+        .await
+        .unwrap();
+
+    // `!=` is the exact negation of the same match
+    test_utils::write_and_expect_local_value(
+        &ma,
+        &preset_id,
+        "if_cond",
+        AgentValue::string("!= /h.*/"),
+    )
+    .await
+    .unwrap();
+
+    test_utils::write_and_expect_local_value(&ma, &preset_id, "if_in", AgentValue::string("hello"))
+        .await
+        .unwrap();
+    test_utils::expect_local_value(&preset_id, "if_f", &AgentValue::string("hello"))
+        .await
+        .unwrap();
+
+    test_utils::write_and_expect_local_value(&ma, &preset_id, "if_in", AgentValue::string("world"))
+        .await
+        .unwrap();
+    test_utils::expect_local_value(&preset_id, "if_t", &AgentValue::string("world"))
+        .await
+        .unwrap();
+
+    ma.quit();
+}
+
+#[tokio::test]
 async fn test_if_bool() {
     let ma = test_utils::setup_modular_agent().await;
 
@@ -380,6 +439,51 @@ async fn test_match_config_update() {
         .await
         .unwrap();
     test_utils::expect_local_value(&preset_id, "match_default", &AgentValue::integer(3))
+        .await
+        .unwrap();
+
+    ma.quit();
+}
+
+#[tokio::test]
+async fn test_match_regex() {
+    let ma = test_utils::setup_modular_agent().await;
+
+    let preset_id = test_utils::open_and_start_preset(&ma, PRESET)
+        .await
+        .unwrap();
+
+    // cond1 becomes a regex on the `status` field. cond2 stays `> 5` from the preset: with
+    // no path it tests the input object itself, which has no numeric value, so it never
+    // matches here - a non-matching status therefore routes to default.
+    test_utils::write_and_expect_local_value(
+        &ma,
+        &preset_id,
+        "match_cond1",
+        AgentValue::string("status == /err.*/"),
+    )
+    .await
+    .unwrap();
+
+    // cond1 matches in full, and the whole input object is what gets emitted
+    let failed = AgentValue::object(hashmap! {
+        "status".to_string() => AgentValue::string("error".to_string()),
+    });
+    test_utils::write_and_expect_local_value(&ma, &preset_id, "match_in", failed.clone())
+        .await
+        .unwrap();
+    test_utils::expect_local_value(&preset_id, "match_0", &failed)
+        .await
+        .unwrap();
+
+    // A status that only partly matches the anchored pattern does not match
+    let partial = AgentValue::object(hashmap! {
+        "status".to_string() => AgentValue::string("my error".to_string()),
+    });
+    test_utils::write_and_expect_local_value(&ma, &preset_id, "match_in", partial.clone())
+        .await
+        .unwrap();
+    test_utils::expect_local_value(&preset_id, "match_default", &partial)
         .await
         .unwrap();
 
