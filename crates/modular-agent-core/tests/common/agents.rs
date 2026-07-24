@@ -11,6 +11,8 @@ const PORT_RESET: &str = "reset";
 const PORT_COUNT: &str = "count";
 const CONFIG_INITIAL_COUNT: &str = "initial_count";
 const GLOBAL_STRING: &str = "global_string";
+pub const CONFIG_DYN: &str = "dyn";
+pub const PORT_DYN_OUT: &str = "dyn_out";
 
 /// Counter
 #[modular_agent(
@@ -99,6 +101,38 @@ impl AsAgent for CancelWaitAgent {
                 self.output(ctx, PORT_OUT, AgentValue::string("done")).await
             }
         }
+    }
+}
+
+/// Mutates its spec in new(): adds a dynamic config and output port.
+/// Models agents like ZipToObject that generate configs/ports at
+/// construction time; the mutation must survive into the preset spec.
+#[modular_agent(
+    title = "Dyn Spec",
+    category = CATEGORY,
+    inputs = [PORT_IN],
+    outputs = [PORT_OUT],
+)]
+pub struct DynSpecAgent {
+    data: AgentData,
+}
+
+#[async_trait]
+impl AsAgent for DynSpecAgent {
+    fn new(ma: ModularAgent, id: String, mut spec: AgentSpec) -> Result<Self, AgentError> {
+        let mut configs = spec.configs.take().unwrap_or_default();
+        configs.set(CONFIG_DYN.to_string(), AgentValue::integer(42));
+        spec.configs = Some(configs);
+
+        let mut outputs = spec.outputs.take().unwrap_or_default();
+        if !outputs.iter().any(|p| p == PORT_DYN_OUT) {
+            outputs.push(PORT_DYN_OUT.to_string());
+        }
+        spec.outputs = Some(outputs);
+
+        Ok(Self {
+            data: AgentData::new(ma, id, spec),
+        })
     }
 }
 

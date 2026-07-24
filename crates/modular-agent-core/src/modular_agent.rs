@@ -734,10 +734,12 @@ impl ModularAgent {
 
         let id = new_id();
         spec.id = id.clone();
-        self.add_agent_internal(preset_id.clone(), spec.clone())?;
+        // Register the constructed spec: new() may have generated dynamic
+        // configs/ports via update_spec, and the preset must reflect them.
+        let constructed = self.add_agent_internal(preset_id.clone(), spec)?;
 
         let mut preset = preset.lock().await;
-        preset.add_agent(spec.clone());
+        preset.add_agent(constructed);
         drop(preset);
 
         self.emit_preset_structure_changed(preset_id);
@@ -745,7 +747,11 @@ impl ModularAgent {
         Ok(id)
     }
 
-    fn add_agent_internal(&self, preset_id: String, spec: AgentSpec) -> Result<(), AgentError> {
+    fn add_agent_internal(
+        &self,
+        preset_id: String,
+        spec: AgentSpec,
+    ) -> Result<AgentSpec, AgentError> {
         let mut agents = self.agents.lock().unwrap();
         if agents.contains_key(&spec.id) {
             return Err(AgentError::AgentAlreadyExists(spec.id.to_string()));
@@ -755,8 +761,9 @@ impl ModularAgent {
         // events it emits later must not inherit the creator's origin tag.
         let mut agent = agent_new(self.base(), spec_id.clone(), spec)?;
         agent.set_preset_id(preset_id);
+        let constructed = agent.spec().clone();
         agents.insert(spec_id, Arc::new(AsyncMutex::new(agent)));
-        Ok(())
+        Ok(constructed)
     }
 
     /// Get the agent by id.
@@ -876,13 +883,21 @@ impl ModularAgent {
         let mut added_connections = 0;
         let mut result = Ok(());
 
+        // Collect the constructed specs (with dynamic configs/ports from
+        // new()) so the preset and the caller both see the real state.
+        let mut constructed_agents = Vec::with_capacity(agents.len());
         for agent in &agents {
-            if let Err(e) = self.add_agent_internal(preset_id.to_string(), agent.clone()) {
-                result = Err(e);
-                break;
+            match self.add_agent_internal(preset_id.to_string(), agent.clone()) {
+                Ok(constructed) => {
+                    preset.add_agent(constructed.clone());
+                    constructed_agents.push(constructed);
+                    added_agents += 1;
+                }
+                Err(e) => {
+                    result = Err(e);
+                    break;
+                }
             }
-            preset.add_agent(agent.clone());
-            added_agents += 1;
         }
 
         if result.is_ok() {
@@ -915,7 +930,7 @@ impl ModularAgent {
 
         self.emit_preset_structure_changed(preset_id.to_string());
 
-        Ok((agents, connections))
+        Ok((constructed_agents, connections))
     }
 
     /// Remove an agent from the specified preset.

@@ -11,12 +11,13 @@ fn test_init() {
     let ma = ModularAgent::init().unwrap();
 
     let defs = ma.get_agent_definitions();
-    assert_eq!(defs.len(), 13);
+    assert_eq!(defs.len(), 14);
     let mut keys: Vec<_> = defs.keys().cloned().collect();
     keys.sort();
     let expected = vec![
         "main_test::common::agents::CancelWaitAgent",
         "main_test::common::agents::CounterAgent",
+        "main_test::common::agents::DynSpecAgent",
         "main_test::common::agents::StuckSleepAgent",
         "modular_agent_core::external_agent::ExternalInputAgent",
         "modular_agent_core::external_agent::ExternalOutputAgent",
@@ -202,6 +203,93 @@ async fn test_remove_spec_only_agent() {
     // An agent in neither the runtime nor the spec is still an error.
     let err = ma.remove_agent(&preset_id, "missing").await.unwrap_err();
     assert!(matches!(err, ma::AgentError::AgentNotFound(_)));
+
+    ma.quit();
+}
+
+#[tokio::test]
+async fn test_add_agent_registers_constructed_spec() {
+    let ma = ModularAgent::init().unwrap();
+    ma.ready().await.unwrap();
+
+    let preset_id = ma.new_preset().unwrap();
+    let def = ma
+        .get_agent_definition(common::agents::DynSpecAgent::DEF_NAME)
+        .unwrap();
+
+    let agent_id = ma
+        .add_agent(preset_id.clone(), def.to_spec())
+        .await
+        .unwrap();
+
+    // The raw preset spec (not overlaid with live agent specs) must contain
+    // the config and port that new() generated.
+    let preset = ma.get_preset(&preset_id).unwrap();
+    let registered = {
+        let preset = preset.lock().await;
+        preset
+            .spec()
+            .agents
+            .iter()
+            .find(|a| a.id == agent_id)
+            .cloned()
+            .unwrap()
+    };
+    let configs = registered.configs.expect("configs must be present");
+    assert!(configs.contains_key(common::agents::CONFIG_DYN));
+    let outputs = registered.outputs.expect("outputs must be present");
+    assert!(outputs.iter().any(|p| p == common::agents::PORT_DYN_OUT));
+
+    // get_preset_spec (save path) must expose them as well.
+    let preset_spec = ma.get_preset_spec(&preset_id).await.unwrap();
+    let saved = preset_spec
+        .agents
+        .iter()
+        .find(|a| a.id == agent_id)
+        .unwrap();
+    let configs = saved.configs.as_ref().expect("configs must be present");
+    assert!(configs.contains_key(common::agents::CONFIG_DYN));
+
+    ma.quit();
+}
+
+#[tokio::test]
+async fn test_add_agents_and_connections_returns_constructed_specs() {
+    let ma = ModularAgent::init().unwrap();
+    ma.ready().await.unwrap();
+
+    let preset_id = ma.new_preset().unwrap();
+    let def = ma
+        .get_agent_definition(common::agents::DynSpecAgent::DEF_NAME)
+        .unwrap();
+
+    let (added, _) = ma
+        .add_agents_and_connections(&preset_id, &vec![def.to_spec()], &vec![])
+        .await
+        .unwrap();
+    assert_eq!(added.len(), 1);
+
+    // The returned spec must be the constructed one, including the config
+    // and port that new() generated.
+    let configs = added[0].configs.as_ref().expect("configs must be present");
+    assert!(configs.contains_key(common::agents::CONFIG_DYN));
+    let outputs = added[0].outputs.as_ref().expect("outputs must be present");
+    assert!(outputs.iter().any(|p| p == common::agents::PORT_DYN_OUT));
+
+    // The preset must have registered the constructed spec as well.
+    let preset = ma.get_preset(&preset_id).unwrap();
+    let registered = {
+        let preset = preset.lock().await;
+        preset
+            .spec()
+            .agents
+            .iter()
+            .find(|a| a.id == added[0].id)
+            .cloned()
+            .unwrap()
+    };
+    let configs = registered.configs.expect("configs must be present");
+    assert!(configs.contains_key(common::agents::CONFIG_DYN));
 
     ma.quit();
 }
