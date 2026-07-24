@@ -3,6 +3,7 @@ import {
   addAgent,
   addAgentsAndConnections,
   addConnection,
+  getAgentSpec,
   newAgentSpec,
   removeAgent,
   removeConnection,
@@ -272,7 +273,10 @@ export class AddAgentCommand implements Command {
     }
     const id = await addAgent(this.presetId, spec);
     spec.id = id;
-    this.node = agentSpecToNode(spec);
+    // Re-fetch the constructed spec: the agent's new() may have added dynamic
+    // configs/ports (e.g. ZipToObject k1..kn) that the local spec lacks.
+    const actual = await getAgentSpec(id).catch(() => null);
+    this.node = agentSpecToNode(actual ?? spec);
     editor.nodes = [...editor.nodes, this.node];
     if (editor.running && !this.node.data.disabled) {
       await startAgent(this.node.id).catch((e) => {
