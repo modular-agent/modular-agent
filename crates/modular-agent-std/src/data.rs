@@ -408,13 +408,13 @@ impl ZipToObjectAgent {
         let ttl_sec = spec
             .configs
             .as_ref()
-            .map(|c| c.get_integer_or("ttl_seconds", 60))
+            .map(|c| c.get_integer_or(CONFIG_TTL_SECONDS, 60))
             .unwrap_or(60) as u64;
 
         let capacity = spec
             .configs
             .as_ref()
-            .map(|c| c.get_integer_or("capacity", 1000))
+            .map(|c| c.get_integer_or(CONFIG_CAPACITY, 1000))
             .unwrap_or(1000) as u64;
 
         // Dynamic generation of config definitions (ConfigSpecs)
@@ -433,6 +433,7 @@ impl ZipToObjectAgent {
         };
         config_specs.insert(CONFIG_N.to_string(), n_spec);
 
+        configs.set(CONFIG_USE_CTX.to_string(), AgentValue::boolean(use_ctx));
         let Some(use_ctx_spec) = spec
             .config_specs
             .as_ref()
@@ -444,6 +445,38 @@ impl ZipToObjectAgent {
             ));
         };
         config_specs.insert(CONFIG_USE_CTX.to_string(), use_ctx_spec);
+
+        configs.set(
+            CONFIG_TTL_SECONDS.to_string(),
+            AgentValue::integer(ttl_sec as i64),
+        );
+        let Some(ttl_spec) = spec
+            .config_specs
+            .as_ref()
+            .and_then(|cs| cs.get(CONFIG_TTL_SECONDS))
+            .cloned()
+        else {
+            return Err(AgentError::InvalidConfig(
+                "config ttl_sec must be present".into(),
+            ));
+        };
+        config_specs.insert(CONFIG_TTL_SECONDS.to_string(), ttl_spec);
+
+        configs.set(
+            CONFIG_CAPACITY.to_string(),
+            AgentValue::integer(capacity as i64),
+        );
+        let Some(capacity_spec) = spec
+            .config_specs
+            .as_ref()
+            .and_then(|cs| cs.get(CONFIG_CAPACITY))
+            .cloned()
+        else {
+            return Err(AgentError::InvalidConfig(
+                "config capacity must be present".into(),
+            ));
+        };
+        config_specs.insert(CONFIG_CAPACITY.to_string(), capacity_spec);
 
         let mut keys = Vec::with_capacity(n);
         for i in 1..=n {
@@ -716,6 +749,58 @@ mod tests {
         let app = root.get_mut("app").unwrap();
         let version = app.get_mut("version").unwrap();
         assert_eq!(*version, AgentValue::string("v2"));
+    }
+
+    /// Regression test: update_spec must read ttl_sec/capacity by their config
+    /// names and keep use_ctx/ttl_sec/capacity in the regenerated configs.
+    #[test]
+    fn test_zip_to_object_update_spec_preserves_configs() {
+        let mut configs = AgentConfigs::new();
+        configs.set(CONFIG_N.to_string(), AgentValue::integer(2));
+        configs.set(CONFIG_USE_CTX.to_string(), AgentValue::boolean(true));
+        configs.set(CONFIG_TTL_SECONDS.to_string(), AgentValue::integer(120));
+        configs.set(CONFIG_CAPACITY.to_string(), AgentValue::integer(5));
+
+        let mut config_specs = AgentConfigSpecs::default();
+        for (key, type_, value) in [
+            (CONFIG_N, "integer", AgentValue::integer(2)),
+            (CONFIG_USE_CTX, "boolean", AgentValue::boolean(false)),
+            (CONFIG_TTL_SECONDS, "integer", AgentValue::integer(60)),
+            (CONFIG_CAPACITY, "integer", AgentValue::integer(1000)),
+        ] {
+            config_specs.insert(
+                key.to_string(),
+                AgentConfigSpec {
+                    value,
+                    type_: Some(type_.to_string()),
+                    ..Default::default()
+                },
+            );
+        }
+
+        let mut spec = AgentSpec {
+            configs: Some(configs),
+            config_specs: Some(config_specs),
+            ..Default::default()
+        };
+
+        let (n, use_ctx, ttl_sec, capacity, keys) =
+            ZipToObjectAgent::update_spec(&mut spec).unwrap();
+        assert_eq!(n, 2);
+        assert!(use_ctx);
+        assert_eq!(ttl_sec, 120);
+        assert_eq!(capacity, 5);
+        assert_eq!(keys, vec!["in1".to_string(), "in2".to_string()]);
+
+        let configs = spec.configs.as_ref().unwrap();
+        assert!(configs.get_bool_or_default(CONFIG_USE_CTX));
+        assert_eq!(configs.get_integer_or(CONFIG_TTL_SECONDS, 0), 120);
+        assert_eq!(configs.get_integer_or(CONFIG_CAPACITY, 0), 5);
+
+        let config_specs = spec.config_specs.as_ref().unwrap();
+        assert!(config_specs.get(CONFIG_USE_CTX).is_some());
+        assert!(config_specs.get(CONFIG_TTL_SECONDS).is_some());
+        assert!(config_specs.get(CONFIG_CAPACITY).is_some());
     }
 
     /// Verify if an intermediate path is not an Object, forcibly overwrite it with an empty Object.
