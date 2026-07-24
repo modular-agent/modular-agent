@@ -296,7 +296,7 @@ impl AsAgent for FromJsonAgent {
     }
 }
 
-fn get_nested_value<'a, K: AsRef<str>>(
+pub(crate) fn get_nested_value<'a, K: AsRef<str>>(
     value: &'a AgentValue,
     keys: &[K],
 ) -> Option<&'a AgentValue> {

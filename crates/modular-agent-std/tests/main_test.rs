@@ -3,6 +3,7 @@
 extern crate modular_agent_std;
 
 mod suites {
+    mod filter_test;
     mod input_test;
     mod string_test;
 }

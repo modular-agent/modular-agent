@@ -5,6 +5,7 @@ pub mod data;
 pub mod display;
 pub mod example;
 pub mod file;
+pub mod filter;
 pub mod input;
 pub mod sequence;
 pub mod string;
