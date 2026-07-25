@@ -101,12 +101,7 @@ impl ModularAgentApp {
     }
 
     /// Rename a preset file (also used internally by move_preset).
-    pub async fn rename_preset(
-        &self,
-        app: &AppHandle,
-        name: &str,
-        new_name: &str,
-    ) -> Result<()> {
+    pub async fn rename_preset(&self, app: &AppHandle, name: &str, new_name: &str) -> Result<()> {
         if !is_valid_preset_name(name) {
             bail!("Invalid preset name: {}", name);
         }
@@ -218,8 +213,7 @@ impl ModularAgentApp {
         new_path_str: &str,
     ) -> Result<()> {
         // Validate paths to prevent path traversal
-        if !path.is_empty()
-            && (path.contains("..") || path.contains('\\') || path.starts_with('/'))
+        if !path.is_empty() && (path.contains("..") || path.contains('\\') || path.starts_with('/'))
         {
             bail!("Invalid folder path");
         }

@@ -1,5 +1,5 @@
 use anyhow::{Context as _, Result};
-use modular_agent_core::mcp_server::{McpServerConfig, McpServerHandle, start_mcp_server};
+use modular_agent_core::mcp_server::{start_mcp_server, McpServerConfig, McpServerHandle};
 use modular_agent_core::{AgentConfigs, AgentValue};
 use rand::Rng as _;
 use serde::{Deserialize, Serialize};
