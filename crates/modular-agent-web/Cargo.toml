@@ -8,14 +8,18 @@ license = "Apache-2.0 OR MIT"
 
 [dependencies]
 html-to-markdown-rs = { version = "2.14.0", optional = true }
+quick-xml = { version = "0.38", optional = true }
 reqwest = { version = "0.12.25", default-features = false, features = ["json"] }
 scraper = { version = "0.25.0", optional = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 url = "2.5.7"
-yt-transcript-rs = { version = "0.1.8", optional = true }
 
 modular-agent-core = "0.25.0"
+
+[dev-dependencies]
+reqwest = { version = "0.12.25", default-features = false }
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 
 [features]
 default = ["rustls-tls", "fetch-url", "html-scraper", "html-to-markdown", "searxng", "yt-transcript"]
@@ -25,7 +29,7 @@ fetch-url = []
 html-scraper = ["scraper"]
 html-to-markdown = ["html-to-markdown-rs"]
 searxng = []
-yt-transcript = ["yt-transcript-rs"]
+yt-transcript = ["quick-xml"]
 
 # [patch.crates-io]
 # modular-agent-core = { path = "../modular-agent-core/modular-agent-core" }
