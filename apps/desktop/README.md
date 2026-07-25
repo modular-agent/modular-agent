@@ -118,7 +118,7 @@ The following agent crates are included by default:
 | ----- | ----------- |
 | [modular-agent-std](https://github.com/modular-agent/modular-agent-std) | Standard utility agents |
 | [modular-agent-llm](https://github.com/modular-agent/modular-agent-llm) | LLM integrations (OpenAI, Ollama) |
-| [modular-agent-web](https://github.com/modular-agent/modular-agent-web) | HTTP, scraping, YouTube |
+| [modular-agent-web](https://github.com/modular-agent/modular-agent-web) | HTTP, scraping, search, YouTube |
 | [modular-agent-slack](https://github.com/modular-agent/modular-agent-slack) | Slack messaging |
 | [modular-agent-sqlx](https://github.com/modular-agent/modular-agent-sqlx) | SQLite, MySQL, PostgreSQL |
 | [modular-agent-audio](https://github.com/modular-agent/modular-agent-audio) | Audio capture/transcription |

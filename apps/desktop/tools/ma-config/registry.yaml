@@ -129,7 +129,7 @@ agents:
     is_default: true
 
   - name: modular-agent-web
-    description: Web/HTTP, scraping, YouTube agents
+    description: Web/HTTP, scraping, search, YouTube agents
     git_url: https://github.com/modular-agent/modular-agent-web.git
     available_features:
       - default-tls
@@ -137,11 +137,13 @@ agents:
       - fetch-url
       - html-scraper
       - html-to-markdown
+      - searxng
       - yt-transcript
     default_features:
       - rustls-tls
       - fetch-url
       - html-scraper
       - html-to-markdown
+      - searxng
       - yt-transcript
     is_default: true
