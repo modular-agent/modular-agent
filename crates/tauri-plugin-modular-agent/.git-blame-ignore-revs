@@ -4,3 +4,6 @@
 
 # Format source with prettier
 133e74d7c6b084316ce9056d486257960abfb8f9
+
+# Apply cargo fmt
+1da6ddf25197497c6d841c61bbfa14310da0c155
