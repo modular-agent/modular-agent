@@ -21,8 +21,14 @@ pub fn add_preset<R: Runtime>(app: AppHandle<R>, spec: PresetSpec) -> Result<Str
 }
 
 #[tauri::command]
-pub fn add_preset_with_name<R: Runtime>(app: AppHandle<R>, spec: PresetSpec, name: String) -> Result<String> {
-    app.ma().add_preset_with_name(spec, name).map_err(Into::into)
+pub fn add_preset_with_name<R: Runtime>(
+    app: AppHandle<R>,
+    spec: PresetSpec,
+    name: String,
+) -> Result<String> {
+    app.ma()
+        .add_preset_with_name(spec, name)
+        .map_err(Into::into)
 }
 
 #[tauri::command]
@@ -41,7 +47,11 @@ pub async fn stop_preset<R: Runtime>(app: AppHandle<R>, id: String) -> Result<()
 }
 
 #[tauri::command]
-pub async fn open_preset_from_file<R: Runtime>(app: AppHandle<R>, path: String, name: Option<String>) -> Result<String> {
+pub async fn open_preset_from_file<R: Runtime>(
+    app: AppHandle<R>,
+    path: String,
+    name: Option<String>,
+) -> Result<String> {
     app.ma()
         .open_preset_from_file(&path, name)
         .await
@@ -83,7 +93,9 @@ pub async fn get_preset_info<R: Runtime>(
 }
 
 #[tauri::command]
-pub async fn get_preset_infos<R: Runtime>(app: AppHandle<R>) -> Vec<modular_agent_core::PresetInfo> {
+pub async fn get_preset_infos<R: Runtime>(
+    app: AppHandle<R>,
+) -> Vec<modular_agent_core::PresetInfo> {
     app.ma().get_preset_infos().await
 }
 
