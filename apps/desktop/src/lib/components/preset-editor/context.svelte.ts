@@ -825,17 +825,22 @@ export class EditorState {
 
   handleNodeDragStart(nodes: PresetNode[]) {
     this.dragStartPositions = new Map(
-      nodes.filter((n) => n.selected).map((n) => [n.id, { x: n.position.x, y: n.position.y }]),
+      nodes.map((n) => [n.id, { x: n.position.x, y: n.position.y }]),
     );
   }
 
   async handleNodeDragStop(targetNode: PresetNode | null) {
+    // targetNode === null means the drag came from the selection overlay
+    // (NodeSelection). XYDrag fires onselectiondragstop right after this call —
+    // leave dragStartPositions for handleSelectionDragStop to consume and clear.
     if (!targetNode) return;
+    const startPositions = this.dragStartPositions;
+    this.dragStartPositions = null;
 
     // Build deltas from stored start positions
     const deltas: NodePositionDelta[] = [];
-    if (this.dragStartPositions) {
-      const oldPos = this.dragStartPositions.get(targetNode.id);
+    if (startPositions) {
+      const oldPos = startPositions.get(targetNode.id);
       if (oldPos && (oldPos.x !== targetNode.position.x || oldPos.y !== targetNode.position.y)) {
         deltas.push({
           id: targetNode.id,
@@ -855,14 +860,15 @@ export class EditorState {
       // Push only (SvelteFlow already moved the node). Don't re-execute.
       this.history.push(new MoveNodesCommand(deltas));
     }
-    this.dragStartPositions = null;
   }
 
   async handleSelectionDragStop(draggedNodes: PresetNode[]) {
+    const startPositions = this.dragStartPositions;
+    this.dragStartPositions = null;
     const deltas: NodePositionDelta[] = [];
 
     for (const node of draggedNodes) {
-      const oldPos = this.dragStartPositions?.get(node.id);
+      const oldPos = startPositions?.get(node.id);
       if (oldPos && (oldPos.x !== node.position.x || oldPos.y !== node.position.y)) {
         deltas.push({
           id: node.id,
@@ -880,7 +886,6 @@ export class EditorState {
     if (deltas.length > 0) {
       this.history.push(new MoveNodesCommand(deltas));
     }
-    this.dragStartPositions = null;
   }
 
   async handleOnMoveEnd(viewport: { x: number; y: number; zoom: number }) {

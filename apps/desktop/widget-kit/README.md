@@ -88,8 +88,11 @@ See `src/types.ts` for the full documented contracts:
   `configSpec`, `readonly`, `updateConfig`) so widgets work both in the node
   view and in the sidebar inspector.
 
-Interactive areas should carry xyflow's `nodrag` / `nowheel` classes so the
-node isn't dragged (and the canvas isn't zoomed) while interacting. Write back
-config values on `change` rather than `input` for drag-style controls to
-avoid flooding undo history and IPC. If you render agent-provided data with
-`{@html}`, sanitize it first.
+Interactive elements **must** carry xyflow's `nodrag` class (inputs, buttons,
+switches, scrollbar thumbs, and any internal drag handles), and
+internally-scrollable areas **must** carry `nowheel`. The node body is no
+longer blanket-`nodrag`, so an interactive element without `nodrag` drags the
+whole node when used, and a scroll area without `nowheel` zooms the canvas.
+Write back config values on `change` rather than `input` for drag-style
+controls to avoid flooding undo history and IPC. If you render agent-provided
+data with `{@html}`, sanitize it first.

@@ -109,6 +109,7 @@
         style:visibility={isActive ? "visible" : "hidden"}
         style:z-index={isActive ? 1 : 0}
         style:pointer-events={isActive ? "auto" : "none"}
+        inert={!isActive}
       >
         <SvelteFlowProvider>
           <EditorInstance tabId={tab.id} {flow} active={isActive} />

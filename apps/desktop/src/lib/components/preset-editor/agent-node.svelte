@@ -59,7 +59,10 @@
     untrack(() => {
       let currentValue = data.configs?.[key];
       if (currentValue === value) return;
-      const newConfigs = { ...data.configs, [key]: value };
+      // Snapshot: `value` read from the deeply-reactive agents store is a $state
+      // proxy for objects/arrays. Nodes are $state.raw, and a proxy stored there
+      // makes SvelteFlow's structuredClone (toObject/Handle) throw DataCloneError.
+      const newConfigs = { ...data.configs, [key]: $state.snapshot(value) };
       updateNodeData(id, { ...data, configs: newConfigs });
     });
   });
@@ -131,7 +134,7 @@
           <div class="flex flex-row space-x-2">
             {#if editTitle}
               <Input
-                class="text-left"
+                class="nodrag text-left"
                 type="text"
                 value={data.title ?? agentDef.title ?? data.def_name}
                 autofocus

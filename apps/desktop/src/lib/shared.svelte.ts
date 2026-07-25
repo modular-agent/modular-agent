@@ -68,6 +68,9 @@ $effect.root(() => {
     const { agent_id, key, value } = event.payload;
     const agent = sharedAgentEvents.agents[agent_id];
     if (!agent) return;
+    // Note: `agents` is deeply reactive, so consumers reading `configUpdated.value`
+    // get a $state proxy regardless of what is assigned here. Consumers that copy
+    // the value into non-reactive storage ($state.raw nodes) must snapshot it.
     agent.configUpdated = { key, value, seq: ++eventSeq };
   });
 

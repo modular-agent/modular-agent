@@ -46,6 +46,6 @@
   {labelStyle}
   {markerStart}
   {markerEnd}
-  {interactionWidth}
+  interactionWidth={interactionWidth ?? 8}
   {style}
 />

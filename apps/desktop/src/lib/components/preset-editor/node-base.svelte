@@ -18,6 +18,7 @@
 </script>
 
 <script lang="ts">
+  import { onDestroy } from "svelte";
   import type { Snippet } from "svelte";
   import { Spring } from "svelte/motion";
 
@@ -89,13 +90,31 @@
 
   let resizeStartWidth: number | undefined;
   let resizeStartHeight: number | undefined;
+  let clearResizeGuard: (() => void) | null = null;
 
   function onResizeStart() {
     localResizing = true;
     resizeStartWidth = width;
     resizeStartHeight = height;
     editor.resizing = true;
+    // xyflow only calls onResizeEnd when a size change was detected. Guarantee the
+    // flags reset if the user grabs a handle and releases without moving.
+    // `clear` removes both listeners so the untriggered modality doesn't leak.
+    const clear = () => {
+      localResizing = false;
+      editor.resizing = false;
+      window.removeEventListener("mouseup", clear);
+      window.removeEventListener("touchend", clear);
+      clearResizeGuard = null;
+    };
+    clearResizeGuard = clear;
+    window.addEventListener("mouseup", clear);
+    window.addEventListener("touchend", clear);
   }
+
+  // A node destroyed mid-resize (external merge, undo) never gets mouseup/touchend
+  // handled here; release the listeners and the editor-wide resizing flag.
+  onDestroy(() => clearResizeGuard?.());
 
   function onResize(_ev: ResizeDragEvent, params: ResizeParams) {
     if (editor.snapActive) {
@@ -109,6 +128,8 @@
   }
 
   async function onResizeEnd(_ev: ResizeDragEvent, params: ResizeParams) {
+    localResizing = false;
+    editor.resizing = false;
     if (!data.id) return;
     let finalWidth = params.width;
     let finalHeight = params.height;
@@ -120,8 +141,6 @@
     editor.props.svelteFlow.updateNode(data.id, { width: finalWidth, height: finalHeight });
     wd = finalWidth;
     ht = finalHeight;
-    localResizing = false;
-    editor.resizing = false;
     await editor.handleResizeEnd(
       data.id,
       resizeStartWidth,
@@ -200,7 +219,7 @@
       class="w-full grow flex flex-col gap-2 overflow-hidden min-h-0"
       style:max-height={ht ? undefined : `${DEFAULT_MAX_NODE_HEIGHT}px`}
     >
-      <ScrollArea class="h-full nodrag nowheel">
+      <ScrollArea class="h-full nowheel" scrollbarYClasses="nodrag" scrollbarXClasses="nodrag">
         {@render contents()}
       </ScrollArea>
     </div>

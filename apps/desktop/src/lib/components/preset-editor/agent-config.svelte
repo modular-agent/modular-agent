@@ -132,7 +132,7 @@
 
 {#snippet displayImage(value: string)}
   {#if isSafeImageSrc(value)}
-    <img class="flex-1 object-scale-down" src={value} alt="" />
+    <img class="flex-1 object-scale-down" src={value} alt="" draggable="false" />
   {:else}
     <div class="flex-none border-none p-2 text-muted-foreground">
       Blocked image: unsafe URL scheme
@@ -180,11 +180,11 @@
 {/snippet}
 
 {#snippet inputUnit(key: string, v: any)}
-  <Button class="flex-none" onclick={() => updateConfig(key, {})} variant="outline" />
+  <Button class="nodrag flex-none" onclick={() => updateConfig(key, {})} variant="outline" />
 {/snippet}
 
 {#snippet inputBoolean(key: string, v: boolean)}
-  <Switch class="flex-none" checked={v} onCheckedChange={() => updateConfig(key, !v)} />
+  <Switch class="nodrag flex-none" checked={v} onCheckedChange={() => updateConfig(key, !v)} />
 {/snippet}
 
 {#snippet inputInteger(key: string, v: number)}

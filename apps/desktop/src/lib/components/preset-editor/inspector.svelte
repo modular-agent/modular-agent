@@ -119,13 +119,13 @@
   bind:this={cardEl}
   class="absolute flex flex-col rounded-lg border border-border bg-sidebar shadow-lg overflow-hidden resize"
   class:select-none={isDragging}
-  style="left: {x}px; top: {y}px; width: {width}px; height: {height}px; min-width: 240px; min-height: 200px; max-width: calc(100% - {x}px - 16px); max-height: calc(100% - {y}px - 16px); z-index: 40; opacity: {opacity.current}; pointer-events: {opacity.current ===
+  style="left: {x}px; top: {y}px; width: {width}px; height: {height}px; min-width: 240px; min-height: 200px; max-width: calc(100% - {x}px - 16px); max-height: calc(100% - {y}px - 16px); z-index: 40; opacity: {opacity.current}; pointer-events: {inspector.selectedCount ===
   0
     ? 'none'
     : 'auto'};"
   onpointerdown={(e) => e.stopPropagation()}
   role="dialog"
-  aria-hidden={opacity.current === 0}
+  aria-hidden={inspector.selectedCount === 0}
   tabindex="-1"
 >
   <!-- Header (drag handle) -->

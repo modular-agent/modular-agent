@@ -124,12 +124,10 @@
   }
 
   function handleKeyup(event: KeyboardEvent) {
-    if (!editor.active) return;
     if (event.key === "Alt") editor.modifierPressed = false;
   }
 
   function handleWindowBlur() {
-    if (!editor.active) return;
     editor.modifierPressed = false;
   }
 
@@ -700,16 +698,16 @@
     height: 0px;
   }
   :global(.svelte-flow__resize-control.line.top) {
-    border: var(--resize-control-size) solid var(--resize-control-color);
+    border-top: var(--resize-control-size) solid var(--resize-control-color);
   }
   :global(.svelte-flow__resize-control.line.right) {
-    border: var(--resize-control-size) solid var(--resize-control-color);
+    border-right: var(--resize-control-size) solid var(--resize-control-color);
   }
   :global(.svelte-flow__resize-control.line.bottom) {
-    border: var(--resize-control-size) solid var(--resize-control-color);
+    border-bottom: var(--resize-control-size) solid var(--resize-control-color);
   }
   :global(.svelte-flow__resize-control.line.left) {
-    border: var(--resize-control-size) solid var(--resize-control-color);
+    border-left: var(--resize-control-size) solid var(--resize-control-color);
   }
   :global(.svelte-flow__controls) {
     margin-left: 8px;
