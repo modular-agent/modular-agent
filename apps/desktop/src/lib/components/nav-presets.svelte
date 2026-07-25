@@ -1,23 +1,29 @@
 <script lang="ts">
+  import { open } from "@tauri-apps/plugin-dialog";
+
   import { onMount } from "svelte";
+
+  import { toast } from "svelte-sonner";
 
   import { goto } from "$app/navigation";
 
-  import { open } from "@tauri-apps/plugin-dialog";
-
   import { importPreset, newPresetWithName } from "$lib/agent";
+  import PresetActionDialog from "$lib/components/preset-action-dialog.svelte";
+  import PresetDeleteDialog from "$lib/components/preset-delete-dialog.svelte";
   import * as PresetFileList from "$lib/components/preset-file-list/index.js";
   import * as ContextMenu from "$lib/components/ui/context-menu/index.js";
   import { ScrollArea } from "$lib/components/ui/scroll-area/index.js";
   import * as Sidebar from "$lib/components/ui/sidebar/index.js";
-  import { deletePreset, moveFolder, movePreset, openPreset, renameFolder, renamePreset } from "$lib/modular_agent";
+  import {
+    deletePreset,
+    moveFolder,
+    movePreset,
+    openPreset,
+    renameFolder,
+    renamePreset,
+  } from "$lib/modular_agent";
   import { presetTreeStore } from "$lib/preset-tree-store.svelte";
   import { tabStore } from "$lib/tab-store.svelte";
-
-  import { toast } from "svelte-sonner";
-
-  import PresetActionDialog from "$lib/components/preset-action-dialog.svelte";
-  import PresetDeleteDialog from "$lib/components/preset-delete-dialog.svelte";
 
   let dialog_name = $state("");
   let openNewPresetDialog = $state(false);
@@ -194,93 +200,103 @@
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div ondragend={handleDragEnd} ondragover={handleDragOver}>
+  {#snippet folder({
+    name,
+    path,
+    open = false,
+    isRoot = false,
+    depth = 0,
+  }: {
+    name: string;
+    path: string;
+    open?: boolean;
+    isRoot?: boolean;
+    depth?: number;
+  })}
+    <PresetFileList.Folder
+      {name}
+      {depth}
+      title={path || undefined}
+      {open}
+      draggable={!isRoot}
+      droptarget={dropTarget === path}
+      onclick={() => onFolderClick(path)}
+      ondragstart={(e) => handleDragStart(e, "folder", path)}
+      ondragenter={(e) => handleDragEnter(e, path)}
+      ondragleave={(e) => handleDragLeave(e, path)}
+      ondrop={(e) => handleDrop(e, path)}
+    >
+      {@const entries = presetTreeStore.entries[path]}
+      {#if entries}
+        {#each entries as entry (entry)}
+          {#if entry.endsWith("/")}
+            {@const fn = entry.slice(0, -1)}
+            {@const fp = path ? `${path}/${fn}` : fn}
+            <ContextMenu.Root>
+              <ContextMenu.Trigger>
+                {@render folder({ name: fn, path: fp, depth: depth + 1 })}
+              </ContextMenu.Trigger>
+              <ContextMenu.Content>
+                <ContextMenu.Item onclick={() => handleNew(fp + "/")}>New</ContextMenu.Item>
+                <ContextMenu.Item onclick={() => handleImport(fp)}>Import</ContextMenu.Item>
+                <ContextMenu.Item onclick={() => handleRename(fp, true)}>Rename</ContextMenu.Item>
+                <ContextMenu.Item onclick={() => handleDelete(fp)}>Delete</ContextMenu.Item>
+              </ContextMenu.Content>
+            </ContextMenu.Root>
+          {:else}
+            {@const fp = path ? `${path}/${entry}` : entry}
+            <ContextMenu.Root>
+              <ContextMenu.Trigger>
+                <PresetFileList.File
+                  name={entry}
+                  depth={depth + 1}
+                  title={fp}
+                  onclick={() => handleFileClick(fp)}
+                  ondragstart={(e) => handleDragStart(e, "file", fp)}
+                  ondragenter={(e) => handleDragEnter(e, path)}
+                  ondragleave={(e) => handleDragLeave(e, path)}
+                  ondrop={(e) => handleDrop(e, path)}
+                />
+              </ContextMenu.Trigger>
+              <ContextMenu.Content>
+                <ContextMenu.Item onclick={() => handleNew(fp)}>New</ContextMenu.Item>
+                <ContextMenu.Item onclick={() => handleImport(path)}>Import</ContextMenu.Item>
+                <ContextMenu.Item onclick={() => handleRename(fp, false)}>Rename</ContextMenu.Item>
+                <ContextMenu.Item onclick={() => handleDelete(fp)}>Delete</ContextMenu.Item>
+              </ContextMenu.Content>
+            </ContextMenu.Root>
+          {/if}
+        {/each}
+      {/if}
+    </PresetFileList.Folder>
+  {/snippet}
 
-{#snippet folder({ name, path, open = false, isRoot = false, depth = 0 }: { name: string; path: string; open?: boolean; isRoot?: boolean; depth?: number })}
-  <PresetFileList.Folder
-    {name}
-    {depth}
-    title={path || undefined}
-    {open}
-    draggable={!isRoot}
-    droptarget={dropTarget === path}
-    onclick={() => onFolderClick(path)}
-    ondragstart={(e) => handleDragStart(e, "folder", path)}
-    ondragenter={(e) => handleDragEnter(e, path)}
-    ondragleave={(e) => handleDragLeave(e, path)}
-    ondrop={(e) => handleDrop(e, path)}
-  >
-    {@const entries = presetTreeStore.entries[path]}
-    {#if entries}
-      {#each entries as entry (entry)}
-        {#if entry.endsWith("/")}
-          {@const fn = entry.slice(0, -1)}
-          {@const fp = path ? `${path}/${fn}` : fn}
-          <ContextMenu.Root>
-            <ContextMenu.Trigger>
-              {@render folder({ name: fn, path: fp, depth: depth + 1 })}
-            </ContextMenu.Trigger>
-            <ContextMenu.Content>
-              <ContextMenu.Item onclick={() => handleNew(fp + "/")}>New</ContextMenu.Item>
-              <ContextMenu.Item onclick={() => handleImport(fp)}>Import</ContextMenu.Item>
-              <ContextMenu.Item onclick={() => handleRename(fp, true)}>Rename</ContextMenu.Item>
-              <ContextMenu.Item onclick={() => handleDelete(fp)}>Delete</ContextMenu.Item>
-            </ContextMenu.Content>
-          </ContextMenu.Root>
-        {:else}
-          {@const fp = path ? `${path}/${entry}` : entry}
-          <ContextMenu.Root>
-            <ContextMenu.Trigger>
-              <PresetFileList.File
-                name={entry}
-                depth={depth + 1}
-                title={fp}
-                onclick={() => handleFileClick(fp)}
-                ondragstart={(e) => handleDragStart(e, "file", fp)}
-                ondragenter={(e) => handleDragEnter(e, path)}
-                ondragleave={(e) => handleDragLeave(e, path)}
-                ondrop={(e) => handleDrop(e, path)}
-              />
-            </ContextMenu.Trigger>
-            <ContextMenu.Content>
-              <ContextMenu.Item onclick={() => handleNew(fp)}>New</ContextMenu.Item>
-              <ContextMenu.Item onclick={() => handleImport(path)}>Import</ContextMenu.Item>
-              <ContextMenu.Item onclick={() => handleRename(fp, false)}>Rename</ContextMenu.Item>
-              <ContextMenu.Item onclick={() => handleDelete(fp)}>Delete</ContextMenu.Item>
-            </ContextMenu.Content>
-          </ContextMenu.Root>
-        {/if}
-      {/each}
-    {/if}
-  </PresetFileList.Folder>
-{/snippet}
-
-<Sidebar.Group class="flex-1 min-h-0">
-  <Sidebar.GroupContent class="h-full">
-    <ScrollArea class="h-full" orientation="both">
-      <div class="group-data-[collapsible=icon]:hidden">
-        {#if presetTreeStore.entries[""].length === 0}
-          <button
-            class="text-xs text-muted-foreground px-2 pl-4 py-1 hover:underline cursor-pointer"
-            onclick={() => handleNew("")}
-          >
-            New Preset
-          </button>
-        {:else}
-          <ContextMenu.Root>
-            <ContextMenu.Trigger>
-              {@render folder({ name: "presets", path: "", open: true, isRoot: true })}
-            </ContextMenu.Trigger>
-            <ContextMenu.Content>
-              <ContextMenu.Item onclick={() => handleNew("")}>New</ContextMenu.Item>
-              <ContextMenu.Item onclick={() => handleImport("")}>Import</ContextMenu.Item>
-            </ContextMenu.Content>
-          </ContextMenu.Root>
-        {/if}
-      </div>
-    </ScrollArea>
-  </Sidebar.GroupContent>
-</Sidebar.Group>
-
+  <Sidebar.Group class="flex-1 min-h-0">
+    <Sidebar.GroupContent class="h-full">
+      <ScrollArea class="h-full" orientation="both">
+        <div class="group-data-[collapsible=icon]:hidden">
+          {#if presetTreeStore.entries[""].length === 0}
+            <button
+              class="text-xs text-muted-foreground px-2 pl-4 py-1 hover:underline cursor-pointer"
+              onclick={() => handleNew("")}
+            >
+              New Preset
+            </button>
+          {:else}
+            <ContextMenu.Root>
+              <ContextMenu.Trigger>
+                {@render folder({ name: "presets", path: "", open: true, isRoot: true })}
+              </ContextMenu.Trigger>
+              <ContextMenu.Content>
+                <ContextMenu.Item onclick={() => handleNew("")}>New</ContextMenu.Item>
+                <ContextMenu.Item onclick={() => handleImport("")}>Import</ContextMenu.Item>
+              </ContextMenu.Content>
+            </ContextMenu.Root>
+          {/if}
+        </div>
+      </ScrollArea>
+    </Sidebar.GroupContent>
+  </Sidebar.Group>
 </div>
 
 {#if openNewPresetDialog}

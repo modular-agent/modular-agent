@@ -1,9 +1,10 @@
 <script lang="ts">
   import { onMount } from "svelte";
 
-  import type { PageProps } from "./$types";
   import { PresetList } from "$lib/components/preset-list";
   import { titlebarState } from "$lib/titlebar-state.svelte";
+
+  import type { PageProps } from "./$types";
 
   let { data }: PageProps = $props();
 

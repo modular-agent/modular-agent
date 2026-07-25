@@ -71,7 +71,5 @@ export function escapeHtml(str: string): string {
 
 export function isSafeImageSrc(src: string): boolean {
   if (typeof src !== "string") return false;
-  return (
-    src.startsWith("data:image/") || src.startsWith("https://") || src.startsWith("http://")
-  );
+  return src.startsWith("data:image/") || src.startsWith("https://") || src.startsWith("http://");
 }

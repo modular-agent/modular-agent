@@ -1,16 +1,12 @@
 <script lang="ts">
-  import { onMount } from "svelte";
-
   import { writeText } from "@tauri-apps/plugin-clipboard-manager";
+
+  import { onMount } from "svelte";
 
   import { resetMode, setMode } from "mode-watcher";
   import { toast } from "svelte-sonner";
 
   import { getAgentDefinitions, getCoreSettings, setCoreSettings } from "$lib/agent";
-  import {
-    getCoreSettings as fetchCoreSettings,
-    regenerateMcpServerToken,
-  } from "$lib/modular_agent";
   import { Button } from "$lib/components/ui/button/index.js";
   import * as Card from "$lib/components/ui/card/index.js";
   import { FieldGroup, Field, FieldLabel } from "$lib/components/ui/field/index.js";
@@ -19,6 +15,10 @@
   import { Switch } from "$lib/components/ui/switch/index.js";
   import { CORE_DEFAULTS } from "$lib/core-settings-store.svelte";
   import { DEFAULT_HOTKEYS, type HotkeyDefinition } from "$lib/hotkeys";
+  import {
+    getCoreSettings as fetchCoreSettings,
+    regenerateMcpServerToken,
+  } from "$lib/modular_agent";
   import type { CoreSettings } from "$lib/types";
 
   interface Props {

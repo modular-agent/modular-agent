@@ -1,5 +1,6 @@
 <script lang="ts">
   import { useConnection } from "@xyflow/svelte";
+
   import { controlPoint } from "./bezier-utils";
 
   const connection = useConnection();

@@ -1,7 +1,6 @@
 // Hotkey definitions, matching, resolving, and formatting
 
-const isMac =
-  typeof navigator !== "undefined" && /Mac|iPod|iPhone|iPad/.test(navigator.platform);
+const isMac = typeof navigator !== "undefined" && /Mac|iPod|iPhone|iPad/.test(navigator.platform);
 
 // ── Types ──────────────────────────────────────────────────────────
 

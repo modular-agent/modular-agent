@@ -183,9 +183,7 @@ export class EditorState {
     // The baseline is captured by the host before the flow fetch, so a change
     // landing mid-fetch still satisfies seq > lastStructureSeq and merges.
     this.lastStructureSeq =
-      props.flow().baseStructureSeq ??
-      sharedPresetEvents.structureChanged[props.preset_id()] ??
-      0;
+      props.flow().baseStructureSeq ?? sharedPresetEvents.structureChanged[props.preset_id()] ?? 0;
 
     // Merge externally-originated structure changes into the canvas.
     // Tracks only this preset's key in the shared record.

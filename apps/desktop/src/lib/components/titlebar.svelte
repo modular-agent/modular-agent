@@ -3,16 +3,16 @@
 
   import { onMount } from "svelte";
 
-  import MinusIcon from "@lucide/svelte/icons/minus";
   import CopyIcon from "@lucide/svelte/icons/copy";
+  import MinusIcon from "@lucide/svelte/icons/minus";
   import SquareIcon from "@lucide/svelte/icons/square";
   import XIcon from "@lucide/svelte/icons/x";
 
   import logo from "$lib/assets/logo.png";
+  import Menubar from "$lib/components/preset-editor/menubar.svelte";
   import PresetActions from "$lib/components/preset-editor/preset-actions.svelte";
   import PresetName from "$lib/components/preset-editor/preset-name.svelte";
   import PresetStatus from "$lib/components/preset-status.svelte";
-  import Menubar from "$lib/components/preset-editor/menubar.svelte";
   import { titlebarState } from "$lib/titlebar-state.svelte";
 
   const isMacos = navigator.userAgent.includes("Mac");
@@ -21,10 +21,7 @@
   let isFullscreen = $state(false);
 
   $effect(() => {
-    document.documentElement.style.setProperty(
-      "--titlebar-height",
-      isFullscreen ? "0px" : "32px",
-    );
+    document.documentElement.style.setProperty("--titlebar-height", isFullscreen ? "0px" : "32px");
   });
 
   onMount(() => {

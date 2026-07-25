@@ -22,7 +22,6 @@
   import { goto } from "$app/navigation";
 
   import { getEdgeColor, resolveColorCss, saveAsPreset } from "$lib/agent";
-  import { coreSettingsStore } from "$lib/core-settings-store.svelte";
   import { AgentList } from "$lib/components/agent-list/index.js";
   import CustomBezierEdge from "$lib/components/connection/custom-bezier-edge.svelte";
   import CustomConnectionLine from "$lib/components/connection/custom-connection-line.svelte";
@@ -30,6 +29,7 @@
   import { Button } from "$lib/components/ui/button/index.js";
   import * as Dialog from "$lib/components/ui/dialog/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
+  import { coreSettingsStore } from "$lib/core-settings-store.svelte";
   import {
     getHotkeyKey,
     matchHotkey,
@@ -512,7 +512,12 @@
 />
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<div bind:this={canvasContainer} class="flex-1 w-full" style="--connection-opacity: {editor.connectionOpacity};" ondblclick={handlePaneDblClick}>
+<div
+  bind:this={canvasContainer}
+  class="flex-1 w-full"
+  style="--connection-opacity: {editor.connectionOpacity};"
+  ondblclick={handlePaneDblClick}
+>
   <SvelteFlow
     id={editor.preset_id}
     attributionPosition="bottom-right"

@@ -5,9 +5,9 @@
 
   import XIcon from "@lucide/svelte/icons/x";
 
+  import { KIND_COLOR_DEFAULTS } from "$lib/agent";
   import { ScrollArea } from "$lib/components/ui/scroll-area/index.js";
   import { Separator } from "$lib/components/ui/separator/index.js";
-  import { KIND_COLOR_DEFAULTS } from "$lib/agent";
   import { renderMarkdown } from "$lib/sanitize";
 
   import { useEditor } from "./context.svelte";
@@ -198,10 +198,11 @@
             <button
               class="text-xs text-muted-foreground hover:text-foreground"
               onclick={() => {
-                const rawColor = inspector.extensions.color
-                  ?? inspector.agentDef?.hints?.color
-                  ?? KIND_COLOR_DEFAULTS[inspector.agentDef?.kind ?? "default"]
-                  ?? 4;
+                const rawColor =
+                  inspector.extensions.color ??
+                  inspector.agentDef?.hints?.color ??
+                  KIND_COLOR_DEFAULTS[inspector.agentDef?.kind ?? "default"] ??
+                  4;
                 const ports = [
                   ...inspector.inputs.filter((p: string) => p !== "err"),
                   ...inspector.outputs.filter((p: string) => p !== "err"),
@@ -210,13 +211,13 @@
                 const pc: Record<string, number | string> = {};
                 for (const p of ports) pc[p] = rawColor;
                 inspector.onUpdateExtension?.("port_colors", pc);
-              }}
-            >Apply to ports</button>
+              }}>Apply to ports</button
+            >
             {#if inspector.extensions.port_colors}
               <button
                 class="text-xs text-muted-foreground hover:text-foreground"
-                onclick={() => inspector.onUpdateExtension?.("port_colors", null)}
-              >Clear</button>
+                onclick={() => inspector.onUpdateExtension?.("port_colors", null)}>Clear</button
+              >
             {/if}
           </div>
         </div>

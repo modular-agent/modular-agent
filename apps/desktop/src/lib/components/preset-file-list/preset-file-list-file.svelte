@@ -17,7 +17,10 @@
 
 <button
   {type}
-  class={cn("flex w-full place-items-center gap-1 overflow-hidden hover:bg-sidebar-accent hover:text-sidebar-accent-foreground", className)}
+  class={cn(
+    "flex w-full place-items-center gap-1 overflow-hidden hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+    className,
+  )}
   style:padding-left="{8 + depth * 16}px"
   draggable="true"
   {...rest}

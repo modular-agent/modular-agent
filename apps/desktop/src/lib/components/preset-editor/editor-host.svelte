@@ -1,11 +1,12 @@
 <script lang="ts">
-  import { SvelteFlowProvider } from "@xyflow/svelte";
-  import { onMount } from "svelte";
-  import { toast } from "svelte-sonner";
-  import { untrack } from "svelte";
-  import { getPresetInfo, getPresetSpec } from "tauri-plugin-modular-agent-api";
-
   import { listen } from "@tauri-apps/api/event";
+
+  import { onMount } from "svelte";
+  import { untrack } from "svelte";
+
+  import { SvelteFlowProvider } from "@xyflow/svelte";
+  import { toast } from "svelte-sonner";
+  import { getPresetInfo, getPresetSpec } from "tauri-plugin-modular-agent-api";
 
   import { presetToFlow } from "$lib/agent";
   import { closePreset } from "$lib/modular_agent";
@@ -25,16 +26,13 @@
   // changes only `name` and keeps the nodes/edges array identities, which the
   // editor's flow-sync effect relies on to leave the canvas untouched.
   onMount(() => {
-    const unlisten = listen<PresetRenamedMessage>(
-      "ma:preset_renamed",
-      (event) => {
-        const { id, newName } = event.payload;
-        if (id in flows) {
-          flows = { ...flows, [id]: { ...flows[id], name: newName } };
-        }
-        tabStore.updateName(id, newName);
-      },
-    );
+    const unlisten = listen<PresetRenamedMessage>("ma:preset_renamed", (event) => {
+      const { id, newName } = event.payload;
+      if (id in flows) {
+        flows = { ...flows, [id]: { ...flows[id], name: newName } };
+      }
+      tabStore.updateName(id, newName);
+    });
     return () => {
       unlisten.then((fn) => fn());
     };
@@ -95,9 +93,7 @@
       loading = next;
       // If tab was closed while loading, ensure backend cleanup
       if (!tabStore.tabs.find((t) => t.id === id)) {
-        closePreset(id).catch((e) =>
-          console.error("Failed to close preset:", e),
-        );
+        closePreset(id).catch((e) => console.error("Failed to close preset:", e));
       }
     }
   }

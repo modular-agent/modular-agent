@@ -15,7 +15,14 @@
     trigger?: Snippet;
   };
 
-  let { action, subject = "Preset", name, onAction, open = $bindable(false), trigger }: Props = $props();
+  let {
+    action,
+    subject = "Preset",
+    name,
+    onAction,
+    open = $bindable(false),
+    trigger,
+  }: Props = $props();
 
   let inputName = $derived(name);
 

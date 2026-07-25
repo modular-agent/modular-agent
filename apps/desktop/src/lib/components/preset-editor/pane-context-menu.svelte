@@ -117,7 +117,10 @@
     <ContextMenu.Sub>
       <ContextMenu.SubTrigger inset>View</ContextMenu.SubTrigger>
       <ContextMenu.SubContent>
-        <ContextMenu.CheckboxItem checked={snapEnabled} onCheckedChange={() => handle(ontogglesnap)}>
+        <ContextMenu.CheckboxItem
+          checked={snapEnabled}
+          onCheckedChange={() => handle(ontogglesnap)}
+        >
           Snap to Grid
         </ContextMenu.CheckboxItem>
         <ContextMenu.CheckboxItem checked={showGrid} onCheckedChange={() => handle(ontogglegrid)}>

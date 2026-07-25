@@ -124,10 +124,7 @@ export class CommandHistory {
   pushCoalescing(cmd: UpdateConfigCommand): void {
     this.mutationSeq++;
     const now = Date.now();
-    if (
-      this.undoStack.length > 0 &&
-      now - this.lastPushTime < COALESCE_WINDOW_MS
-    ) {
+    if (this.undoStack.length > 0 && now - this.lastPushTime < COALESCE_WINDOW_MS) {
       const last = this.undoStack[this.undoStack.length - 1];
       if (
         last instanceof UpdateConfigCommand &&
@@ -212,10 +209,7 @@ export class CommandHistory {
       c.pruneExternalRemovals?.(removedAgentIds, removedConnKeys) ?? true;
     const newUndo = this.undoStack.filter(keep);
     const newRedo = this.redoStack.filter(keep);
-    if (
-      newUndo.length !== this.undoStack.length ||
-      newRedo.length !== this.redoStack.length
-    ) {
+    if (newUndo.length !== this.undoStack.length || newRedo.length !== this.redoStack.length) {
       this.undoStack = newUndo;
       this.redoStack = newRedo;
       this.savedIndex = -1;
@@ -416,8 +410,14 @@ export class DeleteCommand implements Command {
     this.deletedEdges = this.deletedEdges.map((e) => {
       const updated = { ...e };
       let changed = false;
-      if (e.source === oldId) { updated.source = newId; changed = true; }
-      if (e.target === oldId) { updated.target = newId; changed = true; }
+      if (e.source === oldId) {
+        updated.source = newId;
+        changed = true;
+      }
+      if (e.target === oldId) {
+        updated.target = newId;
+        changed = true;
+      }
       return changed ? updated : e;
     });
   }
@@ -427,9 +427,7 @@ export class DeleteCommand implements Command {
     // pointing at an externally-removed neighbor.
     if (this.deletedNodes.some((n) => removedAgentIds.has(n.id))) return false;
     if (
-      this.deletedEdges.some(
-        (e) => removedAgentIds.has(e.source) || removedAgentIds.has(e.target),
-      )
+      this.deletedEdges.some((e) => removedAgentIds.has(e.source) || removedAgentIds.has(e.target))
     )
       return false;
     // Drop saved edges whose connection was removed externally (endpoints
@@ -444,11 +442,7 @@ export class DeleteCommand implements Command {
 // ── CutCommand ──
 
 export class CutCommand extends DeleteCommand {
-  constructor(
-    presetId: string,
-    deletedNodes: PresetNode[],
-    deletedEdges: PresetEdge[],
-  ) {
+  constructor(presetId: string, deletedNodes: PresetNode[], deletedEdges: PresetEdge[]) {
     super(presetId, deletedNodes, deletedEdges, "Cut");
   }
 }
@@ -496,8 +490,14 @@ export class AddConnectionCommand implements Command {
   remapId(oldId: string, newId: string) {
     const updated = { ...this.edge };
     let changed = false;
-    if (this.edge.source === oldId) { updated.source = newId; changed = true; }
-    if (this.edge.target === oldId) { updated.target = newId; changed = true; }
+    if (this.edge.source === oldId) {
+      updated.source = newId;
+      changed = true;
+    }
+    if (this.edge.target === oldId) {
+      updated.target = newId;
+      changed = true;
+    }
     if (changed) this.edge = updated;
   }
 
@@ -547,9 +547,7 @@ export class MoveNodesCommand implements Command {
   }
 
   remapId(oldId: string, newId: string) {
-    this.deltas = this.deltas.map((d) =>
-      d.id === oldId ? { ...d, id: newId } : d,
-    );
+    this.deltas = this.deltas.map((d) => (d.id === oldId ? { ...d, id: newId } : d));
   }
 
   pruneExternalRemovals(removedAgentIds: Set<string>): boolean {
@@ -609,7 +607,12 @@ export class PasteCommand implements Command {
   constructor(
     private presetId: string,
     private agentSpecs: AgentSpec[],
-    private connectionSpecs: { source: string; source_handle: string | null; target: string; target_handle: string | null }[],
+    private connectionSpecs: {
+      source: string;
+      source_handle: string | null;
+      target: string;
+      target_handle: string | null;
+    }[],
   ) {
     this.pastedNodes = [];
     this.pastedEdges = [];
@@ -705,18 +708,28 @@ export class PasteCommand implements Command {
     this.pastedEdges = this.pastedEdges.map((e) => {
       const updated = { ...e };
       let changed = false;
-      if (e.source === oldId) { updated.source = newId; changed = true; }
-      if (e.target === oldId) { updated.target = newId; changed = true; }
+      if (e.source === oldId) {
+        updated.source = newId;
+        changed = true;
+      }
+      if (e.target === oldId) {
+        updated.target = newId;
+        changed = true;
+      }
       return changed ? updated : e;
     });
-    this.agentSpecs = this.agentSpecs.map((s) =>
-      s.id === oldId ? { ...s, id: newId } : s,
-    );
+    this.agentSpecs = this.agentSpecs.map((s) => (s.id === oldId ? { ...s, id: newId } : s));
     this.connectionSpecs = this.connectionSpecs.map((c) => {
       const updated = { ...c };
       let changed = false;
-      if (c.source === oldId) { updated.source = newId; changed = true; }
-      if (c.target === oldId) { updated.target = newId; changed = true; }
+      if (c.source === oldId) {
+        updated.source = newId;
+        changed = true;
+      }
+      if (c.target === oldId) {
+        updated.target = newId;
+        changed = true;
+      }
       return changed ? updated : c;
     });
   }
@@ -726,9 +739,7 @@ export class PasteCommand implements Command {
     // pointing at an externally-removed neighbor.
     if (this.pastedNodes.some((n) => removedAgentIds.has(n.id))) return false;
     if (
-      this.pastedEdges.some(
-        (e) => removedAgentIds.has(e.source) || removedAgentIds.has(e.target),
-      )
+      this.pastedEdges.some((e) => removedAgentIds.has(e.source) || removedAgentIds.has(e.target))
     )
       return false;
     // Drop pasted edges whose connection was removed externally (endpoints
@@ -928,9 +939,7 @@ export class ToggleDisabledCommand implements Command {
   }
 
   remapId(oldId: string, newId: string) {
-    this.deltas = this.deltas.map((d) =>
-      d.id === oldId ? { ...d, id: newId } : d,
-    );
+    this.deltas = this.deltas.map((d) => (d.id === oldId ? { ...d, id: newId } : d));
   }
 
   pruneExternalRemovals(removedAgentIds: Set<string>): boolean {
@@ -946,9 +955,7 @@ type ShowErrDelta = { id: string; wasShowErr: boolean };
 export class ToggleShowErrCommand implements Command {
   readonly label = "Toggle Error Display";
 
-  constructor(
-    private deltas: ShowErrDelta[],
-  ) {}
+  constructor(private deltas: ShowErrDelta[]) {}
 
   async execute(editor: EditorState) {
     for (const d of this.deltas) {
@@ -963,9 +970,7 @@ export class ToggleShowErrCommand implements Command {
   }
 
   remapId(oldId: string, newId: string) {
-    this.deltas = this.deltas.map((d) =>
-      d.id === oldId ? { ...d, id: newId } : d,
-    );
+    this.deltas = this.deltas.map((d) => (d.id === oldId ? { ...d, id: newId } : d));
   }
 
   pruneExternalRemovals(removedAgentIds: Set<string>): boolean {

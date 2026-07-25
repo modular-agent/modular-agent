@@ -1,5 +1,6 @@
 <script lang="ts">
   import XIcon from "@lucide/svelte/icons/x";
+
   import * as ContextMenu from "$lib/components/ui/context-menu/index.js";
   import { formatHotkey, getHotkeyKey, type ResolvedHotkeys } from "$lib/hotkeys";
 

@@ -116,12 +116,7 @@
     <header class="flex items-center justify-between h-14">
       <div class="text-2xl font-semibold">Logs</div>
       <div class="flex items-center gap-2">
-        <Input
-          type="text"
-          placeholder="Search..."
-          class="w-48 h-8"
-          bind:value={searchText}
-        />
+        <Input type="text" placeholder="Search..." class="w-48 h-8" bind:value={searchText} />
 
         <Select.Root type="single" value={selectedLevel} onValueChange={(v) => (selectedLevel = v)}>
           <Select.Trigger class="w-[130px]" size="sm">
@@ -142,21 +137,14 @@
           Auto-scroll
         </Button>
 
-        <Button variant="outline" size="sm" onclick={openLogFolder}>
-          Open Log Folder
-        </Button>
+        <Button variant="outline" size="sm" onclick={openLogFolder}>Open Log Folder</Button>
 
-        <Button variant="outline" size="sm" onclick={() => logStore.clear()}>
-          Clear
-        </Button>
+        <Button variant="outline" size="sm" onclick={() => logStore.clear()}>Clear</Button>
       </div>
     </header>
   </div>
 
-  <div
-    class="flex-1 overflow-auto px-4 pb-4"
-    bind:this={scrollContainer}
-  >
+  <div class="flex-1 overflow-auto px-4 pb-4" bind:this={scrollContainer}>
     <div class="font-mono text-xs leading-5">
       {#each filteredEntries as entry (entry.id)}
         <div class="flex gap-2 py-0.5 hover:bg-muted/50 rounded px-1">

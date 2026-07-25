@@ -24,11 +24,12 @@
   import BotIcon from "@lucide/svelte/icons/bot";
   import CatIcon from "@lucide/svelte/icons/cat";
   import ScrollTextIcon from "@lucide/svelte/icons/scroll-text";
-  import { escapeHtml, isSafeImageSrc, renderMarkdown, sanitizeHtml } from "$lib/sanitize";
 
   import * as Avatar from "$lib/components/ui/avatar/index.js";
   import * as Item from "$lib/components/ui/item/index.js";
   import { truncate } from "$lib/modular_agent";
+  import { escapeHtml, isSafeImageSrc, renderMarkdown, sanitizeHtml } from "$lib/sanitize";
+
   import { extractImageSrcs, extractText, extractThinking } from "./message-content";
 
   let { messages }: Props = $props();
@@ -95,7 +96,9 @@
         </Avatar.Root>
       </Item.Media>
       <Item.Content class="min-w-0">
-        <div class="text-sm leading-normal font-normal text-primary select-text cursor-text message-content">
+        <div
+          class="text-sm leading-normal font-normal text-primary select-text cursor-text message-content"
+        >
           {#if message.role === "ai" || message.role === "tool"}
             {@html message.html}
           {:else}
