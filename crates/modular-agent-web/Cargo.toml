@@ -18,12 +18,13 @@ yt-transcript-rs = { version = "0.1.8", optional = true }
 modular-agent-core = "0.25.0"
 
 [features]
-default = ["rustls-tls", "fetch-url", "html-scraper", "html-to-markdown", "yt-transcript"]
+default = ["rustls-tls", "fetch-url", "html-scraper", "html-to-markdown", "searxng", "yt-transcript"]
 default-tls = ["reqwest/default-tls"]
 rustls-tls = ["reqwest/rustls-tls"]
 fetch-url = []
 html-scraper = ["scraper"]
 html-to-markdown = ["html-to-markdown-rs"]
+searxng = []
 yt-transcript = ["yt-transcript-rs"]
 
 # [patch.crates-io]
