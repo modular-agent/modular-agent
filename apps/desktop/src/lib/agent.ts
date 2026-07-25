@@ -259,7 +259,13 @@ export function inferTypeForDisplay(spec: AgentConfigSpec | undefined, value: an
     }
     return tys.values().next().value ?? "object";
   } else if (typeof value === "object") {
-    if (value?.content !== undefined) {
+    // A real Message always carries `role` (core serializer writes it
+    // unconditionally); `content` alone is not enough — search results,
+    // scraped pages, etc. also have a `content` field.
+    if (
+      value?.content !== undefined &&
+      (typeof value.role === "string" || typeof value.type === "string")
+    ) {
       return "message";
     } else {
       return "object";

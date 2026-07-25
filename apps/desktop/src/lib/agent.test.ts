@@ -25,13 +25,31 @@ describe("inferTypeForDisplay", () => {
   });
 
   it("infers message and object payloads", () => {
-    expect(inferTypeForDisplay({} as AgentConfigSpec, { content: "hi" })).toBe("message");
+    expect(inferTypeForDisplay({} as AgentConfigSpec, { role: "user", content: "hi" })).toBe(
+      "message",
+    );
+    expect(inferTypeForDisplay({} as AgentConfigSpec, { type: "user", content: "hi" })).toBe(
+      "message",
+    );
+    expect(inferTypeForDisplay({} as AgentConfigSpec, { content: "hi" })).toBe("object");
     expect(inferTypeForDisplay({} as AgentConfigSpec, { foo: "bar" })).toBe("object");
+  });
+
+  it("treats content-bearing objects without a role as objects", () => {
+    // e.g. SearXNG search results: { title, url, content }
+    expect(
+      inferTypeForDisplay({} as AgentConfigSpec, [
+        { title: "Example", url: "https://example.com", content: "snippet" },
+        { title: "No snippet", url: "https://example.org" },
+      ]),
+    ).toBe("object");
   });
 
   it("infers element types in arrays", () => {
     expect(inferTypeForDisplay({} as AgentConfigSpec, [1, 2, 3])).toBe("integer");
-    expect(inferTypeForDisplay({} as AgentConfigSpec, [{ content: "hello" }])).toBe("message");
+    expect(
+      inferTypeForDisplay({} as AgentConfigSpec, [{ role: "assistant", content: "hello" }]),
+    ).toBe("message");
     expect(inferTypeForDisplay({} as AgentConfigSpec, ["line one", "line two\nline three"])).toBe(
       "text",
     );
