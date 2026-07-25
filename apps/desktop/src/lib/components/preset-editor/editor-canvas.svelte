@@ -178,7 +178,7 @@
     },
     {
       id: "editor.paste",
-      handler: () => editor.pasteNodesAndEdges(),
+      handler: () => editor.pasteNodesAndEdges(canvasContainer.getBoundingClientRect()),
       skipEditable: true,
     },
     {
@@ -620,7 +620,11 @@
       canRedo={editor.history.canRedo}
       onundo={() => editor.undo()}
       onredo={() => editor.redo()}
-      onpaste={() => editor.pasteNodesAndEdges()}
+      onpaste={() =>
+        editor.pasteNodesAndEdges(canvasContainer.getBoundingClientRect(), {
+          x: editor.paneContextMenuX,
+          y: editor.paneContextMenuY,
+        })}
       onaddagent={() => editor.showAgentList(mouseX, mouseY)}
       ontogglesnap={() => editor.toggleSnap()}
       ontogglegrid={() => editor.toggleGrid()}

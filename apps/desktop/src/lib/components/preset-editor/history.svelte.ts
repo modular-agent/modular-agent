@@ -617,7 +617,6 @@ export class PasteCommand implements Command {
 
   async execute(editor: EditorState) {
     const prevPastedNodes = this.pastedNodes;
-    const isFirstPaste = prevPastedNodes.length === 0;
 
     const [addedAgents, addedConns] = await addAgentsAndConnections(
       this.presetId,
@@ -638,10 +637,6 @@ export class PasteCommand implements Command {
 
     const newNodes: PresetNode[] = [];
     for (const a of addedAgents) {
-      if (isFirstPaste) {
-        a.x = (a.x ?? 0) + 80;
-        a.y = (a.y ?? 0) + 80;
-      }
       const node = agentSpecToNode(a);
       node.selected = true;
       newNodes.push(node);

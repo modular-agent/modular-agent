@@ -82,6 +82,11 @@ const BG_COLORS = ["bg-background dark:bg-background", "bg-muted dark:bg-muted"]
 
 const EXTERNAL_MERGE_DEBOUNCE_MS = 300;
 
+/** Cascade step applied to each paste so repeated pastes never fully overlap. */
+const PASTE_OFFSET = 80;
+/** Inset from the canvas edges within which a paste still counts as visible. */
+const PASTE_VIEWPORT_MARGIN = 40;
+
 export type EditorStateProps = {
   preset_id: () => string;
   flow: () => PresetFlow;
@@ -154,6 +159,11 @@ export class EditorState {
 
   // Drag state for undo
   private dragStartPositions: Map<string, { x: number; y: number }> | null = null;
+
+  // Paste cascade: clipboard text and the delta applied by the previous paste,
+  // so pasting the same content again steps away instead of stacking.
+  private lastPasteText: string | null = null;
+  private lastPasteDelta: { x: number; y: number } | null = null;
 
   // External change merge: last consumed structure-change seq and debounce timer
   private lastStructureSeq = 0;
@@ -553,16 +563,16 @@ export class EditorState {
     await writeText(JSON.stringify(data));
   }
 
-  private async readCopied(): Promise<[AgentSpec[], ConnectionSpec[]]> {
+  private async readCopied(): Promise<[AgentSpec[], ConnectionSpec[], string]> {
     const text = await readText();
     if (!text) {
-      return [[], []];
+      return [[], [], ""];
     }
     try {
       const clipboardData = JSON.parse(text);
-      return [clipboardData.agents || [], clipboardData.connections || []];
+      return [clipboardData.agents || [], clipboardData.connections || [], text];
     } catch {
-      return [[], []];
+      return [[], [], ""];
     }
   }
 
@@ -617,14 +627,90 @@ export class EditorState {
     await withErrorToast(() => this.copySelected(), "Failed to copy");
   }
 
-  async pasteNodesAndEdges() {
-    const [copiedAgents, copiedConnections] = await this.readCopied();
+  /**
+   * Paste clipboard agents into this preset.
+   *
+   * @param canvasRect Bounding rect of the canvas container, used to decide
+   *   whether the pasted content would land off-screen.
+   * @param screenPos Client coordinates to place the content's top-left corner
+   *   at (context-menu paste). Omitted for keyboard paste, which cascades from
+   *   the original position and falls back to the viewport center.
+   */
+  async pasteNodesAndEdges(canvasRect: DOMRect, screenPos?: { x: number; y: number }) {
+    const [copiedAgents, copiedConnections, text] = await this.readCopied();
     if (copiedAgents.length === 0) {
       return;
     }
 
-    const cmd = new PasteCommand(this.preset_id, copiedAgents, copiedConnections);
+    const delta = this.computePasteDelta(copiedAgents, canvasRect, screenPos, text);
+    this.lastPasteText = text;
+    this.lastPasteDelta = delta;
+
+    // Offset before the backend call so the stored spec matches the canvas.
+    const positioned = copiedAgents.map((spec) => ({
+      ...spec,
+      x: (spec.x ?? 0) + delta.x,
+      y: (spec.y ?? 0) + delta.y,
+    }));
+
+    const cmd = new PasteCommand(this.preset_id, positioned, copiedConnections);
     await withErrorToast(() => this.history.executeAndPush(this, cmd), "Failed to paste");
+  }
+
+  /** Bounding box of copied specs in flow coordinates. */
+  private pasteBoundingBox(specs: AgentSpec[]) {
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const spec of specs) {
+      const x = spec.x ?? 0;
+      const y = spec.y ?? 0;
+      minX = Math.min(minX, x);
+      minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x + (spec.width ?? this.snapGridSize));
+      maxY = Math.max(maxY, y + (spec.height ?? this.snapGridSize));
+    }
+    return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+  }
+
+  /** Delta added to every copied spec, keeping their relative layout intact. */
+  private computePasteDelta(
+    specs: AgentSpec[],
+    canvasRect: DOMRect,
+    screenPos: { x: number; y: number } | undefined,
+    text: string,
+  ): { x: number; y: number } {
+    const { screenToFlowPosition, flowToScreenPosition } = this.svelteFlow;
+    const bbox = this.pasteBoundingBox(specs);
+
+    if (screenPos) {
+      const target = screenToFlowPosition(screenPos);
+      return { x: target.x - bbox.x, y: target.y - bbox.y };
+    }
+
+    const prev = this.lastPasteText === text ? this.lastPasteDelta : null;
+    const cascaded = prev
+      ? { x: prev.x + PASTE_OFFSET, y: prev.y + PASTE_OFFSET }
+      : { x: PASTE_OFFSET, y: PASTE_OFFSET };
+
+    const topLeft = flowToScreenPosition({ x: bbox.x + cascaded.x, y: bbox.y + cascaded.y });
+    const visible =
+      topLeft.x >= canvasRect.left + PASTE_VIEWPORT_MARGIN &&
+      topLeft.y >= canvasRect.top + PASTE_VIEWPORT_MARGIN &&
+      topLeft.x <= canvasRect.right - PASTE_VIEWPORT_MARGIN &&
+      topLeft.y <= canvasRect.bottom - PASTE_VIEWPORT_MARGIN;
+    if (visible) return cascaded;
+
+    // Off-screen (scrolled away, or pasted into a different preset): center it.
+    const center = screenToFlowPosition({
+      x: canvasRect.left + canvasRect.width / 2,
+      y: canvasRect.top + canvasRect.height / 2,
+    });
+    return {
+      x: center.x - (bbox.x + bbox.width / 2),
+      y: center.y - (bbox.y + bbox.height / 2),
+    };
   }
 
   selectAllNodesAndEdges() {
