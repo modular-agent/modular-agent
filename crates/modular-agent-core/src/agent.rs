@@ -278,7 +278,17 @@ impl<T: AsAgent> Agent for T {
     }
 
     fn update_spec(&mut self, value: &Value) -> Result<(), AgentError> {
-        self.mut_data().spec.update(value)
+        self.mut_data().spec.update(value)?;
+        // A config patch must reach the agent the same way `set_configs`
+        // delivers one: agents that derive ports or further configs from
+        // their config values only rebuild them in `configs_changed`.
+        if value
+            .as_object()
+            .is_some_and(|map| map.contains_key("configs"))
+        {
+            self.configs_changed()?;
+        }
+        Ok(())
     }
 
     fn status(&self) -> &AgentStatus {

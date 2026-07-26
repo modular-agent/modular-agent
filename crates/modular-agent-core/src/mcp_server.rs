@@ -66,7 +66,7 @@ use crate::config::AgentConfigs;
 use crate::definition::AgentDefinition;
 use crate::error::AgentError;
 use crate::modular_agent::{ModularAgent, ModularAgentEvent};
-use crate::spec::{ConnectionSpec, PresetSpec};
+use crate::spec::{AgentSpec, ConnectionSpec, PresetSpec};
 use crate::value::AgentValue;
 
 const SERVER_INSTRUCTIONS: &str = r#"Modular Agent flow editor.
@@ -91,6 +91,13 @@ LAYOUT CONVENTION
   unit), so omitting them is usually the right choice.
 - add_agent accepts x/y/width/height directly; update_agent_spec changes
   them later, e.g. patch {"x": 480, "y": 240}.
+
+DYNAMIC CONFIGS AND PORTS
+- Some agents generate additional configs and ports from a config value
+  (e.g. Switch's "n" controls the conditions c0..c(n-1) and the numbered
+  output ports). The definition only lists the initial ones; the keys valid
+  right now are the "configs" of the live agent spec, as returned by
+  add_agent and get_preset_spec.
 
 SECRETS AND GLOBAL CONFIGS
 - API keys and tokens (Slack bot/app tokens, LLM API keys, ...) are GLOBAL
@@ -583,10 +590,10 @@ fn validate_preset_name(name: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// Checks candidate config keys against an agent definition. Rejects global
-/// config keys (secrets live in app settings, never on instances) and keys
-/// the definition does not declare.
-fn validate_config_keys<'a>(
+/// Rejects global config keys: secrets live in the application settings and
+/// must never be written onto an agent instance. Global configs belong to the
+/// definition, so this check never needs a live spec.
+fn reject_global_config_keys<'a>(
     def: &AgentDefinition,
     keys: impl Iterator<Item = &'a String>,
 ) -> Result<(), String> {
@@ -602,17 +609,80 @@ fn validate_config_keys<'a>(
                 def.name
             ));
         }
-        if !def.configs.as_ref().is_some_and(|c| c.contains_key(key)) {
-            let valid = def
+    }
+    Ok(())
+}
+
+/// Checks candidate config keys against an agent definition and, when the
+/// instance already exists, against its live spec.
+///
+/// Agents such as Switch generate `c0`..`c(n-1)` from their `n` config in
+/// `new()` / `configs_changed()`, so the definition alone does not know which
+/// keys an instance accepts; `live` is the authority whenever it is
+/// available. Keys starting with `_` are the stale keys parked by
+/// [`AgentDefinition::reconcile_spec`] and are never settable.
+fn validate_config_keys<'a>(
+    def: &AgentDefinition,
+    live: Option<&AgentSpec>,
+    keys: impl Iterator<Item = &'a String>,
+) -> Result<(), String> {
+    let keys: Vec<&String> = keys.collect();
+    reject_global_config_keys(def, keys.iter().copied())?;
+
+    let live_keys: Option<Vec<&str>> = live.and_then(|spec| {
+        let config_specs = spec.config_specs.as_ref();
+        let configs = spec.configs.as_ref();
+        if config_specs.is_none() && configs.is_none() {
+            return None;
+        }
+        let mut merged: Vec<&str> = Vec::new();
+        for key in config_specs
+            .into_iter()
+            .flat_map(|cs| cs.keys())
+            .chain(configs.into_iter().flat_map(|c| c.keys()))
+        {
+            if !merged.contains(&key.as_str()) {
+                merged.push(key);
+            }
+        }
+        Some(merged)
+    });
+
+    let valid_list = || {
+        let valid: Vec<&str> = match &live_keys {
+            Some(live_keys) => live_keys.clone(),
+            None => def
                 .configs
                 .iter()
                 .flatten()
                 .map(|(k, _)| k.as_str())
-                .collect::<Vec<_>>()
-                .join(", ");
+                .collect(),
+        };
+        valid
+            .into_iter()
+            .filter(|k| !k.starts_with('_'))
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+
+    for key in keys {
+        if key.starts_with('_') {
             return Err(format!(
-                "Unknown config \"{key}\" for {}. Valid configs: [{valid}]",
-                def.name
+                "Config \"{key}\" of {} is reserved: keys starting with \"_\" hold values parked by a \
+                 definition change and cannot be set. Valid configs: [{}]",
+                def.name,
+                valid_list()
+            ));
+        }
+        let known = match &live_keys {
+            Some(live_keys) => live_keys.contains(&key.as_str()),
+            None => def.configs.as_ref().is_some_and(|c| c.contains_key(key)),
+        };
+        if !known {
+            return Err(format!(
+                "Unknown config \"{key}\" for {}. Valid configs: [{}]",
+                def.name,
+                valid_list()
             ));
         }
     }
@@ -651,6 +721,9 @@ struct AddAgentParams {
     def_name: String,
     /// Initial config values (key -> value). Only per-instance configs
     /// declared by the definition are allowed; never pass secrets here.
+    /// Some agents derive further configs and ports from a config such as
+    /// "n" (e.g. Switch); pass that config here and the keys it generates
+    /// become settable - the returned spec lists them.
     configs: Option<serde_json::Map<String, Value>>,
     /// Node x position in pixels (grid unit 240).
     x: Option<f64>,
@@ -832,20 +905,29 @@ impl McpServer {
             ));
         };
         if let Some(configs) = &p.configs
-            && let Err(e) = validate_config_keys(&def, configs.keys())
+            && let Err(e) = reject_global_config_keys(&def, configs.keys())
         {
             return err_text(e);
         }
 
+        // Configs the definition declares go into the spec the agent is built
+        // from. The rest may still be valid - agents like Switch generate
+        // configs from `n` in new() - so they are applied and validated once
+        // the instance exists. Values are converted up front either way, so a
+        // type error fails before anything is created.
         let mut spec = def.to_spec();
+        let mut deferred: Vec<(String, AgentValue)> = Vec::new();
         if let Some(configs) = p.configs {
             for (key, value) in configs {
                 let agent_value = match json_to_agent_value(&key, value) {
                     Ok(v) => v,
                     Err(e) => return err_text(e),
                 };
-                if let Some(spec_configs) = spec.configs.as_mut() {
-                    spec_configs.set(key, agent_value);
+                match spec.configs.as_mut() {
+                    Some(spec_configs) if spec_configs.contains_key(&key) => {
+                        spec_configs.set(key, agent_value);
+                    }
+                    _ => deferred.push((key, agent_value)),
                 }
             }
         }
@@ -860,10 +942,55 @@ impl McpServer {
             }
         }
 
+        let preset_id = p.preset_id.clone();
         let agent_id = match self.ma.add_agent(p.preset_id, spec).await {
             Ok(id) => id,
             Err(e) => return err_text(e.to_string()),
         };
+
+        let mut warning = None;
+        if !deferred.is_empty() {
+            let constructed = self.ma.get_agent_spec(&agent_id).await;
+            let validated = match &constructed {
+                Some(constructed) => validate_config_keys(
+                    &def,
+                    Some(constructed),
+                    deferred.iter().map(|(key, _)| key),
+                ),
+                None => Err(format!(
+                    "Agent \"{agent_id}\" vanished right after it was added"
+                )),
+            };
+            if let Err(e) = validated {
+                let mut message = format!(
+                    "{e}\nSome agents derive extra configs and ports from another config (e.g. \"n\"). \
+                     Set that config when adding the agent, then read the returned spec for the keys \
+                     it generated."
+                );
+                if let Err(rollback) = self.ma.remove_agent(&preset_id, &agent_id).await {
+                    log::warn!("Failed to roll back agent {agent_id}: {rollback}");
+                    message.push_str(&format!(
+                        "\nRolling the agent back failed, so it remains in the preset as \"{agent_id}\": {rollback}"
+                    ));
+                }
+                return err_text(message);
+            }
+
+            let mut merged: AgentConfigs = constructed
+                .and_then(|spec| spec.configs)
+                .unwrap_or_default();
+            for (key, value) in deferred {
+                merged.set(key, value);
+            }
+            // A config error here is reported by an agent that has already
+            // committed the new values (an unparsable Switch condition is kept
+            // as never-matching), so the agent stays and the error is a
+            // warning on the created spec.
+            if let Err(e) = self.ma.set_agent_configs(agent_id.clone(), merged).await {
+                warning = Some(format!("Agent created, but applying configs reported: {e}"));
+            }
+        }
+
         match self.ma.get_agent_spec(&agent_id).await {
             Some(created) => {
                 let mut value = match serde_json::to_value(&created) {
@@ -871,6 +998,11 @@ impl McpServer {
                     Err(e) => return err_text(format!("Failed to serialize agent spec: {e}")),
                 };
                 strip_config_specs(&mut value);
+                if let Some(warning) = warning
+                    && let Some(object) = value.as_object_mut()
+                {
+                    object.insert("warning".into(), Value::String(warning));
+                }
                 ok_json(&value)
             }
             None => ok_json(&serde_json::json!({ "agent_id": agent_id })),
@@ -884,7 +1016,7 @@ impl McpServer {
         &self,
         Parameters(p): Parameters<UpdateAgentSpecParams>,
     ) -> Result<CallToolResult, McpError> {
-        let mut patch = p.patch;
+        let patch = p.patch;
         if patch.contains_key("id") || patch.contains_key("def_name") {
             return err_text("\"id\" and \"def_name\" cannot be changed");
         }
@@ -895,23 +1027,15 @@ impl McpServer {
                 p.agent_id
             ));
         };
-        if let Some(configs_patch) = patch.remove("configs") {
+        if let Some(configs_patch) = patch.get("configs") {
             let Value::Object(configs_patch) = configs_patch else {
                 return err_text("\"configs\" must be a JSON object");
             };
             if let Some(def) = self.ma.get_agent_definition(&current.def_name)
-                && let Err(e) = validate_config_keys(&def, configs_patch.keys())
+                && let Err(e) = validate_config_keys(&def, Some(&current), configs_patch.keys())
             {
                 return err_text(e);
             }
-            // AgentSpec::update replaces configs wholesale, so merge the
-            // patch into the current values to keep untouched keys.
-            let mut merged = match serde_json::to_value(current.configs.unwrap_or_default()) {
-                Ok(Value::Object(map)) => map,
-                _ => serde_json::Map::new(),
-            };
-            merged.extend(configs_patch);
-            patch.insert("configs".into(), Value::Object(merged));
         }
 
         match self
@@ -937,7 +1061,7 @@ impl McpServer {
             ));
         };
         if let Some(def) = self.ma.get_agent_definition(&current.def_name)
-            && let Err(e) = validate_config_keys(&def, p.configs.keys())
+            && let Err(e) = validate_config_keys(&def, Some(&current), p.configs.keys())
         {
             return err_text(e);
         }
@@ -1249,15 +1373,96 @@ mod tests {
             .string_config("channel", "")
             .string_global_config("slack_bot_token", "");
 
-        assert!(validate_config_keys(&def, ["channel".to_string()].iter()).is_ok());
+        assert!(validate_config_keys(&def, None, ["channel".to_string()].iter()).is_ok());
 
-        let err = validate_config_keys(&def, ["slack_bot_token".to_string()].iter())
+        let err = validate_config_keys(&def, None, ["slack_bot_token".to_string()].iter())
             .expect_err("global key must be rejected");
         assert!(err.contains("GLOBAL"));
 
-        let err = validate_config_keys(&def, ["nope".to_string()].iter())
+        let err = validate_config_keys(&def, None, ["nope".to_string()].iter())
             .expect_err("unknown key must be rejected");
         assert!(err.contains("channel"));
+    }
+
+    /// A definition of a Switch-like agent plus the spec of an instance that
+    /// generated `c2` (value only), `c3` (spec only) and parked a stale
+    /// `_c9`.
+    fn numbered_def_and_live_spec() -> (AgentDefinition, AgentSpec) {
+        use crate::definition::AgentConfigSpec;
+
+        let def = AgentDefinition::new("test", "t", None)
+            .integer_config("n", 2)
+            .string_config("c0", "")
+            .string_config("c1", "")
+            .string_global_config("api_key", "");
+
+        let mut live = def.to_spec();
+        let mut configs = live.configs.take().unwrap_or_default();
+        configs.set("c2".into(), AgentValue::string(""));
+        configs.set("_c9".into(), AgentValue::string("stale"));
+        live.configs = Some(configs);
+        let mut config_specs = live.config_specs.take().unwrap_or_default();
+        config_specs.insert("c3".into(), AgentConfigSpec::default());
+        live.config_specs = Some(config_specs);
+
+        (def, live)
+    }
+
+    #[test]
+    fn config_key_validation_accepts_live_generated_keys() {
+        let (def, live) = numbered_def_and_live_spec();
+
+        // Generated on the instance only: known through the live spec, from
+        // its configs (c2) as well as its config_specs (c3).
+        assert!(validate_config_keys(&def, Some(&live), ["c2".to_string()].iter()).is_ok());
+        assert!(validate_config_keys(&def, Some(&live), ["c3".to_string()].iter()).is_ok());
+        assert!(validate_config_keys(&def, Some(&live), ["n".to_string()].iter()).is_ok());
+    }
+
+    #[test]
+    fn config_key_validation_lists_live_keys_for_unknown_key() {
+        let (def, live) = numbered_def_and_live_spec();
+
+        let err = validate_config_keys(&def, Some(&live), ["c7".to_string()].iter())
+            .expect_err("unknown key must be rejected");
+        assert!(err.contains("c2"), "live keys must be listed: {err}");
+        assert!(err.contains("c3"), "live keys must be listed: {err}");
+        assert!(!err.contains("_c9"), "stale keys must not be listed: {err}");
+    }
+
+    #[test]
+    fn config_key_validation_rejects_global_key_with_live_spec() {
+        let (def, live) = numbered_def_and_live_spec();
+
+        let err = validate_config_keys(&def, Some(&live), ["api_key".to_string()].iter())
+            .expect_err("global key must be rejected");
+        assert!(err.contains("GLOBAL"));
+    }
+
+    #[test]
+    fn config_key_validation_rejects_stale_underscore_key() {
+        let (def, live) = numbered_def_and_live_spec();
+
+        let err = validate_config_keys(&def, Some(&live), ["_c9".to_string()].iter())
+            .expect_err("stale key must be rejected even though it is present");
+        assert!(err.contains("reserved"), "{err}");
+    }
+
+    #[test]
+    fn config_key_validation_falls_back_to_definition_without_live_spec() {
+        let (def, live) = numbered_def_and_live_spec();
+
+        let err = validate_config_keys(&def, None, ["c2".to_string()].iter())
+            .expect_err("without a live spec only declared keys are valid");
+        assert!(err.contains("c0, c1"), "{err}");
+
+        // A spec carrying neither configs nor config_specs falls back too.
+        let empty = AgentSpec {
+            def_name: live.def_name.clone(),
+            ..Default::default()
+        };
+        assert!(validate_config_keys(&def, Some(&empty), ["c2".to_string()].iter()).is_err());
+        assert!(validate_config_keys(&def, Some(&empty), ["c0".to_string()].iter()).is_ok());
     }
 
     #[test]
@@ -1386,5 +1591,320 @@ mod tests {
 
         // Preset filter drops non-matching records.
         assert!(ring.collect_errors(Some("other"), 0, 10).is_empty());
+    }
+
+    /// Drives the tool handlers directly against a Switch-like agent whose
+    /// live spec - not its definition - knows the generated config keys.
+    mod tool_tests {
+        use async_trait::async_trait;
+        use modular_agent_macros::modular_agent;
+
+        use super::*;
+        use crate::agent::{AgentData, AsAgent};
+        use crate::definition::{AgentConfigSpec, AgentConfigSpecs};
+        use crate::output::AgentOutput;
+
+        /// A condition value the double rejects AFTER committing it, the way
+        /// Switch keeps an unparsable condition as never-matching.
+        const INVALID_CONDITION: &str = "#err";
+
+        /// Switch-like double: rebuilds `c0`..`c(n-1)` and the numbered
+        /// output ports from `n` in new() and configs_changed().
+        #[modular_agent(
+            title = "MCP Numbered",
+            category = "Test",
+            inputs = ["in"],
+            outputs = ["0", "1"],
+            integer_config(name = "n", default = 2),
+            string_config(name = "c0"),
+            string_config(name = "c1"),
+        )]
+        struct McpNumberedAgent {
+            data: AgentData,
+        }
+
+        fn rebuild_numbered(spec: &mut AgentSpec) -> Result<(), AgentError> {
+            let n = spec
+                .configs
+                .as_ref()
+                .map(|configs| configs.get_integer_or("n", 2))
+                .unwrap_or(2)
+                .clamp(1, 16) as usize;
+
+            let mut configs = AgentConfigs::new();
+            let mut config_specs = AgentConfigSpecs::default();
+            configs.set("n".to_string(), AgentValue::integer(n as i64));
+            if let Some(n_spec) = spec
+                .config_specs
+                .as_ref()
+                .and_then(|specs| specs.get("n"))
+                .cloned()
+            {
+                config_specs.insert("n".to_string(), n_spec);
+            }
+            for i in 0..n {
+                let name = format!("c{}", i);
+                let value = spec
+                    .configs
+                    .as_ref()
+                    .map(|cfg| cfg.get_string_or(&name, ""))
+                    .unwrap_or_default();
+                configs.set(name.clone(), AgentValue::string(value));
+                config_specs.insert(
+                    name,
+                    AgentConfigSpec {
+                        value: AgentValue::string_default(),
+                        type_: Some("string".to_string()),
+                        ..Default::default()
+                    },
+                );
+            }
+            spec.configs = Some(configs);
+            spec.config_specs = Some(config_specs);
+            spec.outputs = Some((0..n).map(|i| i.to_string()).collect());
+
+            // Reported after the commit above, like Switch keeping an
+            // unparsable condition as never-matching.
+            if let Some(configs) = &spec.configs {
+                for i in 0..n {
+                    if configs.get_string_or(&format!("c{}", i), "") == INVALID_CONDITION {
+                        return Err(AgentError::InvalidConfig(format!(
+                            "condition c{} is not parsable",
+                            i
+                        )));
+                    }
+                }
+            }
+            Ok(())
+        }
+
+        #[async_trait]
+        impl AsAgent for McpNumberedAgent {
+            fn new(ma: ModularAgent, id: String, mut spec: AgentSpec) -> Result<Self, AgentError> {
+                rebuild_numbered(&mut spec)?;
+                Ok(Self {
+                    data: AgentData::new(ma, id, spec),
+                })
+            }
+
+            fn configs_changed(&mut self) -> Result<(), AgentError> {
+                rebuild_numbered(&mut self.data.spec)?;
+                self.emit_agent_spec_updated();
+                Ok(())
+            }
+        }
+
+        async fn setup() -> (ModularAgent, McpServer, String) {
+            let ma = ModularAgent::init().expect("init");
+            ma.ready().await.expect("ready");
+            let preset_id = ma.new_preset().expect("preset");
+            let server = McpServer::new(ma.clone(), None, Arc::new(EventRing::new()));
+            (ma, server, preset_id)
+        }
+
+        fn result_text(result: &CallToolResult) -> &str {
+            match &result.content[0].raw {
+                rmcp::model::RawContent::Text(text) => &text.text,
+                other => panic!("expected text content, got {other:?}"),
+            }
+        }
+
+        fn result_json(result: &CallToolResult) -> Value {
+            serde_json::from_str(result_text(result)).expect("tool result must be JSON")
+        }
+
+        fn is_error(result: &CallToolResult) -> bool {
+            result.is_error == Some(true)
+        }
+
+        async fn add_numbered(
+            server: &McpServer,
+            preset_id: &str,
+            configs: serde_json::Map<String, Value>,
+        ) -> Result<CallToolResult, McpError> {
+            server
+                .add_agent(Parameters(AddAgentParams {
+                    preset_id: preset_id.to_string(),
+                    def_name: McpNumberedAgent::DEF_NAME.to_string(),
+                    configs: Some(configs),
+                    x: None,
+                    y: None,
+                    width: None,
+                    height: None,
+                }))
+                .await
+        }
+
+        fn json_map(value: Value) -> serde_json::Map<String, Value> {
+            match value {
+                Value::Object(map) => map,
+                _ => unreachable!(),
+            }
+        }
+
+        #[tokio::test]
+        async fn add_agent_applies_deferred_generated_configs() {
+            let (ma, server, preset_id) = setup().await;
+
+            let result = add_numbered(
+                &server,
+                &preset_id,
+                json_map(serde_json::json!({ "n": 3, "c2": "hello" })),
+            )
+            .await
+            .unwrap();
+            assert!(!is_error(&result), "{}", result_text(&result));
+
+            // The returned spec reflects the deferred key and the ports that
+            // n=3 generated, and carries no warning.
+            let created = result_json(&result);
+            assert_eq!(created["configs"]["c2"], "hello");
+            let outputs = created["outputs"].as_array().unwrap();
+            assert!(outputs.contains(&Value::String("2".into())));
+            assert!(created.get("warning").is_none());
+
+            ma.quit();
+        }
+
+        #[tokio::test]
+        async fn add_agent_rolls_back_when_deferred_key_is_invalid() {
+            let (ma, server, preset_id) = setup().await;
+
+            let result = add_numbered(
+                &server,
+                &preset_id,
+                json_map(serde_json::json!({ "n": 3, "c9": "x" })),
+            )
+            .await
+            .unwrap();
+            assert!(is_error(&result));
+            let text = result_text(&result);
+            assert!(text.contains("c9"), "{text}");
+            assert!(text.contains("c2"), "valid keys must be listed: {text}");
+
+            // The half-created agent must not survive the failure.
+            let spec = ma.get_preset_spec(&preset_id).await.unwrap();
+            assert!(spec.agents.is_empty(), "rollback must remove the agent");
+
+            ma.quit();
+        }
+
+        #[tokio::test]
+        async fn add_agent_keeps_agent_and_warns_when_configs_error_after_commit() {
+            let (ma, server, preset_id) = setup().await;
+
+            let result = add_numbered(
+                &server,
+                &preset_id,
+                json_map(serde_json::json!({ "n": 3, "c2": INVALID_CONDITION })),
+            )
+            .await
+            .unwrap();
+            assert!(!is_error(&result), "{}", result_text(&result));
+
+            // The agent committed the condition before reporting it, so it
+            // stays, the value is kept and the error surfaces as a warning.
+            let created = result_json(&result);
+            assert_eq!(created["configs"]["c2"], INVALID_CONDITION);
+            let warning = created["warning"].as_str().unwrap();
+            assert!(warning.contains("c2"), "{warning}");
+
+            ma.quit();
+        }
+
+        #[tokio::test]
+        async fn set_agent_configs_tool_accepts_generated_key() {
+            let (ma, server, preset_id) = setup().await;
+
+            let result = add_numbered(&server, &preset_id, json_map(serde_json::json!({ "n": 3 })))
+                .await
+                .unwrap();
+            let agent_id = result_json(&result)["id"].as_str().unwrap().to_string();
+
+            let result = server
+                .set_agent_configs(Parameters(SetAgentConfigsParams {
+                    agent_id: agent_id.clone(),
+                    configs: json_map(serde_json::json!({ "c2": "hello" })),
+                }))
+                .await
+                .unwrap();
+            assert!(!is_error(&result), "{}", result_text(&result));
+            let spec = ma.get_agent_spec(&agent_id).await.unwrap();
+            assert_eq!(
+                spec.configs.unwrap().get_string_or("c2", ""),
+                "hello",
+                "the generated key must be settable through the tool"
+            );
+
+            let result = server
+                .set_agent_configs(Parameters(SetAgentConfigsParams {
+                    agent_id,
+                    configs: json_map(serde_json::json!({ "c9": "x" })),
+                }))
+                .await
+                .unwrap();
+            assert!(is_error(&result));
+            assert!(result_text(&result).contains("c2"), "live keys listed");
+
+            ma.quit();
+        }
+
+        #[tokio::test]
+        async fn update_agent_spec_tool_accepts_generated_key() {
+            let (ma, server, preset_id) = setup().await;
+
+            let result = add_numbered(&server, &preset_id, json_map(serde_json::json!({ "n": 3 })))
+                .await
+                .unwrap();
+            let agent_id = result_json(&result)["id"].as_str().unwrap().to_string();
+
+            let result = server
+                .update_agent_spec(Parameters(UpdateAgentSpecParams {
+                    agent_id: agent_id.clone(),
+                    patch: json_map(serde_json::json!({ "configs": { "c2": "v" } })),
+                }))
+                .await
+                .unwrap();
+            assert!(!is_error(&result), "{}", result_text(&result));
+
+            // The partial patch must merge: n and the other conditions
+            // survive, so configs_changed keeps all three ports.
+            let spec = ma.get_agent_spec(&agent_id).await.unwrap();
+            let configs = spec.configs.unwrap();
+            assert_eq!(configs.get_string_or("c2", ""), "v");
+            assert_eq!(configs.get_integer_or("n", 0), 3);
+            assert!(spec.outputs.unwrap().iter().any(|p| p == "2"));
+
+            ma.quit();
+        }
+
+        #[tokio::test]
+        async fn update_agent_spec_tool_reports_committed_config_error() {
+            let (ma, server, preset_id) = setup().await;
+
+            let result = add_numbered(&server, &preset_id, json_map(serde_json::json!({ "n": 3 })))
+                .await
+                .unwrap();
+            let agent_id = result_json(&result)["id"].as_str().unwrap().to_string();
+
+            let result = server
+                .update_agent_spec(Parameters(UpdateAgentSpecParams {
+                    agent_id: agent_id.clone(),
+                    patch: json_map(serde_json::json!({ "configs": { "c2": INVALID_CONDITION } })),
+                }))
+                .await
+                .unwrap();
+
+            // configs_changed rejected the committed value: the error must
+            // reach the caller while the spec keeps what the agent stored.
+            assert!(is_error(&result));
+            let spec = ma.get_agent_spec(&agent_id).await.unwrap();
+            assert_eq!(
+                spec.configs.unwrap().get_string_or("c2", ""),
+                INVALID_CONDITION
+            );
+
+            ma.quit();
+        }
     }
 }

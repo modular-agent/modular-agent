@@ -679,9 +679,17 @@ impl ModularAgent {
 
     /// Update the agent spec by id.
     ///
+    /// A patch containing `configs` calls the agent's
+    /// [`AsAgent::configs_changed`], so agents that derive ports or further
+    /// configs from their config values rebuild them; an error it reports is
+    /// propagated, as with [`ModularAgent::set_agent_configs`].
+    ///
     /// Emits [`ModularAgentEvent::AgentSpecUpdated`], and additionally
     /// [`ModularAgentEvent::PresetStructureChanged`] when the patch contains
-    /// keys other than `configs`.
+    /// keys other than `configs`. The events are emitted even when an error
+    /// is returned: the agent may have committed the patch before failing
+    /// (`configs_changed` runs after the merge), and a spec change must never
+    /// go unannounced to hosts.
     pub async fn update_agent_spec(&self, agent_id: &str, value: &Value) -> Result<(), AgentError> {
         let agent = {
             let agents = self.agents.lock().unwrap();
@@ -690,12 +698,16 @@ impl ModularAgent {
             };
             agent.clone()
         };
-        let preset_id = {
+        let (preset_id, updated) = {
             let mut agent = agent.lock().await;
-            agent.update_spec(value)?;
-            agent.preset_id().to_string()
+            let updated = agent.update_spec(value);
+            (agent.preset_id().to_string(), updated)
         };
 
+        // A failure may have left the patch committed (an agent can reject a
+        // value in configs_changed after storing it, as Switch does with an
+        // unparsable condition), so announce first and propagate after: a
+        // spurious refresh is harmless, an unannounced spec change is not.
         self.emit_agent_spec_updated(agent_id.to_string());
 
         // Any non-config key (ports, title, layout, ...) may change how hosts
@@ -707,7 +719,7 @@ impl ModularAgent {
         if structural {
             self.emit_preset_structure_changed(preset_id);
         }
-        Ok(())
+        updated
     }
 
     /// Create a new agent spec from the given agent definition name.

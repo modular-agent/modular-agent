@@ -11,13 +11,14 @@ fn test_init() {
     let ma = ModularAgent::init().unwrap();
 
     let defs = ma.get_agent_definitions();
-    assert_eq!(defs.len(), 14);
+    assert_eq!(defs.len(), 15);
     let mut keys: Vec<_> = defs.keys().cloned().collect();
     keys.sort();
     let expected = vec![
         "main_test::common::agents::CancelWaitAgent",
         "main_test::common::agents::CounterAgent",
         "main_test::common::agents::DynSpecAgent",
+        "main_test::common::agents::NumberedConfigAgent",
         "main_test::common::agents::StuckSleepAgent",
         "modular_agent_core::external_agent::ExternalInputAgent",
         "modular_agent_core::external_agent::ExternalOutputAgent",
@@ -290,6 +291,97 @@ async fn test_add_agents_and_connections_returns_constructed_specs() {
     };
     let configs = registered.configs.expect("configs must be present");
     assert!(configs.contains_key(common::agents::CONFIG_DYN));
+
+    ma.quit();
+}
+
+#[tokio::test]
+async fn test_update_agent_spec_configs_regenerates_dynamic_spec() {
+    let ma = ModularAgent::init().unwrap();
+    ma.ready().await.unwrap();
+
+    let preset_id = ma.new_preset().unwrap();
+    let def = ma
+        .get_agent_definition(common::agents::NumberedConfigAgent::DEF_NAME)
+        .unwrap();
+    let agent_id = ma
+        .add_agent(preset_id.clone(), def.to_spec())
+        .await
+        .unwrap();
+
+    ma.update_agent_spec(&agent_id, &serde_json::json!({ "configs": { "n": 3 } }))
+        .await
+        .unwrap();
+
+    // A configs patch must run configs_changed(), which is what grows the
+    // third condition and the third output port.
+    let spec = ma.get_agent_spec(&agent_id).await.unwrap();
+    let configs = spec.configs.expect("configs must be present");
+    assert!(configs.contains_key("c2"));
+    let outputs = spec.outputs.expect("outputs must be present");
+    assert!(outputs.iter().any(|p| p == "2"));
+
+    ma.quit();
+}
+
+#[tokio::test]
+async fn test_set_agent_configs_accepts_generated_key() {
+    let ma = ModularAgent::init().unwrap();
+    ma.ready().await.unwrap();
+
+    let preset_id = ma.new_preset().unwrap();
+    let def = ma
+        .get_agent_definition(common::agents::NumberedConfigAgent::DEF_NAME)
+        .unwrap();
+
+    let mut spec = def.to_spec();
+    let mut configs = spec.configs.take().unwrap();
+    configs.set(common::agents::CONFIG_N.into(), ma::AgentValue::integer(3));
+    spec.configs = Some(configs);
+    let agent_id = ma.add_agent(preset_id.clone(), spec).await.unwrap();
+
+    let created = ma.get_agent_spec(&agent_id).await.unwrap();
+    let mut configs = created.configs.expect("configs must be present");
+    assert!(
+        configs.contains_key("c2"),
+        "new() must generate c2 from n=3"
+    );
+
+    configs.set("c2".into(), ma::AgentValue::string("hello"));
+    ma.set_agent_configs(agent_id.clone(), configs)
+        .await
+        .unwrap();
+
+    let spec = ma.get_agent_spec(&agent_id).await.unwrap();
+    let configs = spec.configs.expect("configs must be present");
+    assert_eq!(configs.get_string("c2").unwrap(), "hello");
+
+    ma.quit();
+}
+
+#[tokio::test]
+async fn test_numbered_config_restores_parked_stale_key() {
+    let ma = ModularAgent::init().unwrap();
+    ma.ready().await.unwrap();
+
+    let preset_id = ma.new_preset().unwrap();
+    let def = ma
+        .get_agent_definition(common::agents::NumberedConfigAgent::DEF_NAME)
+        .unwrap();
+
+    // reconcile_spec parks configs the definition does not declare under a
+    // "_" prefix when a preset is loaded; new() must pick the value back up.
+    let mut spec = def.to_spec();
+    let mut configs = spec.configs.take().unwrap();
+    configs.set(common::agents::CONFIG_N.into(), ma::AgentValue::integer(3));
+    configs.set("_c2".into(), ma::AgentValue::string("parked"));
+    spec.configs = Some(configs);
+    let agent_id = ma.add_agent(preset_id.clone(), spec).await.unwrap();
+
+    let created = ma.get_agent_spec(&agent_id).await.unwrap();
+    let configs = created.configs.expect("configs must be present");
+    assert_eq!(configs.get_string("c2").unwrap(), "parked");
+    assert!(!configs.contains_key("_c2"), "the parked key must be gone");
 
     ma.quit();
 }

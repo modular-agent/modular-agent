@@ -114,7 +114,9 @@ impl AgentSpec {
     /// Updates this agent spec from a JSON value.
     ///
     /// Known fields (id, def_name, inputs, outputs, configs, disabled) are parsed
-    /// and applied. Unknown fields are stored in the extensions map.
+    /// and applied. `configs` is merged key by key into the current values;
+    /// the other fields are replaced. Unknown fields are stored in the
+    /// extensions map.
     pub fn update(&mut self, value: &Value) -> Result<(), AgentError> {
         let update_map = value
             .as_object()
@@ -153,9 +155,21 @@ impl AgentSpec {
                     }
                 }
                 "configs" => {
-                    let configs: AgentConfigs = serde_json::from_value(v.clone())
+                    let patch: AgentConfigs = serde_json::from_value(v.clone())
                         .map_err(|e| AgentError::SerializationError(e.to_string()))?;
-                    self.configs = Some(configs);
+                    // Merge instead of replacing: callers patch single keys,
+                    // and replacing would drop the untouched configs - which
+                    // agents that regenerate configs/ports in configs_changed
+                    // (e.g. from an "n" config) would then rebuild from
+                    // defaults, destroying ports that still have connections.
+                    match self.configs.as_mut() {
+                        Some(configs) => {
+                            for (key, value) in patch {
+                                configs.set(key, value);
+                            }
+                        }
+                        None => self.configs = Some(patch),
+                    }
                 }
                 "disabled" => {
                     if let Some(disabled_bool) = v.as_bool() {

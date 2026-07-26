@@ -1,6 +1,6 @@
 use modular_agent_core::{
-    AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent, ModularAgent,
-    async_trait, modular_agent,
+    AgentConfigSpec, AgentConfigSpecs, AgentConfigs, AgentContext, AgentData, AgentError,
+    AgentOutput, AgentSpec, AgentValue, AsAgent, ModularAgent, async_trait, modular_agent,
 };
 
 const CATEGORY: &str = "Core/Utils";
@@ -13,6 +13,11 @@ const CONFIG_INITIAL_COUNT: &str = "initial_count";
 const GLOBAL_STRING: &str = "global_string";
 pub const CONFIG_DYN: &str = "dyn";
 pub const PORT_DYN_OUT: &str = "dyn_out";
+pub const CONFIG_N: &str = "n";
+const CONFIG_C0: &str = "c0";
+const CONFIG_C1: &str = "c1";
+const PORT_0: &str = "0";
+const PORT_1: &str = "1";
 
 /// Counter
 #[modular_agent(
@@ -133,6 +138,118 @@ impl AsAgent for DynSpecAgent {
         Ok(Self {
             data: AgentData::new(ma, id, spec),
         })
+    }
+}
+
+/// Regenerates `c0`..`c(n-1)` and the numbered output ports from the `n`
+/// config, in new() as well as in configs_changed(). Models the Switch /
+/// Match agents, whose live spec - not their definition - knows which config
+/// keys currently exist.
+#[modular_agent(
+    title = "Numbered Config",
+    category = CATEGORY,
+    inputs = [PORT_IN],
+    outputs = [PORT_0, PORT_1],
+    integer_config(name = CONFIG_N, default = 2),
+    string_config(name = CONFIG_C0),
+    string_config(name = CONFIG_C1),
+)]
+pub struct NumberedConfigAgent {
+    data: AgentData,
+}
+
+/// A condition value that update_numbered_spec rejects AFTER committing it,
+/// the way Switch keeps an unparsable condition as never-matching.
+pub const INVALID_CONDITION: &str = "#err";
+
+/// Rebuilds the numbered configs, their config specs and the output ports
+/// from `n`.
+fn update_numbered_spec(spec: &mut AgentSpec) -> Result<usize, AgentError> {
+    let n = spec
+        .configs
+        .as_ref()
+        .map(|configs| configs.get_integer_or(CONFIG_N, 2))
+        .unwrap_or(2)
+        .clamp(1, 16) as usize;
+
+    let Some(n_spec) = spec
+        .config_specs
+        .as_ref()
+        .and_then(|specs| specs.get(CONFIG_N))
+        .cloned()
+    else {
+        return Err(AgentError::InvalidConfig(format!(
+            "config {} must be present",
+            CONFIG_N
+        )));
+    };
+
+    let mut configs = AgentConfigs::new();
+    let mut config_specs = AgentConfigSpecs::default();
+    configs.set(CONFIG_N.to_string(), AgentValue::integer(n as i64));
+    config_specs.insert(CONFIG_N.to_string(), n_spec);
+
+    for i in 0..n {
+        let name = format!("c{}", i);
+        // `AgentDefinition::reconcile_spec` parks every config the definition
+        // does not declare - which includes the generated ones - under a
+        // `_`-prefixed key, so fall back to it to survive a reload.
+        let value = spec
+            .configs
+            .as_ref()
+            .map(|cfg| {
+                if cfg.contains_key(&name) {
+                    cfg.get_string_or(&name, "")
+                } else {
+                    cfg.get_string_or(&format!("_{}", name), "")
+                }
+            })
+            .unwrap_or_default();
+        configs.set(name.clone(), AgentValue::string(value));
+        config_specs.insert(
+            name,
+            AgentConfigSpec {
+                value: AgentValue::string_default(),
+                type_: Some("string".to_string()),
+                ..Default::default()
+            },
+        );
+    }
+
+    spec.configs = Some(configs);
+    spec.config_specs = Some(config_specs);
+    spec.outputs = Some((0..n).map(|i| i.to_string()).collect());
+
+    // Reported after the commit above, like Switch reporting a condition it
+    // parsed and stored as never-matching: callers must see the error while
+    // the spec keeps the value.
+    if let Some(configs) = &spec.configs {
+        for i in 0..n {
+            if configs.get_string_or(&format!("c{}", i), "") == INVALID_CONDITION {
+                return Err(AgentError::InvalidConfig(format!(
+                    "condition c{} is not parsable",
+                    i
+                )));
+            }
+        }
+    }
+
+    Ok(n)
+}
+
+#[async_trait]
+impl AsAgent for NumberedConfigAgent {
+    fn new(ma: ModularAgent, id: String, mut spec: AgentSpec) -> Result<Self, AgentError> {
+        update_numbered_spec(&mut spec)?;
+        Ok(Self {
+            data: AgentData::new(ma, id, spec),
+        })
+    }
+
+    fn configs_changed(&mut self) -> Result<(), AgentError> {
+        update_numbered_spec(&mut self.data.spec)?;
+        self.emit_agent_spec_updated();
+        Ok(())
     }
 }
 

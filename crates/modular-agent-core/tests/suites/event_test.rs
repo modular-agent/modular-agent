@@ -152,3 +152,127 @@ async fn test_update_agent_spec_emit_rules() {
 
     ma.quit();
 }
+
+#[tokio::test]
+async fn test_update_agent_spec_announces_dynamic_config_changes() {
+    let ma = ModularAgent::init().unwrap();
+    ma.ready().await.unwrap();
+
+    let preset_id = ma.new_preset().unwrap();
+    let def = ma
+        .get_agent_definition(crate::common::agents::NumberedConfigAgent::DEF_NAME)
+        .unwrap();
+    let agent_id = ma
+        .add_agent(preset_id.clone(), def.to_spec())
+        .await
+        .unwrap();
+
+    let mut rx = ma.subscribe();
+
+    // A successful configs patch produces exactly two AgentSpecUpdated: the
+    // agent's own emit from configs_changed plus the orchestrator's, and no
+    // PresetStructureChanged for a configs-only patch.
+    ma.update_agent_spec(&agent_id, &serde_json::json!({ "configs": { "n": 3 } }))
+        .await
+        .unwrap();
+
+    for _ in 0..2 {
+        let e = next_event(&mut rx).await;
+        assert!(matches!(e.event, ModularAgentEvent::AgentSpecUpdated(ref id) if id == &agent_id));
+    }
+    assert!(matches!(
+        rx.try_recv(),
+        Err(broadcast::error::TryRecvError::Empty)
+    ));
+
+    // A patch the agent rejects after committing it (Switch stores an
+    // unparsable condition as never-matching) must return the error AND
+    // still announce the spec change - the value is in the live spec.
+    let bad = serde_json::json!({ "configs": { "c2": crate::common::agents::INVALID_CONDITION } });
+    ma.update_agent_spec(&agent_id, &bad)
+        .await
+        .expect_err("the committed config error must propagate");
+
+    let e = next_event(&mut rx).await;
+    assert!(matches!(e.event, ModularAgentEvent::AgentSpecUpdated(ref id) if id == &agent_id));
+
+    let spec = ma.get_agent_spec(&agent_id).await.unwrap();
+    assert_eq!(
+        spec.configs.unwrap().get_string("c2").unwrap(),
+        crate::common::agents::INVALID_CONDITION,
+        "the rejected value stays committed, so it must have been announced"
+    );
+
+    ma.quit();
+}
+
+#[tokio::test]
+async fn test_ext_in_renamed_while_stopped_delivers_once() {
+    let ma = ModularAgent::init().unwrap();
+    ma.ready().await.unwrap();
+
+    let preset_id = ma.new_preset().unwrap();
+    let in_id = ma
+        .add_agent(preset_id.clone(), ext_agent_spec(&ma, EXT_IN_DEF, "before"))
+        .await
+        .unwrap();
+    let out_id = ma
+        .add_agent(
+            preset_id.clone(),
+            ext_agent_spec(&ma, EXT_OUT_DEF, "renamed_out"),
+        )
+        .await
+        .unwrap();
+    ma.add_connection(
+        &preset_id,
+        ConnectionSpec {
+            source: in_id.clone(),
+            source_handle: "value".into(),
+            target: out_id,
+            target_handle: "value".into(),
+        },
+    )
+    .await
+    .unwrap();
+
+    // Renaming the channel while the preset is stopped must only re-point
+    // the agent's state: registration happens in start(), and a second
+    // entry would deliver every input twice.
+    ma.update_agent_spec(
+        &in_id,
+        &serde_json::json!({ "configs": { "name": "renamed_in" } }),
+    )
+    .await
+    .unwrap();
+    ma.start_preset(&preset_id).await.unwrap();
+
+    let mut rx = ma.subscribe();
+    ma.write_external_input("renamed_in".into(), AgentValue::string("a"))
+        .await
+        .unwrap();
+    let e = expect_event(
+        &mut rx,
+        |e| matches!(e, ModularAgentEvent::ExternalOutput(name, _) if name == "renamed_out"),
+    )
+    .await;
+    assert!(
+        matches!(e.event, ModularAgentEvent::ExternalOutput(_, ref v) if v == &AgentValue::string("a"))
+    );
+
+    // A duplicate registration would deliver "a" a second time here.
+    ma.write_external_input("renamed_in".into(), AgentValue::string("b"))
+        .await
+        .unwrap();
+    let e = expect_event(
+        &mut rx,
+        |e| matches!(e, ModularAgentEvent::ExternalOutput(name, _) if name == "renamed_out"),
+    )
+    .await;
+    assert!(
+        matches!(e.event, ModularAgentEvent::ExternalOutput(_, ref v) if v == &AgentValue::string("b")),
+        "each input must be delivered exactly once"
+    );
+
+    ma.stop_preset(&preset_id).await.unwrap();
+    ma.quit();
+}

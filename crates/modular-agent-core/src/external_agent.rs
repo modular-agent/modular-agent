@@ -70,7 +70,7 @@ use async_trait::async_trait;
 
 use modular_agent_macros::modular_agent;
 
-use crate::agent::{Agent, AgentData, AsAgent};
+use crate::agent::{Agent, AgentData, AgentStatus, AsAgent};
 use crate::context::AgentContext;
 use crate::error::AgentError;
 use crate::modular_agent::ModularAgent;
@@ -221,20 +221,27 @@ impl AsAgent for ExternalInputAgent {
     fn configs_changed(&mut self) -> Result<(), AgentError> {
         let channel_name = self.configs()?.get_string(CONFIG_NAME).ok();
         if self.channel_name != channel_name {
-            if let Some(channel_name) = &self.channel_name {
-                let ma = self.ma();
-                let mut external_input_agents = ma.external_input_agents.lock().unwrap();
-                if let Some(nodes) = external_input_agents.get_mut(channel_name) {
-                    nodes.retain(|x| x != &self.data.id);
+            // Re-point the registration only while running: start() registers
+            // and stop() unregisters, so touching the map on a stopped agent
+            // would leave a duplicate entry once start() runs, delivering
+            // every external input twice.
+            if self.data.status == AgentStatus::Start {
+                if let Some(channel_name) = &self.channel_name {
+                    let ma = self.ma();
+                    let mut external_input_agents = ma.external_input_agents.lock().unwrap();
+                    if let Some(nodes) = external_input_agents.get_mut(channel_name) {
+                        nodes.retain(|x| x != &self.data.id);
+                    }
                 }
-            }
-            if let Some(channel_name) = &channel_name {
-                let ma = self.ma();
-                let mut external_input_agents = ma.external_input_agents.lock().unwrap();
-                if let Some(nodes) = external_input_agents.get_mut(channel_name) {
-                    nodes.push(self.data.id.clone());
-                } else {
-                    external_input_agents.insert(channel_name.clone(), vec![self.data.id.clone()]);
+                if let Some(channel_name) = &channel_name {
+                    let ma = self.ma();
+                    let mut external_input_agents = ma.external_input_agents.lock().unwrap();
+                    if let Some(nodes) = external_input_agents.get_mut(channel_name) {
+                        nodes.push(self.data.id.clone());
+                    } else {
+                        external_input_agents
+                            .insert(channel_name.clone(), vec![self.data.id.clone()]);
+                    }
                 }
             }
             self.channel_name = channel_name;
@@ -369,22 +376,27 @@ impl AsAgent for LocalInputAgent {
     fn configs_changed(&mut self) -> Result<(), AgentError> {
         let new_var_name = self.configs()?.get_string(CONFIG_NAME).ok();
         if self.var_name != new_var_name {
-            if let Some(var_name) = &self.var_name {
-                let channel_name = channel_name_for_local(self.preset_id(), var_name);
-                let ma = self.ma();
-                let mut external_input_agents = ma.external_input_agents.lock().unwrap();
-                if let Some(nodes) = external_input_agents.get_mut(&channel_name) {
-                    nodes.retain(|x| x != &self.data.id);
+            // Same as ExternalInputAgent: the registration belongs to the
+            // running state, so only re-point it while running.
+            if self.data.status == AgentStatus::Start {
+                if let Some(var_name) = &self.var_name {
+                    let channel_name = channel_name_for_local(self.preset_id(), var_name);
+                    let ma = self.ma();
+                    let mut external_input_agents = ma.external_input_agents.lock().unwrap();
+                    if let Some(nodes) = external_input_agents.get_mut(&channel_name) {
+                        nodes.retain(|x| x != &self.data.id);
+                    }
                 }
-            }
-            if let Some(var_name) = &new_var_name {
-                let channel_name = channel_name_for_local(self.preset_id(), var_name);
-                let ma = self.ma();
-                let mut external_input_agents = ma.external_input_agents.lock().unwrap();
-                if let Some(nodes) = external_input_agents.get_mut(&channel_name) {
-                    nodes.push(self.data.id.clone());
-                } else {
-                    external_input_agents.insert(channel_name.clone(), vec![self.data.id.clone()]);
+                if let Some(var_name) = &new_var_name {
+                    let channel_name = channel_name_for_local(self.preset_id(), var_name);
+                    let ma = self.ma();
+                    let mut external_input_agents = ma.external_input_agents.lock().unwrap();
+                    if let Some(nodes) = external_input_agents.get_mut(&channel_name) {
+                        nodes.push(self.data.id.clone());
+                    } else {
+                        external_input_agents
+                            .insert(channel_name.clone(), vec![self.data.id.clone()]);
+                    }
                 }
             }
             self.var_name = new_var_name;
