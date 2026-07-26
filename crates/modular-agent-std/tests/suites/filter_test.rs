@@ -196,14 +196,14 @@ async fn test_if_bool() {
 }
 
 #[tokio::test]
-async fn test_if_object_path() {
+async fn test_if_object_key() {
     let ma = test_utils::setup_modular_agent().await;
 
     let preset_id = test_utils::open_and_start_preset(&ma, PRESET)
         .await
         .unwrap();
 
-    // The path selects what the condition tests; the whole input is still what gets emitted
+    // The key selects what the condition tests; the whole input is still what gets emitted
     test_utils::write_and_expect_local_value(
         &ma,
         &preset_id,
@@ -239,7 +239,7 @@ async fn test_if_object_path() {
         .await
         .unwrap();
 
-    // A missing key makes the path resolve to null, which is not ordered against 18
+    // A missing field makes the key resolve to null, which is not ordered against 18
     let no_user = AgentValue::object(hashmap! {
         "name".to_string() => AgentValue::string("a".to_string()),
     });
@@ -250,7 +250,7 @@ async fn test_if_object_path() {
         .await
         .unwrap();
 
-    // A non-object input cannot resolve the path either, and is routed instead of failing
+    // A non-object input cannot resolve the key either, and is routed instead of failing
     test_utils::write_and_expect_local_value(&ma, &preset_id, "if_in", AgentValue::string("hello"))
         .await
         .unwrap();
@@ -345,7 +345,7 @@ async fn test_switch() {
         .await
         .unwrap();
 
-    // c1 `> 10`, c2 `> 5`: both match, but the first one wins
+    // c0 `> 10`, c1 `> 5`: both match, but the first one wins
     test_utils::write_and_expect_local_value(&ma, &preset_id, "switch_in", AgentValue::integer(20))
         .await
         .unwrap();
@@ -353,7 +353,7 @@ async fn test_switch() {
         .await
         .unwrap();
 
-    // Only c2 matches
+    // Only c1 matches
     test_utils::write_and_expect_local_value(&ma, &preset_id, "switch_in", AgentValue::integer(7))
         .await
         .unwrap();
@@ -393,14 +393,14 @@ async fn test_switch_config_update() {
         .await
         .unwrap();
 
-    // Raising n exposes the new port `2` and the matching c3 config
+    // Raising n exposes the new port `2` and the matching c2 config
     test_utils::write_and_expect_local_value(&ma, &preset_id, "switch_n", AgentValue::integer(3))
         .await
         .unwrap();
     test_utils::write_and_expect_local_value(
         &ma,
         &preset_id,
-        "switch_c3",
+        "switch_c2",
         AgentValue::string("== 3"),
     )
     .await
@@ -417,7 +417,7 @@ async fn test_switch_config_update() {
     test_utils::write_and_expect_local_value(
         &ma,
         &preset_id,
-        "switch_c1",
+        "switch_c0",
         AgentValue::string("> abc"),
     )
     .await
@@ -453,19 +453,19 @@ async fn test_switch_regex() {
         .await
         .unwrap();
 
-    // c1 becomes a regex on the `status` field. c2 stays `> 5` from the preset: with
-    // no path it tests the input object itself, which has no numeric value, so it never
+    // c0 becomes a regex on the `status` field. c1 stays `> 5` from the preset: with
+    // no key it tests the input object itself, which has no numeric value, so it never
     // matches here - a non-matching status therefore routes to default.
     test_utils::write_and_expect_local_value(
         &ma,
         &preset_id,
-        "switch_c1",
+        "switch_c0",
         AgentValue::string("status == /err.*/"),
     )
     .await
     .unwrap();
 
-    // c1 matches in full, and the whole input object is what gets emitted
+    // c0 matches in full, and the whole input object is what gets emitted
     let failed = AgentValue::object(hashmap! {
         "status".to_string() => AgentValue::string("error".to_string()),
     });
@@ -491,15 +491,15 @@ async fn test_switch_regex() {
 }
 
 #[tokio::test]
-async fn test_switch_object_path() {
+async fn test_switch_object_key() {
     let ma = test_utils::setup_modular_agent().await;
 
     let preset_id = test_utils::open_and_start_preset(&ma, PRESET)
         .await
         .unwrap();
 
-    // Each condition carries its own path, so they can look at different fields.
-    // c2 stays `> 5` from the preset: with no path it tests the input object itself,
+    // Each condition carries its own key, so they can look at different fields.
+    // c1 stays `> 5` from the preset: with no key it tests the input object itself,
     // and an object has no numeric value, so it never matches here.
     test_utils::write_and_expect_local_value(&ma, &preset_id, "switch_n", AgentValue::integer(3))
         .await
@@ -507,7 +507,7 @@ async fn test_switch_object_path() {
     test_utils::write_and_expect_local_value(
         &ma,
         &preset_id,
-        "switch_c1",
+        "switch_c0",
         AgentValue::string("status == \"error\""),
     )
     .await
@@ -515,13 +515,13 @@ async fn test_switch_object_path() {
     test_utils::write_and_expect_local_value(
         &ma,
         &preset_id,
-        "switch_c3",
+        "switch_c2",
         AgentValue::string("retry > 3"),
     )
     .await
     .unwrap();
 
-    // c1 matches, and the whole input object is what gets emitted
+    // c0 matches, and the whole input object is what gets emitted
     let failed = AgentValue::object(hashmap! {
         "status".to_string() => AgentValue::string("error".to_string()),
         "retry".to_string() => AgentValue::integer(0),
@@ -533,7 +533,7 @@ async fn test_switch_object_path() {
         .await
         .unwrap();
 
-    // Only c3 matches, on a different field than c1
+    // Only c2 matches, on a different field than c0
     let retried = AgentValue::object(hashmap! {
         "status".to_string() => AgentValue::string("ok".to_string()),
         "retry".to_string() => AgentValue::integer(5),
@@ -569,7 +569,7 @@ async fn test_match() {
         .unwrap();
 
     // The preset leaves `key` empty, so the input value itself is compared against
-    // c1 `"a"` and c2 `/b.*/`
+    // c0 `"a"` and c1 `/b.*/`
     test_utils::write_and_expect_local_value(&ma, &preset_id, "match_in", AgentValue::string("a"))
         .await
         .unwrap();
@@ -600,7 +600,7 @@ async fn test_match() {
 
     // Comparison is by type as well as value: the case `10` matches the number, not the
     // string "10"
-    test_utils::write_and_expect_local_value(&ma, &preset_id, "match_c1", AgentValue::string("10"))
+    test_utils::write_and_expect_local_value(&ma, &preset_id, "match_c0", AgentValue::string("10"))
         .await
         .unwrap();
 
@@ -629,7 +629,7 @@ async fn test_match_key() {
         .await
         .unwrap();
 
-    // The key selects what is compared; c2 becomes `null` so that a missing key is caught
+    // The key selects what is compared; c1 becomes `null` so that a missing key is caught
     test_utils::write_and_expect_local_value(
         &ma,
         &preset_id,
@@ -641,7 +641,7 @@ async fn test_match_key() {
     test_utils::write_and_expect_local_value(
         &ma,
         &preset_id,
-        "match_c1",
+        "match_c0",
         AgentValue::string("\"error\""),
     )
     .await
@@ -649,13 +649,13 @@ async fn test_match_key() {
     test_utils::write_and_expect_local_value(
         &ma,
         &preset_id,
-        "match_c2",
+        "match_c1",
         AgentValue::string("null"),
     )
     .await
     .unwrap();
 
-    // c1 matches, and the whole input object is what gets emitted
+    // c0 matches, and the whole input object is what gets emitted
     let failed = AgentValue::object(hashmap! {
         "user".to_string() => AgentValue::object(hashmap! {
             "status".to_string() => AgentValue::string("error".to_string()),
@@ -669,7 +669,7 @@ async fn test_match_key() {
         .await
         .unwrap();
 
-    // A key that does not resolve is compared as null, so c2 catches it
+    // A key that does not resolve is compared as null, so c1 catches it
     let missing = AgentValue::object(hashmap! {
         "name".to_string() => AgentValue::string("a".to_string()),
     });
@@ -712,11 +712,11 @@ async fn test_match_config_update() {
         .await
         .unwrap();
 
-    // Raising n exposes the new port `2` and the matching c3 config
+    // Raising n exposes the new port `2` and the matching c2 config
     test_utils::write_and_expect_local_value(&ma, &preset_id, "match_n", AgentValue::integer(3))
         .await
         .unwrap();
-    test_utils::write_and_expect_local_value(&ma, &preset_id, "match_c3", AgentValue::string("3"))
+    test_utils::write_and_expect_local_value(&ma, &preset_id, "match_c2", AgentValue::string("3"))
         .await
         .unwrap();
 
@@ -731,7 +731,7 @@ async fn test_match_config_update() {
     test_utils::write_and_expect_local_value(
         &ma,
         &preset_id,
-        "match_c1",
+        "match_c0",
         AgentValue::string("abc"),
     )
     .await

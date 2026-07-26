@@ -10,13 +10,11 @@ use modular_agent_core::{
 
 const CATEGORY: &str = "Std/Image";
 
-const PORT_FILENAME: &str = "filename";
+const PORT_PATH: &str = "path";
 const PORT_IMAGE: &str = "image";
 const PORT_IMAGE_FILENAME: &str = "image_filename";
-const PORT_BLANK: &str = "blank";
-const PORT_NON_BLANK: &str = "non_blank";
-const PORT_CHANGED: &str = "changed";
-const PORT_UNCHANGED: &str = "unchanged";
+const PORT_T: &str = "t";
+const PORT_F: &str = "f";
 const PORT_RESULT: &str = "result";
 
 const CONFIG_ALMOST_BLACK_THRESHOLD: &str = "almost_black_threshold";
@@ -28,10 +26,10 @@ const CONFIG_THRESHOLD: &str = "threshold";
 
 // IsBlankImageAgent
 #[modular_agent(
-    title = "isBlank",
+    title = "IsBlank",
     category = CATEGORY,
     inputs = [PORT_IMAGE],
-    outputs = [PORT_BLANK, PORT_NON_BLANK],
+    outputs = [PORT_T, PORT_F],
     integer_config(name = CONFIG_ALMOST_BLACK_THRESHOLD, default = 20),
     integer_config(name = CONFIG_BLANK_THRESHOLD, default = 400)
 )]
@@ -86,9 +84,9 @@ impl AsAgent for IsBlankImageAgent {
 
             let is_blank = self.is_blank(&image, almost_black_threshold, blank_threshold);
             if is_blank {
-                self.output(ctx, PORT_BLANK, value).await
+                self.output(ctx, PORT_T, value).await
             } else {
-                self.output(ctx, PORT_NON_BLANK, value).await
+                self.output(ctx, PORT_F, value).await
             }
         } else {
             Err(AgentError::InvalidValue(
@@ -277,10 +275,10 @@ impl AsAgent for ScaleImageAgent {
 
 // IsChangedImageAgent
 #[modular_agent(
-    title = "isChanged",
+    title = "IsChanged",
     category = CATEGORY,
     inputs = [PORT_IMAGE],
-    outputs = [PORT_CHANGED, PORT_UNCHANGED],
+    outputs = [PORT_T, PORT_F],
     number_config(name = CONFIG_THRESHOLD, default = 0.01)
 )]
 struct IsChangedImageAgent {
@@ -344,9 +342,9 @@ impl AsAgent for IsChangedImageAgent {
 
             if is_changed {
                 self.last_image = value.clone().into_image();
-                self.output(ctx, PORT_CHANGED, value).await
+                self.output(ctx, PORT_T, value).await
             } else {
-                self.output(ctx, PORT_UNCHANGED, value).await
+                self.output(ctx, PORT_F, value).await
             }
         } else {
             Err(AgentError::InvalidValue(
@@ -361,7 +359,7 @@ impl AsAgent for IsChangedImageAgent {
 #[modular_agent(
     title = "Open Image",
     category = CATEGORY,
-    inputs = [PORT_FILENAME],
+    inputs = [PORT_PATH],
     outputs = [PORT_IMAGE]
 )]
 struct OpenImageAgent {
@@ -382,13 +380,13 @@ impl AsAgent for OpenImageAgent {
         _port: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
-        let filename = value
+        let path = value
             .as_str()
-            .ok_or_else(|| AgentError::InvalidValue("Expected filename string".into()))?;
-        let img_path = std::path::Path::new(filename);
+            .ok_or_else(|| AgentError::InvalidValue("Expected path string".into()))?;
+        let img_path = std::path::Path::new(path);
 
         let image = photon_rs::native::open_image(img_path).map_err(|e| {
-            AgentError::InvalidValue(format!("Failed to open image {}: {}", filename, e))
+            AgentError::InvalidValue(format!("Failed to open image {}: {}", path, e))
         })?;
 
         self.output(ctx, PORT_IMAGE, AgentValue::image(image)).await

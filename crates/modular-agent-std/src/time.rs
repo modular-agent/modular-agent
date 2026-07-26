@@ -20,15 +20,14 @@ const PORT_VALUE: &str = "value";
 const PORT_UNIT: &str = "unit";
 
 const CONFIG_DELAY: &str = "delay";
-const CONFIG_MAX_NUM_DATA: &str = "max_num_data";
+const CONFIG_CAPACITY: &str = "capacity";
 const CONFIG_INTERVAL: &str = "interval";
 const CONFIG_SCHEDULE: &str = "schedule";
-const CONFIG_TIME: &str = "time";
 
 const DELAY_MS_DEFAULT: i64 = 1000; // 1 second in milliseconds
-const MAX_NUM_DATA_DEFAULT: i64 = 10;
+const CAPACITY_DEFAULT: i64 = 10;
 const INTERVAL_DEFAULT: &str = "10s";
-const TIME_DEFAULT: &str = "1s";
+const THROTTLE_INTERVAL_DEFAULT: &str = "1s";
 
 // Delay Agent
 #[modular_agent(
@@ -38,7 +37,7 @@ const TIME_DEFAULT: &str = "1s";
     inputs = [PORT_VALUE],
     outputs = [PORT_VALUE],
     integer_config(name = CONFIG_DELAY, default = DELAY_MS_DEFAULT, title = "delay (ms)"),
-    integer_config(name = CONFIG_MAX_NUM_DATA, default = MAX_NUM_DATA_DEFAULT, title = "max num data"),
+    integer_config(name = CONFIG_CAPACITY, default = CAPACITY_DEFAULT),
     hint(color=2),
 )]
 struct DelayAgent {
@@ -63,13 +62,13 @@ impl AsAgent for DelayAgent {
     ) -> Result<(), AgentError> {
         let config = self.configs()?;
         let delay_ms = config.get_integer_or(CONFIG_DELAY, DELAY_MS_DEFAULT);
-        let max_num_data = config.get_integer_or(CONFIG_MAX_NUM_DATA, MAX_NUM_DATA_DEFAULT);
+        let capacity = config.get_integer_or(CONFIG_CAPACITY, CAPACITY_DEFAULT);
 
         // To avoid generating too many timers
         {
             let num_waiting_data = self.num_waiting_data.clone();
             let mut num_waiting_data = num_waiting_data.lock().unwrap();
-            if *num_waiting_data >= max_num_data {
+            if *num_waiting_data >= capacity {
                 return Ok(());
             }
             *num_waiting_data += 1;
@@ -406,22 +405,22 @@ impl AsAgent for ScheduleTimerAgent {
     category = CATEGORY,
     inputs = [PORT_VALUE],
     outputs = [PORT_VALUE],
-    string_config(name = CONFIG_TIME, default = TIME_DEFAULT, description = "(ex. 10s, 5m, 100ms, 1h, 1d)"),
-    integer_config(name = CONFIG_MAX_NUM_DATA, title = "max num data", description = "0: no data, -1: all data"),
+    string_config(name = CONFIG_INTERVAL, default = THROTTLE_INTERVAL_DEFAULT, description = "(ex. 10s, 5m, 100ms, 1h, 1d)"),
+    integer_config(name = CONFIG_CAPACITY, description = "0: no data, -1: all data"),
     hint(color=2),
 )]
 struct ThrottleTimeAgent {
     data: AgentData,
     timer_handle: Arc<Mutex<Option<JoinHandle<()>>>>,
-    time_ms: u64,
-    max_num_data: i64,
+    interval_ms: u64,
+    capacity: i64,
     waiting_data: Arc<Mutex<Vec<(AgentContext, String, AgentValue)>>>,
 }
 
 impl ThrottleTimeAgent {
     fn start_timer(&mut self) -> Result<(), AgentError> {
         let timer_handle = self.timer_handle.clone();
-        let time_ms = self.time_ms;
+        let interval_ms = self.interval_ms;
 
         let waiting_data = self.waiting_data.clone();
         let ma = self.ma().clone();
@@ -430,7 +429,7 @@ impl ThrottleTimeAgent {
         let handle = self.runtime().spawn(async move {
             loop {
                 // Sleep for the configured interval
-                tokio::time::sleep(tokio::time::Duration::from_millis(time_ms)).await;
+                tokio::time::sleep(tokio::time::Duration::from_millis(interval_ms)).await;
 
                 // Check if we've been stopped
                 let mut handle = timer_handle.lock().unwrap();
@@ -479,24 +478,24 @@ impl ThrottleTimeAgent {
 #[async_trait]
 impl AsAgent for ThrottleTimeAgent {
     fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
-        let time = spec
+        let interval = spec
             .configs
             .as_ref()
             .ok_or(AgentError::NoConfig)?
-            .get_string_or(CONFIG_TIME, TIME_DEFAULT);
-        let time_ms = parse_duration_to_ms(&time)?;
+            .get_string_or(CONFIG_INTERVAL, THROTTLE_INTERVAL_DEFAULT);
+        let interval_ms = parse_duration_to_ms(&interval)?;
 
-        let max_num_data = spec
+        let capacity = spec
             .configs
             .as_ref()
             .ok_or(AgentError::NoConfig)?
-            .get_integer_or(CONFIG_MAX_NUM_DATA, 0);
+            .get_integer_or(CONFIG_CAPACITY, 0);
 
         Ok(Self {
             data: AgentData::new(ma, id, spec),
             timer_handle: Default::default(),
-            time_ms,
-            max_num_data,
+            interval_ms,
+            capacity,
             waiting_data: Arc::new(Mutex::new(vec![])),
         })
     }
@@ -507,22 +506,22 @@ impl AsAgent for ThrottleTimeAgent {
 
     fn configs_changed(&mut self) -> Result<(), AgentError> {
         // Check if interval has changed
-        let time = self.configs()?.get_string(CONFIG_TIME)?;
-        let new_time = parse_duration_to_ms(&time)?;
-        if new_time != self.time_ms {
-            self.time_ms = new_time;
+        let interval = self.configs()?.get_string(CONFIG_INTERVAL)?;
+        let new_interval = parse_duration_to_ms(&interval)?;
+        if new_interval != self.interval_ms {
+            self.interval_ms = new_interval;
         }
 
-        // Check if max_num_data has changed
-        let max_num_data = self.configs()?.get_integer(CONFIG_MAX_NUM_DATA)?;
-        if self.max_num_data != max_num_data {
+        // Check if capacity has changed
+        let capacity = self.configs()?.get_integer(CONFIG_CAPACITY)?;
+        if self.capacity != capacity {
             let mut wd = self.waiting_data.lock().unwrap();
             let wd_len = wd.len();
-            if max_num_data >= 0 && wd_len > (max_num_data as usize) {
+            if capacity >= 0 && wd_len > (capacity as usize) {
                 // If we have reached the max data to keep, we drop the oldest one
-                wd.drain(0..(wd_len - (max_num_data as usize)));
+                wd.drain(0..(wd_len - (capacity as usize)));
             }
-            self.max_num_data = max_num_data;
+            self.capacity = capacity;
         }
         Ok(())
     }
@@ -537,13 +536,13 @@ impl AsAgent for ThrottleTimeAgent {
             // If the timer is running, we just add the data to the waiting list
             let mut wd = self.waiting_data.lock().unwrap();
 
-            // If max_num_data is 0, we don't need to keep any data
-            if self.max_num_data == 0 {
+            // If capacity is 0, we don't need to keep any data
+            if self.capacity == 0 {
                 return Ok(());
             }
 
             wd.push((ctx, port, value));
-            if self.max_num_data > 0 && wd.len() > self.max_num_data as usize {
+            if self.capacity > 0 && wd.len() > self.capacity as usize {
                 // If we have reached the max data to keep, we drop the oldest one
                 wd.remove(0);
             }

@@ -11,10 +11,8 @@ use modular_agent_core::{
 const CATEGORY: &str = "Std/Array";
 
 const PORT_ARRAY: &str = "array";
-const PORT_IN1: &str = "in1";
-const PORT_IN2: &str = "in2";
-const PORT_T: &str = "T";
-const PORT_F: &str = "F";
+const PORT_T: &str = "t";
+const PORT_F: &str = "f";
 const PORT_VALUE: &str = "value";
 
 const CONFIG_N: &str = "n";
@@ -53,7 +51,7 @@ impl AsAgent for IsArrayAgent {
     }
 }
 
-/// Checks if an input array is empty, emitting to T or F accordingly.
+/// Checks if an input array is empty, emitting to t or f accordingly.
 /// If the input is not an array, it is treated as non-empty.
 #[modular_agent(
     title = "IsEmptyArray",
@@ -550,12 +548,13 @@ impl CollectAgent {
 
 /// Zips multiple inputs into an array.
 ///
-/// The number of inputs n is specified via configuration.
+/// The number of inputs n is specified via configuration, and the input ports are
+/// numbered `0`..`n-1`.
 ///
-/// If n=2, it takes two inputs: in1 and in2. Once all inputs are present,
-/// it emits them as [in1, in2].
+/// If n=2, it takes two inputs: `0` and `1`. Once all inputs are present,
+/// it emits them as [`0`, `1`].
 ///
-/// If in2 arrives repeatedly before in1, the in2 values are queued; when in1 arrives,
+/// If `1` arrives repeatedly before `0`, the `1` values are queued; when `0` arrives,
 /// they’re paired in order from the head of the queue and emitted.
 ///
 /// When the `use_ctx` config is true, inputs are matched by context key (including map frames)
@@ -563,7 +562,7 @@ impl CollectAgent {
 #[modular_agent(
     title = "ZipToArray",
     category = CATEGORY,
-    inputs = [PORT_IN1, PORT_IN2],
+    inputs = ["0", "1"],
     outputs = [PORT_ARRAY],
     integer_config(name = CONFIG_N, default = 2),
     boolean_config(name = CONFIG_USE_CTX),
@@ -618,7 +617,7 @@ impl ZipToArrayAgent {
             .map(|c| c.get_integer_or(CONFIG_CAPACITY, 1000))
             .unwrap_or(1000) as u64;
 
-        spec.inputs = Some((1..=n).map(|i| format!("in{}", i)).collect());
+        spec.inputs = Some((0..n).map(|i| i.to_string()).collect());
 
         Ok((n, use_ctx, ttl_sec, capacity))
     }
@@ -695,12 +694,7 @@ impl AsAgent for ZipToArrayAgent {
         value: AgentValue,
     ) -> Result<(), AgentError> {
         // Parse port number
-        let Some(idx) = port
-            .strip_prefix("in")
-            .and_then(|s| s.parse::<usize>().ok())
-            .filter(|&i| i >= 1 && i <= self.n)
-            .map(|i| i - 1)
-        else {
+        let Some(idx) = port.parse::<usize>().ok().filter(|&i| i < self.n) else {
             return Err(AgentError::InvalidValue(format!(
                 "Invalid input port: {}",
                 port

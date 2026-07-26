@@ -10,8 +10,6 @@ use modular_agent_core::{
 
 const CATEGORY: &str = "Std/Data";
 
-const PORT_IN1: &str = "in1";
-const PORT_IN2: &str = "in2";
 const PORT_JSON: &str = "json";
 const PORT_OBJECT: &str = "object";
 const PORT_VALUE: &str = "value";
@@ -20,7 +18,7 @@ const CONFIG_KEY: &str = "key";
 const CONFIG_VALUE: &str = "value";
 const CONFIG_N: &str = "n";
 const CONFIG_USE_CTX: &str = "use_ctx";
-const CONFIG_TTL_SECONDS: &str = "ttl_sec";
+const CONFIG_TTL_SEC: &str = "ttl_sec";
 const CONFIG_CAPACITY: &str = "capacity";
 
 // Get Value
@@ -345,12 +343,13 @@ fn set_nested_value<K: AsRef<str>>(root: &mut AgentValue, keys: &[K], new_value:
 
 /// Zips multiple inputs into an object.
 ///
-/// The number of inputs n and keys are specified via configuration.
+/// The number of inputs n and keys are specified via configuration, and the input
+/// ports are numbered `0`..`n-1`.
 ///
-/// If n=2, it takes two inputs: in1 and in2. Once all inputs are present,
-/// it emits them as { key1: in1, key2: in2 }.
+/// If n=2, it takes two inputs: `0` and `1`. Once all inputs are present,
+/// it emits them as { k0: value of `0`, k1: value of `1` }.
 ///
-/// If in2 arrives repeatedly before in1, the in2 values are queued; when in1 arrives,
+/// If `1` arrives repeatedly before `0`, the `1` values are queued; when `0` arrives,
 /// they’re paired in order from the head of the queue and emitted.
 ///
 /// When the `use_ctx` config is true, inputs are matched by context key (including map frames)
@@ -358,21 +357,21 @@ fn set_nested_value<K: AsRef<str>>(root: &mut AgentValue, keys: &[K], new_value:
 #[modular_agent(
     title = "ZipToObject",
     category = CATEGORY,
-    inputs = [PORT_IN1, PORT_IN2],
+    inputs = ["0", "1"],
     outputs = [PORT_OBJECT],
     integer_config(name = CONFIG_N, default = 2),
     boolean_config(name = CONFIG_USE_CTX),
-    integer_config(name = CONFIG_TTL_SECONDS, default = 60),
+    integer_config(name = CONFIG_TTL_SEC, default = 60),
     integer_config(name = CONFIG_CAPACITY, default = 1000),
 )]
 struct ZipToObjectAgent {
     data: AgentData,
     n: usize,
     use_ctx: bool,
-    ttl_seconds: u64,
+    ttl_sec: u64,
     capacity: usize,
 
-    // Optimization: Pre-load and store key configuration (k1, k2...)
+    // Optimization: Pre-load and store key configuration (k0, k1...)
     keys: Vec<String>,
 
     // For simple mode: FIFO queues
@@ -408,7 +407,7 @@ impl ZipToObjectAgent {
         let ttl_sec = spec
             .configs
             .as_ref()
-            .map(|c| c.get_integer_or(CONFIG_TTL_SECONDS, 60))
+            .map(|c| c.get_integer_or(CONFIG_TTL_SEC, 60))
             .unwrap_or(60) as u64;
 
         let capacity = spec
@@ -447,20 +446,20 @@ impl ZipToObjectAgent {
         config_specs.insert(CONFIG_USE_CTX.to_string(), use_ctx_spec);
 
         configs.set(
-            CONFIG_TTL_SECONDS.to_string(),
+            CONFIG_TTL_SEC.to_string(),
             AgentValue::integer(ttl_sec as i64),
         );
         let Some(ttl_spec) = spec
             .config_specs
             .as_ref()
-            .and_then(|cs| cs.get(CONFIG_TTL_SECONDS))
+            .and_then(|cs| cs.get(CONFIG_TTL_SEC))
             .cloned()
         else {
             return Err(AgentError::InvalidConfig(
                 "config ttl_sec must be present".into(),
             ));
         };
-        config_specs.insert(CONFIG_TTL_SECONDS.to_string(), ttl_spec);
+        config_specs.insert(CONFIG_TTL_SEC.to_string(), ttl_spec);
 
         configs.set(
             CONFIG_CAPACITY.to_string(),
@@ -479,9 +478,9 @@ impl ZipToObjectAgent {
         config_specs.insert(CONFIG_CAPACITY.to_string(), capacity_spec);
 
         let mut keys = Vec::with_capacity(n);
-        for i in 1..=n {
+        for i in 0..n {
             let key_name = format!("k{}", i);
-            let default_key = format!("in{}", i);
+            let default_key = i.to_string();
             let v = spec
                 .configs
                 .as_ref()
@@ -504,7 +503,7 @@ impl ZipToObjectAgent {
         spec.configs = Some(configs);
         spec.config_specs = Some(config_specs);
 
-        spec.inputs = Some((1..=n).map(|i| format!("in{}", i)).collect());
+        spec.inputs = Some((0..n).map(|i| i.to_string()).collect());
 
         Ok((n as usize, use_ctx, ttl_sec, capacity, keys))
     }
@@ -528,7 +527,7 @@ impl AsAgent for ZipToObjectAgent {
             data,
             n,
             use_ctx,
-            ttl_seconds: ttl_sec,
+            ttl_sec,
             capacity: capacity as usize,
             keys,
             queues: vec![VecDeque::new(); n],
@@ -547,8 +546,8 @@ impl AsAgent for ZipToObjectAgent {
             self.use_ctx = use_ctx;
             changed = true;
         }
-        if ttl_sec != self.ttl_seconds {
-            self.ttl_seconds = ttl_sec;
+        if ttl_sec != self.ttl_sec {
+            self.ttl_sec = ttl_sec;
             changed = true;
         }
         if capacity != self.capacity as u64 {
@@ -583,12 +582,7 @@ impl AsAgent for ZipToObjectAgent {
         value: AgentValue,
     ) -> Result<(), AgentError> {
         // Parse port number
-        let Some(idx) = port
-            .strip_prefix("in")
-            .and_then(|s| s.parse::<usize>().ok())
-            .filter(|&i| i >= 1 && i <= self.n)
-            .map(|i| i - 1)
-        else {
+        let Some(idx) = port.parse::<usize>().ok().filter(|&i| i < self.n) else {
             return Err(AgentError::InvalidValue(format!(
                 "Invalid input port: {}",
                 port
@@ -758,14 +752,14 @@ mod tests {
         let mut configs = AgentConfigs::new();
         configs.set(CONFIG_N.to_string(), AgentValue::integer(2));
         configs.set(CONFIG_USE_CTX.to_string(), AgentValue::boolean(true));
-        configs.set(CONFIG_TTL_SECONDS.to_string(), AgentValue::integer(120));
+        configs.set(CONFIG_TTL_SEC.to_string(), AgentValue::integer(120));
         configs.set(CONFIG_CAPACITY.to_string(), AgentValue::integer(5));
 
         let mut config_specs = AgentConfigSpecs::default();
         for (key, type_, value) in [
             (CONFIG_N, "integer", AgentValue::integer(2)),
             (CONFIG_USE_CTX, "boolean", AgentValue::boolean(false)),
-            (CONFIG_TTL_SECONDS, "integer", AgentValue::integer(60)),
+            (CONFIG_TTL_SEC, "integer", AgentValue::integer(60)),
             (CONFIG_CAPACITY, "integer", AgentValue::integer(1000)),
         ] {
             config_specs.insert(
@@ -790,16 +784,16 @@ mod tests {
         assert!(use_ctx);
         assert_eq!(ttl_sec, 120);
         assert_eq!(capacity, 5);
-        assert_eq!(keys, vec!["in1".to_string(), "in2".to_string()]);
+        assert_eq!(keys, vec!["0".to_string(), "1".to_string()]);
 
         let configs = spec.configs.as_ref().unwrap();
         assert!(configs.get_bool_or_default(CONFIG_USE_CTX));
-        assert_eq!(configs.get_integer_or(CONFIG_TTL_SECONDS, 0), 120);
+        assert_eq!(configs.get_integer_or(CONFIG_TTL_SEC, 0), 120);
         assert_eq!(configs.get_integer_or(CONFIG_CAPACITY, 0), 5);
 
         let config_specs = spec.config_specs.as_ref().unwrap();
         assert!(config_specs.get(CONFIG_USE_CTX).is_some());
-        assert!(config_specs.get(CONFIG_TTL_SECONDS).is_some());
+        assert!(config_specs.get(CONFIG_TTL_SEC).is_some());
         assert!(config_specs.get(CONFIG_CAPACITY).is_some());
     }
 

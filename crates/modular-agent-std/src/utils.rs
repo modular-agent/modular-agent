@@ -7,7 +7,7 @@ use modular_agent_core::{
 
 const CATEGORY: &str = "Std/Utils";
 
-const PORT_IN: &str = "in";
+const PORT_VALUE: &str = "value";
 const PORT_RESET: &str = "reset";
 const PORT_COUNT: &str = "count";
 
@@ -17,7 +17,7 @@ const DISPLAY_COUNT: &str = "count";
 #[modular_agent(
     title = "Counter",
     category = CATEGORY,
-    inputs = [PORT_IN, PORT_RESET],
+    inputs = [PORT_VALUE, PORT_RESET],
     outputs = [PORT_COUNT],
     integer_config(
         name = DISPLAY_COUNT,
@@ -55,7 +55,7 @@ impl AsAgent for CounterAgent {
     ) -> Result<(), AgentError> {
         if port == PORT_RESET {
             self.count = 0;
-        } else if port == PORT_IN {
+        } else if port == PORT_VALUE {
             self.count += 1;
         }
         self.set_config(DISPLAY_COUNT.to_string(), AgentValue::integer(self.count))?;

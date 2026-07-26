@@ -10,7 +10,7 @@ use crate::data::get_nested_value;
 
 const CATEGORY: &str = "Std/Filter";
 
-const PORT_INPUT: &str = "input";
+const PORT_VALUE: &str = "value";
 const PORT_T: &str = "t";
 const PORT_F: &str = "f";
 const PORT_DEFAULT: &str = "_";
@@ -18,13 +18,13 @@ const PORT_DEFAULT: &str = "_";
 const CONFIG_COND: &str = "cond";
 const CONFIG_N: &str = "n";
 const CONFIG_KEY: &str = "key";
+const CONFIG_C0: &str = "c0";
 const CONFIG_C1: &str = "c1";
-const CONFIG_C2: &str = "c2";
 
 /// Upper bound for the Switch / Match agents' `n` config.
 const MAX_N: i64 = 64;
 
-// Condition expression: `[<path>] <operator> <JSON literal>`
+// Condition expression: `[<key>] <operator> <JSON literal>`
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum CondOp {
@@ -69,15 +69,15 @@ enum CondLit {
 
 #[derive(Clone, Debug, PartialEq)]
 struct Cond {
-    /// Path to the value to test, empty when the input value itself is tested.
-    path: Vec<String>,
+    /// Key of the value to test, empty when the input value itself is tested.
+    key: Vec<String>,
     op: CondOp,
     lit: CondLit,
 }
 
 /// Parses a condition expression such as `> 10`, `== "abc"` or `user.age >= 18`.
 ///
-/// The part before the first operator character is the path; scanning stops there, so an
+/// The part before the first operator character is the key; scanning stops there, so an
 /// operator character inside the literal (`name == "a>b"`) is never mistaken for the
 /// operator. Key names containing `=`, `!`, `<` or `>` are therefore not addressable.
 ///
@@ -88,13 +88,13 @@ fn parse_cond(src: &str) -> Result<Cond, AgentError> {
 
     let Some(op_at) = src.find(['=', '!', '<', '>']) else {
         return Err(AgentError::InvalidConfig(format!(
-            "Condition must be `[path] <operator> <literal>`, for example `> 10` or `user.age >= 18`: {}",
+            "Condition must be `[key] <operator> <literal>`, for example `> 10` or `user.age >= 18`: {}",
             src
         )));
     };
-    let (path_src, op_src) = src.split_at(op_at);
+    let (key_src, op_src) = src.split_at(op_at);
 
-    let path = parse_path(path_src)?;
+    let key = parse_key(key_src)?;
 
     let (op, rest) = if let Some(rest) = op_src.strip_prefix("==") {
         (CondOp::Eq, rest)
@@ -132,29 +132,29 @@ fn parse_cond(src: &str) -> Result<Cond, AgentError> {
         )));
     }
 
-    Ok(Cond { path, op, lit })
+    Ok(Cond { key, op, lit })
 }
 
-/// Parses a dot-separated path such as `user.age` into its segments. A blank path yields an
+/// Parses a dot-separated key such as `user.age` into its segments. A blank key yields an
 /// empty vector, which addresses the input value itself.
-fn parse_path(src: &str) -> Result<Vec<String>, AgentError> {
+fn parse_key(src: &str) -> Result<Vec<String>, AgentError> {
     let src = src.trim();
     if src.is_empty() {
         return Ok(Vec::new());
     }
 
-    let mut path = Vec::new();
+    let mut key = Vec::new();
     for segment in src.split('.') {
         let segment = segment.trim();
         if segment.is_empty() {
             return Err(AgentError::InvalidConfig(format!(
-                "Path has an empty segment: {}",
+                "Key has an empty segment: {}",
                 src
             )));
         }
-        path.push(segment.to_string());
+        key.push(segment.to_string());
     }
-    Ok(path)
+    Ok(key)
 }
 
 /// Parses a literal: a regex between slashes, or any scalar JSON value.
@@ -264,7 +264,7 @@ fn cmp_cond(lit: &CondLit, value: &AgentValue) -> Option<Ordering> {
 
 /// Evaluates a condition against an input value.
 ///
-/// When the condition carries a path, the value at that path is tested; a path that does
+/// When the condition carries a key, the value at that key is tested; a key that does
 /// not resolve is tested as null instead of raising an error, so `== null` detects a
 /// missing field.
 ///
@@ -275,10 +275,10 @@ fn eval_cond(cond: &Cond, value: &AgentValue) -> bool {
     // `AgentValue` has drop glue, so a temporary cannot be promoted to a `'static`
     // reference; bind it to a local that outlives `target`.
     let unit = AgentValue::unit();
-    let target = if cond.path.is_empty() {
+    let target = if cond.key.is_empty() {
         value
     } else {
-        get_nested_value(value, &cond.path).unwrap_or(&unit)
+        get_nested_value(value, &cond.key).unwrap_or(&unit)
     };
 
     match cond.op {
@@ -301,7 +301,7 @@ fn eval_cond(cond: &Cond, value: &AgentValue) -> bool {
 
 /// Routes the input value to `t` or `f` depending on a condition.
 ///
-/// The condition is written as `[path] <operator> <literal>`, for example `> 10`,
+/// The condition is written as `[key] <operator> <literal>`, for example `> 10`,
 /// `== "abc"` or `user.age >= 18`. Supported operators are `==`, `!=`, `>`, `>=`, `<` and
 /// `<=`; supported literals are numbers, strings, booleans, `null` and regular expressions.
 /// Order operators reject boolean, null and regex literals at parse time.
@@ -310,18 +310,18 @@ fn eval_cond(cond: &Cond, value: &AgentValue) -> bool {
 /// value in full: the pattern is implicitly anchored as `^(?:...)$`, so `/err.*/` matches
 /// `"error"` but not `"my error"` - write `/.*err.*/` for a substring match. Use the inline
 /// `(?i)` flag for a case-insensitive match, as in `/(?i)error/`. A non-string value (a
-/// number, an object, or an unresolved path) never matches, so `==` is false and `!=` is
+/// number, an object, or an unresolved key) never matches, so `==` is false and `!=` is
 /// true for it. A `/` inside the pattern needs no escaping as long as the literal still ends
 /// with a `/` (`/a/b/` is the pattern `a/b`). An invalid regex is a configuration error,
 /// reported the same way as any other invalid condition.
 ///
-/// The path is a dot-separated list of object keys. When it is omitted, the input value
-/// itself is tested. Whether or not a path is used, the value emitted on `t` / `f` is
-/// always the original input value - the path only selects what the condition looks at.
-/// A path that does not resolve (the input is not an object, a key is missing, or an
+/// The key is a dot-separated list of object keys. When it is omitted, the input value
+/// itself is tested. Whether or not a key is used, the value emitted on `t` / `f` is
+/// always the original input value - the key only selects what the condition looks at.
+/// A key that does not resolve (the input is not an object, a key is missing, or an
 /// intermediate value is not an object) is tested as `null` rather than raising an error,
 /// so `user.age == null` detects a missing field. Key names containing `=`, `!`, `<` or
-/// `>` cannot be addressed, because the first such character ends the path.
+/// `>` cannot be addressed, because the first such character ends the key.
 ///
 /// Numbers compare through their numeric value, so `== 10` matches both an integer and a
 /// float input, but never the string `"10"`. Values that cannot be compared with the
@@ -330,7 +330,7 @@ fn eval_cond(cond: &Cond, value: &AgentValue) -> bool {
 /// value of a different type than the literal is a match.
 ///
 /// # Ports
-/// - Input `input`: Value to test.
+/// - Input `value`: Value to test.
 /// - Output `t`: The input value, when the condition matches.
 /// - Output `f`: The input value, when the condition does not match.
 ///
@@ -344,7 +344,7 @@ fn eval_cond(cond: &Cond, value: &AgentValue) -> bool {
 #[modular_agent(
     title = "If",
     category = CATEGORY,
-    inputs = [PORT_INPUT],
+    inputs = [PORT_VALUE],
     outputs = [PORT_T, PORT_F],
     string_config(name = CONFIG_COND),
     hint(color=5),
@@ -414,10 +414,10 @@ impl AsAgent for IfAgent {
 
 /// Regenerates the dynamic part of a Switch / Match spec: reads `n` (clamped to 1..=64),
 /// carries over the `n` config and the given extra string configs, and rebuilds the
-/// numbered `c1`..`cn` configs and the output ports `0`..`n-1` plus `_`.
+/// numbered `c0`..`c(n-1)` configs and the output ports `0`..`n-1` plus `_`.
 ///
 /// Returns `n`, the current values of the extra configs (in the given order) and the
-/// current values of `c1`..`cn`.
+/// current values of `c0`..`c(n-1)`.
 fn update_numbered_spec(
     spec: &mut AgentSpec,
     extra_strings: &[&str],
@@ -465,11 +465,11 @@ fn update_numbered_spec(
     configs.set(CONFIG_N.to_string(), AgentValue::integer(n as i64));
 
     let mut srcs = Vec::with_capacity(n);
-    for i in 1..=n {
+    for i in 0..n {
         let name = format!("c{}", i);
         // `AgentDefinition::reconcile_spec` moves every config the definition does not
-        // declare - which includes the dynamic `c1`..`cn` - to a `_`-prefixed key when a
-        // preset is loaded. Fall back to it so saved values survive a reload.
+        // declare - which includes the dynamic `c0`..`c(n-1)` - to a `_`-prefixed key when
+        // a preset is loaded. Fall back to it so saved values survive a reload.
         let v = spec
             .configs
             .as_ref()
@@ -527,7 +527,7 @@ fn parse_all<T>(
 
 /// Routes the input value to the first of n conditions that matches.
 ///
-/// The `n` config controls how many `c1`..`cn` conditions exist, and how many
+/// The `n` config controls how many `c0`..`c(n-1)` conditions exist, and how many
 /// numbered output ports `0`..`n-1` are exposed. Conditions are evaluated in order and
 /// the value is emitted on the port matching the first successful condition; when none
 /// matches, it is emitted on `_`. An empty condition never matches, and so does an
@@ -535,7 +535,7 @@ fn parse_all<T>(
 /// error, while an invalid condition loaded from a preset is only kept as never-matching.
 ///
 /// Condition syntax and comparison semantics are the same as the If agent:
-/// `[path] <operator> <literal>` with `==`, `!=`, `>`, `>=`, `<`, `<=` and number, string,
+/// `[key] <operator> <literal>` with `==`, `!=`, `>`, `>=`, `<`, `<=` and number, string,
 /// boolean, null or regex literals; order operators reject boolean, null and regex literals.
 /// A regex literal such as `== /err.*/` matches a string
 /// value in full (implicitly anchored as `^(?:...)$`; use `(?i)` for case-insensitivity), and
@@ -543,35 +543,35 @@ fn parse_all<T>(
 /// match that condition instead of raising an error, and an invalid regex is kept as a
 /// never-matching condition like any other invalid one.
 ///
-/// Each condition carries its own optional path, so different conditions can look at
-/// different fields of the same input. The condition tests the value at the path, but the
-/// value emitted is always the original input value. A path that does not resolve is
+/// Each condition carries its own optional key, so different conditions can look at
+/// different fields of the same input. The condition tests the value at the key, but the
+/// value emitted is always the original input value. A key that does not resolve is
 /// tested as `null`, so `user.age == null` detects a missing field. Key names containing
-/// `=`, `!`, `<` or `>` cannot be addressed, because the first such character ends the path.
+/// `=`, `!`, `<` or `>` cannot be addressed, because the first such character ends the key.
 ///
 /// # Ports
-/// - Input `input`: Value to test.
+/// - Input `value`: Value to test.
 /// - Output `0`..`n-1`: The input value, emitted on the port of the first matching condition.
 /// - Output `_`: The input value, when no condition matches.
 ///
 /// # Configuration
 /// - `n`: Number of conditions and numbered output ports, clamped to 1..=64 (default: 2)
-/// - `c1`..`cn`: Condition expressions, evaluated in order.
+/// - `c0`..`c(n-1)`: Condition expressions, evaluated in order.
 ///
 /// # Example
-/// With `n` = 2, `c1` = `status == "error"` and `c2` = `retry > 3`, the input
+/// With `n` = 2, `c0` = `status == "error"` and `c1` = `retry > 3`, the input
 /// `{"status": "error", "retry": 0}` is emitted unchanged on `0`, `{"status": "ok",
 /// "retry": 5}` on `1`, and `{"status": "ok", "retry": 0}` on `_`.
 #[modular_agent(
     title = "Switch",
     category = CATEGORY,
-    inputs = [PORT_INPUT],
+    inputs = [PORT_VALUE],
     outputs = ["0", "1", PORT_DEFAULT],
     integer_config(name = CONFIG_N, default = 2),
-    // `c1`..`c2` match the default `n`, so a freshly placed agent already exposes them;
+    // `c0`..`c1` match the default `n`, so a freshly placed agent already exposes them;
     // `update_numbered_spec` takes over once `n` changes.
+    string_config(name = CONFIG_C0),
     string_config(name = CONFIG_C1),
-    string_config(name = CONFIG_C2),
     hint(color=5, height=2),
 )]
 struct SwitchAgent {
@@ -643,11 +643,11 @@ impl AsAgent for SwitchAgent {
 
 /// Routes the input value to the first of n case values it is equal to.
 ///
-/// A single `key` selects what to compare, and each `c1`..`cn` holds one candidate value;
-/// there is no operator, the comparison is always equality. Use the Switch agent instead
-/// when the branches need different operators or different keys.
+/// A single `key` selects what to compare, and each `c0`..`c(n-1)` holds one candidate
+/// value; there is no operator, the comparison is always equality. Use the Switch agent
+/// instead when the branches need different operators or different keys.
 ///
-/// The `n` config controls how many `c1`..`cn` case values exist, and how many numbered
+/// The `n` config controls how many `c0`..`c(n-1)` case values exist, and how many numbered
 /// output ports `0`..`n-1` are exposed. Cases are compared in order and the value is
 /// emitted on the port of the first equal one; when none is equal, it is emitted on
 /// `_`. An empty case value never matches, and so does an invalid one - a case set
@@ -670,31 +670,31 @@ impl AsAgent for SwitchAgent {
 /// than raising an error, so a case of `null` catches a missing field.
 ///
 /// # Ports
-/// - Input `input`: Value to test.
+/// - Input `value`: Value to test.
 /// - Output `0`..`n-1`: The input value, emitted on the port of the first equal case value.
 /// - Output `_`: The input value, when no case value is equal.
 ///
 /// # Configuration
-/// - `key`: Dot-separated path to the value to compare. Empty compares the input value itself.
+/// - `key`: Dot-separated key of the value to compare. Empty compares the input value itself.
 /// - `n`: Number of case values and numbered output ports, clamped to 1..=64 (default: 2)
-/// - `c1`..`cn`: Case values, compared in order.
+/// - `c0`..`c(n-1)`: Case values, compared in order.
 ///
 /// # Example
-/// With `key` = `user.status`, `n` = 3, `c1` = `"error"`, `c2` = `/warn.*/` and `c3` = `null`,
+/// With `key` = `user.status`, `n` = 3, `c0` = `"error"`, `c1` = `/warn.*/` and `c2` = `null`,
 /// the input `{"user": {"status": "error"}}` is emitted unchanged on `0`,
 /// `{"user": {"status": "warning"}}` on `1`, `{"user": {}}` on `2` (a missing key compares
 /// as null), and `{"user": {"status": "ok"}}` on `_`.
 #[modular_agent(
     title = "Match",
     category = CATEGORY,
-    inputs = [PORT_INPUT],
+    inputs = [PORT_VALUE],
     outputs = ["0", "1", PORT_DEFAULT],
     string_config(name = CONFIG_KEY),
     integer_config(name = CONFIG_N, default = 2),
-    // `c1`..`c2` match the default `n`, so a freshly placed agent already exposes them;
+    // `c0`..`c1` match the default `n`, so a freshly placed agent already exposes them;
     // `update_numbered_spec` takes over once `n` changes.
+    string_config(name = CONFIG_C0),
     string_config(name = CONFIG_C1),
-    string_config(name = CONFIG_C2),
     hint(color=5, height=2),
 )]
 struct MatchAgent {
@@ -705,8 +705,8 @@ struct MatchAgent {
     key_src: String,
     case_srcs: Vec<String>,
 
-    // Optimization: pre-parsed key path and case values.
-    // `key` is None when the path is invalid, so that nothing matches.
+    // Optimization: pre-parsed key and case values.
+    // `key` is None when the key is invalid, so that nothing matches.
     key: Option<Vec<String>>,
     cases: Vec<Option<CondLit>>,
 }
@@ -717,7 +717,7 @@ impl AsAgent for MatchAgent {
         let (n, extras, case_srcs) = update_numbered_spec(&mut spec, &[CONFIG_KEY])?;
         let key_src = extras.into_iter().next().unwrap_or_default();
         // An invalid key or case is kept as never-matching instead of blocking the load.
-        let key = parse_path(&key_src).ok();
+        let key = parse_key(&key_src).ok();
         let (cases, _) = parse_all(&case_srcs, load_lit);
         let data = AgentData::new(ma, id, spec);
         Ok(Self {
@@ -742,7 +742,7 @@ impl AsAgent for MatchAgent {
         // `cases` could outlive the output ports it routes to. An invalid value is kept
         // as never-matching, like at load time, and the parse error is reported afterwards.
         let mut first_error = None;
-        let key = match parse_path(&key_src) {
+        let key = match parse_key(&key_src) {
             Ok(key) => Some(key),
             Err(e) => {
                 first_error = Some(e);
@@ -777,11 +777,11 @@ impl AsAgent for MatchAgent {
         let matched = match self.key.as_ref() {
             // An invalid key matches nothing, so everything goes to `_`.
             None => None,
-            Some(path) => {
-                let target = if path.is_empty() {
+            Some(key) => {
+                let target = if key.is_empty() {
                     &value
                 } else {
-                    get_nested_value(&value, path).unwrap_or(&unit)
+                    get_nested_value(&value, key).unwrap_or(&unit)
                 };
                 self.cases
                     .iter()
@@ -805,7 +805,7 @@ mod tests {
         assert_eq!(
             parse_cond(">= 10").expect("valid"),
             Cond {
-                path: vec![],
+                key: vec![],
                 op: CondOp::Ge,
                 lit: CondLit::Integer(10)
             }
@@ -813,7 +813,7 @@ mod tests {
         assert_eq!(
             parse_cond("<=10").expect("valid"),
             Cond {
-                path: vec![],
+                key: vec![],
                 op: CondOp::Le,
                 lit: CondLit::Integer(10)
             }
@@ -821,7 +821,7 @@ mod tests {
         assert_eq!(
             parse_cond("> 10").expect("valid"),
             Cond {
-                path: vec![],
+                key: vec![],
                 op: CondOp::Gt,
                 lit: CondLit::Integer(10)
             }
@@ -829,7 +829,7 @@ mod tests {
         assert_eq!(
             parse_cond("< 10").expect("valid"),
             Cond {
-                path: vec![],
+                key: vec![],
                 op: CondOp::Lt,
                 lit: CondLit::Integer(10)
             }
@@ -837,7 +837,7 @@ mod tests {
         assert_eq!(
             parse_cond("== \"abc\"").expect("valid"),
             Cond {
-                path: vec![],
+                key: vec![],
                 op: CondOp::Eq,
                 lit: CondLit::String("abc".to_string())
             }
@@ -845,7 +845,7 @@ mod tests {
         assert_eq!(
             parse_cond("!= null").expect("valid"),
             Cond {
-                path: vec![],
+                key: vec![],
                 op: CondOp::Ne,
                 lit: CondLit::Null
             }
@@ -853,7 +853,7 @@ mod tests {
         assert_eq!(
             parse_cond("== true").expect("valid"),
             Cond {
-                path: vec![],
+                key: vec![],
                 op: CondOp::Eq,
                 lit: CondLit::Boolean(true)
             }
@@ -861,11 +861,11 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_cond_with_path() {
+    fn test_parse_cond_with_key() {
         assert_eq!(
             parse_cond("user.age >= 18").expect("valid"),
             Cond {
-                path: vec!["user".to_string(), "age".to_string()],
+                key: vec!["user".to_string(), "age".to_string()],
                 op: CondOp::Ge,
                 lit: CondLit::Integer(18)
             }
@@ -873,19 +873,16 @@ mod tests {
         assert_eq!(
             parse_cond("status == \"ok\"").expect("valid"),
             Cond {
-                path: vec!["status".to_string()],
+                key: vec!["status".to_string()],
                 op: CondOp::Eq,
                 lit: CondLit::String("ok".to_string())
             }
         );
-        // No path keeps the input value itself as the target
-        assert_eq!(
-            parse_cond("> 10").expect("valid").path,
-            Vec::<String>::new()
-        );
+        // No key keeps the input value itself as the target
+        assert_eq!(parse_cond("> 10").expect("valid").key, Vec::<String>::new());
         // Segments are trimmed
         assert_eq!(
-            parse_cond(" user . age == null").expect("valid").path,
+            parse_cond(" user . age == null").expect("valid").key,
             vec!["user".to_string(), "age".to_string()]
         );
     }
@@ -896,7 +893,7 @@ mod tests {
         assert_eq!(
             parse_cond("name == \"a>b\"").expect("valid"),
             Cond {
-                path: vec!["name".to_string()],
+                key: vec!["name".to_string()],
                 op: CondOp::Eq,
                 lit: CondLit::String("a>b".to_string())
             }
@@ -904,22 +901,22 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_path() {
-        assert_eq!(parse_path("").expect("valid"), Vec::<String>::new());
-        assert_eq!(parse_path("   ").expect("valid"), Vec::<String>::new());
+    fn test_parse_key() {
+        assert_eq!(parse_key("").expect("valid"), Vec::<String>::new());
+        assert_eq!(parse_key("   ").expect("valid"), Vec::<String>::new());
         assert_eq!(
-            parse_path("user.age").expect("valid"),
+            parse_key("user.age").expect("valid"),
             vec!["user".to_string(), "age".to_string()]
         );
         // Segments are trimmed
         assert_eq!(
-            parse_path(" user . age ").expect("valid"),
+            parse_key(" user . age ").expect("valid"),
             vec!["user".to_string(), "age".to_string()]
         );
         // Empty segments
-        assert!(parse_path(".a").is_err());
-        assert!(parse_path("a.").is_err());
-        assert!(parse_path("a..b").is_err());
+        assert!(parse_key(".a").is_err());
+        assert!(parse_key("a.").is_err());
+        assert!(parse_key("a..b").is_err());
     }
 
     #[test]
@@ -950,8 +947,8 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_cond_invalid_path() {
-        // Empty path segments
+    fn test_parse_cond_invalid_key() {
+        // Empty key segments
         assert!(parse_cond(".a > 1").is_err());
         assert!(parse_cond("a. > 1").is_err());
         assert!(parse_cond("a..b > 1").is_err());
@@ -960,7 +957,7 @@ mod tests {
     }
 
     #[test]
-    fn test_eval_cond_path() {
+    fn test_eval_cond_key() {
         let value = AgentValue::object(im::hashmap! {
             "user".to_string() => AgentValue::object(im::hashmap! {
                 "age".to_string() => AgentValue::integer(20),
@@ -996,7 +993,7 @@ mod tests {
             &value
         ));
 
-        // A non-object input with a path evaluates as null
+        // A non-object input with a key evaluates as null
         let scalar = AgentValue::integer(20);
         assert!(!eval_cond(
             &parse_cond("user.age > 18").expect("valid"),
@@ -1006,7 +1003,7 @@ mod tests {
             &parse_cond("user.age == null").expect("valid"),
             &scalar
         ));
-        // Without a path the scalar itself is still tested
+        // Without a key the scalar itself is still tested
         assert!(eval_cond(&parse_cond("> 18").expect("valid"), &scalar));
     }
 
@@ -1042,16 +1039,16 @@ mod tests {
         assert_eq!(
             parse_cond("== /err.*/").expect("valid"),
             Cond {
-                path: vec![],
+                key: vec![],
                 op: CondOp::Eq,
                 lit: CondLit::Regex(CondRegex(Regex::new("^(?:err.*)$").unwrap())),
             }
         );
-        // A path together with `!=`
+        // A key together with `!=`
         assert_eq!(
             parse_cond("status != /ok/").expect("valid"),
             Cond {
-                path: vec!["status".to_string()],
+                key: vec!["status".to_string()],
                 op: CondOp::Ne,
                 lit: CondLit::Regex(CondRegex(Regex::new("^(?:ok)$").unwrap())),
             }
@@ -1060,7 +1057,7 @@ mod tests {
         assert_eq!(
             parse_cond("== /a/b/").expect("valid"),
             Cond {
-                path: vec![],
+                key: vec![],
                 op: CondOp::Eq,
                 lit: CondLit::Regex(CondRegex(Regex::new("^(?:a/b)$").unwrap())),
             }
@@ -1069,7 +1066,7 @@ mod tests {
         assert_eq!(
             parse_cond("== /a=b/").expect("valid"),
             Cond {
-                path: vec![],
+                key: vec![],
                 op: CondOp::Eq,
                 lit: CondLit::Regex(CondRegex(Regex::new("^(?:a=b)$").unwrap())),
             }
@@ -1078,7 +1075,7 @@ mod tests {
         assert_eq!(
             parse_cond("== //").expect("valid"),
             Cond {
-                path: vec![],
+                key: vec![],
                 op: CondOp::Eq,
                 lit: CondLit::Regex(CondRegex(Regex::new("^(?:)$").unwrap())),
             }
@@ -1117,7 +1114,7 @@ mod tests {
         let ci = parse_cond("== /(?i)error/").expect("valid");
         assert!(eval_cond(&ci, &AgentValue::string("ERROR")));
 
-        // Path-based match
+        // Key-based match
         let value = AgentValue::object(im::hashmap! {
             "status".to_string() => AgentValue::string("error".to_string()),
         });
@@ -1140,7 +1137,7 @@ mod tests {
         assert!(!eval_cond(&parse_cond("== /10/").expect("valid"), &num));
         assert!(eval_cond(&parse_cond("!= /10/").expect("valid"), &num));
 
-        // An unresolved path is unit, which is not a string either
+        // An unresolved key is unit, which is not a string either
         let obj = AgentValue::object(im::hashmap! {
             "name".to_string() => AgentValue::string("a".to_string()),
         });

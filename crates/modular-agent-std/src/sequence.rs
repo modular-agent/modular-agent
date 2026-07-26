@@ -12,21 +12,17 @@ const CONFIG_CAPACITY: &str = "capacity";
 
 const CATEGORY: &str = "Std/Sequence";
 
-const PORT_IN: &str = "in";
-const PORT_IN1: &str = "in1";
-const PORT_IN2: &str = "in2";
-const PORT_OUT1: &str = "out1";
-const PORT_OUT2: &str = "out2";
+const PORT_VALUE: &str = "value";
 
 const CONFIG_N: &str = "n";
 const CONFIG_USE_CTX: &str = "use_ctx";
 
-/// Receives an input and emits it sequentially to n outputs.
+/// Receives an input and emits it sequentially to the n outputs `0`..`n-1`.
 #[modular_agent(
     title = "Sequence",
     category = CATEGORY,
-    inputs = [PORT_IN],
-    outputs = [PORT_OUT1, PORT_OUT2],
+    inputs = [PORT_VALUE],
+    outputs = ["0", "1"],
     integer_config(name = CONFIG_N, default = 2),
     hint(color=2),
 )]
@@ -46,7 +42,7 @@ impl SequenceAgent {
             n = 1;
         }
 
-        spec.outputs = Some((1..=n).map(|i| format!("out{}", i)).collect());
+        spec.outputs = Some((0..n).map(|i| i.to_string()).collect());
 
         Ok(n)
     }
@@ -80,19 +76,20 @@ impl AsAgent for SequenceAgent {
         value: AgentValue,
     ) -> Result<(), AgentError> {
         for i in 0..self.n {
-            let out_port = format!("out{}", i + 1);
-            self.output(ctx.clone(), out_port, value.clone()).await?;
+            self.output(ctx.clone(), i.to_string(), value.clone())
+                .await?;
         }
         Ok(())
     }
 }
 
-/// Receives inputs in any order and, once all are present, emits them sequentially.
+/// Receives inputs on the n ports `0`..`n-1` in any order and, once all are present,
+/// emits them sequentially on the output ports of the same names.
 #[modular_agent(
     title = "Sync",
     category = CATEGORY,
-    inputs = [PORT_IN1, PORT_IN2],
-    outputs = [PORT_OUT1, PORT_OUT2],
+    inputs = ["0", "1"],
+    outputs = ["0", "1"],
     integer_config(name = CONFIG_N, default = 2),
     boolean_config(name = CONFIG_USE_CTX),
     integer_config(name = CONFIG_TTL_SEC, default = 60),
@@ -106,7 +103,7 @@ struct SyncAgent {
     ttl_sec: u64,
     capacity: u64,
 
-    // Optimization: Pre-generate and store output port names ("out1", "out2"...)
+    // Optimization: Pre-generate and store output port names ("0", "1"...)
     output_ports: Vec<String>,
 
     // For simple mode
@@ -151,9 +148,8 @@ impl SyncAgent {
             .map(|c| c.get_integer_or(CONFIG_CAPACITY, 1000))
             .unwrap_or(1000) as u64;
 
-        spec.inputs = Some((1..=n).map(|i| format!("in{}", i)).collect());
-
-        let output_ports: Vec<String> = (1..=n).map(|i| format!("out{}", i)).collect();
+        let output_ports: Vec<String> = (0..n).map(|i| i.to_string()).collect();
+        spec.inputs = Some(output_ports.clone());
         spec.outputs = Some(output_ports.clone());
 
         Ok((n, use_ctx, ttl_sec, capacity, output_ports))
@@ -232,12 +228,7 @@ impl AsAgent for SyncAgent {
         value: AgentValue,
     ) -> Result<(), AgentError> {
         // Parse port number
-        let Some(idx) = port
-            .strip_prefix("in")
-            .and_then(|s| s.parse::<usize>().ok())
-            .filter(|&i| i >= 1 && i <= self.n)
-            .map(|i| i - 1)
-        else {
+        let Some(idx) = port.parse::<usize>().ok().filter(|&i| i < self.n) else {
             return Err(AgentError::InvalidValue(format!(
                 "Invalid input port: {}",
                 port

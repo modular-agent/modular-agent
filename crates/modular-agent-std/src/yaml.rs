@@ -7,16 +7,16 @@ use modular_agent_core::{
     async_trait, modular_agent,
 };
 
-const CATEGORY: &str = "Std/Yaml";
+const CATEGORY: &str = "Std/YAML";
 
-const PORT_DATA: &str = "data";
+const PORT_VALUE: &str = "value";
 const PORT_YAML: &str = "yaml";
 
 // To YAML
 #[modular_agent(
     title = "To YAML",
     category = CATEGORY,
-    inputs = [PORT_DATA],
+    inputs = [PORT_VALUE],
     outputs = [PORT_YAML],
     hint(color=5),
 )]
@@ -51,7 +51,7 @@ impl AsAgent for ToYamlAgent {
     title = "From YAML",
     category = CATEGORY,
     inputs = [PORT_YAML],
-    outputs = [PORT_DATA],
+    outputs = [PORT_VALUE],
     hint(color=5),
 )]
 struct FromYamlAgent {
@@ -78,7 +78,7 @@ impl AsAgent for FromYamlAgent {
         let v: serde_json::Value =
             serde_yaml_ng::from_str(s).map_err(|e| AgentError::InvalidValue(e.to_string()))?;
         let value = AgentValue::from_json(v)?;
-        self.output(ctx, PORT_DATA, value).await?;
+        self.output(ctx, PORT_VALUE, value).await?;
         Ok(())
     }
 }

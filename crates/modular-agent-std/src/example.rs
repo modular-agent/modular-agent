@@ -6,7 +6,7 @@ use modular_agent_core::{
 const CATEGORY: &str = "Example";
 
 const PORT_VALUE: &str = "value";
-const PORT_TRIGGER: &str = "trigger";
+const PORT_UNIT: &str = "unit";
 const PORT_COLOR: &str = "color";
 
 const CONFIG_DATA: &str = "data";
@@ -85,11 +85,11 @@ impl AsAgent for ChartDemoAgent {
 /// Emits the current slider value when triggered.
 ///
 /// Demo agent for the custom NodeView mechanism. The `value` config is meant
-/// to be edited through a companion slider NodeView; any input on the trigger
+/// to be edited through a companion slider NodeView; any input on the `unit`
 /// port emits the current value downstream.
 ///
 /// # Ports
-/// - Input `trigger`: Any value; triggers emitting the current `value`
+/// - Input `unit`: Any value; triggers emitting the current `value`
 /// - Output `value`: The current integer value
 ///
 /// # Configuration
@@ -97,7 +97,7 @@ impl AsAgent for ChartDemoAgent {
 #[modular_agent(
     title = "Slider Demo",
     category = CATEGORY,
-    inputs = [PORT_TRIGGER],
+    inputs = [PORT_UNIT],
     outputs = [PORT_VALUE],
     integer_config(name = CONFIG_VALUE, default = 50),
 )]
@@ -129,11 +129,11 @@ impl AsAgent for SliderDemoAgent {
 ///
 /// Demo agent for the custom ConfigWidget mechanism. The `color` config uses
 /// the custom `color` value type (a `#rrggbb` string) so a registered color
-/// widget renders it as a color picker; any input on the trigger port emits
+/// widget renders it as a color picker; any input on the `unit` port emits
 /// the current color string downstream.
 ///
 /// # Ports
-/// - Input `trigger`: Any value; triggers emitting the current `color`
+/// - Input `unit`: Any value; triggers emitting the current `color`
 /// - Output `color`: The current color as a `#rrggbb` string
 ///
 /// # Configuration
@@ -141,7 +141,7 @@ impl AsAgent for SliderDemoAgent {
 #[modular_agent(
     title = "Color Demo",
     category = CATEGORY,
-    inputs = [PORT_TRIGGER],
+    inputs = [PORT_UNIT],
     outputs = [PORT_COLOR],
     custom_config(name = CONFIG_COLOR, type_ = "color", default = "#ff8800"),
 )]

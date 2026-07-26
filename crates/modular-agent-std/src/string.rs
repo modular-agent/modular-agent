@@ -189,14 +189,16 @@ impl AsAgent for StringLengthSplitAgent {
 
         let n = config.get_integer_or_default(CONFIG_LEN);
         if n <= 0 {
-            return Err(AgentError::InvalidConfig("n must be greater than 0".into()));
+            return Err(AgentError::InvalidConfig(
+                "len must be greater than 0".into(),
+            ));
         }
         let n = n as usize;
 
         let overlap = config.get_integer_or_default(CONFIG_OVERLAP) as usize;
         if overlap >= n {
             return Err(AgentError::InvalidConfig(
-                "overlap must be less than n".into(),
+                "overlap must be less than len".into(),
             ));
         }
 
@@ -361,7 +363,8 @@ impl AsAgent for TemplateTextAgent {
     category = CATEGORY,
     inputs = [PORT_VALUE],
     outputs = [PORT_STRING],
-    text_config(name = CONFIG_TEMPLATE, default = "{{value}}")
+    text_config(name = CONFIG_TEMPLATE, default = "{{value}}"),
+    hint(color=5),
 )]
 struct TemplateArrayAgent {
     data: AgentData,
