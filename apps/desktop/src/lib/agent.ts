@@ -93,7 +93,25 @@ export function presetToFlow(info: PresetInfo, spec: PresetSpec): PresetFlow {
   };
 }
 
+// Default node size from definition hints (grid-unit multipliers) × grid size.
+// Unknown definitions or missing hints fall back to one grid unit.
+export function defaultNodeSize(
+  defName: string,
+  gridSize: number,
+): { width: number; height: number } {
+  const hints = _agentDefinitions?.[defName]?.hints;
+  const hintWidth = typeof hints?.width === "number" && hints.width > 0 ? hints.width : 1;
+  const hintHeight = typeof hints?.height === "number" && hints.height > 0 ? hints.height : 1;
+  return { width: hintWidth * gridSize, height: hintHeight * gridSize };
+}
+
 export function agentSpecToNode(spec: AgentSpec): PresetNode {
+  // Specs created outside the editor (MCP, hand-written JSON) may lack a size;
+  // give them the same hints-based default as GUI-added nodes.
+  const fallback =
+    !spec.width || !spec.height
+      ? defaultNodeSize(spec.def_name, coreSettingsStore.snapGridSize)
+      : null;
   return {
     id: spec.id ?? crypto.randomUUID(),
     type: "agent",
@@ -102,8 +120,8 @@ export function agentSpecToNode(spec: AgentSpec): PresetNode {
       x: spec.x ?? 0,
       y: spec.y ?? 0,
     },
-    width: spec.width,
-    height: spec.height,
+    width: spec.width || fallback?.width,
+    height: spec.height || fallback?.height,
   };
 }
 

@@ -17,8 +17,8 @@ import {
 import {
   agentSpecToNode,
   connectionSpecToEdge,
+  defaultNodeSize,
   edgeToConnectionSpec,
-  getAgentDefinitions,
   getEdgeColor,
   resolveColorCss,
 } from "$lib/agent";
@@ -258,12 +258,9 @@ export class AddAgentCommand implements Command {
     spec.x = this.flowPos.x;
     spec.y = this.flowPos.y;
     if (!spec.width || !spec.height) {
-      const agentDefs = getAgentDefinitions();
-      const hints = agentDefs[this.agentName]?.hints;
-      const hintWidth = typeof hints?.width === "number" && hints.width > 0 ? hints.width : 1;
-      const hintHeight = typeof hints?.height === "number" && hints.height > 0 ? hints.height : 1;
-      spec.width = spec.width || hintWidth * editor.snapGridSize;
-      spec.height = spec.height || hintHeight * editor.snapGridSize;
+      const size = defaultNodeSize(this.agentName, editor.snapGridSize);
+      spec.width = spec.width || size.width;
+      spec.height = spec.height || size.height;
     }
     const id = await addAgent(this.presetId, spec);
     spec.id = id;
