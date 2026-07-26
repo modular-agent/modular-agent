@@ -14,7 +14,6 @@ const CATEGORY: &str = "Std/File";
 const CONFIG_PATH: &str = "path";
 
 const PORT_ARRAY: &str = "array";
-const PORT_DATA: &str = "data";
 const PORT_DOC: &str = "doc";
 const PORT_FILES: &str = "files";
 const PORT_PATH: &str = "path";
@@ -261,7 +260,7 @@ impl AsAgent for WriteTextFileAgent {
             AgentError::InvalidValue(format!("Failed to write file {}: {}", path.display(), e))
         })?;
 
-        self.output(ctx, PORT_DATA, value).await
+        self.output(ctx, PORT_UNIT, AgentValue::unit()).await
     }
 }
 
