@@ -65,9 +65,12 @@ fn html2markdown(html: &str) -> Result<String, AgentError> {
     options.preprocessing.preset = PreprocessingPreset::Aggressive;
     options.preprocessing.remove_navigation = true;
     options.preprocessing.remove_forms = true;
+    // Column padding is pure whitespace once the markdown reaches an LLM; a
+    // link-heavy table costs ~75% more without this.
+    options.compact_tables = true;
 
-    let markdown = convert(html, Some(options)).map_err(|e| {
+    let result = convert(html, Some(options)).map_err(|e| {
         AgentError::InvalidValue(format!("Failed to convert HTML to Markdown: {}", e))
     })?;
-    Ok(markdown)
+    Ok(result.content.unwrap_or_default())
 }

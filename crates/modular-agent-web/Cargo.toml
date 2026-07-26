@@ -7,7 +7,7 @@ edition = "2024"
 license = "Apache-2.0 OR MIT"
 
 [dependencies]
-html-to-markdown-rs = { version = "2.14.0", optional = true }
+html-to-markdown-rs = { version = "3.9.0", optional = true }
 quick-xml = { version = "0.41", optional = true }
 reqwest = { version = "0.13.4", default-features = false, features = ["json", "query", "rustls"] }
 scraper = { version = "0.27.0", optional = true }
