@@ -4,9 +4,9 @@ use modular_agent_core::{
     Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
     ModularAgent, async_trait, modular_agent,
 };
-use quick_xml::Reader;
 use quick_xml::escape::resolve_predefined_entity;
 use quick_xml::events::{BytesRef, BytesStart, Event};
+use quick_xml::{Reader, XmlVersion};
 use reqwest::Client;
 use reqwest::header::USER_AGENT;
 use serde::{Deserialize, Serialize};
@@ -236,7 +236,7 @@ fn read_time_attribute(
         return Ok(None);
     };
     let raw = attribute
-        .unescape_value()
+        .normalized_value(XmlVersion::Implicit1_0)
         .map_err(|e| AgentError::IoError(format!("Timedtext attribute error: {}", e)))?;
     Ok(raw.trim().parse::<f64>().ok().map(|value| value / scale))
 }
@@ -354,7 +354,7 @@ fn parse_timedtext(xml: &str) -> Result<Vec<TranscriptSnippet>, AgentError> {
             }
             Event::Text(text) => {
                 if let Some((snippet, _)) = open.as_mut() {
-                    let decoded = text.xml_content().map_err(|e| {
+                    let decoded = text.xml10_content().map_err(|e| {
                         AgentError::IoError(format!("Timedtext decode error: {}", e))
                     })?;
                     snippet.text.push_str(&decoded);
