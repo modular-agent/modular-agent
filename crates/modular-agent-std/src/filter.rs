@@ -13,14 +13,15 @@ const CATEGORY: &str = "Std/Filter";
 const PORT_INPUT: &str = "input";
 const PORT_T: &str = "t";
 const PORT_F: &str = "f";
-const PORT_DEFAULT: &str = "default";
+const PORT_DEFAULT: &str = "_";
 
 const CONFIG_COND: &str = "cond";
 const CONFIG_N: &str = "n";
-const CONFIG_COND1: &str = "cond1";
-const CONFIG_COND2: &str = "cond2";
+const CONFIG_KEY: &str = "key";
+const CONFIG_C1: &str = "c1";
+const CONFIG_C2: &str = "c2";
 
-/// Upper bound for the Match agent's `n` config.
+/// Upper bound for the Switch / Match agents' `n` config.
 const MAX_N: i64 = 64;
 
 // Condition expression: `[<path>] <operator> <JSON literal>`
@@ -93,23 +94,7 @@ fn parse_cond(src: &str) -> Result<Cond, AgentError> {
     };
     let (path_src, op_src) = src.split_at(op_at);
 
-    let path_src = path_src.trim();
-    let path = if path_src.is_empty() {
-        Vec::new()
-    } else {
-        let mut path = Vec::new();
-        for segment in path_src.split('.') {
-            let segment = segment.trim();
-            if segment.is_empty() {
-                return Err(AgentError::InvalidConfig(format!(
-                    "Condition path has an empty segment: {}",
-                    path_src
-                )));
-            }
-            path.push(segment.to_string());
-        }
-        path
-    };
+    let path = parse_path(path_src)?;
 
     let (op, rest) = if let Some(rest) = op_src.strip_prefix("==") {
         (CondOp::Eq, rest)
@@ -138,58 +123,7 @@ fn parse_cond(src: &str) -> Result<Cond, AgentError> {
         )));
     }
 
-    // A regex literal is `/pattern/`. It is handled before JSON parsing so that a leading
-    // `/` is never read as an (invalid) JSON value. The pattern is everything between the
-    // first and last `/`; requiring the closing `/` to be the last character means a `/`
-    // inside the pattern needs no escaping (`/a/b/` is the pattern `a/b`).
-    let lit = if let Some(after_open) = rest.strip_prefix('/') {
-        let Some(pattern) = after_open.strip_suffix('/') else {
-            return Err(AgentError::InvalidConfig(format!(
-                "Regex literal must be closed with a `/`: {}",
-                src
-            )));
-        };
-        // Validate the bare pattern first: an unbalanced pattern such as `a)|(b` is invalid
-        // on its own but would merge with the anchoring wrapper below into a valid -
-        // and unanchored - regex instead of being reported as an error.
-        Regex::new(pattern).map_err(|e| {
-            AgentError::InvalidConfig(format!("Invalid regex literal `/{}/`: {}", pattern, e))
-        })?;
-        // Anchor the whole match. `(?:...)` groups the pattern so an alternation such as
-        // `a|b` is anchored as a whole rather than as `^a` or `b$`.
-        let re = Regex::new(&format!("^(?:{pattern})$")).map_err(|e| {
-            AgentError::InvalidConfig(format!("Invalid regex literal `/{}/`: {}", pattern, e))
-        })?;
-        CondLit::Regex(CondRegex(re))
-    } else {
-        let json: serde_json::Value = serde_json::from_str(rest).map_err(|e| {
-            AgentError::InvalidConfig(format!("Invalid condition literal `{}`: {}", rest, e))
-        })?;
-
-        match json {
-            serde_json::Value::Null => CondLit::Null,
-            serde_json::Value::Bool(b) => CondLit::Boolean(b),
-            serde_json::Value::Number(n) => {
-                if let Some(i) = n.as_i64() {
-                    CondLit::Integer(i)
-                } else if let Some(f) = n.as_f64() {
-                    CondLit::Number(f)
-                } else {
-                    return Err(AgentError::InvalidConfig(format!(
-                        "Condition literal is not representable as a number: {}",
-                        rest
-                    )));
-                }
-            }
-            serde_json::Value::String(s) => CondLit::String(s),
-            _ => {
-                return Err(AgentError::InvalidConfig(format!(
-                    "Array and object condition literals are not supported: {}",
-                    rest
-                )));
-            }
-        }
-    };
+    let lit = parse_lit(rest)?;
 
     if op.is_order() && matches!(lit, CondLit::Boolean(_) | CondLit::Null | CondLit::Regex(_)) {
         return Err(AgentError::InvalidConfig(format!(
@@ -201,12 +135,100 @@ fn parse_cond(src: &str) -> Result<Cond, AgentError> {
     Ok(Cond { path, op, lit })
 }
 
+/// Parses a dot-separated path such as `user.age` into its segments. A blank path yields an
+/// empty vector, which addresses the input value itself.
+fn parse_path(src: &str) -> Result<Vec<String>, AgentError> {
+    let src = src.trim();
+    if src.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let mut path = Vec::new();
+    for segment in src.split('.') {
+        let segment = segment.trim();
+        if segment.is_empty() {
+            return Err(AgentError::InvalidConfig(format!(
+                "Path has an empty segment: {}",
+                src
+            )));
+        }
+        path.push(segment.to_string());
+    }
+    Ok(path)
+}
+
+/// Parses a literal: a regex between slashes, or any scalar JSON value.
+fn parse_lit(src: &str) -> Result<CondLit, AgentError> {
+    let src = src.trim();
+    if src.is_empty() {
+        return Err(AgentError::InvalidConfig("Literal is missing".into()));
+    }
+
+    // A regex literal is `/pattern/`. It is handled before JSON parsing so that a leading
+    // `/` is never read as an (invalid) JSON value. The pattern is everything between the
+    // first and last `/`; requiring the closing `/` to be the last character means a `/`
+    // inside the pattern needs no escaping (`/a/b/` is the pattern `a/b`).
+    let Some(after_open) = src.strip_prefix('/') else {
+        let json: serde_json::Value = serde_json::from_str(src)
+            .map_err(|e| AgentError::InvalidConfig(format!("Invalid literal `{}`: {}", src, e)))?;
+
+        return match json {
+            serde_json::Value::Null => Ok(CondLit::Null),
+            serde_json::Value::Bool(b) => Ok(CondLit::Boolean(b)),
+            serde_json::Value::Number(n) => {
+                if let Some(i) = n.as_i64() {
+                    Ok(CondLit::Integer(i))
+                } else if let Some(f) = n.as_f64() {
+                    Ok(CondLit::Number(f))
+                } else {
+                    Err(AgentError::InvalidConfig(format!(
+                        "Literal is not representable as a number: {}",
+                        src
+                    )))
+                }
+            }
+            serde_json::Value::String(s) => Ok(CondLit::String(s)),
+            _ => Err(AgentError::InvalidConfig(format!(
+                "Array and object literals are not supported: {}",
+                src
+            ))),
+        };
+    };
+
+    let Some(pattern) = after_open.strip_suffix('/') else {
+        return Err(AgentError::InvalidConfig(format!(
+            "Regex literal must be closed with a `/`: {}",
+            src
+        )));
+    };
+    // Validate the bare pattern first: an unbalanced pattern such as `a)|(b` is invalid
+    // on its own but would merge with the anchoring wrapper below into a valid -
+    // and unanchored - regex instead of being reported as an error.
+    Regex::new(pattern).map_err(|e| {
+        AgentError::InvalidConfig(format!("Invalid regex literal `/{}/`: {}", pattern, e))
+    })?;
+    // Anchor the whole match. `(?:...)` groups the pattern so an alternation such as
+    // `a|b` is anchored as a whole rather than as `^a` or `b$`.
+    let re = Regex::new(&format!("^(?:{pattern})$")).map_err(|e| {
+        AgentError::InvalidConfig(format!("Invalid regex literal `/{}/`: {}", pattern, e))
+    })?;
+    Ok(CondLit::Regex(CondRegex(re)))
+}
+
 /// Parses a condition config value. An empty or blank config yields `None`.
 fn load_cond(src: &str) -> Result<Option<Cond>, AgentError> {
     if src.trim().is_empty() {
         return Ok(None);
     }
     parse_cond(src).map(Some)
+}
+
+/// Parses a literal config value. An empty or blank config yields `None`.
+fn load_lit(src: &str) -> Result<Option<CondLit>, AgentError> {
+    if src.trim().is_empty() {
+        return Ok(None);
+    }
+    parse_lit(src).map(Some)
 }
 
 /// Equality between an input value and a literal. A type mismatch is simply `false`;
@@ -390,12 +412,125 @@ impl AsAgent for IfAgent {
     }
 }
 
+/// Regenerates the dynamic part of a Switch / Match spec: reads `n` (clamped to 1..=64),
+/// carries over the `n` config and the given extra string configs, and rebuilds the
+/// numbered `c1`..`cn` configs and the output ports `0`..`n-1` plus `_`.
+///
+/// Returns `n`, the current values of the extra configs (in the given order) and the
+/// current values of `c1`..`cn`.
+fn update_numbered_spec(
+    spec: &mut AgentSpec,
+    extra_strings: &[&str],
+) -> Result<(usize, Vec<String>, Vec<String>), AgentError> {
+    let n = spec
+        .configs
+        .as_ref()
+        .map(|cfg| cfg.get_integer_or(CONFIG_N, 2))
+        .unwrap_or(2);
+    // The upper bound keeps a stray config value from requesting a huge allocation.
+    let n = n.clamp(1, MAX_N) as usize;
+
+    let extra_values: Vec<String> = extra_strings
+        .iter()
+        .map(|name| {
+            spec.configs
+                .as_ref()
+                .map(|cfg| cfg.get_string_or_default(name))
+                .unwrap_or_default()
+        })
+        .collect();
+
+    // Dynamic generation of config definitions (ConfigSpecs)
+    let mut configs = AgentConfigs::new();
+    let mut config_specs = AgentConfigSpecs::default();
+
+    // Re-set required configurations
+    for name in extra_strings.iter().copied().chain([CONFIG_N]) {
+        let Some(config_spec) = spec
+            .config_specs
+            .as_ref()
+            .and_then(|cs| cs.get(name))
+            .cloned()
+        else {
+            return Err(AgentError::InvalidConfig(format!(
+                "config {} must be present",
+                name
+            )));
+        };
+        config_specs.insert(name.to_string(), config_spec);
+    }
+    for (name, value) in extra_strings.iter().zip(&extra_values) {
+        configs.set(name.to_string(), AgentValue::string(value.clone()));
+    }
+    configs.set(CONFIG_N.to_string(), AgentValue::integer(n as i64));
+
+    let mut srcs = Vec::with_capacity(n);
+    for i in 1..=n {
+        let name = format!("c{}", i);
+        // `AgentDefinition::reconcile_spec` moves every config the definition does not
+        // declare - which includes the dynamic `c1`..`cn` - to a `_`-prefixed key when a
+        // preset is loaded. Fall back to it so saved values survive a reload.
+        let v = spec
+            .configs
+            .as_ref()
+            .map(|cfg| {
+                if cfg.contains_key(&name) {
+                    cfg.get_string_or(&name, "")
+                } else {
+                    cfg.get_string_or(&format!("_{}", name), "")
+                }
+            })
+            .unwrap_or_default();
+
+        srcs.push(v.clone());
+
+        configs.set(name.clone(), AgentValue::string(v));
+        config_specs.insert(
+            name,
+            AgentConfigSpec {
+                value: AgentValue::string_default(),
+                type_: Some("string".to_string()),
+                ..Default::default()
+            },
+        );
+    }
+
+    spec.configs = Some(configs);
+    spec.config_specs = Some(config_specs);
+
+    let mut outputs: Vec<String> = (0..n).map(|i| i.to_string()).collect();
+    outputs.push(PORT_DEFAULT.to_string());
+    spec.outputs = Some(outputs);
+
+    Ok((n, extra_values, srcs))
+}
+
+/// Parses each source with `parse`, keeping a failed one as a never-matching `None`, and
+/// returns the first error alongside the results.
+fn parse_all<T>(
+    srcs: &[String],
+    parse: impl Fn(&str) -> Result<Option<T>, AgentError>,
+) -> (Vec<Option<T>>, Option<AgentError>) {
+    let mut first_error = None;
+    let mut parsed = Vec::with_capacity(srcs.len());
+    for src in srcs {
+        match parse(src) {
+            Ok(v) => parsed.push(v),
+            Err(e) => {
+                parsed.push(None);
+                first_error.get_or_insert(e);
+            }
+        }
+    }
+    (parsed, first_error)
+}
+
 /// Routes the input value to the first of n conditions that matches.
 ///
-/// The `n` config controls how many `cond1`..`condn` conditions exist, and how many
+/// The `n` config controls how many `c1`..`cn` conditions exist, and how many
 /// numbered output ports `0`..`n-1` are exposed. Conditions are evaluated in order and
 /// the value is emitted on the port matching the first successful condition; when none
-/// matches, it is emitted on `default`. An empty condition never matches, and so does an
+/// matches, it is emitted on `_`. An empty condition never matches, and so does an
 /// invalid one - a condition set at runtime is additionally reported as a configuration
 /// error, while an invalid condition loaded from a preset is only kept as never-matching.
 ///
@@ -417,29 +552,29 @@ impl AsAgent for IfAgent {
 /// # Ports
 /// - Input `input`: Value to test.
 /// - Output `0`..`n-1`: The input value, emitted on the port of the first matching condition.
-/// - Output `default`: The input value, when no condition matches.
+/// - Output `_`: The input value, when no condition matches.
 ///
 /// # Configuration
 /// - `n`: Number of conditions and numbered output ports, clamped to 1..=64 (default: 2)
-/// - `cond1`..`condn`: Condition expressions, evaluated in order.
+/// - `c1`..`cn`: Condition expressions, evaluated in order.
 ///
 /// # Example
-/// With `n` = 2, `cond1` = `status == "error"` and `cond2` = `retry > 3`, the input
+/// With `n` = 2, `c1` = `status == "error"` and `c2` = `retry > 3`, the input
 /// `{"status": "error", "retry": 0}` is emitted unchanged on `0`, `{"status": "ok",
-/// "retry": 5}` on `1`, and `{"status": "ok", "retry": 0}` on `default`.
+/// "retry": 5}` on `1`, and `{"status": "ok", "retry": 0}` on `_`.
 #[modular_agent(
-    title = "Match",
+    title = "Switch",
     category = CATEGORY,
     inputs = [PORT_INPUT],
     outputs = ["0", "1", PORT_DEFAULT],
     integer_config(name = CONFIG_N, default = 2),
-    // `cond1`..`cond2` match the default `n`, so a freshly placed agent already exposes
-    // them; `update_spec` takes over once `n` changes.
-    string_config(name = CONFIG_COND1),
-    string_config(name = CONFIG_COND2),
-    hint(color=5),
+    // `c1`..`c2` match the default `n`, so a freshly placed agent already exposes them;
+    // `update_numbered_spec` takes over once `n` changes.
+    string_config(name = CONFIG_C1),
+    string_config(name = CONFIG_C2),
+    hint(color=5, height=2),
 )]
-struct MatchAgent {
+struct SwitchAgent {
     data: AgentData,
     n: usize,
 
@@ -450,83 +585,12 @@ struct MatchAgent {
     conds: Vec<Option<Cond>>,
 }
 
-impl MatchAgent {
-    fn update_spec(spec: &mut AgentSpec) -> Result<(usize, Vec<String>), AgentError> {
-        let n = spec
-            .configs
-            .as_ref()
-            .map(|cfg| cfg.get_integer_or(CONFIG_N, 2))
-            .unwrap_or(2);
-        // The upper bound keeps a stray config value from requesting a huge allocation.
-        let n = n.clamp(1, MAX_N) as usize;
-
-        // Dynamic generation of config definitions (ConfigSpecs)
-        let mut configs = AgentConfigs::new();
-        let mut config_specs = AgentConfigSpecs::default();
-
-        // Re-set required configurations
-        configs.set(CONFIG_N.to_string(), AgentValue::integer(n as i64));
-        let Some(n_spec) = spec
-            .config_specs
-            .as_ref()
-            .and_then(|cs| cs.get(CONFIG_N))
-            .cloned()
-        else {
-            return Err(AgentError::InvalidConfig("config n must be present".into()));
-        };
-        config_specs.insert(CONFIG_N.to_string(), n_spec);
-
-        let mut cond_srcs = Vec::with_capacity(n);
-        for i in 1..=n {
-            let cond_name = format!("cond{}", i);
-            // `AgentDefinition::reconcile_spec` moves every config the definition does not
-            // declare - which includes the dynamic `cond1`..`condn` - to a `_`-prefixed key
-            // when a preset is loaded. Fall back to it so saved conditions survive a reload.
-            let v = spec
-                .configs
-                .as_ref()
-                .map(|cfg| {
-                    if cfg.contains_key(&cond_name) {
-                        cfg.get_string_or(&cond_name, "")
-                    } else {
-                        cfg.get_string_or(&format!("_{}", cond_name), "")
-                    }
-                })
-                .unwrap_or_default();
-
-            cond_srcs.push(v.clone());
-
-            configs.set(cond_name.clone(), AgentValue::string(v));
-            config_specs.insert(
-                cond_name,
-                AgentConfigSpec {
-                    value: AgentValue::string_default(),
-                    type_: Some("string".to_string()),
-                    ..Default::default()
-                },
-            );
-        }
-
-        spec.configs = Some(configs);
-        spec.config_specs = Some(config_specs);
-
-        let mut outputs: Vec<String> = (0..n).map(|i| i.to_string()).collect();
-        outputs.push(PORT_DEFAULT.to_string());
-        spec.outputs = Some(outputs);
-
-        Ok((n, cond_srcs))
-    }
-}
-
 #[async_trait]
-impl AsAgent for MatchAgent {
+impl AsAgent for SwitchAgent {
     fn new(ma: ModularAgent, id: String, mut spec: AgentSpec) -> Result<Self, AgentError> {
-        let (n, cond_srcs) = Self::update_spec(&mut spec)?;
+        let (n, _, cond_srcs) = update_numbered_spec(&mut spec, &[])?;
         // Invalid conditions are kept as never-matching instead of blocking the load.
-        let conds = cond_srcs
-            .iter()
-            .map(|src| load_cond(src).unwrap_or(None))
-            .collect();
+        let (conds, _) = parse_all(&cond_srcs, load_cond);
         let data = AgentData::new(ma, id, spec);
         Ok(Self {
             data,
@@ -537,26 +601,16 @@ impl AsAgent for MatchAgent {
     }
 
     fn configs_changed(&mut self) -> Result<(), AgentError> {
-        let (n, cond_srcs) = Self::update_spec(&mut self.data.spec)?;
+        let (n, _, cond_srcs) = update_numbered_spec(&mut self.data.spec, &[])?;
         if n == self.n && cond_srcs == self.cond_srcs {
             return Ok(());
         }
 
-        // `update_spec` has already rewritten the spec, so the parsed state has to be
-        // committed as a whole even when a condition is invalid; otherwise `conds` could
-        // outlive the output ports it routes to. An invalid condition is kept as
+        // `update_numbered_spec` has already rewritten the spec, so the parsed state has
+        // to be committed as a whole even when a condition is invalid; otherwise `conds`
+        // could outlive the output ports it routes to. An invalid condition is kept as
         // never-matching, like at load time, and the parse error is reported afterwards.
-        let mut first_error = None;
-        let mut conds = Vec::with_capacity(cond_srcs.len());
-        for src in &cond_srcs {
-            match load_cond(src) {
-                Ok(cond) => conds.push(cond),
-                Err(e) => {
-                    conds.push(None);
-                    first_error.get_or_insert(e);
-                }
-            }
-        }
+        let (conds, first_error) = parse_all(&cond_srcs, load_cond);
 
         self.n = n;
         self.cond_srcs = cond_srcs;
@@ -579,6 +633,161 @@ impl AsAgent for MatchAgent {
             .conds
             .iter()
             .position(|cond| cond.as_ref().is_some_and(|c| eval_cond(c, &value)));
+
+        match matched {
+            Some(i) => self.output(ctx, i.to_string(), value).await,
+            None => self.output(ctx, PORT_DEFAULT, value).await,
+        }
+    }
+}
+
+/// Routes the input value to the first of n case values it is equal to.
+///
+/// A single `key` selects what to compare, and each `c1`..`cn` holds one candidate value;
+/// there is no operator, the comparison is always equality. Use the Switch agent instead
+/// when the branches need different operators or different keys.
+///
+/// The `n` config controls how many `c1`..`cn` case values exist, and how many numbered
+/// output ports `0`..`n-1` are exposed. Cases are compared in order and the value is
+/// emitted on the port of the first equal one; when none is equal, it is emitted on
+/// `_`. An empty case value never matches, and so does an invalid one - a case set
+/// at runtime is additionally reported as a configuration error, while an invalid one
+/// loaded from a preset is only kept as never-matching. An invalid `key` is handled the
+/// same way, and makes every input go to `_`.
+///
+/// Case values use the same literal syntax as the If and Switch conditions: numbers,
+/// strings, booleans, `null` and regular expressions, written as JSON (`"abc"`, `10`,
+/// `true`, `null`) or as `/pattern/`. A regex matches a string value in full (implicitly
+/// anchored as `^(?:...)$`; use `(?i)` for case-insensitivity), and a non-string value
+/// never matches it. Comparison is by type as well as value, so the case `10` matches
+/// neither the string `"10"` nor `true`, but numbers compare through their numeric value,
+/// so `10` matches both an integer and a float input.
+///
+/// The `key` is a dot-separated list of object keys, and only selects what is compared -
+/// the value emitted is always the original input value. When `key` is omitted, the input
+/// value itself is compared. A key that does not resolve (the input is not an object, a
+/// key is missing, or an intermediate value is not an object) is compared as `null` rather
+/// than raising an error, so a case of `null` catches a missing field.
+///
+/// # Ports
+/// - Input `input`: Value to test.
+/// - Output `0`..`n-1`: The input value, emitted on the port of the first equal case value.
+/// - Output `_`: The input value, when no case value is equal.
+///
+/// # Configuration
+/// - `key`: Dot-separated path to the value to compare. Empty compares the input value itself.
+/// - `n`: Number of case values and numbered output ports, clamped to 1..=64 (default: 2)
+/// - `c1`..`cn`: Case values, compared in order.
+///
+/// # Example
+/// With `key` = `user.status`, `n` = 3, `c1` = `"error"`, `c2` = `/warn.*/` and `c3` = `null`,
+/// the input `{"user": {"status": "error"}}` is emitted unchanged on `0`,
+/// `{"user": {"status": "warning"}}` on `1`, `{"user": {}}` on `2` (a missing key compares
+/// as null), and `{"user": {"status": "ok"}}` on `_`.
+#[modular_agent(
+    title = "Match",
+    category = CATEGORY,
+    inputs = [PORT_INPUT],
+    outputs = ["0", "1", PORT_DEFAULT],
+    string_config(name = CONFIG_KEY),
+    integer_config(name = CONFIG_N, default = 2),
+    // `c1`..`c2` match the default `n`, so a freshly placed agent already exposes them;
+    // `update_numbered_spec` takes over once `n` changes.
+    string_config(name = CONFIG_C1),
+    string_config(name = CONFIG_C2),
+    hint(color=5, height=2),
+)]
+struct MatchAgent {
+    data: AgentData,
+    n: usize,
+
+    // Raw config strings, kept to detect config changes
+    key_src: String,
+    case_srcs: Vec<String>,
+
+    // Optimization: pre-parsed key path and case values.
+    // `key` is None when the path is invalid, so that nothing matches.
+    key: Option<Vec<String>>,
+    cases: Vec<Option<CondLit>>,
+}
+
+#[async_trait]
+impl AsAgent for MatchAgent {
+    fn new(ma: ModularAgent, id: String, mut spec: AgentSpec) -> Result<Self, AgentError> {
+        let (n, extras, case_srcs) = update_numbered_spec(&mut spec, &[CONFIG_KEY])?;
+        let key_src = extras.into_iter().next().unwrap_or_default();
+        // An invalid key or case is kept as never-matching instead of blocking the load.
+        let key = parse_path(&key_src).ok();
+        let (cases, _) = parse_all(&case_srcs, load_lit);
+        let data = AgentData::new(ma, id, spec);
+        Ok(Self {
+            data,
+            n,
+            key_src,
+            case_srcs,
+            key,
+            cases,
+        })
+    }
+
+    fn configs_changed(&mut self) -> Result<(), AgentError> {
+        let (n, extras, case_srcs) = update_numbered_spec(&mut self.data.spec, &[CONFIG_KEY])?;
+        let key_src = extras.into_iter().next().unwrap_or_default();
+        if n == self.n && key_src == self.key_src && case_srcs == self.case_srcs {
+            return Ok(());
+        }
+
+        // `update_numbered_spec` has already rewritten the spec, so the parsed state has
+        // to be committed as a whole even when a key or a case is invalid; otherwise
+        // `cases` could outlive the output ports it routes to. An invalid value is kept
+        // as never-matching, like at load time, and the parse error is reported afterwards.
+        let mut first_error = None;
+        let key = match parse_path(&key_src) {
+            Ok(key) => Some(key),
+            Err(e) => {
+                first_error = Some(e);
+                None
+            }
+        };
+        let (cases, case_error) = parse_all(&case_srcs, load_lit);
+        let first_error = first_error.or(case_error);
+
+        self.n = n;
+        self.key_src = key_src;
+        self.case_srcs = case_srcs;
+        self.key = key;
+        self.cases = cases;
+        self.emit_agent_spec_updated();
+
+        match first_error {
+            Some(e) => Err(e),
+            None => Ok(()),
+        }
+    }
+
+    async fn process(
+        &mut self,
+        ctx: AgentContext,
+        _port: String,
+        value: AgentValue,
+    ) -> Result<(), AgentError> {
+        // `AgentValue` has drop glue, so a temporary cannot be promoted to a `'static`
+        // reference; bind it to a local that outlives `target`.
+        let unit = AgentValue::unit();
+        let matched = match self.key.as_ref() {
+            // An invalid key matches nothing, so everything goes to `_`.
+            None => None,
+            Some(path) => {
+                let target = if path.is_empty() {
+                    &value
+                } else {
+                    get_nested_value(&value, path).unwrap_or(&unit)
+                };
+                self.cases
+                    .iter()
+                    .position(|case| case.as_ref().is_some_and(|lit| eq_cond(lit, target)))
+            }
+        };
 
         match matched {
             Some(i) => self.output(ctx, i.to_string(), value).await,
@@ -692,6 +901,52 @@ mod tests {
                 lit: CondLit::String("a>b".to_string())
             }
         );
+    }
+
+    #[test]
+    fn test_parse_path() {
+        assert_eq!(parse_path("").expect("valid"), Vec::<String>::new());
+        assert_eq!(parse_path("   ").expect("valid"), Vec::<String>::new());
+        assert_eq!(
+            parse_path("user.age").expect("valid"),
+            vec!["user".to_string(), "age".to_string()]
+        );
+        // Segments are trimmed
+        assert_eq!(
+            parse_path(" user . age ").expect("valid"),
+            vec!["user".to_string(), "age".to_string()]
+        );
+        // Empty segments
+        assert!(parse_path(".a").is_err());
+        assert!(parse_path("a.").is_err());
+        assert!(parse_path("a..b").is_err());
+    }
+
+    #[test]
+    fn test_parse_lit() {
+        assert_eq!(
+            parse_lit("\"abc\"").expect("valid"),
+            CondLit::String("abc".to_string())
+        );
+        assert_eq!(parse_lit("10").expect("valid"), CondLit::Integer(10));
+        assert_eq!(parse_lit("1.5").expect("valid"), CondLit::Number(1.5));
+        assert_eq!(parse_lit("true").expect("valid"), CondLit::Boolean(true));
+        assert_eq!(parse_lit("null").expect("valid"), CondLit::Null);
+        assert_eq!(
+            parse_lit(" /err.*/ ").expect("valid"),
+            CondLit::Regex(CondRegex(Regex::new("^(?:err.*)$").unwrap()))
+        );
+
+        // Empty
+        assert!(parse_lit("").is_err());
+        // Unquoted string is not valid JSON
+        assert!(parse_lit("abc").is_err());
+        // Array and object literals are unsupported
+        assert!(parse_lit("[1, 2]").is_err());
+        assert!(parse_lit("{\"a\": 1}").is_err());
+        // Unclosed / invalid regex
+        assert!(parse_lit("/abc").is_err());
+        assert!(parse_lit("/[/").is_err());
     }
 
     #[test]

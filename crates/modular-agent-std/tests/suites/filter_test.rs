@@ -338,34 +338,34 @@ async fn test_if_invalid_cond() {
 }
 
 #[tokio::test]
-async fn test_match() {
+async fn test_switch() {
     let ma = test_utils::setup_modular_agent().await;
 
     let preset_id = test_utils::open_and_start_preset(&ma, PRESET)
         .await
         .unwrap();
 
-    // cond1 `> 10`, cond2 `> 5`: both match, but the first one wins
-    test_utils::write_and_expect_local_value(&ma, &preset_id, "match_in", AgentValue::integer(20))
+    // c1 `> 10`, c2 `> 5`: both match, but the first one wins
+    test_utils::write_and_expect_local_value(&ma, &preset_id, "switch_in", AgentValue::integer(20))
         .await
         .unwrap();
-    test_utils::expect_local_value(&preset_id, "match_0", &AgentValue::integer(20))
+    test_utils::expect_local_value(&preset_id, "switch_0", &AgentValue::integer(20))
         .await
         .unwrap();
 
-    // Only cond2 matches
-    test_utils::write_and_expect_local_value(&ma, &preset_id, "match_in", AgentValue::integer(7))
+    // Only c2 matches
+    test_utils::write_and_expect_local_value(&ma, &preset_id, "switch_in", AgentValue::integer(7))
         .await
         .unwrap();
-    test_utils::expect_local_value(&preset_id, "match_1", &AgentValue::integer(7))
+    test_utils::expect_local_value(&preset_id, "switch_1", &AgentValue::integer(7))
         .await
         .unwrap();
 
     // No condition matches
-    test_utils::write_and_expect_local_value(&ma, &preset_id, "match_in", AgentValue::integer(3))
+    test_utils::write_and_expect_local_value(&ma, &preset_id, "switch_in", AgentValue::integer(3))
         .await
         .unwrap();
-    test_utils::expect_local_value(&preset_id, "match_default", &AgentValue::integer(3))
+    test_utils::expect_local_value(&preset_id, "switch_default", &AgentValue::integer(3))
         .await
         .unwrap();
 
@@ -373,12 +373,331 @@ async fn test_match() {
     test_utils::write_and_expect_local_value(
         &ma,
         &preset_id,
-        "match_in",
+        "switch_in",
         AgentValue::string("hello"),
     )
     .await
     .unwrap();
-    test_utils::expect_local_value(&preset_id, "match_default", &AgentValue::string("hello"))
+    test_utils::expect_local_value(&preset_id, "switch_default", &AgentValue::string("hello"))
+        .await
+        .unwrap();
+
+    ma.quit();
+}
+
+#[tokio::test]
+async fn test_switch_config_update() {
+    let ma = test_utils::setup_modular_agent().await;
+
+    let preset_id = test_utils::open_and_start_preset(&ma, PRESET)
+        .await
+        .unwrap();
+
+    // Raising n exposes the new port `2` and the matching c3 config
+    test_utils::write_and_expect_local_value(&ma, &preset_id, "switch_n", AgentValue::integer(3))
+        .await
+        .unwrap();
+    test_utils::write_and_expect_local_value(
+        &ma,
+        &preset_id,
+        "switch_c3",
+        AgentValue::string("== 3"),
+    )
+    .await
+    .unwrap();
+
+    test_utils::write_and_expect_local_value(&ma, &preset_id, "switch_in", AgentValue::integer(3))
+        .await
+        .unwrap();
+    test_utils::expect_local_value(&preset_id, "switch_2", &AgentValue::integer(3))
+        .await
+        .unwrap();
+
+    // An invalid condition set at runtime never matches instead of keeping the old one
+    test_utils::write_and_expect_local_value(
+        &ma,
+        &preset_id,
+        "switch_c1",
+        AgentValue::string("> abc"),
+    )
+    .await
+    .unwrap();
+
+    test_utils::write_and_expect_local_value(&ma, &preset_id, "switch_in", AgentValue::integer(20))
+        .await
+        .unwrap();
+    test_utils::expect_local_value(&preset_id, "switch_1", &AgentValue::integer(20))
+        .await
+        .unwrap();
+
+    // Lowering n again drops the extra conditions along with their ports
+    test_utils::write_and_expect_local_value(&ma, &preset_id, "switch_n", AgentValue::integer(2))
+        .await
+        .unwrap();
+
+    test_utils::write_and_expect_local_value(&ma, &preset_id, "switch_in", AgentValue::integer(3))
+        .await
+        .unwrap();
+    test_utils::expect_local_value(&preset_id, "switch_default", &AgentValue::integer(3))
+        .await
+        .unwrap();
+
+    ma.quit();
+}
+
+#[tokio::test]
+async fn test_switch_regex() {
+    let ma = test_utils::setup_modular_agent().await;
+
+    let preset_id = test_utils::open_and_start_preset(&ma, PRESET)
+        .await
+        .unwrap();
+
+    // c1 becomes a regex on the `status` field. c2 stays `> 5` from the preset: with
+    // no path it tests the input object itself, which has no numeric value, so it never
+    // matches here - a non-matching status therefore routes to default.
+    test_utils::write_and_expect_local_value(
+        &ma,
+        &preset_id,
+        "switch_c1",
+        AgentValue::string("status == /err.*/"),
+    )
+    .await
+    .unwrap();
+
+    // c1 matches in full, and the whole input object is what gets emitted
+    let failed = AgentValue::object(hashmap! {
+        "status".to_string() => AgentValue::string("error".to_string()),
+    });
+    test_utils::write_and_expect_local_value(&ma, &preset_id, "switch_in", failed.clone())
+        .await
+        .unwrap();
+    test_utils::expect_local_value(&preset_id, "switch_0", &failed)
+        .await
+        .unwrap();
+
+    // A status that only partly matches the anchored pattern does not match
+    let partial = AgentValue::object(hashmap! {
+        "status".to_string() => AgentValue::string("my error".to_string()),
+    });
+    test_utils::write_and_expect_local_value(&ma, &preset_id, "switch_in", partial.clone())
+        .await
+        .unwrap();
+    test_utils::expect_local_value(&preset_id, "switch_default", &partial)
+        .await
+        .unwrap();
+
+    ma.quit();
+}
+
+#[tokio::test]
+async fn test_switch_object_path() {
+    let ma = test_utils::setup_modular_agent().await;
+
+    let preset_id = test_utils::open_and_start_preset(&ma, PRESET)
+        .await
+        .unwrap();
+
+    // Each condition carries its own path, so they can look at different fields.
+    // c2 stays `> 5` from the preset: with no path it tests the input object itself,
+    // and an object has no numeric value, so it never matches here.
+    test_utils::write_and_expect_local_value(&ma, &preset_id, "switch_n", AgentValue::integer(3))
+        .await
+        .unwrap();
+    test_utils::write_and_expect_local_value(
+        &ma,
+        &preset_id,
+        "switch_c1",
+        AgentValue::string("status == \"error\""),
+    )
+    .await
+    .unwrap();
+    test_utils::write_and_expect_local_value(
+        &ma,
+        &preset_id,
+        "switch_c3",
+        AgentValue::string("retry > 3"),
+    )
+    .await
+    .unwrap();
+
+    // c1 matches, and the whole input object is what gets emitted
+    let failed = AgentValue::object(hashmap! {
+        "status".to_string() => AgentValue::string("error".to_string()),
+        "retry".to_string() => AgentValue::integer(0),
+    });
+    test_utils::write_and_expect_local_value(&ma, &preset_id, "switch_in", failed.clone())
+        .await
+        .unwrap();
+    test_utils::expect_local_value(&preset_id, "switch_0", &failed)
+        .await
+        .unwrap();
+
+    // Only c3 matches, on a different field than c1
+    let retried = AgentValue::object(hashmap! {
+        "status".to_string() => AgentValue::string("ok".to_string()),
+        "retry".to_string() => AgentValue::integer(5),
+    });
+    test_utils::write_and_expect_local_value(&ma, &preset_id, "switch_in", retried.clone())
+        .await
+        .unwrap();
+    test_utils::expect_local_value(&preset_id, "switch_2", &retried)
+        .await
+        .unwrap();
+
+    // No condition matches
+    let plain = AgentValue::object(hashmap! {
+        "status".to_string() => AgentValue::string("ok".to_string()),
+        "retry".to_string() => AgentValue::integer(0),
+    });
+    test_utils::write_and_expect_local_value(&ma, &preset_id, "switch_in", plain.clone())
+        .await
+        .unwrap();
+    test_utils::expect_local_value(&preset_id, "switch_default", &plain)
+        .await
+        .unwrap();
+
+    ma.quit();
+}
+
+#[tokio::test]
+async fn test_match() {
+    let ma = test_utils::setup_modular_agent().await;
+
+    let preset_id = test_utils::open_and_start_preset(&ma, PRESET)
+        .await
+        .unwrap();
+
+    // The preset leaves `key` empty, so the input value itself is compared against
+    // c1 `"a"` and c2 `/b.*/`
+    test_utils::write_and_expect_local_value(&ma, &preset_id, "match_in", AgentValue::string("a"))
+        .await
+        .unwrap();
+    test_utils::expect_local_value(&preset_id, "match_0", &AgentValue::string("a"))
+        .await
+        .unwrap();
+
+    // The regex case matches in full
+    test_utils::write_and_expect_local_value(
+        &ma,
+        &preset_id,
+        "match_in",
+        AgentValue::string("bcd"),
+    )
+    .await
+    .unwrap();
+    test_utils::expect_local_value(&preset_id, "match_1", &AgentValue::string("bcd"))
+        .await
+        .unwrap();
+
+    // No case matches
+    test_utils::write_and_expect_local_value(&ma, &preset_id, "match_in", AgentValue::string("c"))
+        .await
+        .unwrap();
+    test_utils::expect_local_value(&preset_id, "match_default", &AgentValue::string("c"))
+        .await
+        .unwrap();
+
+    // Comparison is by type as well as value: the case `10` matches the number, not the
+    // string "10"
+    test_utils::write_and_expect_local_value(&ma, &preset_id, "match_c1", AgentValue::string("10"))
+        .await
+        .unwrap();
+
+    test_utils::write_and_expect_local_value(&ma, &preset_id, "match_in", AgentValue::integer(10))
+        .await
+        .unwrap();
+    test_utils::expect_local_value(&preset_id, "match_0", &AgentValue::integer(10))
+        .await
+        .unwrap();
+
+    test_utils::write_and_expect_local_value(&ma, &preset_id, "match_in", AgentValue::string("10"))
+        .await
+        .unwrap();
+    test_utils::expect_local_value(&preset_id, "match_default", &AgentValue::string("10"))
+        .await
+        .unwrap();
+
+    ma.quit();
+}
+
+#[tokio::test]
+async fn test_match_key() {
+    let ma = test_utils::setup_modular_agent().await;
+
+    let preset_id = test_utils::open_and_start_preset(&ma, PRESET)
+        .await
+        .unwrap();
+
+    // The key selects what is compared; c2 becomes `null` so that a missing key is caught
+    test_utils::write_and_expect_local_value(
+        &ma,
+        &preset_id,
+        "match_key",
+        AgentValue::string("user.status"),
+    )
+    .await
+    .unwrap();
+    test_utils::write_and_expect_local_value(
+        &ma,
+        &preset_id,
+        "match_c1",
+        AgentValue::string("\"error\""),
+    )
+    .await
+    .unwrap();
+    test_utils::write_and_expect_local_value(
+        &ma,
+        &preset_id,
+        "match_c2",
+        AgentValue::string("null"),
+    )
+    .await
+    .unwrap();
+
+    // c1 matches, and the whole input object is what gets emitted
+    let failed = AgentValue::object(hashmap! {
+        "user".to_string() => AgentValue::object(hashmap! {
+            "status".to_string() => AgentValue::string("error".to_string()),
+        }),
+        "name".to_string() => AgentValue::string("a".to_string()),
+    });
+    test_utils::write_and_expect_local_value(&ma, &preset_id, "match_in", failed.clone())
+        .await
+        .unwrap();
+    test_utils::expect_local_value(&preset_id, "match_0", &failed)
+        .await
+        .unwrap();
+
+    // A key that does not resolve is compared as null, so c2 catches it
+    let missing = AgentValue::object(hashmap! {
+        "name".to_string() => AgentValue::string("a".to_string()),
+    });
+    test_utils::write_and_expect_local_value(&ma, &preset_id, "match_in", missing.clone())
+        .await
+        .unwrap();
+    test_utils::expect_local_value(&preset_id, "match_1", &missing)
+        .await
+        .unwrap();
+
+    // So is a scalar input, which is not an object at all
+    test_utils::write_and_expect_local_value(&ma, &preset_id, "match_in", AgentValue::integer(20))
+        .await
+        .unwrap();
+    test_utils::expect_local_value(&preset_id, "match_1", &AgentValue::integer(20))
+        .await
+        .unwrap();
+
+    // A resolved key that equals no case goes to default
+    let ok = AgentValue::object(hashmap! {
+        "user".to_string() => AgentValue::object(hashmap! {
+            "status".to_string() => AgentValue::string("ok".to_string()),
+        }),
+    });
+    test_utils::write_and_expect_local_value(&ma, &preset_id, "match_in", ok.clone())
+        .await
+        .unwrap();
+    test_utils::expect_local_value(&preset_id, "match_default", &ok)
         .await
         .unwrap();
 
@@ -393,18 +712,13 @@ async fn test_match_config_update() {
         .await
         .unwrap();
 
-    // Raising n exposes the new port `2` and the matching cond3 config
+    // Raising n exposes the new port `2` and the matching c3 config
     test_utils::write_and_expect_local_value(&ma, &preset_id, "match_n", AgentValue::integer(3))
         .await
         .unwrap();
-    test_utils::write_and_expect_local_value(
-        &ma,
-        &preset_id,
-        "match_cond3",
-        AgentValue::string("== 3"),
-    )
-    .await
-    .unwrap();
+    test_utils::write_and_expect_local_value(&ma, &preset_id, "match_c3", AgentValue::string("3"))
+        .await
+        .unwrap();
 
     test_utils::write_and_expect_local_value(&ma, &preset_id, "match_in", AgentValue::integer(3))
         .await
@@ -413,24 +727,24 @@ async fn test_match_config_update() {
         .await
         .unwrap();
 
-    // An invalid condition set at runtime never matches instead of keeping the old one
+    // An invalid case set at runtime never matches instead of keeping the old one
     test_utils::write_and_expect_local_value(
         &ma,
         &preset_id,
-        "match_cond1",
-        AgentValue::string("> abc"),
+        "match_c1",
+        AgentValue::string("abc"),
     )
     .await
     .unwrap();
 
-    test_utils::write_and_expect_local_value(&ma, &preset_id, "match_in", AgentValue::integer(20))
+    test_utils::write_and_expect_local_value(&ma, &preset_id, "match_in", AgentValue::string("a"))
         .await
         .unwrap();
-    test_utils::expect_local_value(&preset_id, "match_1", &AgentValue::integer(20))
+    test_utils::expect_local_value(&preset_id, "match_default", &AgentValue::string("a"))
         .await
         .unwrap();
 
-    // Lowering n again drops the extra conditions along with their ports
+    // Lowering n again drops the extra cases along with their ports
     test_utils::write_and_expect_local_value(&ma, &preset_id, "match_n", AgentValue::integer(2))
         .await
         .unwrap();
@@ -439,121 +753,6 @@ async fn test_match_config_update() {
         .await
         .unwrap();
     test_utils::expect_local_value(&preset_id, "match_default", &AgentValue::integer(3))
-        .await
-        .unwrap();
-
-    ma.quit();
-}
-
-#[tokio::test]
-async fn test_match_regex() {
-    let ma = test_utils::setup_modular_agent().await;
-
-    let preset_id = test_utils::open_and_start_preset(&ma, PRESET)
-        .await
-        .unwrap();
-
-    // cond1 becomes a regex on the `status` field. cond2 stays `> 5` from the preset: with
-    // no path it tests the input object itself, which has no numeric value, so it never
-    // matches here - a non-matching status therefore routes to default.
-    test_utils::write_and_expect_local_value(
-        &ma,
-        &preset_id,
-        "match_cond1",
-        AgentValue::string("status == /err.*/"),
-    )
-    .await
-    .unwrap();
-
-    // cond1 matches in full, and the whole input object is what gets emitted
-    let failed = AgentValue::object(hashmap! {
-        "status".to_string() => AgentValue::string("error".to_string()),
-    });
-    test_utils::write_and_expect_local_value(&ma, &preset_id, "match_in", failed.clone())
-        .await
-        .unwrap();
-    test_utils::expect_local_value(&preset_id, "match_0", &failed)
-        .await
-        .unwrap();
-
-    // A status that only partly matches the anchored pattern does not match
-    let partial = AgentValue::object(hashmap! {
-        "status".to_string() => AgentValue::string("my error".to_string()),
-    });
-    test_utils::write_and_expect_local_value(&ma, &preset_id, "match_in", partial.clone())
-        .await
-        .unwrap();
-    test_utils::expect_local_value(&preset_id, "match_default", &partial)
-        .await
-        .unwrap();
-
-    ma.quit();
-}
-
-#[tokio::test]
-async fn test_match_object_path() {
-    let ma = test_utils::setup_modular_agent().await;
-
-    let preset_id = test_utils::open_and_start_preset(&ma, PRESET)
-        .await
-        .unwrap();
-
-    // Each condition carries its own path, so they can look at different fields.
-    // cond2 stays `> 5` from the preset: with no path it tests the input object itself,
-    // and an object has no numeric value, so it never matches here.
-    test_utils::write_and_expect_local_value(&ma, &preset_id, "match_n", AgentValue::integer(3))
-        .await
-        .unwrap();
-    test_utils::write_and_expect_local_value(
-        &ma,
-        &preset_id,
-        "match_cond1",
-        AgentValue::string("status == \"error\""),
-    )
-    .await
-    .unwrap();
-    test_utils::write_and_expect_local_value(
-        &ma,
-        &preset_id,
-        "match_cond3",
-        AgentValue::string("retry > 3"),
-    )
-    .await
-    .unwrap();
-
-    // cond1 matches, and the whole input object is what gets emitted
-    let failed = AgentValue::object(hashmap! {
-        "status".to_string() => AgentValue::string("error".to_string()),
-        "retry".to_string() => AgentValue::integer(0),
-    });
-    test_utils::write_and_expect_local_value(&ma, &preset_id, "match_in", failed.clone())
-        .await
-        .unwrap();
-    test_utils::expect_local_value(&preset_id, "match_0", &failed)
-        .await
-        .unwrap();
-
-    // Only cond3 matches, on a different field than cond1
-    let retried = AgentValue::object(hashmap! {
-        "status".to_string() => AgentValue::string("ok".to_string()),
-        "retry".to_string() => AgentValue::integer(5),
-    });
-    test_utils::write_and_expect_local_value(&ma, &preset_id, "match_in", retried.clone())
-        .await
-        .unwrap();
-    test_utils::expect_local_value(&preset_id, "match_2", &retried)
-        .await
-        .unwrap();
-
-    // No condition matches
-    let plain = AgentValue::object(hashmap! {
-        "status".to_string() => AgentValue::string("ok".to_string()),
-        "retry".to_string() => AgentValue::integer(0),
-    });
-    test_utils::write_and_expect_local_value(&ma, &preset_id, "match_in", plain.clone())
-        .await
-        .unwrap();
-    test_utils::expect_local_value(&preset_id, "match_default", &plain)
         .await
         .unwrap();
 

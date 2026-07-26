@@ -96,30 +96,30 @@
     },
     {
       "id": "211",
-      "def_name": "modular_agent_std::filter::MatchAgent",
+      "def_name": "modular_agent_std::filter::SwitchAgent",
       "inputs": [
         "input"
       ],
       "outputs": [
         "0",
         "1",
-        "default"
+        "_"
       ],
       "configs": {
         "n": 2,
-        "cond1": "> 10",
-        "cond2": "> 5"
+        "c1": "> 10",
+        "c2": "> 5"
       },
       "config_specs": {
         "n": {
           "value": 2,
           "type": "integer"
         },
-        "cond1": {
+        "c1": {
           "value": "",
           "type": "string"
         },
-        "cond2": {
+        "c2": {
           "value": "",
           "type": "string"
         }
@@ -134,7 +134,7 @@
         "value"
       ],
       "configs": {
-        "name": "match_in"
+        "name": "switch_in"
       },
       "config_specs": {
         "name": {
@@ -152,7 +152,7 @@
         "value"
       ],
       "configs": {
-        "name": "match_0"
+        "name": "switch_0"
       },
       "config_specs": {
         "name": {
@@ -170,7 +170,7 @@
         "value"
       ],
       "configs": {
-        "name": "match_1"
+        "name": "switch_1"
       },
       "config_specs": {
         "name": {
@@ -188,7 +188,7 @@
         "value"
       ],
       "configs": {
-        "name": "match_default"
+        "name": "switch_default"
       },
       "config_specs": {
         "name": {
@@ -206,7 +206,7 @@
         "value"
       ],
       "configs": {
-        "name": "match_n"
+        "name": "switch_n"
       },
       "config_specs": {
         "name": {
@@ -224,7 +224,7 @@
         "value"
       ],
       "configs": {
-        "name": "match_cond1"
+        "name": "switch_c1"
       },
       "config_specs": {
         "name": {
@@ -242,7 +242,7 @@
         "value"
       ],
       "configs": {
-        "name": "match_cond3"
+        "name": "switch_c3"
       },
       "config_specs": {
         "name": {
@@ -260,7 +260,7 @@
         "value"
       ],
       "configs": {
-        "name": "match_2"
+        "name": "switch_2"
       },
       "config_specs": {
         "name": {
@@ -270,6 +270,224 @@
       },
       "x": 516,
       "y": 1404
+    },
+    {
+      "id": "221",
+      "def_name": "modular_agent_std::filter::MatchAgent",
+      "inputs": [
+        "input"
+      ],
+      "outputs": [
+        "0",
+        "1",
+        "_"
+      ],
+      "configs": {
+        "key": "",
+        "n": 2,
+        "c1": "\"a\"",
+        "c2": "/b.*/"
+      },
+      "config_specs": {
+        "key": {
+          "value": "",
+          "type": "string"
+        },
+        "n": {
+          "value": 2,
+          "type": "integer"
+        },
+        "c1": {
+          "value": "",
+          "type": "string"
+        },
+        "c2": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": 264,
+      "y": 1632
+    },
+    {
+      "id": "222",
+      "def_name": "modular_agent_core::external_agent::LocalInputAgent",
+      "outputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "match_in"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": -36,
+      "y": 1632
+    },
+    {
+      "id": "223",
+      "def_name": "modular_agent_core::external_agent::LocalOutputAgent",
+      "inputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "match_0"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": 516,
+      "y": 1632
+    },
+    {
+      "id": "224",
+      "def_name": "modular_agent_core::external_agent::LocalOutputAgent",
+      "inputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "match_1"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": 516,
+      "y": 1860
+    },
+    {
+      "id": "225",
+      "def_name": "modular_agent_core::external_agent::LocalOutputAgent",
+      "inputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "match_default"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": 516,
+      "y": 2088
+    },
+    {
+      "id": "226",
+      "def_name": "modular_agent_core::external_agent::LocalInputAgent",
+      "outputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "match_key"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": -36,
+      "y": 1860
+    },
+    {
+      "id": "227",
+      "def_name": "modular_agent_core::external_agent::LocalInputAgent",
+      "outputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "match_n"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": -36,
+      "y": 2088
+    },
+    {
+      "id": "228",
+      "def_name": "modular_agent_core::external_agent::LocalInputAgent",
+      "outputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "match_c1"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": -36,
+      "y": 2316
+    },
+    {
+      "id": "229",
+      "def_name": "modular_agent_core::external_agent::LocalInputAgent",
+      "outputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "match_c3"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": -36,
+      "y": 2544
+    },
+    {
+      "id": "230",
+      "def_name": "modular_agent_core::external_agent::LocalOutputAgent",
+      "inputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "match_2"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": 516,
+      "y": 2316
+    },
+    {
+      "id": "231",
+      "def_name": "modular_agent_core::external_agent::LocalInputAgent",
+      "outputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "match_c2"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": -36,
+      "y": 2772
     }
   ],
   "connections": [
@@ -317,7 +535,7 @@
     },
     {
       "source": "211",
-      "source_handle": "default",
+      "source_handle": "_",
       "target": "215",
       "target_handle": "value"
     },
@@ -331,19 +549,79 @@
       "source": "217",
       "source_handle": "value",
       "target": "211",
-      "target_handle": "config:cond1"
+      "target_handle": "config:c1"
     },
     {
       "source": "218",
       "source_handle": "value",
       "target": "211",
-      "target_handle": "config:cond3"
+      "target_handle": "config:c3"
     },
     {
       "source": "211",
       "source_handle": "2",
       "target": "219",
       "target_handle": "value"
+    },
+    {
+      "source": "222",
+      "source_handle": "value",
+      "target": "221",
+      "target_handle": "input"
+    },
+    {
+      "source": "221",
+      "source_handle": "0",
+      "target": "223",
+      "target_handle": "value"
+    },
+    {
+      "source": "221",
+      "source_handle": "1",
+      "target": "224",
+      "target_handle": "value"
+    },
+    {
+      "source": "221",
+      "source_handle": "_",
+      "target": "225",
+      "target_handle": "value"
+    },
+    {
+      "source": "226",
+      "source_handle": "value",
+      "target": "221",
+      "target_handle": "config:key"
+    },
+    {
+      "source": "227",
+      "source_handle": "value",
+      "target": "221",
+      "target_handle": "config:n"
+    },
+    {
+      "source": "228",
+      "source_handle": "value",
+      "target": "221",
+      "target_handle": "config:c1"
+    },
+    {
+      "source": "229",
+      "source_handle": "value",
+      "target": "221",
+      "target_handle": "config:c3"
+    },
+    {
+      "source": "221",
+      "source_handle": "2",
+      "target": "230",
+      "target_handle": "value"
+    },
+    {
+      "source": "231",
+      "source_handle": "value",
+      "target": "221",
+      "target_handle": "config:c2"
     }
   ],
   "viewport": {
