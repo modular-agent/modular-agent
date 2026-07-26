@@ -86,7 +86,9 @@ LAYOUT CONVENTION
 - Node position and size are stored as x, y, width, height fields on the
   agent spec (pixels). The editor grid unit is 240: place nodes at multiples
   of 240 and lay flows out left to right (x grows in the data-flow
-  direction). Default node size is one grid unit (240x240).
+  direction). When width/height are omitted, the editor sizes the node from
+  the agent definition's hints (grid-unit multipliers, default 1x1 grid
+  unit), so omitting them is usually the right choice.
 - add_agent accepts x/y/width/height directly; update_agent_spec changes
   them later, e.g. patch {"x": 480, "y": 240}.
 
@@ -654,9 +656,11 @@ struct AddAgentParams {
     x: Option<f64>,
     /// Node y position in pixels (grid unit 240).
     y: Option<f64>,
-    /// Node width in pixels (default: one 240px grid unit).
+    /// Node width in pixels. If omitted, the editor sizes the node from the
+    /// definition's hints (grid-unit multipliers; usually leave unset).
     width: Option<f64>,
-    /// Node height in pixels (default: one 240px grid unit).
+    /// Node height in pixels. If omitted, the editor sizes the node from the
+    /// definition's hints (grid-unit multipliers; usually leave unset).
     height: Option<f64>,
 }
 
