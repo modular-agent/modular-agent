@@ -1,0 +1,36 @@
+const COMMANDS: &[&str] = &[
+    "new_preset",
+    "add_preset",
+    "add_preset_with_name",
+    "remove_preset",
+    "start_preset",
+    "stop_preset",
+    "open_preset_from_file",
+    "save_preset",
+    "get_preset_spec",
+    "update_preset_spec",
+    "get_preset_info",
+    "get_preset_infos",
+    "get_agent_definition",
+    "get_agent_definitions",
+    "get_agent_spec",
+    "update_agent_spec",
+    "new_agent_spec",
+    "add_agent",
+    "remove_agent",
+    "add_connection",
+    "remove_connection",
+    "add_agents_and_connections",
+    "start_agent",
+    "stop_agent",
+    "set_agent_configs",
+    "get_global_configs",
+    "get_global_configs_map",
+    "set_global_configs",
+    "set_global_configs_map",
+    "write_external_input",
+];
+
+fn main() {
+    tauri_plugin::Builder::new(COMMANDS).build();
+}

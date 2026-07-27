@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-new-preset"
+description = "Enables the new_preset command without any pre-configured scope."
+commands.allow = ["new_preset"]
+
+[[permission]]
+identifier = "deny-new-preset"
+description = "Denies the new_preset command without any pre-configured scope."
+commands.deny = ["new_preset"]

@@ -1,0 +1,37 @@
+{
+  "name": "tauri-plugin-modular-agent-api",
+  "version": "0.17.0",
+  "license": "MIT OR Apache-2.0",
+  "author": "Akira Ishino",
+  "description": "Tauri plugin for Modular Agent",
+  "type": "module",
+  "types": "./dist-js/index.d.ts",
+  "main": "./dist-js/index.cjs",
+  "module": "./dist-js/index.js",
+  "exports": {
+    "types": "./dist-js/index.d.ts",
+    "import": "./dist-js/index.js",
+    "require": "./dist-js/index.cjs"
+  },
+  "files": [
+    "dist-js",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "rollup -c",
+    "format": "prettier --write guest-js rollup.config.js",
+    "prepublishOnly": "pnpm build",
+    "pretest": "pnpm build"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.11.1"
+  },
+  "devDependencies": {
+    "@rollup/plugin-typescript": "^12.3.0",
+    "@trivago/prettier-plugin-sort-imports": "^6.0.2",
+    "prettier": "^3.9.6",
+    "rollup": "^4.62.2",
+    "tslib": "^2.8.1",
+    "typescript": "^5.9.3"
+  }
+}

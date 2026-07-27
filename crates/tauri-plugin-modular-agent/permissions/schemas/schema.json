@@ -1,0 +1,666 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "PermissionFile",
+  "description": "Permission file that can define a default permission, a set of permissions or a list of inlined permissions.",
+  "type": "object",
+  "properties": {
+    "default": {
+      "description": "The default permission set for the plugin",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/DefaultPermission"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "set": {
+      "description": "A list of permissions sets defined",
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/PermissionSet"
+      }
+    },
+    "permission": {
+      "description": "A list of inlined permissions",
+      "default": [],
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/Permission"
+      }
+    }
+  },
+  "definitions": {
+    "DefaultPermission": {
+      "description": "The default permission set of the plugin.\n\nWorks similarly to a permission with the \"default\" identifier.",
+      "type": "object",
+      "required": [
+        "permissions"
+      ],
+      "properties": {
+        "version": {
+          "description": "The version of the permission.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 1.0
+        },
+        "description": {
+          "description": "Human-readable description of what the permission does. Tauri convention is to use `<h4>` headings in markdown content for Tauri documentation generation purposes.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "permissions": {
+          "description": "All permissions this set contains.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "PermissionSet": {
+      "description": "A set of direct permissions grouped together under a new name.",
+      "type": "object",
+      "required": [
+        "description",
+        "identifier",
+        "permissions"
+      ],
+      "properties": {
+        "identifier": {
+          "description": "A unique identifier for the permission.",
+          "type": "string"
+        },
+        "description": {
+          "description": "Human-readable description of what the permission does.",
+          "type": "string"
+        },
+        "permissions": {
+          "description": "All permissions this set contains.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/PermissionKind"
+          }
+        }
+      }
+    },
+    "Permission": {
+      "description": "Descriptions of explicit privileges of commands.\n\nIt can enable commands to be accessible in the frontend of the application.\n\nIf the scope is defined it can be used to fine grain control the access of individual or multiple commands.",
+      "type": "object",
+      "required": [
+        "identifier"
+      ],
+      "properties": {
+        "version": {
+          "description": "The version of the permission.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 1.0
+        },
+        "identifier": {
+          "description": "A unique identifier for the permission.",
+          "type": "string"
+        },
+        "description": {
+          "description": "Human-readable description of what the permission does. Tauri internal convention is to use `<h4>` headings in markdown content for Tauri documentation generation purposes.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "commands": {
+          "description": "Allowed or denied commands when using this permission.",
+          "default": {
+            "allow": [],
+            "deny": []
+          },
+          "allOf": [
+            {
+              "$ref": "#/definitions/Commands"
+            }
+          ]
+        },
+        "scope": {
+          "description": "Allowed or denied scoped when using this permission.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/Scopes"
+            }
+          ]
+        },
+        "platforms": {
+          "description": "Target platforms this permission applies. By default all platforms are affected by this permission.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/definitions/Target"
+          }
+        }
+      }
+    },
+    "Commands": {
+      "description": "Allowed and denied commands inside a permission.\n\nIf two commands clash inside of `allow` and `deny`, it should be denied by default.",
+      "type": "object",
+      "properties": {
+        "allow": {
+          "description": "Allowed command.",
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "deny": {
+          "description": "Denied command, which takes priority.",
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "Scopes": {
+      "description": "An argument for fine grained behavior control of Tauri commands.\n\nIt can be of any serde serializable type and is used to allow or prevent certain actions inside a Tauri command. The configured scope is passed to the command and will be enforced by the command implementation.\n\n## Example\n\n```json { \"allow\": [{ \"path\": \"$HOME/**\" }], \"deny\": [{ \"path\": \"$HOME/secret.txt\" }] } ```",
+      "type": "object",
+      "properties": {
+        "allow": {
+          "description": "Data that defines what is allowed by the scope.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/definitions/Value"
+          }
+        },
+        "deny": {
+          "description": "Data that defines what is denied by the scope. This should be prioritized by validation logic.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/definitions/Value"
+          }
+        }
+      }
+    },
+    "Value": {
+      "description": "All supported ACL values.",
+      "anyOf": [
+        {
+          "description": "Represents a null JSON value.",
+          "type": "null"
+        },
+        {
+          "description": "Represents a [`bool`].",
+          "type": "boolean"
+        },
+        {
+          "description": "Represents a valid ACL [`Number`].",
+          "allOf": [
+            {
+              "$ref": "#/definitions/Number"
+            }
+          ]
+        },
+        {
+          "description": "Represents a [`String`].",
+          "type": "string"
+        },
+        {
+          "description": "Represents a list of other [`Value`]s.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Value"
+          }
+        },
+        {
+          "description": "Represents a map of [`String`] keys to [`Value`]s.",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/Value"
+          }
+        }
+      ]
+    },
+    "Number": {
+      "description": "A valid ACL number.",
+      "anyOf": [
+        {
+          "description": "Represents an [`i64`].",
+          "type": "integer",
+          "format": "int64"
+        },
+        {
+          "description": "Represents a [`f64`].",
+          "type": "number",
+          "format": "double"
+        }
+      ]
+    },
+    "Target": {
+      "description": "Platform target.",
+      "oneOf": [
+        {
+          "description": "MacOS.",
+          "type": "string",
+          "enum": [
+            "macOS"
+          ]
+        },
+        {
+          "description": "Windows.",
+          "type": "string",
+          "enum": [
+            "windows"
+          ]
+        },
+        {
+          "description": "Linux.",
+          "type": "string",
+          "enum": [
+            "linux"
+          ]
+        },
+        {
+          "description": "Android.",
+          "type": "string",
+          "enum": [
+            "android"
+          ]
+        },
+        {
+          "description": "iOS.",
+          "type": "string",
+          "enum": [
+            "iOS"
+          ]
+        }
+      ]
+    },
+    "PermissionKind": {
+      "type": "string",
+      "oneOf": [
+        {
+          "description": "Enables the add_agent command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-add-agent",
+          "markdownDescription": "Enables the add_agent command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the add_agent command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-add-agent",
+          "markdownDescription": "Denies the add_agent command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the add_agents_and_connections command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-add-agents-and-connections",
+          "markdownDescription": "Enables the add_agents_and_connections command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the add_agents_and_connections command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-add-agents-and-connections",
+          "markdownDescription": "Denies the add_agents_and_connections command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the add_connection command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-add-connection",
+          "markdownDescription": "Enables the add_connection command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the add_connection command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-add-connection",
+          "markdownDescription": "Denies the add_connection command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the add_preset command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-add-preset",
+          "markdownDescription": "Enables the add_preset command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the add_preset command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-add-preset",
+          "markdownDescription": "Denies the add_preset command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the add_preset_with_name command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-add-preset-with-name",
+          "markdownDescription": "Enables the add_preset_with_name command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the add_preset_with_name command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-add-preset-with-name",
+          "markdownDescription": "Denies the add_preset_with_name command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the get_agent_definition command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-agent-definition",
+          "markdownDescription": "Enables the get_agent_definition command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_agent_definition command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-agent-definition",
+          "markdownDescription": "Denies the get_agent_definition command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the get_agent_definitions command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-agent-definitions",
+          "markdownDescription": "Enables the get_agent_definitions command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_agent_definitions command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-agent-definitions",
+          "markdownDescription": "Denies the get_agent_definitions command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the get_agent_spec command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-agent-spec",
+          "markdownDescription": "Enables the get_agent_spec command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_agent_spec command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-agent-spec",
+          "markdownDescription": "Denies the get_agent_spec command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the get_global_configs command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-global-configs",
+          "markdownDescription": "Enables the get_global_configs command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_global_configs command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-global-configs",
+          "markdownDescription": "Denies the get_global_configs command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the get_global_configs_map command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-global-configs-map",
+          "markdownDescription": "Enables the get_global_configs_map command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_global_configs_map command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-global-configs-map",
+          "markdownDescription": "Denies the get_global_configs_map command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the get_preset_info command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-preset-info",
+          "markdownDescription": "Enables the get_preset_info command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_preset_info command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-preset-info",
+          "markdownDescription": "Denies the get_preset_info command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the get_preset_infos command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-preset-infos",
+          "markdownDescription": "Enables the get_preset_infos command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_preset_infos command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-preset-infos",
+          "markdownDescription": "Denies the get_preset_infos command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the get_preset_spec command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-preset-spec",
+          "markdownDescription": "Enables the get_preset_spec command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_preset_spec command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-preset-spec",
+          "markdownDescription": "Denies the get_preset_spec command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the new_agent_spec command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-new-agent-spec",
+          "markdownDescription": "Enables the new_agent_spec command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the new_agent_spec command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-new-agent-spec",
+          "markdownDescription": "Denies the new_agent_spec command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the new_preset command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-new-preset",
+          "markdownDescription": "Enables the new_preset command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the new_preset command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-new-preset",
+          "markdownDescription": "Denies the new_preset command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the open_preset_from_file command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-open-preset-from-file",
+          "markdownDescription": "Enables the open_preset_from_file command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the open_preset_from_file command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-open-preset-from-file",
+          "markdownDescription": "Denies the open_preset_from_file command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the remove_agent command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-remove-agent",
+          "markdownDescription": "Enables the remove_agent command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the remove_agent command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-remove-agent",
+          "markdownDescription": "Denies the remove_agent command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the remove_connection command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-remove-connection",
+          "markdownDescription": "Enables the remove_connection command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the remove_connection command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-remove-connection",
+          "markdownDescription": "Denies the remove_connection command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the remove_preset command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-remove-preset",
+          "markdownDescription": "Enables the remove_preset command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the remove_preset command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-remove-preset",
+          "markdownDescription": "Denies the remove_preset command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the save_preset command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-save-preset",
+          "markdownDescription": "Enables the save_preset command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the save_preset command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-save-preset",
+          "markdownDescription": "Denies the save_preset command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the set_agent_configs command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-set-agent-configs",
+          "markdownDescription": "Enables the set_agent_configs command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the set_agent_configs command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-set-agent-configs",
+          "markdownDescription": "Denies the set_agent_configs command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the set_global_configs command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-set-global-configs",
+          "markdownDescription": "Enables the set_global_configs command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the set_global_configs command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-set-global-configs",
+          "markdownDescription": "Denies the set_global_configs command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the set_global_configs_map command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-set-global-configs-map",
+          "markdownDescription": "Enables the set_global_configs_map command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the set_global_configs_map command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-set-global-configs-map",
+          "markdownDescription": "Denies the set_global_configs_map command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the start_agent command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-start-agent",
+          "markdownDescription": "Enables the start_agent command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the start_agent command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-start-agent",
+          "markdownDescription": "Denies the start_agent command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the start_preset command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-start-preset",
+          "markdownDescription": "Enables the start_preset command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the start_preset command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-start-preset",
+          "markdownDescription": "Denies the start_preset command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the stop_agent command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-stop-agent",
+          "markdownDescription": "Enables the stop_agent command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the stop_agent command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-stop-agent",
+          "markdownDescription": "Denies the stop_agent command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the stop_preset command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-stop-preset",
+          "markdownDescription": "Enables the stop_preset command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the stop_preset command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-stop-preset",
+          "markdownDescription": "Denies the stop_preset command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the update_agent_spec command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-update-agent-spec",
+          "markdownDescription": "Enables the update_agent_spec command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the update_agent_spec command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-update-agent-spec",
+          "markdownDescription": "Denies the update_agent_spec command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the update_preset_spec command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-update-preset-spec",
+          "markdownDescription": "Enables the update_preset_spec command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the update_preset_spec command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-update-preset-spec",
+          "markdownDescription": "Denies the update_preset_spec command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the write_external_input command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-write-external-input",
+          "markdownDescription": "Enables the write_external_input command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the write_external_input command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-write-external-input",
+          "markdownDescription": "Denies the write_external_input command without any pre-configured scope."
+        },
+        {
+          "description": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-new-preset`\n- `allow-add-preset`\n- `allow-add-preset-with-name`\n- `allow-remove-preset`\n- `allow-start-preset`\n- `allow-stop-preset`\n- `allow-open-preset-from-file`\n- `allow-save-preset`\n- `allow-get-preset-spec`\n- `allow-update-preset-spec`\n- `allow-get-preset-info`\n- `allow-get-preset-infos`\n- `allow-get-agent-definition`\n- `allow-get-agent-definitions`\n- `allow-get-agent-spec`\n- `allow-update-agent-spec`\n- `allow-new-agent-spec`\n- `allow-add-agent`\n- `allow-remove-agent`\n- `allow-add-connection`\n- `allow-remove-connection`\n- `allow-add-agents-and-connections`\n- `allow-start-agent`\n- `allow-stop-agent`\n- `allow-set-agent-configs`\n- `allow-get-global-configs`\n- `allow-get-global-configs-map`\n- `allow-set-global-configs`\n- `allow-set-global-configs-map`\n- `allow-write-external-input`",
+          "type": "string",
+          "const": "default",
+          "markdownDescription": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-new-preset`\n- `allow-add-preset`\n- `allow-add-preset-with-name`\n- `allow-remove-preset`\n- `allow-start-preset`\n- `allow-stop-preset`\n- `allow-open-preset-from-file`\n- `allow-save-preset`\n- `allow-get-preset-spec`\n- `allow-update-preset-spec`\n- `allow-get-preset-info`\n- `allow-get-preset-infos`\n- `allow-get-agent-definition`\n- `allow-get-agent-definitions`\n- `allow-get-agent-spec`\n- `allow-update-agent-spec`\n- `allow-new-agent-spec`\n- `allow-add-agent`\n- `allow-remove-agent`\n- `allow-add-connection`\n- `allow-remove-connection`\n- `allow-add-agents-and-connections`\n- `allow-start-agent`\n- `allow-stop-agent`\n- `allow-set-agent-configs`\n- `allow-get-global-configs`\n- `allow-get-global-configs-map`\n- `allow-set-global-configs`\n- `allow-set-global-configs-map`\n- `allow-write-external-input`"
+        }
+      ]
+    }
+  }
+}
