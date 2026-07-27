@@ -1,6 +1,6 @@
 use std::{path::PathBuf, sync::Mutex};
 
-use anyhow::{anyhow, bail, Context as _, Result};
+use anyhow::{Context as _, Result, anyhow, bail};
 use dirs;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};

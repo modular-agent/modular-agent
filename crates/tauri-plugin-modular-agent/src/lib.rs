@@ -2,8 +2,8 @@
 
 use modular_agent_core::ModularAgent;
 use tauri::{
-    plugin::{Builder, TauriPlugin},
     Manager, RunEvent, Runtime,
+    plugin::{Builder, TauriPlugin},
 };
 
 mod commands;
