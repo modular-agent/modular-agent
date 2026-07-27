@@ -97,7 +97,7 @@ impl AsAgent for IsEmptyStringAgent {
 /// escape sequences (e.g., `\n`, `\t`), and outputs the resulting string.
 ///
 /// # Configuration
-/// - `CONFIG_SEP`: Specifies the separator to use when joining strings. Defaults to an empty string.
+/// - `sep`: Separator inserted between the joined strings. Escape sequences (`\n`, `\t`, `\r`, `\\`) are interpreted (default: `\n`, i.e. a newline).
 ///
 /// # Input
 /// - Expects an array of strings as input value.
@@ -106,7 +106,7 @@ impl AsAgent for IsEmptyStringAgent {
 /// - Produces a single joined string as output.
 ///
 /// # Example
-/// Given the input `["Hello", "World"]` and `CONFIG_SEP` set to `" "`, the output will be `"Hello World"`.
+/// Given the input `["Hello", "World"]` and `sep` set to `" "`, the output will be `"Hello World"`.
 #[modular_agent(
     title = "String Join",
     category = CATEGORY,
