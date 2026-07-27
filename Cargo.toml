@@ -12,12 +12,7 @@ members = [
 ]
 # ma-config must build even when the [patch] block below points at a broken
 # local path, so it stays out of the workspace.
-exclude = [
-    "tools/ma-config",
-    # Not yet unified; folded into tools/ma-config in a follow-up commit.
-    "apps/desktop/tools/ma-config",
-    "apps/cli/tools/ma-config",
-]
+exclude = ["tools/ma-config"]
 
 [workspace.package]
 edition = "2024"

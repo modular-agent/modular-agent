@@ -1,56 +1,48 @@
+use std::collections::BTreeMap;
 use std::path::Path;
 
 use console::Style;
 use dialoguer::{Confirm, Input, MultiSelect, Select};
 
-use crate::config::{AgentEntry, AgentSource, BuildConfig, DepConfig};
+use crate::app::AppKind;
+use crate::config::{AgentEntry, AgentSource, BuildConfig};
 use crate::registry::{self, KnownAgent, Registry};
 
 pub fn run_wizard(
+    app: AppKind,
     existing_config: Option<&BuildConfig>,
-    cli_root: &Path,
+    root: &Path,
     registry: &Registry,
 ) -> Result<BuildConfig, String> {
-    let Registry {
-        ref core,
-        ref agents,
-    } = *registry;
-    let known_agents = agents.as_slice();
+    let known_agents = registry.agents.as_slice();
     let bold = Style::new().bold();
 
     println!();
     println!(
         "{}",
-        bold.apply_to("=== ma-config: Modular Agent CLI Configurator ===")
+        bold.apply_to(format!("=== ma-config: {} ===", app.title()))
     );
     println!();
 
-    // Step 1: Core crate config
-    let core_dep = prompt_dep_config(
-        "modular-agent-core",
-        &core.default_path,
-        &core.git_url,
-        &core.default_version,
-        cli_root,
-    )?;
+    let selected_indices = select_agents(app, existing_config, known_agents)?;
 
-    // Step 2: Agent selection
-    let selected_indices = select_agents(existing_config, known_agents)?;
-
-    // Step 3: Build agent entries, auto-detecting local availability
     let mut agents = Vec::new();
     for idx in &selected_indices {
         let known = &known_agents[*idx];
-        let default_path = known.default_path();
-        let local_exists = cli_root.join(&default_path).join("Cargo.toml").exists();
 
-        let source = if local_exists {
-            prompt_local_or_git(&known.name, &default_path, &known.git_url)?
+        let source = if known.in_tree {
+            AgentSource::Workspace
         } else {
-            println!("  [{}] not found locally, using git", known.name);
-            AgentSource::Git {
-                url: known.git_url.to_string(),
-                tag: None,
+            let default_path = known.default_path();
+            let git_url = known.git_url.as_deref().unwrap_or_default();
+            if root.join(&default_path).join("Cargo.toml").exists() {
+                prompt_local_or_git(&known.name, &default_path, git_url)?
+            } else {
+                println!("  [{}] not found locally, using git", known.name);
+                AgentSource::Git {
+                    url: git_url.to_string(),
+                    tag: None,
+                }
             }
         };
 
@@ -67,10 +59,6 @@ pub fn run_wizard(
         });
     }
 
-    // Step 4: Check conflicts
-    check_conflicts(&agents, known_agents)?;
-
-    // Step 5: Custom agents
     loop {
         let add_custom = Confirm::new()
             .with_prompt("Add a custom agent crate not in the list above?")
@@ -84,14 +72,8 @@ pub fn run_wizard(
         agents.push(prompt_custom_agent()?);
     }
 
-    let config = BuildConfig {
-        core: core_dep,
-        plugin: None,
-        agents,
-    };
-
-    // Step 6: Confirmation
-    print_summary(&config);
+    let config = BuildConfig { agents };
+    print_summary(app, &config);
 
     let confirmed = Confirm::new()
         .with_prompt("Proceed with this configuration?")
@@ -107,6 +89,7 @@ pub fn run_wizard(
 }
 
 fn select_agents(
+    app: AppKind,
     existing_config: Option<&BuildConfig>,
     known_agents: &[KnownAgent],
 ) -> Result<Vec<usize>, String> {
@@ -114,12 +97,9 @@ fn select_agents(
 
     let defaults: Vec<bool> = known_agents
         .iter()
-        .map(|a| {
-            if let Some(config) = existing_config {
-                config.agents.iter().any(|e| e.name == a.name)
-            } else {
-                a.is_default
-            }
+        .map(|a| match existing_config {
+            Some(config) => config.agents.iter().any(|e| e.name == a.name),
+            None => a.is_default_for(app),
         })
         .collect();
 
@@ -144,7 +124,7 @@ fn select_agents(
     Ok(selected)
 }
 
-/// Ask user to choose local path or git for a crate that exists locally.
+/// Ask the user to choose local path or git for a crate that exists locally.
 fn prompt_local_or_git(
     name: &str,
     default_path: &str,
@@ -177,23 +157,19 @@ fn prompt_crate_features(
     let available = &known.available_features;
     let defaults = &known.default_features;
 
-    // Determine pre-selected items: use existing config if editing, else use defaults
     let preselected: Vec<bool> = available
         .iter()
-        .map(|feat| {
-            if let Some(config) = existing_config {
-                config
-                    .agents
-                    .iter()
-                    .find(|a| a.name == known.name)
-                    .map(|a| match &a.crate_features {
-                        None => defaults.contains(feat),
-                        Some(feats) => feats.iter().any(|f| f == feat),
-                    })
-                    .unwrap_or_else(|| defaults.contains(feat))
-            } else {
-                defaults.contains(feat)
-            }
+        .map(|feat| match existing_config {
+            Some(config) => config
+                .agents
+                .iter()
+                .find(|a| a.name == known.name)
+                .map(|a| match &a.crate_features {
+                    None => defaults.contains(feat),
+                    Some(feats) => feats.contains(feat),
+                })
+                .unwrap_or_else(|| defaults.contains(feat)),
+            None => defaults.contains(feat),
         })
         .collect();
 
@@ -247,7 +223,7 @@ fn prompt_custom_agent() -> Result<AgentEntry, String> {
 
     let source = if selection == 0 {
         let path: String = Input::new()
-            .with_prompt("Local path")
+            .with_prompt("Local path (relative to the workspace root)")
             .interact_text()
             .map_err(|e| e.to_string())?;
         AgentSource::Path { path }
@@ -294,97 +270,71 @@ fn prompt_custom_agent() -> Result<AgentEntry, String> {
     })
 }
 
-fn prompt_dep_config(
-    label: &str,
-    default_path: &str,
-    default_git: &str,
-    default_version: &str,
-    root: &Path,
-) -> Result<DepConfig, String> {
-    let local_exists = root.join(default_path).join("Cargo.toml").exists();
-
-    let source = if local_exists {
-        let items = &["Local path", "Git repository", "crates.io (version)"];
-        let selection = Select::new()
-            .with_prompt(format!("[{label}] Source (local found)"))
-            .items(items)
-            .default(0)
-            .interact()
-            .map_err(|e| e.to_string())?;
-        match selection {
-            0 => AgentSource::Path {
-                path: default_path.to_string(),
-            },
-            1 => AgentSource::Git {
-                url: default_git.to_string(),
-                tag: None,
-            },
-            _ => {
-                let version: String = Input::new()
-                    .with_prompt(format!("[{label}] crates.io version"))
-                    .default(default_version.to_string())
-                    .interact_text()
-                    .map_err(|e| e.to_string())?;
-                AgentSource::Registry { version }
-            }
+/// Warn about conflicting agents across every configured app.
+///
+/// The workspace resolves dependencies once for all members, so two apps that
+/// each pick one half of a `links` conflict break the whole workspace, not just
+/// their own build.
+pub fn check_conflicts(
+    configs: &BTreeMap<AppKind, BuildConfig>,
+    registry: &Registry,
+    interactive: bool,
+) -> Result<(), String> {
+    let mut selected: BTreeMap<&str, Vec<AppKind>> = BTreeMap::new();
+    for (app, config) in configs {
+        for agent in &config.agents {
+            selected.entry(agent.name.as_str()).or_default().push(*app);
         }
-    } else {
-        let items = &["crates.io (version)", "Git repository"];
-        let selection = Select::new()
-            .with_prompt(format!("[{label}] Source"))
-            .items(items)
-            .default(0)
-            .interact()
-            .map_err(|e| e.to_string())?;
-        match selection {
-            0 => {
-                let version: String = Input::new()
-                    .with_prompt(format!("[{label}] crates.io version"))
-                    .default(default_version.to_string())
-                    .interact_text()
-                    .map_err(|e| e.to_string())?;
-                AgentSource::Registry { version }
+    }
+
+    let mut reported: Vec<(&str, &str)> = Vec::new();
+    for name in selected.keys() {
+        let Some(known) = registry::find_by_name(&registry.agents, name) else {
+            continue;
+        };
+        for conflict in &known.conflicts {
+            let Some(other_apps) = selected.get(conflict.with.as_str()) else {
+                continue;
+            };
+            // Report each pair once, in a stable order.
+            let pair = if *name < conflict.with.as_str() {
+                (*name, conflict.with.as_str())
+            } else {
+                (conflict.with.as_str(), *name)
+            };
+            if reported.contains(&pair) {
+                continue;
             }
-            _ => AgentSource::Git {
-                url: default_git.to_string(),
-                tag: None,
-            },
-        }
-    };
+            reported.push(pair);
 
-    Ok(DepConfig {
-        default_version: default_version.to_string(),
-        source,
-    })
-}
+            let platform_note = conflict
+                .platform
+                .as_ref()
+                .map(|p| format!(" ({p} only)"))
+                .unwrap_or_default();
+            let apps: Vec<&str> = selected[name]
+                .iter()
+                .chain(other_apps)
+                .map(|a| a.slug())
+                .collect();
 
-fn check_conflicts(entries: &[AgentEntry], known_agents: &[KnownAgent]) -> Result<(), String> {
-    let selected_names: Vec<&str> = entries.iter().map(|a| a.name.as_str()).collect();
+            eprintln!(
+                "  Warning: {} conflicts with {}{}: {} [selected in: {}]",
+                known.name,
+                conflict.with,
+                platform_note,
+                conflict.reason,
+                apps.join(", ")
+            );
 
-    for entry in entries {
-        if let Some(known) = registry::find_by_name(known_agents, &entry.name) {
-            for conflict in &known.conflicts {
-                if selected_names.contains(&conflict.with.as_str()) {
-                    let platform_note = conflict
-                        .platform
-                        .as_ref()
-                        .map(|p| format!(" ({p} only)"))
-                        .unwrap_or_default();
-
-                    eprintln!(
-                        "  Warning: {} conflicts with {}{}: {}",
-                        known.name, conflict.with, platform_note, conflict.reason
-                    );
-
-                    let proceed = Confirm::new()
-                        .with_prompt("Continue anyway?")
-                        .default(false)
-                        .interact()
-                        .map_err(|e| e.to_string())?;
-
-                    if !proceed {
-                        return Err("Cancelled due to conflict".to_string());
-                    }
+            if interactive {
+                let proceed = Confirm::new()
+                    .with_prompt("Continue anyway?")
+                    .default(false)
+                    .interact()
+                    .map_err(|e| e.to_string())?;
+                if !proceed {
+                    return Err("Cancelled due to conflict".to_string());
                 }
             }
         }
@@ -395,6 +345,7 @@ fn check_conflicts(entries: &[AgentEntry], known_agents: &[KnownAgent]) -> Resul
 
 fn format_source(source: &AgentSource) -> String {
     match source {
+        AgentSource::Workspace => "in-tree (workspace)".to_string(),
         AgentSource::Path { path } => format!("path: {path}"),
         AgentSource::Git { url, tag } => {
             let tag_str = tag.as_ref().map(|t| format!(" @ {t}")).unwrap_or_default();
@@ -404,31 +355,27 @@ fn format_source(source: &AgentSource) -> String {
     }
 }
 
-fn print_summary(config: &BuildConfig) {
+fn print_summary(app: AppKind, config: &BuildConfig) {
     let bold = Style::new().bold();
     let dim = Style::new().dim();
 
     println!();
-    println!("{}", bold.apply_to("=== Configuration Summary ==="));
-    println!();
     println!(
-        "  modular-agent-core: {}",
-        format_source(&config.core.source)
+        "{}",
+        bold.apply_to(format!("=== {} configuration ===", app.title()))
     );
     println!();
-    println!("  Agents:");
     for agent in &config.agents {
-        let source_str = format_source(&agent.source);
         let features_str = match &agent.crate_features {
             None => String::new(),
             Some(feats) if feats.is_empty() => " [features: none]".to_string(),
             Some(feats) => format!(" [features: {}]", feats.join(", ")),
         };
         println!(
-            "    {} {} {}{}",
+            "  {} {} {}{}",
             bold.apply_to(&agent.name),
             dim.apply_to("-"),
-            source_str,
+            format_source(&agent.source),
             features_str
         );
     }

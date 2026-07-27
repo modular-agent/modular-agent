@@ -1,7 +1,7 @@
 [package]
 name = "ma-config"
 version = "0.1.0"
-description = "TUI wizard for configuring modular-agent-cli agent selections"
+description = "TUI wizard for choosing which agent crates the Modular Agent apps link"
 authors = ["Akira Ishino <akira@lumilab.jp>"]
 edition = "2024"
 license = "Apache-2.0 OR MIT"

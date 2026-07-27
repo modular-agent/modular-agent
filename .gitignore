@@ -1,4 +1,5 @@
 /target
+/tools/ma-config/target
 lcov.info
 
 # ma-config per-app selections (machine local)
