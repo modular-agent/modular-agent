@@ -5,6 +5,7 @@ description = "Standard Agents of Modular Agent"
 authors.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
 
 [dependencies]
 chrono = "0.4"

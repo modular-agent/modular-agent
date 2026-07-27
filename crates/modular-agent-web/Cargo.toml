@@ -5,6 +5,7 @@ description = "Web Agents for Modular Agent"
 authors.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
 
 [dependencies]
 html-to-markdown-rs = { version = "3.9.0", optional = true }
