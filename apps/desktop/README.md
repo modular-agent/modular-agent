@@ -8,8 +8,8 @@
 <br>
 
 ![Developer Preview](https://img.shields.io/badge/Status-Developer_Preview-orange)
-<!-- [![GitHub release](https://img.shields.io/github/v/release/modular-agent/modular-agent-desktop?style=flat)](https://github.com/modular-agent/modular-agent-desktop/releases) -->
-<!-- [![GitHub downloads](https://img.shields.io/github/downloads/modular-agent/modular-agent-desktop/total?style=flat)](https://github.com/modular-agent/modular-agent-desktop/releases) -->
+<!-- [![GitHub release](https://img.shields.io/github/v/release/modular-agent/modular-agent?style=flat)](https://github.com/modular-agent/modular-agent/releases) -->
+<!-- [![GitHub downloads](https://img.shields.io/github/downloads/modular-agent/modular-agent/total?style=flat)](https://github.com/modular-agent/modular-agent/releases) -->
 
 ![Tauri 2](https://img.shields.io/badge/Tauri_2-24C8D8?logo=tauri&logoColor=white)
 ![Rust](https://img.shields.io/badge/Rust-DEA584?logo=rust&logoColor=white)
@@ -41,7 +41,7 @@ Build AI workflows like a modular synth — patch extensible agents together vis
 
 - 🏠 **Local Execution** — All processing happens on your machine; no cloud dependency
 - 💻 **Cross-Platform** — Windows, macOS, Linux
-- 📦 **Embeddable** — The core runtime ([modular-agent-core](https://github.com/modular-agent/modular-agent-core)) has minimal dependencies and can be embedded into various applications to run presets
+- 📦 **Embeddable** — The core runtime ([modular-agent-core](https://github.com/modular-agent/modular-agent/tree/main/crates/modular-agent-core)) has minimal dependencies and can be embedded into various applications to run presets
 
 ### Editor
 
@@ -62,15 +62,17 @@ Build AI workflows like a modular synth — patch extensible agents together vis
 
 ### Build
 
+From `apps/desktop` in a checkout of the monorepo:
+
 ```bash
 npm install              # Install dependencies
 npm run tauri build      # Build for production
 ```
 
-After building, either copy the executable or run the installer:
+Cargo artifacts land in the workspace-level `target/` directory, at the repository root:
 
-- **Executable** - `src-tauri/target/release/modular-agent-desktop.exe` (Windows) / `modular-agent-desktop` (macOS/Linux)
-- **Installer** - `src-tauri/target/release/bundle/msi/*.msi` (Windows) / `dmg/*.dmg` (macOS) / `deb/*.deb` (Linux)
+- **Executable** - `target/release/modular-agent-desktop.exe` (Windows) / `modular-agent-desktop` (macOS/Linux)
+- **Installer** - `target/release/bundle/nsis/*-setup.exe` (Windows) / `dmg/*.dmg` (macOS) / `deb/*.deb` (Linux)
 
 ### Run
 
@@ -93,7 +95,7 @@ After building, either copy the executable or run the installer:
 
 - **Frontend** - [SvelteKit](https://svelte.dev/docs/kit/) (static adapter) + [Svelte 5](https://svelte.dev/), [TypeScript](https://www.typescriptlang.org/), [Tailwind CSS](https://tailwindcss.com/), [Svelte Flow](https://svelteflow.dev/), [shadcn-svelte](https://www.shadcn-svelte.com/)
 - **Backend** - [Rust](https://www.rust-lang.org/) with [Tauri 2](https://v2.tauri.app/)
-- **Core** - [`modular-agent-core`](https://github.com/modular-agent/modular-agent-core) agent runtime
+- **Core** - [`modular-agent-core`](https://github.com/modular-agent/modular-agent/tree/main/crates/modular-agent-core) agent runtime
 
 ```text
 src/                    # Svelte frontend
@@ -107,8 +109,8 @@ src-tauri/src/          # Rust backend
 
 ### Related Projects
 
-- [modular-agent-core](https://github.com/modular-agent/modular-agent-core) - Modular Agent core runtime
-- [tauri-plugin-modular-agent](https://github.com/modular-agent/tauri-plugin-modular-agent) - Tauri plugin
+- [modular-agent-core](https://github.com/modular-agent/modular-agent/tree/main/crates/modular-agent-core) - Modular Agent core runtime
+- [tauri-plugin-modular-agent](https://github.com/modular-agent/modular-agent/tree/main/crates/tauri-plugin-modular-agent) - Tauri plugin
 
 ## Agent Plugins
 
@@ -116,9 +118,9 @@ The following agent crates are included by default:
 
 | Crate | Description |
 | ----- | ----------- |
-| [modular-agent-std](https://github.com/modular-agent/modular-agent-std) | Standard utility agents |
-| [modular-agent-llm](https://github.com/modular-agent/modular-agent-llm) | LLM integrations (OpenAI, Ollama) |
-| [modular-agent-web](https://github.com/modular-agent/modular-agent-web) | HTTP, scraping, search, YouTube |
+| [modular-agent-std](https://github.com/modular-agent/modular-agent/tree/main/crates/modular-agent-std) | Standard utility agents |
+| [modular-agent-llm](https://github.com/modular-agent/modular-agent/tree/main/crates/modular-agent-llm) | LLM integrations (OpenAI, Ollama) |
+| [modular-agent-web](https://github.com/modular-agent/modular-agent/tree/main/crates/modular-agent-web) | HTTP, scraping, search, YouTube |
 | [modular-agent-slack](https://github.com/modular-agent/modular-agent-slack) | Slack messaging |
 | [modular-agent-sqlx](https://github.com/modular-agent/modular-agent-sqlx) | SQLite, MySQL, PostgreSQL |
 | [modular-agent-audio](https://github.com/modular-agent/modular-agent-audio) | Audio capture/transcription |
@@ -131,10 +133,10 @@ The following agent crates are included by default:
 Use the **ma-config** TUI wizard to select which agent packages to include:
 
 ```bash
-cd tools/ma-config && cargo run
+cargo run --manifest-path ../../tools/ma-config/Cargo.toml -- desktop
 ```
 
-The wizard lets you choose agents, configure sources (local path, Git, or crates.io), and select per-crate features. Configuration is saved to `ma-config.toml` for future rebuilds. After the wizard completes, build with `npm run tauri dev` or `npm run tauri build`.
+The wizard lets you choose agents, pick a source for the ones outside this repository (local checkout or Git), and select per-crate features. Configuration is saved to `apps/desktop/ma-config.toml` for future rebuilds. After the wizard completes, build with `npm run tauri dev` or `npm run tauri build`.
 
 ## Contributing
 

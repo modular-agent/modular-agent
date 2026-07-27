@@ -1,16 +1,16 @@
 <div align="center">
 
-<img alt="Modular Agent" width="150" height="150" src="https://raw.githubusercontent.com/modular-agent/modular-agent-core/main/doc/images/Square150x150Logo.png">
+<img alt="Modular Agent" width="150" height="150" src="https://raw.githubusercontent.com/modular-agent/modular-agent/main/crates/modular-agent-core/doc/images/Square150x150Logo.png">
 <br/>
 
-<img alt="modular-agent-core" height="40" src="https://raw.githubusercontent.com/modular-agent/modular-agent-core/main/doc/images/modular_agent_core_title.svg">
+<img alt="modular-agent-core" height="40" src="https://raw.githubusercontent.com/modular-agent/modular-agent/main/crates/modular-agent-core/doc/images/modular_agent_core_title.svg">
 <br/>
 <br/>
 
-![Language](https://img.shields.io/github/languages/top/modular-agent/modular-agent-core)
+![Language](https://img.shields.io/github/languages/top/modular-agent/modular-agent)
 [![Crates.io](https://img.shields.io/crates/v/modular-agent-core.svg)](https://crates.io/crates/modular-agent-core)
 [![Documentation](https://docs.rs/modular-agent-core/badge.svg)](https://docs.rs/modular-agent-core)
-[![License](https://img.shields.io/crates/l/modular-agent-core.svg)](https://github.com/modular-agent/modular-agent-core#license)
+[![License](https://img.shields.io/crates/l/modular-agent-core.svg)](https://github.com/modular-agent/modular-agent#license)
 
 [English](README.md) | [日本語](README_ja.md)
 
@@ -147,18 +147,18 @@ Full API documentation is available at [docs.rs/modular-agent-core](https://docs
 
 ### Applications
 
-- [modular-agent-desktop](https://github.com/modular-agent/modular-agent-desktop) - Visual presets editor (Tauri 2 + Svelte 5)
+- [modular-agent-desktop](https://github.com/modular-agent/modular-agent/tree/main/apps/desktop) - Visual presets editor (Tauri 2 + Svelte 5)
 
 ### Agent Libraries — General
 
-- [modular-agent-std](https://github.com/modular-agent/modular-agent-std) - Standard utility agents (50+)
-- [modular-agent-llm](https://github.com/modular-agent/modular-agent-llm) - OpenAI, Ollama integration
+- [modular-agent-std](https://github.com/modular-agent/modular-agent/tree/main/crates/modular-agent-std) - Standard utility agents (50+)
+- [modular-agent-llm](https://github.com/modular-agent/modular-agent/tree/main/crates/modular-agent-llm) - OpenAI, Ollama integration
 
 ### Agent Libraries — Data Sources
 
 - [modular-agent-lifelog](https://github.com/modular-agent/modular-agent-lifelog) - Screen capture, window tracking agents
 - [modular-agent-slack](https://github.com/modular-agent/modular-agent-slack) - Slack messaging agents
-- [modular-agent-web](https://github.com/modular-agent/modular-agent-web) - HTTP, scraping, search, YouTube agents
+- [modular-agent-web](https://github.com/modular-agent/modular-agent/tree/main/crates/modular-agent-web) - HTTP, scraping, search, YouTube agents
 
 ### Agent Libraries — Databases
 
@@ -170,7 +170,7 @@ Full API documentation is available at [docs.rs/modular-agent-core](https://docs
 
 ### Plugins
 
-- [tauri-plugin-modular-agent](https://github.com/modular-agent/tauri-plugin-modular-agent) - Tauri plugin bridge
+- [tauri-plugin-modular-agent](https://github.com/modular-agent/modular-agent/tree/main/crates/tauri-plugin-modular-agent) - Tauri plugin bridge
 
 ## License
 

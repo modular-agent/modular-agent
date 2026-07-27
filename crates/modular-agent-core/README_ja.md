@@ -1,16 +1,16 @@
 <div align="center">
 
-<img alt="Modular Agent" width="150" height="150" src="https://raw.githubusercontent.com/modular-agent/modular-agent-core/main/doc/images/Square150x150Logo.png">
+<img alt="Modular Agent" width="150" height="150" src="https://raw.githubusercontent.com/modular-agent/modular-agent/main/crates/modular-agent-core/doc/images/Square150x150Logo.png">
 <br/>
 
-<img alt="modular-agent-core" height="40" src="https://raw.githubusercontent.com/modular-agent/modular-agent-core/main/doc/images/modular_agent_core_title.svg">
+<img alt="modular-agent-core" height="40" src="https://raw.githubusercontent.com/modular-agent/modular-agent/main/crates/modular-agent-core/doc/images/modular_agent_core_title.svg">
 <br/>
 <br/>
 
-![Language](https://img.shields.io/github/languages/top/modular-agent/modular-agent-core)
+![Language](https://img.shields.io/github/languages/top/modular-agent/modular-agent)
 [![Crates.io](https://img.shields.io/crates/v/modular-agent-core.svg)](https://crates.io/crates/modular-agent-core)
 [![Documentation](https://docs.rs/modular-agent-core/badge.svg)](https://docs.rs/modular-agent-core)
-[![License](https://img.shields.io/crates/l/modular-agent-core.svg)](https://github.com/modular-agent/modular-agent-core#license)
+[![License](https://img.shields.io/crates/l/modular-agent-core.svg)](https://github.com/modular-agent/modular-agent#license)
 
 [English](README.md) | [日本語](README_ja.md)
 
@@ -147,18 +147,18 @@ API ドキュメントは [docs.rs/modular-agent-core](https://docs.rs/modular-a
 
 ### アプリケーション
 
-- [modular-agent-desktop](https://github.com/modular-agent/modular-agent-desktop) - ビジュアル Preset エディタ (Tauri 2 + Svelte 5)
+- [modular-agent-desktop](https://github.com/modular-agent/modular-agent/tree/main/apps/desktop) - ビジュアル Preset エディタ (Tauri 2 + Svelte 5)
 
 ### エージェントライブラリ — 汎用
 
-- [modular-agent-std](https://github.com/modular-agent/modular-agent-std) - 標準ユーティリティエージェント (50+)
-- [modular-agent-llm](https://github.com/modular-agent/modular-agent-llm) - OpenAI, Ollama 連携
+- [modular-agent-std](https://github.com/modular-agent/modular-agent/tree/main/crates/modular-agent-std) - 標準ユーティリティエージェント (50+)
+- [modular-agent-llm](https://github.com/modular-agent/modular-agent/tree/main/crates/modular-agent-llm) - OpenAI, Ollama 連携
 
 ### エージェントライブラリ — データソース
 
 - [modular-agent-lifelog](https://github.com/modular-agent/modular-agent-lifelog) - スクリーンキャプチャ、ウィンドウトラッキング
 - [modular-agent-slack](https://github.com/modular-agent/modular-agent-slack) - Slack メッセージング
-- [modular-agent-web](https://github.com/modular-agent/modular-agent-web) - HTTP、スクレイピング、YouTube
+- [modular-agent-web](https://github.com/modular-agent/modular-agent/tree/main/crates/modular-agent-web) - HTTP、スクレイピング、YouTube
 
 ### エージェントライブラリ — データベース
 
@@ -170,7 +170,7 @@ API ドキュメントは [docs.rs/modular-agent-core](https://docs.rs/modular-a
 
 ### プラグイン
 
-- [tauri-plugin-modular-agent](https://github.com/modular-agent/tauri-plugin-modular-agent) - Tauri プラグインブリッジ
+- [tauri-plugin-modular-agent](https://github.com/modular-agent/modular-agent/tree/main/crates/tauri-plugin-modular-agent) - Tauri プラグインブリッジ
 
 ## ライセンス
 

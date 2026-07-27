@@ -4,23 +4,23 @@ CLI runner for [Modular Agent](https://github.com/modular-agent) presets. Loads 
 
 ## Build
 
+From a checkout of the monorepo:
+
 ```bash
-cargo build
+cargo build -p modular-agent-cli
 ```
+
+The `ma` binary lands in the workspace-level `target/` directory at the repository root.
 
 ### Custom Configuration with ma-config
 
 `ma-config` is a TUI wizard that lets you select which agent crates to include and configure their sources (local path or Git repository).
 
 ```bash
-# Run the wizard
-cd tools/ma-config && cargo run
-
-# Use a specific config file
-cargo run -- server.toml
+cargo run --manifest-path tools/ma-config/Cargo.toml -- cli
 ```
 
-The wizard generates `Cargo.toml` dependencies and `src/agents.rs` based on your selections. Configuration is saved to `ma-config.toml` for subsequent runs.
+The wizard generates `apps/cli/Cargo.toml` dependencies and `apps/cli/src/agents.rs` based on your selections. Configuration is saved to `apps/cli/ma-config.toml` for subsequent runs.
 
 ## Usage
 
@@ -68,15 +68,15 @@ Input is read line-by-line from stdin. String output is printed as-is; other typ
 | [modular-agent-duckdb](https://github.com/modular-agent/modular-agent-duckdb) | DuckDB analytics | |
 | [modular-agent-lancedb](https://github.com/modular-agent/modular-agent-lancedb) | LanceDB vector database | |
 | [modular-agent-lifelog](https://github.com/modular-agent/modular-agent-lifelog) | Screen capture, window tracking | |
-| [modular-agent-llm](https://github.com/modular-agent/modular-agent-llm) | LLM (OpenAI, Anthropic, Google, etc.) | Yes |
+| [modular-agent-llm](https://github.com/modular-agent/modular-agent/tree/main/crates/modular-agent-llm) | LLM (OpenAI, Anthropic, Google, etc.) | Yes |
 | [modular-agent-mongodb](https://github.com/modular-agent/modular-agent-mongodb) | MongoDB CRUD | |
 | [modular-agent-monty](https://github.com/modular-agent/modular-agent-monty) | Monty | |
 | [modular-agent-slack](https://github.com/modular-agent/modular-agent-slack) | Slack messaging | Yes |
 | [modular-agent-sqlx](https://github.com/modular-agent/modular-agent-sqlx) | SQL database (PostgreSQL, MySQL, SQLite) | Yes |
-| [modular-agent-std](https://github.com/modular-agent/modular-agent-std) | Standard (timer, template, file, etc.) | Yes |
+| [modular-agent-std](https://github.com/modular-agent/modular-agent/tree/main/crates/modular-agent-std) | Standard (timer, template, file, etc.) | Yes |
 | [modular-agent-surrealdb](https://github.com/modular-agent/modular-agent-surrealdb) | SurrealDB graph database | |
 | [modular-agent-voicevox](https://github.com/modular-agent/modular-agent-voicevox) | VOICEVOX text-to-speech | |
-| [modular-agent-web](https://github.com/modular-agent/modular-agent-web) | Web/HTTP, scraping, search, YouTube | Yes |
+| [modular-agent-web](https://github.com/modular-agent/modular-agent/tree/main/crates/modular-agent-web) | Web/HTTP, scraping, search, YouTube | Yes |
 
 Agent selection and features are managed by the `ma-config` wizard.
 
@@ -84,7 +84,7 @@ Agent selection and features are managed by the `ma-config` wizard.
 
 ### Adding Custom Agents
 
-To add a custom agent package, edit `tools/ma-config/registry.yaml`:
+To add a custom agent package, edit `tools/ma-config/registry.yaml` at the repository root:
 
 ```yaml
   - name: my-custom

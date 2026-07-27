@@ -9,8 +9,8 @@
 <br>
 
 ![Developer Preview](https://img.shields.io/badge/Status-Developer_Preview-orange)
-<!-- [![GitHub release](https://img.shields.io/github/v/release/modular-agent/modular-agent-desktop?style=flat)](https://github.com/modular-agent/modular-agent-desktop/releases) -->
-<!-- [![GitHub downloads](https://img.shields.io/github/downloads/modular-agent/modular-agent-desktop/total?style=flat)](https://github.com/modular-agent/modular-agent-desktop/releases) -->
+<!-- [![GitHub release](https://img.shields.io/github/v/release/modular-agent/modular-agent?style=flat)](https://github.com/modular-agent/modular-agent/releases) -->
+<!-- [![GitHub downloads](https://img.shields.io/github/downloads/modular-agent/modular-agent/total?style=flat)](https://github.com/modular-agent/modular-agent/releases) -->
 
 ![Tauri 2](https://img.shields.io/badge/Tauri_2-24C8D8?logo=tauri&logoColor=white)
 ![Rust](https://img.shields.io/badge/Rust-DEA584?logo=rust&logoColor=white)
@@ -42,7 +42,7 @@
 
 - 🏠 **ローカル実行** — すべての処理はローカルマシン上で完結。クラウド不要
 - 💻 **クロスプラットフォーム** — Windows、macOS、Linux
-- 📦 **組み込み可能** — コアランタイム（[modular-agent-core](https://github.com/modular-agent/modular-agent-core)）は依存関係を最小限に抑えており、さまざまなアプリに組み込んでプリセットを実行できる
+- 📦 **組み込み可能** — コアランタイム（[modular-agent-core](https://github.com/modular-agent/modular-agent/tree/main/crates/modular-agent-core)）は依存関係を最小限に抑えており、さまざまなアプリに組み込んでプリセットを実行できる
 
 ### エディタ
 
@@ -63,15 +63,17 @@
 
 ### ビルド
 
+monorepo のチェックアウト内の `apps/desktop` で:
+
 ```bash
 npm install              # 依存パッケージのインストール
 npm run tauri build      # プロダクションビルド
 ```
 
-ビルド後、実行ファイルをコピーするか、インストーラーを実行してください:
+Cargo の成果物はリポジトリルートの workspace 共通 `target/` に出力されます:
 
-- **実行ファイル** - `src-tauri/target/release/modular-agent-desktop.exe`（Windows）/ `modular-agent-desktop`（macOS/Linux）
-- **インストーラー** - `src-tauri/target/release/bundle/msi/*.msi`（Windows）/ `dmg/*.dmg`（macOS）/ `deb/*.deb`（Linux）
+- **実行ファイル** - `target/release/modular-agent-desktop.exe`（Windows）/ `modular-agent-desktop`（macOS/Linux）
+- **インストーラー** - `target/release/bundle/nsis/*-setup.exe`（Windows）/ `dmg/*.dmg`（macOS）/ `deb/*.deb`（Linux）
 
 ### 実行
 
@@ -94,7 +96,7 @@ npm run tauri build      # プロダクションビルド
 
 - **フロントエンド** - [SvelteKit](https://svelte.dev/docs/kit/)（静的アダプタ）+ [Svelte 5](https://svelte.dev/)、[TypeScript](https://www.typescriptlang.org/)、[Tailwind CSS](https://tailwindcss.com/)、[Svelte Flow](https://svelteflow.dev/)、[shadcn-svelte](https://www.shadcn-svelte.com/)
 - **バックエンド** - [Rust](https://www.rust-lang.org/) + [Tauri 2](https://v2.tauri.app/)
-- **コア** - [`modular-agent-core`](https://github.com/modular-agent/modular-agent-core) エージェントランタイム
+- **コア** - [`modular-agent-core`](https://github.com/modular-agent/modular-agent/tree/main/crates/modular-agent-core) エージェントランタイム
 
 ```text
 src/                    # Svelteフロントエンド
@@ -108,8 +110,8 @@ src-tauri/src/          # Rustバックエンド
 
 ### 関連プロジェクト
 
-- [modular-agent-core](https://github.com/modular-agent/modular-agent-core) - Modular Agentコアランタイム
-- [tauri-plugin-modular-agent](https://github.com/modular-agent/tauri-plugin-modular-agent) - Tauriプラグイン
+- [modular-agent-core](https://github.com/modular-agent/modular-agent/tree/main/crates/modular-agent-core) - Modular Agentコアランタイム
+- [tauri-plugin-modular-agent](https://github.com/modular-agent/modular-agent/tree/main/crates/tauri-plugin-modular-agent) - Tauriプラグイン
 
 ## エージェントプラグイン
 
@@ -117,9 +119,9 @@ src-tauri/src/          # Rustバックエンド
 
 | Crate | 説明 |
 | ----- | ---- |
-| [modular-agent-std](https://github.com/modular-agent/modular-agent-std) | 標準ユーティリティエージェント |
-| [modular-agent-llm](https://github.com/modular-agent/modular-agent-llm) | LLM連携（OpenAI、Ollama） |
-| [modular-agent-web](https://github.com/modular-agent/modular-agent-web) | HTTP、スクレイピング、YouTube |
+| [modular-agent-std](https://github.com/modular-agent/modular-agent/tree/main/crates/modular-agent-std) | 標準ユーティリティエージェント |
+| [modular-agent-llm](https://github.com/modular-agent/modular-agent/tree/main/crates/modular-agent-llm) | LLM連携（OpenAI、Ollama） |
+| [modular-agent-web](https://github.com/modular-agent/modular-agent/tree/main/crates/modular-agent-web) | HTTP、スクレイピング、YouTube |
 | [modular-agent-slack](https://github.com/modular-agent/modular-agent-slack) | Slackメッセージング |
 | [modular-agent-sqlx](https://github.com/modular-agent/modular-agent-sqlx) | SQLite、MySQL、PostgreSQL |
 | [modular-agent-audio](https://github.com/modular-agent/modular-agent-audio) | 音声キャプチャ・文字起こし |
@@ -132,10 +134,10 @@ src-tauri/src/          # Rustバックエンド
 **ma-config** TUIウィザードで、ビルドに含めるエージェントパッケージを選択できます:
 
 ```bash
-cd tools/ma-config && cargo run
+cargo run --manifest-path ../../tools/ma-config/Cargo.toml -- desktop
 ```
 
-ウィザードではエージェントの選択、ソースの設定（ローカルパス、Git、crates.io）、クレートごとのfeature選択が可能です。設定は `ma-config.toml` に保存され、次回以降のリビルドに再利用できます。ウィザード完了後、`npm run tauri dev` または `npm run tauri build` でビルドしてください。
+ウィザードではエージェントの選択、リポジトリ外エージェントのソース設定（ローカルチェックアウトまたは Git）、クレートごとの feature 選択が可能です。設定は `apps/desktop/ma-config.toml` に保存され、次回以降のリビルドに再利用できます。ウィザード完了後、`npm run tauri dev` または `npm run tauri build` でビルドしてください。
 
 ## コントリビューション
 
