@@ -1,3 +1,7 @@
+// Release builds check `Send` on futures holding `im::Vector<ToolCall>`, and im's
+// sized-chunks type-level arithmetic recurses past the default limit of 128.
+#![recursion_limit = "256"]
+
 use clap::Parser;
 use modular_agent_core::mcp_server::{McpServerConfig, start_mcp_server};
 use modular_agent_core::{AgentError, AgentValue, ModularAgent, ModularAgentEvent};
