@@ -59,4 +59,4 @@ cargo run --manifest-path tools/ma-config/Cargo.toml -- cli
 
 ## License
 
-Licensed under either of Apache License 2.0 or MIT license at your option.
+Licensed under the Apache License, Version 2.0. See [LICENSE_APACHE-2.0](LICENSE_APACHE-2.0).

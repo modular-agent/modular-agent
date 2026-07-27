@@ -96,4 +96,4 @@ Then re-run `ma-config` to include it in the configuration.
 
 ## License
 
-Apache-2.0 OR MIT
+Apache-2.0

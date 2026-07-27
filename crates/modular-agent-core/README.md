@@ -174,4 +174,4 @@ Full API documentation is available at [docs.rs/modular-agent-core](https://docs
 
 ## License
 
-Dual-licensed under [Apache 2.0](LICENSE-APACHE) or [MIT](LICENSE-MIT).
+Licensed under the [Apache License, Version 2.0](../../LICENSE_APACHE-2.0).

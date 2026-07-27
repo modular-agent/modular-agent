@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "TUI wizard for choosing which agent crates the Modular Agent apps link"
 authors = ["Akira Ishino <akira@lumilab.jp>"]
 edition = "2024"
-license = "Apache-2.0 OR MIT"
+license = "Apache-2.0"
 publish = false
 
 [[bin]]

@@ -174,4 +174,4 @@ API ドキュメントは [docs.rs/modular-agent-core](https://docs.rs/modular-a
 
 ## ライセンス
 
-[Apache 2.0](LICENSE-APACHE) または [MIT](LICENSE-MIT) のデュアルライセンスです。
+[Apache License, Version 2.0](../../LICENSE_APACHE-2.0) の下でライセンスされています。

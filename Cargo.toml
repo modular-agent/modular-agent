@@ -17,7 +17,7 @@ exclude = ["tools/ma-config"]
 [workspace.package]
 edition = "2024"
 authors = ["Akira Ishino <akira@lumilab.jp>"]
-license = "Apache-2.0 OR MIT"
+license = "Apache-2.0"
 repository = "https://github.com/modular-agent/modular-agent"
 
 [workspace.dependencies]
