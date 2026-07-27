@@ -1,0 +1,9 @@
+/target
+lcov.info
+
+# ma-config per-app selections (machine local)
+/apps/*/ma-config.toml
+
+*.bak
+__pycache__/
+.DS_Store
