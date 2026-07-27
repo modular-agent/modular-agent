@@ -1,0 +1,233 @@
+<script lang="ts" module>
+</script>
+
+<script lang="ts">
+  import { onDestroy, untrack } from "svelte";
+
+  import AlertCircleIcon from "@lucide/svelte/icons/alert-circle";
+  import { useSvelteFlow, useNodeConnections, type NodeProps } from "@xyflow/svelte";
+  import { getAgentSpec } from "tauri-plugin-modular-agent-api";
+  import type { AgentSpec } from "tauri-plugin-modular-agent-api";
+
+  import { getAgentDefinitions, resolveNodeColor } from "$lib/agent";
+  import * as Alert from "$lib/components/ui/alert/index.js";
+  import { Button } from "$lib/components/ui/button/index.js";
+  import * as HoverCard from "$lib/components/ui/hover-card/index.js";
+  import { Input } from "$lib/components/ui/input/index.js";
+  import { sharedAgentEvents } from "$lib/shared.svelte";
+
+  import AgentConfig from "./agent-config.svelte";
+  import { useEditor } from "./context.svelte";
+  import { getNodeView } from "./custom-ui/registry";
+  import NodeBase from "./node-base.svelte";
+
+  type Props = NodeProps & {
+    id: string;
+    data: AgentSpec;
+  };
+
+  let { id, data, ...props }: Props = $props();
+
+  // Capture id as a non-reactive value — node id never changes during the component's lifetime.
+  // svelte-ignore state_referenced_locally
+  const nodeId = id;
+
+  const editor = useEditor();
+  const agentDefs = getAgentDefinitions();
+  const agentDef = $derived(agentDefs[data?.def_name] ?? null);
+  // const description = $derived(agentDef.description);
+
+  let errorMessages = $state<string[]>([]);
+  let inputMessage = $state<string>("");
+  let inputCount = $state(0);
+
+  const connections = useNodeConnections({ handleType: "target" });
+
+  let connectedConfigs = $derived(
+    connections.current
+      .filter((c) => c.target === id && c.targetHandle?.startsWith("config:"))
+      .map((c) => c.targetHandle?.substring(7) ?? ""),
+  );
+
+  const agentEvent = sharedAgentEvents.getAgent(nodeId);
+
+  // Config update — $effect.pre for synchronous-like timing (before DOM update)
+  // untrack the read/write of `data` to avoid cycle: read data → updateNodeData → data changes → re-trigger
+  $effect.pre(() => {
+    const { key, value, seq } = agentEvent.configUpdated;
+    if (!seq) return;
+    untrack(() => {
+      let currentValue = data.configs?.[key];
+      if (currentValue === value) return;
+      // Snapshot: `value` read from the deeply-reactive agents store is a $state
+      // proxy for objects/arrays. Nodes are $state.raw, and a proxy stored there
+      // makes SvelteFlow's structuredClone (toObject/Handle) throw DataCloneError.
+      const newConfigs = { ...data.configs, [key]: $state.snapshot(value) };
+      updateNodeData(id, { ...data, configs: newConfigs });
+    });
+  });
+
+  // Error messages
+  // untrack to avoid cycle: .push() reads array → mutates → re-trigger
+  $effect(() => {
+    const { message, seq } = agentEvent.error;
+    if (!seq) return;
+    untrack(() => errorMessages.push(message));
+  });
+
+  // Input messages
+  // untrack to avoid cycle: inputCount += 1 reads then writes → re-trigger
+  $effect(() => {
+    const { port, seq } = agentEvent.input;
+    if (!seq) return;
+    untrack(() => {
+      inputMessage = port;
+      inputCount += 1;
+    });
+  });
+
+  // Spec updated — refetch agent spec from backend
+  $effect(() => {
+    const seq = agentEvent.specUpdated;
+    if (!seq) return;
+    getAgentSpec(id).then((spec) => {
+      if (spec) {
+        updateNodeData(id, { ...spec });
+        // The update may have changed port_colors; recolor outgoing edges
+        editor.refreshEdgeColorsForNode(id, spec.port_colors ?? null);
+      }
+    });
+  });
+
+  onDestroy(() => sharedAgentEvents.removeAgent(nodeId));
+
+  const { updateNodeData } = useSvelteFlow();
+
+  async function updateConfig(key: string, value: any) {
+    const oldValue = data.configs?.[key];
+    await editor.updateNodeConfig(id, key, oldValue, value);
+  }
+
+  function clearError() {
+    errorMessages = [];
+  }
+
+  // Custom NodeView registered for this agent type (replaces the default
+  // config iteration in the contents area when present).
+  const NodeView = $derived(getNodeView(data.def_name));
+
+  let hide_title = $derived(agentDef?.hide_title ?? false);
+  let editTitle = $state(false);
+  let titleColor = $derived(resolveNodeColor(data, agentDef));
+  let titleColorStyle = $derived(`color: ${titleColor}`);
+</script>
+
+{#snippet title()}
+  {#if hide_title}
+    <div class="flex-none mt-1">
+      <div class="flex flex-col flex-nowrap items-start"></div>
+    </div>
+  {:else}
+    <div class="flex-none mt-1">
+      <div class="flex flex-col flex-nowrap items-center">
+        {#if agentDef}
+          <div class="flex flex-row space-x-2">
+            {#if editTitle}
+              <Input
+                class="nodrag text-left"
+                type="text"
+                value={data.title ?? agentDef.title ?? data.def_name}
+                autofocus
+                onblur={() => (editTitle = false)}
+                onkeydown={(evt) => {
+                  if (evt.key === "Enter") {
+                    const newTitle = evt.currentTarget.value;
+                    const oldTitle = data.title ?? null;
+                    if (newTitle === "" || newTitle === (agentDef.title ?? data.def_name)) {
+                      if (oldTitle !== null) editor.updateNodeTitle(id, oldTitle, null);
+                    } else if (newTitle !== oldTitle) {
+                      editor.updateNodeTitle(id, oldTitle, newTitle);
+                    }
+                    editTitle = false;
+                  }
+                }}
+              />
+            {:else}
+              <button
+                type="button"
+                ondblclick={() => (editTitle = true)}
+                class="flex-none"
+                tabindex={-1}
+              >
+                <div class="text-xl font-semibold" style={titleColorStyle}>
+                  {data.title ?? agentDef.title ?? data.def_name}
+                </div>
+              </button>
+              {#if errorMessages.length > 0}
+                <HoverCard.Root>
+                  <HoverCard.Trigger class="ml-4">
+                    <AlertCircleIcon color="red" />
+                  </HoverCard.Trigger>
+                  <HoverCard.Content class="w-full max-w-xl">
+                    <div class="flex flex-col gap-2 mb-2">
+                      {#each errorMessages as msg}
+                        <Alert.Root variant="destructive">
+                          <Alert.Description>
+                            <div>{msg}</div>
+                          </Alert.Description>
+                        </Alert.Root>
+                      {/each}
+                    </div>
+                    <Button onclick={clearError} variant="outline">Clear</Button>
+                  </HoverCard.Content>
+                </HoverCard.Root>
+              {/if}
+            {/if}
+          </div>
+        {:else}
+          <h3 class="text-xl">
+            <s>{data.def_name}</s>
+          </h3>
+        {/if}
+      </div>
+    </div>
+  {/if}
+{/snippet}
+
+{#snippet contents()}
+  {#if NodeView}
+    <NodeView
+      nodeId={id}
+      defName={data.def_name}
+      configs={data.configs ?? {}}
+      configSpecs={data.config_specs ?? {}}
+      {updateConfig}
+      {agentEvent}
+      {connectedConfigs}
+      running={editor.running}
+    />
+  {:else if data.configs}
+    <form class="grow flex flex-col gap-1 pl-7 pr-7 pb-4">
+      {#each Object.entries(data.configs) as [key, value]}
+        <AgentConfig
+          name={key}
+          {value}
+          configSpec={data.config_specs?.[key]}
+          connected={connectedConfigs.includes(key)}
+          {updateConfig}
+        />
+      {/each}
+    </form>
+  {/if}
+{/snippet}
+
+<NodeBase
+  {id}
+  {data}
+  {agentDef}
+  {inputCount}
+  portColors={data.port_colors}
+  {title}
+  {contents}
+  {...props}
+/>
