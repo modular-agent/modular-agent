@@ -1,0 +1,17 @@
+[package]
+name = "modular-agent-macros"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Procedural macro helpers for modular-agent-core"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+im = { workspace = true }
+proc-macro2 = "1"
+quote = "1"
+syn = { version = "2", features = ["full"] }

@@ -1,0 +1,55 @@
+{
+  "id": "10",
+  "name": "Core/External2",
+  "agents": [
+    {
+      "id": "432",
+      "def_name": "modular_agent_core::external_agent::ExternalOutputAgent",
+      "inputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "out"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": 4599.6755598828695,
+      "y": 294.31749787094986
+    },
+    {
+      "id": "433",
+      "def_name": "modular_agent_core::external_agent::ExternalInputAgent",
+      "outputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "channel2"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": 4201.95405906633,
+      "y": 295.40120768243906
+    }
+  ],
+  "connections": [
+    {
+      "source": "433",
+      "source_handle": "value",
+      "target": "432",
+      "target_handle": "value"
+    }
+  ],
+  "viewport": {
+    "x": -3247.37936347749,
+    "y": -71.58331017277237,
+    "zoom": 0.9227562483962616
+  }
+}
