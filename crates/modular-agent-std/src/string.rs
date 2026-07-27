@@ -1,0 +1,455 @@
+use handlebars::Handlebars;
+use im::vector;
+use modular_agent_core::{
+    Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
+    ModularAgent, async_trait, modular_agent,
+};
+use serde_json::json;
+
+const CATEGORY: &str = "Std/String";
+
+const PORT_STRING: &str = "string";
+const PORT_STRINGS: &str = "strings";
+const PORT_VALUE: &str = "value";
+const PORT_T: &str = "t";
+const PORT_F: &str = "f";
+
+const CONFIG_LEN: &str = "len";
+const CONFIG_OVERLAP: &str = "overlap";
+const CONFIG_SEP: &str = "sep";
+const CONFIG_TEMPLATE: &str = "template";
+
+/// Check if the input is a string.
+#[modular_agent(
+    title = "IsString",
+    category = CATEGORY,
+    inputs = [PORT_VALUE],
+    outputs = [PORT_T, PORT_F],
+    hint(color=5),
+)]
+struct IsStringAgent {
+    data: AgentData,
+}
+
+#[async_trait]
+impl AsAgent for IsStringAgent {
+    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+        Ok(Self {
+            data: AgentData::new(ma, id, spec),
+        })
+    }
+
+    async fn process(
+        &mut self,
+        ctx: AgentContext,
+        _port: String,
+        value: AgentValue,
+    ) -> Result<(), AgentError> {
+        if value.is_string() {
+            self.output(ctx, PORT_T, value).await
+        } else {
+            self.output(ctx, PORT_F, value).await
+        }
+    }
+}
+
+/// Check if the input string is empty.
+#[modular_agent(
+    title = "IsEmptyString",
+    category = CATEGORY,
+    inputs = [PORT_STRING],
+    outputs = [PORT_T, PORT_F],
+    hint(color=5),
+)]
+struct IsEmptyStringAgent {
+    data: AgentData,
+}
+
+#[async_trait]
+impl AsAgent for IsEmptyStringAgent {
+    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+        Ok(Self {
+            data: AgentData::new(ma, id, spec),
+        })
+    }
+
+    async fn process(
+        &mut self,
+        ctx: AgentContext,
+        _port: String,
+        value: AgentValue,
+    ) -> Result<(), AgentError> {
+        let is_empty = if let Some(s) = value.as_str() {
+            s.is_empty()
+        } else {
+            false
+        };
+        if is_empty {
+            self.output(ctx, PORT_T, value).await
+        } else {
+            self.output(ctx, PORT_F, value).await
+        }
+    }
+}
+
+/// The `StringJoinAgent` is responsible for joining an array of strings into a single string
+/// using a specified separator. It processes input value, applies transformations to handle
+/// escape sequences (e.g., `\n`, `\t`), and outputs the resulting string.
+///
+/// # Configuration
+/// - `sep`: Separator inserted between the joined strings. Escape sequences (`\n`, `\t`, `\r`, `\\`) are interpreted (default: `\n`, i.e. a newline).
+///
+/// # Input
+/// - Expects an array of strings as input value.
+///
+/// # Output
+/// - Produces a single joined string as output.
+///
+/// # Example
+/// Given the input `["Hello", "World"]` and `sep` set to `" "`, the output will be `"Hello World"`.
+#[modular_agent(
+    title = "String Join",
+    category = CATEGORY,
+    inputs = [PORT_STRINGS],
+    outputs = [PORT_STRING],
+    string_config(name = CONFIG_SEP, default = "\\n"),
+    hint(color=5),
+)]
+struct StringJoinAgent {
+    data: AgentData,
+}
+
+#[async_trait]
+impl AsAgent for StringJoinAgent {
+    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+        Ok(Self {
+            data: AgentData::new(ma, id, spec),
+        })
+    }
+
+    async fn process(
+        &mut self,
+        ctx: AgentContext,
+        _port: String,
+        value: AgentValue,
+    ) -> Result<(), AgentError> {
+        let config = self.configs()?;
+
+        let sep = config.get_string_or_default(CONFIG_SEP);
+
+        if value.is_array() {
+            let mut out = Vec::new();
+            for v in value
+                .as_array()
+                .ok_or_else(|| AgentError::InvalidArrayValue("Expected array".into()))?
+            {
+                out.push(v.as_str().unwrap_or_default());
+            }
+            let mut out = out.join(&sep);
+            out = out.replace("\\n", "\n");
+            out = out.replace("\\t", "\t");
+            out = out.replace("\\r", "\r");
+            out = out.replace("\\\\", "\\");
+            let out_value = AgentValue::string(out);
+            self.output(ctx, PORT_STRING, out_value).await
+        } else {
+            self.output(ctx, PORT_STRING, value).await
+        }
+    }
+}
+
+#[modular_agent(
+    title = "String Length Split",
+    category = CATEGORY,
+    inputs = [PORT_STRING],
+    outputs = [PORT_STRINGS],
+    integer_config(name = CONFIG_LEN, default = 65536),
+    integer_config(name = CONFIG_OVERLAP, default = 1024),
+    hint(color=5),
+)]
+struct StringLengthSplitAgent {
+    data: AgentData,
+}
+
+#[async_trait]
+impl AsAgent for StringLengthSplitAgent {
+    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+        Ok(Self {
+            data: AgentData::new(ma, id, spec),
+        })
+    }
+
+    async fn process(
+        &mut self,
+        ctx: AgentContext,
+        _port: String,
+        value: AgentValue,
+    ) -> Result<(), AgentError> {
+        let config = self.configs()?;
+
+        let n = config.get_integer_or_default(CONFIG_LEN);
+        if n <= 0 {
+            return Err(AgentError::InvalidConfig(
+                "len must be greater than 0".into(),
+            ));
+        }
+        let n = n as usize;
+
+        let overlap = config.get_integer_or_default(CONFIG_OVERLAP) as usize;
+        if overlap >= n {
+            return Err(AgentError::InvalidConfig(
+                "overlap must be less than len".into(),
+            ));
+        }
+
+        let s = value
+            .as_str()
+            .ok_or_else(|| AgentError::InvalidValue("Input value must be a string".into()))?;
+
+        let mut out = Vec::new();
+        let mut start = 0;
+        let len = s.len();
+        while start < len {
+            let mut end = usize::min(start + n, len);
+            while !s.is_char_boundary(end) {
+                end -= 1;
+            }
+            if end <= start {
+                end = start + s[start..].chars().next().map(|c| c.len_utf8()).unwrap_or(1);
+            }
+
+            out.push(AgentValue::string(s[start..end].to_string()));
+
+            if end == len {
+                break;
+            }
+
+            let mut next_start = end.saturating_sub(overlap);
+            while next_start < len && !s.is_char_boundary(next_start) {
+                next_start += 1;
+            }
+            start = next_start;
+        }
+        self.output(ctx, PORT_STRINGS, AgentValue::array(out.into()))
+            .await
+    }
+}
+
+// Template String Agent
+#[modular_agent(
+    title = "Template String",
+    category = CATEGORY,
+    inputs = [PORT_VALUE],
+    outputs = [PORT_STRING],
+    string_config(name = CONFIG_TEMPLATE, default = "{{value}}"),
+    hint(color=5),
+)]
+struct TemplateStringAgent {
+    data: AgentData,
+}
+
+#[async_trait]
+impl AsAgent for TemplateStringAgent {
+    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+        Ok(Self {
+            data: AgentData::new(ma, id, spec),
+        })
+    }
+
+    async fn process(
+        &mut self,
+        ctx: AgentContext,
+        _port: String,
+        value: AgentValue,
+    ) -> Result<(), AgentError> {
+        let config = self.configs()?;
+
+        let template = config.get_string_or_default(CONFIG_TEMPLATE);
+        if template.is_empty() {
+            return Err(AgentError::InvalidConfig("template is not set".into()));
+        }
+
+        let reg = handlebars_new();
+
+        if value.is_array() {
+            let mut out_arr = Vec::new();
+            for v in value
+                .as_array()
+                .ok_or_else(|| AgentError::InvalidArrayValue("Expected array".into()))?
+            {
+                let data = json!({"value": v});
+                let rendered_string = reg.render_template(&template, &data).map_err(|e| {
+                    AgentError::InvalidValue(format!("Failed to render template: {}", e))
+                })?;
+                out_arr.push(rendered_string.into());
+            }
+            self.output(ctx, PORT_STRING, AgentValue::array(out_arr.into()))
+                .await
+        } else {
+            let data = json!({"value": value});
+            let rendered_string = reg.render_template(&template, &data).map_err(|e| {
+                AgentError::InvalidValue(format!("Failed to render template: {}", e))
+            })?;
+            let out_value = AgentValue::string(rendered_string);
+            self.output(ctx, PORT_STRING, out_value).await
+        }
+    }
+}
+
+// Template Text Agent
+#[modular_agent(
+    title = "Template Text",
+    category = CATEGORY,
+    inputs = [PORT_VALUE],
+    outputs = [PORT_STRING],
+    text_config(name = CONFIG_TEMPLATE, default = "{{value}}"),
+    hint(color=5),
+)]
+struct TemplateTextAgent {
+    data: AgentData,
+}
+
+#[async_trait]
+impl AsAgent for TemplateTextAgent {
+    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+        Ok(Self {
+            data: AgentData::new(ma, id, spec),
+        })
+    }
+
+    async fn process(
+        &mut self,
+        ctx: AgentContext,
+        _port: String,
+        value: AgentValue,
+    ) -> Result<(), AgentError> {
+        let config = self.configs()?;
+
+        let template = config.get_string_or_default(CONFIG_TEMPLATE);
+        if template.is_empty() {
+            return Err(AgentError::InvalidConfig("template is not set".into()));
+        }
+
+        let reg = handlebars_new();
+
+        if value.is_array() {
+            let mut out_arr = Vec::new();
+            for v in value
+                .as_array()
+                .ok_or_else(|| AgentError::InvalidArrayValue("Expected array".into()))?
+            {
+                let data = json!({"value": v});
+                let rendered_string = reg.render_template(&template, &data).map_err(|e| {
+                    AgentError::InvalidValue(format!("Failed to render template: {}", e))
+                })?;
+                out_arr.push(rendered_string.into());
+            }
+            self.output(ctx, PORT_STRING, AgentValue::array(out_arr.into()))
+                .await
+        } else {
+            let data = json!({"value": value});
+            let rendered_string = reg.render_template(&template, &data).map_err(|e| {
+                AgentError::InvalidValue(format!("Failed to render template: {}", e))
+            })?;
+            let out_value = AgentValue::string(rendered_string);
+            self.output(ctx, PORT_STRING, out_value).await
+        }
+    }
+}
+
+// Template Array Agent
+#[modular_agent(
+    title = "Template Array",
+    category = CATEGORY,
+    inputs = [PORT_VALUE],
+    outputs = [PORT_STRING],
+    text_config(name = CONFIG_TEMPLATE, default = "{{value}}"),
+    hint(color=5),
+)]
+struct TemplateArrayAgent {
+    data: AgentData,
+}
+
+#[async_trait]
+impl AsAgent for TemplateArrayAgent {
+    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+        Ok(Self {
+            data: AgentData::new(ma, id, spec),
+        })
+    }
+
+    async fn process(
+        &mut self,
+        ctx: AgentContext,
+        _port: String,
+        value: AgentValue,
+    ) -> Result<(), AgentError> {
+        let config = self.configs()?;
+
+        let template = config.get_string_or_default(CONFIG_TEMPLATE);
+        if template.is_empty() {
+            return Err(AgentError::InvalidConfig("template is not set".into()));
+        }
+
+        let reg = handlebars_new();
+
+        if value.is_array() {
+            let rendered_string = reg.render_template(&template, &value).map_err(|e| {
+                AgentError::InvalidValue(format!("Failed to render template: {}", e))
+            })?;
+            self.output(ctx, PORT_STRING, AgentValue::string(rendered_string))
+                .await
+        } else {
+            let d = AgentValue::array(vector![value.clone()]);
+            let rendered_string = reg.render_template(&template, &d).map_err(|e| {
+                AgentError::InvalidValue(format!("Failed to render template: {}", e))
+            })?;
+            let out_value = AgentValue::string(rendered_string);
+            self.output(ctx, PORT_STRING, out_value).await
+        }
+    }
+}
+
+fn handlebars_new<'a>() -> Handlebars<'a> {
+    let mut reg = Handlebars::new();
+    reg.register_escape_fn(handlebars::no_escape);
+    reg.register_helper("to_json", Box::new(to_json_helper));
+
+    #[cfg(feature = "yaml")]
+    reg.register_helper("to_yaml", Box::new(to_yaml_helper));
+
+    reg
+}
+
+fn to_json_helper(
+    h: &handlebars::Helper<'_>,
+    _: &handlebars::Handlebars<'_>,
+    _: &handlebars::Context,
+    _: &mut handlebars::RenderContext<'_, '_>,
+    out: &mut dyn handlebars::Output,
+) -> handlebars::HelperResult {
+    if let Some(value) = h.param(0) {
+        let json_str = serde_json::to_string_pretty(&value.value()).map_err(|e| {
+            handlebars::RenderErrorReason::Other(format!("Failed to serialize to JSON: {}", e))
+        })?;
+        out.write(&json_str)?;
+    }
+    Ok(())
+}
+
+#[cfg(feature = "yaml")]
+fn to_yaml_helper(
+    h: &handlebars::Helper<'_>,
+    _: &handlebars::Handlebars<'_>,
+    _: &handlebars::Context,
+    _: &mut handlebars::RenderContext<'_, '_>,
+    out: &mut dyn handlebars::Output,
+) -> handlebars::HelperResult {
+    if let Some(value) = h.param(0) {
+        let yaml_str = serde_yaml_ng::to_string(&value.value()).map_err(|e| {
+            handlebars::RenderErrorReason::Other(format!("Failed to serialize to YAML: {}", e))
+        })?;
+        out.write(&yaml_str)?;
+    }
+    Ok(())
+}

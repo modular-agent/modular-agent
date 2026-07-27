@@ -1,0 +1,36 @@
+[package]
+name = "modular-agent-std"
+version = "0.16.0"
+description = "Standard Agents of Modular Agent"
+authors = ["Akira Ishino <akira@lumilab.jp>"]
+edition = "2024"
+license = "Apache-2.0 OR MIT"
+
+[dependencies]
+chrono = "0.4"
+cron = "0.17"
+glob = "0.3.3"
+handlebars = "6"
+im = "15"
+log = "0.4"
+mini-moka = "0.10.3"
+modular-agent-core = "0.25.0"
+regex = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml_ng = { version = "0.10.0", optional = true }
+tokio = { version = "1", features = ["time"] }
+
+[features]
+default = ["image", "yaml"]
+image = []
+test-utils = ["modular-agent-core/test-utils", "tokio/macros"]
+yaml = ["serde_yaml_ng"]
+
+[[test]]
+name = "main_test"
+path = "tests/main_test.rs"
+required-features = ["test-utils"]
+
+# [patch.crates-io]
+# modular-agent-core = { path = "../modular-agent-core/modular-agent-core" }

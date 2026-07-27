@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "verbatimModuleSyntax": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    // Editor-only DX: at build time the desktop's vite-plugin-agent-ui
+    // aliases @modular-agent/widget-kit to the desktop's copy.
+    "paths": {
+      "@modular-agent/widget-kit": ["../../modular-agent-desktop/widget-kit/src/index.ts"]
+    }
+  },
+  "include": ["src"]
+}
