@@ -1,0 +1,18 @@
+# Revisions to skip in `git blame` (formatting-only changes).
+# Enable locally with:
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+#
+# SHAs from before the monorepo merge were rewritten by git-filter-repo; the
+# hashes below are the rewritten ones and only resolve in this repository.
+
+# apps/desktop: format source with prettier
+d376a5264b744e6a4f50c24cec6dad51521d10c4
+
+# apps/desktop: apply cargo fmt
+9760216174e569cdc1294ac87282efb61b268639
+
+# crates/tauri-plugin-modular-agent: format source with prettier
+49cb41248eee247d1f19d7174b1ff0ff7a7c8b95
+
+# crates/tauri-plugin-modular-agent: apply cargo fmt
+e0a1da6891e83dbca7a6080235334a6df7f5530a
