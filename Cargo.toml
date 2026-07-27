@@ -1,15 +1,60 @@
 [workspace]
-members = ["modular-agent-core", "modular-agent-macros"]
 resolver = "2"
+members = [
+    "crates/modular-agent-macros",
+    "crates/modular-agent-core",
+    "crates/modular-agent-std",
+    "crates/modular-agent-llm",
+    "crates/modular-agent-web",
+    "crates/tauri-plugin-modular-agent",
+    "apps/desktop/src-tauri",
+    "apps/cli",
+]
+# ma-config must build even when the [patch] block below points at a broken
+# local path, so it stays out of the workspace.
+exclude = [
+    "tools/ma-config",
+    # Not yet unified; folded into tools/ma-config in a follow-up commit.
+    "apps/desktop/tools/ma-config",
+    "apps/cli/tools/ma-config",
+]
 
 [workspace.package]
 edition = "2024"
-version = "0.26.0"
-description = "Modular Agent Core"
 authors = ["Akira Ishino <akira@lumilab.jp>"]
 license = "Apache-2.0 OR MIT"
-repository = "https://github.com/modular-agent/modular-agent-core"
+repository = "https://github.com/modular-agent/modular-agent"
 
 [workspace.dependencies]
-modular-agent-macros = { version = "0.26.0", path = "modular-agent-macros" }
+# In-tree crates: `path` is what the workspace builds against, `version` is what
+# a published crate records for its dependents. Each crate keeps its own semver
+# line; only core and macros are bumped together.
+modular-agent-macros = { version = "0.26.0", path = "crates/modular-agent-macros" }
+modular-agent-core = { version = "0.26.0", path = "crates/modular-agent-core" }
+modular-agent-std = { version = "0.16.0", path = "crates/modular-agent-std" }
+modular-agent-llm = { version = "0.14.0", path = "crates/modular-agent-llm" }
+modular-agent-web = { version = "0.9.0", path = "crates/modular-agent-web" }
+tauri-plugin-modular-agent = { version = "0.17.0", path = "crates/tauri-plugin-modular-agent" }
+
+# Shared external dependencies. Crates whose feature sets diverge (tokio,
+# reqwest) keep their own entries.
+async-trait = "0.1"
 im = { version = "15.1.0", features = ["serde"] }
+log = "0.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+
+# Out-of-tree agent crates depend on modular-agent-core (and the Tauri plugin)
+# from crates.io. Redirect those to the in-tree crates so the workspace links a
+# single copy: agent registration goes through `inventory`, and two linked
+# copies of core mean two separate agent registries.
+[patch.crates-io]
+modular-agent-core = { path = "crates/modular-agent-core" }
+tauri-plugin-modular-agent = { path = "crates/tauri-plugin-modular-agent" }
+
+# Local source overrides for out-of-tree agent crates, written by ma-config.
+# Everything between the markers is generated — edit through the wizard, not by
+# hand. Delete the entries to build from the canonical sources again.
+# ===== ma-config managed: external-agent local overrides (BEGIN) =====
+# ===== ma-config managed (END) =====
