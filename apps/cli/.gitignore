@@ -1,0 +1,5 @@
+/target
+lcov.info
+ma-config.toml
+*.bak
+tools/ma-config/target
