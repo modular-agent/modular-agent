@@ -1,0 +1,15 @@
+# Every issue goes through a template. Questions and open-ended discussion belong in
+# the organization Discussions, which cover all modular-agent repositories at once.
+blank_issues_enabled: false
+contact_links:
+  - name: Questions and usage help
+    url: https://github.com/orgs/modular-agent/discussions/categories/q-a
+    about: Ask the community if it is not a bug report or a feature request.
+  - name: Ideas, showcases, and announcements
+    url: https://github.com/orgs/modular-agent/discussions
+    about: Share a workflow you built, float an idea, or catch up on releases.
+  - name: Agent libraries outside this repository
+    url: https://github.com/modular-agent
+    about: >-
+      Databases, audio, VoiceVox, Slack, lifelog, and others ship from their own
+      repositories. Please report those there.

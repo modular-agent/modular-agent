@@ -1,0 +1,52 @@
+name: Feature request
+description: Suggest an idea for this project
+type: Feature
+body:
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      description: Which part of the repository would this land in?
+      options:
+        - desktop (apps/desktop)
+        - cli (apps/cli, the `ma` runner)
+        - core (crates/modular-agent-core)
+        - macros (crates/modular-agent-macros)
+        - std (crates/modular-agent-std)
+        - llm (crates/modular-agent-llm)
+        - web (crates/modular-agent-web)
+        - tauri-plugin (crates/tauri-plugin-modular-agent)
+        - ma-config (tools/ma-config)
+        - Other / not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Is your feature request related to a problem? Please describe.
+      description: >-
+        A clear and concise description of what the problem is.
+        Ex. I'm always frustrated when [...]
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Describe the solution you'd like
+      description: A clear and concise description of what you want to happen.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Describe alternatives you've considered
+      description: >-
+        Any alternative solutions or features you've considered, including
+        whether an existing agent can already be wired up to do this.
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Screenshots, preset sketches, or anything else that helps.

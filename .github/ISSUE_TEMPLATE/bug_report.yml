@@ -1,0 +1,87 @@
+name: Bug report
+description: Create a report to help us improve
+type: Bug
+body:
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      description: Which part of the repository does this affect?
+      options:
+        - desktop (apps/desktop)
+        - cli (apps/cli, the `ma` runner)
+        - core (crates/modular-agent-core)
+        - macros (crates/modular-agent-macros)
+        - std (crates/modular-agent-std)
+        - llm (crates/modular-agent-llm)
+        - web (crates/modular-agent-web)
+        - tauri-plugin (crates/tauri-plugin-modular-agent)
+        - ma-config (tools/ma-config)
+        - Other / not sure
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: >-
+        The release you are running, using the tag prefix of the component
+        above. If you built from source, give the commit SHA instead.
+      placeholder: desktop-v0.18.0
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: OS
+      placeholder: Windows 11, macOS Tahoe 26.2, Ubuntu 24.04, ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Describe the bug
+      description: A clear and concise description of what the bug is.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: To Reproduce
+      description: >-
+        Steps to reproduce the behavior. If a workflow preset triggers it,
+        attach the preset JSON or the smallest agent graph that still fails.
+      placeholder: |
+        1. Go to '...'
+        2. Click on '....'
+        3. Scroll down to '....'
+        4. See error
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: A clear and concise description of what you expected to happen.
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: >-
+        Relevant console or terminal output. This is rendered as a code block,
+        so no backticks are needed.
+      render: text
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Screenshots and anything else that helps explain the problem.

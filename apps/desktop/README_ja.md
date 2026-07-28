@@ -142,7 +142,7 @@ cargo run --manifest-path ../../tools/ma-config/Cargo.toml -- desktop
 ## コントリビューション
 
 - ⭐ **スターで応援する** — プロジェクトを広めるのに役立ちます
-- 🤝 PR歓迎 — [CONTRIBUTING.md](CONTRIBUTING.md) を参照
+- 🤝 PR歓迎 — [CONTRIBUTING.md](../../CONTRIBUTING.md) を参照
 
 ## ライセンス
 

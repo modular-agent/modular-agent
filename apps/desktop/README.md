@@ -141,7 +141,7 @@ The wizard lets you choose agents, pick a source for the ones outside this repos
 ## Contributing
 
 - ⭐ **Star to show support** — Helps the project reach more people
-- 🤝 Pull requests welcome — see [CONTRIBUTING.md](CONTRIBUTING.md)
+- 🤝 Pull requests welcome — see [CONTRIBUTING.md](../../CONTRIBUTING.md)
 
 ## License
 
