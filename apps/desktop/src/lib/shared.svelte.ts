@@ -8,6 +8,7 @@ import type {
   AgentInMessage,
   AgentSpecUpdatedMessage,
   PresetRemovedMessage,
+  PresetRunningChangedMessage,
   PresetStructureChangedMessage,
 } from "./types";
 
@@ -57,6 +58,11 @@ export const sharedAgentEvents = new SharedAgentEvents();
 class SharedPresetEvents {
   // presetId → latest seq of an externally-originated structure change
   structureChanged = $state<Record<string, number>>({});
+
+  // presetId → latest externally-originated run state. Without this, a preset
+  // started from MCP, auto-start, or another window leaves the UI showing the
+  // state it had when the tab was opened.
+  runningChanged = $state<Record<string, { running: boolean; seq: number }>>({});
 }
 
 export const sharedPresetEvents = new SharedPresetEvents();
@@ -100,6 +106,12 @@ $effect.root(() => {
     if (!isExternalOrigin(event.payload.origin)) return;
     const { preset_id } = event.payload;
     sharedPresetEvents.structureChanged[preset_id] = ++eventSeq;
+  });
+
+  listen<PresetRunningChangedMessage>("ma:preset_running_changed", (event) => {
+    if (!isExternalOrigin(event.payload.origin)) return;
+    const { preset_id, running } = event.payload;
+    sharedPresetEvents.runningChanged[preset_id] = { running, seq: ++eventSeq };
   });
 
   listen<PresetRemovedMessage>("ma:preset_removed", (event) => {

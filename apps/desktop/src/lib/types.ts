@@ -38,6 +38,12 @@ export type PresetRemovedMessage = {
   name: string | null;
 };
 
+export type PresetRunningChangedMessage = {
+  origin: string | null;
+  preset_id: string;
+  running: boolean;
+};
+
 export type PresetRenamedMessage = {
   origin: string | null;
   id: string;
@@ -79,7 +85,6 @@ export type CoreSettings = {
   shortcut_keys?: Record<string, string> | null;
   snap_enabled?: boolean;
   snap_grid_size?: number;
-  show_grid?: boolean;
   grid_gap?: number;
   max_history_length?: number;
   connection_opacity?: number;

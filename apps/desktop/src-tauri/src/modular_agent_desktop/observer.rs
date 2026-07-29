@@ -14,6 +14,7 @@ const EMIT_PRESET_STRUCTURE_CHANGED: &str = "ma:preset_structure_changed";
 const EMIT_PRESET_LIST_CHANGED: &str = "ma:preset_list_changed";
 const EMIT_PRESET_REMOVED: &str = "ma:preset_removed";
 const EMIT_PRESET_RENAMED: &str = "ma:preset_renamed";
+const EMIT_PRESET_RUNNING_CHANGED: &str = "ma:preset_running_changed";
 
 pub fn start_modular_agent_observer(ma: &ModularAgent, app: AppHandle) {
     let mut rx = ma.subscribe();
@@ -63,6 +64,14 @@ fn handle_event(app: &AppHandle, origin: Option<String>, event: ModularAgentEven
         }
         ModularAgentEvent::PresetRemoved { preset_id, name } => {
             emit_preset_removed(app, origin, preset_id, name)?;
+        }
+        // Both directions land on one event: the frontend tracks a boolean, not
+        // two separate signals.
+        ModularAgentEvent::PresetStarted { preset_id } => {
+            emit_preset_running_changed(app, origin, preset_id, true)?;
+        }
+        ModularAgentEvent::PresetStopped { preset_id } => {
+            emit_preset_running_changed(app, origin, preset_id, false)?;
         }
         ModularAgentEvent::PresetRenamed {
             preset_id,
@@ -249,6 +258,30 @@ fn emit_preset_renamed(
         },
     )
     .context("Failed to emit preset renamed message")
+}
+
+fn emit_preset_running_changed(
+    app: &AppHandle,
+    origin: Option<String>,
+    preset_id: String,
+    running: bool,
+) -> Result<()> {
+    #[derive(Clone, Serialize)]
+    struct PresetRunningChangedMessage {
+        origin: Option<String>,
+        preset_id: String,
+        running: bool,
+    }
+
+    app.emit(
+        EMIT_PRESET_RUNNING_CHANGED,
+        PresetRunningChangedMessage {
+            origin,
+            preset_id,
+            running,
+        },
+    )
+    .context("Failed to emit preset running changed message")
 }
 
 fn emit_preset_list_changed(app: &AppHandle, origin: Option<String>, path: String) -> Result<()> {

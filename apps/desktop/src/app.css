@@ -49,6 +49,7 @@
   --agent-highlight: #fcfc02;
   --connection-default: #b8bcc4;
   --link-color: oklch(0.546 0.245 262.881);
+  --board-blueprint-line: oklch(0.76 0.1 265);
 }
 
 .dark {
@@ -95,6 +96,7 @@
   --agent-highlight: oklch(0.9537 0.1071 104.23);
   --connection-default: oklch(0.8315 0.0121 264.5);
   --link-color: oklch(0.488 0.243 264.376);
+  --board-blueprint-line: oklch(0.42 0.07 265);
 }
 
 @theme inline {
@@ -152,6 +154,7 @@
   --color-connection-image: var(--connection-image);
   --color-connection-err: var(--connection-err);
   --color-link-color: var(--link-color);
+  --color-board-blueprint-line: var(--board-blueprint-line);
 }
 
 @layer base {

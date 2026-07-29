@@ -12,7 +12,6 @@
   import Menubar from "$lib/components/preset-editor/menubar.svelte";
   import PresetActions from "$lib/components/preset-editor/preset-actions.svelte";
   import PresetName from "$lib/components/preset-editor/preset-name.svelte";
-  import PresetStatus from "$lib/components/preset-status.svelte";
   import { titlebarState } from "$lib/titlebar-state.svelte";
 
   const isMacos = navigator.userAgent.includes("Mac");
@@ -114,7 +113,6 @@
           onStartPreset={handleStart}
           onStopPreset={handleStop}
         />
-        <PresetStatus running={titlebarState.running} />
       </div>
     {/if}
 

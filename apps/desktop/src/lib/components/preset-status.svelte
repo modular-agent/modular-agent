@@ -5,7 +5,7 @@
   import { cn } from "$lib/utils";
 
   type Props = {
-    running: boolean;
+    running?: boolean | undefined;
     run_on_start?: boolean | undefined;
     class?: string;
   };
@@ -13,6 +13,8 @@
   let { running, run_on_start, class: className }: Props = $props();
 </script>
 
+<!-- The `running` badge is for the preset list, where a row has no other way to
+     show its state. The editor says it with the board instead. -->
 <div class={cn("flex flex-none gap-2", className)}>
   {#if running}
     <Badge variant="outline" class="text-muted-foreground px-1.5">

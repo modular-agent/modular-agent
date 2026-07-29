@@ -78,8 +78,6 @@ async function withErrorLog<T>(fn: () => Promise<T>, message: string): Promise<T
   }
 }
 
-const BG_COLORS = ["bg-background dark:bg-background", "bg-muted dark:bg-muted"];
-
 const EXTERNAL_MERGE_DEBOUNCE_MS = 300;
 
 /** Cascade step applied to each paste so repeated pastes never fully overlap. */
@@ -119,7 +117,6 @@ export class EditorState {
   // Grid/Snap state
   snapEnabled = $state(coreSettingsStore.snapEnabled);
   snapGridSize = $state(coreSettingsStore.snapGridSize);
-  showGrid = $state(coreSettingsStore.showGrid);
   gridGap = $state(coreSettingsStore.gridGap);
   modifierPressed = $state(false);
   resizing = $state(false);
@@ -153,7 +150,6 @@ export class EditorState {
   // Derived
   preset_id = $derived.by(() => this.props.preset_id());
   name = $derived.by(() => this.props.flow().name);
-  bgColor = $derived(this.running ? BG_COLORS[0] : BG_COLORS[1]);
   selectedCount = $derived(this.nodes.filter((n) => n.selected).length);
   dirty = $derived.by(() => this.history.dirty);
 
@@ -167,6 +163,8 @@ export class EditorState {
 
   // External change merge: last consumed structure-change seq and debounce timer
   private lastStructureSeq = 0;
+  // Last consumed run-state seq, so a replayed record doesn't undo a local toggle
+  private lastRunningSeq = 0;
   private externalMergeTimer: ReturnType<typeof setTimeout> | null = null;
   // Generation token: only the most recently started merge/reload may apply
   // its fetched snapshot, so overlapping runs cannot finish out of order.
@@ -184,6 +182,7 @@ export class EditorState {
     // landing mid-fetch still satisfies seq > lastStructureSeq and merges.
     this.lastStructureSeq =
       props.flow().baseStructureSeq ?? sharedPresetEvents.structureChanged[props.preset_id()] ?? 0;
+    this.lastRunningSeq = sharedPresetEvents.runningChanged[props.preset_id()]?.seq ?? 0;
 
     // Merge externally-originated structure changes into the canvas.
     // Tracks only this preset's key in the shared record.
@@ -203,11 +202,21 @@ export class EditorState {
       };
     });
 
+    // Adopt run-state changes made outside this window (MCP, auto-start, tray).
+    // Our own start/stop carries origin "desktop" and never reaches here.
+    $effect(() => {
+      const entry = sharedPresetEvents.runningChanged[this.preset_id];
+      untrack(() => {
+        if (!entry || entry.seq <= this.lastRunningSeq) return;
+        this.lastRunningSeq = entry.seq;
+        this.running = entry.running;
+      });
+    });
+
     // Subscribe to runtime settings changes
     $effect(() => {
       const snap = coreSettingsStore.snapEnabled;
       const size = coreSettingsStore.snapGridSize;
-      const grid = coreSettingsStore.showGrid;
       const gap = coreSettingsStore.gridGap;
       const opacity = coreSettingsStore.connectionOpacity;
       const maxLen = coreSettingsStore.maxHistoryLength;
@@ -215,7 +224,6 @@ export class EditorState {
       untrack(() => {
         this.snapEnabled = snap;
         this.snapGridSize = size;
-        this.showGrid = grid;
         this.gridGap = gap;
         this.connectionOpacity = opacity;
         this.history.setMaxLength(maxLen);
@@ -1122,11 +1130,6 @@ export class EditorState {
     this.saveGridSettings();
   }
 
-  toggleGrid() {
-    this.showGrid = !this.showGrid;
-    this.saveGridSettings();
-  }
-
   setConnectionOpacity(value: number) {
     this.connectionOpacity = Math.max(0, Math.min(1, value));
     this.saveGridSettings();
@@ -1137,7 +1140,6 @@ export class EditorState {
       const settings = getCoreSettings();
       settings.snap_enabled = this.snapEnabled;
       settings.snap_grid_size = this.snapGridSize;
-      settings.show_grid = this.showGrid;
       settings.grid_gap = this.gridGap;
       settings.connection_opacity = this.connectionOpacity;
       await setCoreSettings(settings);

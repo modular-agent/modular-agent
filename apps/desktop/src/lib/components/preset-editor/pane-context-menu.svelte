@@ -8,7 +8,6 @@
     y = 0,
     running = false,
     snapEnabled = false,
-    showGrid = false,
     hotkeys = [],
     onstart,
     onstop,
@@ -24,14 +23,12 @@
     onpaste,
     onaddagent,
     ontogglesnap,
-    ontogglegrid,
   }: {
     open: boolean;
     x: number;
     y: number;
     running: boolean;
     snapEnabled: boolean;
-    showGrid: boolean;
     hotkeys: ResolvedHotkeys;
     onstart?: () => void;
     onstop?: () => void;
@@ -47,7 +44,6 @@
     onpaste?: () => void;
     onaddagent?: () => void;
     ontogglesnap?: () => void;
-    ontogglegrid?: () => void;
   } = $props();
 
   const anchor = $derived({
@@ -122,10 +118,6 @@
           onCheckedChange={() => handle(ontogglesnap)}
         >
           Snap to Grid
-        </ContextMenu.CheckboxItem>
-        <ContextMenu.CheckboxItem checked={showGrid} onCheckedChange={() => handle(ontogglegrid)}>
-          Show Grid
-          <ContextMenu.Shortcut>{hk("editor.toggle_grid")}</ContextMenu.Shortcut>
         </ContextMenu.CheckboxItem>
       </ContextMenu.SubContent>
     </ContextMenu.Sub>

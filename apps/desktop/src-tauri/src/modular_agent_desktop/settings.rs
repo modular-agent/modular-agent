@@ -69,9 +69,6 @@ pub struct CoreSettings {
     pub snap_grid_size: Option<u32>,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub show_grid: Option<bool>,
-
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub grid_gap: Option<u32>,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -118,7 +115,6 @@ impl Default for CoreSettings {
             shortcut_keys: Some(SHORTCUT_KEYS.clone()),
             snap_enabled: None,
             snap_grid_size: None,
-            show_grid: None,
             grid_gap: None,
             max_history_length: None,
             connection_opacity: None,

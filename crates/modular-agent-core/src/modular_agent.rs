@@ -496,12 +496,23 @@ impl ModularAgent {
     ///
     /// This starts all agents in the preset, enabling message flow between them.
     /// Each agent's [`start()`](crate::AsAgent::start) method is called.
+    ///
+    /// Emits [`ModularAgentEvent::PresetStarted`] when the preset was not
+    /// already running.
     pub async fn start_preset(&self, id: &str) -> Result<(), AgentError> {
         let preset = self
             .get_preset(id)
             .ok_or_else(|| AgentError::PresetNotFound(id.to_string()))?;
-        let mut preset = preset.lock().await;
-        preset.start(self).await?;
+        // Emit outside the preset lock so observers cannot deadlock against it.
+        let started = {
+            let mut preset = preset.lock().await;
+            let was_running = preset.running();
+            preset.start(self).await?;
+            !was_running && preset.running()
+        };
+        if started {
+            self.emit_preset_started(id.to_string());
+        }
 
         Ok(())
     }
@@ -510,12 +521,21 @@ impl ModularAgent {
     ///
     /// This stops all agents in the preset, terminating message processing.
     /// Each agent's [`stop()`](crate::AsAgent::stop) method is called.
+    ///
+    /// Emits [`ModularAgentEvent::PresetStopped`] when the preset was running.
     pub async fn stop_preset(&self, id: &str) -> Result<(), AgentError> {
         let preset = self
             .get_preset(id)
             .ok_or_else(|| AgentError::PresetNotFound(id.to_string()))?;
-        let mut preset = preset.lock().await;
-        preset.stop(self).await?;
+        let stopped = {
+            let mut preset = preset.lock().await;
+            let was_running = preset.running();
+            preset.stop(self).await?;
+            was_running && !preset.running()
+        };
+        if stopped {
+            self.emit_preset_stopped(id.to_string());
+        }
 
         Ok(())
     }
@@ -1816,6 +1836,14 @@ impl ModularAgent {
         self.notify_observers(ModularAgentEvent::PresetRemoved { preset_id, name });
     }
 
+    pub(crate) fn emit_preset_started(&self, preset_id: String) {
+        self.notify_observers(ModularAgentEvent::PresetStarted { preset_id });
+    }
+
+    pub(crate) fn emit_preset_stopped(&self, preset_id: String) {
+        self.notify_observers(ModularAgentEvent::PresetStopped { preset_id });
+    }
+
     pub(crate) fn emit_preset_renamed(
         &self,
         preset_id: String,
@@ -1947,6 +1975,18 @@ pub enum ModularAgentEvent {
         preset_id: String,
         name: Option<String>,
     },
+
+    /// A preset started running.
+    ///
+    /// Emitted by [`ModularAgent::start_preset`] only on an actual transition,
+    /// so starting an already-running preset produces no event.
+    PresetStarted { preset_id: String },
+
+    /// A preset stopped running.
+    ///
+    /// Emitted by [`ModularAgent::stop_preset`] only on an actual transition.
+    /// Removing a preset emits [`ModularAgentEvent::PresetRemoved`] instead.
+    PresetStopped { preset_id: String },
 
     /// A preset was renamed.
     ///

@@ -37,7 +37,6 @@
   let mcp_server_token = $state("");
   let run_in_background = $state(false);
   let shortcut_keys = $state<Record<string, string>>({});
-  let show_grid = $state(true);
   let snap_enabled = $state(true);
   let snap_grid_size = $state(CORE_DEFAULTS.snapGridSize);
 
@@ -87,7 +86,6 @@
     mcp_server_port = settings["mcp_server_port"] ?? CORE_DEFAULTS.mcpServerPort;
     mcp_server_token = settings["mcp_server_token"] ?? "";
     run_in_background = settings["run_in_background"] ?? false;
-    show_grid = settings["show_grid"] ?? true;
     snap_enabled = settings["snap_enabled"] ?? true;
     snap_grid_size = settings["snap_grid_size"] ?? CORE_DEFAULTS.snapGridSize;
 
@@ -263,11 +261,6 @@
           onCheckedChange={(v) => autoSave({ snap_enabled: v })}
         />
         <FieldLabel>Snap to Grid</FieldLabel>
-      </Field>
-
-      <Field orientation="horizontal">
-        <Switch bind:checked={show_grid} onCheckedChange={(v) => autoSave({ show_grid: v })} />
-        <FieldLabel>Show Grid</FieldLabel>
       </Field>
 
       <Field orientation="vertical">

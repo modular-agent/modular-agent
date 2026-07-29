@@ -146,7 +146,7 @@ All keyboard shortcuts are defined in `src/lib/hotkeys.ts` and customizable via 
   - Node drag/resize: SvelteFlow moves/resizes → `handleNodeDragStop`/`handleResizeEnd` create commands and `history.push()`.
 - **ID remapping**: Backend assigns new IDs when agents are re-created (redo of Add, undo of Delete). `CommandHistory.redo()`/`undo()` propagates ID changes to remaining stack commands via `Command.remapId()`. All 12 command classes implement `remapId`.
 - **Config coalescing**: `pushCoalescing()` merges rapid config changes (same node+key within 500ms) into one undo entry.
-- **Not undoable**: Viewport pan/zoom, grid/snap toggle, preset start/stop, selection changes, backend-initiated config updates (`agentEvent.configUpdated`).
+- **Not undoable**: Viewport pan/zoom, snap toggle, preset start/stop, selection changes, backend-initiated config updates (`agentEvent.configUpdated`).
 
 Command classes (13): `AddAgentCommand`, `DeleteCommand`, `CutCommand` (extends Delete), `AddConnectionCommand`, `MoveNodesCommand` (also for Align/Distribute), `ResizeNodeCommand`, `PasteCommand`, `UpdateConfigCommand`, `UpdateTitleCommand`, `UpdateExtensionCommand`, `BatchUpdateExtensionCommand` (multi-node color/port_colors via context menu), `ToggleDisabledCommand`, `ToggleShowErrCommand`.
 

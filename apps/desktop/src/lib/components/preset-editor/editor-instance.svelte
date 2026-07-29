@@ -34,7 +34,7 @@
   });
 </script>
 
-<div class="relative w-full h-full {editor.bgColor}">
+<div class="relative w-full h-full">
   <div class="absolute inset-0 flex flex-col">
     <EditorCanvas />
   </div>

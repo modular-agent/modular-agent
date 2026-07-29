@@ -37,7 +37,6 @@
     getSequenceFirst,
     getSequenceSecond,
     matchFirstChord,
-    formatHotkey,
     type ResolvedHotkeys,
   } from "$lib/hotkeys";
   import { tabStore } from "$lib/tab-store.svelte";
@@ -58,6 +57,13 @@
   const nodeTypes: NodeTypes = {
     agent: AgentNode,
   };
+
+  // Stopped draws a blueprint grid; running leaves the board plain.
+  const board = $derived(
+    editor.running
+      ? { line: undefined, variant: undefined }
+      : { line: "var(--color-board-blueprint-line)", variant: BackgroundVariant.Lines },
+  );
 
   const edgeTypes: EdgeTypes = {
     default: CustomBezierEdge,
@@ -204,12 +210,6 @@
       handler: () => {
         if (!editor.history.executing) editor.redo();
       },
-      skipEditable: true,
-      preventDefault: true,
-    },
-    {
-      id: "editor.toggle_grid",
-      handler: () => editor.toggleGrid(),
       skipEditable: true,
       preventDefault: true,
     },
@@ -551,8 +551,8 @@
       bgColor="var(--color-background)"
       gap={editor.gridGap}
       lineWidth={1}
-      variant={editor.running ? undefined : BackgroundVariant.Cross}
-      patternColor={editor.showGrid ? undefined : "transparent"}
+      variant={board.variant}
+      patternColor={board.line}
     />
 
     <Controls>
@@ -565,16 +565,6 @@
           <img
             src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNiIgaGVpZ2h0PSIxNiIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiNmZmZmZmYiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIiBjbGFzcz0ibHVjaWRlIGx1Y2lkZS1tYWduZXQtaWNvbiBsdWNpZGUtbWFnbmV0Ij48cGF0aCBkPSJtMTIgMTUgNCA0Ii8+PHBhdGggZD0iTTIuMzUyIDEwLjY0OGExLjIwNSAxLjIwNSAwIDAgMCAwIDEuNzA0bDIuMjk2IDIuMjk2YTEuMjA1IDEuMjA1IDAgMCAwIDEuNzA0IDBsNi4wMjktNi4wMjlhMSAxIDAgMSAxIDMgM2wtNi4wMjkgNi4wMjlhMS4yMDUgMS4yMDUgMCAwIDAgMCAxLjcwNGwyLjI5NiAyLjI5NmExLjIwNSAxLjIwNSAwIDAgMCAxLjcwNCAwbDYuMzY1LTYuMzY3QTEgMSAwIDAgMCA4LjcxNiA0LjI4MnoiLz48cGF0aCBkPSJtNSA4IDQgNCIvPjwvc3ZnPg=="
             alt="snap"
-          />
-        </ControlButton>
-        <ControlButton
-          onclick={() => editor.toggleGrid()}
-          title="Grid ({formatHotkey(getHotkeyKey(hotkeys, 'editor.toggle_grid'))})"
-          class={editor.showGrid ? undefined : "icon-slashed"}
-        >
-          <img
-            src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNiIgaGVpZ2h0PSIxNiIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiNmZmZmZmYiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIiBjbGFzcz0ibHVjaWRlIGx1Y2lkZS1ncmlkM3gzLWljb24gbHVjaWRlLWdyaWQtM3gzIj48cmVjdCB3aWR0aD0iMTgiIGhlaWdodD0iMTgiIHg9IjMiIHk9IjMiIHJ4PSIyIi8+PHBhdGggZD0iTTMgOWgxOCIvPjxwYXRoIGQ9Ik0zIDE1aDE4Ii8+PHBhdGggZD0iTTkgM3YxOCIvPjxwYXRoIGQ9Ik0xNSAzdjE4Ii8+PC9zdmc+"
-            alt="grid"
           />
         </ControlButton>
       {/snippet}
@@ -610,7 +600,6 @@
       y={editor.paneContextMenuY}
       running={editor.running}
       snapEnabled={editor.snapEnabled}
-      showGrid={editor.showGrid}
       {hotkeys}
       onstart={() => editor.startPreset()}
       onstop={() => editor.stopPreset()}
@@ -630,7 +619,6 @@
         })}
       onaddagent={() => editor.showAgentList(mouseX, mouseY)}
       ontogglesnap={() => editor.toggleSnap()}
-      ontogglegrid={() => editor.toggleGrid()}
     />
   </SvelteFlow>
 </div>
