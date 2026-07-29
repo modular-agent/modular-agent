@@ -117,6 +117,10 @@
   const NodeView = $derived(getNodeView(data.def_name));
 
   let hide_title = $derived(agentDef?.hide_title ?? false);
+  // Unknown definitions render their def_name as the title; the module path
+  // makes it too long for the node, so show the struct name only and keep
+  // the full path in the hover tooltip.
+  let shortDefName = $derived(data.def_name.split("::").pop() ?? data.def_name);
   let editTitle = $state(false);
   let titleColor = $derived(resolveNodeColor(data, agentDef));
   let titleColorStyle = $derived(`color: ${titleColor}`);
@@ -185,8 +189,8 @@
             {/if}
           </div>
         {:else}
-          <h3 class="text-xl">
-            <s>{data.def_name}</s>
+          <h3 class="text-xl" title={data.def_name}>
+            <s>{data.title ?? shortDefName}</s>
           </h3>
         {/if}
       </div>
