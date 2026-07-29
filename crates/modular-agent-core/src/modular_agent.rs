@@ -571,14 +571,15 @@ impl ModularAgent {
             preset.spec().clone()
         };
 
-        // collect current agent specs in the preset
-        let mut agent_specs = Vec::new();
-        for agent in &preset_spec.agents {
+        // Overlay live agent specs onto the stored entries. An agent whose
+        // definition is not registered in this build has no live instance;
+        // keep its stored spec so it survives the editor round-trip and the
+        // save that follows (save_preset writes exactly what this returns).
+        for agent in &mut preset_spec.agents {
             if let Some(spec) = self.get_agent_spec(&agent.id).await {
-                agent_specs.push(spec);
+                *agent = spec;
             }
         }
-        preset_spec.agents = agent_specs;
 
         // No need to change connections
 
@@ -677,6 +678,26 @@ impl ModularAgent {
         Some(agent.spec().clone())
     }
 
+    /// Look up the stored preset spec entry of an agent by id.
+    ///
+    /// Unlike [`Self::get_agent_spec`] this also finds spec-only agents
+    /// (whose definition is not registered in this build), which have no
+    /// live instance. For a live agent it returns the stored entry, not the
+    /// instance spec.
+    pub(crate) async fn find_stored_agent_spec(&self, agent_id: &str) -> Option<AgentSpec> {
+        let presets = {
+            let presets = self.presets.lock().unwrap();
+            presets.values().cloned().collect::<Vec<_>>()
+        };
+        for preset in presets {
+            let preset = preset.lock().await;
+            if let Some(agent) = preset.spec().agents.iter().find(|a| a.id == agent_id) {
+                return Some(agent.clone());
+            }
+        }
+        None
+    }
+
     /// Update the agent spec by id.
     ///
     /// A patch containing `configs` calls the agent's
@@ -690,13 +711,20 @@ impl ModularAgent {
     /// is returned: the agent may have committed the patch before failing
     /// (`configs_changed` runs after the merge), and a spec change must never
     /// go unannounced to hosts.
+    ///
+    /// An agent with no live instance (its definition is not registered in
+    /// this build) is patched in the preset spec that holds it, with the same
+    /// events; [`AgentError::AgentNotFound`] is returned only when no preset
+    /// holds the id either.
     pub async fn update_agent_spec(&self, agent_id: &str, value: &Value) -> Result<(), AgentError> {
         let agent = {
             let agents = self.agents.lock().unwrap();
-            let Some(agent) = agents.get(agent_id) else {
-                return Err(AgentError::AgentNotFound(agent_id.to_string()));
-            };
-            agent.clone()
+            agents.get(agent_id).cloned()
+        };
+        let Some(agent) = agent else {
+            // No live instance: the agent may still exist as a spec-only
+            // entry, whose stored spec is the only place a patch can land.
+            return self.update_spec_only_agent(agent_id, value).await;
         };
         let (preset_id, updated) = {
             let mut agent = agent.lock().await;
@@ -710,16 +738,63 @@ impl ModularAgent {
         // spurious refresh is harmless, an unannounced spec change is not.
         self.emit_agent_spec_updated(agent_id.to_string());
 
-        // Any non-config key (ports, title, layout, ...) may change how hosts
-        // render the preset, so treat those patches as structural. Config-only
-        // patches stay quiet here; they are covered by AgentSpecUpdated.
-        let structural = value
-            .as_object()
-            .is_some_and(|map| map.keys().any(|key| key != "configs"));
-        if structural {
+        if is_structural_spec_patch(value) {
             self.emit_preset_structure_changed(preset_id);
         }
         updated
+    }
+
+    /// Patch the stored spec entry of an agent that has no live instance.
+    ///
+    /// A spec-only agent (its definition is not registered in this build)
+    /// never got instantiated, so the preset spec is the only place its
+    /// layout, ports or configs can be recorded. The event contract matches
+    /// the live path so hosts cannot tell the two apart.
+    async fn update_spec_only_agent(
+        &self,
+        agent_id: &str,
+        value: &Value,
+    ) -> Result<(), AgentError> {
+        let Some((preset_id, updated)) = self.patch_stored_agent_spec(agent_id, value).await else {
+            return Err(AgentError::AgentNotFound(agent_id.to_string()));
+        };
+
+        // A rejected key can follow keys that were already merged, so a
+        // failed patch still has to announce the change.
+        self.emit_agent_spec_updated(agent_id.to_string());
+        if is_structural_spec_patch(value) {
+            self.emit_preset_structure_changed(preset_id);
+        }
+        updated
+    }
+
+    /// Applies a patch to an agent's stored spec entry, emitting no events.
+    ///
+    /// Returns the id of the preset that holds the agent together with the
+    /// patch result, or `None` when no preset spec contains the id. The
+    /// preset id is returned even when the patch failed, so callers can
+    /// still announce a partially merged change.
+    async fn patch_stored_agent_spec(
+        &self,
+        agent_id: &str,
+        value: &Value,
+    ) -> Option<(String, Result<(), AgentError>)> {
+        // Take a snapshot and release the presets lock: a preset's async
+        // mutex must never be awaited while the sync map lock is held.
+        let presets = {
+            let presets = self.presets.lock().unwrap();
+            presets.values().cloned().collect::<Vec<_>>()
+        };
+
+        for preset in presets {
+            // One preset at a time, so no two preset locks are ever held.
+            let mut preset = preset.lock().await;
+            match preset.update_agent_spec(agent_id, value) {
+                Ok(false) => continue,
+                result => return Some((preset.id().to_string(), result.map(|_| ()))),
+            }
+        }
+        None
     }
 
     /// Create a new agent spec from the given agent definition name.
@@ -1373,6 +1448,10 @@ impl ModularAgent {
     /// asynchronously: the events report successful delivery, not completed
     /// application. Events are emitted regardless of whether a key's value
     /// actually changed.
+    ///
+    /// An agent with no live instance (its definition is not registered in
+    /// this build) has the configs merged into its stored preset spec entry,
+    /// so the edit survives a save.
     pub async fn set_agent_configs(
         &self,
         agent_id: String,
@@ -1387,10 +1466,26 @@ impl ModularAgent {
             // The agent is not running. We can set the configs directly.
             let agent = {
                 let agents = self.agents.lock().unwrap();
-                let Some(a) = agents.get(&agent_id) else {
+                agents.get(&agent_id).cloned()
+            };
+            let Some(agent) = agent else {
+                // A spec-only agent has no instance to configure, so write
+                // through to its stored spec entry instead; otherwise the
+                // edit would be lost on the next save. Same event contract
+                // as the live branch below - per-key AgentConfigUpdated, no
+                // AgentSpecUpdated - so hosts cannot tell the two apart.
+                let configs_value = serde_json::to_value(&configs)
+                    .map_err(|e| AgentError::SerializationError(e.to_string()))?;
+                let patch = serde_json::json!({ "configs": configs_value });
+                let Some((_, updated)) = self.patch_stored_agent_spec(&agent_id, &patch).await
+                else {
                     return Err(AgentError::AgentNotFound(agent_id.to_string()));
                 };
-                a.clone()
+                updated?;
+                for (key, value) in configs {
+                    self.emit_agent_config_updated(agent_id.clone(), key, value);
+                }
+                return Ok(());
             };
             agent.lock().await.set_configs(configs.clone())?;
             for (key, value) in configs {
@@ -1755,6 +1850,17 @@ impl ModularAgent {
             event,
         });
     }
+}
+
+/// Whether an agent spec patch warrants a `PresetStructureChanged`.
+///
+/// Any non-config key (ports, title, layout, ...) may change how hosts render
+/// the preset, so treat those patches as structural. Config-only patches stay
+/// quiet here; they are covered by `AgentSpecUpdated`.
+fn is_structural_spec_patch(value: &Value) -> bool {
+    value
+        .as_object()
+        .is_some_and(|map| map.keys().any(|key| key != "configs"))
 }
 
 /// Carrier for a [`ModularAgentEvent`] together with the origin of the change.

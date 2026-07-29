@@ -154,6 +154,102 @@ async fn test_update_agent_spec_emit_rules() {
 }
 
 #[tokio::test]
+async fn test_update_agent_spec_spec_only_emit_rules() {
+    let ma = ModularAgent::init().unwrap();
+    ma.ready().await.unwrap();
+
+    // An unknown definition leaves the agent spec-only: no live instance,
+    // so update_agent_spec patches the stored preset spec entry instead.
+    let spec = ma::PresetSpec {
+        agents: vec![ma::AgentSpec {
+            id: "orphan".into(),
+            def_name: "no_such::Definition".into(),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    let preset_id = ma.add_preset(spec).unwrap();
+    let orphan_id = ma.get_preset_spec(&preset_id).await.unwrap().agents[0]
+        .id
+        .clone();
+
+    // Subscribe after setup so only the two patches below produce events.
+    let mut rx = ma.subscribe();
+
+    let configs_only = serde_json::json!({ "configs": { "channel": "ch" } });
+    ma.update_agent_spec(&orphan_id, &configs_only)
+        .await
+        .unwrap();
+
+    let structural = serde_json::json!({ "x": 480.0 });
+    ma.update_agent_spec(&orphan_id, &structural).await.unwrap();
+
+    // Same contract as the live path (test_update_agent_spec_emit_rules):
+    // the configs-only patch produces no PresetStructureChanged, so hosts
+    // cannot tell a spec-only agent from a live one.
+    let e1 = next_event(&mut rx).await;
+    assert!(matches!(e1.event, ModularAgentEvent::AgentSpecUpdated(ref id) if id == &orphan_id));
+
+    let e2 = next_event(&mut rx).await;
+    assert!(matches!(e2.event, ModularAgentEvent::AgentSpecUpdated(ref id) if id == &orphan_id));
+
+    let e3 = next_event(&mut rx).await;
+    assert!(
+        matches!(e3.event, ModularAgentEvent::PresetStructureChanged { preset_id: ref p } if p == &preset_id)
+    );
+
+    assert!(matches!(
+        rx.try_recv(),
+        Err(broadcast::error::TryRecvError::Empty)
+    ));
+
+    ma.quit();
+}
+
+#[tokio::test]
+async fn test_set_agent_configs_spec_only_emit_rules() {
+    let ma = ModularAgent::init().unwrap();
+    ma.ready().await.unwrap();
+
+    let spec = ma::PresetSpec {
+        agents: vec![ma::AgentSpec {
+            id: "orphan".into(),
+            def_name: "no_such::Definition".into(),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    let preset_id = ma.add_preset(spec).unwrap();
+    let orphan_id = ma.get_preset_spec(&preset_id).await.unwrap().agents[0]
+        .id
+        .clone();
+
+    let mut rx = ma.subscribe();
+
+    let mut configs = ma::AgentConfigs::default();
+    configs.set("channel".into(), AgentValue::string("random"));
+    ma.set_agent_configs(orphan_id.clone(), configs)
+        .await
+        .unwrap();
+
+    // Same contract as the live non-running branch: one AgentConfigUpdated
+    // per key and nothing else - no AgentSpecUpdated, no structure event.
+    let e = next_event(&mut rx).await;
+    assert!(matches!(
+        e.event,
+        ModularAgentEvent::AgentConfigUpdated(ref id, ref key, ref value)
+            if id == &orphan_id && key == "channel" && value == &AgentValue::string("random")
+    ));
+
+    assert!(matches!(
+        rx.try_recv(),
+        Err(broadcast::error::TryRecvError::Empty)
+    ));
+
+    ma.quit();
+}
+
+#[tokio::test]
 async fn test_update_agent_spec_announces_dynamic_config_changes() {
     let ma = ModularAgent::init().unwrap();
     ma.ready().await.unwrap();

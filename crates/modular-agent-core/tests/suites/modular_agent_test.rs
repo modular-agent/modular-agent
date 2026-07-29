@@ -193,16 +193,118 @@ async fn test_remove_spec_only_agent() {
     };
     let preset_id = ma.add_preset(spec).unwrap();
 
-    // get_preset_spec hides spec-only agents (it keeps live instances
-    // only), so read the raw spec through the preset itself.
-    let preset = ma.get_preset(&preset_id).unwrap();
-    let orphan_id = preset.lock().await.spec().agents[0].id.clone();
+    // get_preset_spec exposes spec-only agents, so the editor can see and
+    // address them like any other agent.
+    let preset_spec = ma.get_preset_spec(&preset_id).await.unwrap();
+    let orphan_id = preset_spec.agents[0].id.clone();
 
     ma.remove_agent(&preset_id, &orphan_id).await.unwrap();
-    assert!(preset.lock().await.spec().agents.is_empty());
+    let preset_spec = ma.get_preset_spec(&preset_id).await.unwrap();
+    assert!(preset_spec.agents.is_empty());
 
     // An agent in neither the runtime nor the spec is still an error.
     let err = ma.remove_agent(&preset_id, "missing").await.unwrap_err();
+    assert!(matches!(err, ma::AgentError::AgentNotFound(_)));
+
+    ma.quit();
+}
+
+#[tokio::test]
+async fn test_spec_only_agent_survives_preset_spec_and_updates() {
+    let ma = ModularAgent::init().unwrap();
+    ma.ready().await.unwrap();
+
+    let mut orphan_configs = ma::AgentConfigs::default();
+    orphan_configs.set("channel".into(), ma::AgentValue::string("general"));
+    orphan_configs.set("token".into(), ma::AgentValue::string("secret"));
+
+    let spec = ma::PresetSpec {
+        agents: vec![
+            ma::AgentSpec {
+                id: "orphan".into(),
+                def_name: "no_such::Definition".into(),
+                outputs: Some(vec!["message".into()]),
+                configs: Some(orphan_configs),
+                extensions: [("x".to_string(), serde_json::json!(10))]
+                    .into_iter()
+                    .collect(),
+                ..Default::default()
+            },
+            ma::AgentSpec {
+                id: "counter".into(),
+                def_name: COUNTER_DEF.into(),
+                ..Default::default()
+            },
+        ],
+        connections: vec![ma::ConnectionSpec {
+            source: "orphan".into(),
+            source_handle: "message".into(),
+            target: "counter".into(),
+            target_handle: "in".into(),
+        }],
+        ..Default::default()
+    };
+    let preset_id = ma.add_preset(spec).unwrap();
+
+    // The unknown definition has no live instance, but the stored entry must
+    // still be reported - save_preset writes whatever this returns.
+    let preset_spec = ma.get_preset_spec(&preset_id).await.unwrap();
+    assert_eq!(preset_spec.agents.len(), 2);
+    assert_eq!(preset_spec.connections.len(), 1);
+    let orphan_id = preset_spec.agents[0].id.clone();
+    assert_eq!(preset_spec.agents[0].def_name, "no_such::Definition");
+
+    ma.update_agent_spec(&orphan_id, &serde_json::json!({ "x": 42, "color": 3 }))
+        .await
+        .unwrap();
+
+    let preset_spec = ma.get_preset_spec(&preset_id).await.unwrap();
+    let orphan = &preset_spec.agents[0];
+    assert_eq!(orphan.extensions.get("x"), Some(&serde_json::json!(42)));
+    assert_eq!(orphan.extensions.get("color"), Some(&serde_json::json!(3)));
+    assert_eq!(
+        orphan.outputs.as_deref(),
+        Some(["message".to_string()].as_slice())
+    );
+
+    // The other half of the overlay: a live agent's patch lands only on the
+    // instance, never on the stored entry, so get_preset_spec must reflect
+    // the instance spec for live agents.
+    let counter_id = preset_spec
+        .agents
+        .iter()
+        .find(|a| a.def_name == COUNTER_DEF)
+        .unwrap()
+        .id
+        .clone();
+    ma.update_agent_spec(&counter_id, &serde_json::json!({ "x": 42 }))
+        .await
+        .unwrap();
+    let preset_spec = ma.get_preset_spec(&preset_id).await.unwrap();
+    let counter = preset_spec
+        .agents
+        .iter()
+        .find(|a| a.id == counter_id)
+        .unwrap();
+    assert_eq!(counter.extensions.get("x"), Some(&serde_json::json!(42)));
+
+    let mut new_configs = ma::AgentConfigs::default();
+    new_configs.set("channel".into(), ma::AgentValue::string("random"));
+    ma.set_agent_configs(orphan_id.clone(), new_configs)
+        .await
+        .unwrap();
+
+    let preset_spec = ma.get_preset_spec(&preset_id).await.unwrap();
+    let configs = preset_spec.agents[0].configs.as_ref().unwrap();
+    assert_eq!(configs.get_string("channel").unwrap(), "random");
+    // Setting one key must merge, not replace: the untouched key survives.
+    assert_eq!(configs.get_string("token").unwrap(), "secret");
+
+    // An id in neither the runtime nor any preset spec is still an error.
+    let err = ma
+        .update_agent_spec("missing", &serde_json::json!({ "x": 1 }))
+        .await
+        .unwrap_err();
     assert!(matches!(err, ma::AgentError::AgentNotFound(_)));
 
     ma.quit();

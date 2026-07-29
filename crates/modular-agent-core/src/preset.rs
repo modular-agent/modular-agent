@@ -109,6 +109,19 @@ impl Preset {
         self.spec.remove_agent(agent_id);
     }
 
+    /// Applies a JSON patch to the stored spec entry of an agent.
+    ///
+    /// This is for spec-only agents (whose definition is not registered in
+    /// this build), which have no live instance to receive the patch.
+    /// Returns `Ok(false)` when the agent is not part of this preset spec.
+    pub fn update_agent_spec(&mut self, agent_id: &str, value: &Value) -> Result<bool, AgentError> {
+        let Some(agent) = self.spec.agents.iter_mut().find(|a| a.id == agent_id) else {
+            return Ok(false);
+        };
+        agent.update(value)?;
+        Ok(true)
+    }
+
     /// Adds a connection to this preset.
     pub fn add_connection(&mut self, connection: ConnectionSpec) {
         self.spec.add_connection(connection);

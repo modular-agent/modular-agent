@@ -489,6 +489,24 @@ fn ok_json(value: &impl serde::Serialize) -> Result<CallToolResult, McpError> {
     }
 }
 
+/// Error text for an agent id that has no live instance.
+///
+/// A spec-only agent (its definition is not registered in this build) is
+/// still listed by get_preset_spec, so pointing the caller there would send
+/// it in circles; name the unregistered definition instead. Only a truly
+/// absent id gets the get_preset_spec hint. `role` is the label used for the
+/// agent in the message ("Agent", "Source agent", ...).
+async fn missing_agent_text(ma: &ModularAgent, role: &str, agent_id: &str) -> String {
+    match ma.find_stored_agent_spec(agent_id).await {
+        Some(spec) => format!(
+            "{role} \"{agent_id}\" exists in the preset, but its definition \"{}\" is not \
+             registered in this build, so this tool cannot operate on it.",
+            spec.def_name
+        ),
+        None => format!("{role} \"{agent_id}\" not found. Use get_preset_spec to list agent ids."),
+    }
+}
+
 /// Maps a preset-name error to guidance the calling agent can act on.
 fn preset_error_text(e: AgentError) -> String {
     match e {
@@ -1022,10 +1040,7 @@ impl McpServer {
         }
 
         let Some(current) = self.ma.get_agent_spec(&p.agent_id).await else {
-            return err_text(format!(
-                "Agent \"{}\" not found. Use get_preset_spec to list agent ids.",
-                p.agent_id
-            ));
+            return err_text(missing_agent_text(&self.ma, "Agent", &p.agent_id).await);
         };
         if let Some(configs_patch) = patch.get("configs") {
             let Value::Object(configs_patch) = configs_patch else {
@@ -1055,10 +1070,7 @@ impl McpServer {
         Parameters(p): Parameters<SetAgentConfigsParams>,
     ) -> Result<CallToolResult, McpError> {
         let Some(current) = self.ma.get_agent_spec(&p.agent_id).await else {
-            return err_text(format!(
-                "Agent \"{}\" not found. Use get_preset_spec to list agent ids.",
-                p.agent_id
-            ));
+            return err_text(missing_agent_text(&self.ma, "Agent", &p.agent_id).await);
         };
         if let Some(def) = self.ma.get_agent_definition(&current.def_name)
             && let Err(e) = validate_config_keys(&def, Some(&current), p.configs.keys())
@@ -1101,16 +1113,10 @@ impl McpServer {
         Parameters(p): Parameters<ConnectionParams>,
     ) -> Result<CallToolResult, McpError> {
         let Some(source_spec) = self.ma.get_agent_spec(&p.source).await else {
-            return err_text(format!(
-                "Source agent \"{}\" not found. Use get_preset_spec to list agent ids.",
-                p.source
-            ));
+            return err_text(missing_agent_text(&self.ma, "Source agent", &p.source).await);
         };
         let Some(target_spec) = self.ma.get_agent_spec(&p.target).await else {
-            return err_text(format!(
-                "Target agent \"{}\" not found. Use get_preset_spec to list agent ids.",
-                p.target
-            ));
+            return err_text(missing_agent_text(&self.ma, "Target agent", &p.target).await);
         };
 
         let outputs = source_spec.outputs.unwrap_or_default();
