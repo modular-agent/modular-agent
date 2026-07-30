@@ -93,13 +93,19 @@ export function presetToFlow(info: PresetInfo, spec: PresetSpec): PresetFlow {
   };
 }
 
-// Default node size from definition hints (grid-unit multipliers) × grid size.
-// Unknown definitions or missing hints fall back to one grid unit.
+// Default node size from definition hints (grid-unit multipliers) × grid size,
+// except for free_size definitions, whose hints are pixel values used as-is.
+// Unknown definitions or missing hints fall back to one grid unit (120px for free_size).
 export function defaultNodeSize(
   defName: string,
   gridSize: number,
 ): { width: number; height: number } {
   const hints = _agentDefinitions?.[defName]?.hints;
+  if (hints?.free_size === true) {
+    const width = typeof hints.width === "number" && hints.width > 0 ? hints.width : 120;
+    const height = typeof hints.height === "number" && hints.height > 0 ? hints.height : 120;
+    return { width, height };
+  }
   const hintWidth = typeof hints?.width === "number" && hints.width > 0 ? hints.width : 1;
   const hintHeight = typeof hints?.height === "number" && hints.height > 0 ? hints.height : 1;
   return { width: hintWidth * gridSize, height: hintHeight * gridSize };
@@ -112,6 +118,10 @@ export function agentSpecToNode(spec: AgentSpec): PresetNode {
     !spec.width || !spec.height
       ? defaultNodeSize(spec.def_name, coreSettingsStore.snapGridSize)
       : null;
+  // Derived from the definition hint, never persisted to the spec.
+  // -1001 instead of -1: xyflow's elevateNodesOnSelect adds +1000 to selected
+  // nodes, so a selected background node lands at -1 and stays behind others.
+  const background = _agentDefinitions?.[spec.def_name]?.hints?.background === true;
   return {
     id: spec.id ?? crypto.randomUUID(),
     type: "agent",
@@ -122,6 +132,7 @@ export function agentSpecToNode(spec: AgentSpec): PresetNode {
     },
     width: spec.width || fallback?.width,
     height: spec.height || fallback?.height,
+    ...(background ? { zIndex: -1001 } : {}),
   };
 }
 
@@ -171,6 +182,14 @@ export function resolveNodeColor(data: AgentSpec, agentDef: AgentDefinition | nu
   const h = agentDef?.hints?.color;
   if (typeof h === "number" && NODE_COLOR_VALUES[h]) return NODE_COLOR_VALUES[h];
   return KIND_COLOR_VALUES[agentDef?.kind ?? "default"] ?? KIND_COLOR_VALUES.default;
+}
+
+/** Resolve a node's background color (instance > hint); null means the default gray background. */
+export function resolveNodeBgColor(
+  data: AgentSpec,
+  agentDef: AgentDefinition | null,
+): string | null {
+  return resolveColorCss(data.bg_color) ?? resolveColorCss(agentDef?.hints?.bg_color) ?? null;
 }
 
 // Connection color mapping by source handle name (type-aware ports only)

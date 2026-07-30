@@ -120,12 +120,13 @@ export class EditorState {
   gridGap = $state(coreSettingsStore.gridGap);
   modifierPressed = $state(false);
   resizing = $state(false);
+  draggingFreeSize = $state(false);
 
   // Connection opacity
   connectionOpacity = $state(coreSettingsStore.connectionOpacity);
 
   effectiveSnapGrid = $derived.by(() => {
-    if (this.resizing) return undefined;
+    if (this.resizing || this.draggingFreeSize) return undefined;
     const active = this.snapEnabled !== this.modifierPressed;
     return active ? ([this.snapGridSize, this.snapGridSize] as [number, number]) : undefined;
   });
@@ -832,12 +833,18 @@ export class EditorState {
   // --- Node drag/move handlers ---
 
   handleNodeDragStart(nodes: PresetNode[]) {
+    // free_size nodes are not tied to the grid: suspend the canvas-wide snapGrid
+    // while every dragged node is free_size (xyflow has no per-node opt-out).
+    const defs = getAgentDefinitions();
+    this.draggingFreeSize =
+      nodes.length > 0 && nodes.every((n) => defs[n.data.def_name]?.hints?.free_size === true);
     this.dragStartPositions = new Map(
       nodes.map((n) => [n.id, { x: n.position.x, y: n.position.y }]),
     );
   }
 
   async handleNodeDragStop(targetNode: PresetNode | null) {
+    this.draggingFreeSize = false;
     // targetNode === null means the drag came from the selection overlay
     // (NodeSelection). XYDrag fires onselectiondragstop right after this call —
     // leave dragStartPositions for handleSelectionDragStop to consume and clear.
@@ -871,6 +878,7 @@ export class EditorState {
   }
 
   async handleSelectionDragStop(draggedNodes: PresetNode[]) {
+    this.draggingFreeSize = false;
     const startPositions = this.dragStartPositions;
     this.dragStartPositions = null;
     const deltas: NodePositionDelta[] = [];

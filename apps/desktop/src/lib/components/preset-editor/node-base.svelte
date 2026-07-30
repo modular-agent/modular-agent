@@ -26,7 +26,7 @@
   import type { NodeProps, ResizeDragEvent, ResizeParams } from "@xyflow/svelte";
   import { type AgentDefinition, type AgentSpec } from "tauri-plugin-modular-agent-api";
 
-  import { getEdgeColor, resolveColorCss } from "$lib/agent";
+  import { getEdgeColor, resolveColorCss, resolveNodeBgColor } from "$lib/agent";
   import { ScrollArea } from "$lib/components/ui/scroll-area/index.js";
 
   import { useEditor } from "./context.svelte";
@@ -59,7 +59,11 @@
   const showErr = $derived(data.show_err ?? false);
 
   let hideTitle = $derived(agentDef?.hide_title ?? false);
+  const freeSize = $derived(agentDef?.hints?.free_size === true);
+  const noResize = $derived(agentDef?.hints?.no_resize === true);
   let bgColor = $derived(bgColors[agentDef ? (data.disabled ? 0 : 1) : 2]);
+  // Custom background: disabled (bg-muted) and unknown-def (bg-destructive) keep their class
+  const bgCustom = $derived(agentDef && !data.disabled ? resolveNodeBgColor(data, agentDef) : null);
 
   let clientHeight = $state(0);
   let handleOffset = $derived(
@@ -117,7 +121,7 @@
   onDestroy(() => clearResizeGuard?.());
 
   function onResize(_ev: ResizeDragEvent, params: ResizeParams) {
-    if (editor.snapActive) {
+    if (editor.snapActive && !freeSize) {
       const g = editor.snapGridSize;
       wd = snapToGrid(params.width, g);
       ht = snapToGrid(params.height, g);
@@ -133,7 +137,7 @@
     if (!data.id) return;
     let finalWidth = params.width;
     let finalHeight = params.height;
-    if (editor.snapActive) {
+    if (editor.snapActive && !freeSize) {
       const g = editor.snapGridSize;
       finalWidth = snapToGrid(params.width, g);
       finalHeight = snapToGrid(params.height, g);
@@ -166,7 +170,14 @@
   });
 </script>
 
-<NodeResizer isVisible={selected} {onResizeStart} {onResize} {onResizeEnd} />
+<NodeResizer
+  isVisible={selected && !noResize}
+  minWidth={freeSize ? 24 : undefined}
+  minHeight={freeSize ? 24 : undefined}
+  {onResizeStart}
+  {onResize}
+  {onResizeEnd}
+/>
 <div
   bind:clientHeight
   class="flex flex-col p-1"
@@ -177,15 +188,23 @@
     ? `0 0 ${highlight.current * 40}px ${highlightColor}`
     : ""}
 >
-  <div class="{bgColor} flex flex-col grow min-h-0 p-0 border-none rounded-xl">
+  <div
+    class="{bgCustom ? '' : bgColor} flex flex-col grow min-h-0 p-0 border-none rounded-xl"
+    style:background-color={bgCustom
+      ? `color-mix(in srgb, ${bgCustom} 85%, transparent)`
+      : undefined}
+  >
     {#if hideTitle}
-      {#if agentDef?.title === "Router"}
+      {#if freeSize}
         <div class="w-full min-w-6 flex-none rounded-t-lg"></div>
       {:else}
         <div class="w-full min-w-40 flex-none rounded-t-lg"></div>
       {/if}
     {:else}
-      <div class="w-full min-w-40 flex-none pl-4 pr-4 pb-2 rounded-t-lg">
+      <div
+        class="w-full {freeSize ? 'min-w-6' : 'min-w-40'} flex-none pl-4 pr-4 pb-2 rounded-t-xl"
+        style:background-color={bgCustom ?? undefined}
+      >
         {@render title()}
       </div>
     {/if}

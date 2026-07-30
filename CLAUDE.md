@@ -185,8 +185,12 @@ Use `hint(...)` to attach UI presentation metadata at the definition level:
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | color | integer (1-7) | unset | Node color index |
-| width | integer (>0) | 1 | Block width |
-| height | integer (>0) | 1 | Block height |
+| width | integer (>0) | 1 | Block width (pixels when `free_size` is set) |
+| height | integer (>0) | 1 | Block height (pixels when `free_size` is set) |
+| free_size | boolean | unset | Not tied to the grid: `width`/`height` are read as pixels, and neither resizing nor dragging snaps to the grid |
+| no_resize | boolean | unset | Node cannot be resized (no resize handles) |
+| background | boolean | unset | Render the node behind other nodes |
+| bg_color | integer (1-7) or "#rrggbb" | unset | Node background color. Body rendered at 85% opacity, title bar opaque |
 
 Definition-level `hints` apply to all instances of the agent type.
 Instance-level overrides use `AgentSpec.extensions`.

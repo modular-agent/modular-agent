@@ -13,7 +13,7 @@ const PORT_SP: &str = " ";
     title = "Note",
     category = CATEGORY,
     custom_config(name = NOTE, type_="markdown", default="", hide_title),
-    hint(color=2),
+    hint(color=2, width=240, height=160, free_size=true, background=true, bg_color="#fdf6b2"),
 )]
 struct NoteAgent {
     data: AgentData,
@@ -34,6 +34,7 @@ impl AsAgent for NoteAgent {
     category = CATEGORY,
     inputs=[PORT_SP],
     outputs=[PORT_SP],
+    hint(width=64, height=64, free_size=true, no_resize=true),
 )]
 struct RouterAgent {
     data: AgentData,

@@ -88,7 +88,8 @@ LAYOUT CONVENTION
   of 240 and lay flows out left to right (x grows in the data-flow
   direction). When width/height are omitted, the editor sizes the node from
   the agent definition's hints (grid-unit multipliers, default 1x1 grid
-  unit), so omitting them is usually the right choice.
+  unit), so omitting them is usually the right choice. Definitions with a
+  free_size hint do not follow the 240 grid; their hint sizes are pixels.
 - add_agent accepts x/y/width/height directly; update_agent_spec changes
   them later, e.g. patch {"x": 480, "y": 240}.
 
@@ -749,9 +750,11 @@ struct AddAgentParams {
     y: Option<f64>,
     /// Node width in pixels. If omitted, the editor sizes the node from the
     /// definition's hints (grid-unit multipliers; usually leave unset).
+    /// Definitions with a free_size hint do not follow the 240 grid.
     width: Option<f64>,
     /// Node height in pixels. If omitted, the editor sizes the node from the
     /// definition's hints (grid-unit multipliers; usually leave unset).
+    /// Definitions with a free_size hint do not follow the 240 grid.
     height: Option<f64>,
 }
 

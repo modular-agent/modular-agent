@@ -222,6 +222,43 @@
           </div>
         </div>
 
+        <!-- Background -->
+        <div class="flex flex-col gap-2">
+          <div class="text-xs text-muted-foreground">Background</div>
+          <div class="flex items-center gap-1.5 flex-wrap">
+            <button
+              aria-label="Reset to default background color"
+              class="{SWATCH_CLASS} flex items-center justify-center
+                     text-muted-foreground hover:bg-accent"
+              class:ring-2={inspector.extensions.bg_color == null}
+              class:ring-ring={inspector.extensions.bg_color == null}
+              onclick={() => inspector.onUpdateExtension?.("bg_color", null)}
+              title="Default"
+            >
+              <XIcon size={10} />
+            </button>
+            {#each [1, 2, 3, 4, 5, 6] as n}
+              <button
+                aria-label="Background color {n}"
+                class={SWATCH_CLASS}
+                class:ring-2={inspector.extensions.bg_color === n}
+                class:ring-ring={inspector.extensions.bg_color === n}
+                style="background-color: var(--color-agent-{n})"
+                onclick={() => inspector.onUpdateExtension?.("bg_color", n)}
+              ></button>
+            {/each}
+            <input
+              type="color"
+              aria-label="Custom background color"
+              class={COLOR_INPUT_CLASS}
+              value={typeof inspector.extensions.bg_color === "string"
+                ? inspector.extensions.bg_color
+                : "#888888"}
+              onchange={(e) => inspector.onUpdateExtension?.("bg_color", e.currentTarget.value)}
+            />
+          </div>
+        </div>
+
         <Separator />
 
         <!-- Configs -->
