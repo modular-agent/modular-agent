@@ -4,6 +4,8 @@
   import SquareIcon from "@lucide/svelte/icons/square";
   import { startPreset, stopPreset } from "tauri-plugin-modular-agent-api";
 
+  import { invalidateAll } from "$app/navigation";
+
   import { getCoreSettings, setCoreSettings } from "$lib/agent";
   import { Button } from "$lib/components/ui/button";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
@@ -30,21 +32,13 @@
   }
 
   async function handleRunOnStart() {
-    // update core setting
-    const coreSettings = await getCoreSettings();
-    const auto_start_presets = coreSettings.auto_start_presets || [];
-    if (run_on_start) {
-      // remove from auto_start_presets
-      const index = auto_start_presets.indexOf(name);
-      if (index > -1) {
-        auto_start_presets.splice(index, 1);
-      }
-    } else {
-      // add to auto_start_presets
-      auto_start_presets.push(name);
-    }
-    coreSettings.auto_start_presets = auto_start_presets;
-    await setCoreSettings(coreSettings);
+    const current = getCoreSettings().auto_start_presets || [];
+    const auto_start_presets = run_on_start
+      ? current.filter((n) => n !== name)
+      : [...current, name];
+    await setCoreSettings({ auto_start_presets });
+    // run_on_start is derived from core settings at load time, so re-run load
+    await invalidateAll();
   }
 </script>
 
