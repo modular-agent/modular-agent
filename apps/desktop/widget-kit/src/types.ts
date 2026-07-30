@@ -44,6 +44,22 @@ export interface NodeViewProps {
 }
 
 /**
+ * Presentation overrides for the host node frame, registered per agent type
+ * (def_name). Unlike a NodeView this does not replace any rendering — it
+ * tweaks how node-base.svelte draws the frame itself.
+ */
+export interface NodeStyle {
+  /**
+   * Maps the node's resolved background color (a CSS color string) to the
+   * background-color applied to the node body — the result must be a CSS
+   * color value, not an arbitrary background shorthand. Without a NodeStyle
+   * the body uses the resolved color as-is (opaque); the title bar always
+   * stays opaque.
+   */
+  bodyBackground?: (color: string) => string;
+}
+
+/**
  * Props contract for a ConfigWidget: a component registered per config
  * type_ that renders the input/display of a single config.
  *

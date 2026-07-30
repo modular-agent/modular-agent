@@ -11,6 +11,10 @@ own Svelte 5 components into the desktop app's preset editor:
   `type_` names a genuine **value type** (e.g. `color` = `#rrggbb` string) —
   never a presentation variant of a built-in type. A slider for an integer is
   a NodeView concern, not a fake `type_`.
+- **NodeStyle** — registered per agent type (`def_name`). Presentation
+  overrides for the host node frame itself (currently `bodyBackground`, a
+  function mapping the resolved background color to the background-color of
+  the node body).
 
 This package is the single source of truth for the props contracts
 (`NodeViewProps`, `ConfigWidgetProps`, `AgentEventState`) and shared helper
@@ -40,14 +44,23 @@ import FooNodeView from "./FooNodeView.svelte";
 export const ui = {
   nodeViews: { "modular_agent_foo::FooAgent": FooNodeView }, // key: def_name
   configWidgets: { color: FooColor }, // key: config type_
+  nodeStyles: {
+    // key: def_name — frame presentation overrides (optional)
+    "modular_agent_foo::FooAgent": {
+      bodyBackground: (color) => `color-mix(in srgb, ${color} 85%, transparent)`,
+    },
+  },
 };
 ```
 
+All three manifest keys are optional.
+
 At build time, the desktop app's `vite-plugin-agent-ui` reads `ma-config.toml`
-and, for every agent with a `Path` source, statically imports
-`<path>/ui/src/index.ts` when it exists (virtual module `virtual:agent-ui`).
-No dynamic loading, no npm registry access: the UI ships with the build the
-same way the Rust crate does.
+and, for every agent with a `Path` or `Workspace` source, statically imports
+`<path>/ui/src/index.ts` when it exists (virtual module `virtual:agent-ui`) —
+in-tree Workspace packages resolve to `crates/<name>/ui` at the workspace
+root. No dynamic loading, no npm registry access: the UI ships with the build
+the same way the Rust crate does.
 
 Run `npm install` once inside `ui/` so package-local dependencies land in
 `ui/node_modules` (the only manual step).

@@ -30,6 +30,7 @@
   import { ScrollArea } from "$lib/components/ui/scroll-area/index.js";
 
   import { useEditor } from "./context.svelte";
+  import { getNodeStyle } from "./custom-ui/registry";
 
   type Props = NodeProps & {
     data: AgentSpec;
@@ -64,6 +65,7 @@
   let bgColor = $derived(bgColors[agentDef ? (data.disabled ? 0 : 1) : 2]);
   // Custom background: disabled (bg-muted) and unknown-def (bg-destructive) keep their class
   const bgCustom = $derived(agentDef && !data.disabled ? resolveNodeBgColor(data, agentDef) : null);
+  const nodeStyle = $derived(getNodeStyle(data.def_name));
 
   let clientHeight = $state(0);
   let handleOffset = $derived(
@@ -191,7 +193,7 @@
   <div
     class="{bgCustom ? '' : bgColor} flex flex-col grow min-h-0 p-0 border-none rounded-xl"
     style:background-color={bgCustom
-      ? `color-mix(in srgb, ${bgCustom} 85%, transparent)`
+      ? (nodeStyle?.bodyBackground?.(bgCustom) ?? bgCustom)
       : undefined}
   >
     {#if hideTitle}

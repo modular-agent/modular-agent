@@ -4,6 +4,7 @@
 
 import type {
   ConfigWidgetProps,
+  NodeStyle,
   NodeViewProps,
 } from "@modular-agent/widget-kit";
 
@@ -16,6 +17,7 @@ import SliderNodeView from "./SliderNodeView.svelte";
 export const ui: {
   nodeViews: Record<string, Component<NodeViewProps>>;
   configWidgets: Record<string, Component<ConfigWidgetProps>>;
+  nodeStyles: Record<string, NodeStyle>;
 } = {
   // Keyed on def_name (macro default: module_path::StructName).
   nodeViews: {
@@ -29,5 +31,13 @@ export const ui: {
   // instead (see SliderNodeView).
   configWidgets: {
     color: ColorWidget,
+  },
+  // Keyed on def_name. Frame presentation overrides for the host node.
+  nodeStyles: {
+    // Sticky-note look: translucent body so the canvas shows through.
+    "modular_agent_std::ui::NoteAgent": {
+      bodyBackground: (color) =>
+        `color-mix(in srgb, ${color} 85%, transparent)`,
+    },
   },
 };

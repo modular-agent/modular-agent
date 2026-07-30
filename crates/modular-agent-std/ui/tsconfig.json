@@ -10,7 +10,9 @@
     // Editor-only DX: at build time the desktop's vite-plugin-agent-ui
     // aliases @modular-agent/widget-kit to the desktop's copy.
     "paths": {
-      "@modular-agent/widget-kit": ["../../modular-agent-desktop/widget-kit/src/index.ts"]
+      "@modular-agent/widget-kit": [
+        "../../../apps/desktop/widget-kit/src/index.ts"
+      ]
     }
   },
   "include": ["src"]

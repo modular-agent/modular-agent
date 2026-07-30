@@ -7,9 +7,9 @@ import { searchForWorkspaceRoot } from "vite";
 // Composes per-module agent UI packages at build time, mirroring how
 // ma-config resolves Rust crates. Reads ma-config.toml (the single source of
 // truth for which agent packages are in the build) and, for every agent with
-// a Path source, statically imports <path>/ui/src/index.ts when it exists —
-// exposed as the virtual module "virtual:agent-ui" which registers all
-// NodeViews / ConfigWidgets into the desktop registry.
+// a Path or Workspace source, statically imports <path>/ui/src/index.ts when
+// it exists — exposed as the virtual module "virtual:agent-ui" which registers
+// all NodeViews / ConfigWidgets / NodeStyles into the desktop registry.
 
 const VIRTUAL_ID = "virtual:agent-ui";
 const RESOLVED_ID = "\0" + VIRTUAL_ID;
@@ -42,9 +42,17 @@ function discoverUiPackages() {
   const packages = [];
   for (const agent of agents) {
     const source = agent?.source;
-    if (source?.type !== "Path" || typeof source.path !== "string") continue;
-    // Paths in ma-config.toml are cargo path-dep paths, relative to src-tauri.
-    const dir = path.resolve(desktopRoot, "src-tauri", source.path, "ui");
+    /** @type {string} */
+    let dir;
+    if (source?.type === "Path" && typeof source.path === "string") {
+      // Paths in ma-config.toml are relative to the workspace root.
+      dir = path.resolve(desktopRoot, "../..", source.path, "ui");
+    } else if (source?.type === "Workspace") {
+      // In-tree agents live under crates/<name> at the workspace root.
+      dir = path.resolve(desktopRoot, "../../crates", agent.name, "ui");
+    } else {
+      continue;
+    }
     if (!existsSync(path.join(dir, "package.json"))) continue;
     packages.push({ name: agent.name, dir, dirPosix: toPosix(dir) });
   }
@@ -54,7 +62,7 @@ function discoverUiPackages() {
 /** @param {UiPackage[]} packages */
 function generateVirtualModule(packages) {
   const lines = [
-    `import { registerNodeView, registerConfigWidget } from "$lib/components/preset-editor/custom-ui/registry";`,
+    `import { registerNodeView, registerConfigWidget, registerNodeStyle } from "$lib/components/preset-editor/custom-ui/registry";`,
   ];
   packages.forEach((pkg, i) => {
     // Absolute path with forward slashes — Vite resolves it directly, so UI
@@ -66,6 +74,7 @@ function generateVirtualModule(packages) {
     lines.push(
       `for (const [k, c] of Object.entries(ui${i}.nodeViews ?? {})) registerNodeView(k, c);`,
       `for (const [k, c] of Object.entries(ui${i}.configWidgets ?? {})) registerConfigWidget(k, c);`,
+      `for (const [k, s] of Object.entries(ui${i}.nodeStyles ?? {})) registerNodeStyle(k, s);`,
     );
   });
   return lines.join("\n") + "\n";
