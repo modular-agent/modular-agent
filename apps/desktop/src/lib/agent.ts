@@ -192,6 +192,14 @@ export function resolveNodeBgColor(
   return resolveColorCss(data.bg_color) ?? resolveColorCss(agentDef?.hints?.bg_color) ?? null;
 }
 
+/** Resolve a node's foreground (text) color (instance > hint); null means the theme default. */
+export function resolveNodeFgColor(
+  data: AgentSpec,
+  agentDef: AgentDefinition | null,
+): string | null {
+  return resolveColorCss(data.fg_color) ?? resolveColorCss(agentDef?.hints?.fg_color) ?? null;
+}
+
 // Connection color mapping by source handle name (type-aware ports only)
 const EDGE_COLOR_MAP: Record<string, string> = {
   default: "var(--color-connection-default)",

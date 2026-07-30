@@ -26,7 +26,12 @@
   import type { NodeProps, ResizeDragEvent, ResizeParams } from "@xyflow/svelte";
   import { type AgentDefinition, type AgentSpec } from "tauri-plugin-modular-agent-api";
 
-  import { getEdgeColor, resolveColorCss, resolveNodeBgColor } from "$lib/agent";
+  import {
+    getEdgeColor,
+    resolveColorCss,
+    resolveNodeBgColor,
+    resolveNodeFgColor,
+  } from "$lib/agent";
   import { ScrollArea } from "$lib/components/ui/scroll-area/index.js";
 
   import { useEditor } from "./context.svelte";
@@ -65,6 +70,7 @@
   let bgColor = $derived(bgColors[agentDef ? (data.disabled ? 0 : 1) : 2]);
   // Custom background: disabled (bg-muted) and unknown-def (bg-destructive) keep their class
   const bgCustom = $derived(agentDef && !data.disabled ? resolveNodeBgColor(data, agentDef) : null);
+  const fgCustom = $derived(agentDef && !data.disabled ? resolveNodeFgColor(data, agentDef) : null);
   const nodeStyle = $derived(getNodeStyle(data.def_name));
 
   let clientHeight = $state(0);
@@ -195,6 +201,7 @@
     style:background-color={bgCustom
       ? (nodeStyle?.bodyBackground?.(bgCustom) ?? bgCustom)
       : undefined}
+    style:color={fgCustom ?? undefined}
   >
     {#if hideTitle}
       {#if freeSize}

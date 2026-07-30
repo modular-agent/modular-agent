@@ -259,6 +259,43 @@
           </div>
         </div>
 
+        <!-- Text -->
+        <div class="flex flex-col gap-2">
+          <div class="text-xs text-muted-foreground">Text</div>
+          <div class="flex items-center gap-1.5 flex-wrap">
+            <button
+              aria-label="Reset to default text color"
+              class="{SWATCH_CLASS} flex items-center justify-center
+                     text-muted-foreground hover:bg-accent"
+              class:ring-2={inspector.extensions.fg_color == null}
+              class:ring-ring={inspector.extensions.fg_color == null}
+              onclick={() => inspector.onUpdateExtension?.("fg_color", null)}
+              title="Default"
+            >
+              <XIcon size={10} />
+            </button>
+            {#each [1, 2, 3, 4, 5, 6] as n}
+              <button
+                aria-label="Text color {n}"
+                class={SWATCH_CLASS}
+                class:ring-2={inspector.extensions.fg_color === n}
+                class:ring-ring={inspector.extensions.fg_color === n}
+                style="background-color: var(--color-agent-{n})"
+                onclick={() => inspector.onUpdateExtension?.("fg_color", n)}
+              ></button>
+            {/each}
+            <input
+              type="color"
+              aria-label="Custom text color"
+              class={COLOR_INPUT_CLASS}
+              value={typeof inspector.extensions.fg_color === "string"
+                ? inspector.extensions.fg_color
+                : "#888888"}
+              onchange={(e) => inspector.onUpdateExtension?.("fg_color", e.currentTarget.value)}
+            />
+          </div>
+        </div>
+
         <Separator />
 
         <!-- Configs -->

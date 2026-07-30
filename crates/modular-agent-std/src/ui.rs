@@ -13,7 +13,7 @@ const PORT_SP: &str = " ";
     title = "Note",
     category = CATEGORY,
     custom_config(name = NOTE, type_="markdown", default="", hide_title),
-    hint(color=2, width=240, height=160, free_size=true, background=true, bg_color="#fdf6b2"),
+    hint(color=2, width=240, height=160, free_size=true, background=true, bg_color="#fdf6b2", fg_color="#44403b"),
 )]
 struct NoteAgent {
     data: AgentData,

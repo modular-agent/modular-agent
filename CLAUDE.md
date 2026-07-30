@@ -191,6 +191,7 @@ Use `hint(...)` to attach UI presentation metadata at the definition level:
 | no_resize | boolean | unset | Node cannot be resized (no resize handles) |
 | background | boolean | unset | Render the node behind other nodes |
 | bg_color | integer (1-7) or "#rrggbb" | unset | Node background color. Opaque by default; translucency comes from a UI-package `nodeStyles` entry |
+| fg_color | integer (1-7) or "#rrggbb" | unset | Node foreground (text) color for the node body |
 
 Definition-level `hints` apply to all instances of the agent type.
 Instance-level overrides use `AgentSpec.extensions`.
