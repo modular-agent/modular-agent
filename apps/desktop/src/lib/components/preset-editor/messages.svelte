@@ -126,13 +126,13 @@
 
 <style>
   .message-content :global(code) {
-    background-color: var(--muted);
+    background-color: var(--md-code-bg, var(--muted));
     padding: 0.1rem 0.3rem;
     border-radius: 0.2rem;
     font-size: 0.85em;
   }
   .message-content :global(pre) {
-    background-color: var(--muted);
+    background-color: var(--md-code-bg, var(--muted));
     padding: 0.5rem;
     border-radius: 0.3rem;
     overflow-x: auto;
@@ -150,11 +150,11 @@
     opacity: 0.8;
   }
   .message-content :global(blockquote) {
-    border-left: 3px solid var(--border);
+    border-left: 3px solid var(--md-border, var(--border));
     padding-left: 0.75rem;
     margin-left: 0;
     margin-bottom: 0.4rem;
-    color: var(--muted-foreground);
+    color: var(--md-muted-fg, var(--muted-foreground));
   }
   .message-content :global(p) {
     margin-bottom: 0.4rem;

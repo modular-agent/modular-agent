@@ -77,7 +77,7 @@
   }
 
   .agent-config-markdown:hover {
-    outline: 1px solid var(--border);
+    outline: 1px solid var(--md-border, var(--border));
   }
 
   .agent-config-markdown :global(h1) {
@@ -113,14 +113,14 @@
   }
 
   .agent-config-markdown :global(code) {
-    background-color: var(--muted);
+    background-color: var(--md-code-bg, var(--muted));
     padding: 0.1rem 0.3rem;
     border-radius: 0.2rem;
     font-size: 0.85em;
   }
 
   .agent-config-markdown :global(pre) {
-    background-color: var(--muted);
+    background-color: var(--md-code-bg, var(--muted));
     padding: 0.5rem;
     border-radius: 0.3rem;
     overflow-x: auto;
@@ -133,11 +133,11 @@
   }
 
   .agent-config-markdown :global(blockquote) {
-    border-left: 3px solid var(--border);
+    border-left: 3px solid var(--md-border, var(--border));
     padding-left: 0.75rem;
     margin-left: 0;
     margin-bottom: 0.4rem;
-    color: var(--muted-foreground);
+    color: var(--md-muted-fg, var(--muted-foreground));
   }
 
   .agent-config-markdown :global(a) {
@@ -153,7 +153,7 @@
   .agent-config-markdown :global(th) {
     text-align: left;
     font-weight: 700;
-    border-bottom: 1.5px solid var(--border);
+    border-bottom: 1.5px solid var(--md-border, var(--border));
     padding-bottom: 0.35rem;
   }
 
@@ -177,7 +177,7 @@
 
   .agent-config-markdown :global(hr) {
     border: none;
-    border-top: 1px solid var(--border);
+    border-top: 1px solid var(--md-border, var(--border));
     margin: 0.5rem 0;
   }
 </style>

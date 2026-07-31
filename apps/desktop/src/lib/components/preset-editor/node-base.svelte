@@ -197,7 +197,7 @@
     : ""}
 >
   <div
-    class="{bgCustom ? '' : bgColor} flex flex-col grow min-h-0 p-0 border-none rounded-xl"
+    class="{bgCustom ? 'custom-bg' : bgColor} flex flex-col grow min-h-0 p-0 border-none rounded-xl"
     style:background-color={bgCustom
       ? (nodeStyle?.bodyBackground?.(bgCustom) ?? bgCustom)
       : undefined}
@@ -294,3 +294,11 @@
       : ''}"
   />
 {/if}
+
+<style>
+  .custom-bg {
+    --md-code-bg: color-mix(in srgb, currentColor 12%, transparent);
+    --md-border: color-mix(in srgb, currentColor 35%, transparent);
+    --md-muted-fg: color-mix(in srgb, currentColor 75%, transparent);
+  }
+</style>
