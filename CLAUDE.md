@@ -322,8 +322,8 @@ noise the next time the file is opened in an editor with format-on-save.
 ## Tags
 
 Component tags carry a prefix, since one repository now holds several release lines:
-`core-v0.26.0`, `std-v0.16.0`, `llm-v0.14.0`, `web-v0.9.0`, `plugin-v0.17.0`,
-`desktop-v0.18.0`, `cli-v0.4.0`. Tags from before the merge were rewritten with the same
+`core-v0.27.0`, `std-v0.17.0`, `llm-v0.15.0`, `web-v0.10.0`, `plugin-v0.18.0`,
+`desktop-v0.19.0`, `cli-v0.4.1`. Tags from before the merge were rewritten with the same
 prefixes.
 
 ## See Also
