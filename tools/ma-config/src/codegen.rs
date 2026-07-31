@@ -118,7 +118,7 @@ fn agent_dep_value(app: AppKind, agent: &AgentEntry, known: Option<&KnownAgent>)
             table.insert("git", Value::from(url));
             table
         }
-        None => source_to_inline_table(&agent.source),
+        None => source_to_inline_table(app, &agent.source),
     };
     if let Some(features) = custom_features {
         dep.insert("default-features", Value::from(false));
@@ -246,14 +246,23 @@ fn splice_managed_region(manifest: &str, region: &str) -> Result<String, String>
     Ok(out)
 }
 
-fn source_to_inline_table(source: &AgentSource) -> InlineTable {
+fn source_to_inline_table(app: AppKind, source: &AgentSource) -> InlineTable {
     let mut dep = InlineTable::new();
     match source {
         AgentSource::Workspace => {
             dep.insert("workspace", Value::from(true));
         }
         AgentSource::Path { path } => {
-            dep.insert("path", Value::from(normalize_path(path)));
+            // Config paths are workspace-root relative, but this table lands in
+            // the app crate's manifest — rebase it like the in-tree override.
+            dep.insert(
+                "path",
+                Value::from(normalize_path(&format!(
+                    "{}/{}",
+                    app.crate_dir_to_root(),
+                    path
+                ))),
+            );
         }
         AgentSource::Git { url, tag } => {
             dep.insert("git", Value::from(url.as_str()));
@@ -387,6 +396,24 @@ mod tests {
         ));
         // The CLI does not link the Tauri plugin.
         assert!(!out.contains("tauri-plugin-modular-agent"));
+    }
+
+    #[test]
+    fn unregistered_agent_paths_are_rebased_to_the_app_manifest() {
+        let config = BuildConfig {
+            agents: vec![entry(
+                "modular-agent-custom",
+                AgentSource::Path {
+                    path: "../modular-agent-custom".into(),
+                },
+                None,
+            )],
+        };
+        let out = manifest_after("custom-path", AppKind::Desktop, &config);
+
+        assert!(
+            out.contains("modular-agent-custom = { path = \"../../../../modular-agent-custom\" }")
+        );
     }
 
     #[test]
