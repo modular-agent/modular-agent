@@ -1,6 +1,6 @@
 [package]
 name = "modular-agent-web"
-version = "0.9.0"
+version = "0.10.0"
 description = "Web Agents for Modular Agent"
 authors.workspace = true
 edition.workspace = true

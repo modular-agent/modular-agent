@@ -40,14 +40,14 @@ modular-agent-core provides an asynchronous, stream-based architecture for orche
 
 ```toml
 [dependencies]
-modular-agent-core = "0.26"
+modular-agent-core = "0.27"
 ```
 
 To disable default features:
 
 ```toml
 [dependencies]
-modular-agent-core = { version = "0.26", default-features = false, features = ["llm"] }
+modular-agent-core = { version = "0.27", default-features = false, features = ["llm"] }
 ```
 
 ## Quick Start
@@ -102,7 +102,7 @@ async fn main() -> Result<(), AgentError> {
 With the `mcp-server` feature, a host application can expose its running `ModularAgent` over a localhost MCP endpoint, so external AI agents such as Claude Code can inspect agent definitions, build and edit presets, and verify running flows through natural language.
 
 ```toml
-modular-agent-core = { version = "0.26", features = ["mcp-server"] }
+modular-agent-core = { version = "0.27", features = ["mcp-server"] }
 ```
 
 ```rust
