@@ -1969,7 +1969,7 @@ version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ab8ecd87370524b461f8557c119c405552c396ed91fc0a8eec68679eab26f94a"
 dependencies = [
- "libloading 0.8.9",
+ "libloading 0.7.4",
 ]
 
 [[package]]
@@ -4593,7 +4593,7 @@ dependencies = [
 [[package]]
 name = "modular-agent-audio"
 version = "0.4.0"
-source = "git+https://github.com/modular-agent/modular-agent-audio.git#479c98ec76175169b296d7983ad8e78738d3088c"
+source = "git+https://github.com/modular-agent/modular-agent-audio.git#0c3e007df0552e517dc430461902f7762fda0cc7"
 dependencies = [
  "base64 0.22.1",
  "log",
@@ -4603,7 +4603,7 @@ dependencies = [
 
 [[package]]
 name = "modular-agent-cli"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "clap",
  "env_logger",
@@ -4620,7 +4620,7 @@ dependencies = [
 
 [[package]]
 name = "modular-agent-core"
-version = "0.26.0"
+version = "0.27.0"
 dependencies = [
  "async-trait",
  "axum",
@@ -4651,7 +4651,7 @@ dependencies = [
 
 [[package]]
 name = "modular-agent-desktop"
-version = "0.18.0"
+version = "0.19.0"
 dependencies = [
  "anyhow",
  "ctrlc",
@@ -4690,7 +4690,7 @@ dependencies = [
 [[package]]
 name = "modular-agent-lifelog"
 version = "0.9.0"
-source = "git+https://github.com/modular-agent/modular-agent-lifelog.git#925435fa7a81d851147abb19cd545e0fafc63a30"
+source = "git+https://github.com/modular-agent/modular-agent-lifelog.git#a0504aa8e3c6cc8e1884977b9772afdf29c4eb27"
 dependencies = [
  "active-win-pos-rs",
  "base64 0.22.1",
@@ -4706,7 +4706,7 @@ dependencies = [
 
 [[package]]
 name = "modular-agent-llm"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "async-trait",
  "eventsource-stream",
@@ -4729,7 +4729,7 @@ dependencies = [
 
 [[package]]
 name = "modular-agent-macros"
-version = "0.26.0"
+version = "0.27.0"
 dependencies = [
  "im",
  "proc-macro2",
@@ -4740,7 +4740,7 @@ dependencies = [
 [[package]]
 name = "modular-agent-mattermost"
 version = "0.3.0"
-source = "git+https://github.com/modular-agent/modular-agent-mattermost.git#78e334fb6ce5f96075177793938d0ae2ca27dd75"
+source = "git+https://github.com/modular-agent/modular-agent-mattermost.git#9725115d816618027f795c6914560ed326fbd4e0"
 dependencies = [
  "chrono",
  "futures-util",
@@ -4758,7 +4758,7 @@ dependencies = [
 [[package]]
 name = "modular-agent-monty"
 version = "0.3.0"
-source = "git+https://github.com/modular-agent/modular-agent-monty.git#4ca8b025d1684332f2501804cfdc59b611195f0d"
+source = "git+https://github.com/modular-agent/modular-agent-monty.git#160c09ebc8bfe72b812e8314d44652f508c46ede"
 dependencies = [
  "get-size2",
  "im",
@@ -4773,7 +4773,7 @@ dependencies = [
 [[package]]
 name = "modular-agent-slack"
 version = "0.5.0"
-source = "git+https://github.com/modular-agent/modular-agent-slack.git#c34e41ca34abe48f7546d0c33dcfa34821dd4fda"
+source = "git+https://github.com/modular-agent/modular-agent-slack.git#b257321dc293e67f92edbb71e62c0127115a30e6"
 dependencies = [
  "chrono",
  "im",
@@ -4792,7 +4792,7 @@ dependencies = [
 [[package]]
 name = "modular-agent-sqlx"
 version = "0.5.0"
-source = "git+https://github.com/modular-agent/modular-agent-sqlx.git#364b9b2cab769e994a864333d40523dd0fad2a01"
+source = "git+https://github.com/modular-agent/modular-agent-sqlx.git#9be94a505cc62bb36eef4096e4a9f53f2e0c774d"
 dependencies = [
  "futures-util",
  "im",
@@ -4804,7 +4804,7 @@ dependencies = [
 
 [[package]]
 name = "modular-agent-std"
-version = "0.16.0"
+version = "0.17.0"
 dependencies = [
  "chrono",
  "cron",
@@ -4824,7 +4824,7 @@ dependencies = [
 [[package]]
 name = "modular-agent-voicevox"
 version = "0.5.0"
-source = "git+https://github.com/modular-agent/modular-agent-voicevox.git#e212b87253d81b32699ee4003fc8462a7d409e87"
+source = "git+https://github.com/modular-agent/modular-agent-voicevox.git#ddd619b57cd59cbd479097839b34e6c0cda05a89"
 dependencies = [
  "base64 0.22.1",
  "modular-agent-core",
@@ -4836,7 +4836,7 @@ dependencies = [
 
 [[package]]
 name = "modular-agent-web"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "html-to-markdown-rs",
  "modular-agent-core",
@@ -4852,7 +4852,7 @@ dependencies = [
 [[package]]
 name = "modular-agent-zapcode"
 version = "0.1.1"
-source = "git+https://github.com/modular-agent/modular-agent-zapcode.git#df65d4b84de5750da3318d9eeda891f0dc5d1f3a"
+source = "git+https://github.com/modular-agent/modular-agent-zapcode.git#82e8117303a0570b6dd8ea09efea5d2e0f89205f"
 dependencies = [
  "im",
  "indexmap 2.14.0",
@@ -5230,7 +5230,7 @@ version = "0.7.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "680998035259dcfcafe653688bf2aa6d3e2dc05e98be6ab46afb089dc84f1df8"
 dependencies = [
- "proc-macro-crate 3.5.0",
+ "proc-macro-crate 1.3.1",
  "proc-macro2",
  "quote",
  "syn 2.0.119",
@@ -9127,7 +9127,7 @@ dependencies = [
 
 [[package]]
 name = "tauri-plugin-modular-agent"
-version = "0.17.0"
+version = "0.18.0"
 dependencies = [
  "im",
  "modular-agent-core",
