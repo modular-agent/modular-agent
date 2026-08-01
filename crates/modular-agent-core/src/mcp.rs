@@ -43,7 +43,7 @@ use std::sync::{Arc, OnceLock};
 
 use modular_agent_core::{AgentContext, AgentError, AgentValue, async_trait};
 use rmcp::{
-    model::{CallToolRequestParam, CallToolResult},
+    model::{CallToolRequestParams, CallToolResult},
     service::ServiceExt,
     transport::{ConfigureCommandExt, TokioChildProcess},
 };
@@ -166,16 +166,13 @@ impl MCPTool {
                 self.server_name, self.info.name
             ))
         })?;
-        service
-            .call_tool(CallToolRequestParam {
-                name: self.tool.name.clone(),
-                arguments,
-                task: None,
-            })
-            .await
-            .map_err(|e| {
-                AgentError::Other(format!("Failed to call MCP tool '{}': {e}", self.info.name))
-            })
+        let mut params = CallToolRequestParams::new(self.tool.name.clone());
+        if let Some(arguments) = arguments {
+            params = params.with_arguments(arguments);
+        }
+        service.call_tool(params).await.map_err(|e| {
+            AgentError::Other(format!("Failed to call MCP tool '{}': {e}", self.info.name))
+        })
     }
 }
 
@@ -587,13 +584,8 @@ pub async fn register_tools_from_mcp_json<P: AsRef<Path>>(
 fn call_tool_result_to_agent_value(result: CallToolResult) -> Result<AgentValue, AgentError> {
     let mut contents = Vec::new();
     for c in result.content.iter() {
-        match &c.raw {
-            rmcp::model::RawContent::Text(text) => {
-                contents.push(AgentValue::string(text.text.clone()));
-            }
-            _ => {
-                // Handle other content types as needed
-            }
+        if let Some(text) = c.as_text() {
+            contents.push(AgentValue::string(text.text.clone()));
         }
     }
     let data = AgentValue::array(contents.into());

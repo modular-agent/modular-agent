@@ -27,10 +27,10 @@ jsonschema = { version = "0.48.1", optional = true, default-features = false }
 log = { workspace = true }
 photon-rs = { version = "0.3.3", optional = true }
 regex = { version = "1.12.2", optional = true }
-rmcp = { version = "0.13.0", features = ["client", "transport-child-process"], optional = true }
+rmcp = { version = "3.1", features = ["client", "transport-child-process"], optional = true }
 # mcp-server only: JsonSchema derive for MCP tool parameter types (same major
 # version as rmcp's schemars so the derives are compatible).
-schemars = { version = "1", optional = true }
+schemars = { version = "1.1", optional = true }
 serde = { workspace = true, features = ["rc"] }
 serde_json = { workspace = true }
 thiserror = { workspace = true }

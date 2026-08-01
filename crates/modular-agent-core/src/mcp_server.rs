@@ -49,8 +49,8 @@ use axum::{
 };
 use rmcp::{
     ErrorData as McpError, ServerHandler,
-    handler::server::{router::tool::ToolRouter, wrapper::Parameters},
-    model::{CallToolResult, Content, Implementation, ServerCapabilities, ServerInfo},
+    handler::server::wrapper::Parameters,
+    model::{CallToolResult, ContentBlock, Implementation, ServerCapabilities, ServerInfo},
     tool, tool_handler, tool_router,
     transport::streamable_http_server::{
         StreamableHttpServerConfig, StreamableHttpService, session::local::LocalSessionManager,
@@ -209,10 +209,7 @@ pub async fn start_mcp_server(
             }
         },
         LocalSessionManager::default().into(),
-        StreamableHttpServerConfig {
-            cancellation_token: cancel.child_token(),
-            ..Default::default()
-        },
+        StreamableHttpServerConfig::default().with_cancellation_token(cancel.child_token()),
     );
     let mut router = axum::Router::new().nest_service("/mcp", service);
     if let Some(token) = config.token {
@@ -457,7 +454,6 @@ struct McpServer {
     ma: ModularAgent,
     presets_dir: Option<PathBuf>,
     ring: Arc<EventRing>,
-    tool_router: ToolRouter<Self>,
 }
 
 impl McpServer {
@@ -466,7 +462,6 @@ impl McpServer {
             ma,
             presets_dir,
             ring,
-            tool_router: Self::tool_router(),
         }
     }
 }
@@ -476,11 +471,11 @@ impl McpServer {
 // itself (wrong names, invalid values) are reported as is_error results
 // (err_text), not protocol errors.
 fn ok_text(text: impl Into<String>) -> Result<CallToolResult, McpError> {
-    Ok(CallToolResult::success(vec![Content::text(text.into())]))
+    Ok(CallToolResult::success(vec![ContentBlock::text(text)]))
 }
 
 fn err_text(text: impl Into<String>) -> Result<CallToolResult, McpError> {
-    Ok(CallToolResult::error(vec![Content::text(text.into())]))
+    Ok(CallToolResult::error(vec![ContentBlock::text(text)]))
 }
 
 fn ok_json(value: &impl serde::Serialize) -> Result<CallToolResult, McpError> {
@@ -1346,18 +1341,12 @@ impl McpServer {
 #[tool_handler]
 impl ServerHandler for McpServer {
     fn get_info(&self) -> ServerInfo {
-        ServerInfo {
-            capabilities: ServerCapabilities::builder().enable_tools().build(),
-            server_info: Implementation {
-                name: "modular-agent".into(),
-                title: Some("Modular Agent".into()),
-                version: env!("CARGO_PKG_VERSION").into(),
-                icons: None,
-                website_url: None,
-            },
-            instructions: Some(SERVER_INSTRUCTIONS.into()),
-            ..Default::default()
-        }
+        ServerInfo::new(ServerCapabilities::builder().enable_tools().build())
+            .with_server_info(
+                Implementation::new("modular-agent", env!("CARGO_PKG_VERSION"))
+                    .with_title("Modular Agent"),
+            )
+            .with_instructions(SERVER_INSTRUCTIONS)
     }
 }
 
@@ -1712,8 +1701,8 @@ mod tests {
         }
 
         fn result_text(result: &CallToolResult) -> &str {
-            match &result.content[0].raw {
-                rmcp::model::RawContent::Text(text) => &text.text,
+            match &result.content[0] {
+                ContentBlock::Text(text) => &text.text,
                 other => panic!("expected text content, got {other:?}"),
             }
         }
