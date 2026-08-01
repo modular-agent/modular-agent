@@ -120,7 +120,18 @@ fn agent_dep_value(app: AppKind, agent: &AgentEntry, known: Option<&KnownAgent>)
         }
         None => source_to_inline_table(app, &agent.source),
     };
-    if let Some(features) = custom_features {
+    // The wizard stores `None` when the selection equals the registry's
+    // default_features. Unlike in-tree agents, where the workspace dependency
+    // entry carries the right features, an out-of-tree dep line would fall back
+    // to the crate's own defaults — which may differ (e.g. audio defaults to no
+    // features while the registry wants transcribe-cuda). Materialize the
+    // registry defaults so both meanings of "default" agree.
+    let features = custom_features.or_else(|| {
+        known
+            .map(|k| k.default_features.as_slice())
+            .filter(|f| !f.is_empty())
+    });
+    if let Some(features) = features {
         dep.insert("default-features", Value::from(false));
         dep.insert("features", Value::from(feature_array(features)));
     }
@@ -329,6 +340,18 @@ mod tests {
                     conflicts: vec![],
                     default_for: vec!["desktop".into()],
                 },
+                KnownAgent {
+                    name: "modular-agent-audio".into(),
+                    description: "Audio agents".into(),
+                    git_url: Some(
+                        "https://github.com/modular-agent/modular-agent-audio.git".into(),
+                    ),
+                    in_tree: false,
+                    available_features: vec!["capture".into(), "transcribe-cuda".into()],
+                    default_features: vec!["transcribe-cuda".into()],
+                    conflicts: vec![],
+                    default_for: vec!["desktop".into()],
+                },
             ],
         }
     }
@@ -414,6 +437,26 @@ mod tests {
         assert!(
             out.contains("modular-agent-custom = { path = \"../../../../modular-agent-custom\" }")
         );
+    }
+
+    #[test]
+    fn registry_default_features_materialize_for_out_of_tree_deps() {
+        let config = BuildConfig {
+            agents: vec![entry(
+                "modular-agent-audio",
+                AgentSource::Git {
+                    url: "https://github.com/modular-agent/modular-agent-audio.git".into(),
+                    tag: None,
+                },
+                None,
+            )],
+        };
+        let out = manifest_after("registry-defaults", AppKind::Desktop, &config);
+
+        assert!(out.contains(
+            "modular-agent-audio = { git = \"https://github.com/modular-agent/modular-agent-audio.git\", \
+             default-features = false, features = [\"transcribe-cuda\"] }"
+        ));
     }
 
     #[test]

@@ -199,7 +199,8 @@ fn prompt_crate_features(
         .map(|&i| available[i].to_string())
         .collect();
 
-    // None = use crate defaults, Some([...]) = explicit override
+    // None = registry default_features (materialized by codegen for
+    // out-of-tree deps), Some([...]) = explicit override
     if selected.len() == defaults.len() && selected.iter().all(|f| defaults.contains(f)) {
         Ok(None)
     } else {
