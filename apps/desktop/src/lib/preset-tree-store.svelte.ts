@@ -23,9 +23,14 @@ class PresetTreeStore {
     }
   }
 
-  /** Refresh a loaded directory from backend. Ignores unexpanded paths. Discards stale responses. */
-  async refresh(path: string) {
-    if (!(path in this.entries)) return;
+  /** Refresh a loaded directory from backend. Discards stale responses. */
+  async refresh(path: string): Promise<void> {
+    if (!(path in this.entries)) {
+      // Not loaded yet — a new folder may have appeared on disk; refresh the
+      // nearest loaded ancestor so it shows up. Root "" is always loaded.
+      const parent = path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "";
+      return this.refresh(parent);
+    }
     const seq = (this.refreshSeq.get(path) ?? 0) + 1;
     this.refreshSeq.set(path, seq);
     try {
