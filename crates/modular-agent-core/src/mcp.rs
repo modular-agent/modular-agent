@@ -51,6 +51,11 @@ use serde::Deserialize;
 use tokio::process::Command;
 use tokio::sync::Mutex as AsyncMutex;
 
+#[cfg(feature = "mcp-http-client")]
+use rmcp::transport::{
+    StreamableHttpClientTransport, streamable_http_client::StreamableHttpClientTransportConfig,
+};
+
 use crate::tool::{Tool, ToolInfo, register_tool};
 
 /// Tool implementation that delegates to an MCP server.
@@ -199,6 +204,10 @@ impl Tool for MCPTool {
 ///     "filesystem": {
 ///       "command": "npx",
 ///       "args": ["-y", "@anthropic/mcp-server-filesystem", "/path/to/dir"]
+///     },
+///     "remote": {
+///       "url": "https://example.com/mcp",
+///       "headers": { "Authorization": "Bearer <token>" }
 ///     }
 ///   }
 /// }
@@ -212,18 +221,44 @@ pub struct MCPConfig {
 
 /// Configuration for a single MCP server.
 ///
-/// Specifies how to start the MCP server process.
+/// Either a local server spawned as a child process (`command`) or a remote
+/// streamable HTTP server (`url`). Untagged: extra fields such as
+/// `"type": "http"` in Claude Code style configs are ignored.
 #[derive(Debug, Clone, Deserialize)]
-pub struct MCPServerConfig {
-    /// The command to execute (e.g., "npx", "node", "python").
-    pub command: String,
+#[serde(untagged)]
+pub enum MCPServerConfig {
+    /// Remote MCP server reached over streamable HTTP.
+    Http {
+        /// The server endpoint URL (e.g., "https://example.com/mcp").
+        url: String,
 
-    /// Arguments to pass to the command.
-    pub args: Vec<String>,
+        /// Optional headers sent with every request (e.g., Authorization).
+        #[serde(default)]
+        headers: Option<HashMap<String, String>>,
+    },
+    /// Local MCP server spawned as a child process.
+    Stdio {
+        /// The command to execute (e.g., "npx", "node", "python").
+        command: String,
 
-    /// Optional environment variables for the process.
-    #[serde(default)]
-    pub env: Option<HashMap<String, String>>,
+        /// Arguments to pass to the command.
+        #[serde(default)]
+        args: Vec<String>,
+
+        /// Optional environment variables for the process.
+        #[serde(default)]
+        env: Option<HashMap<String, String>>,
+    },
+}
+
+impl MCPServerConfig {
+    /// Connection target (command or URL) for log messages.
+    fn endpoint(&self) -> &str {
+        match self {
+            MCPServerConfig::Http { url, .. } => url,
+            MCPServerConfig::Stdio { command, .. } => command,
+        }
+    }
 }
 
 /// Type alias for a running MCP service connection.
@@ -295,19 +330,21 @@ impl MCPConnectionPool {
         }
 
         log::info!(
-            "Starting MCP server '{}' (command: {})",
+            "Starting MCP server '{}' ({})",
             server_name,
-            config.command
+            config.endpoint()
         );
 
-        // Start new MCP service
-        let service = ()
-            .serve(
-                TokioChildProcess::new(Command::new(&config.command).configure(|cmd| {
-                    for arg in &config.args {
+        // Start new MCP service. Both transports produce the same
+        // RunningService and InitializeError types, so the serve error is
+        // mapped once after the match.
+        let service = match config {
+            MCPServerConfig::Stdio { command, args, env } => {
+                let transport = TokioChildProcess::new(Command::new(command).configure(|cmd| {
+                    for arg in args {
                         cmd.arg(arg);
                     }
-                    if let Some(env) = &config.env {
+                    if let Some(env) = env {
                         for (key, value) in env {
                             cmd.env(key, value);
                         }
@@ -319,16 +356,52 @@ impl MCPConnectionPool {
                         "Failed to start MCP process for '{}': {e}",
                         server_name
                     ))
-                })?,
-            )
-            .await
-            .map_err(|e| {
-                log::error!("Failed to start MCP service for '{}': {}", server_name, e);
-                AgentError::Other(format!(
-                    "Failed to start MCP service for '{}': {e}",
+                })?;
+                ().serve(transport).await
+            }
+            #[cfg(feature = "mcp-http-client")]
+            MCPServerConfig::Http { url, headers } => {
+                let mut transport_config =
+                    StreamableHttpClientTransportConfig::with_uri(url.clone());
+                if let Some(headers) = headers {
+                    let mut header_map = HashMap::new();
+                    for (name, value) in headers {
+                        let header_name =
+                            http::HeaderName::from_bytes(name.as_bytes()).map_err(|e| {
+                                AgentError::Other(format!(
+                                    "Invalid header name '{}' for MCP server '{}': {e}",
+                                    name, server_name
+                                ))
+                            })?;
+                        let header_value = http::HeaderValue::from_str(value).map_err(|e| {
+                            AgentError::Other(format!(
+                                "Invalid value for header '{}' of MCP server '{}': {e}",
+                                name, server_name
+                            ))
+                        })?;
+                        header_map.insert(header_name, header_value);
+                    }
+                    transport_config = transport_config.custom_headers(header_map);
+                }
+                ().serve(StreamableHttpClientTransport::from_config(transport_config))
+                    .await
+            }
+            #[cfg(not(feature = "mcp-http-client"))]
+            MCPServerConfig::Http { .. } => {
+                return Err(AgentError::Other(format!(
+                    "MCP server '{}' is configured with a URL, but this build lacks \
+                     the mcp-http-client feature",
                     server_name
-                ))
-            })?;
+                )));
+            }
+        };
+        let service = service.map_err(|e| {
+            log::error!("Failed to start MCP service for '{}': {}", server_name, e);
+            AgentError::Other(format!(
+                "Failed to start MCP service for '{}': {e}",
+                server_name
+            ))
+        })?;
 
         log::info!("Successfully started MCP server '{}'", server_name);
 
@@ -477,9 +550,11 @@ async fn register_tools_from_server(
         pool.get_or_create(&server_name, &server_config).await?
     };
 
-    // List all available tools from this server
+    // List all available tools from this server. list_all_tools follows
+    // nextCursor pagination, so servers with more tools than one page are
+    // fully enumerated.
     log::debug!("Listing tools from MCP server '{}'", server_name);
-    let tools_list = {
+    let tools = {
         let connection = entry.conn.lock().await;
         let service = connection.service.as_ref().ok_or_else(|| {
             log::error!("MCP service for '{}' is not available", server_name);
@@ -488,7 +563,7 @@ async fn register_tools_from_server(
                 server_name
             ))
         })?;
-        service.list_tools(Default::default()).await.map_err(|e| {
+        service.list_all_tools().await.map_err(|e| {
             log::error!("Failed to list MCP tools for '{}': {}", server_name, e);
             AgentError::Other(format!(
                 "Failed to list MCP tools for '{}': {e}",
@@ -500,7 +575,7 @@ async fn register_tools_from_server(
     let mut registered_tool_names = Vec::new();
 
     // Register all tools from this server using connection pool
-    for tool_info in tools_list.tools {
+    for tool_info in tools {
         let mcp_tool_name = format!("{}::{}", server_name, tool_info.name);
         registered_tool_names.push(mcp_tool_name.clone());
 
@@ -579,26 +654,40 @@ pub async fn register_tools_from_mcp_json<P: AsRef<Path>>(
 
 /// Converts an MCP tool call result to an AgentValue.
 ///
-/// Extracts text content from the result and returns it as an array.
-/// If the result indicates an error, returns an AgentError instead.
+/// Prefers the structured payload (`structuredContent`) when the server
+/// provides one; otherwise extracts text content from the result and returns
+/// it as an array. If the result indicates an error, returns an AgentError
+/// instead, built the same way.
 fn call_tool_result_to_agent_value(result: CallToolResult) -> Result<AgentValue, AgentError> {
-    let mut contents = Vec::new();
-    for c in result.content.iter() {
-        if let Some(text) = c.as_text() {
-            contents.push(AgentValue::string(text.text.clone()));
-        }
-    }
-    let data = AgentValue::array(contents.into());
     if result.is_error == Some(true) {
-        return Err(AgentError::Other(
-            serde_json::to_string(&data).map_err(|e| AgentError::InvalidValue(e.to_string()))?,
-        ));
+        let message = match &result.structured_content {
+            Some(v) => v.to_string(),
+            None => serde_json::to_string(&text_contents(&result))
+                .map_err(|e| AgentError::InvalidValue(e.to_string()))?,
+        };
+        return Err(AgentError::Other(message));
     }
-    Ok(data)
+    if let Some(v) = result.structured_content {
+        return AgentValue::from_json(v);
+    }
+    Ok(text_contents(&result))
+}
+
+/// Collects the text blocks of a tool result into an AgentValue array.
+fn text_contents(result: &CallToolResult) -> AgentValue {
+    let contents: Vec<AgentValue> = result
+        .content
+        .iter()
+        .filter_map(|c| c.as_text().map(|t| AgentValue::string(t.text.clone())))
+        .collect();
+    AgentValue::array(contents.into())
 }
 
 #[cfg(test)]
 mod tests {
+    use rmcp::model::ContentBlock;
+    use serde_json::json;
+
     use super::*;
 
     fn test_entry(dead: bool) -> PoolEntry {
@@ -609,7 +698,7 @@ mod tests {
     }
 
     fn bogus_config() -> MCPServerConfig {
-        MCPServerConfig {
+        MCPServerConfig::Stdio {
             command: "modular-agent-test-nonexistent-command".to_string(),
             args: Vec::new(),
             env: None,
@@ -663,5 +752,109 @@ mod tests {
         pool.connections.insert("s".to_string(), test_entry(false));
         assert!(pool.get_or_create("s", &bogus_config()).await.is_err());
         assert!(pool.connections.is_empty());
+    }
+
+    #[test]
+    fn call_result_prefers_structured_content() {
+        // CallToolResult::structured adds a text fallback alongside
+        // structuredContent; the structured payload must win over it.
+        let result = CallToolResult::structured(json!({"a": 1}));
+        let value = call_tool_result_to_agent_value(result).unwrap();
+        let obj = value.as_object().unwrap();
+        assert_eq!(obj.get("a"), Some(&AgentValue::integer(1)));
+    }
+
+    #[test]
+    fn call_result_without_structured_content_collects_text() {
+        let result = CallToolResult::success(vec![
+            ContentBlock::text("hello"),
+            ContentBlock::text("world"),
+        ]);
+        let value = call_tool_result_to_agent_value(result).unwrap();
+        let expected = AgentValue::array(
+            vec![AgentValue::string("hello"), AgentValue::string("world")].into(),
+        );
+        assert_eq!(value, expected);
+    }
+
+    #[test]
+    fn call_result_error_prefers_structured_content() {
+        let result = CallToolResult::structured_error(json!({"reason": "bad input"}));
+        let err = call_tool_result_to_agent_value(result).unwrap_err();
+        match err {
+            AgentError::Other(message) => assert_eq!(message, r#"{"reason":"bad input"}"#),
+            other => panic!("expected AgentError::Other, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn call_result_error_without_structured_content_serializes_text() {
+        let result = CallToolResult::error(vec![ContentBlock::text("boom")]);
+        let err = call_tool_result_to_agent_value(result).unwrap_err();
+        match err {
+            AgentError::Other(message) => assert_eq!(message, r#"["boom"]"#),
+            other => panic!("expected AgentError::Other, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn config_deserializes_stdio_form() {
+        let json = r#"{
+            "mcpServers": {
+                "fs": {
+                    "command": "npx",
+                    "args": ["-y", "pkg"],
+                    "env": { "KEY": "VALUE" }
+                }
+            }
+        }"#;
+        let config: MCPConfig = serde_json::from_str(json).unwrap();
+        match &config.mcp_servers["fs"] {
+            MCPServerConfig::Stdio { command, args, env } => {
+                assert_eq!(command, "npx");
+                assert_eq!(args, &["-y", "pkg"]);
+                assert_eq!(env.as_ref().unwrap()["KEY"], "VALUE");
+            }
+            other => panic!("expected stdio config, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn config_deserializes_url_form() {
+        // "type" is an extra field in Claude Code style configs; untagged
+        // deserialization must ignore it.
+        let json = r#"{
+            "mcpServers": {
+                "remote": { "type": "http", "url": "https://example.com/mcp" }
+            }
+        }"#;
+        let config: MCPConfig = serde_json::from_str(json).unwrap();
+        match &config.mcp_servers["remote"] {
+            MCPServerConfig::Http { url, headers } => {
+                assert_eq!(url, "https://example.com/mcp");
+                assert!(headers.is_none());
+            }
+            other => panic!("expected http config, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn config_deserializes_url_form_with_headers() {
+        let json = r#"{
+            "mcpServers": {
+                "remote": {
+                    "url": "https://example.com/mcp",
+                    "headers": { "Authorization": "Bearer token" }
+                }
+            }
+        }"#;
+        let config: MCPConfig = serde_json::from_str(json).unwrap();
+        match &config.mcp_servers["remote"] {
+            MCPServerConfig::Http { url, headers } => {
+                assert_eq!(url, "https://example.com/mcp");
+                assert_eq!(headers.as_ref().unwrap()["Authorization"], "Bearer token");
+            }
+            other => panic!("expected http config, got {:?}", other),
+        }
     }
 }

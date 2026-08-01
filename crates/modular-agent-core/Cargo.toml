@@ -18,6 +18,9 @@ fnv = "1"
 # default-features = false + alloc: only the order-preserving stream
 # combinators (buffered) are needed for parallel tool execution.
 futures-util = { version = "0.3", optional = true, default-features = false, features = ["alloc"] }
+# mcp-http-client only: HeaderName/HeaderValue for custom request headers
+# (rmcp does not re-export the http crate).
+http = { version = "1", optional = true }
 im = { workspace = true }
 indexmap = { version = "2", features = ["serde"] }
 inventory = "0.3"
@@ -57,6 +60,16 @@ image = ["photon-rs"]
 # tokio/fs + tokio/io-util: used only by the session module (JSONL persistence).
 llm = ["regex", "jsonschema", "futures-util", "uuid", "chrono", "tokio/fs", "tokio/io-util"]
 mcp = ["rmcp", "llm"]
+# Streamable HTTP client transport for remote MCP servers ("url" entries in
+# mcp.json). Opt-in so the default build does not pull reqwest into every
+# crates.io consumer. rmcp/reqwest is needed on top of the transport feature
+# to get a TLS backend (rustls).
+mcp-http-client = [
+    "mcp",
+    "rmcp/transport-streamable-http-client-reqwest",
+    "rmcp/reqwest",
+    "dep:http",
+]
 # Built-in MCP server (streamable HTTP) exposing flow-editing tools to
 # external agents. Implies "file" because the save_preset tool writes presets
 # to disk.

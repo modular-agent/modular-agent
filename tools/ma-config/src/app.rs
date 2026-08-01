@@ -78,8 +78,9 @@ impl AppKind {
 
     /// Features both apps need from modular-agent-core. The flow-editing MCP
     /// server is toggled at runtime, so it has to be compiled in either way.
+    /// mcp-http-client lets mcp.json reference remote streamable HTTP servers.
     pub fn core_features(self) -> &'static [&'static str] {
-        &["mcp-server"]
+        &["mcp-server", "mcp-http-client"]
     }
 
     /// Only the desktop app links the Tauri plugin.

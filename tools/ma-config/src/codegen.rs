@@ -394,9 +394,10 @@ mod tests {
         let out = manifest_after("in-tree", AppKind::Desktop, &config);
 
         assert!(out.contains("modular-agent-std = { workspace = true }"));
-        assert!(
-            out.contains("modular-agent-core = { workspace = true, features = [\"mcp-server\"] }")
-        );
+        assert!(out.contains(
+            "modular-agent-core = { workspace = true, \
+             features = [\"mcp-server\", \"mcp-http-client\"] }"
+        ));
         assert!(out.contains("tauri-plugin-modular-agent = { workspace = true }"));
         // Agents dropped from the selection lose their dependency line.
         assert!(!out.contains("modular-agent-gone"));

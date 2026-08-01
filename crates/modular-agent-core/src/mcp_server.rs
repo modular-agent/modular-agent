@@ -49,8 +49,10 @@ use axum::{
 };
 use rmcp::{
     ErrorData as McpError, ServerHandler,
-    handler::server::wrapper::Parameters,
-    model::{CallToolResult, ContentBlock, Implementation, ServerCapabilities, ServerInfo},
+    handler::server::wrapper::{Json, Parameters},
+    model::{
+        CallToolResult, ContentBlock, Implementation, JsonObject, ServerCapabilities, ServerInfo,
+    },
     tool, tool_handler, tool_router,
     transport::streamable_http_server::{
         StreamableHttpServerConfig, StreamableHttpService, session::local::LocalSessionManager,
@@ -278,7 +280,8 @@ const DEFAULT_POLL_LIMIT: usize = 50;
 /// of a captured error; see [`run_event_collector`].
 const PRESET_ID_RESOLVE_TIMEOUT: std::time::Duration = std::time::Duration::from_millis(100);
 
-#[derive(Clone, Serialize)]
+// JsonSchema so the error-polling tool can expose a typed output schema.
+#[derive(Clone, Serialize, JsonSchema)]
 struct ErrorRecord {
     seq: u64,
     time_ms: u64,
@@ -466,10 +469,12 @@ impl McpServer {
     }
 }
 
-// Tool methods return Result<CallToolResult, McpError> because that is what
-// rmcp's IntoCallToolResult accepts; failures an external agent can fix by
-// itself (wrong names, invalid values) are reported as is_error results
-// (err_text), not protocol errors.
+// Text-ack tools return Result<CallToolResult, McpError>; JSON-returning
+// tools return Result<Json<T>, CallToolResult> so the #[tool] macro derives
+// an output_schema from T and Json<T> produces structured_content (plus a
+// JSON-string text fallback for older clients). In both shapes, failures an
+// external agent can fix by itself (wrong names, invalid values) are
+// reported as is_error results (err_text / err), not protocol errors.
 fn ok_text(text: impl Into<String>) -> Result<CallToolResult, McpError> {
     Ok(CallToolResult::success(vec![ContentBlock::text(text)]))
 }
@@ -478,10 +483,16 @@ fn err_text(text: impl Into<String>) -> Result<CallToolResult, McpError> {
     Ok(CallToolResult::error(vec![ContentBlock::text(text)]))
 }
 
-fn ok_json(value: &impl serde::Serialize) -> Result<CallToolResult, McpError> {
-    match serde_json::to_string_pretty(value) {
-        Ok(json) => ok_text(json),
-        Err(e) => err_text(format!("Failed to serialize result: {e}")),
+/// is_error result for the Err arm of structured-output tools.
+fn err(text: impl Into<String>) -> CallToolResult {
+    CallToolResult::error(vec![ContentBlock::text(text)])
+}
+
+fn ok_json(value: &impl serde::Serialize) -> Result<Json<JsonObject>, CallToolResult> {
+    match serde_json::to_value(value) {
+        Ok(Value::Object(map)) => Ok(Json(map)),
+        Ok(other) => Err(err(format!("Result is not a JSON object: {other}"))),
+        Err(e) => Err(err(format!("Failed to serialize result: {e}"))),
     }
 }
 
@@ -522,17 +533,14 @@ fn strip_config_specs(value: &mut Value) {
     }
 }
 
-fn preset_spec_result(spec: &PresetSpec) -> Result<CallToolResult, McpError> {
-    let mut value = match serde_json::to_value(spec) {
-        Ok(v) => v,
-        Err(e) => return err_text(format!("Failed to serialize preset spec: {e}")),
-    };
-    if let Some(agents) = value.get_mut("agents").and_then(|a| a.as_array_mut()) {
+fn preset_spec_result(spec: &PresetSpec) -> Result<Json<JsonObject>, CallToolResult> {
+    let Json(mut map) = ok_json(spec)?;
+    if let Some(agents) = map.get_mut("agents").and_then(|a| a.as_array_mut()) {
         for agent in agents {
             strip_config_specs(agent);
         }
     }
-    ok_json(&value)
+    Ok(Json(map))
 }
 
 /// Truncates long default values so the definition listing stays compact.
@@ -836,6 +844,54 @@ struct GetExternalOutputsParams {
     limit: Option<usize>,
 }
 
+// --- Tool response types ---
+//
+// Fixed-shape responses get local structs so the derived output_schema is
+// meaningful. Dynamic payloads (definitions, specs) use Json<JsonObject>:
+// their shape follows core types that intentionally do not derive JsonSchema,
+// while JsonObject still derives `{"type": "object"}`. Json<Value> would
+// derive the unconstrained schema (no "type"), which strict clients such as
+// Claude Code reject — failing the whole listTools call. For the same reason
+// every structured payload must be a JSON object at the top level, never an
+// array.
+
+#[derive(Serialize, JsonSchema)]
+struct ListPresetsResponse {
+    /// Open presets; each entry carries id, name and running state.
+    presets: Vec<Value>,
+}
+
+#[derive(Serialize, JsonSchema)]
+struct CreatePresetResponse {
+    /// Id of the created preset, used by all other preset tools.
+    preset_id: String,
+}
+
+#[derive(Serialize, JsonSchema)]
+struct GetAgentErrorsResponse {
+    /// Seq of the last record returned; pass it back as since_seq on the
+    /// next call to receive only newer records.
+    latest_seq: u64,
+    /// Number of events lost because the collector fell behind the event
+    /// stream.
+    dropped: u64,
+    /// Captured agent errors, oldest first.
+    errors: Vec<ErrorRecord>,
+}
+
+#[derive(Serialize, JsonSchema)]
+struct GetExternalOutputsResponse {
+    /// Seq of the last record returned; pass it back as since_seq on the
+    /// next call to receive only newer records.
+    latest_seq: u64,
+    /// Number of events lost because the collector fell behind the event
+    /// stream.
+    dropped: u64,
+    /// Captured external outputs, oldest first. Each record carries seq,
+    /// time_ms, channel and value fields.
+    outputs: Vec<Value>,
+}
+
 // --- Tools ---
 
 #[tool_router]
@@ -859,20 +915,28 @@ impl McpServer {
     async fn get_agent_definition(
         &self,
         Parameters(p): Parameters<GetAgentDefinitionParams>,
-    ) -> Result<CallToolResult, McpError> {
+    ) -> Result<Json<JsonObject>, CallToolResult> {
         match self.ma.get_agent_definition(&p.def_name) {
             Some(def) => ok_json(&def),
-            None => err_text(format!(
+            None => Err(err(format!(
                 "Unknown agent definition \"{}\". Use list_agent_definitions to see available definitions.",
                 p.def_name
-            )),
+            ))),
         }
     }
 
     /// List all currently open presets (id, name, running state).
     #[tool]
-    async fn list_presets(&self) -> Result<CallToolResult, McpError> {
-        ok_json(&self.ma.get_preset_infos().await)
+    async fn list_presets(&self) -> Result<Json<ListPresetsResponse>, CallToolResult> {
+        let presets = self
+            .ma
+            .get_preset_infos()
+            .await
+            .iter()
+            .map(serde_json::to_value)
+            .collect::<Result<_, _>>()
+            .map_err(|e| err(format!("Failed to serialize result: {e}")))?;
+        Ok(Json(ListPresetsResponse { presets }))
     }
 
     /// Create a new empty preset with the given name. Returns the preset id
@@ -881,13 +945,13 @@ impl McpServer {
     async fn create_preset(
         &self,
         Parameters(p): Parameters<CreatePresetParams>,
-    ) -> Result<CallToolResult, McpError> {
+    ) -> Result<Json<CreatePresetResponse>, CallToolResult> {
         if let Err(e) = validate_preset_name(&p.name) {
-            return err_text(e);
+            return Err(err(e));
         }
         match self.ma.new_preset_with_name(p.name) {
-            Ok(id) => ok_json(&serde_json::json!({ "preset_id": id })),
-            Err(e) => err_text(preset_error_text(e)),
+            Ok(id) => Ok(Json(CreatePresetResponse { preset_id: id })),
+            Err(e) => Err(err(preset_error_text(e))),
         }
     }
 
@@ -897,13 +961,13 @@ impl McpServer {
     async fn get_preset_spec(
         &self,
         Parameters(p): Parameters<PresetIdParams>,
-    ) -> Result<CallToolResult, McpError> {
+    ) -> Result<Json<JsonObject>, CallToolResult> {
         match self.ma.get_preset_spec(&p.preset_id).await {
             Some(spec) => preset_spec_result(&spec),
-            None => err_text(format!(
+            None => Err(err(format!(
                 "Preset \"{}\" not found. Use list_presets to see open presets.",
                 p.preset_id
-            )),
+            ))),
         }
     }
 
@@ -913,17 +977,17 @@ impl McpServer {
     async fn add_agent(
         &self,
         Parameters(p): Parameters<AddAgentParams>,
-    ) -> Result<CallToolResult, McpError> {
+    ) -> Result<Json<JsonObject>, CallToolResult> {
         let Some(def) = self.ma.get_agent_definition(&p.def_name) else {
-            return err_text(format!(
+            return Err(err(format!(
                 "Unknown agent definition \"{}\". Use list_agent_definitions to see available definitions.",
                 p.def_name
-            ));
+            )));
         };
         if let Some(configs) = &p.configs
             && let Err(e) = reject_global_config_keys(&def, configs.keys())
         {
-            return err_text(e);
+            return Err(err(e));
         }
 
         // Configs the definition declares go into the spec the agent is built
@@ -937,7 +1001,7 @@ impl McpServer {
             for (key, value) in configs {
                 let agent_value = match json_to_agent_value(&key, value) {
                     Ok(v) => v,
-                    Err(e) => return err_text(e),
+                    Err(e) => return Err(err(e)),
                 };
                 match spec.configs.as_mut() {
                     Some(spec_configs) if spec_configs.contains_key(&key) => {
@@ -961,7 +1025,7 @@ impl McpServer {
         let preset_id = p.preset_id.clone();
         let agent_id = match self.ma.add_agent(p.preset_id, spec).await {
             Ok(id) => id,
-            Err(e) => return err_text(e.to_string()),
+            Err(e) => return Err(err(e.to_string())),
         };
 
         let mut warning = None;
@@ -989,7 +1053,7 @@ impl McpServer {
                         "\nRolling the agent back failed, so it remains in the preset as \"{agent_id}\": {rollback}"
                     ));
                 }
-                return err_text(message);
+                return Err(err(message));
             }
 
             let mut merged: AgentConfigs = constructed
@@ -1011,7 +1075,7 @@ impl McpServer {
             Some(created) => {
                 let mut value = match serde_json::to_value(&created) {
                     Ok(v) => v,
-                    Err(e) => return err_text(format!("Failed to serialize agent spec: {e}")),
+                    Err(e) => return Err(err(format!("Failed to serialize agent spec: {e}"))),
                 };
                 strip_config_specs(&mut value);
                 if let Some(warning) = warning
@@ -1295,7 +1359,7 @@ impl McpServer {
     async fn get_agent_errors(
         &self,
         Parameters(p): Parameters<GetAgentErrorsParams>,
-    ) -> Result<CallToolResult, McpError> {
+    ) -> Result<Json<GetAgentErrorsResponse>, CallToolResult> {
         let since_seq = p.since_seq.unwrap_or(0);
         let errors = self.ring.collect_errors(
             p.preset_id.as_deref(),
@@ -1307,10 +1371,10 @@ impl McpServer {
         // but not yet pushed would otherwise be skipped forever by the
         // next poll.
         let latest_seq = errors.last().map_or(since_seq, |r| r.seq);
-        ok_json(&serde_json::json!({
-            "latest_seq": latest_seq,
-            "dropped": self.ring.dropped(),
-            "errors": errors,
+        Ok(Json(GetAgentErrorsResponse {
+            latest_seq,
+            dropped: self.ring.dropped(),
+            errors,
         }))
     }
 
@@ -1322,7 +1386,7 @@ impl McpServer {
     async fn get_external_outputs(
         &self,
         Parameters(p): Parameters<GetExternalOutputsParams>,
-    ) -> Result<CallToolResult, McpError> {
+    ) -> Result<Json<GetExternalOutputsResponse>, CallToolResult> {
         let since_seq = p.since_seq.unwrap_or(0);
         let outputs = self.ring.collect_outputs(
             p.channel.as_deref(),
@@ -1330,10 +1394,17 @@ impl McpServer {
             p.limit.unwrap_or(DEFAULT_POLL_LIMIT),
         );
         let latest_seq = outputs.last().map_or(since_seq, |r| r.seq);
-        ok_json(&serde_json::json!({
-            "latest_seq": latest_seq,
-            "dropped": self.ring.dropped(),
-            "outputs": outputs,
+        // OutputRecord carries an AgentValue, which has no JsonSchema, so
+        // records are pre-serialized and typed as plain JSON in the schema.
+        let outputs = outputs
+            .iter()
+            .map(serde_json::to_value)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| err(format!("Failed to serialize output record: {e}")))?;
+        Ok(Json(GetExternalOutputsResponse {
+            latest_seq,
+            dropped: self.ring.dropped(),
+            outputs,
         }))
     }
 }
@@ -1596,6 +1667,8 @@ mod tests {
     mod tool_tests {
         use async_trait::async_trait;
         use modular_agent_macros::modular_agent;
+        use rmcp::handler::server::tool::IntoCallToolResult;
+        use rmcp::model::CallToolResponse;
 
         use super::*;
         use crate::agent::{AgentData, AsAgent};
@@ -1700,6 +1773,16 @@ mod tests {
             (ma, server, preset_id)
         }
 
+        /// Applies the same conversion the rmcp tool router applies to a
+        /// tool method's return value, so assertions see the wire-level
+        /// CallToolResult (text fallback, structured_content, is_error).
+        fn complete(result: impl IntoCallToolResult) -> CallToolResult {
+            match result.into_call_tool_result().expect("tool result") {
+                CallToolResponse::Complete(result) => result,
+                other => panic!("expected a complete result, got {other:?}"),
+            }
+        }
+
         fn result_text(result: &CallToolResult) -> &str {
             match &result.content[0] {
                 ContentBlock::Text(text) => &text.text,
@@ -1719,18 +1802,20 @@ mod tests {
             server: &McpServer,
             preset_id: &str,
             configs: serde_json::Map<String, Value>,
-        ) -> Result<CallToolResult, McpError> {
-            server
-                .add_agent(Parameters(AddAgentParams {
-                    preset_id: preset_id.to_string(),
-                    def_name: McpNumberedAgent::DEF_NAME.to_string(),
-                    configs: Some(configs),
-                    x: None,
-                    y: None,
-                    width: None,
-                    height: None,
-                }))
-                .await
+        ) -> CallToolResult {
+            complete(
+                server
+                    .add_agent(Parameters(AddAgentParams {
+                        preset_id: preset_id.to_string(),
+                        def_name: McpNumberedAgent::DEF_NAME.to_string(),
+                        configs: Some(configs),
+                        x: None,
+                        y: None,
+                        width: None,
+                        height: None,
+                    }))
+                    .await,
+            )
         }
 
         fn json_map(value: Value) -> serde_json::Map<String, Value> {
@@ -1749,8 +1834,7 @@ mod tests {
                 &preset_id,
                 json_map(serde_json::json!({ "n": 3, "c2": "hello" })),
             )
-            .await
-            .unwrap();
+            .await;
             assert!(!is_error(&result), "{}", result_text(&result));
 
             // The returned spec reflects the deferred key and the ports that
@@ -1773,8 +1857,7 @@ mod tests {
                 &preset_id,
                 json_map(serde_json::json!({ "n": 3, "c9": "x" })),
             )
-            .await
-            .unwrap();
+            .await;
             assert!(is_error(&result));
             let text = result_text(&result);
             assert!(text.contains("c9"), "{text}");
@@ -1796,8 +1879,7 @@ mod tests {
                 &preset_id,
                 json_map(serde_json::json!({ "n": 3, "c2": INVALID_CONDITION })),
             )
-            .await
-            .unwrap();
+            .await;
             assert!(!is_error(&result), "{}", result_text(&result));
 
             // The agent committed the condition before reporting it, so it
@@ -1814,9 +1896,8 @@ mod tests {
         async fn set_agent_configs_tool_accepts_generated_key() {
             let (ma, server, preset_id) = setup().await;
 
-            let result = add_numbered(&server, &preset_id, json_map(serde_json::json!({ "n": 3 })))
-                .await
-                .unwrap();
+            let result =
+                add_numbered(&server, &preset_id, json_map(serde_json::json!({ "n": 3 }))).await;
             let agent_id = result_json(&result)["id"].as_str().unwrap().to_string();
 
             let result = server
@@ -1851,9 +1932,8 @@ mod tests {
         async fn update_agent_spec_tool_accepts_generated_key() {
             let (ma, server, preset_id) = setup().await;
 
-            let result = add_numbered(&server, &preset_id, json_map(serde_json::json!({ "n": 3 })))
-                .await
-                .unwrap();
+            let result =
+                add_numbered(&server, &preset_id, json_map(serde_json::json!({ "n": 3 }))).await;
             let agent_id = result_json(&result)["id"].as_str().unwrap().to_string();
 
             let result = server
@@ -1880,9 +1960,8 @@ mod tests {
         async fn update_agent_spec_tool_reports_committed_config_error() {
             let (ma, server, preset_id) = setup().await;
 
-            let result = add_numbered(&server, &preset_id, json_map(serde_json::json!({ "n": 3 })))
-                .await
-                .unwrap();
+            let result =
+                add_numbered(&server, &preset_id, json_map(serde_json::json!({ "n": 3 }))).await;
             let agent_id = result_json(&result)["id"].as_str().unwrap().to_string();
 
             let result = server
@@ -1903,6 +1982,87 @@ mod tests {
             );
 
             ma.quit();
+        }
+
+        #[tokio::test]
+        async fn converted_tool_returns_structured_content() {
+            let (ma, server, preset_id) = setup().await;
+
+            let result = complete(server.list_presets().await);
+            assert!(!is_error(&result), "{}", result_text(&result));
+            let structured = result
+                .structured_content
+                .clone()
+                .expect("structured_content must be set");
+            let infos = structured["presets"]
+                .as_array()
+                .expect("list_presets must return a presets array");
+            assert!(
+                infos.iter().any(|info| info["id"] == preset_id.as_str()),
+                "the open preset must be listed: {structured}"
+            );
+            // The text fallback carries the same JSON payload.
+            assert_eq!(result_json(&result), structured);
+
+            // A fixed-shape response is structured too.
+            let result = complete(
+                server
+                    .create_preset(Parameters(CreatePresetParams { name: "P2".into() }))
+                    .await,
+            );
+            let structured = result
+                .structured_content
+                .expect("structured_content must be set");
+            assert!(structured["preset_id"].is_string(), "{structured}");
+
+            // The Err branch keeps the plain-text is_error semantics.
+            let result = complete(
+                server
+                    .get_preset_spec(Parameters(PresetIdParams {
+                        preset_id: "no-such-preset".into(),
+                    }))
+                    .await,
+            );
+            assert!(is_error(&result));
+            assert!(result_text(&result).contains("not found"));
+            assert!(result.structured_content.is_none());
+
+            ma.quit();
+        }
+
+        #[test]
+        fn list_tools_carries_output_schema_for_converted_tools() {
+            let tools = McpServer::tool_router().list_all();
+            let tool = |name: &str| {
+                tools
+                    .iter()
+                    .find(|t| t.name == name)
+                    .unwrap_or_else(|| panic!("tool {name} not found"))
+            };
+            for name in [
+                "get_agent_definition",
+                "list_presets",
+                "create_preset",
+                "get_preset_spec",
+                "add_agent",
+                "get_agent_errors",
+                "get_external_outputs",
+            ] {
+                let schema = tool(name)
+                    .output_schema
+                    .clone()
+                    .unwrap_or_else(|| panic!("{name} must declare an output schema"));
+                // Strict clients (Claude Code) validate outputSchema.type ==
+                // "object" and fail the whole listTools call otherwise, so an
+                // unconstrained schema here breaks every tool of the server.
+                assert_eq!(schema["type"], "object", "{name}: {schema:?}");
+            }
+            // Fixed-shape responses expose their fields in the schema.
+            let schema = tool("create_preset").output_schema.clone().unwrap();
+            assert!(schema["properties"]["preset_id"].is_object(), "{schema:?}");
+            // Text-ack tools stay schema-less.
+            assert!(tool("list_agent_definitions").output_schema.is_none());
+            assert!(tool("start_preset").output_schema.is_none());
         }
     }
 }
