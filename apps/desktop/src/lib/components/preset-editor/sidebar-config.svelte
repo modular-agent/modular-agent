@@ -192,21 +192,27 @@
   <!-- Do not render -->
 {:else}
   {@const ty = configSpec?.type}
-  <div class="flex-none relative flex items-center">
-    {#if configSpec?.hide_title !== true}
-      <h3>{configSpec?.title || name}</h3>
+  <div class="flex flex-col gap-1.5">
+    {#if configSpec?.hide_title !== true || configSpec?.description}
+      <div class="flex flex-col gap-0.5">
+        {#if configSpec?.hide_title !== true}
+          <div class="flex-none relative flex items-center">
+            <h3>{configSpec?.title || name}</h3>
+          </div>
+        {/if}
+        {#if configSpec?.description}
+          <p class="flex-none text-xs text-muted-foreground">{configSpec?.description}</p>
+        {/if}
+      </div>
+    {/if}
+    {#if !connected}
+      {@const Widget = configSpec && getConfigWidget(ty)}
+      {#if Widget && configSpec}
+        <Widget configKey={name} {value} {configSpec} readonly={false} {updateConfig} />
+      {:else}
+        {@const renderInput = inputRenderers[ty ?? "default"] ?? inputRenderers.default}
+        {@render renderInput(name, value)}
+      {/if}
     {/if}
   </div>
-  {#if configSpec?.description}
-    <p class="flex-none text-xs text-gray-500">{configSpec?.description}</p>
-  {/if}
-  {#if !connected}
-    {@const Widget = configSpec && getConfigWidget(ty)}
-    {#if Widget && configSpec}
-      <Widget configKey={name} {value} {configSpec} readonly={false} {updateConfig} />
-    {:else}
-      {@const renderInput = inputRenderers[ty ?? "default"] ?? inputRenderers.default}
-      {@render renderInput(name, value)}
-    {/if}
-  {/if}
 {/if}

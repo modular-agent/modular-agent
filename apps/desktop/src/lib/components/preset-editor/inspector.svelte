@@ -27,7 +27,7 @@
 
   let activeTab = $state("configs");
 
-  const DEFAULT_WIDTH = 320;
+  const DEFAULT_WIDTH = 328;
   const DEFAULT_HEIGHT = 640;
 
   let cardEl: HTMLElement;
@@ -134,41 +134,43 @@
   <!-- Header (drag handle) -->
   <div
     bind:this={headerEl}
-    class="flex items-center justify-between px-3 py-4 flex-none select-none"
+    class="px-4 pt-3 pb-2 flex-none select-none"
     style="cursor: {isDragging ? 'grabbing' : 'grab'};"
     onpointerdown={handleDragStart}
     onpointermove={handleDragMove}
     onpointerup={handleDragEnd}
     role="toolbar"
     tabindex="-1"
-  ></div>
+  >
+    {#if inspector.hasSelection}
+      <!-- Agent Info -->
+      <div class="relative flex flex-col gap-1 text-sm">
+        {#if inspector.agentDef?.category}
+          <div class="text-xs text-muted-foreground">{inspector.agentDef.category}</div>
+        {/if}
+        <div class="text-lg font-medium">{inspector.displayTitle}</div>
+        {#if hasDesc}
+          <button
+            class="absolute top-0 right-0 flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+            onclick={() =>
+              editor.openRefCard(
+                inspector.defName,
+                inspector.displayTitle,
+                inspector.agentDef?.description ?? "",
+              )}
+          >
+            <BookOpenIcon size={12} />
+            Ref
+          </button>
+        {/if}
+      </div>
+    {/if}
+  </div>
 
   {#if inspector.hasSelection}
     <ScrollArea class="flex-1 min-h-0">
-      <div class="px-3 pb-4 flex flex-col gap-3">
-        <!-- Agent Info -->
-        <div class="relative flex flex-col gap-1 text-sm">
-          {#if inspector.agentDef?.category}
-            <div class="text-xs text-muted-foreground">{inspector.agentDef.category}</div>
-          {/if}
-          <div class="text-lg font-medium">{inspector.displayTitle}</div>
-          {#if hasDesc}
-            <button
-              class="absolute top-0 right-0 flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-              onclick={() =>
-                editor.openRefCard(
-                  inspector.defName,
-                  inspector.displayTitle,
-                  inspector.agentDef?.description ?? "",
-                )}
-            >
-              <BookOpenIcon size={12} />
-              Ref
-            </button>
-          {/if}
-        </div>
-
-        <Tabs.Root bind:value={activeTab} class="mt-2">
+      <div class="px-4 pb-4 flex flex-col gap-3">
+        <Tabs.Root bind:value={activeTab}>
           <Tabs.List variant="line" class="h-6 gap-4">
             <Tabs.Trigger value="configs" class="px-0 text-xs after:-bottom-1.5"
               >Configs</Tabs.Trigger
@@ -177,9 +179,9 @@
             >
           </Tabs.List>
 
-          <Tabs.Content value="configs" class="flex flex-col gap-3 pt-2">
+          <Tabs.Content value="configs" class="flex flex-col gap-3 pt-3">
             {#if Object.keys(inspector.configs).length > 0}
-              <form class="flex flex-col gap-2">
+              <form class="flex flex-col gap-4">
                 {#each Object.entries(inspector.configs) as [key, value]}
                   <SidebarConfig
                     name={key}
@@ -195,10 +197,10 @@
             {/if}
           </Tabs.Content>
 
-          <Tabs.Content value="colors" class="flex flex-col gap-3 pt-2">
+          <Tabs.Content value="colors" class="flex flex-col gap-4 pt-3">
             <!-- Color -->
             <div class="flex flex-col gap-2">
-              <div class="text-xs text-muted-foreground">Color</div>
+              <div>Color</div>
               <div class="flex items-center gap-1.5 flex-wrap">
                 <button
                   aria-label="Reset to default color"
@@ -261,7 +263,7 @@
 
             <!-- Background -->
             <div class="flex flex-col gap-2">
-              <div class="text-xs text-muted-foreground">Background</div>
+              <div>Background</div>
               <div class="flex items-center gap-1.5 flex-wrap">
                 <button
                   aria-label="Reset to default background color"
@@ -298,7 +300,7 @@
 
             <!-- Text -->
             <div class="flex flex-col gap-2">
-              <div class="text-xs text-muted-foreground">Text</div>
+              <div>Text</div>
               <div class="flex items-center gap-1.5 flex-wrap">
                 <button
                   aria-label="Reset to default text color"

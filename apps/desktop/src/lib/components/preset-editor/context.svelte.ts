@@ -105,7 +105,7 @@ export type RefCard = {
 /** Cascade origin and step for newly opened reference cards. */
 const REF_CARD_CASCADE_BASE = 60;
 const REF_CARD_CASCADE_STEP = 24;
-const REF_CARD_DEFAULT_WIDTH = 380;
+const REF_CARD_DEFAULT_WIDTH = 388;
 const REF_CARD_DEFAULT_HEIGHT = 480;
 
 export class EditorState {

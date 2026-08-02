@@ -88,7 +88,7 @@
   <!-- Header (drag handle) -->
   <div
     bind:this={headerEl}
-    class="flex items-center justify-between gap-2 px-3 py-2 flex-none select-none border-b border-border"
+    class="flex items-center justify-between gap-2 px-4 py-2 flex-none select-none border-b border-border"
     style="cursor: {isDragging ? 'grabbing' : 'grab'};"
     onpointerdown={handleDragStart}
     onpointermove={handleDragMove}
@@ -110,7 +110,7 @@
   </div>
 
   <ScrollArea class="flex-1 min-h-0">
-    <div class="px-3 py-2 text-sm agent-desc-md">
+    <div class="px-4 py-2 text-sm agent-desc-md">
       {@html renderMarkdown(card.description)}
     </div>
   </ScrollArea>
