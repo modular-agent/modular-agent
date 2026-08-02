@@ -6,4 +6,6 @@ mod suites {
     mod filter_test;
     mod input_test;
     mod string_test;
+    #[cfg(feature = "watch")]
+    mod watch_test;
 }

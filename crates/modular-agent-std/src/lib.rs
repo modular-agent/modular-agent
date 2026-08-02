@@ -16,5 +16,8 @@ pub mod utils;
 #[cfg(feature = "image")]
 pub mod image;
 
+#[cfg(feature = "watch")]
+pub mod watch;
+
 #[cfg(feature = "yaml")]
 pub mod yaml;

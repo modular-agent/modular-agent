@@ -12,7 +12,7 @@ Standard utility agents library with 50+ agents for data manipulation, file I/O,
 | -------- | ------- | ---------- |
 | Std/Array | Array operations | Map, Collect, ArrayFirst, ArrayLength, ZipToArray |
 | Std/Data | Object operations | Get Value, Set Value, To JSON, From JSON, ZipToObject |
-| Std/File | File I/O | Read/Write Text, JSON, JSONL, Glob, List Files |
+| Std/File | File I/O | Read/Write Text, JSON, JSONL, Glob, List Files, Watch Directory |
 | Std/Input | UI inputs | String/Integer/Boolean/Number/Text/Object Input |
 | Std/String | Text operations | Template String, String Join, String Length Split |
 | Std/Time | Timing | Delay, Interval Timer, Schedule Timer, Throttle, On Start |
@@ -28,6 +28,7 @@ Standard utility agents library with 50+ agents for data manipulation, file I/O,
 
 - `image` (default) - Image processing agents (photon-rs)
 - `yaml` (default) - YAML serialization (serde_yaml_ng)
+- `watch` (default) - Directory watching (notify-debouncer-full)
 
 ## Key Patterns
 

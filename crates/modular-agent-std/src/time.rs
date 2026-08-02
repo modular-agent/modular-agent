@@ -561,7 +561,7 @@ impl AsAgent for ThrottleTimeAgent {
 }
 
 // Parse time duration strings like "2s", "10m", "200ms"
-fn parse_duration_to_ms(duration_str: &str) -> Result<u64, AgentError> {
+pub(crate) fn parse_duration_to_ms(duration_str: &str) -> Result<u64, AgentError> {
     const MIN_DURATION: u64 = 10;
 
     // Regular expression to match number followed by optional unit

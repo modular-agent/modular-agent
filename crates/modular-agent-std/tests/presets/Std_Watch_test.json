@@ -1,0 +1,87 @@
+{
+  "agents": [
+    {
+      "id": "301",
+      "def_name": "modular_agent_std::watch::WatchDirectoryAgent",
+      "outputs": [
+        "event"
+      ],
+      "configs": {
+        "path": "",
+        "recursive": true,
+        "debounce": "100ms"
+      },
+      "config_specs": {
+        "path": {
+          "value": "",
+          "type": "string"
+        },
+        "recursive": {
+          "value": true,
+          "type": "boolean"
+        },
+        "debounce": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": 264,
+      "y": 108
+    },
+    {
+      "id": "302",
+      "def_name": "modular_agent_core::external_agent::LocalInputAgent",
+      "outputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "watch_path"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": -36,
+      "y": 108
+    },
+    {
+      "id": "303",
+      "def_name": "modular_agent_core::external_agent::LocalOutputAgent",
+      "inputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "watch_event"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": 516,
+      "y": 108
+    }
+  ],
+  "connections": [
+    {
+      "source": "302",
+      "source_handle": "value",
+      "target": "301",
+      "target_handle": "config:path"
+    },
+    {
+      "source": "301",
+      "source_handle": "event",
+      "target": "303",
+      "target_handle": "value"
+    }
+  ],
+  "viewport": {
+    "x": 100,
+    "y": 100,
+    "zoom": 0.5
+  }
+}

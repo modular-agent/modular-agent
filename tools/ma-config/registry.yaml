@@ -111,9 +111,11 @@ agents:
     available_features:
       - image
       - yaml
+      - watch
     default_features:
       - image
       - yaml
+      - watch
     default_for: [desktop, cli]
 
   - name: modular-agent-surrealdb
