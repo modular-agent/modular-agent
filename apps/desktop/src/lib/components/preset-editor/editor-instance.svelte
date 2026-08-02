@@ -7,6 +7,7 @@
   import { setEditor } from "./context.svelte";
   import EditorCanvas from "./editor-canvas.svelte";
   import Inspector from "./inspector.svelte";
+  import ReferenceCard from "./reference-card.svelte";
 
   let { tabId, flow, active }: { tabId: string; flow: PresetFlow; active: boolean } = $props();
 
@@ -41,4 +42,7 @@
   {#if editor.sidebarOpen}
     <Inspector />
   {/if}
+  {#each editor.refCards as card (card.defName)}
+    <ReferenceCard {card} />
+  {/each}
 </div>

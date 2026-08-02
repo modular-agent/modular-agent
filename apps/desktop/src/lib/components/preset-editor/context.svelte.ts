@@ -91,6 +91,23 @@ export type EditorStateProps = {
   svelteFlow: ReturnType<typeof useSvelteFlow>;
 };
 
+/** Floating agent-reference card (one per agent definition). */
+export type RefCard = {
+  defName: string;
+  title: string;
+  description: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+/** Cascade origin and step for newly opened reference cards. */
+const REF_CARD_CASCADE_BASE = 60;
+const REF_CARD_CASCADE_STEP = 24;
+const REF_CARD_DEFAULT_WIDTH = 380;
+const REF_CARD_DEFAULT_HEIGHT = 480;
+
 export class EditorState {
   readonly props: EditorStateProps;
   readonly history;
@@ -142,6 +159,9 @@ export class EditorState {
   inspectorWidth = $state<number | null>(null);
   inspectorHeight = $state<number | null>(null);
   inspector = new InspectorState();
+
+  // Floating reference cards (agent descriptions), rendered last-on-top
+  refCards = $state<RefCard[]>([]);
 
   // Dialog state (shared between menubar and pane context menu)
   openNewPresetDialog = $state(false);
@@ -369,6 +389,38 @@ export class EditorState {
 
   toggleSidebar() {
     this.sidebarOpen = !this.sidebarOpen;
+  }
+
+  // --- Reference cards ---
+
+  openRefCard(defName: string, title: string, description: string) {
+    if (this.refCards.some((c) => c.defName === defName)) {
+      this.bringRefCardToFront(defName);
+      return;
+    }
+    const n = this.refCards.length;
+    this.refCards.push({
+      defName,
+      title,
+      description,
+      x: REF_CARD_CASCADE_BASE + n * REF_CARD_CASCADE_STEP,
+      y: REF_CARD_CASCADE_BASE + n * REF_CARD_CASCADE_STEP,
+      width: REF_CARD_DEFAULT_WIDTH,
+      height: REF_CARD_DEFAULT_HEIGHT,
+    });
+  }
+
+  closeRefCard(defName: string) {
+    const idx = this.refCards.findIndex((c) => c.defName === defName);
+    if (idx >= 0) this.refCards.splice(idx, 1);
+  }
+
+  // Last in array renders on top ({#each} order = stacking order)
+  bringRefCardToFront(defName: string) {
+    const idx = this.refCards.findIndex((c) => c.defName === defName);
+    if (idx < 0 || idx === this.refCards.length - 1) return;
+    const [card] = this.refCards.splice(idx, 1);
+    this.refCards.push(card);
   }
 
   // --- SvelteFlow helpers ---

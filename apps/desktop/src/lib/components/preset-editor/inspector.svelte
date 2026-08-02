@@ -3,12 +3,12 @@
   import { cubicOut } from "svelte/easing";
   import { Tween } from "svelte/motion";
 
+  import BookOpenIcon from "@lucide/svelte/icons/book-open";
   import XIcon from "@lucide/svelte/icons/x";
 
   import { KIND_COLOR_DEFAULTS } from "$lib/agent";
   import { ScrollArea } from "$lib/components/ui/scroll-area/index.js";
   import { Separator } from "$lib/components/ui/separator/index.js";
-  import { renderMarkdown } from "$lib/sanitize";
 
   import { useEditor } from "./context.svelte";
   import SidebarConfig from "./sidebar-config.svelte";
@@ -31,6 +31,7 @@
   let cardEl: HTMLElement;
   let headerEl: HTMLElement;
   let isDragging = $state(false);
+  const hasDesc = $derived(!!inspector.agentDef?.description?.trim());
   let dragOffsetX = 0;
   let dragOffsetY = 0;
 
@@ -142,18 +143,26 @@
 
   {#if inspector.hasSelection}
     <ScrollArea class="flex-1 min-h-0">
-      <div class="px-3 flex flex-col gap-3">
+      <div class="px-3 pb-4 flex flex-col gap-3">
         <!-- Agent Info -->
-        <div class="flex flex-col gap-1 text-sm">
+        <div class="relative flex flex-col gap-1 text-sm">
           {#if inspector.agentDef?.category}
             <div class="text-xs text-muted-foreground">{inspector.agentDef.category}</div>
           {/if}
           <div class="text-lg font-medium">{inspector.displayTitle}</div>
-          {#if inspector.agentDef?.description}
-            {@const descriptionHtml = renderMarkdown(inspector.agentDef.description)}
-            <div class="text-xs text-muted-foreground mt-1 inspector-description">
-              {@html descriptionHtml}
-            </div>
+          {#if hasDesc}
+            <button
+              class="absolute top-0 right-0 flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+              onclick={() =>
+                editor.openRefCard(
+                  inspector.defName,
+                  inspector.displayTitle,
+                  inspector.agentDef?.description ?? "",
+                )}
+            >
+              <BookOpenIcon size={12} />
+              Ref
+            </button>
           {/if}
         </div>
 
@@ -326,54 +335,5 @@
 <style>
   :global([role="dialog"]::-webkit-resizer) {
     display: none;
-  }
-
-  .inspector-description {
-    overflow-wrap: break-word;
-  }
-  .inspector-description :global(p) {
-    margin-bottom: 0.25rem;
-  }
-  .inspector-description :global(p:last-child) {
-    margin-bottom: 0;
-  }
-  .inspector-description :global(code) {
-    background-color: var(--muted);
-    padding: 0.05rem 0.2rem;
-    border-radius: 0.15rem;
-    font-size: 0.85em;
-  }
-  .inspector-description :global(pre) {
-    background-color: var(--muted);
-    padding: 0.5rem;
-    border-radius: 0.3rem;
-    overflow-x: auto;
-    margin-bottom: 0.25rem;
-  }
-  .inspector-description :global(pre code) {
-    background-color: transparent;
-    padding: 0;
-  }
-  .inspector-description :global(a) {
-    color: var(--link-color);
-    text-decoration: underline;
-  }
-  .inspector-description :global(a:hover) {
-    opacity: 0.8;
-  }
-  .inspector-description :global(ul),
-  .inspector-description :global(ol) {
-    padding-left: 1.25rem;
-    margin-bottom: 0.25rem;
-  }
-  .inspector-description :global(li) {
-    margin-bottom: 0.1rem;
-  }
-  .inspector-description :global(blockquote) {
-    border-left: 3px solid var(--border);
-    padding-left: 0.75rem;
-    margin-left: 0;
-    margin-bottom: 0.25rem;
-    color: var(--muted-foreground);
   }
 </style>
