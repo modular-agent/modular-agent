@@ -8,7 +8,7 @@
 
   import { KIND_COLOR_DEFAULTS } from "$lib/agent";
   import { ScrollArea } from "$lib/components/ui/scroll-area/index.js";
-  import { Separator } from "$lib/components/ui/separator/index.js";
+  import * as Tabs from "$lib/components/ui/tabs/index.js";
 
   import { useEditor } from "./context.svelte";
   import SidebarConfig from "./sidebar-config.svelte";
@@ -24,6 +24,8 @@
   const FADE_IN_DURATION = 150;
 
   const opacity = new Tween(inspector.selectedCount > 0 ? 1 : 0);
+
+  let activeTab = $state("configs");
 
   const DEFAULT_WIDTH = 320;
   const DEFAULT_HEIGHT = 640;
@@ -166,161 +168,172 @@
           {/if}
         </div>
 
-        <Separator />
+        <Tabs.Root bind:value={activeTab} class="mt-2">
+          <Tabs.List variant="line" class="h-6 gap-4">
+            <Tabs.Trigger value="configs" class="px-0 text-xs after:-bottom-1.5"
+              >Configs</Tabs.Trigger
+            >
+            <Tabs.Trigger value="colors" class="px-0 text-xs after:-bottom-1.5">Colors</Tabs.Trigger
+            >
+          </Tabs.List>
 
-        <!-- Color -->
-        <div class="flex flex-col gap-2">
-          <div class="text-xs text-muted-foreground">Color</div>
-          <div class="flex items-center gap-1.5 flex-wrap">
-            <button
-              aria-label="Reset to default color"
-              class="{SWATCH_CLASS} flex items-center justify-center
-                     text-muted-foreground hover:bg-accent"
-              class:ring-2={inspector.extensions.color == null}
-              class:ring-ring={inspector.extensions.color == null}
-              onclick={() => inspector.onUpdateExtension?.("color", null)}
-              title="Default"
-            >
-              <XIcon size={10} />
-            </button>
-            {#each [1, 2, 3, 4, 5, 6] as n}
-              <button
-                aria-label="Color {n}"
-                class={SWATCH_CLASS}
-                class:ring-2={inspector.extensions.color === n}
-                class:ring-ring={inspector.extensions.color === n}
-                style="background-color: var(--color-agent-{n})"
-                onclick={() => inspector.onUpdateExtension?.("color", n)}
-              ></button>
-            {/each}
-            <input
-              type="color"
-              aria-label="Custom color"
-              class={COLOR_INPUT_CLASS}
-              value={typeof inspector.extensions.color === "string"
-                ? inspector.extensions.color
-                : "#888888"}
-              onchange={(e) => inspector.onUpdateExtension?.("color", e.currentTarget.value)}
-            />
-          </div>
-          <div class="flex items-center gap-1.5">
-            <button
-              class="text-xs text-muted-foreground hover:text-foreground"
-              onclick={() => {
-                const rawColor =
-                  inspector.extensions.color ??
-                  inspector.agentDef?.hints?.color ??
-                  KIND_COLOR_DEFAULTS[inspector.agentDef?.kind ?? "default"] ??
-                  4;
-                const ports = [
-                  ...inspector.inputs.filter((p: string) => p !== "err"),
-                  ...inspector.outputs.filter((p: string) => p !== "err"),
-                ];
-                if (ports.length === 0) return;
-                const pc: Record<string, number | string> = {};
-                for (const p of ports) pc[p] = rawColor;
-                inspector.onUpdateExtension?.("port_colors", pc);
-              }}>Apply to ports</button
-            >
-            {#if inspector.extensions.port_colors}
-              <button
-                class="text-xs text-muted-foreground hover:text-foreground"
-                onclick={() => inspector.onUpdateExtension?.("port_colors", null)}>Clear</button
-              >
+          <Tabs.Content value="configs" class="flex flex-col gap-3 pt-2">
+            {#if Object.keys(inspector.configs).length > 0}
+              <form class="flex flex-col gap-2">
+                {#each Object.entries(inspector.configs) as [key, value]}
+                  <SidebarConfig
+                    name={key}
+                    {value}
+                    configSpec={inspector.configSpecs[key]}
+                    connected={inspector.connectedConfigs.includes(key)}
+                    {updateConfig}
+                  />
+                {/each}
+              </form>
+            {:else}
+              <div class="text-xs text-muted-foreground">No configs</div>
             {/if}
-          </div>
-        </div>
+          </Tabs.Content>
 
-        <!-- Background -->
-        <div class="flex flex-col gap-2">
-          <div class="text-xs text-muted-foreground">Background</div>
-          <div class="flex items-center gap-1.5 flex-wrap">
-            <button
-              aria-label="Reset to default background color"
-              class="{SWATCH_CLASS} flex items-center justify-center
+          <Tabs.Content value="colors" class="flex flex-col gap-3 pt-2">
+            <!-- Color -->
+            <div class="flex flex-col gap-2">
+              <div class="text-xs text-muted-foreground">Color</div>
+              <div class="flex items-center gap-1.5 flex-wrap">
+                <button
+                  aria-label="Reset to default color"
+                  class="{SWATCH_CLASS} flex items-center justify-center
                      text-muted-foreground hover:bg-accent"
-              class:ring-2={inspector.extensions.bg_color == null}
-              class:ring-ring={inspector.extensions.bg_color == null}
-              onclick={() => inspector.onUpdateExtension?.("bg_color", null)}
-              title="Default"
-            >
-              <XIcon size={10} />
-            </button>
-            {#each [1, 2, 3, 4, 5, 6] as n}
-              <button
-                aria-label="Background color {n}"
-                class={SWATCH_CLASS}
-                class:ring-2={inspector.extensions.bg_color === n}
-                class:ring-ring={inspector.extensions.bg_color === n}
-                style="background-color: var(--color-agent-{n})"
-                onclick={() => inspector.onUpdateExtension?.("bg_color", n)}
-              ></button>
-            {/each}
-            <input
-              type="color"
-              aria-label="Custom background color"
-              class={COLOR_INPUT_CLASS}
-              value={typeof inspector.extensions.bg_color === "string"
-                ? inspector.extensions.bg_color
-                : "#888888"}
-              onchange={(e) => inspector.onUpdateExtension?.("bg_color", e.currentTarget.value)}
-            />
-          </div>
-        </div>
+                  class:ring-2={inspector.extensions.color == null}
+                  class:ring-ring={inspector.extensions.color == null}
+                  onclick={() => inspector.onUpdateExtension?.("color", null)}
+                  title="Default"
+                >
+                  <XIcon size={10} />
+                </button>
+                {#each [1, 2, 3, 4, 5, 6] as n}
+                  <button
+                    aria-label="Color {n}"
+                    class={SWATCH_CLASS}
+                    class:ring-2={inspector.extensions.color === n}
+                    class:ring-ring={inspector.extensions.color === n}
+                    style="background-color: var(--color-agent-{n})"
+                    onclick={() => inspector.onUpdateExtension?.("color", n)}
+                  ></button>
+                {/each}
+                <input
+                  type="color"
+                  aria-label="Custom color"
+                  class={COLOR_INPUT_CLASS}
+                  value={typeof inspector.extensions.color === "string"
+                    ? inspector.extensions.color
+                    : "#888888"}
+                  onchange={(e) => inspector.onUpdateExtension?.("color", e.currentTarget.value)}
+                />
+              </div>
+              <div class="flex items-center gap-1.5">
+                <button
+                  class="text-xs text-muted-foreground hover:text-foreground"
+                  onclick={() => {
+                    const rawColor =
+                      inspector.extensions.color ??
+                      inspector.agentDef?.hints?.color ??
+                      KIND_COLOR_DEFAULTS[inspector.agentDef?.kind ?? "default"] ??
+                      4;
+                    const ports = [
+                      ...inspector.inputs.filter((p: string) => p !== "err"),
+                      ...inspector.outputs.filter((p: string) => p !== "err"),
+                    ];
+                    if (ports.length === 0) return;
+                    const pc: Record<string, number | string> = {};
+                    for (const p of ports) pc[p] = rawColor;
+                    inspector.onUpdateExtension?.("port_colors", pc);
+                  }}>Apply to ports</button
+                >
+                {#if inspector.extensions.port_colors}
+                  <button
+                    class="text-xs text-muted-foreground hover:text-foreground"
+                    onclick={() => inspector.onUpdateExtension?.("port_colors", null)}>Clear</button
+                  >
+                {/if}
+              </div>
+            </div>
 
-        <!-- Text -->
-        <div class="flex flex-col gap-2">
-          <div class="text-xs text-muted-foreground">Text</div>
-          <div class="flex items-center gap-1.5 flex-wrap">
-            <button
-              aria-label="Reset to default text color"
-              class="{SWATCH_CLASS} flex items-center justify-center
+            <!-- Background -->
+            <div class="flex flex-col gap-2">
+              <div class="text-xs text-muted-foreground">Background</div>
+              <div class="flex items-center gap-1.5 flex-wrap">
+                <button
+                  aria-label="Reset to default background color"
+                  class="{SWATCH_CLASS} flex items-center justify-center
                      text-muted-foreground hover:bg-accent"
-              class:ring-2={inspector.extensions.fg_color == null}
-              class:ring-ring={inspector.extensions.fg_color == null}
-              onclick={() => inspector.onUpdateExtension?.("fg_color", null)}
-              title="Default"
-            >
-              <XIcon size={10} />
-            </button>
-            {#each [1, 2, 3, 4, 5, 6] as n}
-              <button
-                aria-label="Text color {n}"
-                class={SWATCH_CLASS}
-                class:ring-2={inspector.extensions.fg_color === n}
-                class:ring-ring={inspector.extensions.fg_color === n}
-                style="background-color: var(--color-agent-{n})"
-                onclick={() => inspector.onUpdateExtension?.("fg_color", n)}
-              ></button>
-            {/each}
-            <input
-              type="color"
-              aria-label="Custom text color"
-              class={COLOR_INPUT_CLASS}
-              value={typeof inspector.extensions.fg_color === "string"
-                ? inspector.extensions.fg_color
-                : "#888888"}
-              onchange={(e) => inspector.onUpdateExtension?.("fg_color", e.currentTarget.value)}
-            />
-          </div>
-        </div>
+                  class:ring-2={inspector.extensions.bg_color == null}
+                  class:ring-ring={inspector.extensions.bg_color == null}
+                  onclick={() => inspector.onUpdateExtension?.("bg_color", null)}
+                  title="Default"
+                >
+                  <XIcon size={10} />
+                </button>
+                {#each [1, 2, 3, 4, 5, 6] as n}
+                  <button
+                    aria-label="Background color {n}"
+                    class={SWATCH_CLASS}
+                    class:ring-2={inspector.extensions.bg_color === n}
+                    class:ring-ring={inspector.extensions.bg_color === n}
+                    style="background-color: var(--color-agent-{n})"
+                    onclick={() => inspector.onUpdateExtension?.("bg_color", n)}
+                  ></button>
+                {/each}
+                <input
+                  type="color"
+                  aria-label="Custom background color"
+                  class={COLOR_INPUT_CLASS}
+                  value={typeof inspector.extensions.bg_color === "string"
+                    ? inspector.extensions.bg_color
+                    : "#888888"}
+                  onchange={(e) => inspector.onUpdateExtension?.("bg_color", e.currentTarget.value)}
+                />
+              </div>
+            </div>
 
-        <Separator />
-
-        <!-- Configs -->
-        {#if Object.keys(inspector.configs).length > 0}
-          <form class="flex flex-col gap-2">
-            {#each Object.entries(inspector.configs) as [key, value]}
-              <SidebarConfig
-                name={key}
-                {value}
-                configSpec={inspector.configSpecs[key]}
-                connected={inspector.connectedConfigs.includes(key)}
-                {updateConfig}
-              />
-            {/each}
-          </form>
-        {/if}
+            <!-- Text -->
+            <div class="flex flex-col gap-2">
+              <div class="text-xs text-muted-foreground">Text</div>
+              <div class="flex items-center gap-1.5 flex-wrap">
+                <button
+                  aria-label="Reset to default text color"
+                  class="{SWATCH_CLASS} flex items-center justify-center
+                     text-muted-foreground hover:bg-accent"
+                  class:ring-2={inspector.extensions.fg_color == null}
+                  class:ring-ring={inspector.extensions.fg_color == null}
+                  onclick={() => inspector.onUpdateExtension?.("fg_color", null)}
+                  title="Default"
+                >
+                  <XIcon size={10} />
+                </button>
+                {#each [1, 2, 3, 4, 5, 6] as n}
+                  <button
+                    aria-label="Text color {n}"
+                    class={SWATCH_CLASS}
+                    class:ring-2={inspector.extensions.fg_color === n}
+                    class:ring-ring={inspector.extensions.fg_color === n}
+                    style="background-color: var(--color-agent-{n})"
+                    onclick={() => inspector.onUpdateExtension?.("fg_color", n)}
+                  ></button>
+                {/each}
+                <input
+                  type="color"
+                  aria-label="Custom text color"
+                  class={COLOR_INPUT_CLASS}
+                  value={typeof inspector.extensions.fg_color === "string"
+                    ? inspector.extensions.fg_color
+                    : "#888888"}
+                  onchange={(e) => inspector.onUpdateExtension?.("fg_color", e.currentTarget.value)}
+                />
+              </div>
+            </div>
+          </Tabs.Content>
+        </Tabs.Root>
       </div>
     </ScrollArea>
   {:else}
