@@ -1,0 +1,358 @@
+{
+  "agents": [
+    {
+      "id": "301",
+      "def_name": "modular_agent_std::sequence::SequenceAgent",
+      "inputs": [
+        "value"
+      ],
+      "outputs": [
+        "0",
+        "1"
+      ],
+      "configs": {
+        "n": 2
+      },
+      "config_specs": {
+        "n": {
+          "value": 2,
+          "type": "integer"
+        }
+      },
+      "x": 264,
+      "y": 108
+    },
+    {
+      "id": "302",
+      "def_name": "modular_agent_core::external_agent::LocalInputAgent",
+      "outputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "seq_in"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": -36,
+      "y": 108
+    },
+    {
+      "id": "303",
+      "def_name": "modular_agent_core::external_agent::LocalOutputAgent",
+      "inputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "seq_0"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": 516,
+      "y": 108
+    },
+    {
+      "id": "304",
+      "def_name": "modular_agent_core::external_agent::LocalOutputAgent",
+      "inputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "seq_1"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": 516,
+      "y": 336
+    },
+    {
+      "id": "311",
+      "def_name": "modular_agent_std::sequence::SyncAgent",
+      "inputs": [
+        "0",
+        "1"
+      ],
+      "outputs": [
+        "0",
+        "1"
+      ],
+      "configs": {
+        "n": 2
+      },
+      "config_specs": {
+        "n": {
+          "value": 2,
+          "type": "integer"
+        }
+      },
+      "x": 264,
+      "y": 720
+    },
+    {
+      "id": "312",
+      "def_name": "modular_agent_core::external_agent::LocalInputAgent",
+      "outputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "sync_in0"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": -36,
+      "y": 720
+    },
+    {
+      "id": "313",
+      "def_name": "modular_agent_core::external_agent::LocalInputAgent",
+      "outputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "sync_in1"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": -36,
+      "y": 948
+    },
+    {
+      "id": "314",
+      "def_name": "modular_agent_core::external_agent::LocalOutputAgent",
+      "inputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "sync_0"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": 516,
+      "y": 720
+    },
+    {
+      "id": "315",
+      "def_name": "modular_agent_core::external_agent::LocalOutputAgent",
+      "inputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "sync_1"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": 516,
+      "y": 948
+    },
+    {
+      "id": "321",
+      "def_name": "modular_agent_core::external_agent::LocalInputAgent",
+      "outputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "syncctx_in"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": -36,
+      "y": 1332
+    },
+    {
+      "id": "322",
+      "def_name": "modular_agent_std::sequence::SequenceAgent",
+      "inputs": [
+        "value"
+      ],
+      "outputs": [
+        "0",
+        "1"
+      ],
+      "configs": {
+        "n": 2
+      },
+      "config_specs": {
+        "n": {
+          "value": 2,
+          "type": "integer"
+        }
+      },
+      "x": 264,
+      "y": 1332
+    },
+    {
+      "id": "323",
+      "def_name": "modular_agent_std::sequence::SyncAgent",
+      "inputs": [
+        "0",
+        "1"
+      ],
+      "outputs": [
+        "0",
+        "1"
+      ],
+      "configs": {
+        "n": 2,
+        "use_ctx": true
+      },
+      "config_specs": {
+        "n": {
+          "value": 2,
+          "type": "integer"
+        },
+        "use_ctx": {
+          "value": false,
+          "type": "boolean"
+        }
+      },
+      "x": 516,
+      "y": 1332
+    },
+    {
+      "id": "324",
+      "def_name": "modular_agent_core::external_agent::LocalOutputAgent",
+      "inputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "syncctx_0"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": 768,
+      "y": 1332
+    },
+    {
+      "id": "325",
+      "def_name": "modular_agent_core::external_agent::LocalOutputAgent",
+      "inputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "syncctx_1"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": 768,
+      "y": 1560
+    }
+  ],
+  "connections": [
+    {
+      "source": "302",
+      "source_handle": "value",
+      "target": "301",
+      "target_handle": "value"
+    },
+    {
+      "source": "301",
+      "source_handle": "0",
+      "target": "303",
+      "target_handle": "value"
+    },
+    {
+      "source": "301",
+      "source_handle": "1",
+      "target": "304",
+      "target_handle": "value"
+    },
+    {
+      "source": "312",
+      "source_handle": "value",
+      "target": "311",
+      "target_handle": "0"
+    },
+    {
+      "source": "313",
+      "source_handle": "value",
+      "target": "311",
+      "target_handle": "1"
+    },
+    {
+      "source": "311",
+      "source_handle": "0",
+      "target": "314",
+      "target_handle": "value"
+    },
+    {
+      "source": "311",
+      "source_handle": "1",
+      "target": "315",
+      "target_handle": "value"
+    },
+    {
+      "source": "321",
+      "source_handle": "value",
+      "target": "322",
+      "target_handle": "value"
+    },
+    {
+      "source": "322",
+      "source_handle": "0",
+      "target": "323",
+      "target_handle": "0"
+    },
+    {
+      "source": "322",
+      "source_handle": "1",
+      "target": "323",
+      "target_handle": "1"
+    },
+    {
+      "source": "323",
+      "source_handle": "0",
+      "target": "324",
+      "target_handle": "value"
+    },
+    {
+      "source": "323",
+      "source_handle": "1",
+      "target": "325",
+      "target_handle": "value"
+    }
+  ],
+  "viewport": {
+    "x": 100,
+    "y": 100,
+    "zoom": 0.5
+  }
+}

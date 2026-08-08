@@ -5,6 +5,7 @@ extern crate modular_agent_std;
 mod suites {
     mod filter_test;
     mod input_test;
+    mod sequence_test;
     mod string_test;
     #[cfg(feature = "watch")]
     mod watch_test;
