@@ -624,7 +624,12 @@ impl ZipToArrayAgent {
 
     fn reset_state(&mut self) {
         self.queues = vec![VecDeque::new(); self.n];
-        self.ctx_buffers.invalidate_all();
+        // invalidate_all only marks entries stale; rebuild the cache so parked
+        // values are released immediately
+        self.ctx_buffers = Cache::builder()
+            .max_capacity(self.capacity)
+            .time_to_live(Duration::from_secs(self.ttl_sec))
+            .build();
     }
 }
 
@@ -672,11 +677,6 @@ impl AsAgent for ZipToArrayAgent {
         }
         if changed {
             self.reset_state();
-            // Rebuild cache with new capacity and TTL
-            self.ctx_buffers = Cache::builder()
-                .max_capacity(capacity)
-                .time_to_live(Duration::from_secs(ttl_sec))
-                .build();
             self.emit_agent_spec_updated();
         }
         Ok(())
@@ -730,6 +730,9 @@ impl AsAgent for ZipToArrayAgent {
                 return self.output(ctx, PORT_ARRAY, AgentValue::array(arr)).await;
             }
 
+            // mini_moka's get returns a clone, so the updated entry must be
+            // written back or the partial state is lost
+            self.ctx_buffers.insert(ctx_key, entry);
             return Ok(());
         }
 

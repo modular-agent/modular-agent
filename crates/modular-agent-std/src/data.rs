@@ -510,7 +510,12 @@ impl ZipToObjectAgent {
 
     fn reset_state(&mut self) {
         self.queues = vec![VecDeque::new(); self.n];
-        self.ctx_buffers.invalidate_all();
+        // invalidate_all only marks entries stale; rebuild the cache so parked
+        // values are released immediately
+        self.ctx_buffers = Cache::builder()
+            .max_capacity(self.capacity as u64)
+            .time_to_live(Duration::from_secs(self.ttl_sec))
+            .build();
     }
 }
 
@@ -560,11 +565,6 @@ impl AsAgent for ZipToObjectAgent {
         }
         if changed {
             self.reset_state();
-            // Rebuild cache with new capacity and ttl
-            self.ctx_buffers = Cache::builder()
-                .max_capacity(capacity)
-                .time_to_live(Duration::from_secs(ttl_sec))
-                .build();
             self.emit_agent_spec_updated();
         }
         Ok(())
