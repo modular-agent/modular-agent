@@ -94,7 +94,9 @@
     <!-- Center: Preset name / Title (absolutely centered, independent of actions) -->
     <div class="absolute inset-x-0 flex items-center justify-center h-full pointer-events-none">
       {#if titlebarState.showMenubar}
-        <div class="pointer-events-auto max-w-[400px] truncate">
+        <div
+          class="pointer-events-auto min-w-0 max-w-[max(120px,min(400px,100vw-420px))] overflow-hidden"
+        >
           <PresetName name={titlebarState.presetName} dirty={titlebarState.dirty} />
         </div>
       {:else}
