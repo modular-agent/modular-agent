@@ -73,3 +73,7 @@ export async function renameFolder(path: string, newPath: string): Promise<void>
 export async function deletePreset(name: string): Promise<string> {
   return await invoke("delete_preset_cmd", { name });
 }
+
+export async function deleteFolder(path: string): Promise<void> {
+  await invoke("delete_folder_cmd", { path });
+}

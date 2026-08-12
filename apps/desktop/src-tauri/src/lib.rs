@@ -102,6 +102,7 @@ pub fn run() {
             modular_agent_desktop::app::rename_preset_cmd,
             modular_agent_desktop::app::rename_folder_cmd,
             modular_agent_desktop::app::delete_preset_cmd,
+            modular_agent_desktop::app::delete_folder_cmd,
             modular_agent_desktop::app::close_preset_cmd,
             modular_agent_desktop::app::import_preset_cmd,
             modular_agent_desktop::app::save_preset_cmd,

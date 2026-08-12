@@ -212,11 +212,13 @@ When the filesystem under `~/.modular_agent/presets/` changes, the backend emits
 | `save_as_preset_cmd` | Always (uses `add_preset_with_name` to load spec into core engine + register name→ID mapping) |
 | `save_preset_cmd` | Only when file is new (`!preset_path_exists`) |
 | `delete_preset_cmd` | Always |
+| `delete_folder_cmd` | Always (the deleted folder's parent) |
 | `import_preset_cmd` | Always |
 | `rename_preset_cmd` | Always (also emits `ma:preset_renamed` if preset is open) |
 | `rename_folder_cmd` | Always (also emits `ma:preset_renamed` per affected open preset) |
 
 - **Rename as primitive**: `rename_preset(name, new_name)` and `rename_folder(path, new_path)` are the core methods; `move_preset` and `move_folder` are thin wrappers that compute `new_name` from `target_dir` + basename.
+- **Delete**: `delete_folder(path)` only removes an **empty** folder (`remove_dir`) — a right-click lands on the wrong row too easily for a recursive delete to be safe, so a non-empty folder fails with "Delete its contents first". `delete_preset` refuses while the preset is running ("Stop it first", same policy as rename/move) and drops its `auto_start_presets` entry via `remove_auto_start_presets`. Neither prunes emptied ancestor directories (rename/move do) — deleting removes exactly the row that was clicked.
 - **Ancestor notification**: When `save_preset_cmd` or `new_preset_with_name_cmd` creates a new subdirectory (via `create_dir_all`), an additional event is emitted for the grandparent directory.
 - **Helper**: `parent_preset_path(name)` extracts the parent directory from a preset name (e.g., `"Cat/MyPreset"` → `"Cat"`).
 - **Frontend**: `PresetTreeStore` (`preset-tree-store.svelte.ts`) is a singleton ViewModel with `$effect.root()` listener (same pattern as `SharedAgentEvents`). Refreshes the directory at `event.payload.path` if it is in the loaded `entries` record; otherwise walks up to the nearest loaded ancestor and refreshes that instead (a new folder appeared on disk — e.g. an MCP `save_preset` into a fresh subdirectory — and must show up in an already-loaded parent). Uses per-path request counter to discard stale responses from concurrent events. `nav-presets.svelte` is a pure View that reads `presetTreeStore.entries` — no direct Tauri event handling. Uses keyed `{#each entries as entry (entry)}` to preserve folder open/close state across refreshes.

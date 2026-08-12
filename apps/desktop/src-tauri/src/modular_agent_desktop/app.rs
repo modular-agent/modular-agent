@@ -84,10 +84,14 @@ impl ModularAgentApp {
     }
 
     /// Delete a preset by the given name, and delete its file.
-    pub async fn delete_preset(&self, name: &str) -> Result<()> {
+    pub async fn delete_preset(&self, app: &AppHandle, name: &str) -> Result<()> {
         // If the preset is loaded in core, remove it first (core emits the
         // removal event so the UI can close any open tab).
         if let Some(preset_id) = self.ma.find_preset_id_by_name(name) {
+            let infos = self.ma.get_preset_infos().await;
+            if infos.iter().any(|p| p.id == preset_id && p.running) {
+                bail!("Cannot delete preset: it is running. Stop it first.");
+            }
             self.ma.remove_preset(&preset_id).await?;
         }
 
@@ -96,6 +100,8 @@ impl ModularAgentApp {
         if preset_path.exists() {
             std::fs::remove_file(preset_path).with_context(|| "Failed to remove preset file")?;
         }
+
+        remove_auto_start_presets(app, |entry| entry == name);
 
         Ok(())
     }
@@ -307,6 +313,43 @@ impl ModularAgentApp {
         if let Some(parent) = old_dir.parent() {
             cleanup_empty_ancestors(app, parent, &presets_root);
         }
+
+        Ok(())
+    }
+
+    /// Delete an empty folder. Refuses to delete a folder that still has
+    /// anything in it — a right-click can easily land on the wrong row, and
+    /// wiping a whole subtree is not recoverable.
+    pub fn delete_folder(&self, app: &AppHandle, path: &str) -> Result<()> {
+        // Validate the path to prevent path traversal. An empty path would
+        // resolve to the presets root itself.
+        if path.is_empty() || path.contains("..") || path.contains('\\') || path.starts_with('/') {
+            bail!("Invalid folder path");
+        }
+
+        let presets_root = presets_dir()?;
+        let dir = presets_root.join(path);
+        if !dir.exists() || !dir.is_dir() {
+            bail!("Folder not found: {}", path);
+        }
+
+        let is_empty = dir
+            .read_dir()
+            .with_context(|| format!("Failed to read directory: {:?}", dir))?
+            .next()
+            .is_none();
+        if !is_empty {
+            bail!("Cannot delete folder: it is not empty. Delete its contents first.");
+        }
+
+        std::fs::remove_dir(&dir).with_context(|| format!("Failed to remove folder: {}", path))?;
+
+        let _ = app.emit(
+            EMIT_PRESET_LIST_CHANGED,
+            PresetListChangedPayload {
+                path: parent_preset_path(path),
+            },
+        );
 
         Ok(())
     }
@@ -657,6 +700,19 @@ fn update_auto_start_presets_prefix(app: &AppHandle, old_prefix: &str, new_prefi
     }
 }
 
+/// Drop auto_start_presets entries matching `is_removed`.
+fn remove_auto_start_presets(app: &AppHandle, is_removed: impl Fn(&str) -> bool) {
+    let core_settings = app.state::<Mutex<CoreSettings>>();
+    let mut settings = core_settings.lock().unwrap();
+    let before = settings.auto_start_presets.len();
+    settings.auto_start_presets.retain(|e| !is_removed(e));
+    let changed = settings.auto_start_presets.len() != before;
+    drop(settings);
+    if changed {
+        let _ = crate::modular_agent_desktop::settings::save(app);
+    }
+}
+
 #[tauri::command]
 pub fn new_preset_with_name_cmd(
     app: AppHandle,
@@ -751,7 +807,7 @@ pub async fn delete_preset_cmd(
     name: String,
 ) -> Result<(), String> {
     asapp
-        .delete_preset(&name)
+        .delete_preset(&app, &name)
         .await
         .map_err(|e| e.to_string())?;
     let _ = app.emit(
@@ -761,6 +817,15 @@ pub async fn delete_preset_cmd(
         },
     );
     Ok(())
+}
+
+#[tauri::command]
+pub fn delete_folder_cmd(
+    app: AppHandle,
+    asapp: State<'_, ModularAgentApp>,
+    path: String,
+) -> Result<(), String> {
+    asapp.delete_folder(&app, &path).map_err(|e| e.to_string())
 }
 
 #[tauri::command]

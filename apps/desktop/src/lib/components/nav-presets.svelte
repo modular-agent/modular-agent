@@ -15,7 +15,9 @@
   import { ScrollArea } from "$lib/components/ui/scroll-area/index.js";
   import * as Sidebar from "$lib/components/ui/sidebar/index.js";
   import {
+    deleteFolder,
     deletePreset,
+    getDirEntries,
     moveFolder,
     movePreset,
     openPreset,
@@ -30,6 +32,11 @@
   let openDeletePresetDialog = $state(false);
   let openRenameDialog = $state(false);
   let renameTarget = $state<{ path: string; isFolder: boolean }>({ path: "", isFolder: false });
+  let deleteTarget = $state<{ path: string; isFolder: boolean; blocked: string }>({
+    path: "",
+    isFolder: false,
+    blocked: "",
+  });
 
   // Drag & Drop state
   let dragSource = $state<{ type: "file" | "folder"; path: string } | null>(null);
@@ -58,12 +65,17 @@
     }
   }
 
-  async function onDeletePreset(name: string) {
+  async function onDelete() {
+    const { path, isFolder } = deleteTarget;
     try {
-      await deletePreset(name);
       // Refresh handled by ma:preset_list_changed event via presetTreeStore
+      if (isFolder) {
+        await deleteFolder(path);
+      } else {
+        await deletePreset(path);
+      }
     } catch (e) {
-      console.error("Failed to delete preset:", e);
+      toast.error(String(e));
     }
   }
 
@@ -72,8 +84,22 @@
     openNewPresetDialog = true;
   }
 
-  async function handleDelete(path: string) {
-    dialog_name = path;
+  async function handleDelete(path: string, isFolder: boolean) {
+    // Only empty folders can be deleted. Check up front so the dialog can say
+    // so with its Delete button disabled, instead of failing after the click.
+    // The backend re-checks: this only sees presets and subfolders, and the
+    // folder can gain content between here and the click.
+    let blocked = "";
+    if (isFolder) {
+      try {
+        if ((await getDirEntries(path)).length > 0) {
+          blocked = "Cannot delete folder: it is not empty. Delete its contents first.";
+        }
+      } catch (e) {
+        blocked = String(e);
+      }
+    }
+    deleteTarget = { path, isFolder, blocked };
     openDeletePresetDialog = true;
   }
 
@@ -240,7 +266,7 @@
                 <ContextMenu.Item onclick={() => handleNew(fp + "/")}>New</ContextMenu.Item>
                 <ContextMenu.Item onclick={() => handleImport(fp)}>Import</ContextMenu.Item>
                 <ContextMenu.Item onclick={() => handleRename(fp, true)}>Rename</ContextMenu.Item>
-                <ContextMenu.Item onclick={() => handleDelete(fp)}>Delete</ContextMenu.Item>
+                <ContextMenu.Item onclick={() => handleDelete(fp, true)}>Delete</ContextMenu.Item>
               </ContextMenu.Content>
             </ContextMenu.Root>
           {:else}
@@ -262,7 +288,7 @@
                 <ContextMenu.Item onclick={() => handleNew(fp)}>New</ContextMenu.Item>
                 <ContextMenu.Item onclick={() => handleImport(path)}>Import</ContextMenu.Item>
                 <ContextMenu.Item onclick={() => handleRename(fp, false)}>Rename</ContextMenu.Item>
-                <ContextMenu.Item onclick={() => handleDelete(fp)}>Delete</ContextMenu.Item>
+                <ContextMenu.Item onclick={() => handleDelete(fp, false)}>Delete</ContextMenu.Item>
               </ContextMenu.Content>
             </ContextMenu.Root>
           {/if}
@@ -310,9 +336,11 @@
 
 {#if openDeletePresetDialog}
   <PresetDeleteDialog
-    name={dialog_name}
+    name={deleteTarget.path}
+    isFolder={deleteTarget.isFolder}
+    blocked={deleteTarget.blocked}
     bind:open={openDeletePresetDialog}
-    onDelete={onDeletePreset}
+    {onDelete}
   />
 {/if}
 
