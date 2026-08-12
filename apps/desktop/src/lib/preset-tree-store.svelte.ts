@@ -4,11 +4,18 @@ import { getDirEntries } from "$lib/modular_agent";
 
 class PresetTreeStore {
   entries = $state<Record<string, string[]>>({ "": [] });
+  private rootLoaded = $state(false);
   private refreshSeq = new Map<string, number>();
+
+  /** No presets and no folders at the root of the preset tree. */
+  get isEmpty() {
+    return this.rootLoaded && this.entries[""].length === 0;
+  }
 
   async loadRoot() {
     try {
       this.entries = { "": await getDirEntries("") };
+      this.rootLoaded = true;
     } catch (e) {
       console.error("Failed to load preset directory:", e);
     }

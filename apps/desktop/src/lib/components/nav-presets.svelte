@@ -301,7 +301,7 @@
     <Sidebar.GroupContent class="h-full">
       <ScrollArea class="h-full" orientation="both">
         <div class="group-data-[collapsible=icon]:hidden">
-          {#if presetTreeStore.entries[""].length === 0}
+          {#if presetTreeStore.isEmpty}
             <button
               class="text-xs text-muted-foreground px-2 pl-4 py-1 hover:underline cursor-pointer"
               onclick={() => handleNew("")}

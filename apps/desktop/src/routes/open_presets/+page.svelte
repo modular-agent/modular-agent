@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onMount } from "svelte";
 
-  import { PresetList } from "$lib/components/preset-list";
+  import { PresetList, PresetListEmpty } from "$lib/components/preset-list";
+  import { presetTreeStore } from "$lib/preset-tree-store.svelte";
   import { titlebarState } from "$lib/titlebar-state.svelte";
 
   import type { PageProps } from "./$types";
@@ -18,5 +19,9 @@
   <header class="flex-none">
     <div class="text-lg font-semibold">Open Presets</div>
   </header>
-  <PresetList presets={data.presetInfos} />
+  {#if presetTreeStore.isEmpty}
+    <PresetListEmpty />
+  {:else}
+    <PresetList presets={data.presetInfos} />
+  {/if}
 </div>
