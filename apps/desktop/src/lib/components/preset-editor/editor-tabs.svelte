@@ -4,7 +4,7 @@
   import { goto } from "$app/navigation";
 
   import ScrollArea from "$lib/components/ui/scroll-area/scroll-area.svelte";
-  import { tabStore } from "$lib/tab-store.svelte";
+  import { closeTabAndNavigate, tabStore } from "$lib/tab-store.svelte";
 
   let viewportRef: HTMLElement | null = $state(null);
 
@@ -44,14 +44,7 @@
 
   async function handleTabClose(event: Event, id: string) {
     event.stopPropagation();
-    const wasActive = tabStore.activeTabId === id;
-    tabStore.closeTab(id);
-    if (!wasActive) return;
-    if (tabStore.tabs.length === 0) {
-      await goto("/open_presets");
-    } else {
-      await goto(`/preset_editor/${tabStore.activeTabId}`, { noScroll: true });
-    }
+    await closeTabAndNavigate(id);
   }
 
   function handleMouseDown(event: MouseEvent, id: string) {

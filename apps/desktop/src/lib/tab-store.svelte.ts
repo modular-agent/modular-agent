@@ -1,3 +1,5 @@
+import { goto } from "$app/navigation";
+
 import { removeHistory } from "$lib/components/preset-editor/history.svelte";
 
 export type Tab = { id: string; name: string };
@@ -46,3 +48,22 @@ class TabStore {
 }
 
 export const tabStore = new TabStore();
+
+/**
+ * Close a tab and move the route off it when it was the active one. Guarded on
+ * the current path so a sidebar delete made from Settings or the preset list
+ * does not yank the user into the editor. Reads `window.location` rather than
+ * `$app/state` because this also runs from a Tauri event callback, outside any
+ * component.
+ */
+export async function closeTabAndNavigate(id: string) {
+  const wasActive = tabStore.activeTabId === id;
+  const onEditorRoute = window.location.pathname.startsWith("/preset_editor");
+  tabStore.closeTab(id);
+  if (!wasActive || !onEditorRoute) return;
+  if (tabStore.tabs.length === 0) {
+    await goto("/open_presets");
+  } else {
+    await goto(`/preset_editor/${tabStore.activeTabId}`, { noScroll: true });
+  }
+}

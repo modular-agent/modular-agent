@@ -1,6 +1,6 @@
 import { listen } from "@tauri-apps/api/event";
 
-import { tabStore } from "$lib/tab-store.svelte";
+import { closeTabAndNavigate, tabStore } from "$lib/tab-store.svelte";
 
 import type {
   AgentConfigUpdatedMessage,
@@ -114,13 +114,15 @@ $effect.root(() => {
     sharedPresetEvents.runningChanged[preset_id] = { running, seq: ++eventSeq };
   });
 
+  // Deliberately not origin-filtered: a sidebar delete goes through the plugin
+  // handle and arrives as our own "desktop" echo, and this is the only path
+  // that closes the tab of a removed preset.
   listen<PresetRemovedMessage>("ma:preset_removed", (event) => {
-    if (!isExternalOrigin(event.payload.origin)) return;
     const { preset_id } = event.payload;
     // Closing the tab triggers editor-host's cleanup, which unloads the
     // (already removed) preset from the backend idempotently.
     if (tabStore.tabs.find((t) => t.id === preset_id)) {
-      tabStore.closeTab(preset_id);
+      closeTabAndNavigate(preset_id);
     }
   });
 });
