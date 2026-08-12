@@ -39,15 +39,13 @@
     {@render trigger()}
   {/if}
   <Dialog.Content class="sm:max-w-[425px]">
-    <form onsubmit={handleAction}>
+    <form onsubmit={handleAction} class="grid gap-4">
       <Dialog.Header>
         <Dialog.Title>{action} {subject}</Dialog.Title>
       </Dialog.Header>
-      <div class="grid gap-4">
-        <div class="grid gap-3">
-          <Label for="name-1">Name</Label>
-          <Input id="name-1" name="name" bind:value={inputName} />
-        </div>
+      <div class="grid gap-3">
+        <Label for="name-1">Name</Label>
+        <Input id="name-1" name="name" bind:value={inputName} />
       </div>
       <Dialog.Footer>
         <Button type="submit">{action}</Button>

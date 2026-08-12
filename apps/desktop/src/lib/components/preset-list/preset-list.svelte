@@ -18,6 +18,7 @@
   import type { PresetInfoExt } from "$lib/types";
 
   import PresetListActions from "./preset-list-actions.svelte";
+  import PresetListEmpty from "./preset-list-empty.svelte";
   import PresetListName from "./preset-list-name.svelte";
 
   const STATUS_COL_WIDTH = "w-[220px]";
@@ -116,56 +117,60 @@
   });
 </script>
 
-<div class="text-primary w-full">
-  <div class="flex items-center justify-between pb-4">
-    <div class="w-64">
-      <Input
-        value={(table.getColumn("name")?.getFilterValue() as string) ?? ""}
-        onchange={(e) => {
-          table.getColumn("name")?.setFilterValue(e.currentTarget.value);
-        }}
-        oninput={(e) => {
-          table.getColumn("name")?.setFilterValue(e.currentTarget.value);
-        }}
-      />
+{#if presets.length === 0}
+  <PresetListEmpty />
+{:else}
+  <div class="text-primary w-full">
+    <div class="flex items-center justify-between pb-4">
+      <div class="w-64">
+        <Input
+          value={(table.getColumn("name")?.getFilterValue() as string) ?? ""}
+          onchange={(e) => {
+            table.getColumn("name")?.setFilterValue(e.currentTarget.value);
+          }}
+          oninput={(e) => {
+            table.getColumn("name")?.setFilterValue(e.currentTarget.value);
+          }}
+        />
+      </div>
+    </div>
+    <div class="">
+      <Table.Root>
+        <Table.Header class="bg-muted">
+          {#each table.getHeaderGroups() as headerGroup (headerGroup.id)}
+            <Table.Row>
+              {#each headerGroup.headers as header (header.id)}
+                <Table.Head
+                  colspan={header.colSpan}
+                  class={header.column.columnDef.meta?.headerClass}
+                >
+                  {#if !header.isPlaceholder}
+                    <FlexRender
+                      content={header.column.columnDef.header}
+                      context={header.getContext()}
+                    />
+                  {/if}
+                </Table.Head>
+              {/each}
+            </Table.Row>
+          {/each}
+        </Table.Header>
+        <Table.Body>
+          {#each table.getRowModel().rows as row (row.id)}
+            <Table.Row data-state={row.getIsSelected() && "selected"}>
+              {#each row.getVisibleCells() as cell (cell.id)}
+                <Table.Cell class={cell.column.columnDef.meta?.cellClass}>
+                  <FlexRender content={cell.column.columnDef.cell} context={cell.getContext()} />
+                </Table.Cell>
+              {/each}
+            </Table.Row>
+          {:else}
+            <Table.Row>
+              <Table.Cell colspan={columns.length} class="h-24 text-center">No results.</Table.Cell>
+            </Table.Row>
+          {/each}
+        </Table.Body>
+      </Table.Root>
     </div>
   </div>
-  <div class="">
-    <Table.Root>
-      <Table.Header class="bg-muted">
-        {#each table.getHeaderGroups() as headerGroup (headerGroup.id)}
-          <Table.Row>
-            {#each headerGroup.headers as header (header.id)}
-              <Table.Head
-                colspan={header.colSpan}
-                class={header.column.columnDef.meta?.headerClass}
-              >
-                {#if !header.isPlaceholder}
-                  <FlexRender
-                    content={header.column.columnDef.header}
-                    context={header.getContext()}
-                  />
-                {/if}
-              </Table.Head>
-            {/each}
-          </Table.Row>
-        {/each}
-      </Table.Header>
-      <Table.Body>
-        {#each table.getRowModel().rows as row (row.id)}
-          <Table.Row data-state={row.getIsSelected() && "selected"}>
-            {#each row.getVisibleCells() as cell (cell.id)}
-              <Table.Cell class={cell.column.columnDef.meta?.cellClass}>
-                <FlexRender content={cell.column.columnDef.cell} context={cell.getContext()} />
-              </Table.Cell>
-            {/each}
-          </Table.Row>
-        {:else}
-          <Table.Row>
-            <Table.Cell colspan={columns.length} class="h-24 text-center">No results.</Table.Cell>
-          </Table.Row>
-        {/each}
-      </Table.Body>
-    </Table.Root>
-  </div>
-</div>
+{/if}
