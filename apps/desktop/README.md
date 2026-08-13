@@ -114,27 +114,27 @@ src-tauri/src/          # Rust backend
 
 ## Agent Plugins
 
-The following agent crates are included by default:
+The default build includes the agent crates that live in this repository:
 
 | Crate | Description |
 | ----- | ----------- |
 | [modular-agent-std](https://github.com/modular-agent/modular-agent/tree/main/crates/modular-agent-std) | Standard utility agents |
-| [modular-agent-llm](https://github.com/modular-agent/modular-agent/tree/main/crates/modular-agent-llm) | LLM integrations (OpenAI, Ollama) |
-| [modular-agent-web](https://github.com/modular-agent/modular-agent-web) | HTTP, scraping, search, YouTube |
-| [modular-agent-slack](https://github.com/modular-agent/modular-agent-slack) | Slack messaging |
-| [modular-agent-sqlx](https://github.com/modular-agent/modular-agent-sqlx) | SQLite, MySQL, PostgreSQL |
-| [modular-agent-lifelog](https://github.com/modular-agent/modular-agent-lifelog) | Screen capture, window tracking |
-| [modular-agent-monty](https://github.com/modular-agent/modular-agent-monty) | Monty agents |
+| [modular-agent-llm](https://github.com/modular-agent/modular-agent/tree/main/crates/modular-agent-llm) | LLM integrations (OpenAI, Anthropic, Google, Ollama) |
 
 ### Custom Build
 
-Use the **ma-config** TUI wizard to select which agent packages to include:
+More agent packages — web scraping, Slack and Mattermost messaging, SQL databases, screen capture, script agents, and others — live in their own repositories and are added at build time:
 
-```bash
-cargo run --manifest-path ../../tools/ma-config/Cargo.toml -- desktop
-```
+1. Clone the agent repositories you want into `custom_agents/` at the repository root. See [custom_agents/README.md](../../custom_agents/README.md) for the repository list and details.
+2. Run the **ma-config** TUI wizard to select agents and per-crate features (only cloned agents are offered):
 
-The wizard lets you choose agents and select per-crate features. Agent packages from outside this repository are linked from `custom_agents/<name>` at the repository root — clone them there first (see `custom_agents/README.md` for the repository list); the wizard only offers agents that are already cloned. Configuration is saved to `apps/desktop/ma-config.toml` for future rebuilds. After the wizard completes, build with `npm run tauri dev` or `npm run tauri build`.
+   ```bash
+   cargo run --manifest-path ../../tools/ma-config/Cargo.toml -- desktop
+   ```
+
+   The selection is saved to `apps/desktop/ma-config.toml` and reused on later runs.
+
+3. Rebuild with `npm run tauri dev` or `npm run tauri build`.
 
 ## Contributing
 

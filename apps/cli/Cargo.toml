@@ -19,7 +19,4 @@ serde_json = { workspace = true }
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros", "io-util", "io-std", "signal", "sync"] }
 modular-agent-core = { workspace = true, features = ["mcp-server", "mcp-http-client"] }
 modular-agent-llm = { workspace = true }
-modular-agent-slack = { path = "../../custom_agents/modular-agent-slack" }
-modular-agent-sqlx = { path = "../../custom_agents/modular-agent-sqlx" }
 modular-agent-std = { workspace = true }
-modular-agent-web = { path = "../../custom_agents/modular-agent-web", default-features = false, features = ["fetch-url", "html-scraper", "html-to-markdown", "searxng", "yt-transcript"] }

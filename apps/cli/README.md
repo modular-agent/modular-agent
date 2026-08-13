@@ -59,24 +59,16 @@ cat data.txt | ma ./preset.json | jq '.result'
 
 Input is read line-by-line from stdin. String output is printed as-is; other types are printed as JSON.
 
-## Official Agents
+## Agent Plugins
 
-| Package | Description | Default |
-| --- | --- | --- |
-| [modular-agent-cozodb](https://github.com/modular-agent/modular-agent-cozodb) | CozoDB logic database | |
-| [modular-agent-duckdb](https://github.com/modular-agent/modular-agent-duckdb) | DuckDB analytics | |
-| [modular-agent-lancedb](https://github.com/modular-agent/modular-agent-lancedb) | LanceDB vector database | |
-| [modular-agent-lifelog](https://github.com/modular-agent/modular-agent-lifelog) | Screen capture, window tracking | |
-| [modular-agent-llm](https://github.com/modular-agent/modular-agent/tree/main/crates/modular-agent-llm) | LLM (OpenAI, Anthropic, Google, etc.) | Yes |
-| [modular-agent-mongodb](https://github.com/modular-agent/modular-agent-mongodb) | MongoDB CRUD | |
-| [modular-agent-monty](https://github.com/modular-agent/modular-agent-monty) | Monty | |
-| [modular-agent-slack](https://github.com/modular-agent/modular-agent-slack) | Slack messaging | Yes |
-| [modular-agent-sqlx](https://github.com/modular-agent/modular-agent-sqlx) | SQL database (PostgreSQL, MySQL, SQLite) | Yes |
-| [modular-agent-std](https://github.com/modular-agent/modular-agent/tree/main/crates/modular-agent-std) | Standard (timer, template, file, etc.) | Yes |
-| [modular-agent-surrealdb](https://github.com/modular-agent/modular-agent-surrealdb) | SurrealDB graph database | |
-| [modular-agent-web](https://github.com/modular-agent/modular-agent-web) | Web/HTTP, scraping, search, YouTube | Yes |
+The default build includes the agent crates that live in this repository:
 
-Agent selection and features are managed by the `ma-config` wizard.
+| Crate | Description |
+| --- | --- |
+| [modular-agent-std](https://github.com/modular-agent/modular-agent/tree/main/crates/modular-agent-std) | Standard (timer, template, file, etc.) |
+| [modular-agent-llm](https://github.com/modular-agent/modular-agent/tree/main/crates/modular-agent-llm) | LLM (OpenAI, Anthropic, Google, etc.) |
+
+More agent packages — web scraping, Slack and Mattermost messaging, SQL databases, screen capture, script agents, and others — live in their own repositories. Clone the ones you want into `custom_agents/` at the repository root and select them with the `ma-config` wizard (see above); [custom_agents/README.md](../../custom_agents/README.md) lists the repositories.
 
 ## Development
 

@@ -4,7 +4,4 @@
 //! to be linked via the `inventory` crate.
 
 use modular_agent_llm as _;
-use modular_agent_slack as _;
-use modular_agent_sqlx as _;
 use modular_agent_std as _;
-use modular_agent_web as _;

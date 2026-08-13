@@ -115,27 +115,27 @@ src-tauri/src/          # Rustバックエンド
 
 ## エージェントプラグイン
 
-以下のエージェントcrateが標準で組み込まれています:
+標準ビルドには、このリポジトリ内にあるエージェントcrateが組み込まれています:
 
 | Crate | 説明 |
 | ----- | ---- |
 | [modular-agent-std](https://github.com/modular-agent/modular-agent/tree/main/crates/modular-agent-std) | 標準ユーティリティエージェント |
-| [modular-agent-llm](https://github.com/modular-agent/modular-agent/tree/main/crates/modular-agent-llm) | LLM連携（OpenAI、Ollama） |
-| [modular-agent-web](https://github.com/modular-agent/modular-agent-web) | HTTP、スクレイピング、YouTube |
-| [modular-agent-slack](https://github.com/modular-agent/modular-agent-slack) | Slackメッセージング |
-| [modular-agent-sqlx](https://github.com/modular-agent/modular-agent-sqlx) | SQLite、MySQL、PostgreSQL |
-| [modular-agent-lifelog](https://github.com/modular-agent/modular-agent-lifelog) | スクリーンキャプチャ、ウィンドウ追跡 |
-| [modular-agent-monty](https://github.com/modular-agent/modular-agent-monty) | Montyエージェント |
+| [modular-agent-llm](https://github.com/modular-agent/modular-agent/tree/main/crates/modular-agent-llm) | LLM連携（OpenAI、Anthropic、Google、Ollama） |
 
 ### カスタムビルド
 
-**ma-config** TUIウィザードで、ビルドに含めるエージェントパッケージを選択できます:
+さらに多くのエージェントパッケージ — Webスクレイピング、Slack / Mattermost メッセージング、SQLデータベース、スクリーンキャプチャ、スクリプトエージェントなど — は各自のリポジトリにあり、ビルド時に追加できます:
 
-```bash
-cargo run --manifest-path ../../tools/ma-config/Cargo.toml -- desktop
-```
+1. 使いたいエージェントリポジトリをリポジトリルートの `custom_agents/` に clone します。リポジトリ一覧と詳細は [custom_agents/README.md](../../custom_agents/README.md) を参照してください。
+2. **ma-config** TUIウィザードを実行し、エージェントとクレートごとの feature を選択します（clone 済みのエージェントだけが表示されます）:
 
-ウィザードではエージェントの選択とクレートごとの feature 選択が可能です。リポジトリ外のエージェントパッケージはリポジトリルートの `custom_agents/<name>` から参照されるため、あらかじめそこに clone してください（リポジトリ一覧は `custom_agents/README.md` を参照。ウィザードには clone 済みのエージェントだけが表示されます）。設定は `apps/desktop/ma-config.toml` に保存され、次回以降のリビルドに再利用できます。ウィザード完了後、`npm run tauri dev` または `npm run tauri build` でビルドしてください。
+   ```bash
+   cargo run --manifest-path ../../tools/ma-config/Cargo.toml -- desktop
+   ```
+
+   選択内容は `apps/desktop/ma-config.toml` に保存され、次回以降に再利用されます。
+
+3. `npm run tauri dev` または `npm run tauri build` でリビルドします。
 
 ## コントリビューション
 
