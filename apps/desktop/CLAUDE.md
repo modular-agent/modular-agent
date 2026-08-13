@@ -244,10 +244,9 @@ Agent functionality is provided by external crates linked in `lib.rs`:
 
 - `modular-agent-llm` - LLM integrations
 - `modular-agent-std` - Standard utilities
-- `modular-agent-web` - Web/HTTP agents
-- `modular-agent-slack`, `modular-agent-sqlx`, etc.
+- `modular-agent-web`, `modular-agent-slack`, `modular-agent-sqlx`, etc.
 
-std / llm / web are in-tree (`crates/`) and linked as workspace dependencies. The rest are
+std / llm are in-tree (`crates/`) and linked as workspace dependencies. The rest are
 cloned from their own repositories into `custom_agents/` at the workspace root and linked
 from there by ma-config.
 
@@ -256,9 +255,9 @@ from there by ma-config.
 `tools/ma-config/` at the workspace root is a TUI wizard for selecting which agent packages a build links. It serves both apps: `ma-config desktop` and `ma-config cli`.
 
 - Codegen generates `src-tauri/src/agents.rs` (do not edit manually) and updates `src-tauri/Cargo.toml`; `lib.rs` has `mod agents;` to link them.
-- core and the Tauri plugin are in-tree and always linked, so they are not selectable. In-tree agents (std / llm / web) are emitted as `{ workspace = true }`; a feature override spells the path out instead, because cargo ignores a member's `default-features = false` when the workspace entry does not set it.
+- core and the Tauri plugin are in-tree and always linked, so they are not selectable. In-tree agents (std / llm) are emitted as `{ workspace = true }`; a feature override spells the path out instead, because cargo ignores a member's `default-features = false` when the workspace entry does not set it.
 - Out-of-tree agents are emitted as `path = "../../../custom_agents/<name>"` — clone them there by hand first (`custom_agents/README.md` lists the repositories), since the wizard only offers clones that exist; ma-config fails pointing at that README when a selected clone has gone missing, and with a fix-up message when a clone still depends on `modular-agent-core` from crates.io (two copies of core, no visible agents). Custom agents outside the registry keep an inline `path` of their own in `[dependencies]`.
-- Configuration is saved to `apps/desktop/ma-config.toml` (gitignored) with paths relative to the workspace root. The catalog is split: `tools/ma-config/registry.yaml` lists the in-tree agents (std / llm / web) only, and each out-of-tree crate carries its own entry — description, features, conflicts, default selection — in an `ma-registry.yaml` at the root of its clone, which the wizard picks up by scanning `custom_agents/`.
+- Configuration is saved to `apps/desktop/ma-config.toml` (gitignored) with paths relative to the workspace root. The catalog is split: `tools/ma-config/registry.yaml` lists the in-tree agents (std / llm) only, and each out-of-tree crate carries its own entry — description, features, conflicts, default selection — in an `ma-registry.yaml` at the root of its clone, which the wizard picks up by scanning `custom_agents/`.
 
 ## HTML Sanitization
 

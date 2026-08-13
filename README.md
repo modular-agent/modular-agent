@@ -22,7 +22,6 @@ Build AI workflows like a modular synth — patch extensible agents together vis
 | [`crates/modular-agent-macros`](crates/modular-agent-macros) | `modular-agent-macros` | `#[modular_agent]` procedural macro |
 | [`crates/modular-agent-std`](crates/modular-agent-std) | `modular-agent-std` | Standard utility agents |
 | [`crates/modular-agent-llm`](crates/modular-agent-llm) | `modular-agent-llm` | OpenAI / Claude / Ollama agents |
-| [`crates/modular-agent-web`](crates/modular-agent-web) | `modular-agent-web` | HTTP, scraping, search, YouTube agents |
 | [`crates/tauri-plugin-modular-agent`](crates/tauri-plugin-modular-agent) | `tauri-plugin-modular-agent` | Tauri plugin bridge (Rust + guest-js) |
 | [`tools/ma-config`](tools/ma-config) | `ma-config` | Agent selection / build configuration TUI |
 

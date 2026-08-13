@@ -35,6 +35,7 @@ These first-party repositories are a good starting set; each clones from
 | `modular-agent-monty` | Monty script agents |
 | `modular-agent-slack` | Slack messaging agents |
 | `modular-agent-sqlx` | SQL database agents (PostgreSQL, MySQL, SQLite) |
+| `modular-agent-web` | Web/HTTP, scraping, search, YouTube agents |
 | `modular-agent-zapcode` | ZapCode TypeScript script agents |
 
 Nothing here is limited to that organization: any repository holding an agent

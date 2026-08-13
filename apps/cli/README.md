@@ -74,7 +74,7 @@ Input is read line-by-line from stdin. String output is printed as-is; other typ
 | [modular-agent-sqlx](https://github.com/modular-agent/modular-agent-sqlx) | SQL database (PostgreSQL, MySQL, SQLite) | Yes |
 | [modular-agent-std](https://github.com/modular-agent/modular-agent/tree/main/crates/modular-agent-std) | Standard (timer, template, file, etc.) | Yes |
 | [modular-agent-surrealdb](https://github.com/modular-agent/modular-agent-surrealdb) | SurrealDB graph database | |
-| [modular-agent-web](https://github.com/modular-agent/modular-agent/tree/main/crates/modular-agent-web) | Web/HTTP, scraping, search, YouTube | Yes |
+| [modular-agent-web](https://github.com/modular-agent/modular-agent-web) | Web/HTTP, scraping, search, YouTube | Yes |
 
 Agent selection and features are managed by the `ma-config` wizard.
 

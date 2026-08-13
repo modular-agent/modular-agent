@@ -14,7 +14,6 @@ body:
         - macros (crates/modular-agent-macros)
         - std (crates/modular-agent-std)
         - llm (crates/modular-agent-llm)
-        - web (crates/modular-agent-web)
         - tauri-plugin (crates/tauri-plugin-modular-agent)
         - ma-config (tools/ma-config)
         - Other / not sure

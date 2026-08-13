@@ -158,7 +158,7 @@ API ドキュメントは [docs.rs/modular-agent-core](https://docs.rs/modular-a
 
 - [modular-agent-lifelog](https://github.com/modular-agent/modular-agent-lifelog) - スクリーンキャプチャ、ウィンドウトラッキング
 - [modular-agent-slack](https://github.com/modular-agent/modular-agent-slack) - Slack メッセージング
-- [modular-agent-web](https://github.com/modular-agent/modular-agent/tree/main/crates/modular-agent-web) - HTTP、スクレイピング、YouTube
+- [modular-agent-web](https://github.com/modular-agent/modular-agent-web) - HTTP、スクレイピング、YouTube
 
 ### エージェントライブラリ — データベース
 

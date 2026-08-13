@@ -158,7 +158,7 @@ Full API documentation is available at [docs.rs/modular-agent-core](https://docs
 
 - [modular-agent-lifelog](https://github.com/modular-agent/modular-agent-lifelog) - Screen capture, window tracking agents
 - [modular-agent-slack](https://github.com/modular-agent/modular-agent-slack) - Slack messaging agents
-- [modular-agent-web](https://github.com/modular-agent/modular-agent/tree/main/crates/modular-agent-web) - HTTP, scraping, search, YouTube agents
+- [modular-agent-web](https://github.com/modular-agent/modular-agent-web) - HTTP, scraping, search, YouTube agents
 
 ### Agent Libraries — Databases
 

@@ -5,7 +5,6 @@ members = [
     "crates/modular-agent-core",
     "crates/modular-agent-std",
     "crates/modular-agent-llm",
-    "crates/modular-agent-web",
     "crates/tauri-plugin-modular-agent",
     "apps/desktop/src-tauri",
     "apps/cli",
@@ -29,7 +28,6 @@ modular-agent-macros = { version = "0.27.0", path = "crates/modular-agent-macros
 modular-agent-core = { version = "0.27.0", path = "crates/modular-agent-core" }
 modular-agent-std = { version = "0.17.0", path = "crates/modular-agent-std" }
 modular-agent-llm = { version = "0.15.0", path = "crates/modular-agent-llm" }
-modular-agent-web = { version = "0.10.0", path = "crates/modular-agent-web" }
 tauri-plugin-modular-agent = { version = "0.18.0", path = "crates/tauri-plugin-modular-agent" }
 
 # Shared external dependencies. Crates whose feature sets diverge (tokio,

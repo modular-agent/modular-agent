@@ -22,4 +22,4 @@ modular-agent-llm = { workspace = true }
 modular-agent-slack = { path = "../../custom_agents/modular-agent-slack" }
 modular-agent-sqlx = { path = "../../custom_agents/modular-agent-sqlx" }
 modular-agent-std = { workspace = true }
-modular-agent-web = { workspace = true }
+modular-agent-web = { path = "../../custom_agents/modular-agent-web", default-features = false, features = ["fetch-url", "html-scraper", "html-to-markdown", "searxng", "yt-transcript"] }

@@ -42,7 +42,7 @@ modular-agent-monty = { path = "../../../custom_agents/modular-agent-monty" }
 modular-agent-slack = { path = "../../../custom_agents/modular-agent-slack" }
 modular-agent-sqlx = { path = "../../../custom_agents/modular-agent-sqlx" }
 modular-agent-std = { workspace = true }
-modular-agent-web = { workspace = true }
+modular-agent-web = { path = "../../../custom_agents/modular-agent-web", default-features = false, features = ["fetch-url", "html-scraper", "html-to-markdown", "searxng", "yt-transcript"] }
 modular-agent-zapcode = { path = "../../../custom_agents/modular-agent-zapcode" }
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]

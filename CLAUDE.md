@@ -23,7 +23,7 @@ cozodb, lancedb, slack, mattermost, lifelog, monty. Also separate:
 
 - **One workspace, one `Cargo.lock`.** Both apps and every `custom_agents/` clone are
   workspace members, so the whole build resolves once.
-- **Versions are per crate.** core and macros are bumped together; std / llm / web /
+- **Versions are per crate.** core and macros are bumped together; std / llm /
   the plugin keep their own semver lines. `[workspace.dependencies]` carries
   `version` + `path` for each in-tree crate, so in-tree builds use the path and a
   published crate records the version.
@@ -110,9 +110,10 @@ noise the next time the file is opened in an editor with format-on-save.
 ## Tags
 
 Component tags carry a prefix, since one repository now holds several release lines:
-`core-v0.27.0`, `std-v0.17.0`, `llm-v0.15.0`, `web-v0.10.0`, `plugin-v0.18.0`,
-`desktop-v0.19.0`, `cli-v0.4.1`. Tags from before the merge were rewritten with the same
-prefixes.
+`core-v0.27.0`, `std-v0.17.0`, `llm-v0.15.0`, `plugin-v0.18.0`, `desktop-v0.19.0`,
+`cli-v0.4.1`. Tags from before the merge were rewritten with the same prefixes.
+Historical `web-v*` tags remain from when `modular-agent-web` was in-tree; it now
+lives in its own repository again.
 
 ## See Also
 
