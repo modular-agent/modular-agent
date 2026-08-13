@@ -1,6 +1,6 @@
 [package]
 name = "modular-agent-desktop"
-version = "0.19.0"
+version = "0.20.0"
 description = "Modular Agent Desktop Application"
 authors.workspace = true
 edition.workspace = true
