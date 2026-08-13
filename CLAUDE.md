@@ -9,32 +9,33 @@ Agents are composed into workflows through JSON preset configurations.
 
 This repository is the monorepo holding the engine, the agent libraries every app needs,
 both applications, and the build configurator. Agent libraries that only some builds
-need live in their own repositories under `github.com/modular-agent` and are consumed as
-git dependencies.
+need live in their own repositories under `github.com/modular-agent` and are cloned into
+`custom_agents/` to build.
 
 ## Repository Structure
 
 Out-of-tree agent packages (separate repositories): sqlx, duckdb, mongodb, surrealdb,
-cozodb, lancedb, audio, voicevox, slack, mattermost, lifelog, monty. Also separate:
+cozodb, lancedb, slack, mattermost, lifelog, monty. Also separate:
 `modular-agent-com` (homepage), `modular-agent-chatvrm` (avatar chat),
 `modular-agent-doc` (documentation site), `browsing-recorder` (browser extension).
 
 ## Workspace Layout
 
-- **One workspace, one `Cargo.lock`.** Both apps are workspace members, so `[patch]` at
-  the root covers them both.
+- **One workspace, one `Cargo.lock`.** Both apps and every `custom_agents/` clone are
+  workspace members, so the whole build resolves once.
 - **Versions are per crate.** core and macros are bumped together; std / llm / web /
   the plugin keep their own semver lines. `[workspace.dependencies]` carries
   `version` + `path` for each in-tree crate, so in-tree builds use the path and a
   published crate records the version.
-- **A permanent `[patch.crates-io]`** redirects `modular-agent-core` and
-  `tauri-plugin-modular-agent` to the in-tree crates. Out-of-tree agents depend on core
-  via crates.io, and two linked copies of core mean two separate `inventory` registries —
-  agents registered in one are invisible to the other. When core's minor version moves,
-  every out-of-tree agent has to declare the new version before the workspace resolves
-  to a single copy.
-- **`tools/ma-config` is excluded from the workspace** so it still builds when the
-  managed `[patch]` region points at a broken local path.
+- **Out-of-tree agents live in `custom_agents/`** (gitignored, cloned by hand). Cargo
+  makes a path dependency inside the workspace directory a member automatically, so
+  selecting one in ma-config needs no `members` entry and no `[patch]`. Each clone
+  depends on core by path (`../../crates/modular-agent-core`), which keeps a single copy
+  of core in the graph — two copies mean two separate `inventory` registries, and agents
+  registered in one are invisible to the other. ma-config errors out on a missing clone
+  or on one still depending on the crates.io core.
+- **`tools/ma-config` is excluded from the workspace** so it still builds when an app
+  manifest points at a `custom_agents/` clone that is missing or broken.
 
 ## Build Commands
 

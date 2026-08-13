@@ -6,10 +6,11 @@ import { searchForWorkspaceRoot } from "vite";
 
 // Composes per-module agent UI packages at build time, mirroring how
 // ma-config resolves Rust crates. Reads ma-config.toml (the single source of
-// truth for which agent packages are in the build) and, for every agent with
-// a Path or Workspace source, statically imports <path>/ui/src/index.ts when
-// it exists — exposed as the virtual module "virtual:agent-ui" which registers
-// all NodeViews / ConfigWidgets / NodeStyles into the desktop registry.
+// truth for which agent packages are in the build) and, for every agent —
+// Workspace, Path, or a registry agent with no source at all — statically
+// imports <path>/ui/src/index.ts when it exists, exposed as the virtual module
+// "virtual:agent-ui" which registers all NodeViews / ConfigWidgets /
+// NodeStyles into the desktop registry.
 
 const VIRTUAL_ID = "virtual:agent-ui";
 const RESOLVED_ID = "\0" + VIRTUAL_ID;
@@ -50,6 +51,9 @@ function discoverUiPackages() {
     } else if (source?.type === "Workspace") {
       // In-tree agents live under crates/<name> at the workspace root.
       dir = path.resolve(desktopRoot, "../../crates", agent.name, "ui");
+    } else if (!source && typeof agent?.name === "string") {
+      // A registry agent carries no source: it is the clone under custom_agents/.
+      dir = path.resolve(desktopRoot, "../..", "custom_agents", agent.name, "ui");
     } else {
       continue;
     }

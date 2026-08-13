@@ -14,7 +14,7 @@ The `ma` binary lands in the workspace-level `target/` directory at the reposito
 
 ### Custom Configuration with ma-config
 
-`ma-config` is a TUI wizard that lets you select which agent crates to include and configure their sources (local path or Git repository).
+`ma-config` is a TUI wizard that lets you select which agent crates to include and which Cargo features they build with. Agent crates from outside this repository are linked from `custom_agents/<name>` at the repository root, and only clones that are already there are offered — see `custom_agents/README.md` for the list of agent repositories and the `git clone` commands.
 
 ```bash
 cargo run --manifest-path tools/ma-config/Cargo.toml -- cli
@@ -63,7 +63,6 @@ Input is read line-by-line from stdin. String output is printed as-is; other typ
 
 | Package | Description | Default |
 | --- | --- | --- |
-| [modular-agent-audio](https://github.com/modular-agent/modular-agent-audio) | Audio capture/transcription | |
 | [modular-agent-cozodb](https://github.com/modular-agent/modular-agent-cozodb) | CozoDB logic database | |
 | [modular-agent-duckdb](https://github.com/modular-agent/modular-agent-duckdb) | DuckDB analytics | |
 | [modular-agent-lancedb](https://github.com/modular-agent/modular-agent-lancedb) | LanceDB vector database | |
@@ -75,7 +74,6 @@ Input is read line-by-line from stdin. String output is printed as-is; other typ
 | [modular-agent-sqlx](https://github.com/modular-agent/modular-agent-sqlx) | SQL database (PostgreSQL, MySQL, SQLite) | Yes |
 | [modular-agent-std](https://github.com/modular-agent/modular-agent/tree/main/crates/modular-agent-std) | Standard (timer, template, file, etc.) | Yes |
 | [modular-agent-surrealdb](https://github.com/modular-agent/modular-agent-surrealdb) | SurrealDB graph database | |
-| [modular-agent-voicevox](https://github.com/modular-agent/modular-agent-voicevox) | VOICEVOX text-to-speech | |
 | [modular-agent-web](https://github.com/modular-agent/modular-agent/tree/main/crates/modular-agent-web) | Web/HTTP, scraping, search, YouTube | Yes |
 
 Agent selection and features are managed by the `ma-config` wizard.
@@ -84,15 +82,14 @@ Agent selection and features are managed by the `ma-config` wizard.
 
 ### Adding Custom Agents
 
-To add a custom agent package, edit `tools/ma-config/registry.yaml` at the repository root:
+A custom agent package describes itself with an `ma-registry.yaml` at the root of its own repository:
 
 ```yaml
-  - name: my-custom
-    description: My custom agents
-    git_url: https://github.com/your-repo/my-custom.git
+name: my-custom
+description: My custom agents
 ```
 
-Then re-run `ma-config` to include it in the configuration.
+Clone the package into `custom_agents/my-custom` — the directory name has to match `name` — and re-run `ma-config`, which scans `custom_agents/` and offers every clone it finds. `available_features`, `default_features`, `default_for` and `conflicts` are optional; see `custom_agents/README.md` for the full schema and for the agent repositories published under `modular-agent`.
 
 ## License
 

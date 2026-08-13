@@ -25,7 +25,7 @@ struct Args {
     #[arg(long)]
     apply: bool,
 
-    /// Path to the agent registry YAML file
+    /// Path to the in-tree agent registry YAML file
     #[arg(long, default_value = "registry.yaml")]
     registry: String,
 }
@@ -50,11 +50,10 @@ fn run(args: Args) -> Result<(), String> {
     } else {
         root.join("tools/ma-config").join(&args.registry)
     };
-    let registry = registry::load(&registry_path)?;
+    let registry = registry::load_all(&registry_path, &root)?;
 
-    // Every app's selection is loaded: [patch] is workspace-wide and so is
-    // dependency resolution, so neither the overrides nor the conflict check
-    // can be decided from one app alone.
+    // Every app's selection is loaded: dependency resolution is workspace-wide,
+    // so the conflict check cannot be decided from one app alone.
     let mut configs = load_all_configs(&root)?;
     let existing = configs.get(&app).cloned();
 
@@ -75,8 +74,8 @@ fn run(args: Args) -> Result<(), String> {
 
             match selection {
                 0 => existing_config.clone(),
-                1 => tui::run_wizard(app, Some(existing_config), &root, &registry)?,
-                _ => tui::run_wizard(app, None, &root, &registry)?,
+                1 => tui::run_wizard(app, Some(existing_config), &registry)?,
+                _ => tui::run_wizard(app, None, &registry)?,
             }
         }
         None if args.apply => {
@@ -85,33 +84,19 @@ fn run(args: Args) -> Result<(), String> {
                 rel(&app.config_path(&root), &root)
             ));
         }
-        None => tui::run_wizard(app, None, &root, &registry)?,
+        None => tui::run_wizard(app, None, &registry)?,
     };
 
     configs.insert(app, build_config.clone());
     tui::check_conflicts(&configs, &registry, !args.apply)?;
 
-    let warnings = codegen::validate_paths(&build_config, &root);
-    if !warnings.is_empty() {
-        eprintln!("\nPath validation warnings:");
-        for w in &warnings {
-            eprintln!("  - {w}");
-        }
-        if !args.apply {
-            let proceed = Confirm::new()
-                .with_prompt("Continue anyway?")
-                .default(false)
-                .interact()
-                .map_err(|e| e.to_string())?;
-            if !proceed {
-                return Err("Cancelled due to path validation warnings".to_string());
-            }
-        }
-    }
-
+    // Saved before validation so a missing clone does not throw away the
+    // selection: clone what the error names, then re-run with --apply.
     let config_path = app.config_path(&root);
     build_config.save(&config_path)?;
     println!("Config saved to {}", config_path.display());
+
+    codegen::validate_paths(&build_config, &root)?;
 
     println!("Updating {}...", rel(&app.manifest_path(&root), &root));
     codegen::update_manifest(app, &build_config, &registry, &root)?;
@@ -122,9 +107,6 @@ fn run(args: Args) -> Result<(), String> {
     if app.needs_mod_agents() {
         codegen::ensure_mod_agents(app, &root)?;
     }
-
-    println!("Updating the managed [patch] region of Cargo.toml...");
-    codegen::update_root_patch(&configs, &registry, &root)?;
 
     let should_update = args.apply
         || Confirm::new()
@@ -145,7 +127,7 @@ fn load_all_configs(root: &Path) -> Result<BTreeMap<AppKind, BuildConfig>, Strin
     for app in ALL_APPS {
         let path = app.config_path(root);
         if path.exists() {
-            configs.insert(app, BuildConfig::load(&path)?);
+            configs.insert(app, BuildConfig::load(app, &path)?);
         }
     }
     Ok(configs)

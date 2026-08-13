@@ -1,60 +1,19 @@
-# Catalog of agent crates the wizard can offer.
+# Catalog of the in-tree agent crates the wizard can offer.
+#
+# Only crates that live under crates/ in this workspace belong here; every entry
+# must set in_tree: true. An out-of-tree agent describes itself in a
+# ma-registry.yaml at the root of its own repository, which the wizard reads
+# from the clone under custom_agents/ — so only cloned crates are offered, and
+# custom_agents/README.md lists what can be cloned.
 #
 # - in_tree: true       lives under crates/ in this workspace; always linked as a
 #                       plain workspace dependency, no source to choose.
-# - git_url:            canonical source of an out-of-tree agent. A local
-#                       checkout is expected at ../<name>, i.e. a sibling of the
-#                       workspace root, and is expressed as a [patch] entry.
 # - default_for:        apps that pre-select the agent on a fresh configuration.
 #
 # modular-agent-core and tauri-plugin-modular-agent are in-tree and always
 # linked, so they are not listed here.
 
 agents:
-  - name: modular-agent-audio
-    description: Audio capture/transcription agents
-    git_url: https://github.com/modular-agent/modular-agent-audio.git
-    available_features:
-      - capture
-      - transcribe
-      - transcribe-cuda
-      - transcribe-vulkan
-      - transcribe-metal
-      - transcribe-coreml
-    default_features:
-      - transcribe-cuda
-    default_for: [desktop]
-
-  - name: modular-agent-cozodb
-    description: CozoDB logic database agents
-    git_url: https://github.com/modular-agent/modular-agent-cozodb.git
-    conflicts:
-      - with: modular-agent-sqlx
-        reason: sqlite3 native link conflict
-
-  - name: modular-agent-duckdb
-    description: DuckDB analytics agents
-    git_url: https://github.com/modular-agent/modular-agent-duckdb.git
-    conflicts:
-      - with: modular-agent-llm
-        reason: CRT mismatch on Windows
-        platform: windows
-
-  - name: modular-agent-lancedb
-    description: LanceDB vector database agents
-    git_url: https://github.com/modular-agent/modular-agent-lancedb.git
-
-  - name: modular-agent-lifelog
-    description: Screen capture, window tracking agents
-    git_url: https://github.com/modular-agent/modular-agent-lifelog.git
-    available_features:
-      - application
-      - screen
-    default_features:
-      - application
-      - screen
-    default_for: [desktop]
-
   - name: modular-agent-llm
     description: LLM agents (OpenAI, Anthropic, Google, etc.)
     in_tree: true
@@ -74,37 +33,6 @@ agents:
         platform: windows
     default_for: [desktop, cli]
 
-  - name: modular-agent-mattermost
-    description: Mattermost messaging agents
-    git_url: https://github.com/modular-agent/modular-agent-mattermost.git
-    available_features:
-      - image
-    default_features:
-      - image
-    default_for: [desktop, cli]
-
-  - name: modular-agent-mongodb
-    description: MongoDB CRUD agents
-    git_url: https://github.com/modular-agent/modular-agent-mongodb.git
-
-  - name: modular-agent-monty
-    description: Monty agents
-    git_url: https://github.com/modular-agent/modular-agent-monty.git
-    default_for: [desktop, cli]
-
-  - name: modular-agent-slack
-    description: Slack messaging agents
-    git_url: https://github.com/modular-agent/modular-agent-slack.git
-    default_for: [desktop, cli]
-
-  - name: modular-agent-sqlx
-    description: SQL database agents (PostgreSQL, MySQL, SQLite)
-    git_url: https://github.com/modular-agent/modular-agent-sqlx.git
-    conflicts:
-      - with: modular-agent-cozodb
-        reason: sqlite3 native link conflict
-    default_for: [desktop, cli]
-
   - name: modular-agent-std
     description: Standard agents (timer, template, file, etc.)
     in_tree: true
@@ -117,20 +45,6 @@ agents:
       - yaml
       - watch
     default_for: [desktop, cli]
-
-  - name: modular-agent-surrealdb
-    description: SurrealDB graph database agents
-    git_url: https://github.com/modular-agent/modular-agent-surrealdb.git
-
-  - name: modular-agent-voicevox
-    description: VOICEVOX text-to-speech agents
-    git_url: https://github.com/modular-agent/modular-agent-voicevox.git
-    available_features:
-      - default-tls
-      - rustls
-    default_features:
-      - rustls
-    default_for: [desktop]
 
   - name: modular-agent-web
     description: Web/HTTP, scraping, search, YouTube agents
@@ -147,9 +61,4 @@ agents:
       - html-to-markdown
       - searxng
       - yt-transcript
-    default_for: [desktop, cli]
-
-  - name: modular-agent-zapcode
-    description: ZapCode TypeScript script agents
-    git_url: https://github.com/modular-agent/modular-agent-zapcode.git
     default_for: [desktop, cli]

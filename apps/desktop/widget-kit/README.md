@@ -56,11 +56,13 @@ export const ui = {
 All three manifest keys are optional.
 
 At build time, the desktop app's `vite-plugin-agent-ui` reads `ma-config.toml`
-and, for every agent with a `Path` or `Workspace` source, statically imports
-`<path>/ui/src/index.ts` when it exists (virtual module `virtual:agent-ui`) —
-in-tree Workspace packages resolve to `crates/<name>/ui` at the workspace
-root. No dynamic loading, no npm registry access: the UI ships with the build
-the same way the Rust crate does.
+and, for every selected agent, statically imports `<path>/ui/src/index.ts` when
+it exists (virtual module `virtual:agent-ui`). The path follows the same rules
+ma-config uses: a `Workspace` source resolves to `crates/<name>/ui`, an explicit
+`Path` source to `<path>/ui`, and a registry agent — which carries no source at
+all — to `custom_agents/<name>/ui`, all relative to the workspace root. No
+dynamic loading, no npm registry access: the UI ships with the build the same
+way the Rust crate does.
 
 Run `npm install` once inside `ui/` so package-local dependencies land in
 `ui/node_modules` (the only manual step).

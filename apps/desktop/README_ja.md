@@ -124,8 +124,6 @@ src-tauri/src/          # Rustバックエンド
 | [modular-agent-web](https://github.com/modular-agent/modular-agent/tree/main/crates/modular-agent-web) | HTTP、スクレイピング、YouTube |
 | [modular-agent-slack](https://github.com/modular-agent/modular-agent-slack) | Slackメッセージング |
 | [modular-agent-sqlx](https://github.com/modular-agent/modular-agent-sqlx) | SQLite、MySQL、PostgreSQL |
-| [modular-agent-audio](https://github.com/modular-agent/modular-agent-audio) | 音声キャプチャ・文字起こし |
-| [modular-agent-voicevox](https://github.com/modular-agent/modular-agent-voicevox) | VOICEVOX テキスト読み上げ |
 | [modular-agent-lifelog](https://github.com/modular-agent/modular-agent-lifelog) | スクリーンキャプチャ、ウィンドウ追跡 |
 | [modular-agent-monty](https://github.com/modular-agent/modular-agent-monty) | Montyエージェント |
 
@@ -137,7 +135,7 @@ src-tauri/src/          # Rustバックエンド
 cargo run --manifest-path ../../tools/ma-config/Cargo.toml -- desktop
 ```
 
-ウィザードではエージェントの選択、リポジトリ外エージェントのソース設定（ローカルチェックアウトまたは Git）、クレートごとの feature 選択が可能です。設定は `apps/desktop/ma-config.toml` に保存され、次回以降のリビルドに再利用できます。ウィザード完了後、`npm run tauri dev` または `npm run tauri build` でビルドしてください。
+ウィザードではエージェントの選択とクレートごとの feature 選択が可能です。リポジトリ外のエージェントパッケージはリポジトリルートの `custom_agents/<name>` から参照されるため、あらかじめそこに clone してください（リポジトリ一覧は `custom_agents/README.md` を参照。ウィザードには clone 済みのエージェントだけが表示されます）。設定は `apps/desktop/ma-config.toml` に保存され、次回以降のリビルドに再利用できます。ウィザード完了後、`npm run tauri dev` または `npm run tauri build` でビルドしてください。
 
 ## コントリビューション
 

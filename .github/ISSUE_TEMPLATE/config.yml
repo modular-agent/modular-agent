@@ -11,5 +11,5 @@ contact_links:
   - name: Agent libraries outside this repository
     url: https://github.com/modular-agent
     about: >-
-      Databases, audio, VoiceVox, Slack, lifelog, and others ship from their own
+      Databases, Slack, lifelog, and others ship from their own
       repositories. Please report those there.

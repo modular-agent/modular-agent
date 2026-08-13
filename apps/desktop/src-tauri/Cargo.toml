@@ -35,17 +35,15 @@ tauri-plugin-store = "2"
 tokio = { version = "1", features = ["full"] }
 modular-agent-core = { workspace = true, features = ["mcp-server", "mcp-http-client"] }
 tauri-plugin-modular-agent = { workspace = true }
-modular-agent-audio = { git = "https://github.com/modular-agent/modular-agent-audio.git" }
-modular-agent-lifelog = { git = "https://github.com/modular-agent/modular-agent-lifelog.git" }
+modular-agent-lifelog = { path = "../../../custom_agents/modular-agent-lifelog", default-features = false, features = ["application", "screen"] }
 modular-agent-llm = { workspace = true }
-modular-agent-mattermost = { git = "https://github.com/modular-agent/modular-agent-mattermost.git" }
-modular-agent-monty = { git = "https://github.com/modular-agent/modular-agent-monty.git" }
-modular-agent-slack = { git = "https://github.com/modular-agent/modular-agent-slack.git" }
-modular-agent-sqlx = { git = "https://github.com/modular-agent/modular-agent-sqlx.git" }
+modular-agent-mattermost = { path = "../../../custom_agents/modular-agent-mattermost", default-features = false, features = ["image"] }
+modular-agent-monty = { path = "../../../custom_agents/modular-agent-monty" }
+modular-agent-slack = { path = "../../../custom_agents/modular-agent-slack" }
+modular-agent-sqlx = { path = "../../../custom_agents/modular-agent-sqlx" }
 modular-agent-std = { workspace = true }
-modular-agent-voicevox = { git = "https://github.com/modular-agent/modular-agent-voicevox.git" }
 modular-agent-web = { workspace = true }
-modular-agent-zapcode = { git = "https://github.com/modular-agent/modular-agent-zapcode.git" }
+modular-agent-zapcode = { path = "../../../custom_agents/modular-agent-zapcode" }
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-autostart = "2"

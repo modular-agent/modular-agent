@@ -26,7 +26,7 @@ Build AI workflows like a modular synth — patch extensible agents together vis
 | [`crates/tauri-plugin-modular-agent`](crates/tauri-plugin-modular-agent) | `tauri-plugin-modular-agent` | Tauri plugin bridge (Rust + guest-js) |
 | [`tools/ma-config`](tools/ma-config) | `ma-config` | Agent selection / build configuration TUI |
 
-Agent libraries outside this repository (databases, audio, VoiceVox, Slack, lifelog,
+Agent libraries outside this repository (databases, Slack, lifelog,
 and others) live in their own repositories under
-[github.com/modular-agent](https://github.com/modular-agent) and are consumed as
-regular git or crates.io dependencies.
+[github.com/modular-agent](https://github.com/modular-agent) and are cloned into
+`custom_agents/` to build as part of this workspace.

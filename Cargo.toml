@@ -10,8 +10,9 @@ members = [
     "apps/desktop/src-tauri",
     "apps/cli",
 ]
-# ma-config must build even when the [patch] block below points at a broken
-# local path, so it stays out of the workspace.
+# ma-config must build even when an app manifest points at a custom_agents/
+# clone that is missing or broken — that is the state it exists to fix — so it
+# stays out of the workspace.
 exclude = ["tools/ma-config"]
 
 [workspace.package]
@@ -39,17 +40,3 @@ log = "0.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
-
-# Out-of-tree agent crates depend on modular-agent-core (and the Tauri plugin)
-# from crates.io. Redirect those to the in-tree crates so the workspace links a
-# single copy: agent registration goes through `inventory`, and two linked
-# copies of core mean two separate agent registries.
-[patch.crates-io]
-modular-agent-core = { path = "crates/modular-agent-core" }
-tauri-plugin-modular-agent = { path = "crates/tauri-plugin-modular-agent" }
-
-# Local source overrides for out-of-tree agent crates, written by ma-config.
-# Everything between the markers is generated — edit through the wizard, not by
-# hand. Delete the entries to build from the canonical sources again.
-# ===== ma-config managed: external-agent local overrides (BEGIN) =====
-# ===== ma-config managed (END) =====

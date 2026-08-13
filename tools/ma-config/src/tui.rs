@@ -1,8 +1,7 @@
 use std::collections::BTreeMap;
-use std::path::Path;
 
 use console::Style;
-use dialoguer::{Confirm, Input, MultiSelect, Select};
+use dialoguer::{Confirm, Input, MultiSelect};
 
 use crate::app::AppKind;
 use crate::config::{AgentEntry, AgentSource, BuildConfig};
@@ -11,7 +10,6 @@ use crate::registry::{self, KnownAgent, Registry};
 pub fn run_wizard(
     app: AppKind,
     existing_config: Option<&BuildConfig>,
-    root: &Path,
     registry: &Registry,
 ) -> Result<BuildConfig, String> {
     let known_agents = registry.agents.as_slice();
@@ -30,21 +28,9 @@ pub fn run_wizard(
     for idx in &selected_indices {
         let known = &known_agents[*idx];
 
-        let source = if known.in_tree {
-            AgentSource::Workspace
-        } else {
-            let default_path = known.default_path();
-            let git_url = known.git_url.as_deref().unwrap_or_default();
-            if root.join(&default_path).join("Cargo.toml").exists() {
-                prompt_local_or_git(&known.name, &default_path, git_url)?
-            } else {
-                println!("  [{}] not found locally, using git", known.name);
-                AgentSource::Git {
-                    url: git_url.to_string(),
-                    tag: None,
-                }
-            }
-        };
+        // Out-of-tree agents have no source to pick: they resolve to
+        // custom_agents/<name>, and codegen fails if that clone is missing.
+        let source = known.in_tree.then_some(AgentSource::Workspace);
 
         let crate_features = if known.has_selectable_features() {
             prompt_crate_features(known, existing_config)?
@@ -124,32 +110,6 @@ fn select_agents(
     Ok(selected)
 }
 
-/// Ask the user to choose local path or git for a crate that exists locally.
-fn prompt_local_or_git(
-    name: &str,
-    default_path: &str,
-    git_url: &str,
-) -> Result<AgentSource, String> {
-    let items = &["Local path", "Git repository"];
-    let selection = Select::new()
-        .with_prompt(format!("[{name}] Source (local found)"))
-        .items(items)
-        .default(0)
-        .interact()
-        .map_err(|e| e.to_string())?;
-
-    if selection == 0 {
-        Ok(AgentSource::Path {
-            path: default_path.to_string(),
-        })
-    } else {
-        Ok(AgentSource::Git {
-            url: git_url.to_string(),
-            tag: None,
-        })
-    }
-}
-
 fn prompt_crate_features(
     known: &KnownAgent,
     existing_config: Option<&BuildConfig>,
@@ -214,36 +174,10 @@ fn prompt_custom_agent() -> Result<AgentEntry, String> {
         .interact_text()
         .map_err(|e| e.to_string())?;
 
-    let items = &["Local path", "Git repository"];
-    let selection = Select::new()
-        .with_prompt("Source type")
-        .items(items)
-        .default(0)
-        .interact()
+    let path: String = Input::new()
+        .with_prompt("Path from the workspace root (e.g. custom_agents/modular-agent-my-custom)")
+        .interact_text()
         .map_err(|e| e.to_string())?;
-
-    let source = if selection == 0 {
-        let path: String = Input::new()
-            .with_prompt("Local path (relative to the workspace root)")
-            .interact_text()
-            .map_err(|e| e.to_string())?;
-        AgentSource::Path { path }
-    } else {
-        let url: String = Input::new()
-            .with_prompt("Git URL")
-            .interact_text()
-            .map_err(|e| e.to_string())?;
-        let tag: String = Input::new()
-            .with_prompt("Git tag (empty for latest)")
-            .default(String::new())
-            .allow_empty(true)
-            .interact_text()
-            .map_err(|e| e.to_string())?;
-        AgentSource::Git {
-            url,
-            tag: if tag.is_empty() { None } else { Some(tag) },
-        }
-    };
 
     let features_str: String = Input::new()
         .with_prompt("Crate features (comma-separated, empty for none)")
@@ -266,7 +200,7 @@ fn prompt_custom_agent() -> Result<AgentEntry, String> {
 
     Ok(AgentEntry {
         name,
-        source,
+        source: Some(AgentSource::Path { path }),
         crate_features,
     })
 }
@@ -344,15 +278,11 @@ pub fn check_conflicts(
     Ok(())
 }
 
-fn format_source(source: &AgentSource) -> String {
-    match source {
-        AgentSource::Workspace => "in-tree (workspace)".to_string(),
-        AgentSource::Path { path } => format!("path: {path}"),
-        AgentSource::Git { url, tag } => {
-            let tag_str = tag.as_ref().map(|t| format!(" @ {t}")).unwrap_or_default();
-            format!("git: {url}{tag_str}")
-        }
-        AgentSource::Registry { version } => format!("crates.io: v{version}"),
+fn format_source(agent: &AgentEntry) -> String {
+    match &agent.source {
+        Some(AgentSource::Workspace) => "in-tree (workspace)".to_string(),
+        Some(AgentSource::Path { path }) => format!("path: {path}"),
+        None => format!("path: {}", registry::clone_path(&agent.name)),
     }
 }
 
@@ -376,7 +306,7 @@ fn print_summary(app: AppKind, config: &BuildConfig) {
             "  {} {} {}{}",
             bold.apply_to(&agent.name),
             dim.apply_to("-"),
-            format_source(&agent.source),
+            format_source(agent),
             features_str
         );
     }

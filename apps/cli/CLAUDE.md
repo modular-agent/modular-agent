@@ -39,20 +39,20 @@ ma <preset> [-i <input>] [-o <output>] [--mcp-port <port>] [--mcp-token <token>]
 Agent crates are managed by the `ma-config` TUI wizard at the workspace root (`tools/ma-config/`), shared with the desktop app. Run it as `ma-config cli`. The wizard:
 
 1. Selects which agent crates to include
-2. Configures sources per out-of-tree crate (local path or Git repository)
-3. Selects per-crate Cargo features via MultiSelect (agents with `available_features` in registry)
-4. Generates `Cargo.toml` dependencies, `src/agents.rs`, and the managed `[patch]` region of the workspace `Cargo.toml`
+2. Selects per-crate Cargo features via MultiSelect (agents with `available_features` in their catalog entry)
+3. Generates `Cargo.toml` dependencies and `src/agents.rs`
 
+- Out-of-tree crates are linked from `custom_agents/<name>` at the workspace root (gitignored, cloned by hand), and only clones that are present are offered. The wizard fails pointing at `custom_agents/README.md` when a selected clone has gone missing, and with a fix-up message when a clone still depends on `modular-agent-core` from crates.io — a second copy of core means a second `inventory` registry and no visible agents.
 - `modular-agent-core` is in-tree and always linked with the `mcp-server` feature; it is not selectable.
 - In-tree agents (std / llm / web) are emitted as `{ workspace = true }`; a feature override spells out a path instead, because cargo ignores a member's `default-features = false` when the workspace entry does not set it.
-- Agent catalog lives in `tools/ma-config/registry.yaml` (editable without recompilation); override the path with `--registry <path>`.
-- YAML root is `Registry { agents: [...] }` with `#[serde(deny_unknown_fields)]`; optional agent fields (`in_tree`, `git_url`, `default_for`, `available_features`, `default_features`, `conflicts`) can be omitted.
+- The catalog has two halves: `tools/ma-config/registry.yaml` holds the in-tree agents only (std / llm / web; override the path with `--registry <path>`), and every out-of-tree crate is read from the `ma-registry.yaml` at the root of its own clone under `custom_agents/`. The wizard scans that directory and merges both halves by name.
+- `registry.yaml`'s root is `Registry { agents: [...] }`, a per-repo `ma-registry.yaml` is a single agent at the root; both use `#[serde(deny_unknown_fields)]`. Optional agent fields (`default_for`, `available_features`, `default_features`, `conflicts`) can be omitted, and a per-repo file's `name` must match its directory name. A clone with no `ma-registry.yaml` falls back to `name` / `description` from its `Cargo.toml` `[package]`.
 
 Configuration is saved to `apps/cli/ma-config.toml` (gitignored), with local paths relative to the workspace root. Configs written before the monorepo are rejected rather than reinterpreted.
 
 - `crate_features` in `ma-config.toml` is `Option<Vec<String>>`: `None` (or omitted) = use crate defaults, `Some([])` = disable all features, `Some([...])` = explicit override with `default-features = false`.
 - When the user's feature selection matches the crate's `default_features`, it is stored as `None` (no redundant output).
-- TLS backend defaults to rustls across web/voicevox crates; `default-tls` feature is available for native TLS.
+- TLS backend defaults to rustls where a crate offers the choice; a `default-tls` feature is available for native TLS.
 
 Known conflicts, checked against the union of both apps' selections because the workspace resolves dependencies once for all members:
 - `cozodb` + `sqlx`: sqlite3 native link conflict

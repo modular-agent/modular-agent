@@ -1,4 +1,3 @@
-use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
 
@@ -7,10 +6,6 @@ use toml_edit::{Array, DocumentMut, InlineTable, Item, Value};
 use crate::app::AppKind;
 use crate::config::{AgentEntry, AgentSource, BuildConfig};
 use crate::registry::{self, KnownAgent, Registry};
-
-pub const PATCH_BEGIN: &str =
-    "# ===== ma-config managed: external-agent local overrides (BEGIN) =====";
-pub const PATCH_END: &str = "# ===== ma-config managed (END) =====";
 
 /// Update the app's `Cargo.toml` with the selected agents as dependencies.
 pub fn update_manifest(
@@ -76,9 +71,9 @@ pub fn update_manifest(
 
 /// The `[dependencies]` entry for one agent.
 ///
-/// A local path for a known out-of-tree agent is expressed as the canonical git
-/// URL here plus a `[patch]` entry at the workspace root, so reverting to the
-/// canonical source only means deleting the patch.
+/// Out-of-tree agents are always path dependencies on their clone under
+/// `custom_agents/`; a path inside the workspace makes the clone a workspace
+/// member, so it shares this workspace's lock file and its copy of core.
 fn agent_dep_value(app: AppKind, agent: &AgentEntry, known: Option<&KnownAgent>) -> Value {
     let custom_features = agent.crate_features.as_deref();
 
@@ -89,14 +84,7 @@ fn agent_dep_value(app: AppKind, agent: &AgentEntry, known: Option<&KnownAgent>)
             // ignores a member's `default-features = false` when the workspace
             // entry does not set it. Spell the path out instead.
             Some(features) => {
-                dep.insert(
-                    "path",
-                    Value::from(format!(
-                        "{}/{}",
-                        app.crate_dir_to_root(),
-                        known.in_tree_path()
-                    )),
-                );
+                dep.insert("path", Value::from(rebase(app, &known.in_tree_path())));
                 dep.insert("default-features", Value::from(false));
                 dep.insert("features", Value::from(feature_array(features)));
             }
@@ -107,24 +95,12 @@ fn agent_dep_value(app: AppKind, agent: &AgentEntry, known: Option<&KnownAgent>)
         return Value::InlineTable(dep);
     }
 
-    let patched_to_git = match agent.source {
-        AgentSource::Path { .. } => known.and_then(|k| k.git_url.as_deref()),
-        _ => None,
-    };
-
-    let mut dep = match patched_to_git {
-        Some(url) => {
-            let mut table = InlineTable::new();
-            table.insert("git", Value::from(url));
-            table
-        }
-        None => source_to_inline_table(app, &agent.source),
-    };
+    let mut dep = source_to_inline_table(app, agent);
     // The wizard stores `None` when the selection equals the registry's
     // default_features. Unlike in-tree agents, where the workspace dependency
     // entry carries the right features, an out-of-tree dep line would fall back
-    // to the crate's own defaults — which may differ (e.g. audio defaults to no
-    // features while the registry wants transcribe-cuda). Materialize the
+    // to the crate's own defaults — which may differ (a crate can default to no
+    // features while its catalog entry wants some enabled). Materialize the
     // registry defaults so both meanings of "default" agree.
     let features = custom_features.or_else(|| {
         known
@@ -186,106 +162,32 @@ pub fn ensure_mod_agents(app: AppKind, root: &Path) -> Result<(), String> {
         .map_err(|e| format!("Failed to write {}: {e}", main_path.display()))
 }
 
-/// Rewrite the ma-config managed region of the workspace `Cargo.toml`.
-///
-/// `[patch]` is workspace-wide, so the region holds the union of every app's
-/// local overrides rather than only those of the app being configured.
-pub fn update_root_patch(
-    configs: &BTreeMap<AppKind, BuildConfig>,
-    registry: &Registry,
-    root: &Path,
-) -> Result<(), String> {
-    let manifest_path = root.join("Cargo.toml");
-    let original = fs::read_to_string(&manifest_path)
-        .map_err(|e| format!("Failed to read {}: {e}", manifest_path.display()))?;
-
-    // git URL -> crate name -> local path
-    let mut patches: BTreeMap<&str, BTreeMap<&str, &str>> = BTreeMap::new();
-    for config in configs.values() {
-        for agent in &config.agents {
-            let AgentSource::Path { path } = &agent.source else {
-                continue;
-            };
-            // Agents outside the registry have no canonical URL to patch
-            // against; their path goes inline into [dependencies] instead.
-            let Some(url) = registry::find_by_name(&registry.agents, &agent.name)
-                .and_then(|known| known.git_url.as_deref())
-            else {
-                continue;
-            };
-            patches
-                .entry(url)
-                .or_default()
-                .insert(agent.name.as_str(), path.as_str());
-        }
-    }
-
-    let mut region = String::new();
-    for (url, crates) in &patches {
-        region.push_str(&format!("[patch.\"{url}\"]\n"));
-        for (name, path) in crates {
-            region.push_str(&format!(
-                "{name} = {{ path = \"{}\" }}\n",
-                normalize_path(path)
-            ));
-        }
-        region.push('\n');
-    }
-
-    let updated = splice_managed_region(&original, &region)?;
-    fs::write(&manifest_path, updated)
-        .map_err(|e| format!("Failed to write {}: {e}", manifest_path.display()))
-}
-
-fn splice_managed_region(manifest: &str, region: &str) -> Result<String, String> {
-    let begin = manifest
-        .find(PATCH_BEGIN)
-        .ok_or("Workspace Cargo.toml is missing the ma-config BEGIN marker")?;
-    let end = manifest
-        .find(PATCH_END)
-        .ok_or("Workspace Cargo.toml is missing the ma-config END marker")?;
-    if end < begin {
-        return Err("ma-config markers in the workspace Cargo.toml are out of order".to_string());
-    }
-
-    let body_start = begin + PATCH_BEGIN.len();
-    let mut out = String::with_capacity(manifest.len() + region.len());
-    out.push_str(&manifest[..body_start]);
-    out.push('\n');
-    out.push_str(region);
-    out.push_str(&manifest[end..]);
-    Ok(out)
-}
-
-fn source_to_inline_table(app: AppKind, source: &AgentSource) -> InlineTable {
+fn source_to_inline_table(app: AppKind, agent: &AgentEntry) -> InlineTable {
     let mut dep = InlineTable::new();
-    match source {
-        AgentSource::Workspace => {
+    match &agent.source {
+        Some(AgentSource::Workspace) => {
             dep.insert("workspace", Value::from(true));
         }
-        AgentSource::Path { path } => {
-            // Config paths are workspace-root relative, but this table lands in
-            // the app crate's manifest — rebase it like the in-tree override.
+        // Config paths are workspace-root relative, but this table lands in the
+        // app crate's manifest — rebase it like the in-tree override.
+        Some(AgentSource::Path { path }) => {
+            dep.insert("path", Value::from(rebase(app, path)));
+        }
+        // A registry agent carries no source: it is the clone under
+        // custom_agents/, which validate_paths has already checked for.
+        None => {
             dep.insert(
                 "path",
-                Value::from(normalize_path(&format!(
-                    "{}/{}",
-                    app.crate_dir_to_root(),
-                    path
-                ))),
+                Value::from(rebase(app, &registry::clone_path(&agent.name))),
             );
-        }
-        AgentSource::Git { url, tag } => {
-            dep.insert("git", Value::from(url.as_str()));
-            if let Some(tag) = tag {
-                dep.insert("tag", Value::from(tag.as_str()));
-            }
-        }
-        AgentSource::Registry { version } => {
-            dep.insert("version", Value::from(version.as_str()));
         }
     }
     dep
+}
+
+/// Rewrite a workspace-root-relative path so it resolves from the app crate.
+fn rebase(app: AppKind, path: &str) -> String {
+    normalize_path(&format!("{}/{}", app.crate_dir_to_root(), path))
 }
 
 /// Normalize path separators: backslash -> forward slash for Cargo.toml compatibility.
@@ -293,22 +195,64 @@ fn normalize_path(path: &str) -> String {
     path.replace('\\', "/")
 }
 
-/// Report `Path` sources that do not point at a crate. Paths are relative to
-/// the workspace root.
-pub fn validate_paths(config: &BuildConfig, root: &Path) -> Vec<String> {
-    config
-        .agents
-        .iter()
-        .filter_map(|agent| match &agent.source {
-            AgentSource::Path { path } if !root.join(path).join("Cargo.toml").exists() => {
-                Some(format!(
-                    "{}: path '{path}' does not contain a Cargo.toml",
-                    agent.name
-                ))
-            }
-            _ => None,
-        })
-        .collect()
+/// Check that every out-of-tree agent points at a usable crate.
+///
+/// Both failures here produce a build that is worse than no build at all — a
+/// missing crate, or a clone that drags in a second copy of core — so they stop
+/// the run instead of warning.
+pub fn validate_paths(config: &BuildConfig, root: &Path) -> Result<(), String> {
+    let mut problems = Vec::new();
+
+    for agent in &config.agents {
+        let path = match &agent.source {
+            Some(AgentSource::Workspace) => continue,
+            Some(AgentSource::Path { path }) => path.clone(),
+            None => registry::clone_path(&agent.name),
+        };
+
+        let manifest = root.join(&path).join("Cargo.toml");
+        let Ok(manifest) = fs::read_to_string(&manifest) else {
+            problems.push(format!(
+                "{}: no crate at '{path}' — clone it (see custom_agents/README.md) or drop it \
+                 from the selection",
+                agent.name
+            ));
+            continue;
+        };
+
+        if !core_is_local(&manifest) {
+            problems.push(format!(
+                "{}: '{path}' still takes modular-agent-core from crates.io. Point it at the \
+                 in-tree crate — `modular-agent-core = {{ path = \"../../crates/modular-agent-core\" }}` \
+                 — because two linked copies of core mean two `inventory` registries, and the \
+                 agents registered in the other one silently disappear.",
+                agent.name
+            ));
+        }
+    }
+
+    if problems.is_empty() {
+        return Ok(());
+    }
+    Err(format!(
+        "Agent source problems:\n  - {}",
+        problems.join("\n  - ")
+    ))
+}
+
+/// Whether a crate's `modular-agent-core` dependency resolves inside this
+/// workspace (a path, or the workspace entry the clone inherits as a member).
+fn core_is_local(manifest: &str) -> bool {
+    let Ok(manifest) = manifest.parse::<toml::Table>() else {
+        return true; // Let cargo report a malformed manifest.
+    };
+    let Some(core) = manifest
+        .get("dependencies")
+        .and_then(|deps| deps.get("modular-agent-core"))
+    else {
+        return true; // Nothing to double-link.
+    };
+    core.get("path").is_some() || core.get("workspace").and_then(toml::Value::as_bool) == Some(true)
 }
 
 #[cfg(test)]
@@ -321,7 +265,6 @@ mod tests {
                 KnownAgent {
                     name: "modular-agent-std".into(),
                     description: "Standard agents".into(),
-                    git_url: None,
                     in_tree: true,
                     available_features: vec!["image".into(), "yaml".into()],
                     default_features: vec!["image".into(), "yaml".into()],
@@ -329,11 +272,8 @@ mod tests {
                     default_for: vec!["desktop".into(), "cli".into()],
                 },
                 KnownAgent {
-                    name: "modular-agent-slack".into(),
-                    description: "Slack agents".into(),
-                    git_url: Some(
-                        "https://github.com/modular-agent/modular-agent-slack.git".into(),
-                    ),
+                    name: "modular-agent-lifelog".into(),
+                    description: "Lifelog agents".into(),
                     in_tree: false,
                     available_features: vec![],
                     default_features: vec![],
@@ -341,14 +281,11 @@ mod tests {
                     default_for: vec!["desktop".into()],
                 },
                 KnownAgent {
-                    name: "modular-agent-audio".into(),
-                    description: "Audio agents".into(),
-                    git_url: Some(
-                        "https://github.com/modular-agent/modular-agent-audio.git".into(),
-                    ),
+                    name: "modular-agent-example".into(),
+                    description: "Example agents".into(),
                     in_tree: false,
-                    available_features: vec!["capture".into(), "transcribe-cuda".into()],
-                    default_features: vec!["transcribe-cuda".into()],
+                    available_features: vec!["basic".into(), "extra".into()],
+                    default_features: vec!["extra".into()],
                     conflicts: vec![],
                     default_for: vec!["desktop".into()],
                 },
@@ -356,7 +293,7 @@ mod tests {
         }
     }
 
-    fn entry(name: &str, source: AgentSource, features: Option<Vec<String>>) -> AgentEntry {
+    fn entry(name: &str, source: Option<AgentSource>, features: Option<Vec<String>>) -> AgentEntry {
         AgentEntry {
             name: name.into(),
             source,
@@ -389,7 +326,11 @@ mod tests {
     #[test]
     fn in_tree_agents_become_workspace_dependencies() {
         let config = BuildConfig {
-            agents: vec![entry("modular-agent-std", AgentSource::Workspace, None)],
+            agents: vec![entry(
+                "modular-agent-std",
+                Some(AgentSource::Workspace),
+                None,
+            )],
         };
         let out = manifest_after("in-tree", AppKind::Desktop, &config);
 
@@ -408,7 +349,7 @@ mod tests {
         let config = BuildConfig {
             agents: vec![entry(
                 "modular-agent-std",
-                AgentSource::Workspace,
+                Some(AgentSource::Workspace),
                 Some(vec!["yaml".into()]),
             )],
         };
@@ -427,109 +368,89 @@ mod tests {
         let config = BuildConfig {
             agents: vec![entry(
                 "modular-agent-custom",
-                AgentSource::Path {
-                    path: "../modular-agent-custom".into(),
-                },
+                Some(AgentSource::Path {
+                    // Backslashes from a Windows path are normalized for Cargo.
+                    path: "custom_agents\\modular-agent-custom".into(),
+                }),
                 None,
             )],
         };
         let out = manifest_after("custom-path", AppKind::Desktop, &config);
 
-        assert!(
-            out.contains("modular-agent-custom = { path = \"../../../../modular-agent-custom\" }")
-        );
+        assert!(out.contains(
+            "modular-agent-custom = { path = \"../../../custom_agents/modular-agent-custom\" }"
+        ));
+    }
+
+    #[test]
+    fn registry_agents_resolve_to_their_custom_agents_clone() {
+        let config = BuildConfig {
+            agents: vec![entry("modular-agent-lifelog", None, None)],
+        };
+        let out = manifest_after("clone-path", AppKind::Desktop, &config);
+
+        assert!(out.contains(
+            "modular-agent-lifelog = { path = \"../../../custom_agents/modular-agent-lifelog\" }"
+        ));
+        assert!(!out.contains("git ="));
     }
 
     #[test]
     fn registry_default_features_materialize_for_out_of_tree_deps() {
         let config = BuildConfig {
-            agents: vec![entry(
-                "modular-agent-audio",
-                AgentSource::Git {
-                    url: "https://github.com/modular-agent/modular-agent-audio.git".into(),
-                    tag: None,
-                },
-                None,
-            )],
+            agents: vec![entry("modular-agent-example", None, None)],
         };
-        let out = manifest_after("registry-defaults", AppKind::Desktop, &config);
+        let out = manifest_after("registry-defaults", AppKind::Cli, &config);
 
         assert!(out.contains(
-            "modular-agent-audio = { git = \"https://github.com/modular-agent/modular-agent-audio.git\", \
-             default-features = false, features = [\"transcribe-cuda\"] }"
+            "modular-agent-example = { path = \"../../custom_agents/modular-agent-example\", \
+             default-features = false, features = [\"extra\"] }"
         ));
     }
 
-    #[test]
-    fn local_paths_stay_out_of_the_app_manifest() {
+    fn validate_with_clone(label: &str, core_dep: &str) -> Result<(), String> {
+        let dir = scratch(label);
+        let crate_dir = dir.join("custom_agents/modular-agent-lifelog");
+        fs::create_dir_all(&crate_dir).unwrap();
+        fs::write(
+            crate_dir.join("Cargo.toml"),
+            format!("[dependencies]\n{core_dep}\n"),
+        )
+        .unwrap();
+
         let config = BuildConfig {
-            agents: vec![entry(
-                "modular-agent-slack",
-                AgentSource::Path {
-                    path: "../modular-agent-slack".into(),
-                },
-                None,
-            )],
+            agents: vec![entry("modular-agent-lifelog", None, None)],
         };
-        let out = manifest_after("local-path", AppKind::Desktop, &config);
+        let result = validate_paths(&config, &dir);
+        let _ = fs::remove_dir_all(&dir);
+        result
+    }
 
-        assert!(out.contains(
-            "modular-agent-slack = { git = \"https://github.com/modular-agent/modular-agent-slack.git\" }"
-        ));
-        assert!(!out.contains("path = \"../modular-agent-slack\""));
+    /// The same message has to cover a selection whose registry entry is gone
+    /// too: the catalog is now built from the clones, so deleting a clone
+    /// deletes its entry.
+    #[test]
+    fn a_missing_clone_points_at_the_custom_agents_readme() {
+        let dir = scratch("missing-clone");
+        let config = BuildConfig {
+            agents: vec![entry("modular-agent-lifelog", None, None)],
+        };
+        let err = validate_paths(&config, &dir).unwrap_err();
+        let _ = fs::remove_dir_all(&dir);
+
+        assert!(err.contains("no crate at 'custom_agents/modular-agent-lifelog'"));
+        assert!(err.contains("custom_agents/README.md"));
     }
 
     #[test]
-    fn managed_region_holds_the_union_across_apps() {
-        let manifest = format!("[workspace]\n\n{PATCH_BEGIN}\nstale content\n{PATCH_END}\n");
-        let mut configs = BTreeMap::new();
-        configs.insert(
-            AppKind::Desktop,
-            BuildConfig {
-                agents: vec![entry(
-                    "modular-agent-slack",
-                    AgentSource::Path {
-                        path: "..\\modular-agent-slack".into(),
-                    },
-                    None,
-                )],
-            },
-        );
-        configs.insert(
-            AppKind::Cli,
-            BuildConfig {
-                agents: vec![entry("modular-agent-std", AgentSource::Workspace, None)],
-            },
-        );
+    fn a_clone_still_on_the_published_core_is_rejected() {
+        let err = validate_with_clone("stale-core", "modular-agent-core = \"0.27.0\"").unwrap_err();
+        assert!(err.contains("crates.io"));
 
-        let dir = scratch("union");
-        fs::write(dir.join("Cargo.toml"), &manifest).unwrap();
-        update_root_patch(&configs, &registry(), &dir).unwrap();
-        let out = fs::read_to_string(dir.join("Cargo.toml")).unwrap();
-        let _ = fs::remove_dir_all(&dir);
-
-        assert!(!out.contains("stale content"));
-        assert!(
-            out.contains("[patch.\"https://github.com/modular-agent/modular-agent-slack.git\"]")
-        );
-        // Backslashes from a Windows path are normalized for Cargo.
-        assert!(out.contains("modular-agent-slack = { path = \"../modular-agent-slack\" }"));
-        // In-tree agents never produce a patch entry.
-        assert!(!out.contains("modular-agent-std ="));
-        assert!(out.contains(PATCH_BEGIN) && out.contains(PATCH_END));
-    }
-
-    #[test]
-    fn managed_region_clears_when_nothing_is_overridden() {
-        let manifest = format!(
-            "[workspace]\n\n{PATCH_BEGIN}\n[patch.\"x\"]\nfoo = {{ path = \"y\" }}\n{PATCH_END}\n"
-        );
-        let dir = scratch("clear");
-        fs::write(dir.join("Cargo.toml"), &manifest).unwrap();
-        update_root_patch(&BTreeMap::new(), &registry(), &dir).unwrap();
-        let out = fs::read_to_string(dir.join("Cargo.toml")).unwrap();
-        let _ = fs::remove_dir_all(&dir);
-
-        assert_eq!(out, format!("[workspace]\n\n{PATCH_BEGIN}\n{PATCH_END}\n"));
+        validate_with_clone(
+            "path-core",
+            "modular-agent-core = { path = \"../../crates/modular-agent-core\" }",
+        )
+        .unwrap();
     }
 }

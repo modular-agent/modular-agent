@@ -3,7 +3,6 @@
 //! Each `use` pulls in the crate, causing #[modular_agent] registrations
 //! to be linked via the `inventory` crate.
 
-use modular_agent_audio as _;
 use modular_agent_lifelog as _;
 use modular_agent_llm as _;
 use modular_agent_mattermost as _;
@@ -11,6 +10,5 @@ use modular_agent_monty as _;
 use modular_agent_slack as _;
 use modular_agent_sqlx as _;
 use modular_agent_std as _;
-use modular_agent_voicevox as _;
 use modular_agent_web as _;
 use modular_agent_zapcode as _;
