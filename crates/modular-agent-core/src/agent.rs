@@ -316,7 +316,19 @@ impl<T: AsAgent> Agent for T {
     }
 
     fn set_configs(&mut self, configs: AgentConfigs) -> Result<(), AgentError> {
-        self.mut_data().spec.configs = Some(configs);
+        // Merge instead of replacing, for the same reason `AgentSpec::update`
+        // merges config patches: a partial update must not drop untouched
+        // keys, or values an agent only emitted (never persisted) would be
+        // clobbered and dynamic configs rebuilt from defaults.
+        let data = self.mut_data();
+        match data.spec.configs.as_mut() {
+            Some(existing) => {
+                for (key, value) in configs {
+                    existing.set(key, value);
+                }
+            }
+            None => data.spec.configs = Some(configs),
+        }
         self.configs_changed()
     }
 

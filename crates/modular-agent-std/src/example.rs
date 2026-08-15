@@ -20,9 +20,10 @@ const CHART_BUFFER_CAP: usize = 100;
 /// Demo agent for the custom NodeView mechanism. A numeric input (integer or
 /// number) is appended to a rolling buffer capped at 100 entries; a numeric
 /// array input replaces the whole buffer. After each update the buffer is
-/// written to the `data` config and pushed to the frontend, so a companion
-/// chart NodeView re-renders on every input. Non-numeric inputs are rejected
-/// with an error.
+/// pushed to the frontend through the `data` config, so a companion chart
+/// NodeView re-renders on every input; the buffer itself is kept in memory
+/// and not saved into the preset. Non-numeric inputs are rejected with an
+/// error.
 ///
 /// # Ports
 /// - Input `value`: A number to append, or a numeric array to replace the buffer
@@ -41,6 +42,7 @@ const CHART_BUFFER_CAP: usize = 100;
 )]
 struct ChartDemoAgent {
     data: AgentData,
+    buf: im::Vector<AgentValue>,
 }
 
 #[async_trait]
@@ -48,7 +50,17 @@ impl AsAgent for ChartDemoAgent {
     fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         Ok(Self {
             data: AgentData::new(ma, id, spec),
+            buf: im::Vector::new(),
         })
+    }
+
+    async fn start(&mut self) -> Result<(), AgentError> {
+        self.buf = im::Vector::new();
+        // The buffer is only emitted, never persisted; this write clears a
+        // buffer an older version saved into the preset.
+        self.set_config(CONFIG_DATA.to_string(), AgentValue::array_default())?;
+        self.emit_config_updated(CONFIG_DATA, AgentValue::array_default());
+        Ok(())
     }
 
     async fn process(
@@ -57,27 +69,24 @@ impl AsAgent for ChartDemoAgent {
         _port: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
-        let mut buf = self.configs()?.get_array_or_default(CONFIG_DATA);
         if let Some(arr) = value.as_array() {
             if arr.iter().any(|v| v.as_f64().is_none()) {
                 return Err(AgentError::InvalidValue(
                     "Array elements must be numeric".into(),
                 ));
             }
-            buf = arr.clone();
+            self.buf = arr.clone();
         } else if value.as_f64().is_some() {
-            buf.push_back(value);
-            while buf.len() > CHART_BUFFER_CAP {
-                buf.pop_front();
+            self.buf.push_back(value);
+            while self.buf.len() > CHART_BUFFER_CAP {
+                self.buf.pop_front();
             }
         } else {
             return Err(AgentError::InvalidValue(
                 "Expected a number or a numeric array".into(),
             ));
         }
-        let data = AgentValue::array(buf);
-        self.set_config(CONFIG_DATA.to_string(), data.clone())?;
-        self.emit_config_updated(CONFIG_DATA, data);
+        self.emit_config_updated(CONFIG_DATA, AgentValue::array(self.buf.clone()));
         Ok(())
     }
 }
