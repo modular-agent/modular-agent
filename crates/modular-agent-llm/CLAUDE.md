@@ -47,7 +47,8 @@ LLM integration library providing completion, chat, and embeddings agents for Op
 | AssistantMessageAgent | LLM/Message | Append assistant message |
 | SystemMessageAgent | LLM/Message | Prepend system message |
 | PreambleAgent | LLM/Message | Add preamble once |
-| MessagesAgent | LLM/Message | Session-backed message history (SessionStore, `session_dir`/`session_id`) |
+| MessagesAgent | LLM/Message | In-memory message history (SessionStore, `session_id`) |
+| FileMessagesAgent | LLM/Message | Message history persisted as JSONL session files (`session_dir`/`session_id`) |
 | MessagesForPromptAgent | LLM/Message | Filter messages to fit max_size |
 
 ## Model Capabilities

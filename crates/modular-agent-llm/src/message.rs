@@ -26,6 +26,11 @@ const CONFIG_SESSION_ID: &str = "session_id";
 /// `reconcile_spec()` renames it to `_messages` for lazy migration.
 const STALE_CONFIG_MESSAGES: &str = "_messages";
 
+/// `session_dir` was removed from the Messages agent when file persistence
+/// moved to the File Messages agent; `reconcile_spec()` renames a leftover
+/// value to `_session_dir`, which `new()` reads to warn about the change.
+const STALE_CONFIG_SESSION_DIR: &str = "_session_dir";
+
 /// Must match the prefix `build_context` (modular-agent-core) puts on the
 /// injected summary message; used to recognize a genuine head message the
 /// compactor mistook for an injected summary.
@@ -284,16 +289,360 @@ impl AsAgent for PreambleAgent {
     }
 }
 
-/// Accumulate messages in an append-only session store.
+/// State shared by the session-backed Messages agents: the active session
+/// and the in-memory caches used to build the emitted context.
+#[derive(Default)]
+struct SessionState {
+    /// Session the agent appends to, resolved in `start()`.
+    session_id: Option<String>,
+
+    /// In-memory cache of the session's entries, replayed in `start()`.
+    entries: Vec<SessionEntry>,
+
+    /// Latest partial streaming message; never appended to the store.
+    partial: Option<Message>,
+}
+
+impl SessionState {
+    fn session_id(&self) -> Result<&str, AgentError> {
+        self.session_id
+            .as_deref()
+            .ok_or_else(|| AgentError::Other("Session is not initialized".to_string()))
+    }
+
+    /// The emitted context: the stored entries passed through
+    /// [`build_context`], with the current partial message (if any) last.
+    fn context_value(&self) -> AgentValue {
+        let mut messages: Vector<AgentValue> = build_context(&self.entries)
+            .into_iter()
+            .map(AgentValue::from)
+            .collect();
+        if let Some(partial) = &self.partial {
+            messages.push_back(partial.clone().into());
+        }
+        AgentValue::array(messages)
+    }
+}
+
+/// Store and state access shared by [`process_session_input`] across the
+/// Messages agents; each agent keeps its own store kind (in-memory vs JSONL
+/// files).
+trait SessionMessages: AsAgent {
+    fn store(&self) -> Result<Arc<dyn SessionStore>, AgentError>;
+
+    fn session_state_mut(&mut self) -> &mut SessionState;
+}
+
+/// Resolve the session to append to at start: create a fresh one when no id
+/// is configured, otherwise load the configured session.
+async fn resolve_session(
+    store: &Arc<dyn SessionStore>,
+    configured_id: String,
+) -> Result<(String, Vec<SessionEntry>), AgentError> {
+    if configured_id.is_empty() {
+        let id = store.create(SessionMeta::new()).await?;
+        return Ok((id, Vec::new()));
+    }
+    match store.load(&configured_id).await {
+        Ok(entries) => Ok((configured_id, entries)),
+        Err(load_err) => {
+            // The configured id may point at a session this store has never
+            // seen (e.g. an in-memory store after a process restart).
+            // Recreate it as an empty session; if even that fails, the load
+            // error was real and wins.
+            let meta = SessionMeta {
+                id: configured_id.clone(),
+                ..SessionMeta::new()
+            };
+            if store.create(meta).await.is_err() {
+                return Err(load_err);
+            }
+            Ok((configured_id, Vec::new()))
+        }
+    }
+}
+
+/// Write an issued session id back to the config and push it to the UI;
+/// `set_config` alone emits no event.
+fn publish_session_id<A: SessionMessages>(agent: &mut A, id: &str) -> Result<(), AgentError> {
+    agent.set_config(CONFIG_SESSION_ID.to_string(), AgentValue::string(id))?;
+    agent.emit_config_updated(CONFIG_SESSION_ID, AgentValue::string(id));
+    Ok(())
+}
+
+/// Convert an input value into a batch of message values, or `None` when the
+/// input is empty and there is nothing to append.
+fn to_message_batch(value: AgentValue) -> Result<Option<Vector<AgentValue>>, AgentError> {
+    let message = value
+        .to_message_value()
+        .ok_or_else(|| AgentError::InvalidValue("Input contains non-Message values".to_string()))?;
+    let messages = if message.is_array() {
+        message.into_array().unwrap_or_default()
+    } else {
+        vector![message]
+    };
+    Ok((!messages.is_empty()).then_some(messages))
+}
+
+/// Append a batch of messages to the session. Only finalized messages reach
+/// the store; a partial streaming message replaces the previous partial in
+/// the single in-memory slot, and the slot is cleared when the final message
+/// with the same id arrives.
+async fn append_messages(
+    store: &Arc<dyn SessionStore>,
+    state: &mut SessionState,
+    in_messages: &Vector<AgentValue>,
+) -> Result<(), AgentError> {
+    let session_id = state.session_id()?.to_string();
+    for value in in_messages {
+        let message = value.as_message().ok_or_else(|| {
+            AgentError::InvalidValue("Input contains non-Message values".to_string())
+        })?;
+
+        if message.streaming {
+            state.partial = Some(message.clone());
+            continue;
+        }
+
+        if let Some(partial) = &state.partial
+            && partial.id.is_some()
+            && partial.id == message.id
+        {
+            state.partial = None;
+        }
+
+        let entry = SessionEntry::message(message.clone());
+        store.append(&session_id, entry.clone()).await?;
+        state.entries.push(entry);
+    }
+    Ok(())
+}
+
+/// Record a compaction marker received on the `message` port (emitted by
+/// `CompactMessagesAgent`'s `compaction` output).
+///
+/// The record's `dropped` count refers to the context the compactor
+/// received, whose head is the previous compaction's first kept entry
+/// (or the log's head when none exists). Skipping `dropped` Message
+/// entries from there yields the new `first_kept_id`. The entry is
+/// appended to the store and the cache, but nothing is emitted:
+/// re-emitting the compacted context would re-trigger the downstream
+/// ChatAgent and issue a duplicate request. The next turn picks the
+/// compaction up naturally via [`build_context`]. The partial slot is
+/// left untouched.
+///
+/// The record's `previous_summary` identifies the baseline it was
+/// computed against; a record whose baseline no longer matches the
+/// session's latest compaction is *discarded* with a warning. The
+/// summarization call takes seconds, so a stale record is realistic:
+/// a `reset` can swap in a fresh session while the call is in flight
+/// (applying the old conversation's summary would leak it into the new
+/// session), and a second same-baseline compaction can race the first
+/// (resolving it against the newer compaction would silently drop
+/// messages its summary does not cover). A first compaction carries no
+/// baseline, so it is sanity-checked by size instead: a record whose
+/// `tokens_before` is more than twice the session's current estimate
+/// cannot describe this session and is discarded.
+async fn record_compaction(
+    store: &Arc<dyn SessionStore>,
+    state: &mut SessionState,
+    value: &AgentValue,
+) -> Result<(), AgentError> {
+    let summary = value
+        .get_str("summary")
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| {
+            AgentError::InvalidValue("Compaction record must have a non-empty summary".to_string())
+        })?
+        .to_string();
+    let dropped = value
+        .get("dropped")
+        .and_then(|v| v.as_i64())
+        .filter(|d| *d >= 0)
+        .ok_or_else(|| {
+            AgentError::InvalidValue(
+                "Compaction record must have a non-negative integer dropped count".to_string(),
+            )
+        })? as usize;
+    let tokens_before = value
+        .get("tokens_before")
+        .and_then(|v| v.as_i64())
+        .and_then(|v| u64::try_from(v).ok());
+    let previous_summary = value.get_str("previous_summary").map(str::to_string);
+
+    let session_id = state.session_id()?.to_string();
+
+    let last_compaction = state
+        .entries
+        .iter()
+        .enumerate()
+        .rev()
+        .find_map(|(i, e)| match e {
+            SessionEntry::Compaction {
+                summary,
+                first_kept_id,
+                ..
+            } => Some((i, summary.clone(), first_kept_id.clone())),
+            _ => None,
+        });
+
+    // Where the compactor's received context started. The record's
+    // baseline (`previous_summary`) must agree with the session's state;
+    // otherwise the record is stale and applying it would corrupt the
+    // session.
+    let start = match (&previous_summary, &last_compaction) {
+        // Baseline is the latest compaction: its first kept Message
+        // entry, or the entry right after it when the id is unknown.
+        (Some(previous), Some((compaction_index, last_summary, first_kept_id)))
+            if previous == last_summary =>
+        {
+            state
+                .entries
+                .iter()
+                .position(|e| matches!(e, SessionEntry::Message { id, .. } if id == first_kept_id))
+                .unwrap_or(compaction_index + 1)
+        }
+        // No compaction on either side: the record claims to cover this
+        // session's head. With no baseline to compare, cross-check the
+        // record's size instead: the compactor computed `tokens_before`
+        // from a context that must be a prefix of this session's
+        // entries, so the session's own estimate can only be larger
+        // (the tail may have grown since), never substantially smaller.
+        // A much smaller session means the record came from a different
+        // session — a reset raced the in-flight summarization call. The
+        // factor of 2 absorbs usage-anchor drift (a fresh reply
+        // re-anchoring a heuristically estimated tail).
+        (None, None) => {
+            if let Some(tokens_before) = tokens_before {
+                let current = estimate_context_tokens(&build_context(&state.entries));
+                if tokens_before > current.saturating_mul(2) {
+                    log::warn!(
+                        "Discarding a compaction record sized for another session \
+                         (record covers ~{tokens_before} tokens, session holds \
+                         ~{current}); the session has likely been reset since"
+                    );
+                    return Ok(());
+                }
+            }
+            0
+        }
+        // A baseline with no compaction on file: the compactor mistook a
+        // genuine head message for an injected summary. It excluded that
+        // head from `dropped`, so the walk must skip the matching entry
+        // too.
+        (Some(previous), None) => {
+            let head = state.entries.iter().position(|e| {
+                matches!(e, SessionEntry::Message { message, .. }
+                    if message.role == "user"
+                        && message.text() == format!("{SUMMARY_PREFIX}{previous}"))
+            });
+            let Some(head_index) = head else {
+                log::warn!(
+                    "Discarding a compaction record computed against an unknown \
+                     previous summary; the session has likely been reset since"
+                );
+                return Ok(());
+            };
+            head_index + 1
+        }
+        _ => {
+            log::warn!(
+                "Discarding a stale compaction record: its baseline does not match \
+                 the session's latest compaction"
+            );
+            return Ok(());
+        }
+    };
+
+    let first_kept_id = state.entries[start..]
+        .iter()
+        .filter_map(|e| match e {
+            SessionEntry::Message { id, .. } => Some(id),
+            _ => None,
+        })
+        .nth(dropped)
+        .cloned();
+    let Some(first_kept_id) = first_kept_id else {
+        // A consistent record always resolves (the compactor keeps at
+        // least one message), so exhaustion means the record belongs to
+        // another state of the world — e.g. a session reset during the
+        // summarization call. Recording it anyway would inject a foreign
+        // summary into this session.
+        log::warn!(
+            "Discarding a compaction record: its dropped count {dropped} exceeds \
+             the session's messages"
+        );
+        return Ok(());
+    };
+
+    let entry = SessionEntry::compaction(summary, first_kept_id, tokens_before);
+    store.append(&session_id, entry.clone()).await?;
+    state.entries.push(entry);
+    Ok(())
+}
+
+/// Shared `process()` body for the Messages agents: `reset` swaps in a new
+/// session, a unit input re-emits the current context, a compaction record
+/// appends a marker, and anything else is appended as messages.
+async fn process_session_input<A: SessionMessages>(
+    agent: &mut A,
+    ctx: AgentContext,
+    port: String,
+    value: AgentValue,
+) -> Result<(), AgentError> {
+    if port == PORT_RESET {
+        let store = agent.store()?;
+        let id = store.create(SessionMeta::new()).await?;
+        publish_session_id(agent, &id)?;
+        let state = agent.session_state_mut();
+        state.session_id = Some(id.clone());
+        state.entries.clear();
+        state.partial = None;
+        // Publish the switch before the (ambiguous) empty context so
+        // downstream agents can tell a reset from an empty session.
+        agent
+            .output(ctx.clone(), PORT_SESSION_ID, AgentValue::string(id))
+            .await?;
+        agent
+            .output(ctx, PORT_MESSAGES, AgentValue::array_default())
+            .await?;
+        return Ok(());
+    }
+
+    if value.is_unit() {
+        let messages = agent.session_state_mut().context_value();
+        agent.output(ctx, PORT_MESSAGES, messages).await?;
+        return Ok(());
+    }
+
+    // Dispatch by shape, before message conversion: Message objects carry
+    // role/content and never a "type" key, so this cannot collide.
+    if value.get_str("type") == Some("compaction") {
+        let store = agent.store()?;
+        return record_compaction(&store, agent.session_state_mut(), &value).await;
+    }
+
+    let Some(in_messages) = to_message_batch(value)? else {
+        return Ok(());
+    };
+
+    let store = agent.store()?;
+    append_messages(&store, agent.session_state_mut(), &in_messages).await?;
+
+    let messages = agent.session_state_mut().context_value();
+    agent.output(ctx, PORT_MESSAGES, messages).await?;
+    Ok(())
+}
+
+/// Accumulate messages in an in-memory session store.
 ///
 /// Received messages are appended to a session (an append-only conversation
-/// log) and the full conversation context is emitted after every input. With
-/// an empty `session_dir` the history lives in memory only and is retained
-/// across agent stop/start within the same process; with a non-empty
-/// `session_dir` each session is persisted as
-/// `<session_dir>/<session_id>.jsonl` and survives restarts. The history is
-/// never trimmed here — limiting the context size is the job of downstream
-/// agents such as `MessagesForPromptAgent`.
+/// log) and the full conversation context is emitted after every input. The
+/// history lives in memory only: it is retained across agent stop/start
+/// within the same process and lost when the process exits. To persist
+/// sessions as files that survive restarts, use the File Messages agent
+/// instead. The history is never trimmed here — limiting the context size
+/// is the job of downstream agents such as `MessagesForPromptAgent`.
 ///
 /// Only finalized messages (`streaming == false`) reach the store. Partial
 /// streaming messages are held in a single in-memory slot — each partial
@@ -322,10 +671,6 @@ impl AsAgent for PreambleAgent {
 /// recorded: the summarization call behind a record takes seconds, and a
 /// `reset` or a second compaction in that window makes the record stale.
 ///
-/// `session_dir` is applied when the agent starts. Changing it while the
-/// agent is running makes further inputs fail with a config error until the
-/// agent is restarted.
-///
 /// Presets saved before session support carried the history in a hidden
 /// `messages` config. On the first start that history is imported once into
 /// the session store (only if the session has no messages yet); the stale
@@ -345,9 +690,6 @@ impl AsAgent for PreambleAgent {
 ///   `reset` switches to a new session
 ///
 /// # Configuration
-/// - `session_dir`: Directory for JSONL session files. Empty: keep the
-///   history in memory only. Applied on start; a runtime change requires a
-///   restart (default: "")
 /// - `session_id`: Session to resume on start. Empty: a new session is
 ///   created and its id is written back to this config (default: "")
 #[modular_agent(
@@ -355,27 +697,18 @@ impl AsAgent for PreambleAgent {
     category=CATEGORY,
     inputs=[PORT_MESSAGE, PORT_RESET],
     outputs=[PORT_MESSAGES, PORT_SESSION_ID],
-    string_config(name=CONFIG_SESSION_DIR, default=""),
-    string_config(name=CONFIG_SESSION_ID, default=""),
+    string_config(name=CONFIG_SESSION_ID, default="", detail),
     hint(width = 2, height = 1),
 )]
 pub struct MessagesAgent {
     data: AgentData,
 
-    /// Active store tagged with the `session_dir` it was created for. The
-    /// agent instance owns its store; keeping the same in-memory store here
-    /// across stop()/start() preserves the history for the empty
-    /// `session_dir` case.
-    store: Option<(String, Arc<dyn SessionStore>)>,
+    /// The agent instance owns its store, and keeping it here across
+    /// stop()/start() is what preserves the history for the lifetime of
+    /// the process.
+    store: Option<Arc<dyn SessionStore>>,
 
-    /// Session the agent appends to, resolved in `start()`.
-    session_id: Option<String>,
-
-    /// In-memory cache of the session's entries, replayed in `start()`.
-    entries: Vec<SessionEntry>,
-
-    /// Latest partial streaming message; never appended to the store.
-    partial: Option<Message>,
+    state: SessionState,
 
     /// History read from the stale `_messages` config, imported into the
     /// store once on the first `start()`.
@@ -383,22 +716,226 @@ pub struct MessagesAgent {
 }
 
 impl MessagesAgent {
+    fn resolve_store(&mut self) -> Arc<dyn SessionStore> {
+        if let Some(store) = &self.store {
+            return store.clone();
+        }
+        let store: Arc<dyn SessionStore> = Arc::new(InMemorySessionStore::new());
+        self.store = Some(store.clone());
+        store
+    }
+}
+
+impl SessionMessages for MessagesAgent {
+    fn store(&self) -> Result<Arc<dyn SessionStore>, AgentError> {
+        self.store
+            .clone()
+            .ok_or_else(|| AgentError::Other("Session store is not initialized".to_string()))
+    }
+
+    fn session_state_mut(&mut self) -> &mut SessionState {
+        &mut self.state
+    }
+}
+
+#[async_trait]
+impl AsAgent for MessagesAgent {
+    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+        // Read the stale keys here: AgentData::new() strips `_`-prefixed
+        // config keys preserved by reconcile_spec().
+        let pending_import: Option<Vec<Message>> = spec
+            .configs
+            .as_ref()
+            .and_then(|c| c.get(STALE_CONFIG_MESSAGES).ok())
+            .and_then(|v| v.to_message_value())
+            .map(|v| {
+                let arr = if v.is_array() {
+                    v.into_array().unwrap_or_default()
+                } else {
+                    vector![v]
+                };
+                arr.iter().filter_map(|m| m.as_message().cloned()).collect()
+            })
+            .filter(|messages: &Vec<Message>| !messages.is_empty());
+
+        // A leftover `session_dir` means this node persisted its sessions
+        // before the in-memory/file split; that is now the File Messages
+        // agent's job.
+        let stale_dir = spec
+            .configs
+            .as_ref()
+            .and_then(|c| c.get(STALE_CONFIG_SESSION_DIR).ok());
+        if stale_dir
+            .as_ref()
+            .and_then(|v| v.as_str())
+            .is_some_and(|d| !d.is_empty())
+        {
+            log::warn!(
+                "Messages agent {id} no longer saves sessions to disk; \
+                 replace it with a File Messages agent to keep them in files"
+            );
+        }
+
+        Ok(Self {
+            data: AgentData::new(ma, id, spec),
+            store: None,
+            state: SessionState::default(),
+            pending_import,
+        })
+    }
+
+    async fn start(&mut self) -> Result<(), AgentError> {
+        let store = self.resolve_store();
+
+        let configured_id = self.configs()?.get_string_or_default(CONFIG_SESSION_ID);
+        let issued_new = configured_id.is_empty();
+        let (session_id, entries) = resolve_session(&store, configured_id).await?;
+        if issued_new {
+            publish_session_id(self, &session_id)?;
+        }
+        self.state.session_id = Some(session_id.clone());
+        self.state.entries = entries;
+        self.state.partial = None;
+
+        // One-way migration of the pre-session `messages` config. The
+        // pending history is cleared only once the import is resolved: a
+        // mid-import append failure below keeps it, so a retried start()
+        // lands in the warn branch and reports the partial state instead of
+        // dropping the tail silently.
+        if let Some(imported) = self.pending_import.clone() {
+            let has_messages = self
+                .state
+                .entries
+                .iter()
+                .any(|e| matches!(e, SessionEntry::Message { .. }));
+            if has_messages {
+                log::warn!(
+                    "Skipping legacy `messages` history import ({} messages): \
+                     session {session_id} already has messages",
+                    imported.len()
+                );
+            } else {
+                for message in imported {
+                    if message.streaming {
+                        continue;
+                    }
+                    let entry = SessionEntry::message(message);
+                    store.append(&session_id, entry.clone()).await?;
+                    self.state.entries.push(entry);
+                }
+            }
+            self.pending_import = None;
+        }
+
+        Ok(())
+    }
+
+    async fn process(
+        &mut self,
+        ctx: AgentContext,
+        port: String,
+        value: AgentValue,
+    ) -> Result<(), AgentError> {
+        process_session_input(self, ctx, port, value).await
+    }
+}
+
+/// Accumulate messages in JSONL session files.
+///
+/// Received messages are appended to a session (an append-only conversation
+/// log) persisted as `<session_dir>/<session_id>.jsonl`, and the full
+/// conversation context is emitted after every input. Sessions survive
+/// restarts; to keep the history in memory only, use the Messages agent
+/// instead. The history is never trimmed here — limiting the context size
+/// is the job of downstream agents such as `MessagesForPromptAgent`.
+///
+/// Only finalized messages (`streaming == false`) reach the store. Partial
+/// streaming messages are held in a single in-memory slot — each partial
+/// replaces the previous one, and the slot is cleared when the final message
+/// with the same id arrives — and appear only at the end of the emitted
+/// context, never in the store.
+///
+/// An input on `reset` starts a new session: a fresh `session_id` is issued,
+/// written back to the config, and emitted on the `session_id` port, then an
+/// empty array is emitted on `messages`. The previous session is left
+/// untouched; to resume a past conversation, set `session_id` to its id and
+/// restart the agent.
+///
+/// The `message` port also accepts a compaction record — an object whose
+/// `type` key is `"compaction"` — as emitted by the `compaction` output of
+/// the Compact Messages agent. The record is stored as a non-destructive
+/// compaction marker (its `dropped` count resolved to the first kept entry
+/// id) and **nothing is emitted**: emitting would re-send the compacted
+/// context and re-trigger a downstream Chat agent. From the next input on,
+/// the emitted context starts with the summary followed by the kept
+/// messages. A record whose `previous_summary` baseline no longer matches
+/// the session's latest compaction — or whose `dropped` count exceeds the
+/// session's messages, or whose `tokens_before` is more than twice the
+/// session's current estimate (first compactions only, which carry no
+/// baseline to compare) — is discarded with a warning instead of being
+/// recorded: the summarization call behind a record takes seconds, and a
+/// `reset` or a second compaction in that window makes the record stale.
+///
+/// `session_dir` is applied when the agent starts; the agent fails to start
+/// while it is empty. Changing it while the agent is running makes further
+/// inputs fail with a config error until the agent is restarted.
+///
+/// # Ports
+/// - Input `message`: Message or array of messages to append. A unit value
+///   emits the current context without appending. A compaction record
+///   (object with `type` `"compaction"`, a non-empty `summary`, a
+///   non-negative integer `dropped`, an optional `tokens_before`, and an
+///   optional `previous_summary` baseline) appends a compaction marker to
+///   the session and emits nothing; a record with a stale baseline is
+///   discarded
+/// - Input `reset`: Start a new session and emit an empty array
+/// - Output `messages`: Conversation context as an array of messages
+/// - Output `session_id`: The freshly issued session id, emitted when
+///   `reset` switches to a new session
+///
+/// # Configuration
+/// - `session_dir`: Directory for the JSONL session files. Required; the
+///   agent fails to start while it is empty (default: "")
+/// - `session_id`: Session to resume on start. Empty: a new session is
+///   created and its id is written back to this config (default: "")
+#[modular_agent(
+    title="File Messages",
+    category=CATEGORY,
+    inputs=[PORT_MESSAGE, PORT_RESET],
+    outputs=[PORT_MESSAGES, PORT_SESSION_ID],
+    string_config(name=CONFIG_SESSION_DIR, default=""),
+    string_config(name=CONFIG_SESSION_ID, default="", detail),
+    hint(width = 2, height = 1),
+)]
+pub struct FileMessagesAgent {
+    data: AgentData,
+
+    /// Active store tagged with the `session_dir` it was created for.
+    store: Option<(String, Arc<dyn SessionStore>)>,
+
+    state: SessionState,
+}
+
+impl FileMessagesAgent {
     fn resolve_store(&mut self) -> Result<Arc<dyn SessionStore>, AgentError> {
         let dir = self.configs()?.get_string_or_default(CONFIG_SESSION_DIR);
+        if dir.is_empty() {
+            return Err(AgentError::InvalidConfig(
+                "session_dir is required".to_string(),
+            ));
+        }
         if let Some((store_dir, store)) = &self.store
             && *store_dir == dir
         {
             return Ok(store.clone());
         }
-        let store: Arc<dyn SessionStore> = if dir.is_empty() {
-            Arc::new(InMemorySessionStore::new())
-        } else {
-            Arc::new(JsonlSessionStore::new(&dir))
-        };
+        let store: Arc<dyn SessionStore> = Arc::new(JsonlSessionStore::new(&dir));
         self.store = Some((dir, store.clone()));
         Ok(store)
     }
+}
 
+impl SessionMessages for FileMessagesAgent {
     fn store(&self) -> Result<Arc<dyn SessionStore>, AgentError> {
         let (store_dir, store) = self
             .store
@@ -417,213 +954,18 @@ impl MessagesAgent {
         Ok(store.clone())
     }
 
-    /// Record a compaction marker received on the `message` port (emitted by
-    /// `CompactMessagesAgent`'s `compaction` output).
-    ///
-    /// The record's `dropped` count refers to the context the compactor
-    /// received, whose head is the previous compaction's first kept entry
-    /// (or the log's head when none exists). Skipping `dropped` Message
-    /// entries from there yields the new `first_kept_id`. The entry is
-    /// appended to the store and the cache, but nothing is emitted:
-    /// re-emitting the compacted context would re-trigger the downstream
-    /// ChatAgent and issue a duplicate request. The next turn picks the
-    /// compaction up naturally via [`build_context`]. The partial slot is
-    /// left untouched.
-    ///
-    /// The record's `previous_summary` identifies the baseline it was
-    /// computed against; a record whose baseline no longer matches the
-    /// session's latest compaction is *discarded* with a warning. The
-    /// summarization call takes seconds, so a stale record is realistic:
-    /// a `reset` can swap in a fresh session while the call is in flight
-    /// (applying the old conversation's summary would leak it into the new
-    /// session), and a second same-baseline compaction can race the first
-    /// (resolving it against the newer compaction would silently drop
-    /// messages its summary does not cover). A first compaction carries no
-    /// baseline, so it is sanity-checked by size instead: a record whose
-    /// `tokens_before` is more than twice the session's current estimate
-    /// cannot describe this session and is discarded.
-    async fn record_compaction(&mut self, value: &AgentValue) -> Result<(), AgentError> {
-        let summary = value
-            .get_str("summary")
-            .filter(|s| !s.is_empty())
-            .ok_or_else(|| {
-                AgentError::InvalidValue(
-                    "Compaction record must have a non-empty summary".to_string(),
-                )
-            })?
-            .to_string();
-        let dropped = value
-            .get("dropped")
-            .and_then(|v| v.as_i64())
-            .filter(|d| *d >= 0)
-            .ok_or_else(|| {
-                AgentError::InvalidValue(
-                    "Compaction record must have a non-negative integer dropped count".to_string(),
-                )
-            })? as usize;
-        let tokens_before = value
-            .get("tokens_before")
-            .and_then(|v| v.as_i64())
-            .and_then(|v| u64::try_from(v).ok());
-        let previous_summary = value.get_str("previous_summary").map(str::to_string);
-
-        let store = self.store()?;
-        let session_id = self
-            .session_id
-            .clone()
-            .ok_or_else(|| AgentError::Other("Session is not initialized".to_string()))?;
-
-        let last_compaction = self
-            .entries
-            .iter()
-            .enumerate()
-            .rev()
-            .find_map(|(i, e)| match e {
-                SessionEntry::Compaction {
-                    summary,
-                    first_kept_id,
-                    ..
-                } => Some((i, summary.clone(), first_kept_id.clone())),
-                _ => None,
-            });
-
-        // Where the compactor's received context started. The record's
-        // baseline (`previous_summary`) must agree with the session's state;
-        // otherwise the record is stale and applying it would corrupt the
-        // session.
-        let start = match (&previous_summary, &last_compaction) {
-            // Baseline is the latest compaction: its first kept Message
-            // entry, or the entry right after it when the id is unknown.
-            (Some(previous), Some((compaction_index, last_summary, first_kept_id)))
-                if previous == last_summary =>
-            {
-                self.entries
-                    .iter()
-                    .position(
-                        |e| matches!(e, SessionEntry::Message { id, .. } if id == first_kept_id),
-                    )
-                    .unwrap_or(compaction_index + 1)
-            }
-            // No compaction on either side: the record claims to cover this
-            // session's head. With no baseline to compare, cross-check the
-            // record's size instead: the compactor computed `tokens_before`
-            // from a context that must be a prefix of this session's
-            // entries, so the session's own estimate can only be larger
-            // (the tail may have grown since), never substantially smaller.
-            // A much smaller session means the record came from a different
-            // session — a reset raced the in-flight summarization call. The
-            // factor of 2 absorbs usage-anchor drift (a fresh reply
-            // re-anchoring a heuristically estimated tail).
-            (None, None) => {
-                if let Some(tokens_before) = tokens_before {
-                    let current = estimate_context_tokens(&build_context(&self.entries));
-                    if tokens_before > current.saturating_mul(2) {
-                        log::warn!(
-                            "Discarding a compaction record sized for another session \
-                             (record covers ~{tokens_before} tokens, session holds \
-                             ~{current}); the session has likely been reset since"
-                        );
-                        return Ok(());
-                    }
-                }
-                0
-            }
-            // A baseline with no compaction on file: the compactor mistook a
-            // genuine head message for an injected summary. It excluded that
-            // head from `dropped`, so the walk must skip the matching entry
-            // too.
-            (Some(previous), None) => {
-                let head = self.entries.iter().position(|e| {
-                    matches!(e, SessionEntry::Message { message, .. }
-                        if message.role == "user"
-                            && message.text() == format!("{SUMMARY_PREFIX}{previous}"))
-                });
-                let Some(head_index) = head else {
-                    log::warn!(
-                        "Discarding a compaction record computed against an unknown \
-                         previous summary; the session has likely been reset since"
-                    );
-                    return Ok(());
-                };
-                head_index + 1
-            }
-            _ => {
-                log::warn!(
-                    "Discarding a stale compaction record: its baseline does not match \
-                     the session's latest compaction"
-                );
-                return Ok(());
-            }
-        };
-
-        let first_kept_id = self.entries[start..]
-            .iter()
-            .filter_map(|e| match e {
-                SessionEntry::Message { id, .. } => Some(id),
-                _ => None,
-            })
-            .nth(dropped)
-            .cloned();
-        let Some(first_kept_id) = first_kept_id else {
-            // A consistent record always resolves (the compactor keeps at
-            // least one message), so exhaustion means the record belongs to
-            // another state of the world — e.g. a session reset during the
-            // summarization call. Recording it anyway would inject a foreign
-            // summary into this session.
-            log::warn!(
-                "Discarding a compaction record: its dropped count {dropped} exceeds \
-                 the session's messages"
-            );
-            return Ok(());
-        };
-
-        let entry = SessionEntry::compaction(summary, first_kept_id, tokens_before);
-        store.append(&session_id, entry.clone()).await?;
-        self.entries.push(entry);
-        Ok(())
-    }
-
-    /// The emitted context: the stored entries passed through
-    /// [`build_context`], with the current partial message (if any) last.
-    fn context_value(&self) -> AgentValue {
-        let mut messages: Vector<AgentValue> = build_context(&self.entries)
-            .into_iter()
-            .map(AgentValue::from)
-            .collect();
-        if let Some(partial) = &self.partial {
-            messages.push_back(partial.clone().into());
-        }
-        AgentValue::array(messages)
+    fn session_state_mut(&mut self) -> &mut SessionState {
+        &mut self.state
     }
 }
 
 #[async_trait]
-impl AsAgent for MessagesAgent {
+impl AsAgent for FileMessagesAgent {
     fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
-        // Read the stale key here: AgentData::new() strips `_`-prefixed
-        // config keys preserved by reconcile_spec().
-        let pending_import: Option<Vec<Message>> = spec
-            .configs
-            .as_ref()
-            .and_then(|c| c.get(STALE_CONFIG_MESSAGES).ok())
-            .and_then(|v| v.to_message_value())
-            .map(|v| {
-                let arr = if v.is_array() {
-                    v.into_array().unwrap_or_default()
-                } else {
-                    vector![v]
-                };
-                arr.iter().filter_map(|m| m.as_message().cloned()).collect()
-            })
-            .filter(|messages: &Vec<Message>| !messages.is_empty());
-
         Ok(Self {
             data: AgentData::new(ma, id, spec),
             store: None,
-            session_id: None,
-            entries: Vec::new(),
-            partial: None,
-            pending_import,
+            state: SessionState::default(),
         })
     }
 
@@ -631,67 +973,14 @@ impl AsAgent for MessagesAgent {
         let store = self.resolve_store()?;
 
         let configured_id = self.configs()?.get_string_or_default(CONFIG_SESSION_ID);
-        let (session_id, entries) = if configured_id.is_empty() {
-            let id = store.create(SessionMeta::new()).await?;
-            self.set_config(
-                CONFIG_SESSION_ID.to_string(),
-                AgentValue::string(id.clone()),
-            )?;
-            // Push the issued id to the UI; set_config alone emits no event.
-            self.emit_config_updated(CONFIG_SESSION_ID, AgentValue::string(id.clone()));
-            (id, Vec::new())
-        } else {
-            match store.load(&configured_id).await {
-                Ok(entries) => (configured_id, entries),
-                Err(load_err) => {
-                    // The configured id may point at a session this store has
-                    // never seen (e.g. an in-memory store after a process
-                    // restart). Recreate it as an empty session; if even that
-                    // fails, the load error was real and wins.
-                    let meta = SessionMeta {
-                        id: configured_id.clone(),
-                        ..SessionMeta::new()
-                    };
-                    if store.create(meta).await.is_err() {
-                        return Err(load_err);
-                    }
-                    (configured_id, Vec::new())
-                }
-            }
-        };
-        self.session_id = Some(session_id.clone());
-        self.entries = entries;
-        self.partial = None;
-
-        // One-way migration of the pre-session `messages` config. The
-        // pending history is cleared only once the import is resolved: a
-        // mid-import append failure below keeps it, so a retried start()
-        // lands in the warn branch and reports the partial state instead of
-        // dropping the tail silently.
-        if let Some(imported) = self.pending_import.clone() {
-            let has_messages = self
-                .entries
-                .iter()
-                .any(|e| matches!(e, SessionEntry::Message { .. }));
-            if has_messages {
-                log::warn!(
-                    "Skipping legacy `messages` history import ({} messages): \
-                     session {session_id} already has messages",
-                    imported.len()
-                );
-            } else {
-                for message in imported {
-                    if message.streaming {
-                        continue;
-                    }
-                    let entry = SessionEntry::message(message);
-                    store.append(&session_id, entry.clone()).await?;
-                    self.entries.push(entry);
-                }
-            }
-            self.pending_import = None;
+        let issued_new = configured_id.is_empty();
+        let (session_id, entries) = resolve_session(&store, configured_id).await?;
+        if issued_new {
+            publish_session_id(self, &session_id)?;
         }
-
+        self.state.session_id = Some(session_id);
+        self.state.entries = entries;
+        self.state.partial = None;
         Ok(())
     }
 
@@ -701,85 +990,7 @@ impl AsAgent for MessagesAgent {
         port: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
-        if port == PORT_RESET {
-            let store = self.store()?;
-            let id = store.create(SessionMeta::new()).await?;
-            self.set_config(
-                CONFIG_SESSION_ID.to_string(),
-                AgentValue::string(id.clone()),
-            )?;
-            // Push the issued id to the UI; set_config alone emits no event.
-            self.emit_config_updated(CONFIG_SESSION_ID, AgentValue::string(id.clone()));
-            self.session_id = Some(id.clone());
-            self.entries.clear();
-            self.partial = None;
-            // Publish the switch before the (ambiguous) empty context so
-            // downstream agents can tell a reset from an empty session.
-            self.output(ctx.clone(), PORT_SESSION_ID, AgentValue::string(id))
-                .await?;
-            self.output(ctx, PORT_MESSAGES, AgentValue::array_default())
-                .await?;
-            return Ok(());
-        }
-
-        if value.is_unit() {
-            let messages = self.context_value();
-            self.output(ctx, PORT_MESSAGES, messages).await?;
-            return Ok(());
-        }
-
-        // Dispatch by shape, before message conversion: Message objects carry
-        // role/content and never a "type" key, so this cannot collide.
-        if value.get_str("type") == Some("compaction") {
-            return self.record_compaction(&value).await;
-        }
-
-        let in_message = value.to_message_value().ok_or_else(|| {
-            AgentError::InvalidValue("Input contains non-Message values".to_string())
-        })?;
-        let in_messages = if in_message.is_array() {
-            in_message.into_array().unwrap_or_default()
-        } else {
-            vector![in_message]
-        };
-        if in_messages.is_empty() {
-            return Ok(());
-        }
-
-        let store = self.store()?;
-        let session_id = self
-            .session_id
-            .clone()
-            .ok_or_else(|| AgentError::Other("Session is not initialized".to_string()))?;
-
-        for value in &in_messages {
-            let message = value.as_message().ok_or_else(|| {
-                AgentError::InvalidValue("Input contains non-Message values".to_string())
-            })?;
-
-            if message.streaming {
-                // Partials never reach the store: the latest one replaces the
-                // previous in a single in-memory slot.
-                self.partial = Some(message.clone());
-                continue;
-            }
-
-            if let Some(partial) = &self.partial
-                && partial.id.is_some()
-                && partial.id == message.id
-            {
-                self.partial = None;
-            }
-
-            let entry = SessionEntry::message(message.clone());
-            store.append(&session_id, entry.clone()).await?;
-            self.entries.push(entry);
-        }
-
-        let messages = self.context_value();
-        self.output(ctx, PORT_MESSAGES, messages).await?;
-
-        Ok(())
+        process_session_input(self, ctx, port, value).await
     }
 }
 
@@ -1020,16 +1231,18 @@ mod tests {
         panic!("agent {agent_id} did not start in time");
     }
 
-    /// Build a running preset with a MessagesAgent (configured via
-    /// `configs`) whose `messages` and `session_id` ports each feed a probe.
-    async fn setup_messages_agent(
+    /// Build a running preset with a session-backed agent of `def_name`
+    /// (configured via `configs`) whose `messages` and `session_id` ports
+    /// each feed a probe.
+    async fn setup_session_agent(
+        def_name: &str,
         configs: Vec<(&str, AgentValue)>,
     ) -> (ModularAgent, String, String, ProbeReceiver, ProbeReceiver) {
         let ma = ModularAgent::init().unwrap();
         ma.ready().await.unwrap();
 
         let preset_id = ma.new_preset().unwrap();
-        let def = ma.get_agent_definition(MessagesAgent::DEF_NAME).unwrap();
+        let def = ma.get_agent_definition(def_name).unwrap();
         let mut spec = def.to_spec();
         {
             let spec_configs = spec.configs.as_mut().unwrap();
@@ -1080,13 +1293,33 @@ mod tests {
         (ma, preset_id, agent_id, probe_rx, session_rx)
     }
 
-    async fn send(ma: &ModularAgent, agent_id: &str, port: &str, value: AgentValue) {
+    async fn setup_messages_agent(
+        configs: Vec<(&str, AgentValue)>,
+    ) -> (ModularAgent, String, String, ProbeReceiver, ProbeReceiver) {
+        setup_session_agent(MessagesAgent::DEF_NAME, configs).await
+    }
+
+    async fn setup_file_messages_agent(
+        configs: Vec<(&str, AgentValue)>,
+    ) -> (ModularAgent, String, String, ProbeReceiver, ProbeReceiver) {
+        setup_session_agent(FileMessagesAgent::DEF_NAME, configs).await
+    }
+
+    async fn send_as<T: AsAgent>(ma: &ModularAgent, agent_id: &str, port: &str, value: AgentValue) {
         let agent = ma.get_agent(agent_id).unwrap();
         let mut guard = agent.lock().await;
-        let messages_agent = guard.as_agent_mut::<MessagesAgent>().unwrap();
-        AsAgent::process(messages_agent, AgentContext::new(), port.to_string(), value)
+        let target = guard.as_agent_mut::<T>().unwrap();
+        AsAgent::process(target, AgentContext::new(), port.to_string(), value)
             .await
             .unwrap();
+    }
+
+    async fn send(ma: &ModularAgent, agent_id: &str, port: &str, value: AgentValue) {
+        send_as::<MessagesAgent>(ma, agent_id, port, value).await
+    }
+
+    async fn send_file(ma: &ModularAgent, agent_id: &str, port: &str, value: AgentValue) {
+        send_as::<FileMessagesAgent>(ma, agent_id, port, value).await
     }
 
     async fn session_id_config(ma: &ModularAgent, agent_id: &str) -> String {
@@ -1109,9 +1342,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn messages_agent_persists_only_finalized_messages() {
+    async fn file_messages_agent_persists_only_finalized_messages() {
         let dir = tempfile::tempdir().unwrap();
-        let (ma, _preset_id, agent_id, probe_rx, _session_rx) = setup_messages_agent(vec![(
+        let (ma, _preset_id, agent_id, probe_rx, _session_rx) = setup_file_messages_agent(vec![(
             CONFIG_SESSION_DIR,
             AgentValue::string(dir.path().to_string_lossy()),
         )])
@@ -1120,7 +1353,7 @@ mod tests {
         let mut partial = Message::assistant("Hel".to_string());
         partial.id = Some("m1".to_string());
         partial.streaming = true;
-        send(&ma, &agent_id, PORT_MESSAGE, partial.into()).await;
+        send_file(&ma, &agent_id, PORT_MESSAGE, partial.into()).await;
 
         // The partial appears in the emitted context...
         let messages = recv_messages(&probe_rx).await;
@@ -1130,7 +1363,7 @@ mod tests {
 
         let mut fin = Message::assistant("Hello".to_string());
         fin.id = Some("m1".to_string());
-        send(&ma, &agent_id, PORT_MESSAGE, fin.into()).await;
+        send_file(&ma, &agent_id, PORT_MESSAGE, fin.into()).await;
 
         // ...and the final with the same id replaces it: exactly one copy.
         let messages = recv_messages(&probe_rx).await;
@@ -1151,15 +1384,15 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn messages_agent_reset_starts_new_session_and_keeps_old_one() {
+    async fn file_messages_agent_reset_starts_new_session_and_keeps_old_one() {
         let dir = tempfile::tempdir().unwrap();
-        let (ma, _preset_id, agent_id, probe_rx, session_rx) = setup_messages_agent(vec![(
+        let (ma, _preset_id, agent_id, probe_rx, session_rx) = setup_file_messages_agent(vec![(
             CONFIG_SESSION_DIR,
             AgentValue::string(dir.path().to_string_lossy()),
         )])
         .await;
 
-        send(
+        send_file(
             &ma,
             &agent_id,
             PORT_MESSAGE,
@@ -1169,7 +1402,7 @@ mod tests {
         assert_eq!(recv_messages(&probe_rx).await.len(), 1);
         let old_session_id = session_id_config(&ma, &agent_id).await;
 
-        send(&ma, &agent_id, PORT_RESET, AgentValue::unit()).await;
+        send_file(&ma, &agent_id, PORT_RESET, AgentValue::unit()).await;
         assert_eq!(recv_messages(&probe_rx).await.len(), 0);
 
         // A new session id was issued and written back to the config.
@@ -1188,7 +1421,7 @@ mod tests {
         assert_eq!(old_entries.len(), 1);
 
         // New inputs land in the new session only.
-        send(
+        send_file(
             &ma,
             &agent_id,
             PORT_MESSAGE,
@@ -1201,7 +1434,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn messages_agent_resumes_existing_session() {
+    async fn file_messages_agent_resumes_existing_session() {
         let dir = tempfile::tempdir().unwrap();
         let store = JsonlSessionStore::new(dir.path());
         let session_id = store.create(SessionMeta::new()).await.unwrap();
@@ -1220,7 +1453,7 @@ mod tests {
             .await
             .unwrap();
 
-        let (ma, _preset_id, agent_id, probe_rx, _session_rx) = setup_messages_agent(vec![
+        let (ma, _preset_id, agent_id, probe_rx, _session_rx) = setup_file_messages_agent(vec![
             (
                 CONFIG_SESSION_DIR,
                 AgentValue::string(dir.path().to_string_lossy()),
@@ -1230,14 +1463,14 @@ mod tests {
         .await;
 
         // start() replayed the history: a unit input emits it as-is.
-        send(&ma, &agent_id, PORT_MESSAGE, AgentValue::unit()).await;
+        send_file(&ma, &agent_id, PORT_MESSAGE, AgentValue::unit()).await;
         let messages = recv_messages(&probe_rx).await;
         assert_eq!(messages.len(), 2);
         assert_eq!(messages[0].text(), "a");
         assert_eq!(messages[1].text(), "b");
 
         // The next appended message extends the same session.
-        send(
+        send_file(
             &ma,
             &agent_id,
             PORT_MESSAGE,
@@ -1248,6 +1481,24 @@ mod tests {
         assert_eq!(messages.len(), 3);
         assert_eq!(messages[2].text(), "c");
         assert_eq!(store.load(&session_id).await.unwrap().len(), 3);
+    }
+
+    #[tokio::test]
+    async fn file_messages_agent_requires_session_dir() {
+        let ma = ModularAgent::init().unwrap();
+        ma.ready().await.unwrap();
+
+        let preset_id = ma.new_preset().unwrap();
+        let def = ma
+            .get_agent_definition(FileMessagesAgent::DEF_NAME)
+            .unwrap();
+        let agent_id = ma.add_agent(preset_id, def.to_spec()).await.unwrap();
+
+        let agent = ma.get_agent(&agent_id).unwrap();
+        let mut guard = agent.lock().await;
+        let file_agent = guard.as_agent_mut::<FileMessagesAgent>().unwrap();
+        let result = AsAgent::start(file_agent).await;
+        assert!(matches!(result, Err(AgentError::InvalidConfig(_))));
     }
 
     #[tokio::test]
@@ -1357,9 +1608,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn messages_agent_compaction_record_appends_marker_and_emits_nothing() {
+    async fn file_messages_agent_compaction_record_appends_marker_and_emits_nothing() {
         let dir = tempfile::tempdir().unwrap();
-        let (ma, _preset_id, agent_id, probe_rx, _session_rx) = setup_messages_agent(vec![(
+        let (ma, _preset_id, agent_id, probe_rx, _session_rx) = setup_file_messages_agent(vec![(
             CONFIG_SESSION_DIR,
             AgentValue::string(dir.path().to_string_lossy()),
         )])
@@ -1371,12 +1622,12 @@ mod tests {
             Message::user("c".to_string()).into(),
             Message::assistant("d".to_string()).into(),
         ]);
-        send(&ma, &agent_id, PORT_MESSAGE, batch).await;
+        send_file(&ma, &agent_id, PORT_MESSAGE, batch).await;
         assert_eq!(recv_messages(&probe_rx).await.len(), 4);
 
         // The record appends a marker and emits nothing (an emit here would
         // re-trigger a downstream ChatAgent with the compacted context).
-        send(
+        send_file(
             &ma,
             &agent_id,
             PORT_MESSAGE,
@@ -1411,7 +1662,7 @@ mod tests {
         assert_eq!(*tokens_before, Some(3));
 
         // The next input emits the compacted context via build_context.
-        send(&ma, &agent_id, PORT_MESSAGE, AgentValue::unit()).await;
+        send_file(&ma, &agent_id, PORT_MESSAGE, AgentValue::unit()).await;
         let messages = recv_messages(&probe_rx).await;
         assert_eq!(messages.len(), 3);
         assert_eq!(messages[0].role, "user");
@@ -1422,7 +1673,7 @@ mod tests {
         // A second compaction counts dropped from the first one's kept head:
         // context was [summary, c, d, e], dropped=1 skips "c", keeping "d".
         // Its record carries the first summary as its baseline.
-        send(
+        send_file(
             &ma,
             &agent_id,
             PORT_MESSAGE,
@@ -1430,7 +1681,7 @@ mod tests {
         )
         .await;
         assert_eq!(recv_messages(&probe_rx).await.len(), 4);
-        send(
+        send_file(
             &ma,
             &agent_id,
             PORT_MESSAGE,
@@ -1451,7 +1702,7 @@ mod tests {
         assert_eq!(summary, "S2");
         assert_eq!(*first_kept_id, msg_ids[3]);
 
-        send(&ma, &agent_id, PORT_MESSAGE, AgentValue::unit()).await;
+        send_file(&ma, &agent_id, PORT_MESSAGE, AgentValue::unit()).await;
         let messages = recv_messages(&probe_rx).await;
         assert_eq!(messages.len(), 3);
         assert_eq!(messages[0].text(), "[Conversation summary]\nS2");
