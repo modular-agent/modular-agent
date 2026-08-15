@@ -42,6 +42,8 @@ impl AsAgent for CounterAgent {
 
     async fn start(&mut self) -> Result<(), AgentError> {
         self.count = 0;
+        // The running count is only emitted, never persisted; this write
+        // clears a count an older version saved into the preset.
         self.set_config(DISPLAY_COUNT.to_string(), AgentValue::integer(0))?;
         self.emit_config_updated(DISPLAY_COUNT, AgentValue::integer(0));
         Ok(())
@@ -58,7 +60,6 @@ impl AsAgent for CounterAgent {
         } else if port == PORT_VALUE {
             self.count += 1;
         }
-        self.set_config(DISPLAY_COUNT.to_string(), AgentValue::integer(self.count))?;
         self.output(ctx, PORT_COUNT, AgentValue::integer(self.count))
             .await?;
         self.emit_config_updated(DISPLAY_COUNT, AgentValue::integer(self.count));

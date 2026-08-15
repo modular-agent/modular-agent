@@ -991,7 +991,11 @@ export class EditorState {
     const newConfigs = { ...oldConfigs, [key]: newValue };
 
     this.svelteFlow.updateNodeData(nodeId, { ...node.data, configs: newConfigs });
-    await setAgentConfigs(nodeId, newConfigs);
+    // Send only the edited key. `data.configs` also holds values agents merely
+    // emitted for display (configUpdated events); pushing the whole object
+    // would write those back into the backend spec and leak them into the
+    // saved preset.
+    await setAgentConfigs(nodeId, { [key]: newValue });
 
     const cmd = new UpdateConfigCommand(nodeId, key, oldValue, newValue, oldConfigs, newConfigs);
     this.history.pushCoalescing(cmd);

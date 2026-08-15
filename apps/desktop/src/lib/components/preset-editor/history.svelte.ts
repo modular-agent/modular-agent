@@ -773,7 +773,9 @@ export class UpdateConfigCommand implements Command {
         configs: this.newConfigs,
       });
     }
-    await setAgentConfigs(this.nodeId, this.newConfigs);
+    // Only the edited key goes to the backend — the full configs snapshot may
+    // contain display-only values that must not enter the persisted spec.
+    await setAgentConfigs(this.nodeId, { [this.key]: this.newValue });
   }
 
   async undo(editor: EditorState) {
@@ -784,7 +786,7 @@ export class UpdateConfigCommand implements Command {
         configs: this.oldConfigs,
       });
     }
-    await setAgentConfigs(this.nodeId, this.oldConfigs);
+    await setAgentConfigs(this.nodeId, { [this.key]: this.oldValue });
   }
 
   remapId(oldId: string, newId: string) {
