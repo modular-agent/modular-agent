@@ -22,7 +22,7 @@ const CHART_BUFFER_CAP: usize = 100;
 /// array input replaces the whole buffer. After each update the buffer is
 /// pushed to the frontend through the `data` config, so a companion chart
 /// NodeView re-renders on every input; the buffer itself is kept in memory
-/// and not saved into the preset. Non-numeric inputs are rejected with an
+/// and not saved into the patch. Non-numeric inputs are rejected with an
 /// error.
 ///
 /// # Ports
@@ -57,7 +57,7 @@ impl AsAgent for ChartDemoAgent {
     async fn start(&mut self) -> Result<(), AgentError> {
         self.buf = im::Vector::new();
         // The buffer is only emitted, never persisted; this write clears a
-        // buffer an older version saved into the preset.
+        // buffer an older version saved into the patch.
         self.set_config(CONFIG_DATA.to_string(), AgentValue::array_default())?;
         self.emit_config_updated(CONFIG_DATA, AgentValue::array_default());
         Ok(())

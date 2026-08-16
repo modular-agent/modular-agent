@@ -1,6 +1,6 @@
 use modular_agent_core::{
     AgentConfigs, AgentConfigsMap, AgentDefinition, AgentDefinitions, AgentSpec, AgentValue,
-    ConnectionSpec, PresetSpec,
+    ConnectionSpec, PatchSpec,
 };
 use serde_json::Value;
 use tauri::{AppHandle, Runtime};
@@ -8,95 +8,91 @@ use tauri::{AppHandle, Runtime};
 use crate::ModularAgentExt;
 use crate::Result;
 
-// Preset management
+// Patch management
 
 #[tauri::command]
-pub fn new_preset<R: Runtime>(app: AppHandle<R>) -> Result<String> {
-    app.ma().new_preset().map_err(Into::into)
+pub fn new_patch<R: Runtime>(app: AppHandle<R>) -> Result<String> {
+    app.ma().new_patch().map_err(Into::into)
 }
 
 #[tauri::command]
-pub fn add_preset<R: Runtime>(app: AppHandle<R>, spec: PresetSpec) -> Result<String> {
-    app.ma().add_preset(spec).map_err(Into::into)
+pub fn add_patch<R: Runtime>(app: AppHandle<R>, spec: PatchSpec) -> Result<String> {
+    app.ma().add_patch(spec).map_err(Into::into)
 }
 
 #[tauri::command]
-pub fn add_preset_with_name<R: Runtime>(
+pub fn add_patch_with_name<R: Runtime>(
     app: AppHandle<R>,
-    spec: PresetSpec,
+    spec: PatchSpec,
     name: String,
 ) -> Result<String> {
-    app.ma()
-        .add_preset_with_name(spec, name)
-        .map_err(Into::into)
+    app.ma().add_patch_with_name(spec, name).map_err(Into::into)
 }
 
 #[tauri::command]
-pub async fn remove_preset<R: Runtime>(app: tauri::AppHandle<R>, id: String) -> Result<()> {
-    app.ma().remove_preset(&id).await.map_err(Into::into)
+pub async fn remove_patch<R: Runtime>(app: tauri::AppHandle<R>, id: String) -> Result<()> {
+    app.ma().remove_patch(&id).await.map_err(Into::into)
 }
 
 #[tauri::command]
-pub async fn start_preset<R: Runtime>(app: AppHandle<R>, id: String) -> Result<()> {
-    app.ma().start_preset(&id).await.map_err(Into::into)
+pub async fn start_patch<R: Runtime>(app: AppHandle<R>, id: String) -> Result<()> {
+    app.ma().start_patch(&id).await.map_err(Into::into)
 }
 
 #[tauri::command]
-pub async fn stop_preset<R: Runtime>(app: AppHandle<R>, id: String) -> Result<()> {
-    app.ma().stop_preset(&id).await.map_err(Into::into)
+pub async fn stop_patch<R: Runtime>(app: AppHandle<R>, id: String) -> Result<()> {
+    app.ma().stop_patch(&id).await.map_err(Into::into)
 }
 
 #[tauri::command]
-pub async fn open_preset_from_file<R: Runtime>(
+pub async fn open_patch_from_file<R: Runtime>(
     app: AppHandle<R>,
     path: String,
     name: Option<String>,
 ) -> Result<String> {
     app.ma()
-        .open_preset_from_file(&path, name)
+        .open_patch_from_file(&path, name)
         .await
         .map_err(Into::into)
 }
 
 #[tauri::command]
-pub async fn save_preset<R: Runtime>(app: AppHandle<R>, id: String, path: String) -> Result<()> {
-    app.ma().save_preset(&id, &path).await.map_err(Into::into)
+pub async fn save_patch<R: Runtime>(app: AppHandle<R>, id: String, path: String) -> Result<()> {
+    app.ma().save_patch(&id, &path).await.map_err(Into::into)
 }
 
-// preset spec
+// patch spec
 
 #[tauri::command]
-pub async fn get_preset_spec<R: Runtime>(app: AppHandle<R>, id: String) -> Option<PresetSpec> {
-    app.ma().get_preset_spec(&id).await
+pub async fn get_patch_spec<R: Runtime>(app: AppHandle<R>, id: String) -> Option<PatchSpec> {
+    app.ma().get_patch_spec(&id).await
 }
 
 #[tauri::command]
-pub async fn update_preset_spec<R: Runtime>(
+pub async fn update_patch_spec<R: Runtime>(
     app: AppHandle<R>,
     id: String,
     value: Value,
 ) -> Result<()> {
     app.ma()
-        .update_preset_spec(&id, &value)
+        .update_patch_spec(&id, &value)
         .await
         .map_err(Into::into)
 }
 
-// preset info
+// patch info
 
 #[tauri::command]
-pub async fn get_preset_info<R: Runtime>(
+pub async fn get_patch_info<R: Runtime>(
     app: AppHandle<R>,
     id: String,
-) -> Option<modular_agent_core::PresetInfo> {
-    app.ma().get_preset_info(&id).await
+) -> Option<modular_agent_core::PatchInfo> {
+    app.ma().get_patch_info(&id).await
 }
 
 #[tauri::command]
-pub async fn get_preset_infos<R: Runtime>(
-    app: AppHandle<R>,
-) -> Vec<modular_agent_core::PresetInfo> {
-    app.ma().get_preset_infos().await
+pub async fn get_patch_infos<R: Runtime>(app: AppHandle<R>) -> Vec<modular_agent_core::PatchInfo> {
+    app.ma().get_patch_infos().await
 }
 
 // agent management
@@ -143,23 +139,20 @@ pub fn new_agent_spec<R: Runtime>(app: AppHandle<R>, def_name: String) -> Result
 #[tauri::command]
 pub async fn add_agent<R: Runtime>(
     app: AppHandle<R>,
-    preset_id: String,
+    patch_id: String,
     spec: AgentSpec,
 ) -> Result<String> {
-    app.ma()
-        .add_agent(preset_id, spec)
-        .await
-        .map_err(Into::into)
+    app.ma().add_agent(patch_id, spec).await.map_err(Into::into)
 }
 
 #[tauri::command]
 pub async fn remove_agent<R: Runtime>(
     app: AppHandle<R>,
-    preset_id: String,
+    patch_id: String,
     agent_id: String,
 ) -> Result<()> {
     app.ma()
-        .remove_agent(&preset_id, &agent_id)
+        .remove_agent(&patch_id, &agent_id)
         .await
         .map_err(Into::into)
 }
@@ -169,11 +162,11 @@ pub async fn remove_agent<R: Runtime>(
 #[tauri::command]
 pub async fn add_connection<R: Runtime>(
     app: AppHandle<R>,
-    preset_id: String,
+    patch_id: String,
     connection: ConnectionSpec,
 ) -> Result<()> {
     app.ma()
-        .add_connection(&preset_id, connection)
+        .add_connection(&patch_id, connection)
         .await
         .map_err(Into::into)
 }
@@ -181,11 +174,11 @@ pub async fn add_connection<R: Runtime>(
 #[tauri::command]
 pub async fn remove_connection<R: Runtime>(
     app: AppHandle<R>,
-    preset_id: String,
+    patch_id: String,
     connection: ConnectionSpec,
 ) -> Result<()> {
     app.ma()
-        .remove_connection(&preset_id, &connection)
+        .remove_connection(&patch_id, &connection)
         .await
         .map_err(Into::into)
 }
@@ -193,12 +186,12 @@ pub async fn remove_connection<R: Runtime>(
 #[tauri::command]
 pub async fn add_agents_and_connections<R: Runtime>(
     app: AppHandle<R>,
-    preset_id: &str,
+    patch_id: &str,
     agents: Vec<AgentSpec>,
     connections: Vec<ConnectionSpec>,
 ) -> Result<(Vec<AgentSpec>, Vec<ConnectionSpec>)> {
     app.ma()
-        .add_agents_and_connections(preset_id, &agents, &connections)
+        .add_agents_and_connections(patch_id, &agents, &connections)
         .await
         .map_err(Into::into)
 }

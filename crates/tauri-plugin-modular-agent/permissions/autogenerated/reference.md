@@ -4,18 +4,18 @@ Default permissions for the plugin
 
 #### This default permission set includes the following:
 
-- `allow-new-preset`
-- `allow-add-preset`
-- `allow-add-preset-with-name`
-- `allow-remove-preset`
-- `allow-start-preset`
-- `allow-stop-preset`
-- `allow-open-preset-from-file`
-- `allow-save-preset`
-- `allow-get-preset-spec`
-- `allow-update-preset-spec`
-- `allow-get-preset-info`
-- `allow-get-preset-infos`
+- `allow-new-patch`
+- `allow-add-patch`
+- `allow-add-patch-with-name`
+- `allow-remove-patch`
+- `allow-start-patch`
+- `allow-stop-patch`
+- `allow-open-patch-from-file`
+- `allow-save-patch`
+- `allow-get-patch-spec`
+- `allow-update-patch-spec`
+- `allow-get-patch-info`
+- `allow-get-patch-infos`
 - `allow-get-agent-definition`
 - `allow-get-agent-definitions`
 - `allow-get-agent-spec`
@@ -125,25 +125,12 @@ Denies the add_connection command without any pre-configured scope.
 <tr>
 <td>
 
-`modular-agent:allow-add-preset`
+`modular-agent:allow-add-patch`
 
 </td>
 <td>
 
-Enables the add_preset command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`modular-agent:deny-add-preset`
-
-</td>
-<td>
-
-Denies the add_preset command without any pre-configured scope.
+Enables the add_patch command without any pre-configured scope.
 
 </td>
 </tr>
@@ -151,12 +138,12 @@ Denies the add_preset command without any pre-configured scope.
 <tr>
 <td>
 
-`modular-agent:allow-add-preset-with-name`
+`modular-agent:deny-add-patch`
 
 </td>
 <td>
 
-Enables the add_preset_with_name command without any pre-configured scope.
+Denies the add_patch command without any pre-configured scope.
 
 </td>
 </tr>
@@ -164,12 +151,25 @@ Enables the add_preset_with_name command without any pre-configured scope.
 <tr>
 <td>
 
-`modular-agent:deny-add-preset-with-name`
+`modular-agent:allow-add-patch-with-name`
 
 </td>
 <td>
 
-Denies the add_preset_with_name command without any pre-configured scope.
+Enables the add_patch_with_name command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`modular-agent:deny-add-patch-with-name`
+
+</td>
+<td>
+
+Denies the add_patch_with_name command without any pre-configured scope.
 
 </td>
 </tr>
@@ -307,25 +307,12 @@ Denies the get_global_configs_map command without any pre-configured scope.
 <tr>
 <td>
 
-`modular-agent:allow-get-preset-info`
+`modular-agent:allow-get-patch-info`
 
 </td>
 <td>
 
-Enables the get_preset_info command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`modular-agent:deny-get-preset-info`
-
-</td>
-<td>
-
-Denies the get_preset_info command without any pre-configured scope.
+Enables the get_patch_info command without any pre-configured scope.
 
 </td>
 </tr>
@@ -333,25 +320,12 @@ Denies the get_preset_info command without any pre-configured scope.
 <tr>
 <td>
 
-`modular-agent:allow-get-preset-infos`
+`modular-agent:deny-get-patch-info`
 
 </td>
 <td>
 
-Enables the get_preset_infos command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`modular-agent:deny-get-preset-infos`
-
-</td>
-<td>
-
-Denies the get_preset_infos command without any pre-configured scope.
+Denies the get_patch_info command without any pre-configured scope.
 
 </td>
 </tr>
@@ -359,12 +333,12 @@ Denies the get_preset_infos command without any pre-configured scope.
 <tr>
 <td>
 
-`modular-agent:allow-get-preset-spec`
+`modular-agent:allow-get-patch-infos`
 
 </td>
 <td>
 
-Enables the get_preset_spec command without any pre-configured scope.
+Enables the get_patch_infos command without any pre-configured scope.
 
 </td>
 </tr>
@@ -372,12 +346,38 @@ Enables the get_preset_spec command without any pre-configured scope.
 <tr>
 <td>
 
-`modular-agent:deny-get-preset-spec`
+`modular-agent:deny-get-patch-infos`
 
 </td>
 <td>
 
-Denies the get_preset_spec command without any pre-configured scope.
+Denies the get_patch_infos command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`modular-agent:allow-get-patch-spec`
+
+</td>
+<td>
+
+Enables the get_patch_spec command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`modular-agent:deny-get-patch-spec`
+
+</td>
+<td>
+
+Denies the get_patch_spec command without any pre-configured scope.
 
 </td>
 </tr>
@@ -411,25 +411,12 @@ Denies the new_agent_spec command without any pre-configured scope.
 <tr>
 <td>
 
-`modular-agent:allow-new-preset`
+`modular-agent:allow-new-patch`
 
 </td>
 <td>
 
-Enables the new_preset command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`modular-agent:deny-new-preset`
-
-</td>
-<td>
-
-Denies the new_preset command without any pre-configured scope.
+Enables the new_patch command without any pre-configured scope.
 
 </td>
 </tr>
@@ -437,12 +424,12 @@ Denies the new_preset command without any pre-configured scope.
 <tr>
 <td>
 
-`modular-agent:allow-open-preset-from-file`
+`modular-agent:deny-new-patch`
 
 </td>
 <td>
 
-Enables the open_preset_from_file command without any pre-configured scope.
+Denies the new_patch command without any pre-configured scope.
 
 </td>
 </tr>
@@ -450,12 +437,25 @@ Enables the open_preset_from_file command without any pre-configured scope.
 <tr>
 <td>
 
-`modular-agent:deny-open-preset-from-file`
+`modular-agent:allow-open-patch-from-file`
 
 </td>
 <td>
 
-Denies the open_preset_from_file command without any pre-configured scope.
+Enables the open_patch_from_file command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`modular-agent:deny-open-patch-from-file`
+
+</td>
+<td>
+
+Denies the open_patch_from_file command without any pre-configured scope.
 
 </td>
 </tr>
@@ -515,25 +515,12 @@ Denies the remove_connection command without any pre-configured scope.
 <tr>
 <td>
 
-`modular-agent:allow-remove-preset`
+`modular-agent:allow-remove-patch`
 
 </td>
 <td>
 
-Enables the remove_preset command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`modular-agent:deny-remove-preset`
-
-</td>
-<td>
-
-Denies the remove_preset command without any pre-configured scope.
+Enables the remove_patch command without any pre-configured scope.
 
 </td>
 </tr>
@@ -541,12 +528,12 @@ Denies the remove_preset command without any pre-configured scope.
 <tr>
 <td>
 
-`modular-agent:allow-save-preset`
+`modular-agent:deny-remove-patch`
 
 </td>
 <td>
 
-Enables the save_preset command without any pre-configured scope.
+Denies the remove_patch command without any pre-configured scope.
 
 </td>
 </tr>
@@ -554,12 +541,25 @@ Enables the save_preset command without any pre-configured scope.
 <tr>
 <td>
 
-`modular-agent:deny-save-preset`
+`modular-agent:allow-save-patch`
 
 </td>
 <td>
 
-Denies the save_preset command without any pre-configured scope.
+Enables the save_patch command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`modular-agent:deny-save-patch`
+
+</td>
+<td>
+
+Denies the save_patch command without any pre-configured scope.
 
 </td>
 </tr>
@@ -671,12 +671,12 @@ Denies the start_agent command without any pre-configured scope.
 <tr>
 <td>
 
-`modular-agent:allow-start-preset`
+`modular-agent:allow-start-patch`
 
 </td>
 <td>
 
-Enables the start_preset command without any pre-configured scope.
+Enables the start_patch command without any pre-configured scope.
 
 </td>
 </tr>
@@ -684,12 +684,12 @@ Enables the start_preset command without any pre-configured scope.
 <tr>
 <td>
 
-`modular-agent:deny-start-preset`
+`modular-agent:deny-start-patch`
 
 </td>
 <td>
 
-Denies the start_preset command without any pre-configured scope.
+Denies the start_patch command without any pre-configured scope.
 
 </td>
 </tr>
@@ -723,12 +723,12 @@ Denies the stop_agent command without any pre-configured scope.
 <tr>
 <td>
 
-`modular-agent:allow-stop-preset`
+`modular-agent:allow-stop-patch`
 
 </td>
 <td>
 
-Enables the stop_preset command without any pre-configured scope.
+Enables the stop_patch command without any pre-configured scope.
 
 </td>
 </tr>
@@ -736,12 +736,12 @@ Enables the stop_preset command without any pre-configured scope.
 <tr>
 <td>
 
-`modular-agent:deny-stop-preset`
+`modular-agent:deny-stop-patch`
 
 </td>
 <td>
 
-Denies the stop_preset command without any pre-configured scope.
+Denies the stop_patch command without any pre-configured scope.
 
 </td>
 </tr>
@@ -775,12 +775,12 @@ Denies the update_agent_spec command without any pre-configured scope.
 <tr>
 <td>
 
-`modular-agent:allow-update-preset-spec`
+`modular-agent:allow-update-patch-spec`
 
 </td>
 <td>
 
-Enables the update_preset_spec command without any pre-configured scope.
+Enables the update_patch_spec command without any pre-configured scope.
 
 </td>
 </tr>
@@ -788,12 +788,12 @@ Enables the update_preset_spec command without any pre-configured scope.
 <tr>
 <td>
 
-`modular-agent:deny-update-preset-spec`
+`modular-agent:deny-update-patch-spec`
 
 </td>
 <td>
 
-Denies the update_preset_spec command without any pre-configured scope.
+Denies the update_patch_spec command without any pre-configured scope.
 
 </td>
 </tr>

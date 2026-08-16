@@ -7,14 +7,14 @@ use ma::{AgentValue, test_utils};
 async fn test_boolean_input() {
     let ma = test_utils::setup_modular_agent().await;
 
-    let preset_id = test_utils::open_and_start_preset(&ma, "tests/presets/Std_Input_test.json")
+    let patch_id = test_utils::open_and_start_patch(&ma, "tests/patches/Std_Input_test.json")
         .await
         .unwrap();
 
-    test_utils::write_and_expect_local_value(&ma, &preset_id, "boolean_trig", AgentValue::unit())
+    test_utils::write_and_expect_local_value(&ma, &patch_id, "boolean_trig", AgentValue::unit())
         .await
         .unwrap();
-    test_utils::expect_local_value(&preset_id, "boolean_out", &AgentValue::boolean(true))
+    test_utils::expect_local_value(&patch_id, "boolean_out", &AgentValue::boolean(true))
         .await
         .unwrap();
 
@@ -25,14 +25,14 @@ async fn test_boolean_input() {
 async fn test_integer_input() {
     let ma = test_utils::setup_modular_agent().await;
 
-    let preset_id = test_utils::open_and_start_preset(&ma, "tests/presets/Std_Input_test.json")
+    let patch_id = test_utils::open_and_start_patch(&ma, "tests/patches/Std_Input_test.json")
         .await
         .unwrap();
 
-    test_utils::write_and_expect_local_value(&ma, &preset_id, "integer_trig", AgentValue::unit())
+    test_utils::write_and_expect_local_value(&ma, &patch_id, "integer_trig", AgentValue::unit())
         .await
         .unwrap();
-    test_utils::expect_local_value(&preset_id, "integer_out", &AgentValue::integer(1))
+    test_utils::expect_local_value(&patch_id, "integer_out", &AgentValue::integer(1))
         .await
         .unwrap();
 
@@ -43,14 +43,14 @@ async fn test_integer_input() {
 async fn test_number_input() {
     let ma = test_utils::setup_modular_agent().await;
 
-    let preset_id = test_utils::open_and_start_preset(&ma, "tests/presets/Std_Input_test.json")
+    let patch_id = test_utils::open_and_start_patch(&ma, "tests/patches/Std_Input_test.json")
         .await
         .unwrap();
 
-    test_utils::write_and_expect_local_value(&ma, &preset_id, "number_trig", AgentValue::unit())
+    test_utils::write_and_expect_local_value(&ma, &patch_id, "number_trig", AgentValue::unit())
         .await
         .unwrap();
-    test_utils::expect_local_value(&preset_id, "number_out", &AgentValue::number(3.14))
+    test_utils::expect_local_value(&patch_id, "number_out", &AgentValue::number(3.14))
         .await
         .unwrap();
 
@@ -61,15 +61,15 @@ async fn test_number_input() {
 async fn test_string_input() {
     let ma = test_utils::setup_modular_agent().await;
 
-    let preset_id = test_utils::open_and_start_preset(&ma, "tests/presets/Std_Input_test.json")
+    let patch_id = test_utils::open_and_start_patch(&ma, "tests/patches/Std_Input_test.json")
         .await
         .unwrap();
 
-    test_utils::write_and_expect_local_value(&ma, &preset_id, "string_trig", AgentValue::unit())
+    test_utils::write_and_expect_local_value(&ma, &patch_id, "string_trig", AgentValue::unit())
         .await
         .unwrap();
     test_utils::expect_local_value(
-        &preset_id,
+        &patch_id,
         "string_out",
         &AgentValue::string("Hello, world!".to_string()),
     )
@@ -83,15 +83,15 @@ async fn test_string_input() {
 async fn test_text_input() {
     let ma = test_utils::setup_modular_agent().await;
 
-    let preset_id = test_utils::open_and_start_preset(&ma, "tests/presets/Std_Input_test.json")
+    let patch_id = test_utils::open_and_start_patch(&ma, "tests/patches/Std_Input_test.json")
         .await
         .unwrap();
 
-    test_utils::write_and_expect_local_value(&ma, &preset_id, "text_trig", AgentValue::unit())
+    test_utils::write_and_expect_local_value(&ma, &patch_id, "text_trig", AgentValue::unit())
         .await
         .unwrap();
     test_utils::expect_local_value(
-        &preset_id,
+        &patch_id,
         "text_out",
         &AgentValue::string("Old pond\nFrogs jumped in\nSound of water.\n"),
     )
@@ -105,15 +105,15 @@ async fn test_text_input() {
 async fn test_object_input() {
     let ma = test_utils::setup_modular_agent().await;
 
-    let preset_id = test_utils::open_and_start_preset(&ma, "tests/presets/Std_Input_test.json")
+    let patch_id = test_utils::open_and_start_patch(&ma, "tests/patches/Std_Input_test.json")
         .await
         .unwrap();
 
-    test_utils::write_and_expect_local_value(&ma, &preset_id, "object_trig", AgentValue::unit())
+    test_utils::write_and_expect_local_value(&ma, &patch_id, "object_trig", AgentValue::unit())
         .await
         .unwrap();
     test_utils::expect_local_value(
-        &preset_id,
+        &patch_id,
         "object_out",
         &AgentValue::object(hashmap! {
             "name".to_string() => AgentValue::string("Alice".to_string()),

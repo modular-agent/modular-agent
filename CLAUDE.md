@@ -5,7 +5,7 @@ This file provides guidance to Claude Code when working with code in this reposi
 ## Project Overview
 
 Modular Agent is a multi-agent orchestration framework for building AI-powered workflows.
-Agents are composed into workflows through JSON preset configurations.
+Agents are composed into workflows through JSON patch configurations.
 
 This repository is the monorepo holding the engine, the agent libraries every app needs,
 both applications, and the build configurator. Agent libraries that only some builds

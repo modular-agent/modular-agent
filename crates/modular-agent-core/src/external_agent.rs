@@ -34,13 +34,13 @@
 //!   a value, it broadcasts to the named channel, triggering a
 //!   [`ModularAgentEvent::ExternalOutput`](crate::ModularAgentEvent::ExternalOutput) event.
 //!
-//! ## Local Agents (Preset scope)
+//! ## Local Agents (Patch scope)
 //!
-//! - [`LocalInputAgent`] (`LocalIn->`): Similar to `ExternalInputAgent`, but scoped to the preset.
+//! - [`LocalInputAgent`] (`LocalIn->`): Similar to `ExternalInputAgent`, but scoped to the patch.
 //!
-//! - [`LocalOutputAgent`] (`->LocalOut`): Similar to `ExternalOutputAgent`, but scoped to the preset.
+//! - [`LocalOutputAgent`] (`->LocalOut`): Similar to `ExternalOutputAgent`, but scoped to the patch.
 //!
-//! # Preset Example
+//! # Patch Example
 //!
 //! ```json
 //! {
@@ -250,11 +250,11 @@ impl AsAgent for ExternalInputAgent {
     }
 }
 
-/// Receives values FROM connected agents and outputs them to a preset-scoped local variable.
+/// Receives values FROM connected agents and outputs them to a patch-scoped local variable.
 ///
-/// Similar to [`ExternalOutputAgent`], but the channel name is scoped to the preset,
-/// using the format `%{preset_id}/{var_name}`. This allows variables to be
-/// isolated between different preset instances.
+/// Similar to [`ExternalOutputAgent`], but the channel name is scoped to the patch,
+/// using the format `%{patch_id}/{var_name}`. This allows variables to be
+/// isolated between different patch instances.
 ///
 /// # Configuration
 ///
@@ -302,7 +302,7 @@ impl AsAgent for LocalOutputAgent {
             // if var_name is not set, stop processing
             return Ok(());
         }
-        let channel_name = channel_name_for_local(self.preset_id(), &var_name);
+        let channel_name = channel_name_for_local(self.patch_id(), &var_name);
         let ma = self.ma();
         ma.send_external_output(channel_name.clone(), ctx, value.clone())
             .await?;
@@ -311,11 +311,11 @@ impl AsAgent for LocalOutputAgent {
     }
 }
 
-/// Receives values FROM a preset-scoped local variable and outputs them TO connected agents.
+/// Receives values FROM a patch-scoped local variable and outputs them TO connected agents.
 ///
-/// Similar to [`ExternalInputAgent`], but the channel name is scoped to the preset,
-/// using the format `%{preset_id}/{var_name}`. This allows variables to be
-/// isolated between different preset instances.
+/// Similar to [`ExternalInputAgent`], but the channel name is scoped to the patch,
+/// using the format `%{patch_id}/{var_name}`. This allows variables to be
+/// isolated between different patch instances.
 ///
 /// # Configuration
 ///
@@ -349,7 +349,7 @@ impl AsAgent for LocalInputAgent {
 
     async fn start(&mut self) -> Result<(), AgentError> {
         if let Some(var_name) = &self.var_name {
-            let channel_name = channel_name_for_local(self.preset_id(), var_name);
+            let channel_name = channel_name_for_local(self.patch_id(), var_name);
             let ma = self.ma();
             let mut external_input_agents = ma.external_input_agents.lock().unwrap();
             if let Some(nodes) = external_input_agents.get_mut(&channel_name) {
@@ -363,7 +363,7 @@ impl AsAgent for LocalInputAgent {
 
     async fn stop(&mut self) -> Result<(), AgentError> {
         if let Some(var_name) = &self.var_name {
-            let channel_name = channel_name_for_local(self.preset_id(), var_name);
+            let channel_name = channel_name_for_local(self.patch_id(), var_name);
             let ma = self.ma();
             let mut external_input_agents = ma.external_input_agents.lock().unwrap();
             if let Some(nodes) = external_input_agents.get_mut(&channel_name) {
@@ -380,7 +380,7 @@ impl AsAgent for LocalInputAgent {
             // running state, so only re-point it while running.
             if self.data.status == AgentStatus::Start {
                 if let Some(var_name) = &self.var_name {
-                    let channel_name = channel_name_for_local(self.preset_id(), var_name);
+                    let channel_name = channel_name_for_local(self.patch_id(), var_name);
                     let ma = self.ma();
                     let mut external_input_agents = ma.external_input_agents.lock().unwrap();
                     if let Some(nodes) = external_input_agents.get_mut(&channel_name) {
@@ -388,7 +388,7 @@ impl AsAgent for LocalInputAgent {
                     }
                 }
                 if let Some(var_name) = &new_var_name {
-                    let channel_name = channel_name_for_local(self.preset_id(), var_name);
+                    let channel_name = channel_name_for_local(self.patch_id(), var_name);
                     let ma = self.ma();
                     let mut external_input_agents = ma.external_input_agents.lock().unwrap();
                     if let Some(nodes) = external_input_agents.get_mut(&channel_name) {

@@ -815,7 +815,7 @@ mod tests {
 
     // --- harness: pass-through paths (no LLM call) ---
 
-    /// `start_preset` returns before the spawned agent loop has run
+    /// `start_patch` returns before the spawned agent loop has run
     /// `AsAgent::start`; wait until the status flips to `Start`.
     async fn wait_until_started(ma: &ModularAgent, agent_id: &str) {
         for _ in 0..200 {
@@ -831,7 +831,7 @@ mod tests {
         panic!("agent {agent_id} did not start in time");
     }
 
-    /// Build a running preset with a CompactMessagesAgent whose `messages`
+    /// Build a running patch with a CompactMessagesAgent whose `messages`
     /// and `compaction` ports each feed a probe.
     async fn setup_compact_agent(
         configs: Vec<(&str, AgentValue)>,
@@ -839,7 +839,7 @@ mod tests {
         let ma = ModularAgent::init().unwrap();
         ma.ready().await.unwrap();
 
-        let preset_id = ma.new_preset().unwrap();
+        let patch_id = ma.new_patch().unwrap();
         let def = ma
             .get_agent_definition(CompactMessagesAgent::DEF_NAME)
             .unwrap();
@@ -850,15 +850,15 @@ mod tests {
                 spec_configs.set(key.into(), value);
             }
         }
-        let agent_id = ma.add_agent(preset_id.clone(), spec).await.unwrap();
+        let agent_id = ma.add_agent(patch_id.clone(), spec).await.unwrap();
 
         let probe_def = ma.get_agent_definition(TestProbeAgent::DEF_NAME).unwrap();
         let messages_probe_id = ma
-            .add_agent(preset_id.clone(), probe_def.to_spec())
+            .add_agent(patch_id.clone(), probe_def.to_spec())
             .await
             .unwrap();
         ma.add_connection(
-            &preset_id,
+            &patch_id,
             ConnectionSpec {
                 source: agent_id.clone(),
                 source_handle: PORT_MESSAGES.into(),
@@ -869,11 +869,11 @@ mod tests {
         .await
         .unwrap();
         let compaction_probe_id = ma
-            .add_agent(preset_id.clone(), probe_def.to_spec())
+            .add_agent(patch_id.clone(), probe_def.to_spec())
             .await
             .unwrap();
         ma.add_connection(
-            &preset_id,
+            &patch_id,
             ConnectionSpec {
                 source: agent_id.clone(),
                 source_handle: PORT_COMPACTION.into(),
@@ -884,7 +884,7 @@ mod tests {
         .await
         .unwrap();
 
-        ma.start_preset(&preset_id).await.unwrap();
+        ma.start_patch(&patch_id).await.unwrap();
         wait_until_started(&ma, &agent_id).await;
         let messages_rx = probe_receiver(&ma, &messages_probe_id).await.unwrap();
         let compaction_rx = probe_receiver(&ma, &compaction_probe_id).await.unwrap();

@@ -29,7 +29,7 @@ fn test_init() {
         "modular_agent_core::tool::CallToolMessageAgent",
         "modular_agent_core::tool::ListToolsAgent",
         "modular_agent_core::tool::LoopControlAgent",
-        "modular_agent_core::tool::PresetToolAgent",
+        "modular_agent_core::tool::PatchToolAgent",
     ];
     assert_eq!(keys, expected);
 
@@ -79,13 +79,13 @@ async fn test_add_agent() {
     let ma = ModularAgent::init().unwrap();
     ma.ready().await.unwrap();
 
-    let preset_id = ma.new_preset().unwrap();
+    let patch_id = ma.new_patch().unwrap();
     let def = ma.get_agent_definition(COUNTER_DEF).unwrap();
     let spec = def.to_spec();
 
-    let agent_id = ma.add_agent(preset_id.clone(), spec).await.unwrap();
-    let preset_spec = ma.get_preset_spec(&preset_id).await.unwrap();
-    assert!(preset_spec.agents.iter().any(|a| a.id == agent_id));
+    let agent_id = ma.add_agent(patch_id.clone(), spec).await.unwrap();
+    let patch_spec = ma.get_patch_spec(&patch_id).await.unwrap();
+    assert!(patch_spec.agents.iter().any(|a| a.id == agent_id));
 
     ma.quit();
 }
@@ -95,15 +95,15 @@ async fn test_remove_agent() {
     let ma = ModularAgent::init().unwrap();
     ma.ready().await.unwrap();
 
-    let preset_id = ma.new_preset().unwrap();
+    let patch_id = ma.new_patch().unwrap();
     let def = ma.get_agent_definition(COUNTER_DEF).unwrap();
 
     let spec = def.to_spec();
-    let agent_id = ma.add_agent(preset_id.clone(), spec).await.unwrap();
+    let agent_id = ma.add_agent(patch_id.clone(), spec).await.unwrap();
 
-    ma.remove_agent(&preset_id, &agent_id).await.unwrap();
-    let preset_spec = ma.get_preset_spec(&preset_id).await.unwrap();
-    assert!(!preset_spec.agents.iter().any(|a| a.id == agent_id));
+    ma.remove_agent(&patch_id, &agent_id).await.unwrap();
+    let patch_spec = ma.get_patch_spec(&patch_id).await.unwrap();
+    assert!(!patch_spec.agents.iter().any(|a| a.id == agent_id));
 
     ma.quit();
 }
@@ -113,15 +113,15 @@ async fn test_remove_after_connect_agent() {
     let ma = ModularAgent::init().unwrap();
     ma.ready().await.unwrap();
 
-    let preset_id = ma.new_preset().unwrap();
+    let patch_id = ma.new_patch().unwrap();
 
     let def = ma.get_agent_definition(COUNTER_DEF).unwrap();
 
     let spec = def.to_spec();
-    let agent1_id = ma.add_agent(preset_id.clone(), spec).await.unwrap();
+    let agent1_id = ma.add_agent(patch_id.clone(), spec).await.unwrap();
 
     let spec = def.to_spec();
-    let agent2_id = ma.add_agent(preset_id.clone(), spec).await.unwrap();
+    let agent2_id = ma.add_agent(patch_id.clone(), spec).await.unwrap();
 
     let connection_spec = ma::ConnectionSpec {
         source: agent1_id.clone(),
@@ -130,13 +130,11 @@ async fn test_remove_after_connect_agent() {
         target_handle: "in".into(),
     };
 
-    ma.add_connection(&preset_id, connection_spec)
-        .await
-        .unwrap();
+    ma.add_connection(&patch_id, connection_spec).await.unwrap();
 
-    ma.remove_agent(&preset_id, &agent1_id).await.unwrap();
-    let preset_spec = ma.get_preset_spec(&preset_id).await.unwrap();
-    assert!(!preset_spec.agents.iter().any(|a| a.id == agent1_id));
+    ma.remove_agent(&patch_id, &agent1_id).await.unwrap();
+    let patch_spec = ma.get_patch_spec(&patch_id).await.unwrap();
+    assert!(!patch_spec.agents.iter().any(|a| a.id == agent1_id));
 
     ma.quit();
 }
@@ -146,16 +144,10 @@ async fn test_duplicate_connection_leaves_spec_unchanged() {
     let ma = ModularAgent::init().unwrap();
     ma.ready().await.unwrap();
 
-    let preset_id = ma.new_preset().unwrap();
+    let patch_id = ma.new_patch().unwrap();
     let def = ma.get_agent_definition(COUNTER_DEF).unwrap();
-    let agent1_id = ma
-        .add_agent(preset_id.clone(), def.to_spec())
-        .await
-        .unwrap();
-    let agent2_id = ma
-        .add_agent(preset_id.clone(), def.to_spec())
-        .await
-        .unwrap();
+    let agent1_id = ma.add_agent(patch_id.clone(), def.to_spec()).await.unwrap();
+    let agent2_id = ma.add_agent(patch_id.clone(), def.to_spec()).await.unwrap();
 
     let connection = ma::ConnectionSpec {
         source: agent1_id.clone(),
@@ -163,15 +155,15 @@ async fn test_duplicate_connection_leaves_spec_unchanged() {
         target: agent2_id.clone(),
         target_handle: "in".into(),
     };
-    ma.add_connection(&preset_id, connection.clone())
+    ma.add_connection(&patch_id, connection.clone())
         .await
         .unwrap();
 
-    let err = ma.add_connection(&preset_id, connection).await.unwrap_err();
+    let err = ma.add_connection(&patch_id, connection).await.unwrap_err();
     assert!(matches!(err, ma::AgentError::ConnectionAlreadyExists));
 
-    let preset_spec = ma.get_preset_spec(&preset_id).await.unwrap();
-    assert_eq!(preset_spec.connections.len(), 1);
+    let patch_spec = ma.get_patch_spec(&patch_id).await.unwrap();
+    assert_eq!(patch_spec.connections.len(), 1);
 
     ma.quit();
 }
@@ -183,7 +175,7 @@ async fn test_remove_spec_only_agent() {
 
     // An agent whose definition is unknown ends up in the spec without a
     // runtime instance; it must still be removable.
-    let spec = ma::PresetSpec {
+    let spec = ma::PatchSpec {
         agents: vec![ma::AgentSpec {
             id: "orphan".into(),
             def_name: "no_such::Definition".into(),
@@ -191,26 +183,26 @@ async fn test_remove_spec_only_agent() {
         }],
         ..Default::default()
     };
-    let preset_id = ma.add_preset(spec).unwrap();
+    let patch_id = ma.add_patch(spec).unwrap();
 
-    // get_preset_spec exposes spec-only agents, so the editor can see and
+    // get_patch_spec exposes spec-only agents, so the editor can see and
     // address them like any other agent.
-    let preset_spec = ma.get_preset_spec(&preset_id).await.unwrap();
-    let orphan_id = preset_spec.agents[0].id.clone();
+    let patch_spec = ma.get_patch_spec(&patch_id).await.unwrap();
+    let orphan_id = patch_spec.agents[0].id.clone();
 
-    ma.remove_agent(&preset_id, &orphan_id).await.unwrap();
-    let preset_spec = ma.get_preset_spec(&preset_id).await.unwrap();
-    assert!(preset_spec.agents.is_empty());
+    ma.remove_agent(&patch_id, &orphan_id).await.unwrap();
+    let patch_spec = ma.get_patch_spec(&patch_id).await.unwrap();
+    assert!(patch_spec.agents.is_empty());
 
     // An agent in neither the runtime nor the spec is still an error.
-    let err = ma.remove_agent(&preset_id, "missing").await.unwrap_err();
+    let err = ma.remove_agent(&patch_id, "missing").await.unwrap_err();
     assert!(matches!(err, ma::AgentError::AgentNotFound(_)));
 
     ma.quit();
 }
 
 #[tokio::test]
-async fn test_spec_only_agent_survives_preset_spec_and_updates() {
+async fn test_spec_only_agent_survives_patch_spec_and_updates() {
     let ma = ModularAgent::init().unwrap();
     ma.ready().await.unwrap();
 
@@ -218,7 +210,7 @@ async fn test_spec_only_agent_survives_preset_spec_and_updates() {
     orphan_configs.set("channel".into(), ma::AgentValue::string("general"));
     orphan_configs.set("token".into(), ma::AgentValue::string("secret"));
 
-    let spec = ma::PresetSpec {
+    let spec = ma::PatchSpec {
         agents: vec![
             ma::AgentSpec {
                 id: "orphan".into(),
@@ -244,22 +236,22 @@ async fn test_spec_only_agent_survives_preset_spec_and_updates() {
         }],
         ..Default::default()
     };
-    let preset_id = ma.add_preset(spec).unwrap();
+    let patch_id = ma.add_patch(spec).unwrap();
 
     // The unknown definition has no live instance, but the stored entry must
-    // still be reported - save_preset writes whatever this returns.
-    let preset_spec = ma.get_preset_spec(&preset_id).await.unwrap();
-    assert_eq!(preset_spec.agents.len(), 2);
-    assert_eq!(preset_spec.connections.len(), 1);
-    let orphan_id = preset_spec.agents[0].id.clone();
-    assert_eq!(preset_spec.agents[0].def_name, "no_such::Definition");
+    // still be reported - save_patch writes whatever this returns.
+    let patch_spec = ma.get_patch_spec(&patch_id).await.unwrap();
+    assert_eq!(patch_spec.agents.len(), 2);
+    assert_eq!(patch_spec.connections.len(), 1);
+    let orphan_id = patch_spec.agents[0].id.clone();
+    assert_eq!(patch_spec.agents[0].def_name, "no_such::Definition");
 
     ma.update_agent_spec(&orphan_id, &serde_json::json!({ "x": 42, "color": 3 }))
         .await
         .unwrap();
 
-    let preset_spec = ma.get_preset_spec(&preset_id).await.unwrap();
-    let orphan = &preset_spec.agents[0];
+    let patch_spec = ma.get_patch_spec(&patch_id).await.unwrap();
+    let orphan = &patch_spec.agents[0];
     assert_eq!(orphan.extensions.get("x"), Some(&serde_json::json!(42)));
     assert_eq!(orphan.extensions.get("color"), Some(&serde_json::json!(3)));
     assert_eq!(
@@ -268,9 +260,9 @@ async fn test_spec_only_agent_survives_preset_spec_and_updates() {
     );
 
     // The other half of the overlay: a live agent's patch lands only on the
-    // instance, never on the stored entry, so get_preset_spec must reflect
+    // instance, never on the stored entry, so get_patch_spec must reflect
     // the instance spec for live agents.
-    let counter_id = preset_spec
+    let counter_id = patch_spec
         .agents
         .iter()
         .find(|a| a.def_name == COUNTER_DEF)
@@ -280,8 +272,8 @@ async fn test_spec_only_agent_survives_preset_spec_and_updates() {
     ma.update_agent_spec(&counter_id, &serde_json::json!({ "x": 42 }))
         .await
         .unwrap();
-    let preset_spec = ma.get_preset_spec(&preset_id).await.unwrap();
-    let counter = preset_spec
+    let patch_spec = ma.get_patch_spec(&patch_id).await.unwrap();
+    let counter = patch_spec
         .agents
         .iter()
         .find(|a| a.id == counter_id)
@@ -294,13 +286,13 @@ async fn test_spec_only_agent_survives_preset_spec_and_updates() {
         .await
         .unwrap();
 
-    let preset_spec = ma.get_preset_spec(&preset_id).await.unwrap();
-    let configs = preset_spec.agents[0].configs.as_ref().unwrap();
+    let patch_spec = ma.get_patch_spec(&patch_id).await.unwrap();
+    let configs = patch_spec.agents[0].configs.as_ref().unwrap();
     assert_eq!(configs.get_string("channel").unwrap(), "random");
     // Setting one key must merge, not replace: the untouched key survives.
     assert_eq!(configs.get_string("token").unwrap(), "secret");
 
-    // An id in neither the runtime nor any preset spec is still an error.
+    // An id in neither the runtime nor any patch spec is still an error.
     let err = ma
         .update_agent_spec("missing", &serde_json::json!({ "x": 1 }))
         .await
@@ -315,22 +307,19 @@ async fn test_add_agent_registers_constructed_spec() {
     let ma = ModularAgent::init().unwrap();
     ma.ready().await.unwrap();
 
-    let preset_id = ma.new_preset().unwrap();
+    let patch_id = ma.new_patch().unwrap();
     let def = ma
         .get_agent_definition(common::agents::DynSpecAgent::DEF_NAME)
         .unwrap();
 
-    let agent_id = ma
-        .add_agent(preset_id.clone(), def.to_spec())
-        .await
-        .unwrap();
+    let agent_id = ma.add_agent(patch_id.clone(), def.to_spec()).await.unwrap();
 
-    // The raw preset spec (not overlaid with live agent specs) must contain
+    // The raw patch spec (not overlaid with live agent specs) must contain
     // the config and port that new() generated.
-    let preset = ma.get_preset(&preset_id).unwrap();
+    let patch = ma.get_patch(&patch_id).unwrap();
     let registered = {
-        let preset = preset.lock().await;
-        preset
+        let patch = patch.lock().await;
+        patch
             .spec()
             .agents
             .iter()
@@ -343,13 +332,9 @@ async fn test_add_agent_registers_constructed_spec() {
     let outputs = registered.outputs.expect("outputs must be present");
     assert!(outputs.iter().any(|p| p == common::agents::PORT_DYN_OUT));
 
-    // get_preset_spec (save path) must expose them as well.
-    let preset_spec = ma.get_preset_spec(&preset_id).await.unwrap();
-    let saved = preset_spec
-        .agents
-        .iter()
-        .find(|a| a.id == agent_id)
-        .unwrap();
+    // get_patch_spec (save path) must expose them as well.
+    let patch_spec = ma.get_patch_spec(&patch_id).await.unwrap();
+    let saved = patch_spec.agents.iter().find(|a| a.id == agent_id).unwrap();
     let configs = saved.configs.as_ref().expect("configs must be present");
     assert!(configs.contains_key(common::agents::CONFIG_DYN));
 
@@ -361,13 +346,13 @@ async fn test_add_agents_and_connections_returns_constructed_specs() {
     let ma = ModularAgent::init().unwrap();
     ma.ready().await.unwrap();
 
-    let preset_id = ma.new_preset().unwrap();
+    let patch_id = ma.new_patch().unwrap();
     let def = ma
         .get_agent_definition(common::agents::DynSpecAgent::DEF_NAME)
         .unwrap();
 
     let (added, _) = ma
-        .add_agents_and_connections(&preset_id, &vec![def.to_spec()], &vec![])
+        .add_agents_and_connections(&patch_id, &vec![def.to_spec()], &vec![])
         .await
         .unwrap();
     assert_eq!(added.len(), 1);
@@ -379,11 +364,11 @@ async fn test_add_agents_and_connections_returns_constructed_specs() {
     let outputs = added[0].outputs.as_ref().expect("outputs must be present");
     assert!(outputs.iter().any(|p| p == common::agents::PORT_DYN_OUT));
 
-    // The preset must have registered the constructed spec as well.
-    let preset = ma.get_preset(&preset_id).unwrap();
+    // The patch must have registered the constructed spec as well.
+    let patch = ma.get_patch(&patch_id).unwrap();
     let registered = {
-        let preset = preset.lock().await;
-        preset
+        let patch = patch.lock().await;
+        patch
             .spec()
             .agents
             .iter()
@@ -402,14 +387,11 @@ async fn test_update_agent_spec_configs_regenerates_dynamic_spec() {
     let ma = ModularAgent::init().unwrap();
     ma.ready().await.unwrap();
 
-    let preset_id = ma.new_preset().unwrap();
+    let patch_id = ma.new_patch().unwrap();
     let def = ma
         .get_agent_definition(common::agents::NumberedConfigAgent::DEF_NAME)
         .unwrap();
-    let agent_id = ma
-        .add_agent(preset_id.clone(), def.to_spec())
-        .await
-        .unwrap();
+    let agent_id = ma.add_agent(patch_id.clone(), def.to_spec()).await.unwrap();
 
     ma.update_agent_spec(&agent_id, &serde_json::json!({ "configs": { "n": 3 } }))
         .await
@@ -431,7 +413,7 @@ async fn test_set_agent_configs_accepts_generated_key() {
     let ma = ModularAgent::init().unwrap();
     ma.ready().await.unwrap();
 
-    let preset_id = ma.new_preset().unwrap();
+    let patch_id = ma.new_patch().unwrap();
     let def = ma
         .get_agent_definition(common::agents::NumberedConfigAgent::DEF_NAME)
         .unwrap();
@@ -440,7 +422,7 @@ async fn test_set_agent_configs_accepts_generated_key() {
     let mut configs = spec.configs.take().unwrap();
     configs.set(common::agents::CONFIG_N.into(), ma::AgentValue::integer(3));
     spec.configs = Some(configs);
-    let agent_id = ma.add_agent(preset_id.clone(), spec).await.unwrap();
+    let agent_id = ma.add_agent(patch_id.clone(), spec).await.unwrap();
 
     let created = ma.get_agent_spec(&agent_id).await.unwrap();
     let mut configs = created.configs.expect("configs must be present");
@@ -466,19 +448,19 @@ async fn test_numbered_config_restores_parked_stale_key() {
     let ma = ModularAgent::init().unwrap();
     ma.ready().await.unwrap();
 
-    let preset_id = ma.new_preset().unwrap();
+    let patch_id = ma.new_patch().unwrap();
     let def = ma
         .get_agent_definition(common::agents::NumberedConfigAgent::DEF_NAME)
         .unwrap();
 
     // reconcile_spec parks configs the definition does not declare under a
-    // "_" prefix when a preset is loaded; new() must pick the value back up.
+    // "_" prefix when a patch is loaded; new() must pick the value back up.
     let mut spec = def.to_spec();
     let mut configs = spec.configs.take().unwrap();
     configs.set(common::agents::CONFIG_N.into(), ma::AgentValue::integer(3));
     configs.set("_c2".into(), ma::AgentValue::string("parked"));
     spec.configs = Some(configs);
-    let agent_id = ma.add_agent(preset_id.clone(), spec).await.unwrap();
+    let agent_id = ma.add_agent(patch_id.clone(), spec).await.unwrap();
 
     let created = ma.get_agent_spec(&agent_id).await.unwrap();
     let configs = created.configs.expect("configs must be present");
@@ -493,7 +475,7 @@ async fn test_failed_batch_add_rolls_back() {
     let ma = ModularAgent::init().unwrap();
     ma.ready().await.unwrap();
 
-    let preset_id = ma.new_preset().unwrap();
+    let patch_id = ma.new_patch().unwrap();
     let def = ma.get_agent_definition(COUNTER_DEF).unwrap();
 
     let agents = vec![
@@ -504,14 +486,14 @@ async fn test_failed_batch_add_rolls_back() {
         },
     ];
     let err = ma
-        .add_agents_and_connections(&preset_id, &agents, &vec![])
+        .add_agents_and_connections(&patch_id, &agents, &vec![])
         .await
         .unwrap_err();
     assert!(matches!(err, ma::AgentError::UnknownDefName(_)));
 
     // The valid first agent must not survive the failed batch.
-    let preset = ma.get_preset(&preset_id).unwrap();
-    assert!(preset.lock().await.spec().agents.is_empty());
+    let patch = ma.get_patch(&patch_id).unwrap();
+    assert!(patch.lock().await.spec().agents.is_empty());
 
     ma.quit();
 }

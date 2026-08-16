@@ -26,19 +26,19 @@ impl<R: Runtime, T: Manager<R>> crate::ModularAgentExt<R> for T {
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
     Builder::new("modular-agent")
         .invoke_handler(tauri::generate_handler![
-            // Preset management
-            commands::new_preset,
-            commands::add_preset,
-            commands::add_preset_with_name,
-            commands::remove_preset,
-            commands::start_preset,
-            commands::stop_preset,
-            commands::open_preset_from_file,
-            commands::save_preset,
-            commands::get_preset_spec,
-            commands::update_preset_spec,
-            commands::get_preset_info,
-            commands::get_preset_infos,
+            // Patch management
+            commands::new_patch,
+            commands::add_patch,
+            commands::add_patch_with_name,
+            commands::remove_patch,
+            commands::start_patch,
+            commands::stop_patch,
+            commands::open_patch_from_file,
+            commands::save_patch,
+            commands::get_patch_spec,
+            commands::update_patch_spec,
+            commands::get_patch_info,
+            commands::get_patch_infos,
             // Agent management
             commands::get_agent_definition,
             commands::get_agent_definitions,

@@ -23,7 +23,7 @@ const CONFIG_MODEL: &str = "model";
 /// the previous one (a re-emitted final replacing an earlier emission), the
 /// previous usage is subtracted before the new one is added, so retried
 /// turns are not double-counted. Totals are cleared when the agent stops, so
-/// a preset restart does not double-count replayed history.
+/// a patch restart does not double-count replayed history.
 ///
 /// When the `model` config names a known model with cost rates, the totals
 /// include `cost_usd`. Cache token rates missing from the registry fall back
@@ -189,26 +189,26 @@ mod tests {
     use modular_agent_core::ConnectionSpec;
     use modular_agent_core::test_utils::{ProbeReceiver, TestProbeAgent, probe_receiver};
 
-    /// Build a running preset with a UsageAgent whose `usage` port feeds a
+    /// Build a running patch with a UsageAgent whose `usage` port feeds a
     /// probe, so emitted totals can be observed end to end.
     async fn setup_usage_with_probe(model: &str) -> (ModularAgent, String, ProbeReceiver) {
         let ma = ModularAgent::init().unwrap();
         ma.ready().await.unwrap();
 
-        let preset_id = ma.new_preset().unwrap();
+        let patch_id = ma.new_patch().unwrap();
         let usage_def = ma.get_agent_definition(UsageAgent::DEF_NAME).unwrap();
         let mut usage_spec = usage_def.to_spec();
         if let Some(configs) = usage_spec.configs.as_mut() {
             configs.set(CONFIG_MODEL.to_string(), AgentValue::string(model));
         }
-        let usage_id = ma.add_agent(preset_id.clone(), usage_spec).await.unwrap();
+        let usage_id = ma.add_agent(patch_id.clone(), usage_spec).await.unwrap();
         let probe_def = ma.get_agent_definition(TestProbeAgent::DEF_NAME).unwrap();
         let probe_id = ma
-            .add_agent(preset_id.clone(), probe_def.to_spec())
+            .add_agent(patch_id.clone(), probe_def.to_spec())
             .await
             .unwrap();
         ma.add_connection(
-            &preset_id,
+            &patch_id,
             ConnectionSpec {
                 source: usage_id.clone(),
                 source_handle: PORT_USAGE.into(),
@@ -218,7 +218,7 @@ mod tests {
         )
         .await
         .unwrap();
-        ma.start_preset(&preset_id).await.unwrap();
+        ma.start_patch(&patch_id).await.unwrap();
         let probe_rx = probe_receiver(&ma, &probe_id).await.unwrap();
 
         (ma, usage_id, probe_rx)

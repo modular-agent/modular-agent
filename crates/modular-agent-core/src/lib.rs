@@ -20,15 +20,15 @@
 //! asynchronously. Implement the [`AsAgent`] trait to create custom agents, or use the
 //! `#[modular_agent]` macro for declarative agent definitions.
 //!
-//! ### Presets
+//! ### Patches
 //!
-//! Presets are collections of agents and their connections, defined in JSON format.
+//! Patches are collections of agents and their connections, defined in JSON format.
 //! They can be loaded from files and managed via [`ModularAgent`] methods.
 //!
 //! ## Quick Start
 //!
 //! See the [CLI example](https://github.com/modular-agent/modular-agent-core/blob/main/examples/cli.rs)
-//! for a complete working example of loading a preset and running agents from the command line.
+//! for a complete working example of loading a patch and running agents from the command line.
 //!
 //! ## Feature Flags
 //!
@@ -49,7 +49,7 @@ mod id;
 mod message;
 mod modular_agent;
 mod output;
-mod preset;
+mod patch;
 mod registry;
 mod runtime;
 mod spec;
@@ -110,11 +110,11 @@ pub use llm::{
 };
 pub use modular_agent::{EventEnvelope, ModularAgent, ModularAgentEvent, SharedAgent};
 pub use output::AgentOutput;
-pub use preset::{Preset, PresetInfo};
+pub use patch::{Patch, PatchInfo};
 pub use registry::AgentRegistration;
 #[cfg(feature = "llm")]
 pub use session::{
     InMemorySessionStore, JsonlSessionStore, SessionEntry, SessionMeta, SessionStore, build_context,
 };
-pub use spec::{AgentSpec, ConnectionSpec, PresetSpec, PresetSpecs};
+pub use spec::{AgentSpec, ConnectionSpec, PatchSpec, PatchSpecs};
 pub use value::{AgentValue, AgentValueMap};

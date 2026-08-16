@@ -8,17 +8,17 @@ use crate::config::AgentConfigs;
 use crate::definition::AgentConfigSpecs;
 use crate::error::AgentError;
 
-/// A map of preset names to their specifications.
-pub type PresetSpecs = FnvIndexMap<String, PresetSpec>;
+/// A map of patch names to their specifications.
+pub type PatchSpecs = FnvIndexMap<String, PatchSpec>;
 
-/// The serializable specification of a preset (workflow).
+/// The serializable specification of a patch (workflow).
 ///
-/// A preset defines a complete workflow configuration including all agents
+/// A patch defines a complete workflow configuration including all agents
 /// and their connections. This struct is designed for JSON serialization
-/// and can be loaded from or saved to preset files.
+/// and can be loaded from or saved to patch files.
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
-pub struct PresetSpec {
-    /// List of agent specifications in this preset.
+pub struct PatchSpec {
+    /// List of agent specifications in this patch.
     pub agents: Vec<AgentSpec>,
 
     /// List of connections between agents.
@@ -31,23 +31,23 @@ pub struct PresetSpec {
     pub extensions: FnvIndexMap<String, Value>,
 }
 
-impl PresetSpec {
-    /// Adds an agent to this preset.
+impl PatchSpec {
+    /// Adds an agent to this patch.
     pub fn add_agent(&mut self, agent: AgentSpec) {
         self.agents.push(agent);
     }
 
-    /// Removes an agent from this preset by its ID.
+    /// Removes an agent from this patch by its ID.
     pub fn remove_agent(&mut self, agent_id: &str) {
         self.agents.retain(|agent| agent.id != agent_id);
     }
 
-    /// Adds a connection to this preset.
+    /// Adds a connection to this patch.
     pub fn add_connection(&mut self, connection: ConnectionSpec) {
         self.connections.push(connection);
     }
 
-    /// Removes a connection from this preset.
+    /// Removes a connection from this patch.
     ///
     /// Returns `Some(ConnectionSpec)` if the connection was found and removed,
     /// or `None` if it was not found.
@@ -56,18 +56,18 @@ impl PresetSpec {
         Some(self.connections.remove(index))
     }
 
-    /// Serializes this preset to a pretty-printed JSON string.
+    /// Serializes this patch to a pretty-printed JSON string.
     pub fn to_json(&self) -> Result<String, AgentError> {
         let json = serde_json::to_string_pretty(self)
             .map_err(|e| AgentError::SerializationError(e.to_string()))?;
         Ok(json)
     }
 
-    /// Deserializes a preset from a JSON string.
+    /// Deserializes a patch from a JSON string.
     pub fn from_json(json_str: &str) -> Result<Self, AgentError> {
-        let preset: PresetSpec = serde_json::from_str(json_str)
+        let patch: PatchSpec = serde_json::from_str(json_str)
             .map_err(|e| AgentError::SerializationError(e.to_string()))?;
-        Ok(preset)
+        Ok(patch)
     }
 }
 

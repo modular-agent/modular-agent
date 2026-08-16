@@ -24,9 +24,9 @@ pub enum AgentError {
     #[error("Invalid port: {0}")]
     InvalidPin(String),
 
-    /// Invalid preset name.
-    #[error("Invalid preset name: {0}")]
-    InvalidPresetName(String),
+    /// Invalid patch name.
+    #[error("Invalid patch name: {0}")]
+    InvalidPatchName(String),
 
     /// Invalid value for the expected type.
     #[error("Invalid {0} value")]
@@ -36,9 +36,9 @@ pub enum AgentError {
     #[error("{0}: Agent definition \"{1}\" is missing")]
     MissingDefinition(String, String),
 
-    /// Failed to rename a preset.
-    #[error("Failed to rename preset: {0}")]
-    RenamePresetFailed(String),
+    /// Failed to rename a patch.
+    #[error("Failed to rename patch: {0}")]
+    RenamePatchFailed(String),
 
     /// Unknown agent definition kind.
     #[error("Unknown agent def kind: {0}")]
@@ -88,13 +88,13 @@ pub enum AgentError {
     #[error("Connection {0} not found")]
     ConnectionNotFound(String),
 
-    /// Preset with the specified name was not found.
-    #[error("Preset {0} not found")]
-    PresetNotFound(String),
+    /// Patch with the specified name was not found.
+    #[error("Patch {0} not found")]
+    PatchNotFound(String),
 
-    /// A preset with this name already exists.
-    #[error("Preset name \"{0}\" already exists")]
-    PresetNameExists(String),
+    /// A patch with this name already exists.
+    #[error("Patch name \"{0}\" already exists")]
+    PatchNameExists(String),
 
     /// Agent definition was not found.
     #[error("Agent {0} definition not found")]

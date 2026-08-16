@@ -87,11 +87,11 @@ pub trait Agent: Send + Sync + 'static {
         self.ma().get_global_configs(self.def_name())
     }
 
-    /// Returns the preset ID this agent belongs to.
-    fn preset_id(&self) -> &str;
+    /// Returns the patch ID this agent belongs to.
+    fn patch_id(&self) -> &str;
 
-    /// Sets the preset ID.
-    fn set_preset_id(&mut self, preset_id: String);
+    /// Sets the patch ID.
+    fn set_patch_id(&mut self, patch_id: String);
 
     /// Starts the agent.
     ///
@@ -145,9 +145,9 @@ pub struct AgentData {
     /// The specification of the agent (definition, config, etc.).
     pub spec: AgentSpec,
 
-    /// The preset identifier for the agent.
-    /// Empty string when the agent does not belong to any preset.
-    pub preset_id: String,
+    /// The patch identifier for the agent.
+    /// Empty string when the agent does not belong to any patch.
+    pub patch_id: String,
 
     /// The current lifecycle status of the agent.
     pub status: AgentStatus,
@@ -168,7 +168,7 @@ impl AgentData {
             ma,
             id,
             spec,
-            preset_id: String::new(),
+            patch_id: String::new(),
             status: AgentStatus::Init,
         }
     }
@@ -191,7 +191,7 @@ pub trait HasAgentData {
 /// # Cancellation safety
 ///
 /// The agent loop races [`process()`](Self::process) against the agent's
-/// cancellation token, which fires when the agent (or its whole preset) is
+/// cancellation token, which fires when the agent (or its whole patch) is
 /// stopped. On cancellation the in-flight `process()` future is **dropped at
 /// whatever await point it has reached** — implementations must not rely on
 /// running to completion. In particular, outputs emitted before the drop
@@ -332,12 +332,12 @@ impl<T: AsAgent> Agent for T {
         self.configs_changed()
     }
 
-    fn preset_id(&self) -> &str {
-        &self.data().preset_id
+    fn patch_id(&self) -> &str {
+        &self.data().patch_id
     }
 
-    fn set_preset_id(&mut self, preset_id: String) {
-        self.mut_data().preset_id = preset_id;
+    fn set_patch_id(&mut self, patch_id: String) {
+        self.mut_data().patch_id = patch_id;
     }
 
     async fn start(&mut self) -> Result<(), AgentError> {

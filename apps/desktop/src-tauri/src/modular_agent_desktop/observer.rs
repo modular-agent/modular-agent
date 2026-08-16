@@ -4,17 +4,17 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 use tokio::sync::broadcast::error::RecvError;
 
-use crate::modular_agent_desktop::app::parent_preset_path;
+use crate::modular_agent_desktop::app::parent_patch_path;
 
 const EMIT_AGENT_CONFIG_UPDATED: &str = "ma:agent_config_updated";
 const EMIT_AGENT_ERROR: &str = "ma:agent_error";
 const EMIT_AGENT_IN: &str = "ma:agent_in";
 const EMIT_AGENT_SPEC_UPDATED: &str = "ma:agent_spec_updated";
-const EMIT_PRESET_STRUCTURE_CHANGED: &str = "ma:preset_structure_changed";
-const EMIT_PRESET_LIST_CHANGED: &str = "ma:preset_list_changed";
-const EMIT_PRESET_REMOVED: &str = "ma:preset_removed";
-const EMIT_PRESET_RENAMED: &str = "ma:preset_renamed";
-const EMIT_PRESET_RUNNING_CHANGED: &str = "ma:preset_running_changed";
+const EMIT_PATCH_STRUCTURE_CHANGED: &str = "ma:patch_structure_changed";
+const EMIT_PATCH_LIST_CHANGED: &str = "ma:patch_list_changed";
+const EMIT_PATCH_REMOVED: &str = "ma:patch_removed";
+const EMIT_PATCH_RENAMED: &str = "ma:patch_renamed";
+const EMIT_PATCH_RUNNING_CHANGED: &str = "ma:patch_running_changed";
 
 pub fn start_modular_agent_observer(ma: &ModularAgent, app: AppHandle) {
     let mut rx = ma.subscribe();
@@ -53,43 +53,43 @@ fn handle_event(app: &AppHandle, origin: Option<String>, event: ModularAgentEven
         ModularAgentEvent::AgentSpecUpdated(agent_id) => {
             emit_agent_spec_updated(app, origin, agent_id)?;
         }
-        ModularAgentEvent::PresetStructureChanged { preset_id } => {
-            emit_preset_structure_changed(app, origin, preset_id)?;
+        ModularAgentEvent::PatchStructureChanged { patch_id } => {
+            emit_patch_structure_changed(app, origin, patch_id)?;
         }
-        ModularAgentEvent::PresetAdded {
+        ModularAgentEvent::PatchAdded {
             name: Some(name), ..
         } => {
-            // Named presets appear in the sidebar; refresh their parent folder.
-            emit_preset_list_changed(app, origin, parent_preset_path(&name))?;
+            // Named patches appear in the sidebar; refresh their parent folder.
+            emit_patch_list_changed(app, origin, parent_patch_path(&name))?;
         }
-        ModularAgentEvent::PresetRemoved { preset_id, name } => {
-            emit_preset_removed(app, origin, preset_id, name)?;
+        ModularAgentEvent::PatchRemoved { patch_id, name } => {
+            emit_patch_removed(app, origin, patch_id, name)?;
         }
         // Both directions land on one event: the frontend tracks a boolean, not
         // two separate signals.
-        ModularAgentEvent::PresetStarted { preset_id } => {
-            emit_preset_running_changed(app, origin, preset_id, true)?;
+        ModularAgentEvent::PatchStarted { patch_id } => {
+            emit_patch_running_changed(app, origin, patch_id, true)?;
         }
-        ModularAgentEvent::PresetStopped { preset_id } => {
-            emit_preset_running_changed(app, origin, preset_id, false)?;
+        ModularAgentEvent::PatchStopped { patch_id } => {
+            emit_patch_running_changed(app, origin, patch_id, false)?;
         }
-        ModularAgentEvent::PresetRenamed {
-            preset_id,
+        ModularAgentEvent::PatchRenamed {
+            patch_id,
             old_name,
             new_name,
         } => {
-            let new_parent = parent_preset_path(&new_name);
-            emit_preset_renamed(app, origin.clone(), preset_id, old_name.clone(), new_name)?;
+            let new_parent = parent_patch_path(&new_name);
+            emit_patch_renamed(app, origin.clone(), patch_id, old_name.clone(), new_name)?;
             if let Some(old_name) = old_name {
-                let old_parent = parent_preset_path(&old_name);
+                let old_parent = parent_patch_path(&old_name);
                 if old_parent != new_parent {
-                    emit_preset_list_changed(app, origin.clone(), old_parent)?;
+                    emit_patch_list_changed(app, origin.clone(), old_parent)?;
                 }
             }
-            emit_preset_list_changed(app, origin, new_parent)?;
+            emit_patch_list_changed(app, origin, new_parent)?;
         }
-        ModularAgentEvent::PresetSaved { preset_id: _, name } => {
-            emit_preset_list_changed(app, origin, parent_preset_path(&name))?;
+        ModularAgentEvent::PatchSaved { patch_id: _, name } => {
+            emit_patch_list_changed(app, origin, parent_patch_path(&name))?;
         }
         _ => {}
     }
@@ -189,49 +189,49 @@ fn emit_agent_spec_updated(
     .context("Failed to emit agent spec updated message")
 }
 
-fn emit_preset_structure_changed(
+fn emit_patch_structure_changed(
     app: &AppHandle,
     origin: Option<String>,
-    preset_id: String,
+    patch_id: String,
 ) -> Result<()> {
     #[derive(Clone, Serialize)]
-    struct PresetStructureChangedMessage {
+    struct PatchStructureChangedMessage {
         origin: Option<String>,
-        preset_id: String,
+        patch_id: String,
     }
 
     app.emit(
-        EMIT_PRESET_STRUCTURE_CHANGED,
-        PresetStructureChangedMessage { origin, preset_id },
+        EMIT_PATCH_STRUCTURE_CHANGED,
+        PatchStructureChangedMessage { origin, patch_id },
     )
-    .context("Failed to emit preset structure changed message")
+    .context("Failed to emit patch structure changed message")
 }
 
-fn emit_preset_removed(
+fn emit_patch_removed(
     app: &AppHandle,
     origin: Option<String>,
-    preset_id: String,
+    patch_id: String,
     name: Option<String>,
 ) -> Result<()> {
     #[derive(Clone, Serialize)]
-    struct PresetRemovedMessage {
+    struct PatchRemovedMessage {
         origin: Option<String>,
-        preset_id: String,
+        patch_id: String,
         name: Option<String>,
     }
 
     app.emit(
-        EMIT_PRESET_REMOVED,
-        PresetRemovedMessage {
+        EMIT_PATCH_REMOVED,
+        PatchRemovedMessage {
             origin,
-            preset_id,
+            patch_id,
             name,
         },
     )
-    .context("Failed to emit preset removed message")
+    .context("Failed to emit patch removed message")
 }
 
-fn emit_preset_renamed(
+fn emit_patch_renamed(
     app: &AppHandle,
     origin: Option<String>,
     id: String,
@@ -239,7 +239,7 @@ fn emit_preset_renamed(
     new_name: String,
 ) -> Result<()> {
     #[derive(Clone, Serialize)]
-    struct PresetRenamedMessage {
+    struct PatchRenamedMessage {
         origin: Option<String>,
         id: String,
         #[serde(rename = "oldName")]
@@ -249,51 +249,51 @@ fn emit_preset_renamed(
     }
 
     app.emit(
-        EMIT_PRESET_RENAMED,
-        PresetRenamedMessage {
+        EMIT_PATCH_RENAMED,
+        PatchRenamedMessage {
             origin,
             id,
             old_name,
             new_name,
         },
     )
-    .context("Failed to emit preset renamed message")
+    .context("Failed to emit patch renamed message")
 }
 
-fn emit_preset_running_changed(
+fn emit_patch_running_changed(
     app: &AppHandle,
     origin: Option<String>,
-    preset_id: String,
+    patch_id: String,
     running: bool,
 ) -> Result<()> {
     #[derive(Clone, Serialize)]
-    struct PresetRunningChangedMessage {
+    struct PatchRunningChangedMessage {
         origin: Option<String>,
-        preset_id: String,
+        patch_id: String,
         running: bool,
     }
 
     app.emit(
-        EMIT_PRESET_RUNNING_CHANGED,
-        PresetRunningChangedMessage {
+        EMIT_PATCH_RUNNING_CHANGED,
+        PatchRunningChangedMessage {
             origin,
-            preset_id,
+            patch_id,
             running,
         },
     )
-    .context("Failed to emit preset running changed message")
+    .context("Failed to emit patch running changed message")
 }
 
-fn emit_preset_list_changed(app: &AppHandle, origin: Option<String>, path: String) -> Result<()> {
+fn emit_patch_list_changed(app: &AppHandle, origin: Option<String>, path: String) -> Result<()> {
     #[derive(Clone, Serialize)]
-    struct PresetListChangedMessage {
+    struct PatchListChangedMessage {
         origin: Option<String>,
         path: String,
     }
 
     app.emit(
-        EMIT_PRESET_LIST_CHANGED,
-        PresetListChangedMessage { origin, path },
+        EMIT_PATCH_LIST_CHANGED,
+        PatchListChangedMessage { origin, path },
     )
-    .context("Failed to emit preset list changed message")
+    .context("Failed to emit patch list changed message")
 }

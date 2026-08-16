@@ -13,7 +13,7 @@ use crate::common;
 use common::agents::{CancelWaitAgent, StuckSleepAgent};
 
 const EXT_IN_DEF: &str = "modular_agent_core::external_agent::ExternalInputAgent";
-const PRESET_TOOL_DEF: &str = "modular_agent_core::tool::PresetToolAgent";
+const PATCH_TOOL_DEF: &str = "modular_agent_core::tool::PatchToolAgent";
 
 fn set_config(spec: &mut AgentSpec, key: &str, value: AgentValue) {
     let mut configs = spec.configs.take().unwrap_or_default();
@@ -21,23 +21,23 @@ fn set_config(spec: &mut AgentSpec, key: &str, value: AgentValue) {
     spec.configs = Some(configs);
 }
 
-/// Builds and starts a preset: ExtIn(channel) -> agent(def) -> probe.
+/// Builds and starts a patch: ExtIn(channel) -> agent(def) -> probe.
 /// Returns (agent_id, probe_id).
 async fn start_chain(ma: &ModularAgent, channel: &str, agent_def: &str) -> (String, String) {
-    let preset_id = ma.new_preset().unwrap();
+    let patch_id = ma.new_patch().unwrap();
 
     let mut ext_spec = ma.new_agent_spec(EXT_IN_DEF).unwrap();
     set_config(&mut ext_spec, "name", AgentValue::string(channel));
-    let ext_id = ma.add_agent(preset_id.clone(), ext_spec).await.unwrap();
+    let ext_id = ma.add_agent(patch_id.clone(), ext_spec).await.unwrap();
 
     let agent_spec = ma.new_agent_spec(agent_def).unwrap();
-    let agent_id = ma.add_agent(preset_id.clone(), agent_spec).await.unwrap();
+    let agent_id = ma.add_agent(patch_id.clone(), agent_spec).await.unwrap();
 
     let probe_spec = ma.new_agent_spec(TestProbeAgent::DEF_NAME).unwrap();
-    let probe_id = ma.add_agent(preset_id.clone(), probe_spec).await.unwrap();
+    let probe_id = ma.add_agent(patch_id.clone(), probe_spec).await.unwrap();
 
     ma.add_connection(
-        &preset_id,
+        &patch_id,
         ConnectionSpec {
             source: ext_id,
             source_handle: "value".into(),
@@ -48,7 +48,7 @@ async fn start_chain(ma: &ModularAgent, channel: &str, agent_def: &str) -> (Stri
     .await
     .unwrap();
     ma.add_connection(
-        &preset_id,
+        &patch_id,
         ConnectionSpec {
             source: agent_id.clone(),
             source_handle: "out".into(),
@@ -59,7 +59,7 @@ async fn start_chain(ma: &ModularAgent, channel: &str, agent_def: &str) -> (Stri
     .await
     .unwrap();
 
-    ma.start_preset(&preset_id).await.unwrap();
+    ma.start_patch(&patch_id).await.unwrap();
     // Agent start() runs inside the spawned agent loop; give the external
     // input agent a moment to register its channel.
     tokio::time::sleep(Duration::from_millis(100)).await;
@@ -149,9 +149,9 @@ async fn abort_context_cancels_running_flow() {
 }
 
 #[tokio::test]
-async fn start_agent_after_stop_preset_processes_inputs() {
+async fn start_agent_after_stop_patch_processes_inputs() {
     let ma = test_utils::setup_modular_agent().await;
-    let preset_id = ma.new_preset().unwrap();
+    let patch_id = ma.new_patch().unwrap();
 
     let mut ext_spec = ma.new_agent_spec(EXT_IN_DEF).unwrap();
     set_config(
@@ -159,13 +159,13 @@ async fn start_agent_after_stop_preset_processes_inputs() {
         "name",
         AgentValue::string("cancel_test_restart"),
     );
-    let ext_id = ma.add_agent(preset_id.clone(), ext_spec).await.unwrap();
+    let ext_id = ma.add_agent(patch_id.clone(), ext_spec).await.unwrap();
 
     let probe_spec = ma.new_agent_spec(TestProbeAgent::DEF_NAME).unwrap();
-    let probe_id = ma.add_agent(preset_id.clone(), probe_spec).await.unwrap();
+    let probe_id = ma.add_agent(patch_id.clone(), probe_spec).await.unwrap();
 
     ma.add_connection(
-        &preset_id,
+        &patch_id,
         ConnectionSpec {
             source: ext_id.clone(),
             source_handle: "value".into(),
@@ -176,12 +176,12 @@ async fn start_agent_after_stop_preset_processes_inputs() {
     .await
     .unwrap();
 
-    ma.start_preset(&preset_id).await.unwrap();
+    ma.start_patch(&patch_id).await.unwrap();
     tokio::time::sleep(Duration::from_millis(100)).await;
-    ma.stop_preset(&preset_id).await.unwrap();
+    ma.stop_patch(&patch_id).await.unwrap();
 
     // Individually restarted agents must get live cancellation tokens, not
-    // children of the parent token fired by stop_preset — a born-cancelled
+    // children of the parent token fired by stop_patch — a born-cancelled
     // token would make them silently skip every input.
     ma.start_agent(&ext_id).await.unwrap();
     ma.start_agent(&probe_id).await.unwrap();
@@ -201,20 +201,20 @@ async fn start_agent_after_stop_preset_processes_inputs() {
 }
 
 #[tokio::test]
-async fn already_cancelled_preset_tool_does_not_emit_tool_in() {
-    let tool_name = "cancel_test_preset_tool";
+async fn already_cancelled_patch_tool_does_not_emit_tool_in() {
+    let tool_name = "cancel_test_patch_tool";
 
     let ma = ModularAgent::init().unwrap();
     ma.ready().await.unwrap();
 
-    let preset_id = ma.new_preset().unwrap();
-    let mut spec = ma.new_agent_spec(PRESET_TOOL_DEF).unwrap();
+    let patch_id = ma.new_patch().unwrap();
+    let mut spec = ma.new_agent_spec(PATCH_TOOL_DEF).unwrap();
     set_config(&mut spec, "name", AgentValue::string(tool_name));
-    let agent_id = ma.add_agent(preset_id.clone(), spec).await.unwrap();
+    let agent_id = ma.add_agent(patch_id.clone(), spec).await.unwrap();
     let probe_spec = ma.new_agent_spec(TestProbeAgent::DEF_NAME).unwrap();
-    let probe_id = ma.add_agent(preset_id.clone(), probe_spec).await.unwrap();
+    let probe_id = ma.add_agent(patch_id.clone(), probe_spec).await.unwrap();
     ma.add_connection(
-        &preset_id,
+        &patch_id,
         ConnectionSpec {
             source: agent_id,
             source_handle: "tool_in".into(),
@@ -225,7 +225,7 @@ async fn already_cancelled_preset_tool_does_not_emit_tool_in() {
     .await
     .unwrap();
 
-    ma.start_preset(&preset_id).await.unwrap();
+    ma.start_patch(&patch_id).await.unwrap();
     tokio::time::sleep(Duration::from_millis(100)).await;
 
     let tool = get_tool(tool_name).unwrap();
@@ -248,6 +248,6 @@ async fn already_cancelled_preset_tool_does_not_emit_tool_in() {
         "an already-cancelled tool call must not emit tool_in"
     );
 
-    ma.stop_preset(&preset_id).await.unwrap();
+    ma.stop_patch(&patch_id).await.unwrap();
     ma.quit();
 }

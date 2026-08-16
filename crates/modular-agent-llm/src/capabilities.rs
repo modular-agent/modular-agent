@@ -83,7 +83,7 @@ impl ThinkingLevel {
 ///
 /// `None` requested means "off" and always yields `None`. An empty
 /// `supported` list (model without thinking support) silently yields `None`
-/// as well, so presets can set a thinking level once and still work on
+/// as well, so patches can set a thinking level once and still work on
 /// non-reasoning models. Ties between an equally-distant lower and higher
 /// level resolve to the lower (cheaper) one.
 pub(crate) fn clamp_thinking_level(

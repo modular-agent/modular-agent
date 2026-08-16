@@ -19,7 +19,7 @@ use photon_rs::PhotonImage;
 /// One block of structured [`Message`] content.
 ///
 /// Serialized as an internally tagged object (`{"type": "text", ...}`) so
-/// block arrays in preset JSON stay self-describing.
+/// block arrays in patch JSON stay self-describing.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ContentBlock {
@@ -375,7 +375,7 @@ impl Serialize for Message {
                 serde_json::Value::String(tool_name.clone()),
             );
         }
-        // Only emitted when set, so presets saved before this field existed
+        // Only emitted when set, so patches saved before this field existed
         // round-trip unchanged.
         if let Some(is_error) = &self.is_error {
             map.insert("is_error".to_string(), serde_json::Value::Bool(*is_error));
@@ -901,7 +901,7 @@ mod tests {
 
     #[test]
     fn test_tool_call_function_parse_error_serde() {
-        // None must not emit the key, so presets saved before this field
+        // None must not emit the key, so patches saved before this field
         // existed round-trip unchanged.
         let func = ToolCallFunction {
             name: "t".to_string(),
@@ -1137,7 +1137,7 @@ mod tests {
 
     #[test]
     fn test_message_without_stop_reason_deserializes_to_none() {
-        // Presets saved before this field existed must load unchanged.
+        // Patches saved before this field existed must load unchanged.
         let json = serde_json::json!({
             "role": "assistant",
             "content": "ok",
@@ -1193,7 +1193,7 @@ mod tests {
 
     #[test]
     fn test_message_without_usage_deserializes_to_none() {
-        // Presets saved before this field existed must load unchanged.
+        // Patches saved before this field existed must load unchanged.
         let json = serde_json::json!({
             "role": "assistant",
             "content": "ok",

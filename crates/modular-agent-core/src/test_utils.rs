@@ -28,11 +28,11 @@ pub async fn setup_modular_agent() -> ModularAgent {
     ma
 }
 
-/// Load and start an preset from a file.
+/// Load and start an patch from a file.
 #[cfg(feature = "file")]
-pub async fn open_and_start_preset(ma: &ModularAgent, path: &str) -> Result<String, AgentError> {
-    let id = ma.open_preset_from_file(path, None).await?;
-    ma.start_preset(&id).await?;
+pub async fn open_and_start_patch(ma: &ModularAgent, path: &str) -> Result<String, AgentError> {
+    let id = ma.open_patch_from_file(path, None).await?;
+    ma.start_patch(&id).await?;
     Ok(id)
 }
 
@@ -108,13 +108,13 @@ pub async fn expect_local_value(
 /// to appear as an external output on the same variable name.
 pub async fn write_and_expect_local_value(
     ma: &ModularAgent,
-    preset_id: &str,
+    patch_id: &str,
     var_name: &str,
     value: AgentValue,
 ) -> Result<(), AgentError> {
-    ma.write_local_input(preset_id, var_name, value.clone())
+    ma.write_local_input(patch_id, var_name, value.clone())
         .await?;
-    expect_local_value(preset_id, var_name, &value).await
+    expect_local_value(patch_id, var_name, &value).await
 }
 
 // TestProbeAgent

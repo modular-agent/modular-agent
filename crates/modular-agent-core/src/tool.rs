@@ -7,7 +7,7 @@
 //! - The `Tool` trait for implementing custom tools
 //! - Agents for working with tools in workflows:
 //!   - `ListToolsAgent` - Lists available tools matching a pattern
-//!   - `PresetToolAgent` - Exposes a workflow as a callable tool
+//!   - `PatchToolAgent` - Exposes a workflow as a callable tool
 //!   - `CallToolMessageAgent` - Processes tool calls from LLM messages
 //!   - `LoopControlAgent` - Guards tool-call cycles with an iteration limit
 //!   - `CallToolAgent` - Directly invokes a tool by name
@@ -946,7 +946,7 @@ impl AsAgent for ListToolsAgent {
 /// * Input `tool_out` - Receives the tool's result from the workflow
 /// * Output `tool_in` - Emits the tool call arguments to the workflow
 #[modular_agent(
-    title="Preset Tool",
+    title="Patch Tool",
     category=CATEGORY,
     inputs=[PORT_TOOL_OUT],
     outputs=[PORT_TOOL_IN],
@@ -955,7 +955,7 @@ impl AsAgent for ListToolsAgent {
     object_config(name=CONFIG_TOOL_PARAMETERS),
     integer_config(name=CONFIG_TIMEOUT_SECS, default=60),
 )]
-pub struct PresetToolAgent {
+pub struct PatchToolAgent {
     data: AgentData,
     name: String,
     description: String,
@@ -964,7 +964,7 @@ pub struct PresetToolAgent {
     pending: Arc<Mutex<HashMap<usize, oneshot::Sender<AgentValue>>>>,
 }
 
-impl PresetToolAgent {
+impl PatchToolAgent {
     /// Initiates a tool call and returns a receiver for the result.
     ///
     /// Emits the arguments to the workflow and registers a pending receiver
@@ -990,7 +990,7 @@ impl PresetToolAgent {
 }
 
 #[async_trait]
-impl AsAgent for PresetToolAgent {
+impl AsAgent for PatchToolAgent {
     fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         let def_name = spec.def_name.clone();
         let configs = spec.configs.clone();
@@ -1032,7 +1032,7 @@ impl AsAgent for PresetToolAgent {
         if self.data.status == AgentStatus::Start {
             if !is_valid_tool_name(&self.name) {
                 log::warn!(
-                    "PresetToolAgent {} has invalid tool name {:?}; \
+                    "PatchToolAgent {} has invalid tool name {:?}; \
                      tool names must match ^[a-zA-Z0-9_-]{{1,64}}$",
                     self.id(),
                     self.name
@@ -1042,7 +1042,7 @@ impl AsAgent for PresetToolAgent {
                 .ma()
                 .get_agent(self.id())
                 .ok_or_else(|| AgentError::AgentNotFound(self.id().to_string()))?;
-            let tool = PresetTool::new(
+            let tool = PatchTool::new(
                 self.name.clone(),
                 self.description.clone(),
                 self.parameters.clone(),
@@ -1067,7 +1067,7 @@ impl AsAgent for PresetToolAgent {
         // an invalid name only fails later at API-call time, so surface it early.
         if !is_valid_tool_name(&self.name) {
             log::warn!(
-                "PresetToolAgent {} has invalid tool name {:?}; \
+                "PatchToolAgent {} has invalid tool name {:?}; \
                  tool names must match ^[a-zA-Z0-9_-]{{1,64}}$",
                 self.id(),
                 self.name
@@ -1077,7 +1077,7 @@ impl AsAgent for PresetToolAgent {
             .ma()
             .get_agent(self.id())
             .ok_or_else(|| AgentError::AgentNotFound(self.id().to_string()))?;
-        let tool = PresetTool::new(
+        let tool = PatchTool::new(
             self.name.clone(),
             self.description.clone(),
             self.parameters.clone(),
@@ -1106,14 +1106,14 @@ impl AsAgent for PresetToolAgent {
     }
 }
 
-/// Internal Tool implementation that delegates to a PresetToolAgent.
-struct PresetTool {
+/// Internal Tool implementation that delegates to a PatchToolAgent.
+struct PatchTool {
     info: ToolInfo,
     agent: SharedAgent,
 }
 
-impl PresetTool {
-    /// Creates a new PresetTool wrapping a PresetToolAgent.
+impl PatchTool {
+    /// Creates a new PatchTool wrapping a PatchToolAgent.
     fn new(
         name: String,
         description: String,
@@ -1149,10 +1149,8 @@ impl PresetTool {
         let cancel = ctx.cancel_token().cloned();
         let (rx, timeout_secs, pending) = {
             let mut guard = self.agent.lock().await;
-            let Some(preset_tool_agent) = guard.as_agent_mut::<PresetToolAgent>() else {
-                return Err(AgentError::Other(
-                    "Agent is not PresetToolAgent".to_string(),
-                ));
+            let Some(patch_tool_agent) = guard.as_agent_mut::<PatchToolAgent>() else {
+                return Err(AgentError::Other("Agent is not PatchToolAgent".to_string()));
             };
             // Cancellation may have fired while waiting for the agent lock.
             // Check again immediately before pending state is registered and
@@ -1160,12 +1158,12 @@ impl PresetTool {
             if ctx.is_cancelled() {
                 return Err(AgentError::Cancelled);
             }
-            let timeout_secs = preset_tool_agent
+            let timeout_secs = patch_tool_agent
                 .configs()
                 .map(|c| c.get_integer_or(CONFIG_TIMEOUT_SECS, DEFAULT_TIMEOUT_SECS))
                 .unwrap_or(DEFAULT_TIMEOUT_SECS);
-            let pending = preset_tool_agent.pending.clone();
-            let rx = preset_tool_agent.start_tool_call(ctx, args)?;
+            let pending = patch_tool_agent.pending.clone();
+            let rx = patch_tool_agent.start_tool_call(ctx, args)?;
             (rx, timeout_secs, pending)
         };
 
@@ -1176,7 +1174,7 @@ impl PresetTool {
         // is keyed by context id, which is shared by every tool call in the
         // same flow (including an LLM retry after an error), so a leftover
         // sender would deliver a late tool_out to whichever call registers
-        // under the same id next. PresetTool registers with
+        // under the same id next. PatchTool registers with
         // ExecutionMode::Sequential and call_tools never runs a Sequential
         // call concurrently with anything, so within a flow no newer call can
         // have registered a sender while this one is alive — the guard cannot
@@ -1216,7 +1214,7 @@ impl PresetTool {
 }
 
 #[async_trait]
-impl Tool for PresetTool {
+impl Tool for PatchTool {
     fn info(&self) -> &ToolInfo {
         &self.info
     }
@@ -1626,12 +1624,12 @@ mod tests {
     }
 
     #[test]
-    fn test_preset_tool_timeout_config_default() {
-        let def = PresetToolAgent::agent_definition();
+    fn test_patch_tool_timeout_config_default() {
+        let def = PatchToolAgent::agent_definition();
         let specs = def
             .configs
             .as_ref()
-            .expect("PresetToolAgent should have config specs");
+            .expect("PatchToolAgent should have config specs");
         let spec = specs
             .get(CONFIG_TIMEOUT_SECS)
             .expect("timeout_secs config should be present");
@@ -2088,26 +2086,26 @@ mod tests {
             limit: ProbeReceiver,
         }
 
-        /// Builds a running preset: LoopControlAgent with its `message` and
+        /// Builds a running patch: LoopControlAgent with its `message` and
         /// `limit_exceeded` outputs each wired to a TestProbeAgent.
         async fn setup(max_iterations: i64) -> Fixture {
             let ma = ModularAgent::init().unwrap();
             ma.ready().await.unwrap();
-            let preset_id = ma.new_preset().unwrap();
+            let patch_id = ma.new_patch().unwrap();
 
             let loop_def = ma.get_agent_definition(LOOP_DEF).unwrap();
             let loop_id = ma
-                .add_agent(preset_id.clone(), loop_def.to_spec())
+                .add_agent(patch_id.clone(), loop_def.to_spec())
                 .await
                 .unwrap();
 
             let probe_def = ma.get_agent_definition(PROBE_DEF).unwrap();
             let fwd_id = ma
-                .add_agent(preset_id.clone(), probe_def.to_spec())
+                .add_agent(patch_id.clone(), probe_def.to_spec())
                 .await
                 .unwrap();
             let lim_id = ma
-                .add_agent(preset_id.clone(), probe_def.to_spec())
+                .add_agent(patch_id.clone(), probe_def.to_spec())
                 .await
                 .unwrap();
 
@@ -2116,7 +2114,7 @@ mod tests {
                 (PORT_LIMIT_EXCEEDED, lim_id.clone()),
             ] {
                 ma.add_connection(
-                    &preset_id,
+                    &patch_id,
                     ConnectionSpec {
                         source: loop_id.clone(),
                         source_handle: source_handle.to_string(),
@@ -2138,7 +2136,7 @@ mod tests {
                 )
                 .unwrap();
 
-            ma.start_preset(&preset_id).await.unwrap();
+            ma.start_patch(&patch_id).await.unwrap();
 
             let forwarded = probe_receiver(&ma, &fwd_id).await.unwrap();
             let limit = probe_receiver(&ma, &lim_id).await.unwrap();

@@ -8,21 +8,21 @@ use serial_test::serial;
 async fn test_var_routing() {
     let ma = test_utils::setup_modular_agent().await;
 
-    // load var preset
-    let var_preset_id = test_utils::open_and_start_preset(&ma, "tests/presets/Core_Var.json")
+    // load var patch
+    let var_patch_id = test_utils::open_and_start_patch(&ma, "tests/patches/Core_Var.json")
         .await
         .unwrap();
 
     test_utils::write_and_expect_local_value(
         &ma,
-        &var_preset_id,
+        &var_patch_id,
         "var1",
         AgentValue::string("hello"),
     )
     .await
     .unwrap();
 
-    test_utils::expect_local_value(&var_preset_id, "var2", &AgentValue::string("hello"))
+    test_utils::expect_local_value(&var_patch_id, "var2", &AgentValue::string("hello"))
         .await
         .unwrap();
 

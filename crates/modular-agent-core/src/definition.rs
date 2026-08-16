@@ -565,7 +565,7 @@ impl AgentDefinition {
 
     /// Reconciles an existing `AgentSpec` with this definition for backward compatibility.
     ///
-    /// When loading old JSON presets, the spec may not match the current definition.
+    /// When loading old JSON patches, the spec may not match the current definition.
     /// This method:
     /// - Fills missing config keys with definition defaults
     /// - Renames stale keys (not in definition) with `_` prefix for lazy migration

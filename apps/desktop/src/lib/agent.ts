@@ -6,12 +6,12 @@ import {
   type AgentDefinition,
   type AgentDefinitions,
   type AgentSpec,
-  type PresetInfo,
-  type PresetSpec,
+  type PatchInfo,
+  type PatchSpec,
   type ConnectionSpec,
   getAgentDefinitions as getAgentDefinitionsAPI,
   getGlobalConfigsMap as getGlobalConfigsMapAPI,
-  getPresetInfos,
+  getPatchInfos,
 } from "tauri-plugin-modular-agent-api";
 
 import { coreSettingsStore } from "./core-settings-store.svelte";
@@ -19,35 +19,35 @@ import {
   getCoreSettings as getCoreSettingsUtils,
   setCoreSettings as setCoreSettingsUtils,
 } from "./modular_agent";
-import type { PresetFlow, PresetEdge, PresetNode, CoreSettings, PresetInfoExt } from "./types";
+import type { PatchFlow, PatchEdge, PatchNode, CoreSettings, PatchInfoExt } from "./types";
 
-export async function newPresetWithName(name: string): Promise<string> {
-  return await invoke("new_preset_with_name_cmd", { name });
+export async function newPatchWithName(name: string): Promise<string> {
+  return await invoke("new_patch_with_name_cmd", { name });
 }
 
-export async function savePreset(name: string, spec: PresetSpec): Promise<void> {
-  await invoke("save_preset_cmd", { name, spec });
+export async function savePatch(name: string, spec: PatchSpec): Promise<void> {
+  await invoke("save_patch_cmd", { name, spec });
 }
 
-export async function saveAsPreset(name: string, spec: PresetSpec): Promise<string> {
-  return await invoke("save_as_preset_cmd", { name, spec });
+export async function saveAsPatch(name: string, spec: PatchSpec): Promise<string> {
+  return await invoke("save_as_patch_cmd", { name, spec });
 }
 
-export async function importPreset(path: string, targetDir: string): Promise<string> {
-  return await invoke("import_preset_cmd", { path, targetDir });
+export async function importPatch(path: string, targetDir: string): Promise<string> {
+  return await invoke("import_patch_cmd", { path, targetDir });
 }
 
-export async function startPreset(id: string): Promise<void> {
-  await invoke("start_preset_cmd", { id });
+export async function startPatch(id: string): Promise<void> {
+  await invoke("start_patch_cmd", { id });
 }
 
-export async function stopPreset(id: string): Promise<void> {
-  await invoke("stop_preset_cmd", { id });
+export async function stopPatch(id: string): Promise<void> {
+  await invoke("stop_patch_cmd", { id });
 }
 
-// Preset
+// Patch
 
-export function presetToFlow(info: PresetInfo, spec: PresetSpec): PresetFlow {
+export function patchToFlow(info: PatchInfo, spec: PatchSpec): PatchFlow {
   // Deserialize agents first
   const nodes = spec.agents.map((agent) => agentSpecToNode(agent));
 
@@ -111,7 +111,7 @@ export function defaultNodeSize(
   return { width: hintWidth * gridSize, height: hintHeight * gridSize };
 }
 
-export function agentSpecToNode(spec: AgentSpec): PresetNode {
+export function agentSpecToNode(spec: AgentSpec): PatchNode {
   // Specs created outside the editor (MCP, hand-written JSON) may lack a size;
   // give them the same hints-based default as GUI-added nodes.
   const fallback =
@@ -237,7 +237,7 @@ export function getEdgeColor(sourceHandle: string | null | undefined): string | 
 export function connectionSpecToEdge(
   connection: ConnectionSpec,
   sourcePortColors?: Record<string, number | string> | null,
-): PresetEdge {
+): PatchEdge {
   let color: string | null = null;
   if (sourcePortColors && connection.source_handle && connection.source_handle !== "err") {
     color = resolveColorCss(sourcePortColors[connection.source_handle]);
@@ -253,7 +253,7 @@ export function connectionSpecToEdge(
   };
 }
 
-export function edgeToConnectionSpec(edge: PresetEdge): ConnectionSpec {
+export function edgeToConnectionSpec(edge: PatchEdge): ConnectionSpec {
   return {
     source: edge.source,
     source_handle: edge.sourceHandle ?? null,
@@ -352,12 +352,12 @@ export function getGlobalConfigsMap(): AgentConfigsMap {
   return _globalConfigsMap;
 }
 
-export async function loadPresetInfos(): Promise<PresetInfoExt[]> {
-  const presetInfos = (await getPresetInfos()) as PresetInfoExt[];
+export async function loadPatchInfos(): Promise<PatchInfoExt[]> {
+  const patchInfos = (await getPatchInfos()) as PatchInfoExt[];
   const coreSettings = getCoreSettings();
-  const auto_start_presets = coreSettings.auto_start_presets || [];
-  return presetInfos.map((s) =>
-    auto_start_presets.includes(s.name) ? { ...s, run_on_start: true } : s,
+  const auto_start_patches = coreSettings.auto_start_patches || [];
+  return patchInfos.map((s) =>
+    auto_start_patches.includes(s.name) ? { ...s, run_on_start: true } : s,
   );
 }
 

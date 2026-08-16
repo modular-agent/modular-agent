@@ -1,0 +1,1396 @@
+import { writeText, readText } from "@tauri-apps/plugin-clipboard-manager";
+import { open } from "@tauri-apps/plugin-dialog";
+
+import { getContext, setContext, untrack } from "svelte";
+
+import type { useSvelteFlow } from "@xyflow/svelte";
+import { toast } from "svelte-sonner";
+import {
+  getAgentSpec,
+  getPatchInfo,
+  getPatchSpec,
+  setAgentConfigs,
+  startPatch as startPatchAPI,
+  stopPatch as stopPatchAPI,
+  updateAgentSpec,
+  updatePatchSpec,
+  type AgentSpec,
+  type ConnectionSpec,
+} from "tauri-plugin-modular-agent-api";
+
+import { goto } from "$app/navigation";
+
+import {
+  edgeToConnectionSpec,
+  getAgentDefinitions,
+  getEdgeColor,
+  getCoreSettings,
+  setCoreSettings,
+  importPatch as importPatchAPI,
+  savePatch as savePatchAPI,
+  newPatchWithName,
+  patchToFlow,
+  resolveColorCss,
+  KIND_COLOR_DEFAULTS,
+} from "$lib/agent";
+import { coreSettingsStore } from "$lib/core-settings-store.svelte";
+import { sharedPatchEvents } from "$lib/shared.svelte";
+import { tabStore } from "$lib/tab-store.svelte";
+import { titlebarState } from "$lib/titlebar-state.svelte";
+import type { PatchFlow, PatchNode, PatchEdge } from "$lib/types";
+
+import {
+  AddAgentCommand,
+  DeleteCommand,
+  CutCommand,
+  AddConnectionCommand,
+  MoveNodesCommand,
+  ResizeNodeCommand,
+  PasteCommand,
+  UpdateConfigCommand,
+  UpdateTitleCommand,
+  UpdateExtensionCommand,
+  BatchUpdateExtensionCommand,
+  ToggleDisabledCommand,
+  ToggleShowErrCommand,
+  getOrCreateHistory,
+  type NodePositionDelta,
+} from "./history.svelte";
+import { InspectorState, EXTENSION_KEYS } from "./inspector-state.svelte";
+import { reconcileFlow } from "./merge";
+
+async function withErrorToast<T>(fn: () => Promise<T>, message: string): Promise<T | undefined> {
+  try {
+    return await fn();
+  } catch (e) {
+    console.error(message, e);
+    toast.error(message, { description: String(e) });
+    return undefined;
+  }
+}
+
+async function withErrorLog<T>(fn: () => Promise<T>, message: string): Promise<T | undefined> {
+  try {
+    return await fn();
+  } catch (e) {
+    console.error(message, e);
+    return undefined;
+  }
+}
+
+const EXTERNAL_MERGE_DEBOUNCE_MS = 300;
+
+/** Cascade step applied to each paste so repeated pastes never fully overlap. */
+const PASTE_OFFSET = 80;
+/** Inset from the canvas edges within which a paste still counts as visible. */
+const PASTE_VIEWPORT_MARGIN = 40;
+
+export type EditorStateProps = {
+  patch_id: () => string;
+  flow: () => PatchFlow;
+  svelteFlow: ReturnType<typeof useSvelteFlow>;
+};
+
+/** Floating agent-reference card (one per agent definition). */
+export type RefCard = {
+  defName: string;
+  title: string;
+  description: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+/** Cascade origin and step for newly opened reference cards. */
+const REF_CARD_CASCADE_BASE = 60;
+const REF_CARD_CASCADE_STEP = 24;
+const REF_CARD_DEFAULT_WIDTH = 388;
+const REF_CARD_DEFAULT_HEIGHT = 480;
+
+export class EditorState {
+  readonly props: EditorStateProps;
+  readonly history;
+
+  // Whether this editor's tab is currently active (visible)
+  active = $state(false);
+
+  // Reactive state
+  running = $state(false);
+  nodes = $state.raw<PatchNode[]>([]);
+  edges = $state.raw<PatchEdge[]>([]);
+  openNodeContextMenu = $state(false);
+  nodeContextMenuX = $state(0);
+  nodeContextMenuY = $state(0);
+  openPaneContextMenu = $state(false);
+  paneContextMenuX = $state(0);
+  paneContextMenuY = $state(0);
+  openAgentList = $state(false);
+  agentListX = $state(0);
+  agentListY = $state(0);
+  agentListOriginX = $state(0);
+  agentListOriginY = $state(0);
+
+  // Grid/Snap state
+  snapEnabled = $state(coreSettingsStore.snapEnabled);
+  snapGridSize = $state(coreSettingsStore.snapGridSize);
+  gridGap = $state(coreSettingsStore.gridGap);
+  modifierPressed = $state(false);
+  resizing = $state(false);
+  draggingFreeSize = $state(false);
+
+  // Connection opacity
+  connectionOpacity = $state(coreSettingsStore.connectionOpacity);
+
+  effectiveSnapGrid = $derived.by(() => {
+    if (this.resizing || this.draggingFreeSize) return undefined;
+    const active = this.snapEnabled !== this.modifierPressed;
+    return active ? ([this.snapGridSize, this.snapGridSize] as [number, number]) : undefined;
+  });
+
+  get snapActive(): boolean {
+    return this.snapEnabled !== this.modifierPressed;
+  }
+
+  // Sidebar / Inspector floating card
+  sidebarOpen = $state(true);
+  inspectorX = $state<number | null>(null);
+  inspectorY = $state<number | null>(null);
+  inspectorWidth = $state<number | null>(null);
+  inspectorHeight = $state<number | null>(null);
+  inspector = new InspectorState();
+
+  // Floating reference cards (agent descriptions), rendered last-on-top
+  refCards = $state<RefCard[]>([]);
+
+  // Dialog state (shared between menubar and pane context menu)
+  openNewPatchDialog = $state(false);
+  openSaveAsDialog = $state(false);
+  saveAsName = $state("");
+
+  // Derived
+  patch_id = $derived.by(() => this.props.patch_id());
+  name = $derived.by(() => this.props.flow().name);
+  selectedCount = $derived(this.nodes.filter((n) => n.selected).length);
+  dirty = $derived.by(() => this.history.dirty);
+
+  // Drag state for undo
+  private dragStartPositions: Map<string, { x: number; y: number }> | null = null;
+
+  // Paste cascade: clipboard text and the delta applied by the previous paste,
+  // so pasting the same content again steps away instead of stacking.
+  private lastPasteText: string | null = null;
+  private lastPasteDelta: { x: number; y: number } | null = null;
+
+  // External change merge: last consumed structure-change seq and debounce timer
+  private lastStructureSeq = 0;
+  // Last consumed run-state seq, so a replayed record doesn't undo a local toggle
+  private lastRunningSeq = 0;
+  private externalMergeTimer: ReturnType<typeof setTimeout> | null = null;
+  // Generation token: only the most recently started merge/reload may apply
+  // its fetched snapshot, so overlapping runs cannot finish out of order.
+  private mergeGen = 0;
+
+  // Inspector sync: track last synced data ref to detect actual data changes
+  private _lastSyncedData: any = null;
+
+  constructor(props: EditorStateProps) {
+    this.props = props;
+    this.history = getOrCreateHistory(props.patch_id(), coreSettingsStore.maxHistoryLength);
+
+    // Ignore structure changes that predate the loaded flow (e.g. tab reopen).
+    // The baseline is captured by the host before the flow fetch, so a change
+    // landing mid-fetch still satisfies seq > lastStructureSeq and merges.
+    this.lastStructureSeq =
+      props.flow().baseStructureSeq ?? sharedPatchEvents.structureChanged[props.patch_id()] ?? 0;
+    this.lastRunningSeq = sharedPatchEvents.runningChanged[props.patch_id()]?.seq ?? 0;
+
+    // Merge externally-originated structure changes into the canvas.
+    // Tracks only this patch's key in the shared record.
+    $effect(() => {
+      const seq = sharedPatchEvents.structureChanged[this.patch_id] ?? 0;
+      untrack(() => {
+        if (seq > this.lastStructureSeq) {
+          this.lastStructureSeq = seq;
+          this.scheduleExternalMerge();
+        }
+      });
+      return () => {
+        if (this.externalMergeTimer !== null) {
+          clearTimeout(this.externalMergeTimer);
+          this.externalMergeTimer = null;
+        }
+      };
+    });
+
+    // Adopt run-state changes made outside this window (MCP, auto-start, tray).
+    // Our own start/stop carries origin "desktop" and never reaches here.
+    $effect(() => {
+      const entry = sharedPatchEvents.runningChanged[this.patch_id];
+      untrack(() => {
+        if (!entry || entry.seq <= this.lastRunningSeq) return;
+        this.lastRunningSeq = entry.seq;
+        this.running = entry.running;
+      });
+    });
+
+    // Subscribe to runtime settings changes
+    $effect(() => {
+      const snap = coreSettingsStore.snapEnabled;
+      const size = coreSettingsStore.snapGridSize;
+      const gap = coreSettingsStore.gridGap;
+      const opacity = coreSettingsStore.connectionOpacity;
+      const maxLen = coreSettingsStore.maxHistoryLength;
+
+      untrack(() => {
+        this.snapEnabled = snap;
+        this.snapGridSize = size;
+        this.gridGap = gap;
+        this.connectionOpacity = opacity;
+        this.history.setMaxLength(maxLen);
+      });
+    });
+
+    // Sync nodes/edges from flow data. Keyed off the arrays' identities, not
+    // the flow object's: a name-only flow update (e.g. a rename) keeps the
+    // same arrays and must not roll the canvas back to load-time state.
+    let lastSyncedFlowNodes: PatchNode[] | null = null;
+    let lastSyncedFlowEdges: PatchEdge[] | null = null;
+    $effect.pre(() => {
+      const flow = this.props.flow();
+      if (flow.nodes === lastSyncedFlowNodes && flow.edges === lastSyncedFlowEdges) return;
+      lastSyncedFlowNodes = flow.nodes;
+      lastSyncedFlowEdges = flow.edges;
+      this.nodes = [...flow.nodes];
+      this.edges = [...flow.edges];
+    });
+
+    // Sync running state
+    $effect.pre(() => {
+      const _id = this.props.patch_id();
+      this.running = this.props.flow().running ?? false;
+    });
+
+    // Titlebar callbacks — only active editor controls the titlebar
+    $effect(() => {
+      if (!this.active) return;
+      titlebarState.onStart = () => this.startPatch();
+      titlebarState.onStop = () => this.stopPatch();
+      titlebarState.onShowNewDialog = () => this.showNewPatchDialog();
+      titlebarState.onSavePatch = () => this.savePatch();
+      titlebarState.onShowSaveAsDialog = () => this.showSaveAsDialog();
+      titlebarState.onImportPatch = () => this.importPatchAndNavigate();
+      titlebarState.onExportPatch = () => this.exportPatch();
+    });
+
+    // Sync titlebar data — only when active
+    $effect.pre(() => {
+      if (!this.active) return;
+      const flow = this.props.flow();
+      titlebarState.title = flow.name;
+      titlebarState.showActions = true;
+      titlebarState.showMenubar = true;
+      titlebarState.patchId = this.props.patch_id();
+      titlebarState.patchName = flow.name;
+      titlebarState.dirty = this.dirty;
+    });
+
+    $effect(() => {
+      if (!this.active) return;
+      titlebarState.running = this.running;
+    });
+
+    // Sync running state to tab indicator
+    $effect(() => {
+      tabStore.setRunning(this.patch_id, this.running);
+    });
+
+    // Sync tab name when patch name changes (e.g. Save As)
+    $effect(() => {
+      tabStore.updateName(this.patch_id, this.name);
+    });
+
+    // Sync dirty state to tab indicator (all tabs, not just active)
+    $effect(() => {
+      tabStore.setDirty(this.patch_id, this.dirty);
+    });
+
+    // Inspector: action callbacks (closure over `this`, reads state at invocation time)
+    this.inspector.onUpdateConfig = (key: string, value: any) => {
+      const nodeId = this.inspector.nodeId;
+      if (!nodeId) return;
+      const node = this.nodes.find((n) => n.id === nodeId);
+      if (!node) return;
+      const oldValue = node.data.configs?.[key];
+      this.updateNodeConfig(nodeId, key, oldValue, value);
+    };
+
+    this.inspector.onUpdateExtension = (key: string, value: any) => {
+      const nodeId = this.inspector.nodeId;
+      if (!nodeId) return;
+      const node = this.nodes.find((n) => n.id === nodeId);
+      if (!node) return;
+      const oldValue = node.data[key] ?? null;
+      if (oldValue === value) return;
+      this.updateNodeExtension(nodeId, key, oldValue, value);
+    };
+
+    // Inspector: sync ViewModel from Model (nodes + edges)
+    $effect(() => {
+      const nodes = this.nodes; // tracked: triggers on any node change
+      const edges = this.edges; // tracked: triggers on edge add/remove
+      untrack(() => {
+        const selected = nodes.filter((n) => n.selected);
+        const node = selected.length === 1 ? selected[0] : null;
+
+        // Early exit: no selection and nothing changed
+        if (!node) {
+          if (this.inspector.nodeId === null && this.inspector.selectedCount === selected.length)
+            return;
+          this.inspector.selectedCount = selected.length;
+          this.inspector.nodeId = null;
+          this._lastSyncedData = null;
+          return;
+        }
+
+        // Early exit: same node selected AND data hasn't changed.
+        // Position-only changes don't create a new data ref → early exit (perf).
+        // updateNodeData creates a new data ref → full sync (correctness for undo/redo).
+        if (this.inspector.nodeId === node.id && this._lastSyncedData === node.data) return;
+
+        const data = node.data;
+        this.inspector.selectedCount = selected.length;
+        this.inspector.nodeId = node.id;
+        this.inspector.defName = data.def_name;
+        this.inspector.title = data.title ?? null;
+        this.inspector.disabled = data.disabled ?? false;
+        this.inspector.showErr = data.show_err ?? false;
+        this.inspector.configs = data.configs ?? {};
+        this.inspector.configSpecs = data.config_specs ?? {};
+        this.inspector.inputs = data.inputs ?? [];
+        this.inspector.outputs = data.outputs ?? [];
+        this.inspector.agentDef = getAgentDefinitions()[data.def_name] ?? null;
+        this.inspector.connectedConfigs = edges
+          .filter((e) => e.target === node.id && e.targetHandle?.startsWith("config:"))
+          .map((e) => e.targetHandle?.substring(7) ?? "");
+
+        // Sync extension attributes
+        const ext: Record<string, any> = {};
+        for (const key of EXTENSION_KEYS) {
+          if (data[key] != null) ext[key] = data[key];
+        }
+        this.inspector.extensions = ext;
+        this._lastSyncedData = node.data;
+      });
+    });
+  }
+
+  // --- Sidebar ---
+
+  toggleSidebar() {
+    this.sidebarOpen = !this.sidebarOpen;
+  }
+
+  // --- Reference cards ---
+
+  openRefCard(defName: string, title: string, description: string) {
+    if (this.refCards.some((c) => c.defName === defName)) {
+      this.bringRefCardToFront(defName);
+      return;
+    }
+    const n = this.refCards.length;
+    this.refCards.push({
+      defName,
+      title,
+      description,
+      x: REF_CARD_CASCADE_BASE + n * REF_CARD_CASCADE_STEP,
+      y: REF_CARD_CASCADE_BASE + n * REF_CARD_CASCADE_STEP,
+      width: REF_CARD_DEFAULT_WIDTH,
+      height: REF_CARD_DEFAULT_HEIGHT,
+    });
+  }
+
+  closeRefCard(defName: string) {
+    const idx = this.refCards.findIndex((c) => c.defName === defName);
+    if (idx >= 0) this.refCards.splice(idx, 1);
+  }
+
+  // Last in array renders on top ({#each} order = stacking order)
+  bringRefCardToFront(defName: string) {
+    const idx = this.refCards.findIndex((c) => c.defName === defName);
+    if (idx < 0 || idx === this.refCards.length - 1) return;
+    const [card] = this.refCards.splice(idx, 1);
+    this.refCards.push(card);
+  }
+
+  // --- SvelteFlow helpers ---
+
+  private get svelteFlow() {
+    return this.props.svelteFlow;
+  }
+
+  // --- Undo/Redo ---
+
+  async undo() {
+    await this.history.undo(this);
+  }
+
+  async redo() {
+    await this.history.redo(this);
+  }
+
+  // --- Patch operations ---
+
+  async savePatch() {
+    const result = await withErrorToast(async () => {
+      const s = await getPatchSpec(this.patch_id);
+      if (!s) return;
+      await savePatchAPI(this.name, s);
+      return true;
+    }, "Failed to save patch");
+    if (result) this.history.markSaved();
+  }
+
+  async startPatch() {
+    await withErrorToast(async () => {
+      await startPatchAPI(this.patch_id);
+      this.running = true;
+    }, "Failed to start patch");
+  }
+
+  async stopPatch() {
+    await withErrorToast(async () => {
+      await stopPatchAPI(this.patch_id);
+      this.running = false;
+    }, "Failed to stop patch");
+  }
+
+  private downloadJson(data: unknown, filename: string) {
+    const jsonStr = JSON.stringify(data, null, 2);
+    const blob = new Blob([jsonStr], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+  }
+
+  private sanitizeFilename(name: string): string {
+    return name.replace(/[/\\:*?"<>|]/g, "_");
+  }
+
+  async exportPatch() {
+    await withErrorToast(async () => {
+      const s = await getPatchSpec(this.patch_id);
+      if (!s) return;
+      this.downloadJson(s, this.sanitizeFilename(this.name) + ".json");
+    }, "Failed to export patch");
+  }
+
+  async exportSelected() {
+    const [selectedNodes] = this.selectedNodesAndEdges();
+    if (selectedNodes.length === 0) return;
+
+    await withErrorToast(async () => {
+      const data = await this.collectSelectedData();
+      this.downloadJson(data, this.sanitizeFilename(this.name) + "_selected.json");
+    }, "Failed to export selected");
+  }
+
+  async importPatch(): Promise<string | null> {
+    const file = await open({
+      multiple: false,
+      filters: [{ name: "JSON", extensions: ["json"] }],
+    });
+    if (!file) return null;
+
+    const result = await withErrorToast(async () => {
+      const name = this.name;
+      const lastSlash = name.lastIndexOf("/");
+      const targetDir = lastSlash >= 0 ? name.substring(0, lastSlash) : "";
+      return await importPatchAPI(file as string, targetDir);
+    }, "Failed to import patch");
+    return result ?? null;
+  }
+
+  async newPatch(name: string): Promise<string | null> {
+    const result = await withErrorToast(async () => {
+      return await newPatchWithName(name);
+    }, "Failed to create new patch");
+    return result || null;
+  }
+
+  // --- Node/Edge operations ---
+
+  async addAgent(agentName: string, position?: { x: number; y: number }) {
+    const flowPos =
+      position !== undefined
+        ? this.svelteFlow.screenToFlowPosition(position)
+        : this.svelteFlow.screenToFlowPosition({
+            x: window.innerWidth * 0.45,
+            y: window.innerHeight * 0.3,
+          });
+    const cmd = new AddAgentCommand(this.patch_id, agentName, flowPos);
+    await withErrorToast(() => this.history.executeAndPush(this, cmd), "Failed to add agent");
+  }
+
+  async handleOnDelete({
+    nodes: deletedNodes,
+    edges: deletedEdges,
+  }: {
+    nodes?: PatchNode[];
+    edges?: PatchEdge[];
+  }) {
+    const dn = deletedNodes ?? [];
+    const de = deletedEdges ?? [];
+    if (dn.length === 0 && de.length === 0) return;
+
+    // SvelteFlow already removed items from arrays. Create command for backend sync + undo.
+    const cmd = new DeleteCommand(this.patch_id, dn, de);
+    // Execute backend deletion, then push to history
+    await withErrorToast(async () => {
+      await cmd.execute(this);
+      this.history.push(cmd);
+    }, "Failed to delete");
+  }
+
+  async handleOnConnect(connection: {
+    source: string;
+    target: string;
+    sourceHandle?: string | null;
+    targetHandle?: string | null;
+  }) {
+    // SvelteFlow already added the edge via handleBeforeConnect.
+    // Find the edge that SvelteFlow just added.
+    const edge = this.edges.find(
+      (e) =>
+        e.source === connection.source &&
+        e.target === connection.target &&
+        e.sourceHandle === connection.sourceHandle &&
+        e.targetHandle === connection.targetHandle,
+    );
+    if (!edge) return;
+
+    const cmd = new AddConnectionCommand(this.patch_id, edge);
+    // Backend call only (edge already in UI). Push without execute.
+    const result = await withErrorToast(
+      () =>
+        import("tauri-plugin-modular-agent-api").then((m) =>
+          m.addConnection(this.patch_id, edgeToConnectionSpec(edge)),
+        ),
+      "Failed to add connection",
+    );
+    if (result !== undefined) {
+      this.history.push(cmd);
+    }
+  }
+
+  // --- Selection helpers ---
+
+  selectedNodesAndEdges(): [PatchNode[], PatchEdge[]] {
+    const selectedNodes = this.nodes.filter((node) => node.selected);
+    const selectedEdges = this.edges.filter((edge) => edge.selected);
+    return [selectedNodes, selectedEdges];
+  }
+
+  private async collectSelectedData(): Promise<{
+    agents: AgentSpec[];
+    connections: ConnectionSpec[];
+  }> {
+    const [selectedNodes] = this.selectedNodesAndEdges();
+    const nodeIds = new Set(selectedNodes.map((n) => n.id));
+
+    const edgesBetweenSelected = this.edges.filter(
+      (e) => nodeIds.has(e.source) && nodeIds.has(e.target),
+    );
+
+    const agents = (
+      await Promise.all(selectedNodes.map(async (node) => await getAgentSpec(node.id)))
+    ).filter((spec) => spec !== null);
+    const connections = edgesBetweenSelected.map((edge) => edgeToConnectionSpec(edge));
+
+    return { agents, connections };
+  }
+
+  // --- Clipboard operations ---
+
+  private async copySelected() {
+    const data = await this.collectSelectedData();
+    await writeText(JSON.stringify(data));
+  }
+
+  private async readCopied(): Promise<[AgentSpec[], ConnectionSpec[], string]> {
+    const text = await readText();
+    if (!text) {
+      return [[], [], ""];
+    }
+    try {
+      const clipboardData = JSON.parse(text);
+      return [clipboardData.agents || [], clipboardData.connections || [], text];
+    } catch {
+      return [[], [], ""];
+    }
+  }
+
+  async cutNodesAndEdges() {
+    const [selectedNodes, selectedEdges] = this.selectedNodesAndEdges();
+    if (selectedNodes.length === 0 && selectedEdges.length === 0) {
+      return;
+    }
+
+    // Copy to clipboard first
+    try {
+      await this.copySelected();
+    } catch (e) {
+      console.error("Failed to copy:", e);
+      toast.error("Failed to copy", { description: String(e) });
+      return;
+    }
+
+    // Also capture connected edges that will be orphaned
+    const nodeIds = new Set(selectedNodes.map((n) => n.id));
+    const selectedEdgeIds = new Set(selectedEdges.map((e) => e.id));
+    const allAffectedEdges = this.edges.filter(
+      (e) => selectedEdgeIds.has(e.id) || nodeIds.has(e.source) || nodeIds.has(e.target),
+    );
+
+    const cmd = new CutCommand(this.patch_id, selectedNodes, allAffectedEdges);
+    await withErrorToast(() => this.history.executeAndPush(this, cmd), "Failed to cut");
+  }
+
+  async deleteSelectedNodesAndEdges() {
+    if (this.history.executing) return;
+    const [selectedNodes, selectedEdges] = this.selectedNodesAndEdges();
+    if (selectedNodes.length === 0 && selectedEdges.length === 0) return;
+
+    // Also include edges connected to deleted nodes (same logic as cutNodesAndEdges)
+    const nodeIds = new Set(selectedNodes.map((n) => n.id));
+    const selectedEdgeIds = new Set(selectedEdges.map((e) => e.id));
+    const allAffectedEdges = this.edges.filter(
+      (e) => selectedEdgeIds.has(e.id) || nodeIds.has(e.source) || nodeIds.has(e.target),
+    );
+
+    const cmd = new DeleteCommand(this.patch_id, selectedNodes, allAffectedEdges);
+    await withErrorToast(() => this.history.executeAndPush(this, cmd), "Failed to delete");
+  }
+
+  async copyNodesAndEdges() {
+    const [selectedNodes, selectedEdges] = this.selectedNodesAndEdges();
+    if (selectedNodes.length === 0 && selectedEdges.length === 0) {
+      return;
+    }
+
+    await withErrorToast(() => this.copySelected(), "Failed to copy");
+  }
+
+  /**
+   * Paste clipboard agents into this patch.
+   *
+   * @param canvasRect Bounding rect of the canvas container, used to decide
+   *   whether the pasted content would land off-screen.
+   * @param screenPos Client coordinates to place the content's top-left corner
+   *   at (context-menu paste). Omitted for keyboard paste, which cascades from
+   *   the original position and falls back to the viewport center.
+   */
+  async pasteNodesAndEdges(canvasRect: DOMRect, screenPos?: { x: number; y: number }) {
+    const [copiedAgents, copiedConnections, text] = await this.readCopied();
+    if (copiedAgents.length === 0) {
+      return;
+    }
+
+    const delta = this.computePasteDelta(copiedAgents, canvasRect, screenPos, text);
+    this.lastPasteText = text;
+    this.lastPasteDelta = delta;
+
+    // Offset before the backend call so the stored spec matches the canvas.
+    const positioned = copiedAgents.map((spec) => ({
+      ...spec,
+      x: (spec.x ?? 0) + delta.x,
+      y: (spec.y ?? 0) + delta.y,
+    }));
+
+    const cmd = new PasteCommand(this.patch_id, positioned, copiedConnections);
+    await withErrorToast(() => this.history.executeAndPush(this, cmd), "Failed to paste");
+  }
+
+  /** Bounding box of copied specs in flow coordinates. */
+  private pasteBoundingBox(specs: AgentSpec[]) {
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const spec of specs) {
+      const x = spec.x ?? 0;
+      const y = spec.y ?? 0;
+      minX = Math.min(minX, x);
+      minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x + (spec.width ?? this.snapGridSize));
+      maxY = Math.max(maxY, y + (spec.height ?? this.snapGridSize));
+    }
+    return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+  }
+
+  /** Delta added to every copied spec, keeping their relative layout intact. */
+  private computePasteDelta(
+    specs: AgentSpec[],
+    canvasRect: DOMRect,
+    screenPos: { x: number; y: number } | undefined,
+    text: string,
+  ): { x: number; y: number } {
+    const { screenToFlowPosition, flowToScreenPosition } = this.svelteFlow;
+    const bbox = this.pasteBoundingBox(specs);
+
+    if (screenPos) {
+      const target = screenToFlowPosition(screenPos);
+      return { x: target.x - bbox.x, y: target.y - bbox.y };
+    }
+
+    const prev = this.lastPasteText === text ? this.lastPasteDelta : null;
+    const cascaded = prev
+      ? { x: prev.x + PASTE_OFFSET, y: prev.y + PASTE_OFFSET }
+      : { x: PASTE_OFFSET, y: PASTE_OFFSET };
+
+    const topLeft = flowToScreenPosition({ x: bbox.x + cascaded.x, y: bbox.y + cascaded.y });
+    const visible =
+      topLeft.x >= canvasRect.left + PASTE_VIEWPORT_MARGIN &&
+      topLeft.y >= canvasRect.top + PASTE_VIEWPORT_MARGIN &&
+      topLeft.x <= canvasRect.right - PASTE_VIEWPORT_MARGIN &&
+      topLeft.y <= canvasRect.bottom - PASTE_VIEWPORT_MARGIN;
+    if (visible) return cascaded;
+
+    // Off-screen (scrolled away, or pasted into a different patch): center it.
+    const center = screenToFlowPosition({
+      x: canvasRect.left + canvasRect.width / 2,
+      y: canvasRect.top + canvasRect.height / 2,
+    });
+    return {
+      x: center.x - (bbox.x + bbox.width / 2),
+      y: center.y - (bbox.y + bbox.height / 2),
+    };
+  }
+
+  selectAllNodesAndEdges() {
+    const { updateNode, updateEdge } = this.svelteFlow;
+    this.nodes.forEach((node) => {
+      updateNode(node.id, { selected: true });
+    });
+    this.edges.forEach((edge) => {
+      updateEdge(edge.id, { selected: true });
+    });
+  }
+
+  // --- Enable/Disable/ToggleErr ---
+
+  async enable() {
+    const [selectedNodes] = this.selectedNodesAndEdges();
+    const targets = selectedNodes.filter((n) => n.data.disabled);
+    if (targets.length === 0) return;
+
+    const deltas = targets.map((n) => ({ id: n.id, wasDisabled: true }));
+    const cmd = new ToggleDisabledCommand(deltas, false);
+    await withErrorToast(() => this.history.executeAndPush(this, cmd), "Failed to enable agent(s)");
+  }
+
+  async disable() {
+    const [selectedNodes] = this.selectedNodesAndEdges();
+    const targets = selectedNodes.filter((n) => !n.data.disabled);
+    if (targets.length === 0) return;
+
+    const deltas = targets.map((n) => ({ id: n.id, wasDisabled: false }));
+    const cmd = new ToggleDisabledCommand(deltas, true);
+    await withErrorToast(
+      () => this.history.executeAndPush(this, cmd),
+      "Failed to disable agent(s)",
+    );
+  }
+
+  toggleErr() {
+    const [selectedNodes] = this.selectedNodesAndEdges();
+    if (selectedNodes.length === 0) return;
+
+    const deltas = selectedNodes.map((n) => ({
+      id: n.id,
+      wasShowErr: n.data.show_err ?? false,
+    }));
+    const cmd = new ToggleShowErrCommand(deltas);
+    // ToggleShowErr is synchronous (no backend call), so execute directly
+    cmd.execute(this);
+    this.history.push(cmd);
+  }
+
+  // --- Batch color operations (context menu) ---
+
+  async setSelectedNodesColor(color: number | null) {
+    const [selectedNodes] = this.selectedNodesAndEdges();
+    if (selectedNodes.length === 0) return;
+    const deltas = selectedNodes
+      .map((n) => ({
+        id: n.id,
+        oldValue: (n.data.color as number | string | null) ?? null,
+        newValue: color,
+      }))
+      .filter((d) => d.oldValue !== d.newValue);
+    if (deltas.length === 0) return;
+    const cmd = new BatchUpdateExtensionCommand(deltas, "color");
+    await withErrorToast(() => this.history.executeAndPush(this, cmd), "Failed to set color");
+  }
+
+  async applyColorToPorts() {
+    const [selectedNodes] = this.selectedNodesAndEdges();
+    if (selectedNodes.length === 0) return;
+    const agentDefs = getAgentDefinitions();
+    const deltas = selectedNodes
+      .map((n) => {
+        const def = agentDefs[n.data.def_name];
+        const rawColor =
+          n.data.color ?? def?.hints?.color ?? KIND_COLOR_DEFAULTS[def?.kind ?? "default"] ?? 4;
+        const ports = [
+          ...(n.data.inputs ?? []).filter((p: string) => p !== "err"),
+          ...(n.data.outputs ?? []).filter((p: string) => p !== "err"),
+        ];
+        const pc: Record<string, number | string> = {};
+        for (const p of ports) pc[p] = rawColor;
+        return {
+          id: n.id,
+          oldValue: (n.data.port_colors as Record<string, number | string> | null) ?? null,
+          newValue: ports.length > 0 ? pc : null,
+        };
+      })
+      .filter((d) => JSON.stringify(d.oldValue) !== JSON.stringify(d.newValue));
+    if (deltas.length === 0) return;
+    const cmd = new BatchUpdateExtensionCommand(deltas, "port_colors");
+    await withErrorToast(
+      () => this.history.executeAndPush(this, cmd),
+      "Failed to apply color to ports",
+    );
+  }
+
+  async clearPortColors() {
+    const [selectedNodes] = this.selectedNodesAndEdges();
+    if (selectedNodes.length === 0) return;
+    const deltas = selectedNodes
+      .filter((n) => n.data.port_colors != null)
+      .map((n) => ({ id: n.id, oldValue: n.data.port_colors, newValue: null }));
+    if (deltas.length === 0) return;
+    const cmd = new BatchUpdateExtensionCommand(deltas, "port_colors");
+    await withErrorToast(
+      () => this.history.executeAndPush(this, cmd),
+      "Failed to clear port colors",
+    );
+  }
+
+  // --- Node drag/move handlers ---
+
+  handleNodeDragStart(nodes: PatchNode[]) {
+    // free_size nodes are not tied to the grid: suspend the canvas-wide snapGrid
+    // while every dragged node is free_size (xyflow has no per-node opt-out).
+    const defs = getAgentDefinitions();
+    this.draggingFreeSize =
+      nodes.length > 0 && nodes.every((n) => defs[n.data.def_name]?.hints?.free_size === true);
+    this.dragStartPositions = new Map(
+      nodes.map((n) => [n.id, { x: n.position.x, y: n.position.y }]),
+    );
+  }
+
+  async handleNodeDragStop(targetNode: PatchNode | null) {
+    this.draggingFreeSize = false;
+    // targetNode === null means the drag came from the selection overlay
+    // (NodeSelection). XYDrag fires onselectiondragstop right after this call —
+    // leave dragStartPositions for handleSelectionDragStop to consume and clear.
+    if (!targetNode) return;
+    const startPositions = this.dragStartPositions;
+    this.dragStartPositions = null;
+
+    // Build deltas from stored start positions
+    const deltas: NodePositionDelta[] = [];
+    if (startPositions) {
+      const oldPos = startPositions.get(targetNode.id);
+      if (oldPos && (oldPos.x !== targetNode.position.x || oldPos.y !== targetNode.position.y)) {
+        deltas.push({
+          id: targetNode.id,
+          oldPosition: oldPos,
+          newPosition: { x: targetNode.position.x, y: targetNode.position.y },
+        });
+      }
+    }
+
+    // Persist to backend
+    await withErrorLog(
+      () => updateAgentSpec(targetNode.id, { x: targetNode.position.x, y: targetNode.position.y }),
+      "Failed to update node position",
+    );
+
+    if (deltas.length > 0) {
+      // Push only (SvelteFlow already moved the node). Don't re-execute.
+      this.history.push(new MoveNodesCommand(deltas));
+    }
+  }
+
+  async handleSelectionDragStop(draggedNodes: PatchNode[]) {
+    this.draggingFreeSize = false;
+    const startPositions = this.dragStartPositions;
+    this.dragStartPositions = null;
+    const deltas: NodePositionDelta[] = [];
+
+    for (const node of draggedNodes) {
+      const oldPos = startPositions?.get(node.id);
+      if (oldPos && (oldPos.x !== node.position.x || oldPos.y !== node.position.y)) {
+        deltas.push({
+          id: node.id,
+          oldPosition: oldPos,
+          newPosition: { x: node.position.x, y: node.position.y },
+        });
+      }
+      try {
+        await updateAgentSpec(node.id, { x: node.position.x, y: node.position.y });
+      } catch (e) {
+        console.error("Failed to update node position:", node.id, e);
+      }
+    }
+
+    if (deltas.length > 0) {
+      this.history.push(new MoveNodesCommand(deltas));
+    }
+  }
+
+  async handleOnMoveEnd(viewport: { x: number; y: number; zoom: number }) {
+    await withErrorLog(
+      () => updatePatchSpec(this.patch_id, { viewport }),
+      "Failed to update viewport",
+    );
+  }
+
+  // --- Resize handler ---
+
+  async handleResizeEnd(
+    nodeId: string,
+    oldWidth: number | undefined,
+    oldHeight: number | undefined,
+    newWidth: number,
+    newHeight: number,
+  ) {
+    const cmd = new ResizeNodeCommand(nodeId, oldWidth, oldHeight, newWidth, newHeight);
+    // SvelteFlow already resized the node. Backend persist + push.
+    await withErrorLog(
+      () => updateAgentSpec(nodeId, { width: newWidth, height: newHeight }),
+      "Failed to update node size",
+    );
+    this.history.push(cmd);
+  }
+
+  // --- Config/Title updates (for undo support) ---
+
+  async updateNodeConfig(nodeId: string, key: string, oldValue: unknown, newValue: unknown) {
+    const node = this.nodes.find((n) => n.id === nodeId);
+    if (!node) return;
+
+    const oldConfigs = { ...node.data.configs };
+    const newConfigs = { ...oldConfigs, [key]: newValue };
+
+    this.svelteFlow.updateNodeData(nodeId, { ...node.data, configs: newConfigs });
+    // Send only the edited key. `data.configs` also holds values agents merely
+    // emitted for display (configUpdated events); pushing the whole object
+    // would write those back into the backend spec and leak them into the
+    // saved patch.
+    await setAgentConfigs(nodeId, { [key]: newValue });
+
+    const cmd = new UpdateConfigCommand(nodeId, key, oldValue, newValue, oldConfigs, newConfigs);
+    this.history.pushCoalescing(cmd);
+  }
+
+  updateNodeTitle(nodeId: string, oldTitle: string | null, newTitle: string | null) {
+    this.svelteFlow.updateNodeData(nodeId, { title: newTitle });
+    const cmd = new UpdateTitleCommand(nodeId, oldTitle, newTitle);
+    this.history.push(cmd);
+  }
+
+  async updateNodeExtension(nodeId: string, key: string, oldValue: any, newValue: any) {
+    this.svelteFlow.updateNodeData(nodeId, { [key]: newValue ?? undefined });
+    if (key === "port_colors") this.refreshEdgeColorsForNode(nodeId, newValue);
+    await withErrorLog(
+      () => updateAgentSpec(nodeId, { [key]: newValue ?? null }),
+      "Failed to update node extension",
+    );
+    const cmd = new UpdateExtensionCommand(nodeId, key, oldValue, newValue);
+    this.history.push(cmd);
+  }
+
+  /** Re-compute edge stroke colors for all edges originating from a given node. */
+  refreshEdgeColorsForNode(
+    nodeId: string,
+    portColorsOverride?: Record<string, number | string> | null,
+  ) {
+    const portColors =
+      portColorsOverride !== undefined
+        ? portColorsOverride
+        : (this.nodes.find((n) => n.id === nodeId)?.data.port_colors ?? null);
+    let changed = false;
+    const newEdges = this.edges.map((edge) => {
+      if (edge.source !== nodeId) return edge;
+      let color: string | null = null;
+      if (portColors && edge.sourceHandle && edge.sourceHandle !== "err") {
+        color = resolveColorCss(portColors[edge.sourceHandle]);
+      }
+      if (!color) color = getEdgeColor(edge.sourceHandle);
+      const newStyle = color ? `stroke: ${color};` : undefined;
+      if (edge.style === newStyle) return edge;
+      changed = true;
+      return { ...edge, style: newStyle };
+    });
+    if (changed) this.edges = newEdges;
+  }
+
+  // --- External change merge ---
+
+  private isTabOpen(): boolean {
+    return tabStore.tabs.some((t) => t.id === this.patch_id);
+  }
+
+  /** Debounced trigger for merging externally-originated structure changes. */
+  private scheduleExternalMerge() {
+    if (this.externalMergeTimer !== null) clearTimeout(this.externalMergeTimer);
+    this.externalMergeTimer = setTimeout(() => {
+      this.externalMergeTimer = null;
+      // Re-arm while a local interaction is in flight. The local result wins
+      // afterwards because our own echo is origin-filtered.
+      if (this.resizing || this.dragStartPositions !== null || this.history.executing) {
+        this.scheduleExternalMerge();
+        return;
+      }
+      void this.applyExternalChanges();
+    }, EXTERNAL_MERGE_DEBOUNCE_MS);
+  }
+
+  /**
+   * Fetch the current backend state and merge it into the canvas, preserving
+   * selection and undo history for everything that survived. Never writes to
+   * the host's flow record — that would roll the canvas back to load-time state.
+   */
+  private async applyExternalChanges() {
+    if (!this.isTabOpen()) return;
+    const gen = ++this.mergeGen;
+    const mutationSeq = this.history.mutationSeq;
+    try {
+      const info = await getPatchInfo(this.patch_id);
+      const spec = await getPatchSpec(this.patch_id);
+      // A newer merge/reload started during IPC — let it win
+      if (gen !== this.mergeGen) return;
+      // Tab may have been closed during IPC (e.g. external patch removal)
+      if (!this.isTabOpen()) return;
+      if (!info || !spec) return;
+      // A local edit started or completed during IPC: the fetched snapshot
+      // may predate it, so discard it and re-arm instead of applying.
+      if (
+        this.resizing ||
+        this.dragStartPositions !== null ||
+        this.history.executing ||
+        this.history.mutationSeq !== mutationSeq
+      ) {
+        this.scheduleExternalMerge();
+        return;
+      }
+
+      const target = patchToFlow(info, spec);
+      const result = reconcileFlow(this.nodes, this.edges, target);
+      if (result.changed) {
+        this.nodes = result.nodes;
+        this.edges = result.edges;
+        this.history.purgeInvalidated(result.removedAgentIds, result.removedConnKeys);
+        // Backend content diverged from the last save
+        this.history.savedIndex = -1;
+      }
+      this.running = target.running;
+    } catch (e) {
+      console.error("Failed to merge external changes:", e);
+      await this.reloadFromBackend();
+    }
+  }
+
+  /** Full rebuild from the backend; last-resort recovery when merging fails. */
+  private async reloadFromBackend() {
+    if (!this.isTabOpen()) return;
+    const gen = ++this.mergeGen;
+    try {
+      const info = await getPatchInfo(this.patch_id);
+      const spec = await getPatchSpec(this.patch_id);
+      if (gen !== this.mergeGen) return;
+      if (!this.isTabOpen()) return;
+      if (!info || !spec) return;
+
+      const flow = patchToFlow(info, spec);
+      this.nodes = [...flow.nodes];
+      this.edges = [...flow.edges];
+      this.running = flow.running;
+      this.history.clear();
+    } catch (e) {
+      console.error("Failed to reload patch:", e);
+      toast.error("Failed to reload patch", { description: String(e) });
+    }
+  }
+
+  // --- Context menu ---
+
+  showNodeContextMenu(x: number, y: number) {
+    this.openPaneContextMenu = false;
+    this.openAgentList = false;
+    this.nodeContextMenuX = x;
+    this.nodeContextMenuY = y;
+    this.openNodeContextMenu = true;
+  }
+
+  hideNodeContextMenu() {
+    this.openNodeContextMenu = false;
+  }
+
+  showPaneContextMenu(x: number, y: number) {
+    this.openNodeContextMenu = false;
+    this.openAgentList = false;
+    this.paneContextMenuX = x;
+    this.paneContextMenuY = y;
+    this.openPaneContextMenu = true;
+  }
+
+  hidePaneContextMenu() {
+    this.openPaneContextMenu = false;
+  }
+
+  showAgentList(x: number, y: number) {
+    this.hideNodeContextMenu();
+    this.hidePaneContextMenu();
+    this.agentListOriginX = x;
+    this.agentListOriginY = y;
+    const POPUP_W = 256;
+    const POPUP_H = 320;
+    const HEADER_H = 40;
+    const cx = x - POPUP_W / 2;
+    const cy = y - HEADER_H / 2;
+    this.agentListX = Math.max(0, Math.min(cx, window.innerWidth - POPUP_W));
+    this.agentListY = Math.max(0, Math.min(cy, window.innerHeight - POPUP_H));
+    this.openAgentList = true;
+  }
+
+  hideAgentList() {
+    this.openAgentList = false;
+  }
+
+  // --- Dialogs ---
+
+  showNewPatchDialog() {
+    this.openNewPatchDialog = true;
+  }
+
+  showSaveAsDialog() {
+    this.saveAsName = this.name;
+    this.openSaveAsDialog = true;
+  }
+
+  // --- Grid/Snap ---
+
+  toggleSnap() {
+    this.snapEnabled = !this.snapEnabled;
+    this.saveGridSettings();
+  }
+
+  setConnectionOpacity(value: number) {
+    this.connectionOpacity = Math.max(0, Math.min(1, value));
+    this.saveGridSettings();
+  }
+
+  private async saveGridSettings() {
+    await withErrorLog(async () => {
+      const settings = getCoreSettings();
+      settings.snap_enabled = this.snapEnabled;
+      settings.snap_grid_size = this.snapGridSize;
+      settings.grid_gap = this.gridGap;
+      settings.connection_opacity = this.connectionOpacity;
+      await setCoreSettings(settings);
+    }, "Failed to save grid settings");
+  }
+
+  // --- Alignment ---
+
+  async alignNodes(direction: "left" | "center" | "right" | "top" | "middle" | "bottom") {
+    const selectedNodes = this.nodes.filter((n) => n.selected);
+    if (selectedNodes.length < 2) return;
+
+    // Capture old positions
+    const oldPositions = new Map(selectedNodes.map((n) => [n.id, { ...n.position }]));
+
+    // Compute new positions
+    const updates: { id: string; x: number; y: number }[] = [];
+
+    switch (direction) {
+      case "left": {
+        const target = Math.min(...selectedNodes.map((n) => n.position.x));
+        for (const n of selectedNodes) {
+          updates.push({ id: n.id, x: target, y: n.position.y });
+        }
+        break;
+      }
+      case "right": {
+        const target = Math.max(
+          ...selectedNodes.map((n) => n.position.x + (n.measured?.width ?? n.width ?? 200)),
+        );
+        for (const n of selectedNodes) {
+          const w = n.measured?.width ?? n.width ?? 200;
+          updates.push({ id: n.id, x: target - w, y: n.position.y });
+        }
+        break;
+      }
+      case "center": {
+        const positions = selectedNodes.map((n) => {
+          const w = n.measured?.width ?? n.width ?? 200;
+          return n.position.x + w / 2;
+        });
+        const target = (Math.min(...positions) + Math.max(...positions)) / 2;
+        for (const n of selectedNodes) {
+          const w = n.measured?.width ?? n.width ?? 200;
+          updates.push({ id: n.id, x: target - w / 2, y: n.position.y });
+        }
+        break;
+      }
+      case "top": {
+        const target = Math.min(...selectedNodes.map((n) => n.position.y));
+        for (const n of selectedNodes) {
+          updates.push({ id: n.id, x: n.position.x, y: target });
+        }
+        break;
+      }
+      case "bottom": {
+        const target = Math.max(
+          ...selectedNodes.map((n) => n.position.y + (n.measured?.height ?? n.height ?? 100)),
+        );
+        for (const n of selectedNodes) {
+          const h = n.measured?.height ?? n.height ?? 100;
+          updates.push({ id: n.id, x: n.position.x, y: target - h });
+        }
+        break;
+      }
+      case "middle": {
+        const positions = selectedNodes.map((n) => {
+          const h = n.measured?.height ?? n.height ?? 100;
+          return n.position.y + h / 2;
+        });
+        const target = (Math.min(...positions) + Math.max(...positions)) / 2;
+        for (const n of selectedNodes) {
+          const h = n.measured?.height ?? n.height ?? 100;
+          updates.push({ id: n.id, x: n.position.x, y: target - h / 2 });
+        }
+        break;
+      }
+    }
+
+    // Build deltas
+    const deltas: NodePositionDelta[] = updates
+      .map((u) => ({
+        id: u.id,
+        oldPosition: oldPositions.get(u.id)!,
+        newPosition: { x: u.x, y: u.y },
+      }))
+      .filter((d) => d.oldPosition.x !== d.newPosition.x || d.oldPosition.y !== d.newPosition.y);
+
+    if (deltas.length === 0) return;
+
+    const cmd = new MoveNodesCommand(deltas, "Align");
+    await withErrorToast(() => this.history.executeAndPush(this, cmd), "Failed to align nodes");
+  }
+
+  async distributeNodes(direction: "horizontal" | "vertical") {
+    const selectedNodes = this.nodes.filter((n) => n.selected);
+    if (selectedNodes.length < 3) return;
+
+    // Capture old positions
+    const oldPositions = new Map(selectedNodes.map((n) => [n.id, { ...n.position }]));
+
+    const updates: { id: string; x: number; y: number }[] = [];
+
+    if (direction === "horizontal") {
+      const sorted = [...selectedNodes].sort((a, b) => a.position.x - b.position.x);
+      const first = sorted[0].position.x;
+      const lastNode = sorted[sorted.length - 1];
+      const last = lastNode.position.x + (lastNode.measured?.width ?? lastNode.width ?? 200);
+      const totalNodeWidth = sorted.reduce(
+        (sum, n) => sum + (n.measured?.width ?? n.width ?? 200),
+        0,
+      );
+      const gap = (last - first - totalNodeWidth) / (sorted.length - 1);
+
+      let x = first;
+      for (const n of sorted) {
+        const w = n.measured?.width ?? n.width ?? 200;
+        updates.push({ id: n.id, x, y: n.position.y });
+        x += w + gap;
+      }
+    } else {
+      const sorted = [...selectedNodes].sort((a, b) => a.position.y - b.position.y);
+      const first = sorted[0].position.y;
+      const lastNode = sorted[sorted.length - 1];
+      const last = lastNode.position.y + (lastNode.measured?.height ?? lastNode.height ?? 100);
+      const totalNodeHeight = sorted.reduce(
+        (sum, n) => sum + (n.measured?.height ?? n.height ?? 100),
+        0,
+      );
+      const gap = (last - first - totalNodeHeight) / (sorted.length - 1);
+
+      let y = first;
+      for (const n of sorted) {
+        const h = n.measured?.height ?? n.height ?? 100;
+        updates.push({ id: n.id, x: n.position.x, y });
+        y += h + gap;
+      }
+    }
+
+    // Build deltas
+    const deltas: NodePositionDelta[] = updates
+      .map((u) => ({
+        id: u.id,
+        oldPosition: oldPositions.get(u.id)!,
+        newPosition: { x: u.x, y: u.y },
+      }))
+      .filter((d) => d.oldPosition.x !== d.newPosition.x || d.oldPosition.y !== d.newPosition.y);
+
+    if (deltas.length === 0) return;
+
+    const cmd = new MoveNodesCommand(deltas, "Distribute");
+    await withErrorToast(
+      () => this.history.executeAndPush(this, cmd),
+      "Failed to distribute nodes",
+    );
+  }
+
+  // --- Navigate helpers ---
+
+  async importPatchAndNavigate() {
+    const id = await this.importPatch();
+    if (id) {
+      // Derive imported patch name from current patch's directory
+      const lastSlash = this.name.lastIndexOf("/");
+      const dir = lastSlash >= 0 ? this.name.substring(0, lastSlash + 1) : "";
+      tabStore.openTab(id, dir + id);
+      goto(`/patch_editor/${id}`, { noScroll: true });
+    }
+  }
+
+  async newPatchAndNavigate(name: string) {
+    const id = await this.newPatch(name);
+    if (id) {
+      tabStore.openTab(id, name);
+      goto(`/patch_editor/${id}`, { noScroll: true });
+    }
+  }
+}
+
+// --- Context API ---
+
+const SYMBOL_KEY = "patch-editor";
+
+export function setEditor(props: EditorStateProps): EditorState {
+  return setContext(Symbol.for(SYMBOL_KEY), new EditorState(props));
+}
+
+export function useEditor(): EditorState {
+  return getContext<EditorState>(Symbol.for(SYMBOL_KEY));
+}

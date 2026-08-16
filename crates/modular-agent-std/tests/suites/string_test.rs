@@ -7,28 +7,28 @@ use ma::{AgentValue, test_utils};
 async fn test_is_string() {
     let ma = test_utils::setup_modular_agent().await;
 
-    let preset_id = test_utils::open_and_start_preset(&ma, "tests/presets/Std_String_test.json")
+    let patch_id = test_utils::open_and_start_patch(&ma, "tests/patches/Std_String_test.json")
         .await
         .unwrap();
 
     // Unit -> f
-    test_utils::write_and_expect_local_value(&ma, &preset_id, "is_string_in", AgentValue::unit())
+    test_utils::write_and_expect_local_value(&ma, &patch_id, "is_string_in", AgentValue::unit())
         .await
         .unwrap();
-    test_utils::expect_local_value(&preset_id, "is_string_f", &AgentValue::unit())
+    test_utils::expect_local_value(&patch_id, "is_string_f", &AgentValue::unit())
         .await
         .unwrap();
 
     // String -> t
     test_utils::write_and_expect_local_value(
         &ma,
-        &preset_id,
+        &patch_id,
         "is_string_in",
         AgentValue::string("hello"),
     )
     .await
     .unwrap();
-    test_utils::expect_local_value(&preset_id, "is_string_t", &AgentValue::string("hello"))
+    test_utils::expect_local_value(&patch_id, "is_string_t", &AgentValue::string("hello"))
         .await
         .unwrap();
 
@@ -39,50 +39,46 @@ async fn test_is_string() {
 async fn test_is_empty_string() {
     let ma = test_utils::setup_modular_agent().await;
 
-    let preset_id = test_utils::open_and_start_preset(&ma, "tests/presets/Std_String_test.json")
+    let patch_id = test_utils::open_and_start_patch(&ma, "tests/patches/Std_String_test.json")
         .await
         .unwrap();
 
     // Empty -> t
     test_utils::write_and_expect_local_value(
         &ma,
-        &preset_id,
+        &patch_id,
         "is_empty_string_in",
         AgentValue::string(""),
     )
     .await
     .unwrap();
-    test_utils::expect_local_value(&preset_id, "is_empty_string_t", &AgentValue::string(""))
+    test_utils::expect_local_value(&patch_id, "is_empty_string_t", &AgentValue::string(""))
         .await
         .unwrap();
 
     // Non-empty -> f
     test_utils::write_and_expect_local_value(
         &ma,
-        &preset_id,
+        &patch_id,
         "is_empty_string_in",
         AgentValue::string("hello"),
     )
     .await
     .unwrap();
-    test_utils::expect_local_value(
-        &preset_id,
-        "is_empty_string_f",
-        &AgentValue::string("hello"),
-    )
-    .await
-    .unwrap();
+    test_utils::expect_local_value(&patch_id, "is_empty_string_f", &AgentValue::string("hello"))
+        .await
+        .unwrap();
 
     // Non-string (Unit) -> f
     test_utils::write_and_expect_local_value(
         &ma,
-        &preset_id,
+        &patch_id,
         "is_empty_string_in",
         AgentValue::unit(),
     )
     .await
     .unwrap();
-    test_utils::expect_local_value(&preset_id, "is_empty_string_f", &AgentValue::unit())
+    test_utils::expect_local_value(&patch_id, "is_empty_string_f", &AgentValue::unit())
         .await
         .unwrap();
 
@@ -93,14 +89,14 @@ async fn test_is_empty_string() {
 async fn test_string_join() {
     let ma = test_utils::setup_modular_agent().await;
 
-    let preset_id = test_utils::open_and_start_preset(&ma, "tests/presets/Std_String_test.json")
+    let patch_id = test_utils::open_and_start_patch(&ma, "tests/patches/Std_String_test.json")
         .await
         .unwrap();
 
     // Array join with default sep \\n -> \n
     test_utils::write_and_expect_local_value(
         &ma,
-        &preset_id,
+        &patch_id,
         "string_join_in",
         AgentValue::array(vector![
             AgentValue::string("Hello"),
@@ -110,7 +106,7 @@ async fn test_string_join() {
     .await
     .unwrap();
     test_utils::expect_local_value(
-        &preset_id,
+        &patch_id,
         "string_join_out",
         &AgentValue::string("Hello\nWorld"),
     )
@@ -120,13 +116,13 @@ async fn test_string_join() {
     // Non-array passthrough
     test_utils::write_and_expect_local_value(
         &ma,
-        &preset_id,
+        &patch_id,
         "string_join_in",
         AgentValue::string("solo"),
     )
     .await
     .unwrap();
-    test_utils::expect_local_value(&preset_id, "string_join_out", &AgentValue::string("solo"))
+    test_utils::expect_local_value(&patch_id, "string_join_out", &AgentValue::string("solo"))
         .await
         .unwrap();
 
@@ -137,21 +133,21 @@ async fn test_string_join() {
 async fn test_string_length_split() {
     let ma = test_utils::setup_modular_agent().await;
 
-    let preset_id = test_utils::open_and_start_preset(&ma, "tests/presets/Std_String_test.json")
+    let patch_id = test_utils::open_and_start_patch(&ma, "tests/patches/Std_String_test.json")
         .await
         .unwrap();
 
     // Short string -> single element array
     test_utils::write_and_expect_local_value(
         &ma,
-        &preset_id,
+        &patch_id,
         "string_length_split_in",
         AgentValue::string("Hello, World!"),
     )
     .await
     .unwrap();
     test_utils::expect_local_value(
-        &preset_id,
+        &patch_id,
         "string_length_split_out",
         &AgentValue::array(vector![AgentValue::string("Hello, World!")]),
     )
@@ -161,7 +157,7 @@ async fn test_string_length_split() {
     // Long string -> split into multiple elements
     test_utils::write_and_expect_local_value(
         &ma,
-        &preset_id,
+        &patch_id,
         "string_length_split_len",
         AgentValue::integer(8),
     )
@@ -169,7 +165,7 @@ async fn test_string_length_split() {
     .unwrap();
     test_utils::write_and_expect_local_value(
         &ma,
-        &preset_id,
+        &patch_id,
         "string_length_split_overlap",
         AgentValue::integer(2),
     )
@@ -177,14 +173,14 @@ async fn test_string_length_split() {
     .unwrap();
     test_utils::write_and_expect_local_value(
         &ma,
-        &preset_id,
+        &patch_id,
         "string_length_split_in",
         AgentValue::string("Hello, World!"),
     )
     .await
     .unwrap();
     test_utils::expect_local_value(
-        &preset_id,
+        &patch_id,
         "string_length_split_out",
         &AgentValue::array(vector![
             AgentValue::string("Hello, W"),
@@ -201,21 +197,21 @@ async fn test_string_length_split() {
 async fn test_template_string() {
     let ma = test_utils::setup_modular_agent().await;
 
-    let preset_id = test_utils::open_and_start_preset(&ma, "tests/presets/Std_String_test.json")
+    let patch_id = test_utils::open_and_start_patch(&ma, "tests/patches/Std_String_test.json")
         .await
         .unwrap();
 
     // String with default {{value}} -> same string
     test_utils::write_and_expect_local_value(
         &ma,
-        &preset_id,
+        &patch_id,
         "template_string_in",
         AgentValue::string("hello"),
     )
     .await
     .unwrap();
     test_utils::expect_local_value(
-        &preset_id,
+        &patch_id,
         "template_string_out",
         &AgentValue::string("hello"),
     )
@@ -229,26 +225,22 @@ async fn test_template_string() {
 async fn test_template_text() {
     let ma = test_utils::setup_modular_agent().await;
 
-    let preset_id = test_utils::open_and_start_preset(&ma, "tests/presets/Std_String_test.json")
+    let patch_id = test_utils::open_and_start_patch(&ma, "tests/patches/Std_String_test.json")
         .await
         .unwrap();
 
     // String with default {{value}} -> same string
     test_utils::write_and_expect_local_value(
         &ma,
-        &preset_id,
+        &patch_id,
         "template_text_in",
         AgentValue::string("world"),
     )
     .await
     .unwrap();
-    test_utils::expect_local_value(
-        &preset_id,
-        "template_text_out",
-        &AgentValue::string("world"),
-    )
-    .await
-    .unwrap();
+    test_utils::expect_local_value(&patch_id, "template_text_out", &AgentValue::string("world"))
+        .await
+        .unwrap();
 
     ma.quit();
 }
@@ -257,14 +249,14 @@ async fn test_template_text() {
 async fn test_template_array() {
     let ma = test_utils::setup_modular_agent().await;
 
-    let preset_id = test_utils::open_and_start_preset(&ma, "tests/presets/Std_String_test.json")
+    let patch_id = test_utils::open_and_start_patch(&ma, "tests/patches/Std_String_test.json")
         .await
         .unwrap();
 
     // Override template, then send array
     test_utils::write_and_expect_local_value(
         &ma,
-        &preset_id,
+        &patch_id,
         "template_array_template",
         AgentValue::string("{{#each this}}{{this}}{{#unless @last}},{{/unless}}{{/each}}"),
     )
@@ -272,7 +264,7 @@ async fn test_template_array() {
     .unwrap();
     test_utils::write_and_expect_local_value(
         &ma,
-        &preset_id,
+        &patch_id,
         "template_array_in",
         AgentValue::array(vector![
             AgentValue::string("x"),
@@ -283,7 +275,7 @@ async fn test_template_array() {
     .await
     .unwrap();
     test_utils::expect_local_value(
-        &preset_id,
+        &patch_id,
         "template_array_out",
         &AgentValue::string("x,y,z"),
     )

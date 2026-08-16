@@ -7,9 +7,9 @@ import type {
   AgentErrorMessage,
   AgentInMessage,
   AgentSpecUpdatedMessage,
-  PresetRemovedMessage,
-  PresetRunningChangedMessage,
-  PresetStructureChangedMessage,
+  PatchRemovedMessage,
+  PatchRunningChangedMessage,
+  PatchStructureChangedMessage,
 } from "./types";
 
 // Origin convention: "desktop" is our own echo (ignore); "mcp" and null
@@ -55,17 +55,17 @@ class SharedAgentEvents {
 
 export const sharedAgentEvents = new SharedAgentEvents();
 
-class SharedPresetEvents {
-  // presetId → latest seq of an externally-originated structure change
+class SharedPatchEvents {
+  // patchId → latest seq of an externally-originated structure change
   structureChanged = $state<Record<string, number>>({});
 
-  // presetId → latest externally-originated run state. Without this, a preset
+  // patchId → latest externally-originated run state. Without this, a patch
   // started from MCP, auto-start, or another window leaves the UI showing the
   // state it had when the tab was opened.
   runningChanged = $state<Record<string, { running: boolean; seq: number }>>({});
 }
 
-export const sharedPresetEvents = new SharedPresetEvents();
+export const sharedPatchEvents = new SharedPatchEvents();
 
 // Tauri event listeners (module-level, live for the app's lifetime)
 $effect.root(() => {
@@ -102,27 +102,27 @@ $effect.root(() => {
     agent.specUpdated = ++eventSeq;
   });
 
-  listen<PresetStructureChangedMessage>("ma:preset_structure_changed", (event) => {
+  listen<PatchStructureChangedMessage>("ma:patch_structure_changed", (event) => {
     if (!isExternalOrigin(event.payload.origin)) return;
-    const { preset_id } = event.payload;
-    sharedPresetEvents.structureChanged[preset_id] = ++eventSeq;
+    const { patch_id } = event.payload;
+    sharedPatchEvents.structureChanged[patch_id] = ++eventSeq;
   });
 
-  listen<PresetRunningChangedMessage>("ma:preset_running_changed", (event) => {
+  listen<PatchRunningChangedMessage>("ma:patch_running_changed", (event) => {
     if (!isExternalOrigin(event.payload.origin)) return;
-    const { preset_id, running } = event.payload;
-    sharedPresetEvents.runningChanged[preset_id] = { running, seq: ++eventSeq };
+    const { patch_id, running } = event.payload;
+    sharedPatchEvents.runningChanged[patch_id] = { running, seq: ++eventSeq };
   });
 
   // Deliberately not origin-filtered: a sidebar delete goes through the plugin
   // handle and arrives as our own "desktop" echo, and this is the only path
-  // that closes the tab of a removed preset.
-  listen<PresetRemovedMessage>("ma:preset_removed", (event) => {
-    const { preset_id } = event.payload;
+  // that closes the tab of a removed patch.
+  listen<PatchRemovedMessage>("ma:patch_removed", (event) => {
+    const { patch_id } = event.payload;
     // Closing the tab triggers editor-host's cleanup, which unloads the
-    // (already removed) preset from the backend idempotently.
-    if (tabStore.tabs.find((t) => t.id === preset_id)) {
-      closeTabAndNavigate(preset_id);
+    // (already removed) patch from the backend idempotently.
+    if (tabStore.tabs.find((t) => t.id === patch_id)) {
+      closeTabAndNavigate(patch_id);
     }
   });
 });

@@ -3,7 +3,7 @@ extern crate modular_agent_core as ma;
 use ma::test_utils::{self, ProbeReceiver, probe_receiver, recv_probe};
 use ma::{AgentContext, AgentValue, ConnectionSpec, ModularAgent};
 
-const PRESET: &str = "tests/presets/Std_Sequence_test.json";
+const PATCH: &str = "tests/patches/Std_Sequence_test.json";
 
 const SYNC_DEF: &str = "modular_agent_std::sequence::SyncAgent";
 const PROBE_DEF: &str = "modular_agent_core::test_utils::TestProbeAgent";
@@ -12,18 +12,16 @@ const PROBE_DEF: &str = "modular_agent_core::test_utils::TestProbeAgent";
 async fn test_sequence() {
     let ma = test_utils::setup_modular_agent().await;
 
-    let preset_id = test_utils::open_and_start_preset(&ma, PRESET)
-        .await
-        .unwrap();
+    let patch_id = test_utils::open_and_start_patch(&ma, PATCH).await.unwrap();
 
     // One input fans out to every output port in order
-    test_utils::write_and_expect_local_value(&ma, &preset_id, "seq_in", AgentValue::integer(42))
+    test_utils::write_and_expect_local_value(&ma, &patch_id, "seq_in", AgentValue::integer(42))
         .await
         .unwrap();
-    test_utils::expect_local_value(&preset_id, "seq_0", &AgentValue::integer(42))
+    test_utils::expect_local_value(&patch_id, "seq_0", &AgentValue::integer(42))
         .await
         .unwrap();
-    test_utils::expect_local_value(&preset_id, "seq_1", &AgentValue::integer(42))
+    test_utils::expect_local_value(&patch_id, "seq_1", &AgentValue::integer(42))
         .await
         .unwrap();
 
@@ -34,48 +32,46 @@ async fn test_sequence() {
 async fn test_sync_fifo() {
     let ma = test_utils::setup_modular_agent().await;
 
-    let preset_id = test_utils::open_and_start_preset(&ma, PRESET)
-        .await
-        .unwrap();
+    let patch_id = test_utils::open_and_start_patch(&ma, PATCH).await.unwrap();
 
     // Nothing is emitted until every port has a value
-    test_utils::write_and_expect_local_value(&ma, &preset_id, "sync_in0", AgentValue::integer(1))
+    test_utils::write_and_expect_local_value(&ma, &patch_id, "sync_in0", AgentValue::integer(1))
         .await
         .unwrap();
-    test_utils::write_and_expect_local_value(&ma, &preset_id, "sync_in1", AgentValue::integer(2))
+    test_utils::write_and_expect_local_value(&ma, &patch_id, "sync_in1", AgentValue::integer(2))
         .await
         .unwrap();
-    test_utils::expect_local_value(&preset_id, "sync_0", &AgentValue::integer(1))
+    test_utils::expect_local_value(&patch_id, "sync_0", &AgentValue::integer(1))
         .await
         .unwrap();
-    test_utils::expect_local_value(&preset_id, "sync_1", &AgentValue::integer(2))
+    test_utils::expect_local_value(&patch_id, "sync_1", &AgentValue::integer(2))
         .await
         .unwrap();
 
     // Values queue per port and pair up first-in-first-out
-    test_utils::write_and_expect_local_value(&ma, &preset_id, "sync_in0", AgentValue::integer(3))
+    test_utils::write_and_expect_local_value(&ma, &patch_id, "sync_in0", AgentValue::integer(3))
         .await
         .unwrap();
-    test_utils::write_and_expect_local_value(&ma, &preset_id, "sync_in0", AgentValue::integer(4))
+    test_utils::write_and_expect_local_value(&ma, &patch_id, "sync_in0", AgentValue::integer(4))
         .await
         .unwrap();
-    test_utils::write_and_expect_local_value(&ma, &preset_id, "sync_in1", AgentValue::integer(5))
+    test_utils::write_and_expect_local_value(&ma, &patch_id, "sync_in1", AgentValue::integer(5))
         .await
         .unwrap();
-    test_utils::expect_local_value(&preset_id, "sync_0", &AgentValue::integer(3))
+    test_utils::expect_local_value(&patch_id, "sync_0", &AgentValue::integer(3))
         .await
         .unwrap();
-    test_utils::expect_local_value(&preset_id, "sync_1", &AgentValue::integer(5))
+    test_utils::expect_local_value(&patch_id, "sync_1", &AgentValue::integer(5))
         .await
         .unwrap();
 
-    test_utils::write_and_expect_local_value(&ma, &preset_id, "sync_in1", AgentValue::integer(6))
+    test_utils::write_and_expect_local_value(&ma, &patch_id, "sync_in1", AgentValue::integer(6))
         .await
         .unwrap();
-    test_utils::expect_local_value(&preset_id, "sync_0", &AgentValue::integer(4))
+    test_utils::expect_local_value(&patch_id, "sync_0", &AgentValue::integer(4))
         .await
         .unwrap();
-    test_utils::expect_local_value(&preset_id, "sync_1", &AgentValue::integer(6))
+    test_utils::expect_local_value(&patch_id, "sync_1", &AgentValue::integer(6))
         .await
         .unwrap();
 
@@ -86,30 +82,28 @@ async fn test_sync_fifo() {
 async fn test_sync_context_mode() {
     let ma = test_utils::setup_modular_agent().await;
 
-    let preset_id = test_utils::open_and_start_preset(&ma, PRESET)
-        .await
-        .unwrap();
+    let patch_id = test_utils::open_and_start_patch(&ma, PATCH).await.unwrap();
 
     // A single trigger fans out through Sequence, so both Sync ports see the
     // same ctx and the pair completes
-    test_utils::write_and_expect_local_value(&ma, &preset_id, "syncctx_in", AgentValue::integer(7))
+    test_utils::write_and_expect_local_value(&ma, &patch_id, "syncctx_in", AgentValue::integer(7))
         .await
         .unwrap();
-    test_utils::expect_local_value(&preset_id, "syncctx_0", &AgentValue::integer(7))
+    test_utils::expect_local_value(&patch_id, "syncctx_0", &AgentValue::integer(7))
         .await
         .unwrap();
-    test_utils::expect_local_value(&preset_id, "syncctx_1", &AgentValue::integer(7))
+    test_utils::expect_local_value(&patch_id, "syncctx_1", &AgentValue::integer(7))
         .await
         .unwrap();
 
     // The buffer is released on completion, so the next trigger works the same
-    test_utils::write_and_expect_local_value(&ma, &preset_id, "syncctx_in", AgentValue::integer(8))
+    test_utils::write_and_expect_local_value(&ma, &patch_id, "syncctx_in", AgentValue::integer(8))
         .await
         .unwrap();
-    test_utils::expect_local_value(&preset_id, "syncctx_0", &AgentValue::integer(8))
+    test_utils::expect_local_value(&patch_id, "syncctx_0", &AgentValue::integer(8))
         .await
         .unwrap();
-    test_utils::expect_local_value(&preset_id, "syncctx_1", &AgentValue::integer(8))
+    test_utils::expect_local_value(&patch_id, "syncctx_1", &AgentValue::integer(8))
         .await
         .unwrap();
 
@@ -119,24 +113,24 @@ async fn test_sync_context_mode() {
 /// Wire a context-mode Sync to one probe per output port so emitted ctxs can
 /// be inspected.
 async fn setup_ctx_sync_with_probes(ma: &ModularAgent) -> (String, ProbeReceiver, ProbeReceiver) {
-    let preset_id = ma.new_preset().unwrap();
+    let patch_id = ma.new_patch().unwrap();
 
     let sync_def = ma.get_agent_definition(SYNC_DEF).unwrap();
     let mut sync_spec = sync_def.to_spec();
     if let Some(configs) = sync_spec.configs.as_mut() {
         configs.set("use_ctx".into(), AgentValue::boolean(true));
     }
-    let sync_id = ma.add_agent(preset_id.clone(), sync_spec).await.unwrap();
+    let sync_id = ma.add_agent(patch_id.clone(), sync_spec).await.unwrap();
 
     let probe_def = ma.get_agent_definition(PROBE_DEF).unwrap();
     let mut probe_ids = Vec::new();
     for port in ["0", "1"] {
         let probe_id = ma
-            .add_agent(preset_id.clone(), probe_def.to_spec())
+            .add_agent(patch_id.clone(), probe_def.to_spec())
             .await
             .unwrap();
         ma.add_connection(
-            &preset_id,
+            &patch_id,
             ConnectionSpec {
                 source: sync_id.clone(),
                 source_handle: port.into(),
@@ -148,7 +142,7 @@ async fn setup_ctx_sync_with_probes(ma: &ModularAgent) -> (String, ProbeReceiver
         .unwrap();
         probe_ids.push(probe_id);
     }
-    ma.start_preset(&preset_id).await.unwrap();
+    ma.start_patch(&patch_id).await.unwrap();
 
     let probe0 = probe_receiver(ma, &probe_ids[0]).await.unwrap();
     let probe1 = probe_receiver(ma, &probe_ids[1]).await.unwrap();

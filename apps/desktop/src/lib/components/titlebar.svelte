@@ -9,9 +9,9 @@
   import XIcon from "@lucide/svelte/icons/x";
 
   import logo from "$lib/assets/logo.png";
-  import Menubar from "$lib/components/preset-editor/menubar.svelte";
-  import PresetActions from "$lib/components/preset-editor/preset-actions.svelte";
-  import PresetName from "$lib/components/preset-editor/preset-name.svelte";
+  import Menubar from "$lib/components/patch-editor/menubar.svelte";
+  import PatchActions from "$lib/components/patch-editor/patch-actions.svelte";
+  import PatchName from "$lib/components/patch-editor/patch-name.svelte";
   import { titlebarState } from "$lib/titlebar-state.svelte";
 
   const isMacos = navigator.userAgent.includes("Mac");
@@ -82,22 +82,22 @@
         <div>
           <Menubar
             onShowNewDialog={titlebarState.onShowNewDialog ?? (() => {})}
-            onSavePreset={titlebarState.onSavePreset ?? (() => {})}
+            onSavePatch={titlebarState.onSavePatch ?? (() => {})}
             onShowSaveAsDialog={titlebarState.onShowSaveAsDialog ?? (() => {})}
-            onImportPreset={titlebarState.onImportPreset ?? (() => {})}
-            onExportPreset={titlebarState.onExportPreset ?? (() => {})}
+            onImportPatch={titlebarState.onImportPatch ?? (() => {})}
+            onExportPatch={titlebarState.onExportPatch ?? (() => {})}
           />
         </div>
       {/if}
     </div>
 
-    <!-- Center: Preset name / Title (absolutely centered, independent of actions) -->
+    <!-- Center: Patch name / Title (absolutely centered, independent of actions) -->
     <div class="absolute inset-x-0 flex items-center justify-center h-full pointer-events-none">
       {#if titlebarState.showMenubar}
         <div
           class="pointer-events-auto min-w-0 max-w-[max(120px,min(400px,100vw-420px))] overflow-hidden"
         >
-          <PresetName name={titlebarState.presetName} dirty={titlebarState.dirty} />
+          <PatchName name={titlebarState.patchName} dirty={titlebarState.dirty} />
         </div>
       {:else}
         <span class="text-sm font-semibold truncate">{titlebarState.title}</span>
@@ -110,10 +110,10 @@
     <!-- Actions + Status (right-aligned, before window controls) -->
     {#if titlebarState.showActions}
       <div class="flex items-center gap-1 shrink-0 z-10 mr-1">
-        <PresetActions
+        <PatchActions
           running={titlebarState.running}
-          onStartPreset={handleStart}
-          onStopPreset={handleStop}
+          onStartPatch={handleStart}
+          onStopPatch={handleStop}
         />
       </div>
     {/if}

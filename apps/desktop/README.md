@@ -41,13 +41,13 @@ Build AI workflows like a modular synth — patch extensible agents together vis
 
 - 🏠 **Local Execution** — All processing happens on your machine; no cloud dependency
 - 💻 **Cross-Platform** — Windows, macOS, Linux
-- 📦 **Embeddable** — The core runtime ([modular-agent-core](https://github.com/modular-agent/modular-agent/tree/main/crates/modular-agent-core)) has minimal dependencies and can be embedded into various applications to run presets
+- 📦 **Embeddable** — The core runtime ([modular-agent-core](https://github.com/modular-agent/modular-agent/tree/main/crates/modular-agent-core)) has minimal dependencies and can be embedded into various applications to run patches
 
 ### Editor
 
 - 🎨 **Visual Workflow Editor** — Node-based drag-and-drop interface for designing agent pipelines
-- 💾 **Preset Management** — Save, load, import/export workflow configurations
-- 🚀 **Auto-Start** — Configure presets to run on app launch
+- 💾 **Patch Management** — Save, load, import/export workflow configurations
+- 🚀 **Auto-Start** — Configure patches to run on app launch
 - 🔲 **System Tray** — Run workflows in the background
 
 ## Getting Started
@@ -77,7 +77,7 @@ Cargo artifacts land in the workspace-level `target/` directory, at the reposito
 ### Run
 
 1. Launch Modular Agent
-2. Open or create a new preset
+2. Open or create a new patch
 3. Right-click on the canvas and select "Add agent", or double-click to open the agent list
 4. Connect agents by dragging between ports
 5. Right-click and select "Play" (or press `Ctrl+.` / `Cmd+.`) to start the workflow
@@ -86,7 +86,7 @@ Cargo artifacts land in the workspace-level `target/` directory, at the reposito
 
 ### How It Works
 
-1. **Presets** are workflow configurations — a graph of connected agents
+1. **Patches** are workflow configurations — a graph of connected agents
 2. **Agents** are processing units (e.g., "Chat Completion", "HTTP Request", "Text Template")
 3. Each agent has **input/output ports** — connect them by dragging between ports
 4. Press **Play** to start the pipeline — data flows through agents in real time
@@ -100,7 +100,7 @@ Cargo artifacts land in the workspace-level `target/` directory, at the reposito
 ```text
 src/                    # Svelte frontend
   routes/               # SvelteKit pages
-    preset_editor/      # Visual workflow editor
+    patch_editor/      # Visual workflow editor
     settings/           # App settings
   lib/
     components/         # UI components

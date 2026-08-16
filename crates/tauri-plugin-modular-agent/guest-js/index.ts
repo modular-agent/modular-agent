@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 
-export type PresetInfo = {
+export type PatchInfo = {
   id: string;
   name: string;
   running: boolean;
@@ -38,7 +38,7 @@ export type AgentConfigSpec = {
   detail?: boolean | null;
 };
 
-export type PresetSpec = {
+export type PatchSpec = {
   agents: AgentSpec[];
   connections: ConnectionSpec[];
   viewport: Viewport | null;
@@ -75,60 +75,60 @@ export type Viewport = {
   zoom: number;
 };
 
-// preset
+// patch
 
-export async function newPreset(): Promise<[string, string]> {
-  return await invoke<any>("plugin:modular-agent|new_preset", {});
+export async function newPatch(): Promise<[string, string]> {
+  return await invoke<any>("plugin:modular-agent|new_patch", {});
 }
 
-export async function addPreset(spec: PresetSpec): Promise<string> {
-  return await invoke<any>("plugin:modular-agent|add_preset", { spec });
+export async function addPatch(spec: PatchSpec): Promise<string> {
+  return await invoke<any>("plugin:modular-agent|add_patch", { spec });
 }
 
-export async function addPresetWithName(spec: PresetSpec, name: string): Promise<string> {
-  return await invoke<any>("plugin:modular-agent|add_preset_with_name", {
+export async function addPatchWithName(spec: PatchSpec, name: string): Promise<string> {
+  return await invoke<any>("plugin:modular-agent|add_patch_with_name", {
     spec,
     name,
   });
 }
 
-export async function removePreset(id: string): Promise<void> {
-  await invoke<void>("plugin:modular-agent|remove_preset", { id });
+export async function removePatch(id: string): Promise<void> {
+  await invoke<void>("plugin:modular-agent|remove_patch", { id });
 }
 
-export async function startPreset(id: string): Promise<void> {
-  await invoke<void>("plugin:modular-agent|start_preset", { id });
+export async function startPatch(id: string): Promise<void> {
+  await invoke<void>("plugin:modular-agent|start_patch", { id });
 }
 
-export async function stopPreset(id: string): Promise<void> {
-  await invoke<void>("plugin:modular-agent|stop_preset", { id });
+export async function stopPatch(id: string): Promise<void> {
+  await invoke<void>("plugin:modular-agent|stop_patch", { id });
 }
 
-export async function openPresetFromFile(path: string, name?: string | null): Promise<string> {
-  return await invoke<any>("plugin:modular-agent|open_preset_from_file", {
+export async function openPatchFromFile(path: string, name?: string | null): Promise<string> {
+  return await invoke<any>("plugin:modular-agent|open_patch_from_file", {
     path,
     name,
   });
 }
 
-export async function savePreset(id: string, path: string): Promise<void> {
-  await invoke<void>("plugin:modular-agent|save_preset", { id, path });
+export async function savePatch(id: string, path: string): Promise<void> {
+  await invoke<void>("plugin:modular-agent|save_patch", { id, path });
 }
 
-export async function getPresetSpec(id: string): Promise<PresetSpec | null> {
-  return await invoke<any>("plugin:modular-agent|get_preset_spec", { id });
+export async function getPatchSpec(id: string): Promise<PatchSpec | null> {
+  return await invoke<any>("plugin:modular-agent|get_patch_spec", { id });
 }
 
-export async function updatePresetSpec(id: string, value: Partial<PresetSpec>): Promise<void> {
-  await invoke<void>("plugin:modular-agent|update_preset_spec", { id, value });
+export async function updatePatchSpec(id: string, value: Partial<PatchSpec>): Promise<void> {
+  await invoke<void>("plugin:modular-agent|update_patch_spec", { id, value });
 }
 
-export async function getPresetInfo(id: string): Promise<PresetInfo | null> {
-  return await invoke<any>("plugin:modular-agent|get_preset_info", { id });
+export async function getPatchInfo(id: string): Promise<PatchInfo | null> {
+  return await invoke<any>("plugin:modular-agent|get_patch_info", { id });
 }
 
-export async function getPresetInfos(): Promise<PresetInfo[]> {
-  return await invoke<any>("plugin:modular-agent|get_preset_infos", {});
+export async function getPatchInfos(): Promise<PatchInfo[]> {
+  return await invoke<any>("plugin:modular-agent|get_patch_infos", {});
 }
 
 // agent
@@ -160,48 +160,45 @@ export async function newAgentSpec(defName: string): Promise<AgentSpec> {
   return await invoke<any>("plugin:modular-agent|new_agent_spec", { defName });
 }
 
-export async function addAgent(presetId: string, spec: AgentSpec): Promise<string> {
+export async function addAgent(patchId: string, spec: AgentSpec): Promise<string> {
   return await invoke<string>("plugin:modular-agent|add_agent", {
-    presetId,
+    patchId,
     spec,
   });
 }
 
-export async function removeAgent(presetId: string, agentId: string): Promise<void> {
+export async function removeAgent(patchId: string, agentId: string): Promise<void> {
   await invoke<void>("plugin:modular-agent|remove_agent", {
-    presetId,
+    patchId,
     agentId,
   });
 }
 
 // connection
 
-export async function addConnection(presetId: string, connection: ConnectionSpec): Promise<void> {
+export async function addConnection(patchId: string, connection: ConnectionSpec): Promise<void> {
   await invoke<void>("plugin:modular-agent|add_connection", {
-    presetId,
+    patchId,
     connection,
   });
 }
 
-export async function removeConnection(
-  presetId: string,
-  connection: ConnectionSpec,
-): Promise<void> {
+export async function removeConnection(patchId: string, connection: ConnectionSpec): Promise<void> {
   await invoke<void>("plugin:modular-agent|remove_connection", {
-    presetId,
+    patchId,
     connection,
   });
 }
 
 export async function addAgentsAndConnections(
-  presetId: string,
+  patchId: string,
   agents: AgentSpec[],
   connections: ConnectionSpec[],
 ): Promise<[AgentSpec[], ConnectionSpec[]]> {
   return await invoke<[AgentSpec[], ConnectionSpec[]]>(
     "plugin:modular-agent|add_agents_and_connections",
     {
-      presetId,
+      patchId,
       agents,
       connections,
     },

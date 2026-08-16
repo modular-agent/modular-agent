@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-save-patch"
+description = "Enables the save_patch command without any pre-configured scope."
+commands.allow = ["save_patch"]
+
+[[permission]]
+identifier = "deny-save-patch"
+description = "Denies the save_patch command without any pre-configured scope."
+commands.deny = ["save_patch"]

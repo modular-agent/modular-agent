@@ -66,7 +66,7 @@ function discoverUiPackages() {
 /** @param {UiPackage[]} packages */
 function generateVirtualModule(packages) {
   const lines = [
-    `import { registerNodeView, registerConfigWidget, registerNodeStyle } from "$lib/components/preset-editor/custom-ui/registry";`,
+    `import { registerNodeView, registerConfigWidget, registerNodeStyle } from "$lib/components/patch-editor/custom-ui/registry";`,
   ];
   packages.forEach((pkg, i) => {
     // Absolute path with forward slashes — Vite resolves it directly, so UI

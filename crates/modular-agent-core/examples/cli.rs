@@ -6,10 +6,10 @@ use tokio::select;
 
 #[derive(Parser)]
 #[command(name = "cli")]
-#[command(about = "Run a modular agent preset with stdin/stdout")]
+#[command(about = "Run a modular agent patch with stdin/stdout")]
 struct Args {
-    /// Path to the preset JSON file
-    preset: String,
+    /// Path to the patch JSON file
+    patch: String,
 
     /// Name of the input channel
     #[arg(short, long, default_value = "input")]
@@ -35,11 +35,11 @@ async fn main() -> Result<(), AgentError> {
             .init();
     }
 
-    // Validate preset file exists
-    if !Path::new(&args.preset).exists() {
+    // Validate patch file exists
+    if !Path::new(&args.patch).exists() {
         return Err(AgentError::IoError(format!(
-            "Preset file not found: {}",
-            args.preset
+            "Patch file not found: {}",
+            args.patch
         )));
     }
 
@@ -47,7 +47,7 @@ async fn main() -> Result<(), AgentError> {
     let ma = ModularAgent::init()?;
     ma.ready().await?;
 
-    // Subscribe to external output BEFORE starting preset (avoid race condition)
+    // Subscribe to external output BEFORE starting patch (avoid race condition)
     let output_channel = args.output.clone();
     let mut output_rx = ma.subscribe_to_event(move |envelope| {
         if let ModularAgentEvent::ExternalOutput(name, value) = envelope.event
@@ -58,12 +58,12 @@ async fn main() -> Result<(), AgentError> {
         None
     });
 
-    // Load and start preset
-    let preset_id = ma.open_preset_from_file(&args.preset, None).await?;
-    ma.start_preset(&preset_id).await?;
+    // Load and start patch
+    let patch_id = ma.open_patch_from_file(&args.patch, None).await?;
+    ma.start_patch(&patch_id).await?;
 
     if args.verbose {
-        eprintln!("Preset loaded: {}", args.preset);
+        eprintln!("Patch loaded: {}", args.patch);
         eprintln!(
             "Input channel: {}, Output channel: {}",
             args.input, args.output
@@ -106,7 +106,7 @@ async fn main() -> Result<(), AgentError> {
     }
 
     // Graceful shutdown
-    ma.stop_preset(&preset_id).await?;
+    ma.stop_patch(&patch_id).await?;
     ma.shutdown().await?;
 
     // Drain any remaining output

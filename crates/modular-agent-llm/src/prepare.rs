@@ -105,7 +105,7 @@ fn sanitize_id(target: ProviderKind, id: &str, used: &HashSet<String>) -> String
             let mut s = id.to_string();
             if s.len() > 40 {
                 // Truncate on a char boundary; ids are usually ASCII but the
-                // history is arbitrary preset data.
+                // history is arbitrary patch data.
                 let mut end = 40;
                 while !s.is_char_boundary(end) {
                     end -= 1;

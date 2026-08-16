@@ -46,32 +46,32 @@ export async function getDirEntries(path: string): Promise<string[]> {
   return await invoke("get_dir_entries_cmd", { path });
 }
 
-export async function openPreset(name: string): Promise<string> {
-  return await invoke("open_preset_cmd", { name });
+export async function openPatch(name: string): Promise<string> {
+  return await invoke("open_patch_cmd", { name });
 }
 
-export async function closePreset(id: string): Promise<boolean> {
-  return await invoke("close_preset_cmd", { id });
+export async function closePatch(id: string): Promise<boolean> {
+  return await invoke("close_patch_cmd", { id });
 }
 
-export async function movePreset(name: string, targetDir: string): Promise<void> {
-  await invoke("move_preset_cmd", { name, targetDir });
+export async function movePatch(name: string, targetDir: string): Promise<void> {
+  await invoke("move_patch_cmd", { name, targetDir });
 }
 
 export async function moveFolder(path: string, targetDir: string): Promise<void> {
   await invoke("move_folder_cmd", { path, targetDir });
 }
 
-export async function renamePreset(name: string, newName: string): Promise<void> {
-  await invoke("rename_preset_cmd", { name, newName });
+export async function renamePatch(name: string, newName: string): Promise<void> {
+  await invoke("rename_patch_cmd", { name, newName });
 }
 
 export async function renameFolder(path: string, newPath: string): Promise<void> {
   await invoke("rename_folder_cmd", { path, newPath });
 }
 
-export async function deletePreset(name: string): Promise<string> {
-  return await invoke("delete_preset_cmd", { name });
+export async function deletePatch(name: string): Promise<string> {
+  return await invoke("delete_patch_cmd", { name });
 }
 
 export async function deleteFolder(path: string): Promise<void> {

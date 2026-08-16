@@ -13,9 +13,9 @@ use crate::definition::{AgentConfigSpecs, AgentDefinition, AgentDefinitions};
 use crate::error::AgentError;
 use crate::id::{new_id, update_ids};
 use crate::message::{self, AgentEventMessage};
-use crate::preset::{Preset, PresetInfo};
+use crate::patch::{Patch, PatchInfo};
 use crate::registry;
-use crate::spec::{AgentSpec, ConnectionSpec, PresetSpec};
+use crate::spec::{AgentSpec, ConnectionSpec, PatchSpec};
 use crate::value::AgentValue;
 
 const MESSAGE_LIMIT: usize = 1024;
@@ -41,10 +41,10 @@ static AGENT_TOKEN_GENERATION: AtomicU64 = AtomicU64::new(1);
 ///
 /// 1. [`init()`](Self::init) - Create instance and register agent definitions
 /// 2. [`ready()`](Self::ready) - Start the internal message loop
-/// 3. Load presets with [`open_preset_from_file()`](Self::open_preset_from_file) or [`add_preset()`](Self::add_preset)
-/// 4. [`start_preset()`](Self::start_preset) - Start agents in a preset
+/// 3. Load patches with [`open_patch_from_file()`](Self::open_patch_from_file) or [`add_patch()`](Self::add_patch)
+/// 4. [`start_patch()`](Self::start_patch) - Start agents in a patch
 /// 5. Interact via [`write_external_input()`](Self::write_external_input) and [`subscribe()`](Self::subscribe)
-/// 6. [`stop_preset()`](Self::stop_preset) - Stop agents
+/// 6. [`stop_patch()`](Self::stop_patch) - Stop agents
 /// 7. [`quit()`](Self::quit) - Shut down
 ///
 /// # Example
@@ -59,15 +59,15 @@ static AGENT_TOKEN_GENERATION: AtomicU64 = AtomicU64::new(1);
 ///     let ma = ModularAgent::init()?;
 ///     ma.ready().await?;
 ///
-///     // Load a preset
-///     let preset_id = ma.open_preset_from_file("my_preset.json", None).await?;
-///     ma.start_preset(&preset_id).await?;
+///     // Load a patch
+///     let patch_id = ma.open_patch_from_file("my_patch.json", None).await?;
+///     ma.start_patch(&patch_id).await?;
 ///
 ///     // Send external input
 ///     ma.write_external_input("input".to_string(), AgentValue::string("hello")).await?;
 ///
 ///     // Cleanup
-///     ma.stop_preset(&preset_id).await?;
+///     ma.stop_patch(&patch_id).await?;
 ///     ma.quit();
 ///     Ok(())
 /// }
@@ -98,22 +98,22 @@ pub struct ModularAgent {
     // agent def name -> agent definition
     pub(crate) defs: Arc<Mutex<AgentDefinitions>>,
 
-    // presets (preset id -> preset)
-    pub(crate) presets: Arc<Mutex<FnvIndexMap<String, Arc<AsyncMutex<Preset>>>>>,
+    // patches (patch id -> patch)
+    pub(crate) patches: Arc<Mutex<FnvIndexMap<String, Arc<AsyncMutex<Patch>>>>>,
 
-    /// name -> preset id: the single source of truth for preset name lookup
-    /// and uniqueness. Mutated only by `add_preset_raw`, `rename_preset`,
-    /// and `remove_preset`.
+    /// name -> patch id: the single source of truth for patch name lookup
+    /// and uniqueness. Mutated only by `add_patch_raw`, `rename_patch`,
+    /// and `remove_patch`.
     ///
-    /// Lock order: never acquire `presets` or a preset's async mutex while
+    /// Lock order: never acquire `patches` or a patch's async mutex while
     /// holding this lock.
-    pub(crate) preset_names: Arc<Mutex<FnvIndexMap<String, String>>>,
+    pub(crate) patch_names: Arc<Mutex<FnvIndexMap<String, String>>>,
 
     // agent def name -> config
     pub(crate) global_configs_map: Arc<Mutex<FnvIndexMap<String, AgentConfigs>>>,
 
-    // preset id -> parent cancellation token for the preset's agents
-    pub(crate) preset_tokens: Arc<Mutex<FnvIndexMap<String, CancellationToken>>>,
+    // patch id -> parent cancellation token for the patch's agents
+    pub(crate) patch_tokens: Arc<Mutex<FnvIndexMap<String, CancellationToken>>>,
 
     // agent id -> (loop generation, current cancellation token of that loop)
     pub(crate) agent_tokens: Arc<Mutex<FnvIndexMap<String, (u64, CancellationToken)>>>,
@@ -153,10 +153,10 @@ impl ModularAgent {
             external_values: Default::default(),
             connections: Default::default(),
             defs: Default::default(),
-            presets: Default::default(),
-            preset_names: Default::default(),
+            patches: Default::default(),
+            patch_names: Default::default(),
             global_configs_map: Default::default(),
-            preset_tokens: Default::default(),
+            patch_tokens: Default::default(),
             agent_tokens: Default::default(),
             context_tokens: Default::default(),
             tx: Arc::new(Mutex::new(None)),
@@ -223,7 +223,7 @@ impl ModularAgent {
 
     /// Start the internal message loop.
     ///
-    /// This must be called after [`init`](Self::init) before loading presets or sending messages.
+    /// This must be called after [`init`](Self::init) before loading patches or sending messages.
     /// The message loop handles routing between agents and external output events.
     ///
     /// # Example
@@ -244,8 +244,8 @@ impl ModularAgent {
 
     /// Shut down the `ModularAgent`.
     ///
-    /// This stops the internal message loop. Call [`stop_preset`](Self::stop_preset)
-    /// for each running preset before calling this method for graceful shutdown.
+    /// This stops the internal message loop. Call [`stop_patch`](Self::stop_patch)
+    /// for each running patch before calling this method for graceful shutdown.
     ///
     /// This does not release external resources such as MCP server child processes.
     /// Use [`shutdown`](Self::shutdown) instead when full cleanup is required.
@@ -254,9 +254,9 @@ impl ModularAgent {
     ///
     /// ```rust,no_run
     /// # use modular_agent_core::ModularAgent;
-    /// # async fn example(ma: ModularAgent, preset_id: &str) {
-    /// // Stop all presets first
-    /// ma.stop_preset(preset_id).await.unwrap();
+    /// # async fn example(ma: ModularAgent, patch_id: &str) {
+    /// // Stop all patches first
+    /// ma.stop_patch(patch_id).await.unwrap();
     /// // Then quit
     /// ma.quit();
     /// # }
@@ -270,7 +270,7 @@ impl ModularAgent {
     ///
     /// Calls [`quit`](Self::quit) to stop the internal message loop, then closes any
     /// pooled MCP server connections so their child processes do not leak. Call
-    /// [`stop_preset`](Self::stop_preset) for each running preset before this method.
+    /// [`stop_patch`](Self::stop_patch) for each running patch before this method.
     /// An MCP tool call still in flight during shutdown may reconnect and respawn its
     /// server process afterwards, so quiesce all workflows first.
     ///
@@ -278,8 +278,8 @@ impl ModularAgent {
     ///
     /// ```rust,no_run
     /// # use modular_agent_core::ModularAgent;
-    /// # async fn example(ma: ModularAgent, preset_id: &str) {
-    /// ma.stop_preset(preset_id).await.unwrap();
+    /// # async fn example(ma: ModularAgent, patch_id: &str) {
+    /// ma.stop_patch(patch_id).await.unwrap();
     /// ma.shutdown().await.unwrap();
     /// # }
     /// ```
@@ -290,312 +290,308 @@ impl ModularAgent {
         Ok(())
     }
 
-    // Preset management
+    // Patch management
 
-    /// Create a new empty preset.
+    /// Create a new empty patch.
     ///
-    /// Returns the id of the new preset. The preset is created with default settings
+    /// Returns the id of the new patch. The patch is created with default settings
     /// and contains no agents or connections initially.
-    pub fn new_preset(&self) -> Result<String, AgentError> {
-        let spec = PresetSpec::default();
-        let id = self.add_preset(spec)?;
+    pub fn new_patch(&self) -> Result<String, AgentError> {
+        let spec = PatchSpec::default();
+        let id = self.add_patch(spec)?;
         Ok(id)
     }
 
-    /// Create a new empty preset with the given name.
+    /// Create a new empty patch with the given name.
     ///
-    /// Returns the id of the new preset.
-    pub fn new_preset_with_name(&self, name: String) -> Result<String, AgentError> {
-        let spec = PresetSpec::default();
-        let id = self.add_preset_with_name(spec, name)?;
+    /// Returns the id of the new patch.
+    pub fn new_patch_with_name(&self, name: String) -> Result<String, AgentError> {
+        let spec = PatchSpec::default();
+        let id = self.add_patch_with_name(spec, name)?;
         Ok(id)
     }
 
-    /// Get a preset by id.
+    /// Get a patch by id.
     ///
-    /// Returns `None` if no preset exists with the given id.
-    pub fn get_preset(&self, id: &str) -> Option<Arc<AsyncMutex<Preset>>> {
-        let presets = self.presets.lock().unwrap();
-        presets.get(id).cloned()
+    /// Returns `None` if no patch exists with the given id.
+    pub fn get_patch(&self, id: &str) -> Option<Arc<AsyncMutex<Patch>>> {
+        let patches = self.patches.lock().unwrap();
+        patches.get(id).cloned()
     }
 
-    /// Find the id of a live preset by its name.
+    /// Find the id of a live patch by its name.
     ///
-    /// Returns `None` when no preset with the given name is loaded.
-    pub fn find_preset_id_by_name(&self, name: &str) -> Option<String> {
-        let names = self.preset_names.lock().unwrap();
+    /// Returns `None` when no patch with the given name is loaded.
+    pub fn find_patch_id_by_name(&self, name: &str) -> Option<String> {
+        let names = self.patch_names.lock().unwrap();
         names.get(name).cloned()
     }
 
-    /// Add a new preset with the given spec, and returns the id of the new preset.
+    /// Add a new patch with the given spec, and returns the id of the new patch.
     ///
     /// The ids of the given spec, including agents and connections, are changed to new unique ids.
     /// This allows the same spec to be added multiple times without id conflicts.
-    pub fn add_preset(&self, spec: PresetSpec) -> Result<String, AgentError> {
-        self.add_preset_raw(spec, None)
+    pub fn add_patch(&self, spec: PatchSpec) -> Result<String, AgentError> {
+        self.add_patch_raw(spec, None)
     }
 
-    /// Add a new preset with the given name and spec, and returns the id of the new preset.
+    /// Add a new patch with the given name and spec, and returns the id of the new patch.
     ///
     /// The ids of the given spec, including agents and connections, are changed to new unique ids.
-    pub fn add_preset_with_name(
-        &self,
-        spec: PresetSpec,
-        name: String,
-    ) -> Result<String, AgentError> {
-        self.add_preset_raw(spec, Some(name))
+    pub fn add_patch_with_name(&self, spec: PatchSpec, name: String) -> Result<String, AgentError> {
+        self.add_patch_raw(spec, Some(name))
     }
 
-    fn add_preset_raw(&self, spec: PresetSpec, name: Option<String>) -> Result<String, AgentError> {
-        let mut preset = Preset::new(spec);
+    fn add_patch_raw(&self, spec: PatchSpec, name: Option<String>) -> Result<String, AgentError> {
+        let mut patch = Patch::new(spec);
         if let Some(name) = &name {
-            preset.set_name(name.clone());
+            patch.set_name(name.clone());
         }
-        let id = preset.id().to_string();
+        let id = patch.id().to_string();
 
         // Reserve the name first so a duplicate fails before any agents are
         // created; the reservation is rolled back if a later step fails.
         if let Some(name) = &name {
-            let mut names = self.preset_names.lock().unwrap();
+            let mut names = self.patch_names.lock().unwrap();
             if names.contains_key(name) {
-                return Err(AgentError::PresetNameExists(name.clone()));
+                return Err(AgentError::PatchNameExists(name.clone()));
             }
             names.insert(name.clone(), id.clone());
         }
 
         // add agents
-        for agent in &preset.spec().agents {
+        for agent in &patch.spec().agents {
             if let Err(e) = self.add_agent_internal(id.clone(), agent.clone()) {
                 log::error!("Failed to add_agent {}: {}", agent.id, e);
             }
         }
 
         // add connections
-        for connection in &preset.spec().connections {
+        for connection in &patch.spec().connections {
             self.add_connection_internal(connection.clone())
                 .unwrap_or_else(|e| {
                     log::error!("Failed to add_connection {}: {}", connection.source, e);
                 });
         }
 
-        // add the given preset into presets
+        // add the given patch into patches
         let inserted = {
-            let mut presets = self.presets.lock().unwrap();
-            if presets.contains_key(&id) {
+            let mut patches = self.patches.lock().unwrap();
+            if patches.contains_key(&id) {
                 false
             } else {
-                presets.insert(id.clone(), Arc::new(AsyncMutex::new(preset)));
+                patches.insert(id.clone(), Arc::new(AsyncMutex::new(patch)));
                 true
             }
         };
         if !inserted {
             if let Some(name) = &name {
-                self.preset_names.lock().unwrap().swap_remove(name);
+                self.patch_names.lock().unwrap().swap_remove(name);
             }
             return Err(AgentError::DuplicateId(id));
         }
 
-        self.emit_preset_added(id.clone(), name);
+        self.emit_patch_added(id.clone(), name);
 
         Ok(id)
     }
 
-    /// Rename a preset by id.
+    /// Rename a patch by id.
     ///
-    /// Fails with [`AgentError::PresetNameExists`] when another preset
-    /// already uses `new_name`. Renaming a preset to its current name is a
-    /// no-op and succeeds. Emits [`ModularAgentEvent::PresetRenamed`].
-    pub async fn rename_preset(&self, id: &str, new_name: String) -> Result<(), AgentError> {
-        let preset = self
-            .get_preset(id)
-            .ok_or_else(|| AgentError::PresetNotFound(id.to_string()))?;
+    /// Fails with [`AgentError::PatchNameExists`] when another patch
+    /// already uses `new_name`. Renaming a patch to its current name is a
+    /// no-op and succeeds. Emits [`ModularAgentEvent::PatchRenamed`].
+    pub async fn rename_patch(&self, id: &str, new_name: String) -> Result<(), AgentError> {
+        let patch = self
+            .get_patch(id)
+            .ok_or_else(|| AgentError::PatchNotFound(id.to_string()))?;
 
         {
-            let mut names = self.preset_names.lock().unwrap();
+            let mut names = self.patch_names.lock().unwrap();
             if let Some(owner) = names.get(&new_name)
                 && owner != id
             {
-                return Err(AgentError::PresetNameExists(new_name));
+                return Err(AgentError::PatchNameExists(new_name));
             }
-            // Remove by id so a previously unnamed preset gaining its first
+            // Remove by id so a previously unnamed patch gaining its first
             // name is handled too.
             names.retain(|_, v| v != id);
             names.insert(new_name.clone(), id.to_string());
         }
 
         // Re-check liveness after reserving the name: a concurrent
-        // remove_preset may have completed (including its name-index
-        // cleanup) between get_preset above and the insert, which would
+        // remove_patch may have completed (including its name-index
+        // cleanup) between get_patch above and the insert, which would
         // leave the new entry pointing at a dead id forever. The lock-order
-        // rule (never take `presets` while holding `preset_names`) forces
-        // this check to come after the insert; either remove_preset's
+        // rule (never take `patches` while holding `patch_names`) forces
+        // this check to come after the insert; either remove_patch's
         // cleanup runs after our insert and clears it, or we observe the id
         // gone here and roll the reservation back.
-        if !self.presets.lock().unwrap().contains_key(id) {
-            let mut names = self.preset_names.lock().unwrap();
+        if !self.patches.lock().unwrap().contains_key(id) {
+            let mut names = self.patch_names.lock().unwrap();
             if names.get(&new_name).is_some_and(|owner| owner == id) {
                 names.swap_remove(&new_name);
             }
-            return Err(AgentError::PresetNotFound(id.to_string()));
+            return Err(AgentError::PatchNotFound(id.to_string()));
         }
 
         let old_name = {
-            let mut preset = preset.lock().await;
-            let old_name = preset.name().map(str::to_string);
-            preset.set_name(new_name.clone());
+            let mut patch = patch.lock().await;
+            let old_name = patch.name().map(str::to_string);
+            patch.set_name(new_name.clone());
             old_name
         };
-        self.emit_preset_renamed(id.to_string(), old_name, new_name);
+        self.emit_patch_renamed(id.to_string(), old_name, new_name);
         Ok(())
     }
 
-    /// Remove a preset by id.
+    /// Remove a patch by id.
     ///
-    /// Stops the preset if running, then removes all associated agents and connections.
-    /// Emits [`ModularAgentEvent::PresetRemoved`] after teardown.
-    pub async fn remove_preset(&self, id: &str) -> Result<(), AgentError> {
-        let preset = self
-            .get_preset(id)
-            .ok_or_else(|| AgentError::PresetNotFound(id.to_string()))?;
+    /// Stops the patch if running, then removes all associated agents and connections.
+    /// Emits [`ModularAgentEvent::PatchRemoved`] after teardown.
+    pub async fn remove_patch(&self, id: &str) -> Result<(), AgentError> {
+        let patch = self
+            .get_patch(id)
+            .ok_or_else(|| AgentError::PatchNotFound(id.to_string()))?;
 
-        let mut preset = preset.lock().await;
-        let name = preset.name().map(str::to_string);
-        preset.stop(self).await.unwrap_or_else(|e| {
-            log::error!("Failed to stop preset {}: {}", id, e);
+        let mut patch = patch.lock().await;
+        let name = patch.name().map(str::to_string);
+        patch.stop(self).await.unwrap_or_else(|e| {
+            log::error!("Failed to stop patch {}: {}", id, e);
         });
 
-        // Remove all agents and connections associated with the preset
-        for agent in &preset.spec().agents {
+        // Remove all agents and connections associated with the patch
+        for agent in &patch.spec().agents {
             self.remove_agent_internal(&agent.id)
                 .await
                 .unwrap_or_else(|e| {
                     log::error!("Failed to remove_agent {}: {}", agent.id, e);
                 });
         }
-        for connection in &preset.spec().connections {
+        for connection in &patch.spec().connections {
             self.remove_connection_internal(connection);
         }
 
-        // Drop the preset lock before modifying the presets map
-        drop(preset);
+        // Drop the patch lock before modifying the patches map
+        drop(patch);
 
-        // Remove the preset entry from the map
+        // Remove the patch entry from the map
         {
-            let mut presets = self.presets.lock().unwrap();
-            presets.swap_remove(id);
+            let mut patches = self.patches.lock().unwrap();
+            patches.swap_remove(id);
         }
-        self.preset_names.lock().unwrap().retain(|_, v| v != id);
-        self.remove_preset_token(id);
+        self.patch_names.lock().unwrap().retain(|_, v| v != id);
+        self.remove_patch_token(id);
 
-        self.emit_preset_removed(id.to_string(), name);
+        self.emit_patch_removed(id.to_string(), name);
 
         Ok(())
     }
 
-    /// Start a preset by id.
+    /// Start a patch by id.
     ///
-    /// This starts all agents in the preset, enabling message flow between them.
+    /// This starts all agents in the patch, enabling message flow between them.
     /// Each agent's [`start()`](crate::AsAgent::start) method is called.
     ///
-    /// Emits [`ModularAgentEvent::PresetStarted`] when the preset was not
+    /// Emits [`ModularAgentEvent::PatchStarted`] when the patch was not
     /// already running.
-    pub async fn start_preset(&self, id: &str) -> Result<(), AgentError> {
-        let preset = self
-            .get_preset(id)
-            .ok_or_else(|| AgentError::PresetNotFound(id.to_string()))?;
-        // Emit outside the preset lock so observers cannot deadlock against it.
+    pub async fn start_patch(&self, id: &str) -> Result<(), AgentError> {
+        let patch = self
+            .get_patch(id)
+            .ok_or_else(|| AgentError::PatchNotFound(id.to_string()))?;
+        // Emit outside the patch lock so observers cannot deadlock against it.
         let started = {
-            let mut preset = preset.lock().await;
-            let was_running = preset.running();
-            preset.start(self).await?;
-            !was_running && preset.running()
+            let mut patch = patch.lock().await;
+            let was_running = patch.running();
+            patch.start(self).await?;
+            !was_running && patch.running()
         };
         if started {
-            self.emit_preset_started(id.to_string());
+            self.emit_patch_started(id.to_string());
         }
 
         Ok(())
     }
 
-    /// Stop a preset by id.
+    /// Stop a patch by id.
     ///
-    /// This stops all agents in the preset, terminating message processing.
+    /// This stops all agents in the patch, terminating message processing.
     /// Each agent's [`stop()`](crate::AsAgent::stop) method is called.
     ///
-    /// Emits [`ModularAgentEvent::PresetStopped`] when the preset was running.
-    pub async fn stop_preset(&self, id: &str) -> Result<(), AgentError> {
-        let preset = self
-            .get_preset(id)
-            .ok_or_else(|| AgentError::PresetNotFound(id.to_string()))?;
+    /// Emits [`ModularAgentEvent::PatchStopped`] when the patch was running.
+    pub async fn stop_patch(&self, id: &str) -> Result<(), AgentError> {
+        let patch = self
+            .get_patch(id)
+            .ok_or_else(|| AgentError::PatchNotFound(id.to_string()))?;
         let stopped = {
-            let mut preset = preset.lock().await;
-            let was_running = preset.running();
-            preset.stop(self).await?;
-            was_running && !preset.running()
+            let mut patch = patch.lock().await;
+            let was_running = patch.running();
+            patch.stop(self).await?;
+            was_running && !patch.running()
         };
         if stopped {
-            self.emit_preset_stopped(id.to_string());
+            self.emit_patch_stopped(id.to_string());
         }
 
         Ok(())
     }
 
-    /// Open a preset from a JSON file.
+    /// Open a patch from a JSON file.
     ///
-    /// Reads the file, parses the JSON as a [`PresetSpec`], and adds it to the system.
-    /// Optionally provide a custom name for the preset.
+    /// Reads the file, parses the JSON as a [`PatchSpec`], and adds it to the system.
+    /// Optionally provide a custom name for the patch.
     ///
     /// # Arguments
     ///
-    /// * `path` - Path to the JSON preset file
-    /// * `name` - Optional custom name for the preset
+    /// * `path` - Path to the JSON patch file
+    /// * `name` - Optional custom name for the patch
     #[cfg(feature = "file")]
-    pub async fn open_preset_from_file(
+    pub async fn open_patch_from_file(
         &self,
         path: &str,
         name: Option<String>,
     ) -> Result<String, AgentError> {
         let json_str =
             std::fs::read_to_string(path).map_err(|e| AgentError::IoError(e.to_string()))?;
-        let spec = PresetSpec::from_json(&json_str)?;
-        let id = self.add_preset_raw(spec, name)?;
+        let spec = PatchSpec::from_json(&json_str)?;
+        let id = self.add_patch_raw(spec, name)?;
         Ok(id)
     }
 
-    /// Save a preset to a JSON file.
+    /// Save a patch to a JSON file.
     ///
-    /// Serializes the current preset state (including agent configs) to JSON
+    /// Serializes the current patch state (including agent configs) to JSON
     /// and writes it to the specified path. Emits
-    /// [`ModularAgentEvent::PresetSaved`] when the preset has a name; unnamed
-    /// presets have no list entry to refresh, so no event is emitted for them.
+    /// [`ModularAgentEvent::PatchSaved`] when the patch has a name; unnamed
+    /// patches have no list entry to refresh, so no event is emitted for them.
     #[cfg(feature = "file")]
-    pub async fn save_preset(&self, id: &str, path: &str) -> Result<(), AgentError> {
-        let Some(preset_spec) = self.get_preset_spec(id).await else {
-            return Err(AgentError::PresetNotFound(id.to_string()));
+    pub async fn save_patch(&self, id: &str, path: &str) -> Result<(), AgentError> {
+        let Some(patch_spec) = self.get_patch_spec(id).await else {
+            return Err(AgentError::PatchNotFound(id.to_string()));
         };
-        let json_str = preset_spec.to_json()?;
+        let json_str = patch_spec.to_json()?;
         std::fs::write(path, json_str).map_err(|e| AgentError::IoError(e.to_string()))?;
-        if let Some(name) = self.get_preset_info(id).await.and_then(|info| info.name) {
-            self.emit_preset_saved(id.to_string(), name);
+        if let Some(name) = self.get_patch_info(id).await.and_then(|info| info.name) {
+            self.emit_patch_saved(id.to_string(), name);
         }
         Ok(())
     }
 
-    // PresetSpec
+    // PatchSpec
 
-    /// Get the current preset spec by id.
-    pub async fn get_preset_spec(&self, id: &str) -> Option<PresetSpec> {
-        let preset = self.get_preset(id)?;
-        let mut preset_spec = {
-            let preset = preset.lock().await;
-            preset.spec().clone()
+    /// Get the current patch spec by id.
+    pub async fn get_patch_spec(&self, id: &str) -> Option<PatchSpec> {
+        let patch = self.get_patch(id)?;
+        let mut patch_spec = {
+            let patch = patch.lock().await;
+            patch.spec().clone()
         };
 
         // Overlay live agent specs onto the stored entries. An agent whose
         // definition is not registered in this build has no live instance;
         // keep its stored spec so it survives the editor round-trip and the
-        // save that follows (save_preset writes exactly what this returns).
-        for agent in &mut preset_spec.agents {
+        // save that follows (save_patch writes exactly what this returns).
+        for agent in &mut patch_spec.agents {
             if let Some(spec) = self.get_agent_spec(&agent.id).await {
                 *agent = spec;
             }
@@ -603,48 +599,48 @@ impl ModularAgent {
 
         // No need to change connections
 
-        Some(preset_spec)
+        Some(patch_spec)
     }
 
-    /// Update the preset spec
-    pub async fn update_preset_spec(&self, id: &str, value: &Value) -> Result<(), AgentError> {
-        let preset = self
-            .get_preset(id)
-            .ok_or_else(|| AgentError::PresetNotFound(id.to_string()))?;
-        let mut preset = preset.lock().await;
-        preset.update_spec(value)?;
-        drop(preset);
-        self.emit_preset_structure_changed(id.to_string());
+    /// Update the patch spec
+    pub async fn update_patch_spec(&self, id: &str, value: &Value) -> Result<(), AgentError> {
+        let patch = self
+            .get_patch(id)
+            .ok_or_else(|| AgentError::PatchNotFound(id.to_string()))?;
+        let mut patch = patch.lock().await;
+        patch.update_spec(value)?;
+        drop(patch);
+        self.emit_patch_structure_changed(id.to_string());
         Ok(())
     }
 
-    // PresetInfo
+    // PatchInfo
 
-    /// Get info of the preset by id.
-    pub async fn get_preset_info(&self, id: &str) -> Option<PresetInfo> {
-        let preset = self.get_preset(id)?;
-        Some(PresetInfo::from(&*preset.lock().await))
+    /// Get info of the patch by id.
+    pub async fn get_patch_info(&self, id: &str) -> Option<PatchInfo> {
+        let patch = self.get_patch(id)?;
+        Some(PatchInfo::from(&*patch.lock().await))
     }
 
-    /// Get infos of all presets.
-    pub async fn get_preset_infos(&self) -> Vec<PresetInfo> {
-        let presets = {
-            let presets = self.presets.lock().unwrap();
-            presets.values().cloned().collect::<Vec<_>>()
+    /// Get infos of all patches.
+    pub async fn get_patch_infos(&self) -> Vec<PatchInfo> {
+        let patches = {
+            let patches = self.patches.lock().unwrap();
+            patches.values().cloned().collect::<Vec<_>>()
         };
-        let mut preset_infos = Vec::new();
-        for preset in presets {
-            let preset_guard = preset.lock().await;
-            preset_infos.push(PresetInfo::from(&*preset_guard));
+        let mut patch_infos = Vec::new();
+        for patch in patches {
+            let patch_guard = patch.lock().await;
+            patch_infos.push(PatchInfo::from(&*patch_guard));
         }
-        preset_infos
+        patch_infos
     }
 
     // Agents
 
     /// Register an agent definition.
     ///
-    /// This makes the agent type available for use in presets. The definition
+    /// This makes the agent type available for use in patches. The definition
     /// includes metadata (title, category), input/output ports, and config specs.
     ///
     /// Note: Agents using `#[modular_agent]` macro are registered automatically via inventory.
@@ -698,20 +694,20 @@ impl ModularAgent {
         Some(agent.spec().clone())
     }
 
-    /// Look up the stored preset spec entry of an agent by id.
+    /// Look up the stored patch spec entry of an agent by id.
     ///
     /// Unlike [`Self::get_agent_spec`] this also finds spec-only agents
     /// (whose definition is not registered in this build), which have no
     /// live instance. For a live agent it returns the stored entry, not the
     /// instance spec.
     pub(crate) async fn find_stored_agent_spec(&self, agent_id: &str) -> Option<AgentSpec> {
-        let presets = {
-            let presets = self.presets.lock().unwrap();
-            presets.values().cloned().collect::<Vec<_>>()
+        let patches = {
+            let patches = self.patches.lock().unwrap();
+            patches.values().cloned().collect::<Vec<_>>()
         };
-        for preset in presets {
-            let preset = preset.lock().await;
-            if let Some(agent) = preset.spec().agents.iter().find(|a| a.id == agent_id) {
+        for patch in patches {
+            let patch = patch.lock().await;
+            if let Some(agent) = patch.spec().agents.iter().find(|a| a.id == agent_id) {
                 return Some(agent.clone());
             }
         }
@@ -726,15 +722,15 @@ impl ModularAgent {
     /// propagated, as with [`ModularAgent::set_agent_configs`].
     ///
     /// Emits [`ModularAgentEvent::AgentSpecUpdated`], and additionally
-    /// [`ModularAgentEvent::PresetStructureChanged`] when the patch contains
+    /// [`ModularAgentEvent::PatchStructureChanged`] when the patch contains
     /// keys other than `configs`. The events are emitted even when an error
     /// is returned: the agent may have committed the patch before failing
     /// (`configs_changed` runs after the merge), and a spec change must never
     /// go unannounced to hosts.
     ///
     /// An agent with no live instance (its definition is not registered in
-    /// this build) is patched in the preset spec that holds it, with the same
-    /// events; [`AgentError::AgentNotFound`] is returned only when no preset
+    /// this build) is patched in the patch spec that holds it, with the same
+    /// events; [`AgentError::AgentNotFound`] is returned only when no patch
     /// holds the id either.
     pub async fn update_agent_spec(&self, agent_id: &str, value: &Value) -> Result<(), AgentError> {
         let agent = {
@@ -746,10 +742,10 @@ impl ModularAgent {
             // entry, whose stored spec is the only place a patch can land.
             return self.update_spec_only_agent(agent_id, value).await;
         };
-        let (preset_id, updated) = {
+        let (patch_id, updated) = {
             let mut agent = agent.lock().await;
             let updated = agent.update_spec(value);
-            (agent.preset_id().to_string(), updated)
+            (agent.patch_id().to_string(), updated)
         };
 
         // A failure may have left the patch committed (an agent can reject a
@@ -759,7 +755,7 @@ impl ModularAgent {
         self.emit_agent_spec_updated(agent_id.to_string());
 
         if is_structural_spec_patch(value) {
-            self.emit_preset_structure_changed(preset_id);
+            self.emit_patch_structure_changed(patch_id);
         }
         updated
     }
@@ -767,7 +763,7 @@ impl ModularAgent {
     /// Patch the stored spec entry of an agent that has no live instance.
     ///
     /// A spec-only agent (its definition is not registered in this build)
-    /// never got instantiated, so the preset spec is the only place its
+    /// never got instantiated, so the patch spec is the only place its
     /// layout, ports or configs can be recorded. The event contract matches
     /// the live path so hosts cannot tell the two apart.
     async fn update_spec_only_agent(
@@ -775,7 +771,7 @@ impl ModularAgent {
         agent_id: &str,
         value: &Value,
     ) -> Result<(), AgentError> {
-        let Some((preset_id, updated)) = self.patch_stored_agent_spec(agent_id, value).await else {
+        let Some((patch_id, updated)) = self.patch_stored_agent_spec(agent_id, value).await else {
             return Err(AgentError::AgentNotFound(agent_id.to_string()));
         };
 
@@ -783,35 +779,35 @@ impl ModularAgent {
         // failed patch still has to announce the change.
         self.emit_agent_spec_updated(agent_id.to_string());
         if is_structural_spec_patch(value) {
-            self.emit_preset_structure_changed(preset_id);
+            self.emit_patch_structure_changed(patch_id);
         }
         updated
     }
 
     /// Applies a patch to an agent's stored spec entry, emitting no events.
     ///
-    /// Returns the id of the preset that holds the agent together with the
-    /// patch result, or `None` when no preset spec contains the id. The
-    /// preset id is returned even when the patch failed, so callers can
+    /// Returns the id of the patch that holds the agent together with the
+    /// patch result, or `None` when no patch spec contains the id. The
+    /// patch id is returned even when the patch failed, so callers can
     /// still announce a partially merged change.
     async fn patch_stored_agent_spec(
         &self,
         agent_id: &str,
         value: &Value,
     ) -> Option<(String, Result<(), AgentError>)> {
-        // Take a snapshot and release the presets lock: a preset's async
+        // Take a snapshot and release the patches lock: a patch's async
         // mutex must never be awaited while the sync map lock is held.
-        let presets = {
-            let presets = self.presets.lock().unwrap();
-            presets.values().cloned().collect::<Vec<_>>()
+        let patches = {
+            let patches = self.patches.lock().unwrap();
+            patches.values().cloned().collect::<Vec<_>>()
         };
 
-        for preset in presets {
-            // One preset at a time, so no two preset locks are ever held.
-            let mut preset = preset.lock().await;
-            match preset.update_agent_spec(agent_id, value) {
+        for patch in patches {
+            // One patch at a time, so no two patch locks are ever held.
+            let mut patch = patch.lock().await;
+            match patch.update_agent_spec(agent_id, value) {
                 Ok(false) => continue,
-                result => return Some((preset.id().to_string(), result.map(|_| ()))),
+                result => return Some((patch.id().to_string(), result.map(|_| ()))),
             }
         }
         None
@@ -825,38 +821,38 @@ impl ModularAgent {
         Ok(def.to_spec())
     }
 
-    /// Add an agent to the specified preset.
+    /// Add an agent to the specified patch.
     ///
-    /// Creates a new agent instance from the given spec and adds it to the preset.
+    /// Creates a new agent instance from the given spec and adds it to the patch.
     /// Returns the id of the newly created agent. The agent is not started automatically;
-    /// call [`start_preset`](Self::start_preset) or [`start_agent`](Self::start_agent) to start it.
+    /// call [`start_patch`](Self::start_patch) or [`start_agent`](Self::start_agent) to start it.
     pub async fn add_agent(
         &self,
-        preset_id: String,
+        patch_id: String,
         mut spec: AgentSpec,
     ) -> Result<String, AgentError> {
-        let preset = self
-            .get_preset(&preset_id)
-            .ok_or_else(|| AgentError::PresetNotFound(preset_id.to_string()))?;
+        let patch = self
+            .get_patch(&patch_id)
+            .ok_or_else(|| AgentError::PatchNotFound(patch_id.to_string()))?;
 
         let id = new_id();
         spec.id = id.clone();
         // Register the constructed spec: new() may have generated dynamic
-        // configs/ports via update_spec, and the preset must reflect them.
-        let constructed = self.add_agent_internal(preset_id.clone(), spec)?;
+        // configs/ports via update_spec, and the patch must reflect them.
+        let constructed = self.add_agent_internal(patch_id.clone(), spec)?;
 
-        let mut preset = preset.lock().await;
-        preset.add_agent(constructed);
-        drop(preset);
+        let mut patch = patch.lock().await;
+        patch.add_agent(constructed);
+        drop(patch);
 
-        self.emit_preset_structure_changed(preset_id);
+        self.emit_patch_structure_changed(patch_id);
 
         Ok(id)
     }
 
     fn add_agent_internal(
         &self,
-        preset_id: String,
+        patch_id: String,
         spec: AgentSpec,
     ) -> Result<AgentSpec, AgentError> {
         let mut agents = self.agents.lock().unwrap();
@@ -867,7 +863,7 @@ impl ModularAgent {
         // base(): the agent keeps this handle for its lifetime, so runtime
         // events it emits later must not inherit the creator's origin tag.
         let mut agent = agent_new(self.base(), spec_id.clone(), spec)?;
-        agent.set_preset_id(preset_id);
+        agent.set_patch_id(patch_id);
         let constructed = agent.spec().clone();
         agents.insert(spec_id, Arc::new(AsyncMutex::new(agent)));
         Ok(constructed)
@@ -879,13 +875,13 @@ impl ModularAgent {
         agents.get(agent_id).cloned()
     }
 
-    /// Add a connection between two agents in the specified preset.
+    /// Add a connection between two agents in the specified patch.
     ///
     /// When the source agent outputs a value on the source handle (port),
     /// it will be delivered to the target agent's target handle (port).
     pub async fn add_connection(
         &self,
-        preset_id: &str,
+        patch_id: &str,
         connection: ConnectionSpec,
     ) -> Result<(), AgentError> {
         // check if the source and target agents exist
@@ -907,17 +903,17 @@ impl ModularAgent {
             return Err(AgentError::EmptyTargetHandle);
         }
 
-        let preset = self
-            .get_preset(preset_id)
-            .ok_or_else(|| AgentError::PresetNotFound(preset_id.to_string()))?;
-        let mut preset = preset.lock().await;
+        let patch = self
+            .get_patch(patch_id)
+            .ok_or_else(|| AgentError::PatchNotFound(patch_id.to_string()))?;
+        let mut patch = patch.lock().await;
         // Register the routing entry first: it is the fallible step
-        // (duplicate detection), and a failure must leave the preset spec
+        // (duplicate detection), and a failure must leave the patch spec
         // untouched so no spec change ever goes unannounced.
         self.add_connection_internal(connection.clone())?;
-        preset.add_connection(connection);
-        drop(preset);
-        self.emit_preset_structure_changed(preset_id.to_string());
+        patch.add_connection(connection);
+        drop(patch);
+        self.emit_patch_structure_changed(patch_id.to_string());
         Ok(())
     }
 
@@ -966,22 +962,22 @@ impl ModularAgent {
         })
     }
 
-    /// Add agents and connections to the specified preset.
+    /// Add agents and connections to the specified patch.
     ///
     /// The ids of the given agents and connections are changed to new unique ids.
-    /// The agents are not started automatically, even if the preset is running.
+    /// The agents are not started automatically, even if the patch is running.
     pub async fn add_agents_and_connections(
         &self,
-        preset_id: &str,
+        patch_id: &str,
         agents: &Vec<AgentSpec>,
         connections: &Vec<ConnectionSpec>,
     ) -> Result<(Vec<AgentSpec>, Vec<ConnectionSpec>), AgentError> {
         let (agents, connections) = update_ids(agents, connections);
 
-        let preset = self
-            .get_preset(preset_id)
-            .ok_or_else(|| AgentError::PresetNotFound(preset_id.to_string()))?;
-        let mut preset = preset.lock().await;
+        let patch = self
+            .get_patch(patch_id)
+            .ok_or_else(|| AgentError::PatchNotFound(patch_id.to_string()))?;
+        let mut patch = patch.lock().await;
 
         // Track progress so a mid-batch failure can be rolled back: a
         // partial batch must not leave agents in the spec (or the runtime
@@ -991,12 +987,12 @@ impl ModularAgent {
         let mut result = Ok(());
 
         // Collect the constructed specs (with dynamic configs/ports from
-        // new()) so the preset and the caller both see the real state.
+        // new()) so the patch and the caller both see the real state.
         let mut constructed_agents = Vec::with_capacity(agents.len());
         for agent in &agents {
-            match self.add_agent_internal(preset_id.to_string(), agent.clone()) {
+            match self.add_agent_internal(patch_id.to_string(), agent.clone()) {
                 Ok(constructed) => {
-                    preset.add_agent(constructed.clone());
+                    patch.add_agent(constructed.clone());
                     constructed_agents.push(constructed);
                     added_agents += 1;
                 }
@@ -1013,14 +1009,14 @@ impl ModularAgent {
                     result = Err(e);
                     break;
                 }
-                preset.add_connection(connection.clone());
+                patch.add_connection(connection.clone());
                 added_connections += 1;
             }
         }
 
         if let Err(e) = result {
             for connection in connections.iter().take(added_connections) {
-                preset.remove_connection(connection);
+                patch.remove_connection(connection);
                 self.remove_connection_internal(connection);
             }
             // The rolled-back agents were never started, so no stop or
@@ -1028,30 +1024,30 @@ impl ModularAgent {
             // add_agent_internal completely.
             let mut agents_map = self.agents.lock().unwrap();
             for agent in agents.iter().take(added_agents) {
-                preset.remove_agent(&agent.id);
+                patch.remove_agent(&agent.id);
                 agents_map.swap_remove(&agent.id);
             }
             return Err(e);
         }
-        drop(preset);
+        drop(patch);
 
-        self.emit_preset_structure_changed(preset_id.to_string());
+        self.emit_patch_structure_changed(patch_id.to_string());
 
         Ok((constructed_agents, connections))
     }
 
-    /// Remove an agent from the specified preset.
+    /// Remove an agent from the specified patch.
     ///
     /// If the agent is running, it will be stopped first.
-    pub async fn remove_agent(&self, preset_id: &str, agent_id: &str) -> Result<(), AgentError> {
-        let preset = self
-            .get_preset(preset_id)
-            .ok_or_else(|| AgentError::PresetNotFound(preset_id.to_string()))?;
+    pub async fn remove_agent(&self, patch_id: &str, agent_id: &str) -> Result<(), AgentError> {
+        let patch = self
+            .get_patch(patch_id)
+            .ok_or_else(|| AgentError::PatchNotFound(patch_id.to_string()))?;
 
         // Tear down the runtime instance before touching the spec so a
         // failure leaves the spec unchanged and no spec change ever goes
         // unannounced. An agent can exist in the spec without a runtime
-        // instance (its definition was unknown when the preset was added);
+        // instance (its definition was unknown when the patch was added);
         // such an agent is still removable from the spec.
         let runtime_removed = match self.remove_agent_internal(agent_id).await {
             Ok(()) => true,
@@ -1060,16 +1056,16 @@ impl ModularAgent {
         };
 
         let spec_removed = {
-            let mut preset = preset.lock().await;
-            let count_before = preset.spec().agents.len();
-            preset.remove_agent(agent_id);
-            preset.spec().agents.len() != count_before
+            let mut patch = patch.lock().await;
+            let count_before = patch.spec().agents.len();
+            patch.remove_agent(agent_id);
+            patch.spec().agents.len() != count_before
         };
 
         if !runtime_removed && !spec_removed {
             return Err(AgentError::AgentNotFound(agent_id.to_string()));
         }
-        self.emit_preset_structure_changed(preset_id.to_string());
+        self.emit_patch_structure_changed(patch_id.to_string());
         Ok(())
     }
 
@@ -1101,17 +1097,17 @@ impl ModularAgent {
         Ok(())
     }
 
-    /// Remove a connection from the specified preset.
+    /// Remove a connection from the specified patch.
     pub async fn remove_connection(
         &self,
-        preset_id: &str,
+        patch_id: &str,
         connection: &ConnectionSpec,
     ) -> Result<(), AgentError> {
-        let preset = self
-            .get_preset(preset_id)
-            .ok_or_else(|| AgentError::PresetNotFound(preset_id.to_string()))?;
-        let mut preset = preset.lock().await;
-        let Some(connection) = preset.remove_connection(connection) else {
+        let patch = self
+            .get_patch(patch_id)
+            .ok_or_else(|| AgentError::PatchNotFound(patch_id.to_string()))?;
+        let mut patch = patch.lock().await;
+        let Some(connection) = patch.remove_connection(connection) else {
             return Err(AgentError::ConnectionNotFound(format!(
                 "{}:{}->{}:{}",
                 connection.source,
@@ -1121,8 +1117,8 @@ impl ModularAgent {
             )));
         };
         self.remove_connection_internal(&connection);
-        drop(preset);
-        self.emit_preset_structure_changed(preset_id.to_string());
+        drop(patch);
+        self.emit_patch_structure_changed(patch_id.to_string());
         Ok(())
     }
 
@@ -1142,47 +1138,47 @@ impl ModularAgent {
 
     // Cancellation tokens
 
-    /// Returns the parent cancellation token for a preset, creating it if needed.
-    fn preset_token(&self, preset_id: &str) -> CancellationToken {
-        let mut tokens = self.preset_tokens.lock().unwrap();
-        tokens.entry(preset_id.to_string()).or_default().clone()
+    /// Returns the parent cancellation token for a patch, creating it if needed.
+    fn patch_token(&self, patch_id: &str) -> CancellationToken {
+        let mut tokens = self.patch_tokens.lock().unwrap();
+        tokens.entry(patch_id.to_string()).or_default().clone()
     }
 
-    /// Installs a fresh (uncancelled) parent token for a preset.
+    /// Installs a fresh (uncancelled) parent token for a patch.
     ///
     /// A fired `CancellationToken` cannot be reset, so this is called when a
-    /// preset starts to replace the token cancelled by a previous stop.
-    pub(crate) fn reset_preset_token(&self, preset_id: &str) {
-        let mut tokens = self.preset_tokens.lock().unwrap();
-        tokens.insert(preset_id.to_string(), CancellationToken::new());
+    /// patch starts to replace the token cancelled by a previous stop.
+    pub(crate) fn reset_patch_token(&self, patch_id: &str) {
+        let mut tokens = self.patch_tokens.lock().unwrap();
+        tokens.insert(patch_id.to_string(), CancellationToken::new());
     }
 
-    /// Cancels the preset's parent token, aborting the in-flight `process()`
-    /// of every agent in the preset at once.
+    /// Cancels the patch's parent token, aborting the in-flight `process()`
+    /// of every agent in the patch at once.
     ///
     /// The entry is kept (in its cancelled state) for the duration of the
     /// stop sequence so agent tokens renewed while agents are still being
     /// stopped are born cancelled and queued inputs are skipped instead of
-    /// processed. [`Preset::stop`](crate::preset::Preset::stop) removes the
+    /// processed. [`Patch::stop`](crate::patch::Patch::stop) removes the
     /// entry once every agent has stopped, so a later `start_agent` derives
     /// a live token instead of a child of the fired one.
-    pub(crate) fn cancel_preset_token(&self, preset_id: &str) {
-        let token = self.preset_tokens.lock().unwrap().get(preset_id).cloned();
+    pub(crate) fn cancel_patch_token(&self, patch_id: &str) {
+        let token = self.patch_tokens.lock().unwrap().get(patch_id).cloned();
         if let Some(token) = token {
             token.cancel();
         }
     }
 
-    pub(crate) fn remove_preset_token(&self, preset_id: &str) {
-        self.preset_tokens.lock().unwrap().swap_remove(preset_id);
+    pub(crate) fn remove_patch_token(&self, patch_id: &str) {
+        self.patch_tokens.lock().unwrap().swap_remove(patch_id);
     }
 
     /// Creates and tracks a fresh cancellation token for an agent as a child
-    /// of its preset's parent token. The returned generation identifies the
+    /// of its patch's parent token. The returned generation identifies the
     /// agent-loop incarnation that owns the slot.
-    fn create_agent_token(&self, preset_id: &str, agent_id: &str) -> (u64, CancellationToken) {
+    fn create_agent_token(&self, patch_id: &str, agent_id: &str) -> (u64, CancellationToken) {
         let generation = AGENT_TOKEN_GENERATION.fetch_add(1, Ordering::Relaxed);
-        let token = self.preset_token(preset_id).child_token();
+        let token = self.patch_token(patch_id).child_token();
         self.agent_tokens
             .lock()
             .unwrap()
@@ -1190,23 +1186,23 @@ impl ModularAgent {
         (generation, token)
     }
 
-    /// Replaces a fired agent token with a fresh child of the preset token.
+    /// Replaces a fired agent token with a fresh child of the patch token.
     ///
     /// Called by the agent loop after its token fired. Returns `None` when
     /// the slot no longer belongs to the calling loop — either
     /// [`stop_agent`](Self::stop_agent) removed the entry, a restarted
     /// agent's new loop installed its own token (different generation), or
-    /// the whole preset was removed. The caller then keeps its fired token
+    /// the whole patch was removed. The caller then keeps its fired token
     /// so queued inputs are skipped until the `Stop` message arrives.
     fn renew_agent_token(
         &self,
-        preset_id: &str,
+        patch_id: &str,
         agent_id: &str,
         generation: u64,
     ) -> Option<CancellationToken> {
         // Look up (never create) the parent: a lagging loop must not
-        // resurrect the token entry of a removed preset.
-        let parent = self.preset_tokens.lock().unwrap().get(preset_id).cloned()?;
+        // resurrect the token entry of a removed patch.
+        let parent = self.patch_tokens.lock().unwrap().get(patch_id).cloned()?;
         let fresh = parent.child_token();
         let mut tokens = self.agent_tokens.lock().unwrap();
         let slot = tokens.get_mut(agent_id)?;
@@ -1241,7 +1237,7 @@ impl ModularAgent {
     /// Cancels the context's cancellation token, which every agent handling
     /// the flow received via [`AgentContext::cancel_token`]. Cancellation is
     /// cooperative for work already in flight: agents that `select!` on the
-    /// token (LLM streaming loops, [`PresetToolAgent`](crate::tool::PresetToolAgent)
+    /// token (LLM streaming loops, [`PatchToolAgent`](crate::tool::PatchToolAgent)
     /// result waits) abort promptly with [`AgentError::Cancelled`], while
     /// agents that ignore it run to completion. Inputs dispatched after the
     /// token fires are skipped before `process()` is called. The cancelled
@@ -1285,9 +1281,9 @@ impl ModularAgent {
             };
             a.clone()
         };
-        let (def_name, preset_id) = {
+        let (def_name, patch_id) = {
             let agent = agent.lock().await;
-            (agent.def_name().to_string(), agent.preset_id().to_string())
+            (agent.def_name().to_string(), agent.patch_id().to_string())
         };
         let uses_native_thread = {
             let defs = self.defs.lock().unwrap();
@@ -1317,7 +1313,7 @@ impl ModularAgent {
             // stamp runtime events with the caller's origin.
             let ma = self.base();
             // Created before spawning so stop_agent can cancel it immediately.
-            let (generation, mut token) = self.create_agent_token(&preset_id, agent_id);
+            let (generation, mut token) = self.create_agent_token(&patch_id, agent_id);
 
             let agent_loop = async move {
                 // Race start() against the token too: a start() stuck on
@@ -1365,7 +1361,7 @@ impl ModularAgent {
                                     // one unless this loop no longer owns the
                                     // token slot (agent stopping or restarted).
                                     if let Some(fresh) = ma.renew_agent_token(
-                                        &preset_id,
+                                        &patch_id,
                                         &agent_id_clone,
                                         generation,
                                     ) {
@@ -1470,7 +1466,7 @@ impl ModularAgent {
     /// actually changed.
     ///
     /// An agent with no live instance (its definition is not registered in
-    /// this build) has the configs merged into its stored preset spec entry,
+    /// this build) has the configs merged into its stored patch spec entry,
     /// so the edit survives a save.
     pub async fn set_agent_configs(
         &self,
@@ -1665,11 +1661,11 @@ impl ModularAgent {
     /// Write a value to the local variable channel.
     pub async fn write_local_input(
         &self,
-        preset_id: &str,
+        patch_id: &str,
         name: &str,
         value: AgentValue,
     ) -> Result<(), AgentError> {
-        let channel_name = format!("%{}/{}", preset_id, name);
+        let channel_name = format!("%{}/{}", patch_id, name);
         self.send_external_output(channel_name, AgentContext::new(), value)
             .await
     }
@@ -1725,7 +1721,7 @@ impl ModularAgent {
     /// [`ModularAgentEvent`] together with the origin of the change.
     /// For filtered subscriptions, use [`subscribe_to_event`](Self::subscribe_to_event).
     ///
-    /// **Note**: Subscribe before starting presets to avoid missing events.
+    /// **Note**: Subscribe before starting patches to avoid missing events.
     pub fn subscribe(&self) -> broadcast::Receiver<EventEnvelope> {
         self.observers.subscribe()
     }
@@ -1736,7 +1732,7 @@ impl ModularAgent {
     /// filters and maps events, and only successfully mapped events are forwarded
     /// to the returned receiver.
     ///
-    /// **Important**: Subscribe to events BEFORE starting presets to avoid missing
+    /// **Important**: Subscribe to events BEFORE starting patches to avoid missing
     /// events due to race conditions.
     ///
     /// # Arguments
@@ -1765,7 +1761,7 @@ impl ModularAgent {
     ///     None
     /// });
     ///
-    /// // Now start the preset and receive events
+    /// // Now start the patch and receive events
     /// while let Some(value) = output_rx.recv().await {
     ///     println!("Received: {:?}", value);
     /// }
@@ -1824,42 +1820,42 @@ impl ModularAgent {
         self.notify_observers(ModularAgentEvent::AgentSpecUpdated(agent_id));
     }
 
-    pub(crate) fn emit_preset_structure_changed(&self, preset_id: String) {
-        self.notify_observers(ModularAgentEvent::PresetStructureChanged { preset_id });
+    pub(crate) fn emit_patch_structure_changed(&self, patch_id: String) {
+        self.notify_observers(ModularAgentEvent::PatchStructureChanged { patch_id });
     }
 
-    pub(crate) fn emit_preset_added(&self, preset_id: String, name: Option<String>) {
-        self.notify_observers(ModularAgentEvent::PresetAdded { preset_id, name });
+    pub(crate) fn emit_patch_added(&self, patch_id: String, name: Option<String>) {
+        self.notify_observers(ModularAgentEvent::PatchAdded { patch_id, name });
     }
 
-    pub(crate) fn emit_preset_removed(&self, preset_id: String, name: Option<String>) {
-        self.notify_observers(ModularAgentEvent::PresetRemoved { preset_id, name });
+    pub(crate) fn emit_patch_removed(&self, patch_id: String, name: Option<String>) {
+        self.notify_observers(ModularAgentEvent::PatchRemoved { patch_id, name });
     }
 
-    pub(crate) fn emit_preset_started(&self, preset_id: String) {
-        self.notify_observers(ModularAgentEvent::PresetStarted { preset_id });
+    pub(crate) fn emit_patch_started(&self, patch_id: String) {
+        self.notify_observers(ModularAgentEvent::PatchStarted { patch_id });
     }
 
-    pub(crate) fn emit_preset_stopped(&self, preset_id: String) {
-        self.notify_observers(ModularAgentEvent::PresetStopped { preset_id });
+    pub(crate) fn emit_patch_stopped(&self, patch_id: String) {
+        self.notify_observers(ModularAgentEvent::PatchStopped { patch_id });
     }
 
-    pub(crate) fn emit_preset_renamed(
+    pub(crate) fn emit_patch_renamed(
         &self,
-        preset_id: String,
+        patch_id: String,
         old_name: Option<String>,
         new_name: String,
     ) {
-        self.notify_observers(ModularAgentEvent::PresetRenamed {
-            preset_id,
+        self.notify_observers(ModularAgentEvent::PatchRenamed {
+            patch_id,
             old_name,
             new_name,
         });
     }
 
     #[cfg(feature = "file")]
-    pub(crate) fn emit_preset_saved(&self, preset_id: String, name: String) {
-        self.notify_observers(ModularAgentEvent::PresetSaved { preset_id, name });
+    pub(crate) fn emit_patch_saved(&self, patch_id: String, name: String) {
+        self.notify_observers(ModularAgentEvent::PatchSaved { patch_id, name });
     }
 
     pub(crate) fn emit_external_output(&self, name: String, value: AgentValue) {
@@ -1880,10 +1876,10 @@ impl ModularAgent {
     }
 }
 
-/// Whether an agent spec patch warrants a `PresetStructureChanged`.
+/// Whether an agent spec patch warrants a `PatchStructureChanged`.
 ///
 /// Any non-config key (ports, title, layout, ...) may change how hosts render
-/// the preset, so treat those patches as structural. Config-only patches stay
+/// the patch, so treat those patches as structural. Config-only patches stay
 /// quiet here; they are covered by `AgentSpecUpdated`.
 fn is_structural_spec_patch(value: &Value) -> bool {
     value
@@ -1946,64 +1942,64 @@ pub enum ModularAgentEvent {
     /// Fields: `(agent_id)`
     AgentSpecUpdated(String),
 
-    /// A preset's structure (agents, connections, or non-config spec keys)
+    /// A patch's structure (agents, connections, or non-config spec keys)
     /// was changed.
     ///
     /// Emitted by [`ModularAgent::add_agent`], [`ModularAgent::remove_agent`],
     /// [`ModularAgent::add_connection`], [`ModularAgent::remove_connection`],
     /// [`ModularAgent::add_agents_and_connections`],
-    /// [`ModularAgent::update_preset_spec`], and by
+    /// [`ModularAgent::update_patch_spec`], and by
     /// [`ModularAgent::update_agent_spec`] when the patch contains keys other
-    /// than `configs`, so hosts can refresh their view of the preset.
-    PresetStructureChanged { preset_id: String },
+    /// than `configs`, so hosts can refresh their view of the patch.
+    PatchStructureChanged { patch_id: String },
 
-    /// A preset was added.
+    /// A patch was added.
     ///
-    /// Emitted whenever a preset is created or loaded
-    /// ([`ModularAgent::new_preset`], [`ModularAgent::add_preset`], their
-    /// named variants, and `open_preset_from_file`).
-    PresetAdded {
-        preset_id: String,
+    /// Emitted whenever a patch is created or loaded
+    /// ([`ModularAgent::new_patch`], [`ModularAgent::add_patch`], their
+    /// named variants, and `open_patch_from_file`).
+    PatchAdded {
+        patch_id: String,
         name: Option<String>,
     },
 
-    /// A preset was removed.
+    /// A patch was removed.
     ///
-    /// Emitted by [`ModularAgent::remove_preset`] after the preset and its
+    /// Emitted by [`ModularAgent::remove_patch`] after the patch and its
     /// agents have been torn down, so hosts can close any view of it.
-    PresetRemoved {
-        preset_id: String,
+    PatchRemoved {
+        patch_id: String,
         name: Option<String>,
     },
 
-    /// A preset started running.
+    /// A patch started running.
     ///
-    /// Emitted by [`ModularAgent::start_preset`] only on an actual transition,
-    /// so starting an already-running preset produces no event.
-    PresetStarted { preset_id: String },
+    /// Emitted by [`ModularAgent::start_patch`] only on an actual transition,
+    /// so starting an already-running patch produces no event.
+    PatchStarted { patch_id: String },
 
-    /// A preset stopped running.
+    /// A patch stopped running.
     ///
-    /// Emitted by [`ModularAgent::stop_preset`] only on an actual transition.
-    /// Removing a preset emits [`ModularAgentEvent::PresetRemoved`] instead.
-    PresetStopped { preset_id: String },
+    /// Emitted by [`ModularAgent::stop_patch`] only on an actual transition.
+    /// Removing a patch emits [`ModularAgentEvent::PatchRemoved`] instead.
+    PatchStopped { patch_id: String },
 
-    /// A preset was renamed.
+    /// A patch was renamed.
     ///
-    /// Emitted by [`ModularAgent::rename_preset`]. `old_name` is `None` when
-    /// the preset had no name before.
-    PresetRenamed {
-        preset_id: String,
+    /// Emitted by [`ModularAgent::rename_patch`]. `old_name` is `None` when
+    /// the patch had no name before.
+    PatchRenamed {
+        patch_id: String,
         old_name: Option<String>,
         new_name: String,
     },
 
-    /// A named preset was saved to disk.
+    /// A named patch was saved to disk.
     ///
-    /// Emitted by [`ModularAgent::save_preset`]; unnamed presets produce no
+    /// Emitted by [`ModularAgent::save_patch`]; unnamed patches produce no
     /// event.
     #[cfg(feature = "file")]
-    PresetSaved { preset_id: String, name: String },
+    PatchSaved { patch_id: String, name: String },
 
     /// A value was written to an external output channel.
     ///

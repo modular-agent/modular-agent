@@ -34,7 +34,7 @@
 
 ## 概要
 
-modular-agent-core は、複数のエージェントをオーケストレーションするための非同期・ストリームベースのアーキテクチャを提供します。エージェントはメッセージパッシングで通信し、Preset を使ってネットワークとして構成できます。このクレートは最小限の依存関係を持つコアライブラリであり、個々のエージェント実装は別パッケージとして提供されています。
+modular-agent-core は、複数のエージェントをオーケストレーションするための非同期・ストリームベースのアーキテクチャを提供します。エージェントはメッセージパッシングで通信し、Patch を使ってネットワークとして構成できます。このクレートは最小限の依存関係を持つコアライブラリであり、個々のエージェント実装は別パッケージとして提供されています。
 
 ## インストール
 
@@ -69,9 +69,9 @@ async fn main() -> Result<(), AgentError> {
         None
     });
 
-    // 3. Preset を読み込み・開始
-    let preset_id = ma.open_preset_from_file("preset.json", None).await?;
-    ma.start_preset(&preset_id).await?;
+    // 3. Patch を読み込み・開始
+    let patch_id = ma.open_patch_from_file("patch.json", None).await?;
+    ma.start_patch(&patch_id).await?;
 
     // 4. 入力を送信・出力を受信
     ma.write_external_input("input".into(), AgentValue::string("hello")).await?;
@@ -80,7 +80,7 @@ async fn main() -> Result<(), AgentError> {
     }
 
     // 5. クリーンアップ
-    ma.stop_preset(&preset_id).await?;
+    ma.stop_patch(&patch_id).await?;
     ma.quit();
     Ok(())
 }
@@ -90,7 +90,7 @@ async fn main() -> Result<(), AgentError> {
 
 | Feature      | デフォルト | 説明                                            |
 | ------------ | ---------- | ----------------------------------------------- |
-| `file`       | 有効       | Preset のファイル読み込みサポート               |
+| `file`       | 有効       | Patch のファイル読み込みサポート               |
 | `image`      | 有効       | photon-rs による画像処理                        |
 | `llm`        | 有効       | Message / ToolCall 型による LLM 連携            |
 | `mcp`        | 有効       | Model Context Protocol 連携                     |
@@ -99,7 +99,7 @@ async fn main() -> Result<(), AgentError> {
 
 ## 外部エージェントによる編集（MCP サーバー）
 
-`mcp-server` feature を有効にすると、ホストアプリケーションは実行中の `ModularAgent` を localhost の MCP エンドポイントとして公開でき、Claude Code などの外部 AI エージェントが自然言語からエージェント定義の参照、プリセットの構築・編集、実行中フローの動作確認を行えるようになります。
+`mcp-server` feature を有効にすると、ホストアプリケーションは実行中の `ModularAgent` を localhost の MCP エンドポイントとして公開でき、Claude Code などの外部 AI エージェントが自然言語からエージェント定義の参照、パッチの構築・編集、実行中フローの動作確認を行えるようになります。
 
 ```toml
 modular-agent-core = { version = "0.28", features = ["mcp-server"] }
@@ -113,8 +113,8 @@ let handle = start_mcp_server(
     ma.clone(),
     McpServerConfig {
         port: 8765,
-        // save_preset ツールの保存先ルート。None なら保存不可。
-        presets_dir: Some("/path/to/presets".into()),
+        // save_patch ツールの保存先ルート。None なら保存不可。
+        patches_dir: Some("/path/to/patches".into()),
         // 必須の Bearer トークン。None なら認証なし。
         token: Some("secret".into()),
     },
@@ -135,7 +135,7 @@ claude mcp add --transport http modular-agent http://127.0.0.1:8765/mcp \
 
 > Slack チャンネルを listen して、メッセージを Chat エージェントに送り、返答をチャンネルに投稿するフローを作って
 
-外部エージェントは通常、`list_agent_definitions` でカタログを取得したあと、`create_preset` → `add_agent` ×4（Slack Listener / Slack To Message / Chat / Slack Post）→ `add_connection` ×3 → `save_preset` の順にツールを呼びます。さらに `start_preset` で実行し、`write_external_input` でテスト値を投入して `get_external_outputs` / `get_agent_errors` をポーリングすれば、フローをエンドツーエンドで動作確認できます。両ポーリングツールは `latest_seq`（そのレスポンスで返した最後のレコードの seq）を返し、次の呼び出しで `since_seq` として渡すと新しいレコードだけを受け取れます。`dropped > 0` はイベントコレクタが broadcast ストリームに追いつけず、一部のイベントをキャプチャできなかったことを示します。なお、キャプチャバッファ自体は種別ごとに最新 200 レコードのみ保持するため、ポーリングが間に合わなかったレコードは `dropped` に反映されずに押し出されることがあります。構造変更は `ModularAgentEvent::PresetStructureChanged` を emit するため、ホスト（modular-agent-desktop など）は UI をライブ更新できます。ツールは全 17 種で、定義参照・プリセット CRUD・エージェント/接続編集・設定更新・start/stop・実行時検証をカバーします。
+外部エージェントは通常、`list_agent_definitions` でカタログを取得したあと、`create_patch` → `add_agent` ×4（Slack Listener / Slack To Message / Chat / Slack Post）→ `add_connection` ×3 → `save_patch` の順にツールを呼びます。さらに `start_patch` で実行し、`write_external_input` でテスト値を投入して `get_external_outputs` / `get_agent_errors` をポーリングすれば、フローをエンドツーエンドで動作確認できます。両ポーリングツールは `latest_seq`（そのレスポンスで返した最後のレコードの seq）を返し、次の呼び出しで `since_seq` として渡すと新しいレコードだけを受け取れます。`dropped > 0` はイベントコレクタが broadcast ストリームに追いつけず、一部のイベントをキャプチャできなかったことを示します。なお、キャプチャバッファ自体は種別ごとに最新 200 レコードのみ保持するため、ポーリングが間に合わなかったレコードは `dropped` に反映されずに押し出されることがあります。構造変更は `ModularAgentEvent::PatchStructureChanged` を emit するため、ホスト（modular-agent-desktop など）は UI をライブ更新できます。ツールは全 17 種で、定義参照・パッチ CRUD・エージェント/接続編集・設定更新・start/stop・実行時検証をカバーします。
 
 サーバーは `127.0.0.1` のみにバインドします。`token` を設定した場合、すべてのリクエストに `Authorization: Bearer <token>` ヘッダーが必須で、ない場合は 401 で拒否されます。トークンなしでは認証がないため、有効化は明示的に行ってください。`modular-agent-desktop` では Settings → Core から（トークンは自動生成）、`modular-agent-cli` では `--mcp-port <PORT>` と `--mcp-token <TOKEN>` フラグで有効化します。
 
@@ -147,7 +147,7 @@ API ドキュメントは [docs.rs/modular-agent-core](https://docs.rs/modular-a
 
 ### アプリケーション
 
-- [modular-agent-desktop](https://github.com/modular-agent/modular-agent/tree/main/apps/desktop) - ビジュアル Preset エディタ (Tauri 2 + Svelte 5)
+- [modular-agent-desktop](https://github.com/modular-agent/modular-agent/tree/main/apps/desktop) - ビジュアル Patch エディタ (Tauri 2 + Svelte 5)
 
 ### エージェントライブラリ — 汎用
 

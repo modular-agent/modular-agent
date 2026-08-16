@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-start-patch"
+description = "Enables the start_patch command without any pre-configured scope."
+commands.allow = ["start_patch"]
+
+[[permission]]
+identifier = "deny-start-patch"
+description = "Denies the start_patch command without any pre-configured scope."
+commands.deny = ["start_patch"]

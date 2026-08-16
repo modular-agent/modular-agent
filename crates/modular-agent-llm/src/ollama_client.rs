@@ -459,7 +459,7 @@ pub(crate) fn message_from_ollama(msg: &OllamaChatMessage) -> Message {
                 function: ToolCallFunction {
                     // Ollama sends no tool_call id; assign a stable one at
                     // generation time so tool results can be paired even
-                    // after the preset switches to another provider (P-02).
+                    // after the patch switches to another provider (P-02).
                     id: Some(uuid::Uuid::new_v4().to_string()),
                     name: call.function.name.clone(),
                     parameters: call.function.arguments.clone(),

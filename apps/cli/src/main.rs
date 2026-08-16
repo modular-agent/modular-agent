@@ -13,10 +13,10 @@ mod agents;
 
 #[derive(Parser)]
 #[command(name = "ma")]
-#[command(about = "Run a modular agent preset with stdin/stdout")]
+#[command(about = "Run a modular agent patch with stdin/stdout")]
 struct Args {
-    /// Path to the preset JSON file
-    preset: String,
+    /// Path to the patch JSON file
+    patch: String,
 
     /// Name of the input channel
     #[arg(short, long, default_value = "input")]
@@ -50,11 +50,11 @@ async fn main() -> Result<(), AgentError> {
             .init();
     }
 
-    // Validate preset file exists
-    if !Path::new(&args.preset).exists() {
+    // Validate patch file exists
+    if !Path::new(&args.patch).exists() {
         return Err(AgentError::IoError(format!(
-            "Preset file not found: {}",
-            args.preset
+            "Patch file not found: {}",
+            args.patch
         )));
     }
 
@@ -62,7 +62,7 @@ async fn main() -> Result<(), AgentError> {
     let ma = ModularAgent::init()?;
     ma.ready().await?;
 
-    // Subscribe to external output BEFORE starting preset (avoid race condition)
+    // Subscribe to external output BEFORE starting patch (avoid race condition)
     let output_channel = args.output.clone();
     let mut output_rx = ma.subscribe_to_event(move |envelope| {
         if let ModularAgentEvent::ExternalOutput(name, value) = envelope.event
@@ -73,25 +73,25 @@ async fn main() -> Result<(), AgentError> {
         None
     });
 
-    // Load the preset first so MCP clients can see it as soon as the server
-    // is up, but start the MCP server before starting the preset: a bind
+    // Load the patch first so MCP clients can see it as soon as the server
+    // is up, but start the MCP server before starting the patch: a bind
     // failure (e.g. port already in use) must not leave running agents
     // behind without their stop() hooks being called.
-    let preset_id = ma.open_preset_from_file(&args.preset, None).await?;
+    let patch_id = ma.open_patch_from_file(&args.patch, None).await?;
 
     // Optionally serve the built-in MCP server so external agents (e.g.
     // Claude Code) can inspect and edit the running flow.
     let mcp_server = match args.mcp_port {
         Some(port) => {
-            // save_preset writes relative to this dir; the directory of the
-            // preset being run is the only presets root the CLI knows about.
-            let presets_dir = match Path::new(&args.preset).parent() {
+            // save_patch writes relative to this dir; the directory of the
+            // patch being run is the only patches root the CLI knows about.
+            let patches_dir = match Path::new(&args.patch).parent() {
                 Some(dir) if !dir.as_os_str().is_empty() => dir.to_path_buf(),
                 _ => PathBuf::from("."),
             };
             let config = McpServerConfig {
                 port,
-                presets_dir: Some(presets_dir),
+                patches_dir: Some(patches_dir),
                 token: args.mcp_token.clone(),
             };
             let handle = start_mcp_server(ma.clone(), config).await?;
@@ -103,10 +103,10 @@ async fn main() -> Result<(), AgentError> {
         None => None,
     };
 
-    ma.start_preset(&preset_id).await?;
+    ma.start_patch(&patch_id).await?;
 
     if args.verbose {
-        eprintln!("Preset loaded: {}", args.preset);
+        eprintln!("Patch loaded: {}", args.patch);
         eprintln!(
             "Input channel: {}, Output channel: {}",
             args.input, args.output
@@ -149,11 +149,11 @@ async fn main() -> Result<(), AgentError> {
     }
 
     // Graceful shutdown: stop the MCP server first so no external edits
-    // arrive while the preset is being torn down.
+    // arrive while the patch is being torn down.
     if let Some(server) = mcp_server {
         server.stop().await;
     }
-    ma.stop_preset(&preset_id).await?;
+    ma.stop_patch(&patch_id).await?;
     ma.quit();
 
     // Drain any remaining output

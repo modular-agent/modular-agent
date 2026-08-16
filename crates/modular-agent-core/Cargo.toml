@@ -71,7 +71,7 @@ mcp-http-client = [
     "dep:http",
 ]
 # Built-in MCP server (streamable HTTP) exposing flow-editing tools to
-# external agents. Implies "file" because the save_preset tool writes presets
+# external agents. Implies "file" because the save_patch tool writes patches
 # to disk.
 mcp-server = [
     "file",
