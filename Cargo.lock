@@ -3488,7 +3488,7 @@ dependencies = [
 
 [[package]]
 name = "modular-agent-core"
-version = "0.28.0"
+version = "0.29.0"
 dependencies = [
  "async-trait",
  "axum",
@@ -3549,7 +3549,7 @@ dependencies = [
 
 [[package]]
 name = "modular-agent-llm"
-version = "0.16.0"
+version = "0.17.0"
 dependencies = [
  "async-trait",
  "eventsource-stream",
@@ -3572,7 +3572,7 @@ dependencies = [
 
 [[package]]
 name = "modular-agent-macros"
-version = "0.28.0"
+version = "0.29.0"
 dependencies = [
  "im",
  "proc-macro2",
@@ -3582,7 +3582,7 @@ dependencies = [
 
 [[package]]
 name = "modular-agent-std"
-version = "0.18.0"
+version = "0.19.0"
 dependencies = [
  "chrono",
  "cron",
@@ -6399,7 +6399,7 @@ dependencies = [
 
 [[package]]
 name = "tauri-plugin-modular-agent"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "im",
  "modular-agent-core",

@@ -1,6 +1,6 @@
 [package]
 name = "modular-agent-std"
-version = "0.18.0"
+version = "0.19.0"
 description = "Standard Agents of Modular Agent"
 authors.workspace = true
 edition.workspace = true

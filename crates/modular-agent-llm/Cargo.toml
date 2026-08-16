@@ -1,6 +1,6 @@
 [package]
 name = "modular-agent-llm"
-version = "0.16.0"
+version = "0.17.0"
 description = "LLM Agents for Modular Agent"
 authors.workspace = true
 edition.workspace = true
