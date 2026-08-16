@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-new-patch"
+description = "Enables the new_patch command without any pre-configured scope."
+commands.allow = ["new_patch"]
+
+[[permission]]
+identifier = "deny-new-patch"
+description = "Denies the new_patch command without any pre-configured scope."
+commands.deny = ["new_patch"]

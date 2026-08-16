@@ -1,5 +1,5 @@
 import { redirect } from "@sveltejs/kit";
 
 export const load = async () => {
-  redirect(303, "/open_presets");
+  redirect(303, "/open_patches");
 };

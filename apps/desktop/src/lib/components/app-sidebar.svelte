@@ -8,7 +8,7 @@
   import * as Sidebar from "$lib/components/ui/sidebar/index.js";
 
   import Attribution from "./attribution.svelte";
-  import NavPresets from "./nav-presets.svelte";
+  import NavPatches from "./nav-patches.svelte";
   import NavSecondary from "./nav-secondary.svelte";
 
   const data = {
@@ -37,20 +37,20 @@
           <Sidebar.MenuItem>
             <Sidebar.MenuButton>
               {#snippet child({ props })}
-                <a href="/open_presets" {...props}>
+                <a href="/open_patches" {...props}>
                   <WorkflowIcon />
-                  <span>Open Presets</span>
+                  <span>Open Patches</span>
                 </a>
               {/snippet}
               {#snippet tooltipContent()}
-                <span>Open Presets</span>
+                <span>Open Patches</span>
               {/snippet}
             </Sidebar.MenuButton>
           </Sidebar.MenuItem>
         </Sidebar.Menu>
       </Sidebar.GroupContent>
     </Sidebar.Group>
-    <NavPresets />
+    <NavPatches />
     <NavSecondary items={data.navSecondary} class="mt-auto flex-shrink-0 pb-0" />
   </Sidebar.Content>
   <Sidebar.Footer>

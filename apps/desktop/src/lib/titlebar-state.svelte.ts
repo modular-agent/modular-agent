@@ -7,14 +7,14 @@ class TitlebarState {
   onStart: (() => Promise<void>) | null = $state(null);
   onStop: (() => Promise<void>) | null = $state(null);
 
-  // Menubar callbacks (preset_editor only)
-  presetId = $state("");
-  presetName = $state("");
+  // Menubar callbacks (patch_editor only)
+  patchId = $state("");
+  patchName = $state("");
   onShowNewDialog: (() => void) | null = $state(null);
-  onSavePreset: (() => void) | null = $state(null);
+  onSavePatch: (() => void) | null = $state(null);
   onShowSaveAsDialog: (() => void) | null = $state(null);
-  onImportPreset: (() => void) | null = $state(null);
-  onExportPreset: (() => void) | null = $state(null);
+  onImportPatch: (() => void) | null = $state(null);
+  onExportPatch: (() => void) | null = $state(null);
 
   reset() {
     this.title = "Modular Agent";
@@ -24,13 +24,13 @@ class TitlebarState {
     this.showMenubar = false;
     this.onStart = null;
     this.onStop = null;
-    this.presetId = "";
-    this.presetName = "";
+    this.patchId = "";
+    this.patchName = "";
     this.onShowNewDialog = null;
-    this.onSavePreset = null;
+    this.onSavePatch = null;
     this.onShowSaveAsDialog = null;
-    this.onImportPreset = null;
-    this.onExportPreset = null;
+    this.onImportPatch = null;
+    this.onExportPatch = null;
   }
 }
 

@@ -368,7 +368,7 @@ impl IfAgent {
 #[async_trait]
 impl AsAgent for IfAgent {
     fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
-        // Keep an invalid condition from blocking the load of a preset; it is reported
+        // Keep an invalid condition from blocking the load of a patch; it is reported
         // on the first process() call instead.
         let cond = Self::load_cond_config(&spec).unwrap_or(None);
         Ok(Self {
@@ -469,7 +469,7 @@ fn update_numbered_spec(
         let name = format!("c{}", i);
         // `AgentDefinition::reconcile_spec` moves every config the definition does not
         // declare - which includes the dynamic `c0`..`c(n-1)` - to a `_`-prefixed key when
-        // a preset is loaded. Fall back to it so saved values survive a reload.
+        // a patch is loaded. Fall back to it so saved values survive a reload.
         let v = spec
             .configs
             .as_ref()
@@ -532,7 +532,7 @@ fn parse_all<T>(
 /// the value is emitted on the port matching the first successful condition; when none
 /// matches, it is emitted on `_`. An empty condition never matches, and so does an
 /// invalid one - a condition set at runtime is additionally reported as a configuration
-/// error, while an invalid condition loaded from a preset is only kept as never-matching.
+/// error, while an invalid condition loaded from a patch is only kept as never-matching.
 ///
 /// Condition syntax and comparison semantics are the same as the If agent:
 /// `[key] <operator> <literal>` with `==`, `!=`, `>`, `>=`, `<`, `<=` and number, string,
@@ -652,7 +652,7 @@ impl AsAgent for SwitchAgent {
 /// emitted on the port of the first equal one; when none is equal, it is emitted on
 /// `_`. An empty case value never matches, and so does an invalid one - a case set
 /// at runtime is additionally reported as a configuration error, while an invalid one
-/// loaded from a preset is only kept as never-matching. An invalid `key` is handled the
+/// loaded from a patch is only kept as never-matching. An invalid `key` is handled the
 /// same way, and makes every input go to `_`.
 ///
 /// Case values use the same literal syntax as the If and Switch conditions: numbers,

@@ -30,7 +30,7 @@ const CONFIG_SAVE_VALUE: &str = "save_value";
     boolean_config(
         name = CONFIG_SAVE_VALUE,
         title = "Save Value",
-        description = "Persist the displayed value in the preset file",
+        description = "Persist the displayed value in the patch file",
         detail,
     )
 )]
@@ -80,7 +80,7 @@ impl AsAgent for DisplayValueAgent {
     boolean_config(
         name = CONFIG_SAVE_VALUE,
         title = "Save Value",
-        description = "Persist the displayed value in the preset file",
+        description = "Persist the displayed value in the patch file",
         detail,
     )
 )]

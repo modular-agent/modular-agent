@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-get-patch-infos"
+description = "Enables the get_patch_infos command without any pre-configured scope."
+commands.allow = ["get_patch_infos"]
+
+[[permission]]
+identifier = "deny-get-patch-infos"
+description = "Denies the get_patch_infos command without any pre-configured scope."
+commands.deny = ["get_patch_infos"]

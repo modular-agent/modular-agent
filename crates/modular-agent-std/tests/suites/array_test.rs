@@ -9,22 +9,22 @@ const PROBE_DEF: &str = "modular_agent_core::test_utils::TestProbeAgent";
 
 /// Wire a context-mode ZipToArray to a probe on its `array` output.
 async fn setup_ctx_zip_with_probe(ma: &ModularAgent) -> (String, ProbeReceiver) {
-    let preset_id = ma.new_preset().unwrap();
+    let patch_id = ma.new_patch().unwrap();
 
     let zip_def = ma.get_agent_definition(ZIP_TO_ARRAY_DEF).unwrap();
     let mut zip_spec = zip_def.to_spec();
     if let Some(configs) = zip_spec.configs.as_mut() {
         configs.set("use_ctx".into(), AgentValue::boolean(true));
     }
-    let zip_id = ma.add_agent(preset_id.clone(), zip_spec).await.unwrap();
+    let zip_id = ma.add_agent(patch_id.clone(), zip_spec).await.unwrap();
 
     let probe_def = ma.get_agent_definition(PROBE_DEF).unwrap();
     let probe_id = ma
-        .add_agent(preset_id.clone(), probe_def.to_spec())
+        .add_agent(patch_id.clone(), probe_def.to_spec())
         .await
         .unwrap();
     ma.add_connection(
-        &preset_id,
+        &patch_id,
         ConnectionSpec {
             source: zip_id.clone(),
             source_handle: "array".into(),
@@ -34,7 +34,7 @@ async fn setup_ctx_zip_with_probe(ma: &ModularAgent) -> (String, ProbeReceiver) 
     )
     .await
     .unwrap();
-    ma.start_preset(&preset_id).await.unwrap();
+    ma.start_patch(&patch_id).await.unwrap();
 
     let probe = probe_receiver(ma, &probe_id).await.unwrap();
     (zip_id, probe)

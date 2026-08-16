@@ -120,19 +120,19 @@ async fn length_stop_reason_skips_execution_and_synthesizes_error_results() {
 
     // Wire CallToolMessageAgent's message output to a probe so the synthetic
     // tool results can be observed.
-    let preset_id = ma.new_preset().unwrap();
+    let patch_id = ma.new_patch().unwrap();
     let call_def = ma.get_agent_definition(CALL_TOOL_MESSAGE_DEF).unwrap();
     let call_agent_id = ma
-        .add_agent(preset_id.clone(), call_def.to_spec())
+        .add_agent(patch_id.clone(), call_def.to_spec())
         .await
         .unwrap();
     let probe_def = ma.get_agent_definition(TestProbeAgent::DEF_NAME).unwrap();
     let probe_agent_id = ma
-        .add_agent(preset_id.clone(), probe_def.to_spec())
+        .add_agent(patch_id.clone(), probe_def.to_spec())
         .await
         .unwrap();
     ma.add_connection(
-        &preset_id,
+        &patch_id,
         ConnectionSpec {
             source: call_agent_id.clone(),
             source_handle: "message".into(),
@@ -142,7 +142,7 @@ async fn length_stop_reason_skips_execution_and_synthesizes_error_results() {
     )
     .await
     .unwrap();
-    ma.start_preset(&preset_id).await.unwrap();
+    ma.start_patch(&patch_id).await.unwrap();
     let probe_rx = probe_receiver(&ma, &probe_agent_id).await.unwrap();
 
     let mut msg = Message::assistant(String::new());

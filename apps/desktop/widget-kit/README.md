@@ -1,7 +1,7 @@
 # @modular-agent/widget-kit
 
 Shared SDK for Modular Agent custom node UIs. Agent packages can bring their
-own Svelte 5 components into the desktop app's preset editor:
+own Svelte 5 components into the desktop app's patch editor:
 
 - **NodeView** — registered per agent type (`def_name`). Replaces the default
   config rendering in the node's contents area. Title, ports, and resizer stay

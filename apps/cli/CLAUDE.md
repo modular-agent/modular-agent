@@ -4,7 +4,7 @@ See root CLAUDE.md for common agent development patterns.
 
 ## Overview
 
-CLI runner for Modular Agent presets. Loads a preset JSON file and provides stdin/stdout communication with the agent network.
+CLI runner for Modular Agent patches. Loads a patch JSON file and provides stdin/stdout communication with the agent network.
 
 ## Build Commands
 
@@ -12,8 +12,8 @@ CLI runner for Modular Agent presets. Loads a preset JSON file and provides stdi
 # Build (agents are configured by ma-config wizard)
 cargo build -p modular-agent-cli
 
-# Run with a preset
-cargo run -p modular-agent-cli -- <preset.json> [-v]
+# Run with a patch
+cargo run -p modular-agent-cli -- <patch.json> [-v]
 
 # Configure agents with the ma-config wizard
 cargo run --manifest-path ../../tools/ma-config/Cargo.toml -- cli
@@ -22,15 +22,15 @@ cargo run --manifest-path ../../tools/ma-config/Cargo.toml -- cli
 ## Usage
 
 ```
-ma <preset> [-i <input>] [-o <output>] [--mcp-port <port>] [--mcp-token <token>] [-v]
+ma <patch> [-i <input>] [-o <output>] [--mcp-port <port>] [--mcp-token <token>] [-v]
 ```
 
 | Argument | Default | Description |
 |----------|---------|-------------|
-| `preset` | (required) | Path to preset JSON file |
+| `patch` | (required) | Path to patch JSON file |
 | `-i, --input` | `input` | External input channel name |
 | `-o, --output` | `output` | External output channel name |
-| `--mcp-port` | off | Serve the built-in MCP server on `http://127.0.0.1:<port>/mcp` (external agents can inspect/edit the running flow; `save_preset` writes into the preset file's directory) |
+| `--mcp-port` | off | Serve the built-in MCP server on `http://127.0.0.1:<port>/mcp` (external agents can inspect/edit the running flow; `save_patch` writes into the patch file's directory) |
 | `--mcp-token` | off | Bearer token required for MCP requests (omit to disable auth; requires `--mcp-port`) |
 | `-v, --verbose` | off | Enable logging |
 

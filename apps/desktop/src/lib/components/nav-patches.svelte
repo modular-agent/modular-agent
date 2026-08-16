@@ -1,0 +1,355 @@
+<script lang="ts">
+  import { open } from "@tauri-apps/plugin-dialog";
+
+  import { onMount } from "svelte";
+
+  import { toast } from "svelte-sonner";
+
+  import { goto } from "$app/navigation";
+
+  import { importPatch, newPatchWithName } from "$lib/agent";
+  import PatchActionDialog from "$lib/components/patch-action-dialog.svelte";
+  import PatchDeleteDialog from "$lib/components/patch-delete-dialog.svelte";
+  import * as PatchFileList from "$lib/components/patch-file-list/index.js";
+  import * as ContextMenu from "$lib/components/ui/context-menu/index.js";
+  import { ScrollArea } from "$lib/components/ui/scroll-area/index.js";
+  import * as Sidebar from "$lib/components/ui/sidebar/index.js";
+  import {
+    deleteFolder,
+    deletePatch,
+    getDirEntries,
+    moveFolder,
+    movePatch,
+    openPatch,
+    renameFolder,
+    renamePatch,
+  } from "$lib/modular_agent";
+  import { patchTreeStore } from "$lib/patch-tree-store.svelte";
+  import { tabStore } from "$lib/tab-store.svelte";
+
+  let dialog_name = $state("");
+  let openNewPatchDialog = $state(false);
+  let openDeletePatchDialog = $state(false);
+  let openRenameDialog = $state(false);
+  let renameTarget = $state<{ path: string; isFolder: boolean }>({ path: "", isFolder: false });
+  let deleteTarget = $state<{ path: string; isFolder: boolean; blocked: string }>({
+    path: "",
+    isFolder: false,
+    blocked: "",
+  });
+
+  // Drag & Drop state
+  let dragSource = $state<{ type: "file" | "folder"; path: string } | null>(null);
+  let dropTarget = $state<string | null>(null);
+  let dragEnterCounters = new Map<string, number>();
+
+  onMount(() => {
+    patchTreeStore.loadRoot();
+  });
+
+  async function onFolderClick(path: string) {
+    await patchTreeStore.expandFolder(path);
+  }
+
+  async function handleFileClick(name: string) {
+    let id = await openPatch(name);
+    tabStore.openTab(id, name);
+    goto(`/patch_editor/${id}`, { noScroll: true });
+  }
+
+  async function onNewPatch(name: string) {
+    const new_id = await newPatchWithName(name);
+    if (new_id) {
+      tabStore.openTab(new_id, name);
+      goto(`/patch_editor/${new_id}`, { noScroll: true });
+    }
+  }
+
+  async function onDelete() {
+    const { path, isFolder } = deleteTarget;
+    try {
+      // Refresh handled by ma:patch_list_changed event via patchTreeStore
+      if (isFolder) {
+        await deleteFolder(path);
+      } else {
+        await deletePatch(path);
+      }
+    } catch (e) {
+      toast.error(String(e));
+    }
+  }
+
+  async function handleNew(path: string) {
+    dialog_name = path;
+    openNewPatchDialog = true;
+  }
+
+  async function handleDelete(path: string, isFolder: boolean) {
+    // Only empty folders can be deleted. Check up front so the dialog can say
+    // so with its Delete button disabled, instead of failing after the click.
+    // The backend re-checks: this only sees patches and subfolders, and the
+    // folder can gain content between here and the click.
+    let blocked = "";
+    if (isFolder) {
+      try {
+        if ((await getDirEntries(path)).length > 0) {
+          blocked = "Cannot delete folder: it is not empty. Delete its contents first.";
+        }
+      } catch (e) {
+        blocked = String(e);
+      }
+    }
+    deleteTarget = { path, isFolder, blocked };
+    openDeletePatchDialog = true;
+  }
+
+  async function handleImport(targetDir: string) {
+    const file = await open({
+      multiple: false,
+      filters: [{ name: "JSON", extensions: ["json"] }],
+    });
+    if (!file) return;
+
+    const id = await importPatch(file as string, targetDir);
+    tabStore.openTab(id, id);
+    goto(`/patch_editor/${id}`, { noScroll: true });
+  }
+
+  function handleRename(path: string, isFolder: boolean) {
+    renameTarget = { path, isFolder };
+    openRenameDialog = true;
+  }
+
+  async function onRename(newBasename: string) {
+    if (newBasename.includes("/")) {
+      toast.error("Name cannot contain /");
+      return;
+    }
+    const { path, isFolder } = renameTarget;
+    const lastSlash = path.lastIndexOf("/");
+    const parent = lastSlash >= 0 ? path.substring(0, lastSlash) : "";
+    const newFullPath = parent ? `${parent}/${newBasename}` : newBasename;
+    try {
+      if (isFolder) {
+        await renameFolder(path, newFullPath);
+      } else {
+        await renamePatch(path, newFullPath);
+      }
+    } catch (e) {
+      toast.error(String(e));
+    }
+  }
+
+  // --- Drag & Drop handlers ---
+
+  function handleDragStart(e: DragEvent, type: "file" | "folder", path: string) {
+    if (!e.dataTransfer) return;
+    e.stopPropagation();
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", JSON.stringify({ type, path }));
+    dragSource = { type, path };
+  }
+
+  function handleDragEnd() {
+    dragSource = null;
+    dropTarget = null;
+    dragEnterCounters.clear();
+  }
+
+  function handleDragOver(e: DragEvent) {
+    if (!dragSource) return;
+    e.preventDefault();
+    e.dataTransfer!.dropEffect = "move";
+  }
+
+  function handleDragEnter(e: DragEvent, targetDir: string) {
+    if (!dragSource) return;
+    if (!isValidDropTarget(targetDir)) return;
+    e.preventDefault();
+    const count = (dragEnterCounters.get(targetDir) ?? 0) + 1;
+    dragEnterCounters.set(targetDir, count);
+    dropTarget = targetDir;
+  }
+
+  function handleDragLeave(_e: DragEvent, targetDir: string) {
+    const count = (dragEnterCounters.get(targetDir) ?? 1) - 1;
+    dragEnterCounters.set(targetDir, count);
+    if (count <= 0) {
+      dragEnterCounters.delete(targetDir);
+      if (dropTarget === targetDir) {
+        dropTarget = null;
+      }
+    }
+  }
+
+  function isValidDropTarget(targetDir: string): boolean {
+    if (!dragSource) return false;
+    const { type, path } = dragSource;
+
+    // Compute current parent
+    const currentParent = path.includes("/") ? path.substring(0, path.lastIndexOf("/")) : "";
+    // Same parent → no-op
+    if (targetDir === currentParent) return false;
+
+    // For folders: cannot drop into self or children
+    if (type === "folder") {
+      if (targetDir === path) return false;
+      if (targetDir.startsWith(path + "/")) return false;
+    }
+
+    return true;
+  }
+
+  async function handleDrop(e: DragEvent, targetDir: string) {
+    e.preventDefault();
+    e.stopPropagation();
+    dropTarget = null;
+    dragEnterCounters.clear();
+
+    if (!dragSource) return;
+    if (!isValidDropTarget(targetDir)) return;
+
+    const { type, path } = dragSource;
+    dragSource = null;
+
+    try {
+      if (type === "file") {
+        await movePatch(path, targetDir);
+      } else {
+        await moveFolder(path, targetDir);
+      }
+    } catch (err) {
+      toast.error(String(err));
+    }
+  }
+</script>
+
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div ondragend={handleDragEnd} ondragover={handleDragOver}>
+  {#snippet folder({
+    name,
+    path,
+    open = false,
+    isRoot = false,
+    depth = 0,
+  }: {
+    name: string;
+    path: string;
+    open?: boolean;
+    isRoot?: boolean;
+    depth?: number;
+  })}
+    <PatchFileList.Folder
+      {name}
+      {depth}
+      title={path || undefined}
+      {open}
+      draggable={!isRoot}
+      droptarget={dropTarget === path}
+      onclick={() => onFolderClick(path)}
+      ondragstart={(e) => handleDragStart(e, "folder", path)}
+      ondragenter={(e) => handleDragEnter(e, path)}
+      ondragleave={(e) => handleDragLeave(e, path)}
+      ondrop={(e) => handleDrop(e, path)}
+    >
+      {@const entries = patchTreeStore.entries[path]}
+      {#if entries}
+        {#each entries as entry (entry)}
+          {#if entry.endsWith("/")}
+            {@const fn = entry.slice(0, -1)}
+            {@const fp = path ? `${path}/${fn}` : fn}
+            <ContextMenu.Root>
+              <ContextMenu.Trigger>
+                {@render folder({ name: fn, path: fp, depth: depth + 1 })}
+              </ContextMenu.Trigger>
+              <ContextMenu.Content>
+                <ContextMenu.Item onclick={() => handleNew(fp + "/")}>New</ContextMenu.Item>
+                <ContextMenu.Item onclick={() => handleImport(fp)}>Import</ContextMenu.Item>
+                <ContextMenu.Item onclick={() => handleRename(fp, true)}>Rename</ContextMenu.Item>
+                <ContextMenu.Item onclick={() => handleDelete(fp, true)}>Delete</ContextMenu.Item>
+              </ContextMenu.Content>
+            </ContextMenu.Root>
+          {:else}
+            {@const fp = path ? `${path}/${entry}` : entry}
+            <ContextMenu.Root>
+              <ContextMenu.Trigger>
+                <PatchFileList.File
+                  name={entry}
+                  depth={depth + 1}
+                  title={fp}
+                  onclick={() => handleFileClick(fp)}
+                  ondragstart={(e) => handleDragStart(e, "file", fp)}
+                  ondragenter={(e) => handleDragEnter(e, path)}
+                  ondragleave={(e) => handleDragLeave(e, path)}
+                  ondrop={(e) => handleDrop(e, path)}
+                />
+              </ContextMenu.Trigger>
+              <ContextMenu.Content>
+                <ContextMenu.Item onclick={() => handleNew(fp)}>New</ContextMenu.Item>
+                <ContextMenu.Item onclick={() => handleImport(path)}>Import</ContextMenu.Item>
+                <ContextMenu.Item onclick={() => handleRename(fp, false)}>Rename</ContextMenu.Item>
+                <ContextMenu.Item onclick={() => handleDelete(fp, false)}>Delete</ContextMenu.Item>
+              </ContextMenu.Content>
+            </ContextMenu.Root>
+          {/if}
+        {/each}
+      {/if}
+    </PatchFileList.Folder>
+  {/snippet}
+
+  <Sidebar.Group class="flex-1 min-h-0">
+    <Sidebar.GroupContent class="h-full">
+      <ScrollArea class="h-full" orientation="both">
+        <div class="group-data-[collapsible=icon]:hidden">
+          {#if patchTreeStore.isEmpty}
+            <button
+              class="text-xs text-muted-foreground px-2 pl-4 py-1 hover:underline cursor-pointer"
+              onclick={() => handleNew("")}
+            >
+              New Patch
+            </button>
+          {:else}
+            <ContextMenu.Root>
+              <ContextMenu.Trigger>
+                {@render folder({ name: "patches", path: "", open: true, isRoot: true })}
+              </ContextMenu.Trigger>
+              <ContextMenu.Content>
+                <ContextMenu.Item onclick={() => handleNew("")}>New</ContextMenu.Item>
+                <ContextMenu.Item onclick={() => handleImport("")}>Import</ContextMenu.Item>
+              </ContextMenu.Content>
+            </ContextMenu.Root>
+          {/if}
+        </div>
+      </ScrollArea>
+    </Sidebar.GroupContent>
+  </Sidebar.Group>
+</div>
+
+{#if openNewPatchDialog}
+  <PatchActionDialog
+    action="New"
+    name={dialog_name}
+    bind:open={openNewPatchDialog}
+    onAction={onNewPatch}
+  />
+{/if}
+
+{#if openDeletePatchDialog}
+  <PatchDeleteDialog
+    name={deleteTarget.path}
+    isFolder={deleteTarget.isFolder}
+    blocked={deleteTarget.blocked}
+    bind:open={openDeletePatchDialog}
+    {onDelete}
+  />
+{/if}
+
+{#if openRenameDialog}
+  <PatchActionDialog
+    action="Rename"
+    subject={renameTarget.isFolder ? "Folder" : "Patch"}
+    name={renameTarget.path.split("/").pop() ?? renameTarget.path}
+    bind:open={openRenameDialog}
+    onAction={onRename}
+  />
+{/if}

@@ -111,7 +111,7 @@ impl AsAgent for CancelWaitAgent {
 
 /// Mutates its spec in new(): adds a dynamic config and output port.
 /// Models agents like ZipToObject that generate configs/ports at
-/// construction time; the mutation must survive into the preset spec.
+/// construction time; the mutation must survive into the patch spec.
 #[modular_agent(
     title = "Dyn Spec",
     category = CATEGORY,

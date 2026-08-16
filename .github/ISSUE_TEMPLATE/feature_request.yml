@@ -48,4 +48,4 @@ body:
     id: context
     attributes:
       label: Additional context
-      description: Screenshots, preset sketches, or anything else that helps.
+      description: Screenshots, patch sketches, or anything else that helps.

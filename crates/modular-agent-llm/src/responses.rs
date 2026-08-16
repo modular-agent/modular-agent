@@ -645,7 +645,7 @@ impl ResponsesAgent {
     ) -> Result<(), AgentError> {
         // Events are dropped by routing when nothing is connected, but only
         // after the per-delta serde conversion below has been paid; skip it
-        // up front so presets that ignore the event port pay nothing.
+        // up front so patches that ignore the event port pay nothing.
         if !self.ma().has_connections(self.id(), PORT_EVENT) {
             return Ok(());
         }
@@ -724,25 +724,25 @@ mod tests {
     use modular_agent_core::ConnectionSpec;
     use modular_agent_core::test_utils::{ProbeReceiver, TestProbeAgent, probe_receiver};
 
-    /// Build a running preset with a ResponsesAgent whose `port` output
+    /// Build a running patch with a ResponsesAgent whose `port` output
     /// feeds a probe, so stream-loop emits can be observed end to end.
     async fn setup_responses_with_probe(port: &str) -> (ModularAgent, String, ProbeReceiver) {
         let ma = ModularAgent::init().unwrap();
         ma.ready().await.unwrap();
 
-        let preset_id = ma.new_preset().unwrap();
+        let patch_id = ma.new_patch().unwrap();
         let responses_def = ma.get_agent_definition(ResponsesAgent::DEF_NAME).unwrap();
         let responses_id = ma
-            .add_agent(preset_id.clone(), responses_def.to_spec())
+            .add_agent(patch_id.clone(), responses_def.to_spec())
             .await
             .unwrap();
         let probe_def = ma.get_agent_definition(TestProbeAgent::DEF_NAME).unwrap();
         let probe_id = ma
-            .add_agent(preset_id.clone(), probe_def.to_spec())
+            .add_agent(patch_id.clone(), probe_def.to_spec())
             .await
             .unwrap();
         ma.add_connection(
-            &preset_id,
+            &patch_id,
             ConnectionSpec {
                 source: responses_id.clone(),
                 source_handle: port.into(),
@@ -752,7 +752,7 @@ mod tests {
         )
         .await
         .unwrap();
-        ma.start_preset(&preset_id).await.unwrap();
+        ma.start_patch(&patch_id).await.unwrap();
         let probe_rx = probe_receiver(&ma, &probe_id).await.unwrap();
 
         (ma, responses_id, probe_rx)

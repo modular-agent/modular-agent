@@ -1,6 +1,6 @@
 # modular-agent-cli
 
-CLI runner for [Modular Agent](https://github.com/modular-agent) presets. Loads a preset JSON file and provides stdin/stdout communication with the agent network.
+CLI runner for [Modular Agent](https://github.com/modular-agent) patches. Loads a patch JSON file and provides stdin/stdout communication with the agent network.
 
 ## Build
 
@@ -25,12 +25,12 @@ The wizard generates `apps/cli/Cargo.toml` dependencies and `apps/cli/src/agents
 ## Usage
 
 ```bash
-ma <preset> [-i <input>] [-o <output>] [-v]
+ma <patch> [-i <input>] [-o <output>] [-v]
 ```
 
 | Argument | Default | Description |
 | --- | --- | --- |
-| `preset` | (required) | Path to preset JSON file |
+| `patch` | (required) | Path to patch JSON file |
 | `-i, --input` | `input` | External input channel name |
 | `-o, --output` | `output` | External output channel name |
 | `-v, --verbose` | off | Enable logging |
@@ -39,22 +39,22 @@ ma <preset> [-i <input>] [-o <output>] [-v]
 
 ```bash
 # Interactive mode
-ma ./preset.json
+ma ./patch.json
 
 # Single input via pipe
-echo "Hello" | ma ./preset.json
+echo "Hello" | ma ./patch.json
 
 # Input from file
-ma ./preset.json < input.txt
+ma ./patch.json < input.txt
 
 # Output to file
-echo "Hello" | ma ./preset.json > output.txt
+echo "Hello" | ma ./patch.json > output.txt
 
 # Custom input/output channels
-echo "Hello" | ma ./preset.json -i "query" -o "result"
+echo "Hello" | ma ./patch.json -i "query" -o "result"
 
 # Chain with other tools
-cat data.txt | ma ./preset.json | jq '.result'
+cat data.txt | ma ./patch.json | jq '.result'
 ```
 
 Input is read line-by-line from stdin. String output is printed as-is; other types are printed as JSON.

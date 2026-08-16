@@ -852,17 +852,17 @@ pub fn response_output_to_message(output: &[serde_json::Value]) -> Result<Messag
 // Helpers
 // ============================================================================
 
-/// Derive a stable prompt cache key from the agent's preset and instance ids.
+/// Derive a stable prompt cache key from the agent's patch and instance ids.
 ///
 /// OpenAI caps `prompt_cache_key` at 64 chars; longer keys are rejected. The
 /// key must be deterministic across calls of the same agent instance so that
 /// repeated requests route to the same cache, so it is derived purely from
 /// stable identifiers (no timestamps or random data).
-pub(crate) fn prompt_cache_key(preset_id: &str, agent_id: &str) -> String {
-    let key = if preset_id.is_empty() {
+pub(crate) fn prompt_cache_key(patch_id: &str, agent_id: &str) -> String {
+    let key = if patch_id.is_empty() {
         agent_id.to_string()
     } else {
-        format!("{}:{}", preset_id, agent_id)
+        format!("{}:{}", patch_id, agent_id)
     };
     // Clamp on a char boundary so a multi-byte id near the limit stays valid.
     if key.len() <= 64 {
@@ -1382,11 +1382,11 @@ mod tests {
 
     #[test]
     fn test_prompt_cache_key_combines_ids() {
-        assert_eq!(prompt_cache_key("preset1", "agent1"), "preset1:agent1");
+        assert_eq!(prompt_cache_key("patch1", "agent1"), "patch1:agent1");
     }
 
     #[test]
-    fn test_prompt_cache_key_empty_preset_uses_agent_id() {
+    fn test_prompt_cache_key_empty_patch_uses_agent_id() {
         assert_eq!(prompt_cache_key("", "agent1"), "agent1");
     }
 
@@ -1401,17 +1401,17 @@ mod tests {
 
     #[test]
     fn test_prompt_cache_key_clamped_to_64_chars() {
-        let preset = "p".repeat(50);
+        let patch = "p".repeat(50);
         let agent = "a".repeat(50);
-        let key = prompt_cache_key(&preset, &agent);
+        let key = prompt_cache_key(&patch, &agent);
         assert!(key.len() <= 64, "key len was {}", key.len());
     }
 
     #[test]
     fn test_prompt_cache_key_clamps_on_char_boundary() {
         // A multi-byte char straddling the 64-byte limit must not be split.
-        let preset = "あ".repeat(30); // 90 bytes
-        let key = prompt_cache_key(&preset, "agent");
+        let patch = "あ".repeat(30); // 90 bytes
+        let key = prompt_cache_key(&patch, "agent");
         assert!(key.len() <= 64, "key len was {}", key.len());
         // Round-trips as valid UTF-8 (would panic on a bad boundary slice).
         assert!(!key.is_empty());

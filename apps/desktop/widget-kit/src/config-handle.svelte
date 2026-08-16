@@ -3,7 +3,7 @@
   "config:{name}" id convention used by the default rendering in
   agent-config.svelte. NodeViews that replace the contents area must place
   this themselves for every config that should accept edge connections —
-  otherwise existing preset edges to that config have no handle to attach to.
+  otherwise existing patch edges to that config have no handle to attach to.
 
   Must be rendered inside a relatively positioned row element (the default
   rendering uses <div class="flex-none relative flex items-center">) so that

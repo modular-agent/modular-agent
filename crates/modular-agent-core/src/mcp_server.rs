@@ -1,7 +1,7 @@
 //! Built-in MCP server exposing flow-editing tools over streamable HTTP.
 //!
 //! External agents (e.g. Claude Code) connect to `http://127.0.0.1:<port>/mcp`
-//! and use fine-grained tools (`add_agent`, `add_connection`, `start_preset`,
+//! and use fine-grained tools (`add_agent`, `add_connection`, `start_patch`,
 //! ...) to build and run workflows. All tools are thin wrappers over
 //! [`ModularAgent`] methods plus pre-validation that turns mistakes (wrong
 //! definition names, wrong port names) into self-correctable error messages.
@@ -24,7 +24,7 @@
 //!     ma,
 //!     McpServerConfig {
 //!         port: 8765,
-//!         presets_dir: Some("/path/to/presets".into()),
+//!         patches_dir: Some("/path/to/patches".into()),
 //!         token: Some("secret".into()),
 //!     },
 //! )
@@ -68,13 +68,13 @@ use crate::config::AgentConfigs;
 use crate::definition::AgentDefinition;
 use crate::error::AgentError;
 use crate::modular_agent::{ModularAgent, ModularAgentEvent};
-use crate::spec::{AgentSpec, ConnectionSpec, PresetSpec};
+use crate::spec::{AgentSpec, ConnectionSpec, PatchSpec};
 use crate::value::AgentValue;
 
 const SERVER_INSTRUCTIONS: &str = r#"Modular Agent flow editor.
 
 FLOW MODEL
-- A preset is a workflow graph: agents (nodes) connected by directed edges.
+- A patch is a workflow graph: agents (nodes) connected by directed edges.
 - Each agent is an instance of an agent definition, identified by def_name
   (a fully-qualified Rust path, e.g. "modular_agent_llm::chat::ChatAgent").
 - A connection routes values from a source agent's output port to a target
@@ -100,7 +100,7 @@ DYNAMIC CONFIGS AND PORTS
   (e.g. Switch's "n" controls the conditions c0..c(n-1) and the numbered
   output ports). The definition only lists the initial ones; the keys valid
   right now are the "configs" of the live agent spec, as returned by
-  add_agent and get_preset_spec.
+  add_agent and get_patch_spec.
 
 SECRETS AND GLOBAL CONFIGS
 - API keys and tokens (Slack bot/app tokens, LLM API keys, ...) are GLOBAL
@@ -111,11 +111,11 @@ SECRETS AND GLOBAL CONFIGS
 TYPICAL WORKFLOW
 1. list_agent_definitions to discover agents (get_agent_definition for
    details on one).
-2. create_preset, then add_agent per node and add_connection per edge.
-3. save_preset to persist, start_preset / stop_preset to run.
+2. create_patch, then add_agent per node and add_connection per edge.
+3. save_patch to persist, start_patch / stop_patch to run.
 
 VERIFYING A FLOW
-1. start_preset to run the workflow.
+1. start_patch to run the workflow.
 2. write_external_input to feed a test value into an external input channel
    (an ExternalInputAgent's configured name), or wait for a real event
    source (e.g. a Slack message).
@@ -123,7 +123,7 @@ VERIFYING A FLOW
    pass it back as since_seq on the next call to receive only new records.
    dropped > 0 means the collector fell behind the event stream and some
    records were lost before capture.
-4. stop_preset when done.
+4. stop_patch when done.
 
 WORKED EXAMPLE - "listen to a Slack channel, send each message to a chat
 LLM, post the reply back to Slack":
@@ -142,9 +142,9 @@ Slack tokens and the LLM API key are global configs set by the user."#;
 pub struct McpServerConfig {
     /// TCP port to bind on 127.0.0.1 (endpoint path is `/mcp`).
     pub port: u16,
-    /// Root directory where the `save_preset` tool writes preset JSON files
-    /// (`<presets_dir>/<name>.json`). When `None`, saving is unavailable.
-    pub presets_dir: Option<PathBuf>,
+    /// Root directory where the `save_patch` tool writes patch JSON files
+    /// (`<patches_dir>/<name>.json`). When `None`, saving is unavailable.
+    pub patches_dir: Option<PathBuf>,
     /// Bearer token required on every request. `None` disables
     /// authentication.
     pub token: Option<String>,
@@ -197,7 +197,7 @@ pub async fn start_mcp_server(
         cancel.child_token(),
     ));
 
-    let presets_dir = config.presets_dir;
+    let patches_dir = config.patches_dir;
     let service = StreamableHttpService::new(
         {
             let ma = ma.clone();
@@ -205,7 +205,7 @@ pub async fn start_mcp_server(
             move || {
                 Ok(McpServer::new(
                     ma.clone(),
-                    presets_dir.clone(),
+                    patches_dir.clone(),
                     ring.clone(),
                 ))
             }
@@ -276,16 +276,16 @@ async fn require_bearer(expected: Arc<str>, req: Request, next: Next) -> Respons
 const RING_CAPACITY: usize = 200;
 const DEFAULT_POLL_LIMIT: usize = 50;
 
-/// Upper bound on waiting for an agent's mutex when resolving the preset id
+/// Upper bound on waiting for an agent's mutex when resolving the patch id
 /// of a captured error; see [`run_event_collector`].
-const PRESET_ID_RESOLVE_TIMEOUT: std::time::Duration = std::time::Duration::from_millis(100);
+const PATCH_ID_RESOLVE_TIMEOUT: std::time::Duration = std::time::Duration::from_millis(100);
 
 // JsonSchema so the error-polling tool can expose a typed output schema.
 #[derive(Clone, Serialize, JsonSchema)]
 struct ErrorRecord {
     seq: u64,
     time_ms: u64,
-    preset_id: Option<String>,
+    patch_id: Option<String>,
     agent_id: String,
     message: String,
 }
@@ -334,7 +334,7 @@ impl EventRing {
     fn push_error(
         &self,
         time_ms: u64,
-        preset_id: Option<String>,
+        patch_id: Option<String>,
         agent_id: String,
         message: String,
     ) {
@@ -345,7 +345,7 @@ impl EventRing {
         errors.push_back(ErrorRecord {
             seq: self.next_seq(),
             time_ms,
-            preset_id,
+            patch_id,
             agent_id,
             message,
         });
@@ -368,7 +368,7 @@ impl EventRing {
     /// so the caller can continue from the last returned seq.
     fn collect_errors(
         &self,
-        preset_id: Option<&str>,
+        patch_id: Option<&str>,
         since_seq: u64,
         limit: usize,
     ) -> Vec<ErrorRecord> {
@@ -376,7 +376,7 @@ impl EventRing {
         let mut result: Vec<ErrorRecord> = errors
             .iter()
             .filter(|r| r.seq > since_seq)
-            .filter(|r| preset_id.is_none_or(|p| r.preset_id.as_deref() == Some(p)))
+            .filter(|r| patch_id.is_none_or(|p| r.patch_id.as_deref() == Some(p)))
             .cloned()
             .collect();
         result.truncate(limit);
@@ -425,7 +425,7 @@ async fn run_event_collector(ma: ModularAgent, ring: Arc<EventRing>, cancel: Can
         };
         match envelope.event {
             ModularAgentEvent::AgentError(agent_id, message) => {
-                // Resolve the preset at capture time: once the agent is
+                // Resolve the patch at capture time: once the agent is
                 // gone the mapping is unrecoverable. The agent mutex is
                 // held for the whole duration of process() and errors are
                 // emitted while it is still held, so an unbounded lock
@@ -433,17 +433,17 @@ async fn run_event_collector(ma: ModularAgent, ring: Arc<EventRing>, cancel: Can
                 // until broadcast events are dropped as Lagged. A short
                 // bounded wait resolves the common case (the agent loop
                 // releases the lock right after emitting) and otherwise
-                // records the error without a preset id.
-                let preset_id = match ma.get_agent(&agent_id) {
+                // records the error without a patch id.
+                let patch_id = match ma.get_agent(&agent_id) {
                     Some(agent) => {
-                        match tokio::time::timeout(PRESET_ID_RESOLVE_TIMEOUT, agent.lock()).await {
-                            Ok(agent) => Some(agent.preset_id().to_string()),
+                        match tokio::time::timeout(PATCH_ID_RESOLVE_TIMEOUT, agent.lock()).await {
+                            Ok(agent) => Some(agent.patch_id().to_string()),
                             Err(_) => None,
                         }
                     }
                     None => None,
                 };
-                ring.push_error(now_ms(), preset_id, agent_id, message);
+                ring.push_error(now_ms(), patch_id, agent_id, message);
             }
             ModularAgentEvent::ExternalOutput(channel, value) => {
                 ring.push_output(now_ms(), channel, value);
@@ -455,15 +455,15 @@ async fn run_event_collector(ma: ModularAgent, ring: Arc<EventRing>, cancel: Can
 
 struct McpServer {
     ma: ModularAgent,
-    presets_dir: Option<PathBuf>,
+    patches_dir: Option<PathBuf>,
     ring: Arc<EventRing>,
 }
 
 impl McpServer {
-    fn new(ma: ModularAgent, presets_dir: Option<PathBuf>, ring: Arc<EventRing>) -> Self {
+    fn new(ma: ModularAgent, patches_dir: Option<PathBuf>, ring: Arc<EventRing>) -> Self {
         Self {
             ma,
-            presets_dir,
+            patches_dir,
             ring,
         }
     }
@@ -499,27 +499,27 @@ fn ok_json(value: &impl serde::Serialize) -> Result<Json<JsonObject>, CallToolRe
 /// Error text for an agent id that has no live instance.
 ///
 /// A spec-only agent (its definition is not registered in this build) is
-/// still listed by get_preset_spec, so pointing the caller there would send
+/// still listed by get_patch_spec, so pointing the caller there would send
 /// it in circles; name the unregistered definition instead. Only a truly
-/// absent id gets the get_preset_spec hint. `role` is the label used for the
+/// absent id gets the get_patch_spec hint. `role` is the label used for the
 /// agent in the message ("Agent", "Source agent", ...).
 async fn missing_agent_text(ma: &ModularAgent, role: &str, agent_id: &str) -> String {
     match ma.find_stored_agent_spec(agent_id).await {
         Some(spec) => format!(
-            "{role} \"{agent_id}\" exists in the preset, but its definition \"{}\" is not \
+            "{role} \"{agent_id}\" exists in the patch, but its definition \"{}\" is not \
              registered in this build, so this tool cannot operate on it.",
             spec.def_name
         ),
-        None => format!("{role} \"{agent_id}\" not found. Use get_preset_spec to list agent ids."),
+        None => format!("{role} \"{agent_id}\" not found. Use get_patch_spec to list agent ids."),
     }
 }
 
-/// Maps a preset-name error to guidance the calling agent can act on.
-fn preset_error_text(e: AgentError) -> String {
+/// Maps a patch-name error to guidance the calling agent can act on.
+fn patch_error_text(e: AgentError) -> String {
     match e {
-        AgentError::PresetNameExists(name) => format!(
-            "Preset name \"{name}\" already exists. Use list_presets to see open presets \
-             (and their ids), then pick a different name or work with the existing preset."
+        AgentError::PatchNameExists(name) => format!(
+            "Patch name \"{name}\" already exists. Use list_patches to see open patches \
+             (and their ids), then pick a different name or work with the existing patch."
         ),
         e => e.to_string(),
     }
@@ -533,7 +533,7 @@ fn strip_config_specs(value: &mut Value) {
     }
 }
 
-fn preset_spec_result(spec: &PresetSpec) -> Result<Json<JsonObject>, CallToolResult> {
+fn patch_spec_result(spec: &PatchSpec) -> Result<Json<JsonObject>, CallToolResult> {
     let Json(mut map) = ok_json(spec)?;
     if let Some(agents) = map.get_mut("agents").and_then(|a| a.as_array_mut()) {
         for agent in agents {
@@ -591,14 +591,14 @@ fn definition_line(def: &AgentDefinition) -> String {
     )
 }
 
-/// Validates a preset name used as a relative path under the presets
+/// Validates a patch name used as a relative path under the patches
 /// directory. Names come from an external agent, so this is a boundary check.
-fn validate_preset_name(name: &str) -> Result<(), String> {
+fn validate_patch_name(name: &str) -> Result<(), String> {
     if name.is_empty() {
-        return Err("Preset name must not be empty".into());
+        return Err("Patch name must not be empty".into());
     }
     if name.contains('\\') {
-        return Err("Preset name must use '/' as the folder separator".into());
+        return Err("Patch name must use '/' as the folder separator".into());
     }
     // Path::components() normalizes "." away, so check the raw segments.
     let segments_ok = name
@@ -606,7 +606,7 @@ fn validate_preset_name(name: &str) -> Result<(), String> {
         .all(|s| !s.is_empty() && s != "." && s != ".." && !s.ends_with(':'));
     if !segments_ok {
         return Err(format!(
-            "Invalid preset name \"{name}\": must be a relative path without empty, \".\" or \"..\" components"
+            "Invalid patch name \"{name}\": must be a relative path without empty, \".\" or \"..\" components"
         ));
     }
     Ok(())
@@ -724,21 +724,21 @@ struct GetAgentDefinitionParams {
 }
 
 #[derive(Deserialize, JsonSchema)]
-struct CreatePresetParams {
-    /// Preset name; use '/' for folders (e.g. "MyFolder/MyPreset").
+struct CreatePatchParams {
+    /// Patch name; use '/' for folders (e.g. "MyFolder/MyPatch").
     name: String,
 }
 
 #[derive(Deserialize, JsonSchema)]
-struct PresetIdParams {
-    /// Preset id (as returned by create_preset / list_presets).
-    preset_id: String,
+struct PatchIdParams {
+    /// Patch id (as returned by create_patch / list_patches).
+    patch_id: String,
 }
 
 #[derive(Deserialize, JsonSchema)]
 struct AddAgentParams {
-    /// Preset id to add the agent to.
-    preset_id: String,
+    /// Patch id to add the agent to.
+    patch_id: String,
     /// Fully-qualified agent definition name.
     def_name: String,
     /// Initial config values (key -> value). Only per-instance configs
@@ -763,7 +763,7 @@ struct AddAgentParams {
 
 #[derive(Deserialize, JsonSchema)]
 struct UpdateAgentSpecParams {
-    /// Agent id (as shown in get_preset_spec).
+    /// Agent id (as shown in get_patch_spec).
     agent_id: String,
     /// Partial spec patch. Recognized keys: "configs" (object, merged into
     /// current configs), "disabled" (bool), and layout/extension fields such
@@ -774,7 +774,7 @@ struct UpdateAgentSpecParams {
 
 #[derive(Deserialize, JsonSchema)]
 struct SetAgentConfigsParams {
-    /// Agent id (as shown in get_preset_spec).
+    /// Agent id (as shown in get_patch_spec).
     agent_id: String,
     /// Config values to set (key -> value); merged into current configs.
     configs: serde_json::Map<String, Value>,
@@ -782,16 +782,16 @@ struct SetAgentConfigsParams {
 
 #[derive(Deserialize, JsonSchema)]
 struct RemoveAgentParams {
-    /// Preset id containing the agent.
-    preset_id: String,
+    /// Patch id containing the agent.
+    patch_id: String,
     /// Agent id to remove.
     agent_id: String,
 }
 
 #[derive(Deserialize, JsonSchema)]
 struct ConnectionParams {
-    /// Preset id containing both agents.
-    preset_id: String,
+    /// Patch id containing both agents.
+    patch_id: String,
     /// Source agent id.
     source: String,
     /// Output port name on the source agent (or "err").
@@ -803,18 +803,18 @@ struct ConnectionParams {
 }
 
 #[derive(Deserialize, JsonSchema)]
-struct SavePresetParams {
-    /// Preset id to save.
-    preset_id: String,
-    /// Preset name to save as (relative path without extension, '/' for
-    /// folders). Defaults to the preset's current name.
+struct SavePatchParams {
+    /// Patch id to save.
+    patch_id: String,
+    /// Patch name to save as (relative path without extension, '/' for
+    /// folders). Defaults to the patch's current name.
     name: Option<String>,
 }
 
 #[derive(Deserialize, JsonSchema)]
 struct WriteExternalInputParams {
     /// External input channel name (the name configured on an
-    /// ExternalInputAgent in a running preset).
+    /// ExternalInputAgent in a running patch).
     channel: String,
     /// JSON value to send into the channel.
     value: Value,
@@ -822,8 +822,8 @@ struct WriteExternalInputParams {
 
 #[derive(Deserialize, JsonSchema)]
 struct GetAgentErrorsParams {
-    /// Only return errors from this preset.
-    preset_id: Option<String>,
+    /// Only return errors from this patch.
+    patch_id: Option<String>,
     /// Poll cursor: only return records with seq greater than this. Use the
     /// latest_seq from a previous call; it equals the seq of the last
     /// record that call returned.
@@ -856,15 +856,15 @@ struct GetExternalOutputsParams {
 // array.
 
 #[derive(Serialize, JsonSchema)]
-struct ListPresetsResponse {
-    /// Open presets; each entry carries id, name and running state.
-    presets: Vec<Value>,
+struct ListPatchesResponse {
+    /// Open patches; each entry carries id, name and running state.
+    patches: Vec<Value>,
 }
 
 #[derive(Serialize, JsonSchema)]
-struct CreatePresetResponse {
-    /// Id of the created preset, used by all other preset tools.
-    preset_id: String,
+struct CreatePatchResponse {
+    /// Id of the created patch, used by all other patch tools.
+    patch_id: String,
 }
 
 #[derive(Serialize, JsonSchema)]
@@ -925,53 +925,53 @@ impl McpServer {
         }
     }
 
-    /// List all currently open presets (id, name, running state).
+    /// List all currently open patches (id, name, running state).
     #[tool]
-    async fn list_presets(&self) -> Result<Json<ListPresetsResponse>, CallToolResult> {
-        let presets = self
+    async fn list_patches(&self) -> Result<Json<ListPatchesResponse>, CallToolResult> {
+        let patches = self
             .ma
-            .get_preset_infos()
+            .get_patch_infos()
             .await
             .iter()
             .map(serde_json::to_value)
             .collect::<Result<_, _>>()
             .map_err(|e| err(format!("Failed to serialize result: {e}")))?;
-        Ok(Json(ListPresetsResponse { presets }))
+        Ok(Json(ListPatchesResponse { patches }))
     }
 
-    /// Create a new empty preset with the given name. Returns the preset id
-    /// used by all other preset tools.
+    /// Create a new empty patch with the given name. Returns the patch id
+    /// used by all other patch tools.
     #[tool]
-    async fn create_preset(
+    async fn create_patch(
         &self,
-        Parameters(p): Parameters<CreatePresetParams>,
-    ) -> Result<Json<CreatePresetResponse>, CallToolResult> {
-        if let Err(e) = validate_preset_name(&p.name) {
+        Parameters(p): Parameters<CreatePatchParams>,
+    ) -> Result<Json<CreatePatchResponse>, CallToolResult> {
+        if let Err(e) = validate_patch_name(&p.name) {
             return Err(err(e));
         }
-        match self.ma.new_preset_with_name(p.name) {
-            Ok(id) => Ok(Json(CreatePresetResponse { preset_id: id })),
-            Err(e) => Err(err(preset_error_text(e))),
+        match self.ma.new_patch_with_name(p.name) {
+            Ok(id) => Ok(Json(CreatePatchResponse { patch_id: id })),
+            Err(e) => Err(err(patch_error_text(e))),
         }
     }
 
-    /// Get the live spec of a preset: all agents (with ids, configs, layout)
+    /// Get the live spec of a patch: all agents (with ids, configs, layout)
     /// and connections. This is the current editor canvas state.
     #[tool]
-    async fn get_preset_spec(
+    async fn get_patch_spec(
         &self,
-        Parameters(p): Parameters<PresetIdParams>,
+        Parameters(p): Parameters<PatchIdParams>,
     ) -> Result<Json<JsonObject>, CallToolResult> {
-        match self.ma.get_preset_spec(&p.preset_id).await {
-            Some(spec) => preset_spec_result(&spec),
+        match self.ma.get_patch_spec(&p.patch_id).await {
+            Some(spec) => patch_spec_result(&spec),
             None => Err(err(format!(
-                "Preset \"{}\" not found. Use list_presets to see open presets.",
-                p.preset_id
+                "Patch \"{}\" not found. Use list_patches to see open patches.",
+                p.patch_id
             ))),
         }
     }
 
-    /// Add an agent to a preset. Returns the created agent spec including
+    /// Add an agent to a patch. Returns the created agent spec including
     /// its assigned id (needed for add_connection).
     #[tool]
     async fn add_agent(
@@ -1022,8 +1022,8 @@ impl McpServer {
             }
         }
 
-        let preset_id = p.preset_id.clone();
-        let agent_id = match self.ma.add_agent(p.preset_id, spec).await {
+        let patch_id = p.patch_id.clone();
+        let agent_id = match self.ma.add_agent(p.patch_id, spec).await {
             Ok(id) => id,
             Err(e) => return Err(err(e.to_string())),
         };
@@ -1047,10 +1047,10 @@ impl McpServer {
                      Set that config when adding the agent, then read the returned spec for the keys \
                      it generated."
                 );
-                if let Err(rollback) = self.ma.remove_agent(&preset_id, &agent_id).await {
+                if let Err(rollback) = self.ma.remove_agent(&patch_id, &agent_id).await {
                     log::warn!("Failed to roll back agent {agent_id}: {rollback}");
                     message.push_str(&format!(
-                        "\nRolling the agent back failed, so it remains in the preset as \"{agent_id}\": {rollback}"
+                        "\nRolling the agent back failed, so it remains in the patch as \"{agent_id}\": {rollback}"
                     ));
                 }
                 return Err(err(message));
@@ -1155,13 +1155,13 @@ impl McpServer {
         }
     }
 
-    /// Remove an agent (and all its connections) from a preset.
+    /// Remove an agent (and all its connections) from a patch.
     #[tool]
     async fn remove_agent(
         &self,
         Parameters(p): Parameters<RemoveAgentParams>,
     ) -> Result<CallToolResult, McpError> {
-        match self.ma.remove_agent(&p.preset_id, &p.agent_id).await {
+        match self.ma.remove_agent(&p.patch_id, &p.agent_id).await {
             Ok(()) => ok_text("Agent removed"),
             Err(e) => err_text(e.to_string()),
         }
@@ -1224,14 +1224,14 @@ impl McpServer {
             target: p.target,
             target_handle: p.target_handle,
         };
-        match self.ma.add_connection(&p.preset_id, connection).await {
+        match self.ma.add_connection(&p.patch_id, connection).await {
             Ok(()) => ok_text("Connection added"),
             Err(e) => err_text(e.to_string()),
         }
     }
 
-    /// Remove a connection from a preset. All four fields must match an
-    /// existing connection exactly (see get_preset_spec).
+    /// Remove a connection from a patch. All four fields must match an
+    /// existing connection exactly (see get_patch_spec).
     #[tool]
     async fn remove_connection(
         &self,
@@ -1243,33 +1243,33 @@ impl McpServer {
             target: p.target,
             target_handle: p.target_handle,
         };
-        match self.ma.remove_connection(&p.preset_id, &connection).await {
+        match self.ma.remove_connection(&p.patch_id, &connection).await {
             Ok(()) => ok_text("Connection removed"),
             Err(e) => err_text(e.to_string()),
         }
     }
 
-    /// Save a preset to disk as <presets_dir>/<name>.json.
+    /// Save a patch to disk as <patches_dir>/<name>.json.
     #[tool]
-    async fn save_preset(
+    async fn save_patch(
         &self,
-        Parameters(p): Parameters<SavePresetParams>,
+        Parameters(p): Parameters<SavePatchParams>,
     ) -> Result<CallToolResult, McpError> {
-        let Some(presets_dir) = &self.presets_dir else {
+        let Some(patches_dir) = &self.patches_dir else {
             return err_text(
-                "Saving is unavailable: this MCP server was started without a presets directory.",
+                "Saving is unavailable: this MCP server was started without a patches directory.",
             );
         };
 
         let current_name = self
             .ma
-            .get_preset_info(&p.preset_id)
+            .get_patch_info(&p.patch_id)
             .await
             .and_then(|info| info.name);
         let Some(name) = p.name.or(current_name.clone()) else {
-            return err_text("Preset has no name; pass the \"name\" parameter to save it.");
+            return err_text("Patch has no name; pass the \"name\" parameter to save it.");
         };
-        if let Err(e) = validate_preset_name(&name) {
+        if let Err(e) = validate_patch_name(&name) {
             return err_text(e);
         }
         let renamed_from = match &current_name {
@@ -1277,65 +1277,65 @@ impl McpServer {
             _ => None,
         };
         if renamed_from.is_some()
-            && let Err(e) = self.ma.rename_preset(&p.preset_id, name.clone()).await
+            && let Err(e) = self.ma.rename_patch(&p.patch_id, name.clone()).await
         {
-            return err_text(preset_error_text(e));
+            return err_text(patch_error_text(e));
         }
 
-        let path = presets_dir.join(format!("{name}.json"));
+        let path = patches_dir.join(format!("{name}.json"));
         if let Some(parent) = path.parent()
             && let Err(e) = std::fs::create_dir_all(parent)
         {
-            return err_text(format!("Failed to create preset directory: {e}"));
+            return err_text(format!("Failed to create patch directory: {e}"));
         }
         let path_str = path.to_string_lossy().to_string();
-        match self.ma.save_preset(&p.preset_id, &path_str).await {
+        match self.ma.save_patch(&p.patch_id, &path_str).await {
             Ok(()) => {
                 // A rename-on-save is a move: drop the old file so the two
                 // names cannot diverge.
                 if let Some(old_name) = renamed_from {
-                    let old_path = presets_dir.join(format!("{old_name}.json"));
+                    let old_path = patches_dir.join(format!("{old_name}.json"));
                     if old_path.exists()
                         && let Err(e) = std::fs::remove_file(&old_path)
                     {
                         log::warn!(
-                            "Failed to remove old preset file {}: {e}",
+                            "Failed to remove old patch file {}: {e}",
                             old_path.display()
                         );
                     }
                 }
-                ok_text(format!("Saved preset \"{name}\""))
+                ok_text(format!("Saved patch \"{name}\""))
             }
             Err(e) => err_text(e.to_string()),
         }
     }
 
-    /// Start all agents in a preset (run the workflow).
+    /// Start all agents in a patch (run the workflow).
     #[tool]
-    async fn start_preset(
+    async fn start_patch(
         &self,
-        Parameters(p): Parameters<PresetIdParams>,
+        Parameters(p): Parameters<PatchIdParams>,
     ) -> Result<CallToolResult, McpError> {
-        match self.ma.start_preset(&p.preset_id).await {
-            Ok(()) => ok_text("Preset started"),
+        match self.ma.start_patch(&p.patch_id).await {
+            Ok(()) => ok_text("Patch started"),
             Err(e) => err_text(e.to_string()),
         }
     }
 
-    /// Stop all agents in a preset.
+    /// Stop all agents in a patch.
     #[tool]
-    async fn stop_preset(
+    async fn stop_patch(
         &self,
-        Parameters(p): Parameters<PresetIdParams>,
+        Parameters(p): Parameters<PatchIdParams>,
     ) -> Result<CallToolResult, McpError> {
-        match self.ma.stop_preset(&p.preset_id).await {
-            Ok(()) => ok_text("Preset stopped"),
+        match self.ma.stop_patch(&p.patch_id).await {
+            Ok(()) => ok_text("Patch stopped"),
             Err(e) => err_text(e.to_string()),
         }
     }
 
     /// Write a test value into an external input channel of a running
-    /// preset. Use get_external_outputs / get_agent_errors afterwards to
+    /// patch. Use get_external_outputs / get_agent_errors afterwards to
     /// observe the result.
     #[tool]
     async fn write_external_input(
@@ -1352,7 +1352,7 @@ impl McpServer {
         }
     }
 
-    /// Get recent agent errors (from running presets). Poll with since_seq
+    /// Get recent agent errors (from running patches). Poll with since_seq
     /// set to the previous latest_seq to receive only new records; dropped
     /// counts events lost when the collector fell behind the event stream.
     #[tool]
@@ -1362,7 +1362,7 @@ impl McpServer {
     ) -> Result<Json<GetAgentErrorsResponse>, CallToolResult> {
         let since_seq = p.since_seq.unwrap_or(0);
         let errors = self.ring.collect_errors(
-            p.preset_id.as_deref(),
+            p.patch_id.as_deref(),
             since_seq,
             p.limit.unwrap_or(DEFAULT_POLL_LIMIT),
         );
@@ -1378,7 +1378,7 @@ impl McpServer {
         }))
     }
 
-    /// Get recent external output values (from running presets). Poll with
+    /// Get recent external output values (from running patches). Poll with
     /// since_seq set to the previous latest_seq to receive only new records;
     /// dropped counts events lost when the collector fell behind the event
     /// stream.
@@ -1426,14 +1426,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn preset_name_validation() {
-        assert!(validate_preset_name("MyPreset").is_ok());
-        assert!(validate_preset_name("Folder/MyPreset").is_ok());
-        assert!(validate_preset_name("").is_err());
-        assert!(validate_preset_name("../escape").is_err());
-        assert!(validate_preset_name("/absolute").is_err());
-        assert!(validate_preset_name("a\\b").is_err());
-        assert!(validate_preset_name("a/./b").is_err());
+    fn patch_name_validation() {
+        assert!(validate_patch_name("MyPatch").is_ok());
+        assert!(validate_patch_name("Folder/MyPatch").is_ok());
+        assert!(validate_patch_name("").is_err());
+        assert!(validate_patch_name("../escape").is_err());
+        assert!(validate_patch_name("/absolute").is_err());
+        assert!(validate_patch_name("a\\b").is_err());
+        assert!(validate_patch_name("a/./b").is_err());
     }
 
     #[test]
@@ -1613,7 +1613,7 @@ mod tests {
             ma.clone(),
             McpServerConfig {
                 port,
-                presets_dir: None,
+                patches_dir: None,
                 token: Some("test-token".into()),
             },
         )
@@ -1658,7 +1658,7 @@ mod tests {
         let next = ring.collect_errors(None, page[4].seq, 5);
         assert_eq!(next[0].seq, page[4].seq + 1);
 
-        // Preset filter drops non-matching records.
+        // Patch filter drops non-matching records.
         assert!(ring.collect_errors(Some("other"), 0, 10).is_empty());
     }
 
@@ -1768,9 +1768,9 @@ mod tests {
         async fn setup() -> (ModularAgent, McpServer, String) {
             let ma = ModularAgent::init().expect("init");
             ma.ready().await.expect("ready");
-            let preset_id = ma.new_preset().expect("preset");
+            let patch_id = ma.new_patch().expect("patch");
             let server = McpServer::new(ma.clone(), None, Arc::new(EventRing::new()));
-            (ma, server, preset_id)
+            (ma, server, patch_id)
         }
 
         /// Applies the same conversion the rmcp tool router applies to a
@@ -1800,13 +1800,13 @@ mod tests {
 
         async fn add_numbered(
             server: &McpServer,
-            preset_id: &str,
+            patch_id: &str,
             configs: serde_json::Map<String, Value>,
         ) -> CallToolResult {
             complete(
                 server
                     .add_agent(Parameters(AddAgentParams {
-                        preset_id: preset_id.to_string(),
+                        patch_id: patch_id.to_string(),
                         def_name: McpNumberedAgent::DEF_NAME.to_string(),
                         configs: Some(configs),
                         x: None,
@@ -1827,11 +1827,11 @@ mod tests {
 
         #[tokio::test]
         async fn add_agent_applies_deferred_generated_configs() {
-            let (ma, server, preset_id) = setup().await;
+            let (ma, server, patch_id) = setup().await;
 
             let result = add_numbered(
                 &server,
-                &preset_id,
+                &patch_id,
                 json_map(serde_json::json!({ "n": 3, "c2": "hello" })),
             )
             .await;
@@ -1850,11 +1850,11 @@ mod tests {
 
         #[tokio::test]
         async fn add_agent_rolls_back_when_deferred_key_is_invalid() {
-            let (ma, server, preset_id) = setup().await;
+            let (ma, server, patch_id) = setup().await;
 
             let result = add_numbered(
                 &server,
-                &preset_id,
+                &patch_id,
                 json_map(serde_json::json!({ "n": 3, "c9": "x" })),
             )
             .await;
@@ -1864,7 +1864,7 @@ mod tests {
             assert!(text.contains("c2"), "valid keys must be listed: {text}");
 
             // The half-created agent must not survive the failure.
-            let spec = ma.get_preset_spec(&preset_id).await.unwrap();
+            let spec = ma.get_patch_spec(&patch_id).await.unwrap();
             assert!(spec.agents.is_empty(), "rollback must remove the agent");
 
             ma.quit();
@@ -1872,11 +1872,11 @@ mod tests {
 
         #[tokio::test]
         async fn add_agent_keeps_agent_and_warns_when_configs_error_after_commit() {
-            let (ma, server, preset_id) = setup().await;
+            let (ma, server, patch_id) = setup().await;
 
             let result = add_numbered(
                 &server,
-                &preset_id,
+                &patch_id,
                 json_map(serde_json::json!({ "n": 3, "c2": INVALID_CONDITION })),
             )
             .await;
@@ -1894,10 +1894,10 @@ mod tests {
 
         #[tokio::test]
         async fn set_agent_configs_tool_accepts_generated_key() {
-            let (ma, server, preset_id) = setup().await;
+            let (ma, server, patch_id) = setup().await;
 
             let result =
-                add_numbered(&server, &preset_id, json_map(serde_json::json!({ "n": 3 }))).await;
+                add_numbered(&server, &patch_id, json_map(serde_json::json!({ "n": 3 }))).await;
             let agent_id = result_json(&result)["id"].as_str().unwrap().to_string();
 
             let result = server
@@ -1930,10 +1930,10 @@ mod tests {
 
         #[tokio::test]
         async fn update_agent_spec_tool_accepts_generated_key() {
-            let (ma, server, preset_id) = setup().await;
+            let (ma, server, patch_id) = setup().await;
 
             let result =
-                add_numbered(&server, &preset_id, json_map(serde_json::json!({ "n": 3 }))).await;
+                add_numbered(&server, &patch_id, json_map(serde_json::json!({ "n": 3 }))).await;
             let agent_id = result_json(&result)["id"].as_str().unwrap().to_string();
 
             let result = server
@@ -1958,10 +1958,10 @@ mod tests {
 
         #[tokio::test]
         async fn update_agent_spec_tool_reports_committed_config_error() {
-            let (ma, server, preset_id) = setup().await;
+            let (ma, server, patch_id) = setup().await;
 
             let result =
-                add_numbered(&server, &preset_id, json_map(serde_json::json!({ "n": 3 }))).await;
+                add_numbered(&server, &patch_id, json_map(serde_json::json!({ "n": 3 }))).await;
             let agent_id = result_json(&result)["id"].as_str().unwrap().to_string();
 
             let result = server
@@ -1986,20 +1986,20 @@ mod tests {
 
         #[tokio::test]
         async fn converted_tool_returns_structured_content() {
-            let (ma, server, preset_id) = setup().await;
+            let (ma, server, patch_id) = setup().await;
 
-            let result = complete(server.list_presets().await);
+            let result = complete(server.list_patches().await);
             assert!(!is_error(&result), "{}", result_text(&result));
             let structured = result
                 .structured_content
                 .clone()
                 .expect("structured_content must be set");
-            let infos = structured["presets"]
+            let infos = structured["patches"]
                 .as_array()
-                .expect("list_presets must return a presets array");
+                .expect("list_patches must return a patches array");
             assert!(
-                infos.iter().any(|info| info["id"] == preset_id.as_str()),
-                "the open preset must be listed: {structured}"
+                infos.iter().any(|info| info["id"] == patch_id.as_str()),
+                "the open patch must be listed: {structured}"
             );
             // The text fallback carries the same JSON payload.
             assert_eq!(result_json(&result), structured);
@@ -2007,19 +2007,19 @@ mod tests {
             // A fixed-shape response is structured too.
             let result = complete(
                 server
-                    .create_preset(Parameters(CreatePresetParams { name: "P2".into() }))
+                    .create_patch(Parameters(CreatePatchParams { name: "P2".into() }))
                     .await,
             );
             let structured = result
                 .structured_content
                 .expect("structured_content must be set");
-            assert!(structured["preset_id"].is_string(), "{structured}");
+            assert!(structured["patch_id"].is_string(), "{structured}");
 
             // The Err branch keeps the plain-text is_error semantics.
             let result = complete(
                 server
-                    .get_preset_spec(Parameters(PresetIdParams {
-                        preset_id: "no-such-preset".into(),
+                    .get_patch_spec(Parameters(PatchIdParams {
+                        patch_id: "no-such-patch".into(),
                     }))
                     .await,
             );
@@ -2041,9 +2041,9 @@ mod tests {
             };
             for name in [
                 "get_agent_definition",
-                "list_presets",
-                "create_preset",
-                "get_preset_spec",
+                "list_patches",
+                "create_patch",
+                "get_patch_spec",
                 "add_agent",
                 "get_agent_errors",
                 "get_external_outputs",
@@ -2058,11 +2058,11 @@ mod tests {
                 assert_eq!(schema["type"], "object", "{name}: {schema:?}");
             }
             // Fixed-shape responses expose their fields in the schema.
-            let schema = tool("create_preset").output_schema.clone().unwrap();
-            assert!(schema["properties"]["preset_id"].is_object(), "{schema:?}");
+            let schema = tool("create_patch").output_schema.clone().unwrap();
+            assert!(schema["properties"]["patch_id"].is_object(), "{schema:?}");
             // Text-ack tools stay schema-less.
             assert!(tool("list_agent_definitions").output_schema.is_none());
-            assert!(tool("start_preset").output_schema.is_none());
+            assert!(tool("start_patch").output_schema.is_none());
         }
     }
 }

@@ -34,7 +34,7 @@ A Rust framework for building modular multi-agent systems with stream-based mess
 
 ## Overview
 
-modular-agent-core provides an asynchronous, stream-based architecture for orchestrating multiple agents. Agents communicate through message passing and can be composed into networks using Presets. This is the core library with minimal dependencies—individual agent implementations are available separately.
+modular-agent-core provides an asynchronous, stream-based architecture for orchestrating multiple agents. Agents communicate through message passing and can be composed into networks using Patches. This is the core library with minimal dependencies—individual agent implementations are available separately.
 
 ## Installation
 
@@ -69,9 +69,9 @@ async fn main() -> Result<(), AgentError> {
         None
     });
 
-    // 3. Load and start preset
-    let preset_id = ma.open_preset_from_file("preset.json", None).await?;
-    ma.start_preset(&preset_id).await?;
+    // 3. Load and start patch
+    let patch_id = ma.open_patch_from_file("patch.json", None).await?;
+    ma.start_patch(&patch_id).await?;
 
     // 4. Send input / receive output
     ma.write_external_input("input".into(), AgentValue::string("hello")).await?;
@@ -80,7 +80,7 @@ async fn main() -> Result<(), AgentError> {
     }
 
     // 5. Cleanup
-    ma.stop_preset(&preset_id).await?;
+    ma.stop_patch(&patch_id).await?;
     ma.quit();
     Ok(())
 }
@@ -90,7 +90,7 @@ async fn main() -> Result<(), AgentError> {
 
 | Feature      | Default | Description                                     |
 | ------------ | ------- | ----------------------------------------------- |
-| `file`       | Yes     | File handling support for presets                |
+| `file`       | Yes     | File handling support for patches                |
 | `image`      | Yes     | Image processing via photon-rs                  |
 | `llm`        | Yes     | LLM integration with Message and ToolCall types |
 | `mcp`        | Yes     | Model Context Protocol integration              |
@@ -99,7 +99,7 @@ async fn main() -> Result<(), AgentError> {
 
 ## External Agent Editing (MCP Server)
 
-With the `mcp-server` feature, a host application can expose its running `ModularAgent` over a localhost MCP endpoint, so external AI agents such as Claude Code can inspect agent definitions, build and edit presets, and verify running flows through natural language.
+With the `mcp-server` feature, a host application can expose its running `ModularAgent` over a localhost MCP endpoint, so external AI agents such as Claude Code can inspect agent definitions, build and edit patches, and verify running flows through natural language.
 
 ```toml
 modular-agent-core = { version = "0.28", features = ["mcp-server"] }
@@ -113,8 +113,8 @@ let handle = start_mcp_server(
     ma.clone(),
     McpServerConfig {
         port: 8765,
-        // Root directory for the save_preset tool; None disables saving.
-        presets_dir: Some("/path/to/presets".into()),
+        // Root directory for the save_patch tool; None disables saving.
+        patches_dir: Some("/path/to/patches".into()),
         // Required Bearer token; None disables authentication.
         token: Some("secret".into()),
     },
@@ -135,7 +135,7 @@ Then ask, for example:
 
 > Create a flow that listens to a Slack channel, sends each message to a Chat agent, and posts the reply back to the channel.
 
-The external agent typically calls `list_agent_definitions` to discover the catalog, then `create_preset` → `add_agent` ×4 (Slack Listener, Slack To Message, Chat, Slack Post) → `add_connection` ×3 → `save_preset`. It can then verify the flow end to end: `start_preset`, feed a test value with `write_external_input`, and poll `get_external_outputs` / `get_agent_errors`. Both polling tools return `latest_seq` — the seq of the last record returned — which the agent passes back as `since_seq` on the next call to receive only new records; `dropped > 0` means the event collector fell behind the broadcast stream and some events were never captured. Separately, the capture buffer keeps only the most recent 200 records per kind, so records not polled in time can age out without affecting `dropped`. Structure changes emit `ModularAgentEvent::PresetStructureChanged` so hosts (e.g. modular-agent-desktop) can refresh their UI live. The full tool list (17 tools) covers definitions, preset CRUD, agent/connection editing, config updates, start/stop, and runtime verification.
+The external agent typically calls `list_agent_definitions` to discover the catalog, then `create_patch` → `add_agent` ×4 (Slack Listener, Slack To Message, Chat, Slack Post) → `add_connection` ×3 → `save_patch`. It can then verify the flow end to end: `start_patch`, feed a test value with `write_external_input`, and poll `get_external_outputs` / `get_agent_errors`. Both polling tools return `latest_seq` — the seq of the last record returned — which the agent passes back as `since_seq` on the next call to receive only new records; `dropped > 0` means the event collector fell behind the broadcast stream and some events were never captured. Separately, the capture buffer keeps only the most recent 200 records per kind, so records not polled in time can age out without affecting `dropped`. Structure changes emit `ModularAgentEvent::PatchStructureChanged` so hosts (e.g. modular-agent-desktop) can refresh their UI live. The full tool list (17 tools) covers definitions, patch CRUD, agent/connection editing, config updates, start/stop, and runtime verification.
 
 The server binds `127.0.0.1` only. When `token` is set, every request must carry an `Authorization: Bearer <token>` header and is rejected with 401 otherwise; without a token the server is unauthenticated, so enable it deliberately. `modular-agent-desktop` exposes it via Settings → Core (with an auto-generated token); `modular-agent-cli` via the `--mcp-port <PORT>` and `--mcp-token <TOKEN>` flags.
 
@@ -147,7 +147,7 @@ Full API documentation is available at [docs.rs/modular-agent-core](https://docs
 
 ### Applications
 
-- [modular-agent-desktop](https://github.com/modular-agent/modular-agent/tree/main/apps/desktop) - Visual presets editor (Tauri 2 + Svelte 5)
+- [modular-agent-desktop](https://github.com/modular-agent/modular-agent/tree/main/apps/desktop) - Visual patches editor (Tauri 2 + Svelte 5)
 
 ### Agent Libraries — General
 

@@ -331,28 +331,28 @@
           "markdownDescription": "Denies the add_connection command without any pre-configured scope."
         },
         {
-          "description": "Enables the add_preset command without any pre-configured scope.",
+          "description": "Enables the add_patch command without any pre-configured scope.",
           "type": "string",
-          "const": "allow-add-preset",
-          "markdownDescription": "Enables the add_preset command without any pre-configured scope."
+          "const": "allow-add-patch",
+          "markdownDescription": "Enables the add_patch command without any pre-configured scope."
         },
         {
-          "description": "Denies the add_preset command without any pre-configured scope.",
+          "description": "Denies the add_patch command without any pre-configured scope.",
           "type": "string",
-          "const": "deny-add-preset",
-          "markdownDescription": "Denies the add_preset command without any pre-configured scope."
+          "const": "deny-add-patch",
+          "markdownDescription": "Denies the add_patch command without any pre-configured scope."
         },
         {
-          "description": "Enables the add_preset_with_name command without any pre-configured scope.",
+          "description": "Enables the add_patch_with_name command without any pre-configured scope.",
           "type": "string",
-          "const": "allow-add-preset-with-name",
-          "markdownDescription": "Enables the add_preset_with_name command without any pre-configured scope."
+          "const": "allow-add-patch-with-name",
+          "markdownDescription": "Enables the add_patch_with_name command without any pre-configured scope."
         },
         {
-          "description": "Denies the add_preset_with_name command without any pre-configured scope.",
+          "description": "Denies the add_patch_with_name command without any pre-configured scope.",
           "type": "string",
-          "const": "deny-add-preset-with-name",
-          "markdownDescription": "Denies the add_preset_with_name command without any pre-configured scope."
+          "const": "deny-add-patch-with-name",
+          "markdownDescription": "Denies the add_patch_with_name command without any pre-configured scope."
         },
         {
           "description": "Enables the get_agent_definition command without any pre-configured scope.",
@@ -415,40 +415,40 @@
           "markdownDescription": "Denies the get_global_configs_map command without any pre-configured scope."
         },
         {
-          "description": "Enables the get_preset_info command without any pre-configured scope.",
+          "description": "Enables the get_patch_info command without any pre-configured scope.",
           "type": "string",
-          "const": "allow-get-preset-info",
-          "markdownDescription": "Enables the get_preset_info command without any pre-configured scope."
+          "const": "allow-get-patch-info",
+          "markdownDescription": "Enables the get_patch_info command without any pre-configured scope."
         },
         {
-          "description": "Denies the get_preset_info command without any pre-configured scope.",
+          "description": "Denies the get_patch_info command without any pre-configured scope.",
           "type": "string",
-          "const": "deny-get-preset-info",
-          "markdownDescription": "Denies the get_preset_info command without any pre-configured scope."
+          "const": "deny-get-patch-info",
+          "markdownDescription": "Denies the get_patch_info command without any pre-configured scope."
         },
         {
-          "description": "Enables the get_preset_infos command without any pre-configured scope.",
+          "description": "Enables the get_patch_infos command without any pre-configured scope.",
           "type": "string",
-          "const": "allow-get-preset-infos",
-          "markdownDescription": "Enables the get_preset_infos command without any pre-configured scope."
+          "const": "allow-get-patch-infos",
+          "markdownDescription": "Enables the get_patch_infos command without any pre-configured scope."
         },
         {
-          "description": "Denies the get_preset_infos command without any pre-configured scope.",
+          "description": "Denies the get_patch_infos command without any pre-configured scope.",
           "type": "string",
-          "const": "deny-get-preset-infos",
-          "markdownDescription": "Denies the get_preset_infos command without any pre-configured scope."
+          "const": "deny-get-patch-infos",
+          "markdownDescription": "Denies the get_patch_infos command without any pre-configured scope."
         },
         {
-          "description": "Enables the get_preset_spec command without any pre-configured scope.",
+          "description": "Enables the get_patch_spec command without any pre-configured scope.",
           "type": "string",
-          "const": "allow-get-preset-spec",
-          "markdownDescription": "Enables the get_preset_spec command without any pre-configured scope."
+          "const": "allow-get-patch-spec",
+          "markdownDescription": "Enables the get_patch_spec command without any pre-configured scope."
         },
         {
-          "description": "Denies the get_preset_spec command without any pre-configured scope.",
+          "description": "Denies the get_patch_spec command without any pre-configured scope.",
           "type": "string",
-          "const": "deny-get-preset-spec",
-          "markdownDescription": "Denies the get_preset_spec command without any pre-configured scope."
+          "const": "deny-get-patch-spec",
+          "markdownDescription": "Denies the get_patch_spec command without any pre-configured scope."
         },
         {
           "description": "Enables the new_agent_spec command without any pre-configured scope.",
@@ -463,28 +463,28 @@
           "markdownDescription": "Denies the new_agent_spec command without any pre-configured scope."
         },
         {
-          "description": "Enables the new_preset command without any pre-configured scope.",
+          "description": "Enables the new_patch command without any pre-configured scope.",
           "type": "string",
-          "const": "allow-new-preset",
-          "markdownDescription": "Enables the new_preset command without any pre-configured scope."
+          "const": "allow-new-patch",
+          "markdownDescription": "Enables the new_patch command without any pre-configured scope."
         },
         {
-          "description": "Denies the new_preset command without any pre-configured scope.",
+          "description": "Denies the new_patch command without any pre-configured scope.",
           "type": "string",
-          "const": "deny-new-preset",
-          "markdownDescription": "Denies the new_preset command without any pre-configured scope."
+          "const": "deny-new-patch",
+          "markdownDescription": "Denies the new_patch command without any pre-configured scope."
         },
         {
-          "description": "Enables the open_preset_from_file command without any pre-configured scope.",
+          "description": "Enables the open_patch_from_file command without any pre-configured scope.",
           "type": "string",
-          "const": "allow-open-preset-from-file",
-          "markdownDescription": "Enables the open_preset_from_file command without any pre-configured scope."
+          "const": "allow-open-patch-from-file",
+          "markdownDescription": "Enables the open_patch_from_file command without any pre-configured scope."
         },
         {
-          "description": "Denies the open_preset_from_file command without any pre-configured scope.",
+          "description": "Denies the open_patch_from_file command without any pre-configured scope.",
           "type": "string",
-          "const": "deny-open-preset-from-file",
-          "markdownDescription": "Denies the open_preset_from_file command without any pre-configured scope."
+          "const": "deny-open-patch-from-file",
+          "markdownDescription": "Denies the open_patch_from_file command without any pre-configured scope."
         },
         {
           "description": "Enables the remove_agent command without any pre-configured scope.",
@@ -511,28 +511,28 @@
           "markdownDescription": "Denies the remove_connection command without any pre-configured scope."
         },
         {
-          "description": "Enables the remove_preset command without any pre-configured scope.",
+          "description": "Enables the remove_patch command without any pre-configured scope.",
           "type": "string",
-          "const": "allow-remove-preset",
-          "markdownDescription": "Enables the remove_preset command without any pre-configured scope."
+          "const": "allow-remove-patch",
+          "markdownDescription": "Enables the remove_patch command without any pre-configured scope."
         },
         {
-          "description": "Denies the remove_preset command without any pre-configured scope.",
+          "description": "Denies the remove_patch command without any pre-configured scope.",
           "type": "string",
-          "const": "deny-remove-preset",
-          "markdownDescription": "Denies the remove_preset command without any pre-configured scope."
+          "const": "deny-remove-patch",
+          "markdownDescription": "Denies the remove_patch command without any pre-configured scope."
         },
         {
-          "description": "Enables the save_preset command without any pre-configured scope.",
+          "description": "Enables the save_patch command without any pre-configured scope.",
           "type": "string",
-          "const": "allow-save-preset",
-          "markdownDescription": "Enables the save_preset command without any pre-configured scope."
+          "const": "allow-save-patch",
+          "markdownDescription": "Enables the save_patch command without any pre-configured scope."
         },
         {
-          "description": "Denies the save_preset command without any pre-configured scope.",
+          "description": "Denies the save_patch command without any pre-configured scope.",
           "type": "string",
-          "const": "deny-save-preset",
-          "markdownDescription": "Denies the save_preset command without any pre-configured scope."
+          "const": "deny-save-patch",
+          "markdownDescription": "Denies the save_patch command without any pre-configured scope."
         },
         {
           "description": "Enables the set_agent_configs command without any pre-configured scope.",
@@ -583,16 +583,16 @@
           "markdownDescription": "Denies the start_agent command without any pre-configured scope."
         },
         {
-          "description": "Enables the start_preset command without any pre-configured scope.",
+          "description": "Enables the start_patch command without any pre-configured scope.",
           "type": "string",
-          "const": "allow-start-preset",
-          "markdownDescription": "Enables the start_preset command without any pre-configured scope."
+          "const": "allow-start-patch",
+          "markdownDescription": "Enables the start_patch command without any pre-configured scope."
         },
         {
-          "description": "Denies the start_preset command without any pre-configured scope.",
+          "description": "Denies the start_patch command without any pre-configured scope.",
           "type": "string",
-          "const": "deny-start-preset",
-          "markdownDescription": "Denies the start_preset command without any pre-configured scope."
+          "const": "deny-start-patch",
+          "markdownDescription": "Denies the start_patch command without any pre-configured scope."
         },
         {
           "description": "Enables the stop_agent command without any pre-configured scope.",
@@ -607,16 +607,16 @@
           "markdownDescription": "Denies the stop_agent command without any pre-configured scope."
         },
         {
-          "description": "Enables the stop_preset command without any pre-configured scope.",
+          "description": "Enables the stop_patch command without any pre-configured scope.",
           "type": "string",
-          "const": "allow-stop-preset",
-          "markdownDescription": "Enables the stop_preset command without any pre-configured scope."
+          "const": "allow-stop-patch",
+          "markdownDescription": "Enables the stop_patch command without any pre-configured scope."
         },
         {
-          "description": "Denies the stop_preset command without any pre-configured scope.",
+          "description": "Denies the stop_patch command without any pre-configured scope.",
           "type": "string",
-          "const": "deny-stop-preset",
-          "markdownDescription": "Denies the stop_preset command without any pre-configured scope."
+          "const": "deny-stop-patch",
+          "markdownDescription": "Denies the stop_patch command without any pre-configured scope."
         },
         {
           "description": "Enables the update_agent_spec command without any pre-configured scope.",
@@ -631,16 +631,16 @@
           "markdownDescription": "Denies the update_agent_spec command without any pre-configured scope."
         },
         {
-          "description": "Enables the update_preset_spec command without any pre-configured scope.",
+          "description": "Enables the update_patch_spec command without any pre-configured scope.",
           "type": "string",
-          "const": "allow-update-preset-spec",
-          "markdownDescription": "Enables the update_preset_spec command without any pre-configured scope."
+          "const": "allow-update-patch-spec",
+          "markdownDescription": "Enables the update_patch_spec command without any pre-configured scope."
         },
         {
-          "description": "Denies the update_preset_spec command without any pre-configured scope.",
+          "description": "Denies the update_patch_spec command without any pre-configured scope.",
           "type": "string",
-          "const": "deny-update-preset-spec",
-          "markdownDescription": "Denies the update_preset_spec command without any pre-configured scope."
+          "const": "deny-update-patch-spec",
+          "markdownDescription": "Denies the update_patch_spec command without any pre-configured scope."
         },
         {
           "description": "Enables the write_external_input command without any pre-configured scope.",
@@ -655,10 +655,10 @@
           "markdownDescription": "Denies the write_external_input command without any pre-configured scope."
         },
         {
-          "description": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-new-preset`\n- `allow-add-preset`\n- `allow-add-preset-with-name`\n- `allow-remove-preset`\n- `allow-start-preset`\n- `allow-stop-preset`\n- `allow-open-preset-from-file`\n- `allow-save-preset`\n- `allow-get-preset-spec`\n- `allow-update-preset-spec`\n- `allow-get-preset-info`\n- `allow-get-preset-infos`\n- `allow-get-agent-definition`\n- `allow-get-agent-definitions`\n- `allow-get-agent-spec`\n- `allow-update-agent-spec`\n- `allow-new-agent-spec`\n- `allow-add-agent`\n- `allow-remove-agent`\n- `allow-add-connection`\n- `allow-remove-connection`\n- `allow-add-agents-and-connections`\n- `allow-start-agent`\n- `allow-stop-agent`\n- `allow-set-agent-configs`\n- `allow-get-global-configs`\n- `allow-get-global-configs-map`\n- `allow-set-global-configs`\n- `allow-set-global-configs-map`\n- `allow-write-external-input`",
+          "description": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-new-patch`\n- `allow-add-patch`\n- `allow-add-patch-with-name`\n- `allow-remove-patch`\n- `allow-start-patch`\n- `allow-stop-patch`\n- `allow-open-patch-from-file`\n- `allow-save-patch`\n- `allow-get-patch-spec`\n- `allow-update-patch-spec`\n- `allow-get-patch-info`\n- `allow-get-patch-infos`\n- `allow-get-agent-definition`\n- `allow-get-agent-definitions`\n- `allow-get-agent-spec`\n- `allow-update-agent-spec`\n- `allow-new-agent-spec`\n- `allow-add-agent`\n- `allow-remove-agent`\n- `allow-add-connection`\n- `allow-remove-connection`\n- `allow-add-agents-and-connections`\n- `allow-start-agent`\n- `allow-stop-agent`\n- `allow-set-agent-configs`\n- `allow-get-global-configs`\n- `allow-get-global-configs-map`\n- `allow-set-global-configs`\n- `allow-set-global-configs-map`\n- `allow-write-external-input`",
           "type": "string",
           "const": "default",
-          "markdownDescription": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-new-preset`\n- `allow-add-preset`\n- `allow-add-preset-with-name`\n- `allow-remove-preset`\n- `allow-start-preset`\n- `allow-stop-preset`\n- `allow-open-preset-from-file`\n- `allow-save-preset`\n- `allow-get-preset-spec`\n- `allow-update-preset-spec`\n- `allow-get-preset-info`\n- `allow-get-preset-infos`\n- `allow-get-agent-definition`\n- `allow-get-agent-definitions`\n- `allow-get-agent-spec`\n- `allow-update-agent-spec`\n- `allow-new-agent-spec`\n- `allow-add-agent`\n- `allow-remove-agent`\n- `allow-add-connection`\n- `allow-remove-connection`\n- `allow-add-agents-and-connections`\n- `allow-start-agent`\n- `allow-stop-agent`\n- `allow-set-agent-configs`\n- `allow-get-global-configs`\n- `allow-get-global-configs-map`\n- `allow-set-global-configs`\n- `allow-set-global-configs-map`\n- `allow-write-external-input`"
+          "markdownDescription": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-new-patch`\n- `allow-add-patch`\n- `allow-add-patch-with-name`\n- `allow-remove-patch`\n- `allow-start-patch`\n- `allow-stop-patch`\n- `allow-open-patch-from-file`\n- `allow-save-patch`\n- `allow-get-patch-spec`\n- `allow-update-patch-spec`\n- `allow-get-patch-info`\n- `allow-get-patch-infos`\n- `allow-get-agent-definition`\n- `allow-get-agent-definitions`\n- `allow-get-agent-spec`\n- `allow-update-agent-spec`\n- `allow-new-agent-spec`\n- `allow-add-agent`\n- `allow-remove-agent`\n- `allow-add-connection`\n- `allow-remove-connection`\n- `allow-add-agents-and-connections`\n- `allow-start-agent`\n- `allow-stop-agent`\n- `allow-set-agent-configs`\n- `allow-get-global-configs`\n- `allow-get-global-configs-map`\n- `allow-set-global-configs`\n- `allow-set-global-configs-map`\n- `allow-write-external-input`"
         }
       ]
     }

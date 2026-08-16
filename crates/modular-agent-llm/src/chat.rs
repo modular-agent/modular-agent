@@ -92,7 +92,7 @@ pub(crate) const DEFAULT_CONFIG_MODEL: &str = "openai/gpt-5-nano";
 ///   "medium", or "high" (default: "off"; unrecognized values act as "off").
 ///   Clamped to the nearest level the model supports according to the
 ///   capability registry; models without thinking support silently run with
-///   thinking off, so one preset works across models. Provider mapping:
+///   thinking off, so one patch works across models. Provider mapping:
 ///   Claude budget-mechanism models get `thinking.budget_tokens`
 ///   (minimal=1024, low=2048, medium=8192, high=16384; the budget is added
 ///   to max_tokens, re-clamped to the model limit, and shrunk when needed
@@ -118,7 +118,7 @@ pub(crate) const DEFAULT_CONFIG_MODEL: &str = "openai/gpt-5-nano";
 ///   attaches ephemeral cache_control markers ("long" uses a 1h TTL) only when
 ///   tools are configured or the history is multi-turn, so single-shot
 ///   requests avoid the cache-write surcharge. For OpenAI, sends a
-///   `prompt_cache_key` derived from the preset and agent IDs to improve
+///   `prompt_cache_key` derived from the patch and agent IDs to improve
 ///   cache routing. No-op for Ollama.
 #[modular_agent(
     title = "Chat",
@@ -248,7 +248,7 @@ impl AsAgent for ChatAgent {
         let model_max_tokens = caps.max_tokens;
 
         // Clamp the requested thinking level to what the model supports; an
-        // unknown or non-reasoning model degrades to "off" so one preset
+        // unknown or non-reasoning model degrades to "off" so one patch
         // works across models.
         let thinking = crate::capabilities::clamp_thinking_level(
             crate::capabilities::ThinkingLevel::parse(
@@ -361,7 +361,7 @@ impl ChatAgent {
         // Captured before building the request because a stable cache key must
         // come from the agent's identity, not per-turn state.
         let prompt_cache_key = (cache_retention != CacheRetention::None)
-            .then(|| openai_client::prompt_cache_key(self.preset_id(), self.id()));
+            .then(|| openai_client::prompt_cache_key(self.patch_id(), self.id()));
 
         let client = self.openai_manager.get_client(self.ma())?;
 
@@ -487,7 +487,7 @@ impl ChatAgent {
     ) -> Result<(), AgentError> {
         // Events are dropped by routing when nothing is connected, but only
         // after the per-delta serde conversion below has been paid; skip it
-        // up front so presets that ignore the event port pay nothing.
+        // up front so patches that ignore the event port pay nothing.
         if !self.ma().has_connections(self.id(), PORT_EVENT) {
             return Ok(());
         }
@@ -1633,25 +1633,25 @@ mod tests {
     use modular_agent_core::ConnectionSpec;
     use modular_agent_core::test_utils::{ProbeReceiver, TestProbeAgent, probe_receiver};
 
-    /// Build a running preset with a ChatAgent whose `source_port` feeds a
+    /// Build a running patch with a ChatAgent whose `source_port` feeds a
     /// probe, so stream-loop emits can be observed end to end.
     async fn setup_chat_probe_on(source_port: &str) -> (ModularAgent, String, ProbeReceiver) {
         let ma = ModularAgent::init().unwrap();
         ma.ready().await.unwrap();
 
-        let preset_id = ma.new_preset().unwrap();
+        let patch_id = ma.new_patch().unwrap();
         let chat_def = ma.get_agent_definition(ChatAgent::DEF_NAME).unwrap();
         let chat_id = ma
-            .add_agent(preset_id.clone(), chat_def.to_spec())
+            .add_agent(patch_id.clone(), chat_def.to_spec())
             .await
             .unwrap();
         let probe_def = ma.get_agent_definition(TestProbeAgent::DEF_NAME).unwrap();
         let probe_id = ma
-            .add_agent(preset_id.clone(), probe_def.to_spec())
+            .add_agent(patch_id.clone(), probe_def.to_spec())
             .await
             .unwrap();
         ma.add_connection(
-            &preset_id,
+            &patch_id,
             ConnectionSpec {
                 source: chat_id.clone(),
                 source_handle: source_port.into(),
@@ -1661,7 +1661,7 @@ mod tests {
         )
         .await
         .unwrap();
-        ma.start_preset(&preset_id).await.unwrap();
+        ma.start_patch(&patch_id).await.unwrap();
         let probe_rx = probe_receiver(&ma, &probe_id).await.unwrap();
 
         (ma, chat_id, probe_rx)

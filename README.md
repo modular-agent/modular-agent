@@ -17,8 +17,8 @@ Build AI workflows like a modular synth — patch extensible agents together vis
 | Path | App / Crate | Description |
 |---|---|---|
 | [`apps/desktop`](apps/desktop) | `modular-agent-desktop` | Visual workflow editor (Tauri 2 + Svelte 5) |
-| [`apps/cli`](apps/cli) | `modular-agent-cli` | `ma` command-line preset runner |
-| [`crates/modular-agent-core`](crates/modular-agent-core) | `modular-agent-core` | Orchestration engine, agent runtime, preset loader |
+| [`apps/cli`](apps/cli) | `modular-agent-cli` | `ma` command-line patch runner |
+| [`crates/modular-agent-core`](crates/modular-agent-core) | `modular-agent-core` | Orchestration engine, agent runtime, patch loader |
 | [`crates/modular-agent-macros`](crates/modular-agent-macros) | `modular-agent-macros` | `#[modular_agent]` procedural macro |
 | [`crates/modular-agent-std`](crates/modular-agent-std) | `modular-agent-std` | Standard utility agents |
 | [`crates/modular-agent-llm`](crates/modular-agent-llm) | `modular-agent-llm` | OpenAI / Claude / Ollama agents |

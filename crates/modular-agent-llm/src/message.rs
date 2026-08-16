@@ -22,7 +22,7 @@ const CONFIG_PREAMBLE: &str = "preamble";
 const CONFIG_SESSION_DIR: &str = "session_dir";
 const CONFIG_SESSION_ID: &str = "session_id";
 
-/// Old presets stored the history in a hidden `messages` config;
+/// Old patches stored the history in a hidden `messages` config;
 /// `reconcile_spec()` renames it to `_messages` for lazy migration.
 const STALE_CONFIG_MESSAGES: &str = "_messages";
 
@@ -671,7 +671,7 @@ async fn process_session_input<A: SessionMessages>(
 /// recorded: the summarization call behind a record takes seconds, and a
 /// `reset` or a second compaction in that window makes the record stale.
 ///
-/// Presets saved before session support carried the history in a hidden
+/// Patches saved before session support carried the history in a hidden
 /// `messages` config. On the first start that history is imported once into
 /// the session store (only if the session has no messages yet); the stale
 /// config key is dropped afterwards.
@@ -1214,7 +1214,7 @@ mod tests {
     use modular_agent_core::test_utils::{ProbeReceiver, TestProbeAgent, probe_receiver};
     use modular_agent_core::{AgentStatus, ConnectionSpec};
 
-    /// `start_preset` returns before the spawned agent loop has run
+    /// `start_patch` returns before the spawned agent loop has run
     /// `AsAgent::start`; wait until the status flips to `Start` (set under
     /// the same lock as `start()`, so seeing it means `start()` finished).
     async fn wait_until_started(ma: &ModularAgent, agent_id: &str) {
@@ -1231,7 +1231,7 @@ mod tests {
         panic!("agent {agent_id} did not start in time");
     }
 
-    /// Build a running preset with a session-backed agent of `def_name`
+    /// Build a running patch with a session-backed agent of `def_name`
     /// (configured via `configs`) whose `messages` and `session_id` ports
     /// each feed a probe.
     async fn setup_session_agent(
@@ -1241,7 +1241,7 @@ mod tests {
         let ma = ModularAgent::init().unwrap();
         ma.ready().await.unwrap();
 
-        let preset_id = ma.new_preset().unwrap();
+        let patch_id = ma.new_patch().unwrap();
         let def = ma.get_agent_definition(def_name).unwrap();
         let mut spec = def.to_spec();
         {
@@ -1250,15 +1250,15 @@ mod tests {
                 spec_configs.set(key.into(), value);
             }
         }
-        let agent_id = ma.add_agent(preset_id.clone(), spec).await.unwrap();
+        let agent_id = ma.add_agent(patch_id.clone(), spec).await.unwrap();
 
         let probe_def = ma.get_agent_definition(TestProbeAgent::DEF_NAME).unwrap();
         let probe_id = ma
-            .add_agent(preset_id.clone(), probe_def.to_spec())
+            .add_agent(patch_id.clone(), probe_def.to_spec())
             .await
             .unwrap();
         ma.add_connection(
-            &preset_id,
+            &patch_id,
             ConnectionSpec {
                 source: agent_id.clone(),
                 source_handle: PORT_MESSAGES.into(),
@@ -1270,11 +1270,11 @@ mod tests {
         .unwrap();
 
         let session_probe_id = ma
-            .add_agent(preset_id.clone(), probe_def.to_spec())
+            .add_agent(patch_id.clone(), probe_def.to_spec())
             .await
             .unwrap();
         ma.add_connection(
-            &preset_id,
+            &patch_id,
             ConnectionSpec {
                 source: agent_id.clone(),
                 source_handle: PORT_SESSION_ID.into(),
@@ -1285,12 +1285,12 @@ mod tests {
         .await
         .unwrap();
 
-        ma.start_preset(&preset_id).await.unwrap();
+        ma.start_patch(&patch_id).await.unwrap();
         wait_until_started(&ma, &agent_id).await;
         let probe_rx = probe_receiver(&ma, &probe_id).await.unwrap();
         let session_rx = probe_receiver(&ma, &session_probe_id).await.unwrap();
 
-        (ma, preset_id, agent_id, probe_rx, session_rx)
+        (ma, patch_id, agent_id, probe_rx, session_rx)
     }
 
     async fn setup_messages_agent(
@@ -1344,7 +1344,7 @@ mod tests {
     #[tokio::test]
     async fn file_messages_agent_persists_only_finalized_messages() {
         let dir = tempfile::tempdir().unwrap();
-        let (ma, _preset_id, agent_id, probe_rx, _session_rx) = setup_file_messages_agent(vec![(
+        let (ma, _patch_id, agent_id, probe_rx, _session_rx) = setup_file_messages_agent(vec![(
             CONFIG_SESSION_DIR,
             AgentValue::string(dir.path().to_string_lossy()),
         )])
@@ -1386,7 +1386,7 @@ mod tests {
     #[tokio::test]
     async fn file_messages_agent_reset_starts_new_session_and_keeps_old_one() {
         let dir = tempfile::tempdir().unwrap();
-        let (ma, _preset_id, agent_id, probe_rx, session_rx) = setup_file_messages_agent(vec![(
+        let (ma, _patch_id, agent_id, probe_rx, session_rx) = setup_file_messages_agent(vec![(
             CONFIG_SESSION_DIR,
             AgentValue::string(dir.path().to_string_lossy()),
         )])
@@ -1453,7 +1453,7 @@ mod tests {
             .await
             .unwrap();
 
-        let (ma, _preset_id, agent_id, probe_rx, _session_rx) = setup_file_messages_agent(vec![
+        let (ma, _patch_id, agent_id, probe_rx, _session_rx) = setup_file_messages_agent(vec![
             (
                 CONFIG_SESSION_DIR,
                 AgentValue::string(dir.path().to_string_lossy()),
@@ -1488,11 +1488,11 @@ mod tests {
         let ma = ModularAgent::init().unwrap();
         ma.ready().await.unwrap();
 
-        let preset_id = ma.new_preset().unwrap();
+        let patch_id = ma.new_patch().unwrap();
         let def = ma
             .get_agent_definition(FileMessagesAgent::DEF_NAME)
             .unwrap();
-        let agent_id = ma.add_agent(preset_id, def.to_spec()).await.unwrap();
+        let agent_id = ma.add_agent(patch_id, def.to_spec()).await.unwrap();
 
         let agent = ma.get_agent(&agent_id).unwrap();
         let mut guard = agent.lock().await;
@@ -1513,7 +1513,7 @@ mod tests {
                 "content".into() => AgentValue::string("old assistant"),
             }),
         ]);
-        let (ma, preset_id, agent_id, probe_rx, _session_rx) =
+        let (ma, patch_id, agent_id, probe_rx, _session_rx) =
             setup_messages_agent(vec![(STALE_CONFIG_MESSAGES, old_messages)]).await;
 
         // The old history landed in the (in-memory) store.
@@ -1525,8 +1525,8 @@ mod tests {
 
         // A stop()/start() cycle must not import again; the in-memory store
         // is retained across the cycle.
-        ma.stop_preset(&preset_id).await.unwrap();
-        ma.start_preset(&preset_id).await.unwrap();
+        ma.stop_patch(&patch_id).await.unwrap();
+        ma.start_patch(&patch_id).await.unwrap();
         wait_until_started(&ma, &agent_id).await;
 
         send(&ma, &agent_id, PORT_MESSAGE, AgentValue::unit()).await;
@@ -1538,7 +1538,7 @@ mod tests {
 
     #[tokio::test]
     async fn messages_agent_unit_outputs_context_and_array_appends_in_order() {
-        let (ma, _preset_id, agent_id, probe_rx, _session_rx) = setup_messages_agent(vec![]).await;
+        let (ma, _patch_id, agent_id, probe_rx, _session_rx) = setup_messages_agent(vec![]).await;
 
         // Unit input on an empty session emits an empty array.
         send(&ma, &agent_id, PORT_MESSAGE, AgentValue::unit()).await;
@@ -1610,7 +1610,7 @@ mod tests {
     #[tokio::test]
     async fn file_messages_agent_compaction_record_appends_marker_and_emits_nothing() {
         let dir = tempfile::tempdir().unwrap();
-        let (ma, _preset_id, agent_id, probe_rx, _session_rx) = setup_file_messages_agent(vec![(
+        let (ma, _patch_id, agent_id, probe_rx, _session_rx) = setup_file_messages_agent(vec![(
             CONFIG_SESSION_DIR,
             AgentValue::string(dir.path().to_string_lossy()),
         )])
@@ -1712,7 +1712,7 @@ mod tests {
 
     #[tokio::test]
     async fn messages_agent_compaction_dropped_beyond_history_discards_record() {
-        let (ma, _preset_id, agent_id, probe_rx, _session_rx) = setup_messages_agent(vec![]).await;
+        let (ma, _patch_id, agent_id, probe_rx, _session_rx) = setup_messages_agent(vec![]).await;
 
         let batch = AgentValue::array(vector![
             Message::user("a".to_string()).into(),
@@ -1741,7 +1741,7 @@ mod tests {
 
     #[tokio::test]
     async fn messages_agent_discards_oversized_first_compaction_record() {
-        let (ma, _preset_id, agent_id, probe_rx, _session_rx) = setup_messages_agent(vec![]).await;
+        let (ma, _patch_id, agent_id, probe_rx, _session_rx) = setup_messages_agent(vec![]).await;
 
         let batch = AgentValue::array(vector![
             Message::user("a".to_string()).into(),
@@ -1772,7 +1772,7 @@ mod tests {
 
     #[tokio::test]
     async fn messages_agent_discards_stale_compaction_records() {
-        let (ma, _preset_id, agent_id, probe_rx, _session_rx) = setup_messages_agent(vec![]).await;
+        let (ma, _patch_id, agent_id, probe_rx, _session_rx) = setup_messages_agent(vec![]).await;
 
         let batch = AgentValue::array(vector![
             Message::user("a".to_string()).into(),
@@ -1836,7 +1836,7 @@ mod tests {
         // A genuine first user message that happens to carry the summary
         // prefix: the compactor excludes it from `dropped`, and the walk
         // must skip the matching head entry to stay aligned.
-        let (ma, _preset_id, agent_id, probe_rx, _session_rx) = setup_messages_agent(vec![]).await;
+        let (ma, _patch_id, agent_id, probe_rx, _session_rx) = setup_messages_agent(vec![]).await;
 
         let batch = AgentValue::array(vector![
             Message::user("[Conversation summary]\nold".to_string()).into(),
@@ -1866,7 +1866,7 @@ mod tests {
 
     #[tokio::test]
     async fn messages_agent_invalid_compaction_record_errors() {
-        let (ma, _preset_id, agent_id, _probe_rx, _session_rx) = setup_messages_agent(vec![]).await;
+        let (ma, _patch_id, agent_id, _probe_rx, _session_rx) = setup_messages_agent(vec![]).await;
 
         let agent = ma.get_agent(&agent_id).unwrap();
         let mut guard = agent.lock().await;
@@ -2052,7 +2052,7 @@ mod tests {
         assert!(strip_unsigned_thinking(&msg).is_none());
     }
 
-    /// Build a running preset with a MessagesForPromptAgent (configured via
+    /// Build a running patch with a MessagesForPromptAgent (configured via
     /// `configs`) whose `messages` port feeds a probe.
     async fn setup_prompt_agent(
         configs: Vec<(&str, AgentValue)>,
@@ -2060,7 +2060,7 @@ mod tests {
         let ma = ModularAgent::init().unwrap();
         ma.ready().await.unwrap();
 
-        let preset_id = ma.new_preset().unwrap();
+        let patch_id = ma.new_patch().unwrap();
         let def = ma
             .get_agent_definition(MessagesForPromptAgent::DEF_NAME)
             .unwrap();
@@ -2071,15 +2071,15 @@ mod tests {
                 spec_configs.set(key.into(), value);
             }
         }
-        let agent_id = ma.add_agent(preset_id.clone(), spec).await.unwrap();
+        let agent_id = ma.add_agent(patch_id.clone(), spec).await.unwrap();
 
         let probe_def = ma.get_agent_definition(TestProbeAgent::DEF_NAME).unwrap();
         let probe_id = ma
-            .add_agent(preset_id.clone(), probe_def.to_spec())
+            .add_agent(patch_id.clone(), probe_def.to_spec())
             .await
             .unwrap();
         ma.add_connection(
-            &preset_id,
+            &patch_id,
             ConnectionSpec {
                 source: agent_id.clone(),
                 source_handle: PORT_MESSAGES.into(),
@@ -2090,7 +2090,7 @@ mod tests {
         .await
         .unwrap();
 
-        ma.start_preset(&preset_id).await.unwrap();
+        ma.start_patch(&patch_id).await.unwrap();
         wait_until_started(&ma, &agent_id).await;
         let probe_rx = probe_receiver(&ma, &probe_id).await.unwrap();
 

@@ -48,35 +48,35 @@ async fn test_origin_stamped_on_tagged_handle_and_stripped_at_runtime() {
     let mut rx = base.subscribe();
 
     // Structural changes made through the tagged handle carry its origin.
-    let preset_id = mcp.new_preset().unwrap();
+    let patch_id = mcp.new_patch().unwrap();
     let envelope = expect_event(&mut rx, |e| {
-        matches!(e, ModularAgentEvent::PresetAdded { .. })
+        matches!(e, ModularAgentEvent::PatchAdded { .. })
     })
     .await;
     assert_eq!(envelope.origin.as_deref(), Some("mcp"));
 
     let in_id = mcp
         .add_agent(
-            preset_id.clone(),
+            patch_id.clone(),
             ext_agent_spec(&mcp, EXT_IN_DEF, "origin_in"),
         )
         .await
         .unwrap();
     let envelope = expect_event(&mut rx, |e| {
-        matches!(e, ModularAgentEvent::PresetStructureChanged { .. })
+        matches!(e, ModularAgentEvent::PatchStructureChanged { .. })
     })
     .await;
     assert_eq!(envelope.origin.as_deref(), Some("mcp"));
 
     let out_id = mcp
         .add_agent(
-            preset_id.clone(),
+            patch_id.clone(),
             ext_agent_spec(&mcp, EXT_OUT_DEF, "origin_out"),
         )
         .await
         .unwrap();
     mcp.add_connection(
-        &preset_id,
+        &patch_id,
         ConnectionSpec {
             source: in_id,
             source_handle: "value".into(),
@@ -90,7 +90,7 @@ async fn test_origin_stamped_on_tagged_handle_and_stripped_at_runtime() {
     // Run the flow: the resulting ExternalOutput is emitted by the agent
     // runtime through the handle stored at agent creation, which must have
     // been stripped of the creator's origin.
-    mcp.start_preset(&preset_id).await.unwrap();
+    mcp.start_patch(&patch_id).await.unwrap();
     mcp.write_external_input("origin_in".into(), AgentValue::string("hello"))
         .await
         .unwrap();
@@ -105,7 +105,7 @@ async fn test_origin_stamped_on_tagged_handle_and_stripped_at_runtime() {
         "runtime events must not inherit the origin of the handle that created the agent"
     );
 
-    mcp.stop_preset(&preset_id).await.unwrap();
+    mcp.stop_patch(&patch_id).await.unwrap();
     base.quit();
 }
 
@@ -114,9 +114,9 @@ async fn test_update_agent_spec_emit_rules() {
     let ma = ModularAgent::init().unwrap();
     ma.ready().await.unwrap();
 
-    let preset_id = ma.new_preset().unwrap();
+    let patch_id = ma.new_patch().unwrap();
     let agent_id = ma
-        .add_agent(preset_id.clone(), ma.new_agent_spec(EXT_OUT_DEF).unwrap())
+        .add_agent(patch_id.clone(), ma.new_agent_spec(EXT_OUT_DEF).unwrap())
         .await
         .unwrap();
 
@@ -132,7 +132,7 @@ async fn test_update_agent_spec_emit_rules() {
     ma.update_agent_spec(&agent_id, &structural).await.unwrap();
 
     // Events are emitted synchronously, so the exact sequence proves the
-    // configs-only patch produced no PresetStructureChanged.
+    // configs-only patch produced no PatchStructureChanged.
     let e1 = next_event(&mut rx).await;
     assert!(matches!(e1.event, ModularAgentEvent::AgentSpecUpdated(ref id) if id == &agent_id));
 
@@ -141,7 +141,7 @@ async fn test_update_agent_spec_emit_rules() {
 
     let e3 = next_event(&mut rx).await;
     assert!(
-        matches!(e3.event, ModularAgentEvent::PresetStructureChanged { preset_id: ref p } if p == &preset_id)
+        matches!(e3.event, ModularAgentEvent::PatchStructureChanged { patch_id: ref p } if p == &patch_id)
     );
 
     // Nothing else is running, so no further events may be pending.
@@ -159,8 +159,8 @@ async fn test_update_agent_spec_spec_only_emit_rules() {
     ma.ready().await.unwrap();
 
     // An unknown definition leaves the agent spec-only: no live instance,
-    // so update_agent_spec patches the stored preset spec entry instead.
-    let spec = ma::PresetSpec {
+    // so update_agent_spec patches the stored patch spec entry instead.
+    let spec = ma::PatchSpec {
         agents: vec![ma::AgentSpec {
             id: "orphan".into(),
             def_name: "no_such::Definition".into(),
@@ -168,8 +168,8 @@ async fn test_update_agent_spec_spec_only_emit_rules() {
         }],
         ..Default::default()
     };
-    let preset_id = ma.add_preset(spec).unwrap();
-    let orphan_id = ma.get_preset_spec(&preset_id).await.unwrap().agents[0]
+    let patch_id = ma.add_patch(spec).unwrap();
+    let orphan_id = ma.get_patch_spec(&patch_id).await.unwrap().agents[0]
         .id
         .clone();
 
@@ -185,7 +185,7 @@ async fn test_update_agent_spec_spec_only_emit_rules() {
     ma.update_agent_spec(&orphan_id, &structural).await.unwrap();
 
     // Same contract as the live path (test_update_agent_spec_emit_rules):
-    // the configs-only patch produces no PresetStructureChanged, so hosts
+    // the configs-only patch produces no PatchStructureChanged, so hosts
     // cannot tell a spec-only agent from a live one.
     let e1 = next_event(&mut rx).await;
     assert!(matches!(e1.event, ModularAgentEvent::AgentSpecUpdated(ref id) if id == &orphan_id));
@@ -195,7 +195,7 @@ async fn test_update_agent_spec_spec_only_emit_rules() {
 
     let e3 = next_event(&mut rx).await;
     assert!(
-        matches!(e3.event, ModularAgentEvent::PresetStructureChanged { preset_id: ref p } if p == &preset_id)
+        matches!(e3.event, ModularAgentEvent::PatchStructureChanged { patch_id: ref p } if p == &patch_id)
     );
 
     assert!(matches!(
@@ -211,7 +211,7 @@ async fn test_set_agent_configs_spec_only_emit_rules() {
     let ma = ModularAgent::init().unwrap();
     ma.ready().await.unwrap();
 
-    let spec = ma::PresetSpec {
+    let spec = ma::PatchSpec {
         agents: vec![ma::AgentSpec {
             id: "orphan".into(),
             def_name: "no_such::Definition".into(),
@@ -219,8 +219,8 @@ async fn test_set_agent_configs_spec_only_emit_rules() {
         }],
         ..Default::default()
     };
-    let preset_id = ma.add_preset(spec).unwrap();
-    let orphan_id = ma.get_preset_spec(&preset_id).await.unwrap().agents[0]
+    let patch_id = ma.add_patch(spec).unwrap();
+    let orphan_id = ma.get_patch_spec(&patch_id).await.unwrap().agents[0]
         .id
         .clone();
 
@@ -254,20 +254,17 @@ async fn test_update_agent_spec_announces_dynamic_config_changes() {
     let ma = ModularAgent::init().unwrap();
     ma.ready().await.unwrap();
 
-    let preset_id = ma.new_preset().unwrap();
+    let patch_id = ma.new_patch().unwrap();
     let def = ma
         .get_agent_definition(crate::common::agents::NumberedConfigAgent::DEF_NAME)
         .unwrap();
-    let agent_id = ma
-        .add_agent(preset_id.clone(), def.to_spec())
-        .await
-        .unwrap();
+    let agent_id = ma.add_agent(patch_id.clone(), def.to_spec()).await.unwrap();
 
     let mut rx = ma.subscribe();
 
     // A successful configs patch produces exactly two AgentSpecUpdated: the
     // agent's own emit from configs_changed plus the orchestrator's, and no
-    // PresetStructureChanged for a configs-only patch.
+    // PatchStructureChanged for a configs-only patch.
     ma.update_agent_spec(&agent_id, &serde_json::json!({ "configs": { "n": 3 } }))
         .await
         .unwrap();
@@ -307,20 +304,20 @@ async fn test_ext_in_renamed_while_stopped_delivers_once() {
     let ma = ModularAgent::init().unwrap();
     ma.ready().await.unwrap();
 
-    let preset_id = ma.new_preset().unwrap();
+    let patch_id = ma.new_patch().unwrap();
     let in_id = ma
-        .add_agent(preset_id.clone(), ext_agent_spec(&ma, EXT_IN_DEF, "before"))
+        .add_agent(patch_id.clone(), ext_agent_spec(&ma, EXT_IN_DEF, "before"))
         .await
         .unwrap();
     let out_id = ma
         .add_agent(
-            preset_id.clone(),
+            patch_id.clone(),
             ext_agent_spec(&ma, EXT_OUT_DEF, "renamed_out"),
         )
         .await
         .unwrap();
     ma.add_connection(
-        &preset_id,
+        &patch_id,
         ConnectionSpec {
             source: in_id.clone(),
             source_handle: "value".into(),
@@ -331,7 +328,7 @@ async fn test_ext_in_renamed_while_stopped_delivers_once() {
     .await
     .unwrap();
 
-    // Renaming the channel while the preset is stopped must only re-point
+    // Renaming the channel while the patch is stopped must only re-point
     // the agent's state: registration happens in start(), and a second
     // entry would deliver every input twice.
     ma.update_agent_spec(
@@ -340,7 +337,7 @@ async fn test_ext_in_renamed_while_stopped_delivers_once() {
     )
     .await
     .unwrap();
-    ma.start_preset(&preset_id).await.unwrap();
+    ma.start_patch(&patch_id).await.unwrap();
 
     let mut rx = ma.subscribe();
     ma.write_external_input("renamed_in".into(), AgentValue::string("a"))
@@ -369,6 +366,6 @@ async fn test_ext_in_renamed_while_stopped_delivers_once() {
         "each input must be delivered exactly once"
     );
 
-    ma.stop_preset(&preset_id).await.unwrap();
+    ma.stop_patch(&patch_id).await.unwrap();
     ma.quit();
 }

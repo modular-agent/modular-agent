@@ -135,7 +135,7 @@
       </FieldGroup>
       {#if configsModified}
         <p class="text-sm text-amber-600 dark:text-amber-400 mt-2" role="status">
-          Changes may require restarting running presets to take effect.
+          Changes may require restarting running patches to take effect.
         </p>
       {/if}
     {/if}

@@ -38,7 +38,7 @@ async fn http_loopback_lists_tools_and_returns_structured_content() {
         ma.clone(),
         McpServerConfig {
             port,
-            presets_dir: None,
+            patches_dir: None,
             token: Some(TOKEN.into()),
         },
     )
@@ -60,14 +60,14 @@ async fn http_loopback_lists_tools_and_returns_structured_content() {
     // Registration walks the pooled client path: connect over streamable
     // HTTP with the auth header, then enumerate tools via list_all_tools.
     let tools = register_tools_from_mcp_json(&config_path).await.unwrap();
-    for name in ["loopback::list_presets", "loopback::create_preset"] {
+    for name in ["loopback::list_patches", "loopback::create_patch"] {
         assert!(tools.contains(&name.to_string()), "missing tool {name}");
     }
 
-    // create_preset returns Json<CreatePresetResponse>: the client must
+    // create_patch returns Json<CreatePatchResponse>: the client must
     // surface the structured payload as a parsed object, not as the text
     // fallback (which would arrive as an array of JSON strings).
-    let create = get_tool("loopback::create_preset").unwrap();
+    let create = get_tool("loopback::create_patch").unwrap();
     let created = create
         .call(
             AgentContext::new(),
@@ -75,32 +75,32 @@ async fn http_loopback_lists_tools_and_returns_structured_content() {
         )
         .await
         .unwrap();
-    let preset_id = created
+    let patch_id = created
         .as_object()
-        .expect("create_preset must return a structured object")
-        .get("preset_id")
+        .expect("create_patch must return a structured object")
+        .get("patch_id")
         .and_then(AgentValue::as_str)
-        .expect("structured response must carry preset_id")
+        .expect("structured response must carry patch_id")
         .to_string();
 
-    let list = get_tool("loopback::list_presets").unwrap();
+    let list = get_tool("loopback::list_patches").unwrap();
     let listed = list
         .call(AgentContext::new(), AgentValue::object_default())
         .await
         .unwrap();
     let infos = listed
         .as_object()
-        .and_then(|obj| obj.get("presets"))
+        .and_then(|obj| obj.get("patches"))
         .and_then(AgentValue::as_array)
-        .expect("list_presets must return a structured object with a presets array");
+        .expect("list_patches must return a structured object with a patches array");
     assert!(
         infos.iter().any(|info| {
             info.as_object()
                 .and_then(|obj| obj.get("id"))
                 .and_then(AgentValue::as_str)
-                == Some(preset_id.as_str())
+                == Some(patch_id.as_str())
         }),
-        "created preset {preset_id} missing from list_presets result: {listed:?}"
+        "created patch {patch_id} missing from list_patches result: {listed:?}"
     );
 
     shutdown_all_mcp_connections().await.unwrap();

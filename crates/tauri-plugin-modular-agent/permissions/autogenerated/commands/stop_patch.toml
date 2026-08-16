@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-stop-patch"
+description = "Enables the stop_patch command without any pre-configured scope."
+commands.allow = ["stop_patch"]
+
+[[permission]]
+identifier = "deny-stop-patch"
+description = "Denies the stop_patch command without any pre-configured scope."
+commands.deny = ["stop_patch"]

@@ -1,5 +1,5 @@
 import type { Edge, Node } from "@xyflow/svelte";
-import type { AgentSpec, PresetInfo, Viewport } from "tauri-plugin-modular-agent-api";
+import type { AgentSpec, PatchInfo, Viewport } from "tauri-plugin-modular-agent-api";
 
 // Messages
 
@@ -27,24 +27,24 @@ export type AgentSpecUpdatedMessage = {
   agent_id: string;
 };
 
-export type PresetStructureChangedMessage = {
+export type PatchStructureChangedMessage = {
   origin: string | null;
-  preset_id: string;
+  patch_id: string;
 };
 
-export type PresetRemovedMessage = {
+export type PatchRemovedMessage = {
   origin: string | null;
-  preset_id: string;
+  patch_id: string;
   name: string | null;
 };
 
-export type PresetRunningChangedMessage = {
+export type PatchRunningChangedMessage = {
   origin: string | null;
-  preset_id: string;
+  patch_id: string;
   running: boolean;
 };
 
-export type PresetRenamedMessage = {
+export type PatchRenamedMessage = {
   origin: string | null;
   id: string;
   oldName: string | null;
@@ -53,11 +53,11 @@ export type PresetRenamedMessage = {
 
 // for SvelteFlow
 
-export type PresetFlow = {
+export type PatchFlow = {
   id: string;
   name: string;
-  nodes: PresetNode[];
-  edges: PresetEdge[];
+  nodes: PatchNode[];
+  edges: PatchEdge[];
   running: boolean;
   viewport: Viewport | null;
   /**
@@ -68,18 +68,18 @@ export type PresetFlow = {
   baseStructureSeq?: number;
 };
 
-export type PresetNode = Node & {
+export type PatchNode = Node & {
   data: AgentSpec;
   extensions?: Record<string, any>;
 };
 
-export type PresetEdge = Edge;
+export type PatchEdge = Edge;
 
 // Settings
 
 export type CoreSettings = {
   autostart?: boolean;
-  auto_start_presets: string[];
+  auto_start_patches: string[];
   color_mode?: string | null;
   run_in_background: boolean;
   shortcut_keys?: Record<string, string> | null;
@@ -95,6 +95,6 @@ export type CoreSettings = {
   mcp_server_token?: string | null;
 };
 
-export type PresetInfoExt = PresetInfo & {
+export type PatchInfoExt = PatchInfo & {
   run_on_start?: boolean;
 };

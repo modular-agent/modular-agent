@@ -31,7 +31,7 @@ pub(crate) enum CacheRetention {
 
 impl CacheRetention {
     /// Unrecognized values fall back to the default ("short") so a typo in a
-    /// preset degrades to normal caching instead of failing the request.
+    /// patch degrades to normal caching instead of failing the request.
     pub(crate) fn parse(s: &str) -> Self {
         match s {
             "none" => Self::None,

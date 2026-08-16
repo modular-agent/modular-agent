@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use ma::{AgentValue, test_utils};
 
-const PRESET: &str = "tests/presets/Std_Watch_test.json";
+const PATCH: &str = "tests/patches/Std_Watch_test.json";
 
 // Watcher startup and OS event delivery are timing-dependent; keep this generous
 // so slow machines don't flake.
@@ -26,8 +26,8 @@ fn make_test_dir(name: &str) -> PathBuf {
 // watch registration happens after that, so no fixed sleep can guarantee the
 // watcher is live. Keep touching a sentinel file until its event arrives;
 // from that point on the watcher is known to observe the directory.
-async fn wait_for_watcher_ready(preset_id: &str, dir: &Path) {
-    let expected_name = format!("%{}/watch_event", preset_id);
+async fn wait_for_watcher_ready(patch_id: &str, dir: &Path) {
+    let expected_name = format!("%{}/watch_event", patch_id);
     let sentinel = dir.join("watcher_ready_sentinel");
     let sentinel_str = sentinel.to_string_lossy().to_string();
     let deadline = std::time::Instant::now() + EVENT_TIMEOUT;
@@ -52,8 +52,8 @@ async fn wait_for_watcher_ready(preset_id: &str, dir: &Path) {
 // Receive watch events until one targets the given path. OS-dependent extra
 // events (e.g. for the parent directory) are skipped instead of failing the
 // test on an exact-match basis.
-async fn recv_event_for_path(preset_id: &str, path: &Path) -> AgentValue {
-    let expected_name = format!("%{}/watch_event", preset_id);
+async fn recv_event_for_path(patch_id: &str, path: &Path) -> AgentValue {
+    let expected_name = format!("%{}/watch_event", patch_id);
     let expected_path = path.to_string_lossy().to_string();
     let deadline = std::time::Instant::now() + EVENT_TIMEOUT;
     loop {
@@ -76,27 +76,25 @@ async fn recv_event_for_path(preset_id: &str, path: &Path) -> AgentValue {
 async fn test_watch_create() {
     let ma = test_utils::setup_modular_agent().await;
 
-    let preset_id = test_utils::open_and_start_preset(&ma, PRESET)
-        .await
-        .unwrap();
+    let patch_id = test_utils::open_and_start_patch(&ma, PATCH).await.unwrap();
 
     let dir = make_test_dir("create");
     test_utils::write_and_expect_local_value(
         &ma,
-        &preset_id,
+        &patch_id,
         "watch_path",
         AgentValue::string(dir.to_string_lossy().to_string()),
     )
     .await
     .unwrap();
 
-    wait_for_watcher_ready(&preset_id, &dir).await;
+    wait_for_watcher_ready(&patch_id, &dir).await;
 
     let file = dir.join("created.txt");
     let file_str = file.to_string_lossy().to_string();
     std::fs::write(&file, "hello").unwrap();
 
-    let event = recv_event_for_path(&preset_id, &file).await;
+    let event = recv_event_for_path(&patch_id, &file).await;
     assert_eq!(event.get_str("kind"), Some("create"));
     let paths = event.get_array("paths").unwrap();
     assert!(paths.iter().any(|p| p.as_str() == Some(file_str.as_str())));
@@ -109,9 +107,7 @@ async fn test_watch_create() {
 async fn test_watch_remove() {
     let ma = test_utils::setup_modular_agent().await;
 
-    let preset_id = test_utils::open_and_start_preset(&ma, PRESET)
-        .await
-        .unwrap();
+    let patch_id = test_utils::open_and_start_patch(&ma, PATCH).await.unwrap();
 
     // The file must exist before the watcher starts, so the removal is the only
     // change it can observe for this path.
@@ -121,18 +117,18 @@ async fn test_watch_remove() {
 
     test_utils::write_and_expect_local_value(
         &ma,
-        &preset_id,
+        &patch_id,
         "watch_path",
         AgentValue::string(dir.to_string_lossy().to_string()),
     )
     .await
     .unwrap();
 
-    wait_for_watcher_ready(&preset_id, &dir).await;
+    wait_for_watcher_ready(&patch_id, &dir).await;
 
     std::fs::remove_file(&file).unwrap();
 
-    let event = recv_event_for_path(&preset_id, &file).await;
+    let event = recv_event_for_path(&patch_id, &file).await;
     assert_eq!(event.get_str("kind"), Some("remove"));
 
     ma.quit();

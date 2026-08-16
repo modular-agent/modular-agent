@@ -51,7 +51,7 @@ pub struct CoreSettings {
     pub autostart: bool,
 
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub auto_start_presets: Vec<String>,
+    pub auto_start_patches: Vec<String>,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub color_mode: Option<String>,
@@ -109,7 +109,7 @@ impl Default for CoreSettings {
 
         CoreSettings {
             autostart: false,
-            auto_start_presets: Vec::new(),
+            auto_start_patches: Vec::new(),
             color_mode: None,
             run_in_background: false,
             shortcut_keys: Some(SHORTCUT_KEYS.clone()),
@@ -226,10 +226,10 @@ pub async fn apply_mcp_server(app: &AppHandle) -> Result<()> {
     }
 
     if enabled {
-        let presets_dir = crate::modular_agent_desktop::app::presets_dir().ok();
+        let patches_dir = crate::modular_agent_desktop::app::patches_dir().ok();
         let config = McpServerConfig {
             port,
-            presets_dir,
+            patches_dir,
             token,
         };
         let handle = start_mcp_server(app.ma().clone(), config).await?;

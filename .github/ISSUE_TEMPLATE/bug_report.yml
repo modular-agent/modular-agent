@@ -52,8 +52,8 @@ body:
     attributes:
       label: To Reproduce
       description: >-
-        Steps to reproduce the behavior. If a workflow preset triggers it,
-        attach the preset JSON or the smallest agent graph that still fails.
+        Steps to reproduce the behavior. If a workflow patch triggers it,
+        attach the patch JSON or the smallest agent graph that still fails.
       placeholder: |
         1. Go to '...'
         2. Click on '....'

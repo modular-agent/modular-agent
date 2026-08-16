@@ -8,11 +8,11 @@ use serial_test::serial;
 async fn test_external_routing() {
     let ma = test_utils::setup_modular_agent().await;
 
-    // load external presets
-    test_utils::open_and_start_preset(&ma, "tests/presets/Core_External1.json")
+    // load external patches
+    test_utils::open_and_start_patch(&ma, "tests/patches/Core_External1.json")
         .await
         .unwrap();
-    test_utils::open_and_start_preset(&ma, "tests/presets/Core_External2.json")
+    test_utils::open_and_start_patch(&ma, "tests/patches/Core_External2.json")
         .await
         .unwrap();
 
