@@ -1,12 +1,11 @@
 <script lang="ts">
   import EllipsisVerticalIcon from "@lucide/svelte/icons/ellipsis-vertical";
-  import PlayIcon from "@lucide/svelte/icons/play";
-  import SquareIcon from "@lucide/svelte/icons/square";
   import { startPatch, stopPatch } from "tauri-plugin-modular-agent-api";
 
   import { invalidateAll } from "$app/navigation";
 
   import { getCoreSettings, setCoreSettings } from "$lib/agent";
+  import RunSwitch from "$lib/components/run-switch.svelte";
   import { Button } from "$lib/components/ui/button";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
 
@@ -43,15 +42,7 @@
 </script>
 
 <div class="flex items-center justify-end gap-2">
-  {#if running}
-    <Button onclick={handleStop} variant="ghost" class="w-4">
-      <SquareIcon color="var(--color-agent-1)" />
-    </Button>
-  {:else}
-    <Button onclick={handleStart} variant="ghost" class="w-4">
-      <PlayIcon color="var(--color-agent-6)" />
-    </Button>
-  {/if}
+  <RunSwitch running={running ?? false} onStart={handleStart} onStop={handleStop} />
 
   <DropdownMenu.Root>
     <DropdownMenu.Trigger>

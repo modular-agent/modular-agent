@@ -10,8 +10,8 @@
 
   import logo from "$lib/assets/logo.png";
   import Menubar from "$lib/components/patch-editor/menubar.svelte";
-  import PatchActions from "$lib/components/patch-editor/patch-actions.svelte";
   import PatchName from "$lib/components/patch-editor/patch-name.svelte";
+  import RunSwitch from "$lib/components/run-switch.svelte";
   import { titlebarState } from "$lib/titlebar-state.svelte";
 
   const isMacos = navigator.userAgent.includes("Mac");
@@ -109,12 +109,8 @@
 
     <!-- Actions + Status (right-aligned, before window controls) -->
     {#if titlebarState.showActions}
-      <div class="flex items-center gap-1 shrink-0 z-10 mr-1">
-        <PatchActions
-          running={titlebarState.running}
-          onStartPatch={handleStart}
-          onStopPatch={handleStop}
-        />
+      <div class="flex items-center shrink-0 z-10 mr-2">
+        <RunSwitch running={titlebarState.running} onStart={handleStart} onStop={handleStop} />
       </div>
     {/if}
 
