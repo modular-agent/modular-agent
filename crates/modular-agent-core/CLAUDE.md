@@ -110,7 +110,7 @@ Default features: `["file", "image", "llm", "mcp"]`
 
 ## Publishing
 
-- `modular-agent-core` uses `readme = "../README.md"` to reference the workspace-root README for crates.io
+- `modular-agent-core` has no `readme` key in its `Cargo.toml`, so crates.io shows the crate's own `README.md` (not the workspace-root one)
 - README images use absolute `raw.githubusercontent.com` URLs for crates.io compatibility
 
 ## Scripts

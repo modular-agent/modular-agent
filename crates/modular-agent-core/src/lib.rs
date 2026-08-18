@@ -27,7 +27,7 @@
 //!
 //! ## Quick Start
 //!
-//! See the [CLI example](https://github.com/modular-agent/modular-agent-core/blob/main/examples/cli.rs)
+//! See the [CLI example](https://github.com/modular-agent/modular-agent/blob/main/crates/modular-agent-core/examples/cli.rs)
 //! for a complete working example of loading a patch and running agents from the command line.
 //!
 //! ## Feature Flags

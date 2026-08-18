@@ -66,7 +66,7 @@ The default build includes the agent crates that live in this repository:
 | Crate | Description |
 | --- | --- |
 | [modular-agent-std](https://github.com/modular-agent/modular-agent/tree/main/crates/modular-agent-std) | Standard (timer, template, file, etc.) |
-| [modular-agent-llm](https://github.com/modular-agent/modular-agent/tree/main/crates/modular-agent-llm) | LLM (OpenAI, Anthropic, Google, etc.) |
+| [modular-agent-llm](https://github.com/modular-agent/modular-agent/tree/main/crates/modular-agent-llm) | LLM (OpenAI, Claude, Ollama) |
 
 More agent packages — web scraping, Slack and Mattermost messaging, SQL databases, screen capture, script agents, and others — live in their own repositories. Clone the ones you want into `custom_agents/` at the repository root and select them with the `ma-config` wizard (see above); [custom_agents/README.md](../../custom_agents/README.md) lists the repositories.
 
