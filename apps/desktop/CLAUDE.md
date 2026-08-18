@@ -67,9 +67,9 @@ src/                    # Svelte frontend
         node-base.svelte      # Base node frame with handles
         node-context-menu.svelte  # Right-click context menu
         menubar.svelte        # File menu (New/Save/Import/Export)
-        patch-actions.svelte # Play/Stop buttons
         patch-name.svelte    # Breadcrumb path display
         messages.svelte       # Message display
+      run-switch.svelte   # Run toggle (titlebar + patch list)
       agent-list/       # Agent category tree (popup, click to add)
       ui/               # shadcn-svelte UI components
         sonner/           # Toaster with OS-specific offset (Windows custom titlebar)
