@@ -131,8 +131,9 @@ pub fn run() {
                 let run_in_background = {
                     let app = window.app_handle();
                     let core_settings = app
-                        .state::<std::sync::Mutex<modular_agent_desktop::settings::CoreSettings>>();
-                    let guard = core_settings.lock().unwrap();
+                        .state::<parking_lot::Mutex<modular_agent_desktop::settings::CoreSettings>>(
+                        );
+                    let guard = core_settings.lock();
                     guard.run_in_background
                 };
                 if !run_in_background {

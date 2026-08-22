@@ -107,7 +107,7 @@ impl IntervalTimerAgent {
 
         let ma = self.ma().clone();
         let agent_id = self.id().to_string();
-        let handle = self.runtime().spawn(async move {
+        let handle = self.runtime()?.spawn(async move {
             loop {
                 // Sleep for the configured interval
                 tokio::time::sleep(tokio::time::Duration::from_millis(interval_ms)).await;
@@ -218,7 +218,7 @@ impl AsAgent for OnStartAgent {
         let ma = self.ma().clone();
         let agent_id = self.id().to_string();
 
-        self.runtime().spawn(async move {
+        self.runtime()?.spawn(async move {
             tokio::time::sleep(Duration::from_millis(delay_ms as u64)).await;
 
             if let Err(e) = ma.try_send_agent_out(
@@ -260,7 +260,7 @@ impl ScheduleTimerAgent {
         let timer_handle = self.timer_handle.clone();
         let schedule = schedule.clone();
 
-        let handle = self.runtime().spawn(async move {
+        let handle = self.runtime()?.spawn(async move {
             loop {
                 // Calculate the next time this schedule should run
                 let now: DateTime<Utc> = Utc::now();
@@ -426,7 +426,7 @@ impl ThrottleTimeAgent {
         let ma = self.ma().clone();
         let agent_id = self.id().to_string();
 
-        let handle = self.runtime().spawn(async move {
+        let handle = self.runtime()?.spawn(async move {
             loop {
                 // Sleep for the configured interval
                 tokio::time::sleep(tokio::time::Duration::from_millis(interval_ms)).await;

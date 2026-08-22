@@ -1,4 +1,4 @@
-use std::sync::Mutex;
+use parking_lot::Mutex;
 
 use anyhow::Result;
 use tauri::{AppHandle, Manager};
@@ -11,7 +11,7 @@ pub fn init(app: &AppHandle) -> Result<()> {
     let settings = app.state::<Mutex<CoreSettings>>();
     let shortcut_key;
     {
-        let settings = settings.lock().unwrap();
+        let settings = settings.lock();
         shortcut_key = settings
             .shortcut_keys
             .as_ref()

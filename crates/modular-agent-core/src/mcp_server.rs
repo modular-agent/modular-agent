@@ -38,8 +38,10 @@
 use std::collections::VecDeque;
 use std::net::{Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
+
+use parking_lot::Mutex;
 
 use axum::{
     extract::Request,
@@ -338,7 +340,7 @@ impl EventRing {
         agent_id: String,
         message: String,
     ) {
-        let mut errors = self.errors.lock().unwrap();
+        let mut errors = self.errors.lock();
         if errors.len() >= RING_CAPACITY {
             errors.pop_front();
         }
@@ -352,7 +354,7 @@ impl EventRing {
     }
 
     fn push_output(&self, time_ms: u64, channel: String, value: AgentValue) {
-        let mut outputs = self.outputs.lock().unwrap();
+        let mut outputs = self.outputs.lock();
         if outputs.len() >= RING_CAPACITY {
             outputs.pop_front();
         }
@@ -372,7 +374,7 @@ impl EventRing {
         since_seq: u64,
         limit: usize,
     ) -> Vec<ErrorRecord> {
-        let errors = self.errors.lock().unwrap();
+        let errors = self.errors.lock();
         let mut result: Vec<ErrorRecord> = errors
             .iter()
             .filter(|r| r.seq > since_seq)
@@ -390,7 +392,7 @@ impl EventRing {
         since_seq: u64,
         limit: usize,
     ) -> Vec<OutputRecord> {
-        let outputs = self.outputs.lock().unwrap();
+        let outputs = self.outputs.lock();
         let mut result: Vec<OutputRecord> = outputs
             .iter()
             .filter(|r| r.seq > since_seq)
@@ -1648,7 +1650,7 @@ mod tests {
         for i in 0..(RING_CAPACITY + 10) {
             ring.push_error(0, Some("p1".into()), format!("a{i}"), "boom".into());
         }
-        assert_eq!(ring.errors.lock().unwrap().len(), RING_CAPACITY);
+        assert_eq!(ring.errors.lock().len(), RING_CAPACITY);
 
         // Oldest surviving record has seq 11; paging resumes after a cursor.
         let page = ring.collect_errors(None, 0, 5);

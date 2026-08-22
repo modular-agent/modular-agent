@@ -1,7 +1,8 @@
-use std::{path::PathBuf, sync::Mutex};
+use std::path::PathBuf;
 
 use anyhow::{Context as _, Result, anyhow, bail};
 use dirs;
+use parking_lot::Mutex;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
 
@@ -489,7 +490,7 @@ async fn start_mcp_services() -> Result<()> {
 async fn run_auto_start_patches(app: &AppHandle) {
     let auto_start_patches = {
         let core_settings = app.state::<Mutex<CoreSettings>>();
-        let guard = core_settings.lock().unwrap();
+        let guard = core_settings.lock();
         guard.auto_start_patches.clone()
     };
 
@@ -669,7 +670,7 @@ fn cleanup_empty_ancestors(
 /// Update auto_start_patches: replace exact match of old_name with new_name.
 fn update_auto_start_patches(app: &AppHandle, old_name: &str, new_name: &str) {
     let core_settings = app.state::<Mutex<CoreSettings>>();
-    let mut settings = core_settings.lock().unwrap();
+    let mut settings = core_settings.lock();
     let mut changed = false;
     for entry in settings.auto_start_patches.iter_mut() {
         if entry == old_name {
@@ -686,7 +687,7 @@ fn update_auto_start_patches(app: &AppHandle, old_name: &str, new_name: &str) {
 /// Update auto_start_patches: replace old prefix with new prefix for folder moves.
 fn update_auto_start_patches_prefix(app: &AppHandle, old_prefix: &str, new_prefix: &str) {
     let core_settings = app.state::<Mutex<CoreSettings>>();
-    let mut settings = core_settings.lock().unwrap();
+    let mut settings = core_settings.lock();
     let mut changed = false;
     for entry in settings.auto_start_patches.iter_mut() {
         if entry.starts_with(old_prefix) {
@@ -703,7 +704,7 @@ fn update_auto_start_patches_prefix(app: &AppHandle, old_prefix: &str, new_prefi
 /// Drop auto_start_patches entries matching `is_removed`.
 fn remove_auto_start_patches(app: &AppHandle, is_removed: impl Fn(&str) -> bool) {
     let core_settings = app.state::<Mutex<CoreSettings>>();
-    let mut settings = core_settings.lock().unwrap();
+    let mut settings = core_settings.lock();
     let before = settings.auto_start_patches.len();
     settings.auto_start_patches.retain(|e| !is_removed(e));
     let changed = settings.auto_start_patches.len() != before;

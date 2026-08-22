@@ -197,7 +197,7 @@ impl AsAgent for ExternalInputAgent {
     async fn start(&mut self) -> Result<(), AgentError> {
         if let Some(channel_name) = &self.channel_name {
             let ma = self.ma();
-            let mut external_input_agents = ma.external_input_agents.lock().unwrap();
+            let mut external_input_agents = ma.external_input_agents.lock();
             if let Some(nodes) = external_input_agents.get_mut(channel_name) {
                 nodes.push(self.data.id.clone());
             } else {
@@ -210,7 +210,7 @@ impl AsAgent for ExternalInputAgent {
     async fn stop(&mut self) -> Result<(), AgentError> {
         if let Some(channel_name) = &self.channel_name {
             let ma = self.ma();
-            let mut external_input_agents = ma.external_input_agents.lock().unwrap();
+            let mut external_input_agents = ma.external_input_agents.lock();
             if let Some(nodes) = external_input_agents.get_mut(channel_name) {
                 nodes.retain(|x| x != &self.data.id);
             }
@@ -228,14 +228,14 @@ impl AsAgent for ExternalInputAgent {
             if self.data.status == AgentStatus::Start {
                 if let Some(channel_name) = &self.channel_name {
                     let ma = self.ma();
-                    let mut external_input_agents = ma.external_input_agents.lock().unwrap();
+                    let mut external_input_agents = ma.external_input_agents.lock();
                     if let Some(nodes) = external_input_agents.get_mut(channel_name) {
                         nodes.retain(|x| x != &self.data.id);
                     }
                 }
                 if let Some(channel_name) = &channel_name {
                     let ma = self.ma();
-                    let mut external_input_agents = ma.external_input_agents.lock().unwrap();
+                    let mut external_input_agents = ma.external_input_agents.lock();
                     if let Some(nodes) = external_input_agents.get_mut(channel_name) {
                         nodes.push(self.data.id.clone());
                     } else {
@@ -351,7 +351,7 @@ impl AsAgent for LocalInputAgent {
         if let Some(var_name) = &self.var_name {
             let channel_name = channel_name_for_local(self.patch_id(), var_name);
             let ma = self.ma();
-            let mut external_input_agents = ma.external_input_agents.lock().unwrap();
+            let mut external_input_agents = ma.external_input_agents.lock();
             if let Some(nodes) = external_input_agents.get_mut(&channel_name) {
                 nodes.push(self.data.id.clone());
             } else {
@@ -365,7 +365,7 @@ impl AsAgent for LocalInputAgent {
         if let Some(var_name) = &self.var_name {
             let channel_name = channel_name_for_local(self.patch_id(), var_name);
             let ma = self.ma();
-            let mut external_input_agents = ma.external_input_agents.lock().unwrap();
+            let mut external_input_agents = ma.external_input_agents.lock();
             if let Some(nodes) = external_input_agents.get_mut(&channel_name) {
                 nodes.retain(|x| x != &self.data.id);
             }
@@ -382,7 +382,7 @@ impl AsAgent for LocalInputAgent {
                 if let Some(var_name) = &self.var_name {
                     let channel_name = channel_name_for_local(self.patch_id(), var_name);
                     let ma = self.ma();
-                    let mut external_input_agents = ma.external_input_agents.lock().unwrap();
+                    let mut external_input_agents = ma.external_input_agents.lock();
                     if let Some(nodes) = external_input_agents.get_mut(&channel_name) {
                         nodes.retain(|x| x != &self.data.id);
                     }
@@ -390,7 +390,7 @@ impl AsAgent for LocalInputAgent {
                 if let Some(var_name) = &new_var_name {
                     let channel_name = channel_name_for_local(self.patch_id(), var_name);
                     let ma = self.ma();
-                    let mut external_input_agents = ma.external_input_agents.lock().unwrap();
+                    let mut external_input_agents = ma.external_input_agents.lock();
                     if let Some(nodes) = external_input_agents.get_mut(&channel_name) {
                         nodes.push(self.data.id.clone());
                     } else {

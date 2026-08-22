@@ -18,9 +18,11 @@
 use std::{
     collections::{BTreeMap, HashMap, HashSet, VecDeque},
     future::Future,
-    sync::{Arc, Mutex, OnceLock, RwLock},
+    sync::{Arc, OnceLock},
     time::Duration,
 };
+
+use parking_lot::{Mutex, RwLock};
 
 use tokio_util::sync::CancellationToken;
 
@@ -298,7 +300,7 @@ fn registry() -> &'static RwLock<ToolRegistry> {
 ///
 /// * `tool` - The tool implementation to register
 pub fn register_tool<T: Tool + Send + Sync + 'static>(tool: T) {
-    registry().write().unwrap().register_tool(tool);
+    registry().write().register_tool(tool);
 }
 
 /// Minimum description length (in characters) below which registration warns.
@@ -344,7 +346,7 @@ fn is_valid_tool_name(name: &str) -> bool {
 ///
 /// * `name` - The name of the tool to unregister
 pub fn unregister_tool(name: &str) {
-    registry().write().unwrap().unregister_tool(name);
+    registry().write().unregister_tool(name);
 }
 
 /// Returns information about all registered tools.
@@ -355,7 +357,6 @@ pub fn unregister_tool(name: &str) {
 pub fn list_tool_infos() -> Vec<ToolInfo> {
     registry()
         .read()
-        .unwrap()
         .tools
         .values()
         .map(|entry| entry.info.clone())
@@ -388,7 +389,6 @@ pub fn list_tool_infos_patterns(patterns: &str) -> Result<Vec<ToolInfo>, regex::
     let reg_set = RegexSet::new(&patterns)?;
     let tool_names = registry()
         .read()
-        .unwrap()
         .tools
         .values()
         .filter_map(|entry| {
@@ -412,7 +412,7 @@ pub fn list_tool_infos_patterns(patterns: &str) -> Result<Vec<ToolInfo>, regex::
 ///
 /// The tool if found, or `None` if no tool with that name is registered.
 pub fn get_tool(name: &str) -> Option<Arc<Box<dyn Tool + Send + Sync>>> {
-    registry().read().unwrap().get_tool(name)
+    registry().read().get_tool(name)
 }
 
 /// Invokes a tool by name with the given arguments.
@@ -436,7 +436,7 @@ pub async fn call_tool(
     }
 
     let tool = {
-        let guard = registry().read().unwrap();
+        let guard = registry().read();
         guard.get_tool(name)
     };
 
@@ -976,12 +976,12 @@ impl PatchToolAgent {
     ) -> Result<oneshot::Receiver<AgentValue>, AgentError> {
         let (tx, rx) = oneshot::channel();
 
-        self.pending.lock().unwrap().insert(ctx.id(), tx);
+        self.pending.lock().insert(ctx.id(), tx);
         if let Err(e) = self.try_output(ctx.clone(), PORT_TOOL_IN, args) {
             // Nothing was emitted, so no result can ever arrive; drop the entry
             // now or it would linger until stop() and could swallow the result
             // of a later call reusing this context id.
-            self.pending.lock().unwrap().remove(&ctx.id());
+            self.pending.lock().remove(&ctx.id());
             return Err(e);
         }
 
@@ -1089,7 +1089,7 @@ impl AsAgent for PatchToolAgent {
 
     async fn stop(&mut self) -> Result<(), AgentError> {
         unregister_tool(&self.name);
-        self.pending.lock().unwrap().clear();
+        self.pending.lock().clear();
         Ok(())
     }
 
@@ -1099,7 +1099,7 @@ impl AsAgent for PatchToolAgent {
         _port: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
-        if let Some(tx) = self.pending.lock().unwrap().remove(&ctx.id()) {
+        if let Some(tx) = self.pending.lock().remove(&ctx.id()) {
             let _ = tx.send(value);
         }
         Ok(())
@@ -1185,7 +1185,7 @@ impl PatchTool {
         }
         impl Drop for PendingGuard {
             fn drop(&mut self) {
-                self.pending.lock().unwrap().remove(&self.ctx_id);
+                self.pending.lock().remove(&self.ctx_id);
             }
         }
         let _guard = PendingGuard { pending, ctx_id };
