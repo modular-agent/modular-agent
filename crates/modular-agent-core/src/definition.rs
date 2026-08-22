@@ -64,10 +64,6 @@ pub struct AgentDefinition {
     #[serde(default, skip_serializing_if = "FnvIndexMap::is_empty")]
     pub hints: FnvIndexMap<String, Value>,
 
-    /// Whether to run this agent on a native OS thread instead of the async runtime.
-    #[serde(default, skip_serializing_if = "<&bool>::not")]
-    pub native_thread: bool,
-
     /// Factory function to create new agent instances.
     #[serde(skip)]
     pub new_boxed: Option<AgentNewBoxedFn>,
@@ -525,15 +521,6 @@ impl AgentDefinition {
             map.insert(key, entry);
             self.global_configs = Some(map);
         }
-    }
-
-    /// Configures this agent to run on a native OS thread.
-    ///
-    /// Use this for agents that perform blocking I/O or CPU-intensive operations
-    /// that would block the async runtime.
-    pub fn use_native_thread(mut self) -> Self {
-        self.native_thread = true;
-        self
     }
 
     /// Adds a UI hint. Returns self for method chaining.

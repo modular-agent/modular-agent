@@ -1265,9 +1265,6 @@ impl ModularAgent {
     /// Creates a message channel for the agent and spawns its event loop.
     /// The agent's [`start()`](crate::AsAgent::start) method is called, then
     /// the agent begins processing incoming messages.
-    ///
-    /// If the agent's definition has `native_thread = true`, the agent runs
-    /// on a dedicated OS thread instead of the tokio runtime.
     pub async fn start_agent(&self, agent_id: &str) -> Result<(), AgentError> {
         let agent = {
             let agents = self.agents.lock();
@@ -1280,13 +1277,9 @@ impl ModularAgent {
             let agent = agent.lock().await;
             (agent.def_name().to_string(), agent.patch_id().to_string())
         };
-        let uses_native_thread = {
-            let defs = self.defs.lock();
-            let Some(def) = defs.get(&def_name) else {
-                return Err(AgentError::AgentDefinitionNotFound(agent_id.to_string()));
-            };
-            def.native_thread
-        };
+        if !self.defs.lock().contains_key(&def_name) {
+            return Err(AgentError::AgentDefinitionNotFound(def_name));
+        }
         let agent_status = {
             // This will not block since the agent is not started yet.
             let agent = agent.lock().await;
@@ -1294,19 +1287,6 @@ impl ModularAgent {
         };
         if agent_status == AgentStatus::Init {
             log::info!("Starting agent {}", agent_id);
-
-            // Build the runtime before registering the channel and token so a
-            // failure here leaves no half-started agent behind.
-            let native_rt = if uses_native_thread {
-                Some(
-                    tokio::runtime::Builder::new_current_thread()
-                        .enable_all()
-                        .build()
-                        .map_err(|e| AgentError::IoError(e.to_string()))?,
-                )
-            } else {
-                None
-            };
 
             let (tx, mut rx) = mpsc::channel(MESSAGE_LIMIT);
 
@@ -1407,13 +1387,7 @@ impl ModularAgent {
                 }
             };
 
-            if let Some(rt) = native_rt {
-                std::thread::spawn(move || {
-                    rt.block_on(agent_loop);
-                });
-            } else {
-                tokio::spawn(agent_loop);
-            }
+            tokio::spawn(agent_loop);
         }
         Ok(())
     }
