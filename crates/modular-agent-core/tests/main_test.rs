@@ -13,6 +13,7 @@ mod suites {
     mod patch_name_test;
     mod patch_test;
     mod patch_tool_test;
+    mod shutdown_test;
     mod var_disabled_test;
     mod var_test;
 }

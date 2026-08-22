@@ -109,6 +109,31 @@ impl AsAgent for CancelWaitAgent {
     }
 }
 
+/// Never returns from stop(). Used to verify that shutdown gives up after
+/// its timeout instead of hanging on a misbehaving agent.
+#[modular_agent(
+    title = "Pending Stop",
+    category = CATEGORY,
+    inputs = [PORT_IN],
+    outputs = [PORT_OUT],
+)]
+pub struct PendingStopAgent {
+    data: AgentData,
+}
+
+#[async_trait]
+impl AsAgent for PendingStopAgent {
+    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+        Ok(Self {
+            data: AgentData::new(ma, id, spec),
+        })
+    }
+
+    async fn stop(&mut self) -> Result<(), AgentError> {
+        std::future::pending().await
+    }
+}
+
 /// Mutates its spec in new(): adds a dynamic config and output port.
 /// Models agents like ZipToObject that generate configs/ports at
 /// construction time; the mutation must survive into the patch spec.

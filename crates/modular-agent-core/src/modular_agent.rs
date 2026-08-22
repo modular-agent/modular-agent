@@ -1,10 +1,12 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Weak};
+use std::time::Duration;
 
 use parking_lot::Mutex;
 use serde_json::Value;
 use tokio::sync::{Mutex as AsyncMutex, broadcast, broadcast::error::RecvError, mpsc};
 use tokio_util::sync::CancellationToken;
+use tokio_util::task::TaskTracker;
 
 use crate::FnvIndexMap;
 use crate::agent::{Agent, AgentMessage, AgentStatus, agent_new};
@@ -46,7 +48,12 @@ static AGENT_TOKEN_GENERATION: AtomicU64 = AtomicU64::new(1);
 /// 4. [`start_patch()`](Self::start_patch) - Start agents in a patch
 /// 5. Interact via [`write_external_input()`](Self::write_external_input) and [`subscribe()`](Self::subscribe)
 /// 6. [`stop_patch()`](Self::stop_patch) - Stop agents
-/// 7. [`quit()`](Self::quit) - Shut down
+/// 7. [`shutdown()`](Self::shutdown) - Stop remaining patches, wait for the
+///    spawned tasks to finish, and release external resources ([`quit()`](Self::quit)
+///    is the lightweight variant for tests and simple programs)
+///
+/// Restarting with [`ready()`](Self::ready) after `shutdown()` is not supported;
+/// create a new instance instead.
 ///
 /// # Example
 ///
@@ -68,8 +75,7 @@ static AGENT_TOKEN_GENERATION: AtomicU64 = AtomicU64::new(1);
 ///     ma.write_external_input("input".to_string(), AgentValue::string("hello")).await?;
 ///
 ///     // Cleanup
-///     ma.stop_patch(&patch_id).await?;
-///     ma.quit();
+///     ma.shutdown(std::time::Duration::from_secs(5)).await?;
 ///     Ok(())
 /// }
 /// ```
@@ -128,6 +134,13 @@ pub struct ModularAgent {
     // observers
     pub(crate) observers: broadcast::Sender<EventEnvelope>,
 
+    /// Tracks the message loop, agent loops, and event forwarders so
+    /// `shutdown` can wait for them.
+    pub(crate) tasks: TaskTracker,
+
+    /// Cancelled by `shutdown`; event forwarders watch a child of it.
+    pub(crate) shutdown_token: CancellationToken,
+
     /// Origin tag stamped onto the [`EventEnvelope`] of every event emitted
     /// through this handle. Carried per clone (not shared) so tagged entry
     /// points can coexist with the untagged handles produced by `base()`.
@@ -162,6 +175,8 @@ impl ModularAgent {
             context_tokens: Default::default(),
             tx: Arc::new(Mutex::new(None)),
             observers: tx,
+            tasks: TaskTracker::new(),
+            shutdown_token: CancellationToken::new(),
             origin: None,
         }
     }
@@ -239,13 +254,14 @@ impl ModularAgent {
         Ok(())
     }
 
-    /// Shut down the `ModularAgent`.
+    /// Stop the internal message loop without waiting for anything.
     ///
-    /// This stops the internal message loop. Call [`stop_patch`](Self::stop_patch)
-    /// for each running patch before calling this method for graceful shutdown.
+    /// Intended for tests and simple programs. Call [`stop_patch`](Self::stop_patch)
+    /// for each running patch before calling this method.
     ///
-    /// This does not release external resources such as MCP server child processes.
-    /// Use [`shutdown`](Self::shutdown) instead when full cleanup is required.
+    /// This neither waits for spawned tasks to finish nor releases external resources
+    /// such as MCP server child processes. Production code should call
+    /// [`shutdown`](Self::shutdown) instead.
     ///
     /// # Example
     ///
@@ -263,28 +279,58 @@ impl ModularAgent {
         *tx_lock = None;
     }
 
-    /// Shut down the `ModularAgent` and release external resources.
+    /// Gracefully shut down the `ModularAgent` and release external resources.
     ///
-    /// Calls [`quit`](Self::quit) to stop the internal message loop, then closes any
-    /// pooled MCP server connections so their child processes do not leak. Call
-    /// [`stop_patch`](Self::stop_patch) for each running patch before this method.
-    /// An MCP tool call still in flight during shutdown may reconnect and respawn its
-    /// server process afterwards, so quiesce all workflows first.
+    /// Within `timeout`, this stops every running patch (calling each agent's
+    /// [`stop()`](crate::AsAgent::stop)), stops the internal message loop, cancels
+    /// event forwarders created by [`subscribe_to_event`](Self::subscribe_to_event),
+    /// and waits for all of those tasks to finish. Afterwards, whether or not the
+    /// timeout elapsed, pooled MCP server connections are closed so their child
+    /// processes do not leak.
+    ///
+    /// Returns [`AgentError::ShutdownTimeout`] when the tasks did not finish in time.
+    /// Events already forwarded to a `subscribe_to_event` receiver remain readable
+    /// with `try_recv` after shutdown.
+    ///
+    /// Works even if [`ready`](Self::ready) was never called. Restarting with
+    /// `ready()` afterwards is not supported; create a new instance instead.
+    /// Do not start patches concurrently with shutdown: tasks spawned after the
+    /// wait completes are not waited for.
     ///
     /// # Example
     ///
     /// ```rust,no_run
     /// # use modular_agent_core::ModularAgent;
-    /// # async fn example(ma: ModularAgent, patch_id: &str) {
-    /// ma.stop_patch(patch_id).await.unwrap();
-    /// ma.shutdown().await.unwrap();
+    /// # use std::time::Duration;
+    /// # async fn example(ma: ModularAgent) {
+    /// ma.shutdown(Duration::from_secs(5)).await.unwrap();
     /// # }
     /// ```
-    pub async fn shutdown(&self) -> Result<(), AgentError> {
-        self.quit();
+    pub async fn shutdown(&self, timeout: Duration) -> Result<(), AgentError> {
+        let result = tokio::time::timeout(timeout, async {
+            let patch_ids: Vec<String> = self.patches.lock().keys().cloned().collect();
+            for id in patch_ids {
+                let running = match self.get_patch(&id) {
+                    Some(patch) => patch.lock().await.running(),
+                    None => false,
+                };
+                if running && let Err(e) = self.stop_patch(&id).await {
+                    log::error!("Failed to stop patch {} during shutdown: {}", id, e);
+                }
+            }
+            self.quit();
+            self.shutdown_token.cancel();
+            self.tasks.close();
+            self.tasks.wait().await;
+        })
+        .await;
+
+        // Runs even after a timeout: leaked MCP child processes are worse than
+        // a late return, and the pool enforces its own bound on this.
         #[cfg(feature = "mcp")]
         crate::mcp::shutdown_all_mcp_connections().await?;
-        Ok(())
+
+        result.map_err(|_| AgentError::ShutdownTimeout(timeout))
     }
 
     // Patch management
@@ -1387,7 +1433,7 @@ impl ModularAgent {
                 }
             };
 
-            tokio::spawn(agent_loop);
+            self.tasks.spawn(agent_loop);
         }
         Ok(())
     }
@@ -1668,7 +1714,7 @@ impl ModularAgent {
         // spawn the main loop; base() so events emitted while routing
         // messages are never attributed to the caller of ready().
         let ma = self.base();
-        tokio::spawn(async move {
+        self.tasks.spawn(async move {
             while let Some(message) = rx.recv().await {
                 use AgentEventMessage::*;
 
@@ -1752,25 +1798,32 @@ impl ModularAgent {
     {
         let (tx, rx) = mpsc::unbounded_channel();
         let mut event_rx = self.subscribe();
+        let shutdown = self.shutdown_token.child_token();
 
-        tokio::spawn(async move {
+        self.tasks.spawn(async move {
             loop {
-                match event_rx.recv().await {
-                    Ok(envelope) => {
-                        if let Some(mapped_event) = filter_map(envelope)
-                            && tx.send(mapped_event).is_err()
-                        {
-                            // Receiver dropped, task can exit
-                            break;
+                tokio::select! {
+                    // biased: events already in the broadcast channel (e.g.
+                    // PatchStopped emitted by shutdown itself) are forwarded
+                    // before cancellation is observed, so they are not lost.
+                    biased;
+                    // Without this arm the forwarder would outlive a dropped
+                    // receiver until the next event arrives, which may be never.
+                    _ = tx.closed() => break,
+                    received = event_rx.recv() => match received {
+                        Ok(envelope) => {
+                            if let Some(mapped_event) = filter_map(envelope)
+                                && tx.send(mapped_event).is_err()
+                            {
+                                break;
+                            }
                         }
-                    }
-                    Err(RecvError::Lagged(n)) => {
-                        log::warn!("Event subscriber lagged by {} events", n);
-                    }
-                    Err(RecvError::Closed) => {
-                        // Sender dropped, task can exit
-                        break;
-                    }
+                        Err(RecvError::Lagged(n)) => {
+                            log::warn!("Event subscriber lagged by {} events", n);
+                        }
+                        Err(RecvError::Closed) => break,
+                    },
+                    _ = shutdown.cancelled() => break,
                 }
             }
         });
@@ -2003,5 +2056,24 @@ mod tests {
         assert_eq!(tokens.len(), CONTEXT_TOKEN_PRUNE_THRESHOLD + 1);
         assert!(ma.abort_context(0));
         assert!(tokens[0].is_cancelled());
+    }
+
+    #[tokio::test]
+    async fn event_forwarder_exits_when_receiver_is_dropped() {
+        let ma = ModularAgent::new();
+        let before = ma.tasks.len();
+
+        let rx = ma.subscribe_to_event(|_| Some(()));
+        assert_eq!(ma.tasks.len(), before + 1);
+
+        // No event is ever emitted, so only `tx.closed()` can wake the forwarder.
+        drop(rx);
+        for _ in 0..100 {
+            if ma.tasks.len() == before {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+        assert_eq!(ma.tasks.len(), before);
     }
 }

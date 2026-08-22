@@ -39,8 +39,9 @@ serde = { workspace = true, features = ["rc"] }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "sync", "time", "macros"] }
-# default-features = false: only CancellationToken (tokio_util::sync) is used.
-tokio-util = { version = "0.7", default-features = false }
+# default-features = false + rt: only CancellationToken (tokio_util::sync) and
+# TaskTracker (tokio_util::task, for graceful shutdown) are used.
+tokio-util = { version = "0.7", default-features = false, features = ["rt"] }
 # v4: random session/entry ids that stay unique across process restarts
 # (the counter-based internal id generator is not).
 uuid = { version = "1", optional = true, features = ["v4"] }

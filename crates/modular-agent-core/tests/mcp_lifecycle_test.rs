@@ -145,7 +145,7 @@ async fn run_scenarios() {
     let pid = *spawned_pids(&log_path).last().unwrap();
     assert!(process_alive(pid), "server process should be running");
     let magent = ModularAgent::init().unwrap();
-    magent.shutdown().await.unwrap();
+    magent.shutdown(Duration::from_secs(5)).await.unwrap();
     wait_until_dead(pid).await;
 
     // The pool was drained, so the next call establishes a fresh connection.

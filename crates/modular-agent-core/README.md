@@ -41,6 +41,8 @@ modular-agent-core = { version = "0.29", default-features = false, features = ["
 ## Quick Start
 
 ```rust
+use std::time::Duration;
+
 use modular_agent_core::{AgentError, AgentValue, ModularAgent, ModularAgentEvent};
 
 #[tokio::main]
@@ -68,8 +70,7 @@ async fn main() -> Result<(), AgentError> {
     }
 
     // 5. Cleanup
-    ma.stop_patch(&patch_id).await?;
-    ma.quit();
+    ma.shutdown(Duration::from_secs(5)).await?;
     Ok(())
 }
 ```
@@ -78,7 +79,7 @@ async fn main() -> Result<(), AgentError> {
 
 ### ModularAgent
 
-`ModularAgent` is the orchestrator. `init()` collects every agent definition registered in the binary; `ready().await` starts the runtime. Patches are loaded with `open_patch_from_file` (or built programmatically) and controlled with `start_patch` / `stop_patch`. `write_external_input` feeds values in, `subscribe_to_event` observes everything the engine emits (external outputs, agent errors, structure changes), and `quit()` shuts the runtime down.
+`ModularAgent` is the orchestrator. `init()` collects every agent definition registered in the binary; `ready().await` starts the runtime. Patches are loaded with `open_patch_from_file` (or built programmatically) and controlled with `start_patch` / `stop_patch`. `write_external_input` feeds values in, `subscribe_to_event` observes everything the engine emits (external outputs, agent errors, structure changes), and `shutdown(timeout)` shuts the runtime down: it stops running patches, waits for their tasks, drains MCP connections, and errors with `AgentError::ShutdownTimeout` if the timeout elapses. `quit()` remains for tests and simple cases.
 
 ### Definitions and Specs
 

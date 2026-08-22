@@ -107,7 +107,7 @@ async fn main() -> Result<(), AgentError> {
 
     // Graceful shutdown
     ma.stop_patch(&patch_id).await?;
-    ma.shutdown().await?;
+    ma.shutdown(std::time::Duration::from_secs(5)).await?;
 
     // Drain any remaining output
     while let Ok(value) = output_rx.try_recv() {
