@@ -80,10 +80,12 @@ ma.start_patch(&id).await?;
 ma.write_external_input("input".into(), AgentValue::string("hello")).await?;
 if let Some(value) = rx.recv().await { /* handle output */ }
 
-// 5. Cleanup
-ma.stop_patch(&id).await?;
-ma.quit();
+// 5. Cleanup: stops running patches, waits for tasks, drains MCP connections;
+//    errors with AgentError::ShutdownTimeout after the timeout.
+ma.shutdown(Duration::from_secs(5)).await?;
 ```
+
+`quit()` remains for tests and simple cases (synchronous, does not wait for anything).
 
 ## Feature Flags
 

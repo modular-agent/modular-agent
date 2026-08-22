@@ -182,6 +182,11 @@ pub enum AgentError {
     #[error("Cancelled")]
     Cancelled,
 
+    /// [`ModularAgent::shutdown`](crate::ModularAgent::shutdown) did not
+    /// finish within the given duration.
+    #[error("Shutdown timed out after {0:?}")]
+    ShutdownTimeout(std::time::Duration),
+
     /// Generic agent error.
     #[error("Agent error: {0}")]
     Other(String),

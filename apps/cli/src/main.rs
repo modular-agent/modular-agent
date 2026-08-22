@@ -6,6 +6,7 @@ use clap::Parser;
 use modular_agent_core::mcp_server::{McpServerConfig, start_mcp_server};
 use modular_agent_core::{AgentError, AgentValue, ModularAgent, ModularAgentEvent};
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::select;
 
@@ -153,8 +154,10 @@ async fn main() -> Result<(), AgentError> {
     if let Some(server) = mcp_server {
         server.stop().await;
     }
-    ma.stop_patch(&patch_id).await?;
-    ma.quit();
+    // Stops the patch, waits for agent loops, and reaps MCP child processes.
+    if let Err(e) = ma.shutdown(Duration::from_secs(5)).await {
+        log::error!("Shutdown error: {}", e);
+    }
 
     // Drain any remaining output
     while let Ok(value) = output_rx.try_recv() {

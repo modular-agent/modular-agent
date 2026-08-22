@@ -1,6 +1,7 @@
 #![recursion_limit = "256"]
 
 use modular_agent_core::ModularAgent;
+use std::time::Duration;
 use tauri::{
     Manager, RunEvent, Runtime,
     plugin::{Builder, TauriPlugin},
@@ -73,7 +74,11 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             }
             RunEvent::Exit => {
                 let ma = app.state::<ModularAgent>();
-                ma.quit();
+                // Stop running patches and reap MCP child processes before the process ends.
+                if let Err(e) = tauri::async_runtime::block_on(ma.shutdown(Duration::from_secs(5)))
+                {
+                    eprintln!("Shutdown error: {}", e);
+                }
             }
             _ => {}
         })

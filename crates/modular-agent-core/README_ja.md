@@ -41,6 +41,8 @@ modular-agent-core = { version = "0.29", default-features = false, features = ["
 ## クイックスタート
 
 ```rust
+use std::time::Duration;
+
 use modular_agent_core::{AgentError, AgentValue, ModularAgent, ModularAgentEvent};
 
 #[tokio::main]
@@ -68,8 +70,7 @@ async fn main() -> Result<(), AgentError> {
     }
 
     // 5. クリーンアップ
-    ma.stop_patch(&patch_id).await?;
-    ma.quit();
+    ma.shutdown(Duration::from_secs(5)).await?;
     Ok(())
 }
 ```
@@ -78,7 +79,7 @@ async fn main() -> Result<(), AgentError> {
 
 ### ModularAgent
 
-`ModularAgent` はオーケストレータです。`init()` がバイナリに登録されたすべてのエージェント定義を収集し、`ready().await` でランタイムが起動します。パッチは `open_patch_from_file` で読み込み（プログラムからの構築も可能）、`start_patch` / `stop_patch` で制御します。`write_external_input` で値を投入し、`subscribe_to_event` でエンジンが emit するすべてのイベント（外部出力、エージェントエラー、構造変更）を観測し、`quit()` でランタイムを終了します。
+`ModularAgent` はオーケストレータです。`init()` がバイナリに登録されたすべてのエージェント定義を収集し、`ready().await` でランタイムが起動します。パッチは `open_patch_from_file` で読み込み（プログラムからの構築も可能）、`start_patch` / `stop_patch` で制御します。`write_external_input` で値を投入し、`subscribe_to_event` でエンジンが emit するすべてのイベント（外部出力、エージェントエラー、構造変更）を観測し、`shutdown(timeout)` でランタイムを終了します。`shutdown` は実行中のパッチを停止し、タスクの完了を待ち、MCP 接続を閉じ、タイムアウトを超えると `AgentError::ShutdownTimeout` を返します。`quit()` はテストや簡易用途向けに残っています。
 
 ### 定義（Definition）とスペック（Spec）
 

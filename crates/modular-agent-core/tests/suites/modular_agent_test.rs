@@ -11,7 +11,7 @@ fn test_init() {
     let ma = ModularAgent::init().unwrap();
 
     let defs = ma.get_agent_definitions();
-    assert_eq!(defs.len(), 15);
+    assert_eq!(defs.len(), 16);
     let mut keys: Vec<_> = defs.keys().cloned().collect();
     keys.sort();
     let expected = vec![
@@ -19,6 +19,7 @@ fn test_init() {
         "main_test::common::agents::CounterAgent",
         "main_test::common::agents::DynSpecAgent",
         "main_test::common::agents::NumberedConfigAgent",
+        "main_test::common::agents::PendingStopAgent",
         "main_test::common::agents::StuckSleepAgent",
         "modular_agent_core::external_agent::ExternalInputAgent",
         "modular_agent_core::external_agent::ExternalOutputAgent",
