@@ -20,7 +20,6 @@ export type AgentDefinition = {
   configs?: AgentConfigSpecs | null;
   global_configs?: AgentGlobalConfigs | null;
   hints?: Record<string, any>;
-  native_thread?: boolean | null;
 };
 
 export type AgentConfigSpecs = Record<string, AgentConfigSpec>;
