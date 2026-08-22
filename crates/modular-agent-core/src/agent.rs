@@ -111,8 +111,8 @@ pub trait Agent: Send + Sync + 'static {
         value: AgentValue,
     ) -> Result<(), AgentError>;
 
-    /// Returns the tokio runtime.
-    fn runtime(&self) -> &tokio::runtime::Runtime {
+    /// Returns the shared tokio runtime, or an error if it could not be created.
+    fn runtime(&self) -> Result<&tokio::runtime::Runtime, AgentError> {
         runtime()
     }
 
@@ -418,7 +418,7 @@ pub(crate) fn agent_new(
     let def;
     {
         let def_name = &spec.def_name;
-        let defs = ma.defs.lock().unwrap();
+        let defs = ma.defs.lock();
         def = defs
             .get(def_name)
             .ok_or_else(|| AgentError::UnknownDefName(def_name.to_string()))?

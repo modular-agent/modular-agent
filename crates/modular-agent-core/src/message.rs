@@ -107,7 +107,7 @@ pub async fn agent_out(
 ) {
     let targets;
     {
-        let env_edges = ma.connections.lock().unwrap();
+        let env_edges = ma.connections.lock();
         targets = env_edges.get(&source_agent).cloned();
     }
 
@@ -124,7 +124,7 @@ pub async fn agent_out(
         }
 
         {
-            let env_agents = ma.agents.lock().unwrap();
+            let env_agents = ma.agents.lock();
             if !env_agents.contains_key(&target_agent) {
                 continue;
             }
@@ -152,12 +152,12 @@ pub async fn agent_out(
 /// 4. Emits the value as an external output event
 pub async fn external_input(ma: &ModularAgent, name: String, ctx: AgentContext, value: AgentValue) {
     {
-        let mut external_values = ma.external_values.lock().unwrap();
+        let mut external_values = ma.external_values.lock();
         external_values.insert(name.clone(), value.clone());
     }
     let input_nodes;
     {
-        let env_input_nodes = ma.external_input_agents.lock().unwrap();
+        let env_input_nodes = ma.external_input_agents.lock();
         input_nodes = env_input_nodes.get(&name).cloned();
     }
     if let Some(input_nodes) = input_nodes {
@@ -166,7 +166,7 @@ pub async fn external_input(ma: &ModularAgent, name: String, ctx: AgentContext, 
 
             let edges;
             {
-                let env_edges = ma.connections.lock().unwrap();
+                let env_edges = ma.connections.lock();
                 edges = env_edges.get(&node).cloned();
             }
             let Some(edges) = edges else {

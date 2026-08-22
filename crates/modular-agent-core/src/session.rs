@@ -29,9 +29,9 @@
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
-use std::sync::Mutex;
 
 use async_trait::async_trait;
+use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
 
@@ -214,20 +214,12 @@ impl InMemorySessionStore {
     pub fn new() -> Self {
         Self::default()
     }
-
-    fn lock(&self) -> std::sync::MutexGuard<'_, SessionMap> {
-        // A poisoned lock only means another thread panicked mid-operation;
-        // the map itself is still structurally valid.
-        self.sessions
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-    }
 }
 
 #[async_trait]
 impl SessionStore for InMemorySessionStore {
     async fn create(&self, meta: SessionMeta) -> Result<String, AgentError> {
-        let mut sessions = self.lock();
+        let mut sessions = self.sessions.lock();
         let id = meta.id.clone();
         if sessions.contains_key(&id) {
             return Err(AgentError::DuplicateId(id));
@@ -237,7 +229,7 @@ impl SessionStore for InMemorySessionStore {
     }
 
     async fn append(&self, session_id: &str, entry: SessionEntry) -> Result<(), AgentError> {
-        let mut sessions = self.lock();
+        let mut sessions = self.sessions.lock();
         let (_, entries) = sessions
             .get_mut(session_id)
             .ok_or_else(|| session_not_found(session_id))?;
@@ -246,7 +238,7 @@ impl SessionStore for InMemorySessionStore {
     }
 
     async fn load(&self, session_id: &str) -> Result<Vec<SessionEntry>, AgentError> {
-        let sessions = self.lock();
+        let sessions = self.sessions.lock();
         let (_, entries) = sessions
             .get(session_id)
             .ok_or_else(|| session_not_found(session_id))?;
@@ -254,7 +246,7 @@ impl SessionStore for InMemorySessionStore {
     }
 
     async fn list(&self) -> Result<Vec<SessionMeta>, AgentError> {
-        let sessions = self.lock();
+        let sessions = self.sessions.lock();
         Ok(sessions.values().map(|(meta, _)| meta.clone()).collect())
     }
 }

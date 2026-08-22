@@ -1,4 +1,4 @@
-use std::sync::Mutex;
+use parking_lot::Mutex;
 
 use anyhow::Result;
 use tauri::{AppHandle, Manager};
@@ -10,7 +10,7 @@ pub fn init(app: &AppHandle) -> Result<()> {
     let setting = app.state::<Mutex<CoreSettings>>();
     let is_autostart;
     {
-        let setting = setting.lock().unwrap();
+        let setting = setting.lock();
         is_autostart = setting.autostart;
     }
 

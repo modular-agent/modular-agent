@@ -1,6 +1,7 @@
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, Weak};
+use std::sync::{Arc, Weak};
 
+use parking_lot::Mutex;
 use serde_json::Value;
 use tokio::sync::{Mutex as AsyncMutex, broadcast, broadcast::error::RecvError, mpsc};
 use tokio_util::sync::CancellationToken;
@@ -192,11 +193,7 @@ impl ModularAgent {
     }
 
     pub(crate) fn tx(&self) -> Result<mpsc::Sender<AgentEventMessage>, AgentError> {
-        self.tx
-            .lock()
-            .unwrap()
-            .clone()
-            .ok_or(AgentError::TxNotInitialized)
+        self.tx.lock().clone().ok_or(AgentError::TxNotInitialized)
     }
 
     /// Initialize a new `ModularAgent` instance.
@@ -262,7 +259,7 @@ impl ModularAgent {
     /// # }
     /// ```
     pub fn quit(&self) {
-        let mut tx_lock = self.tx.lock().unwrap();
+        let mut tx_lock = self.tx.lock();
         *tx_lock = None;
     }
 
@@ -315,7 +312,7 @@ impl ModularAgent {
     ///
     /// Returns `None` if no patch exists with the given id.
     pub fn get_patch(&self, id: &str) -> Option<Arc<AsyncMutex<Patch>>> {
-        let patches = self.patches.lock().unwrap();
+        let patches = self.patches.lock();
         patches.get(id).cloned()
     }
 
@@ -323,7 +320,7 @@ impl ModularAgent {
     ///
     /// Returns `None` when no patch with the given name is loaded.
     pub fn find_patch_id_by_name(&self, name: &str) -> Option<String> {
-        let names = self.patch_names.lock().unwrap();
+        let names = self.patch_names.lock();
         names.get(name).cloned()
     }
 
@@ -352,7 +349,7 @@ impl ModularAgent {
         // Reserve the name first so a duplicate fails before any agents are
         // created; the reservation is rolled back if a later step fails.
         if let Some(name) = &name {
-            let mut names = self.patch_names.lock().unwrap();
+            let mut names = self.patch_names.lock();
             if names.contains_key(name) {
                 return Err(AgentError::PatchNameExists(name.clone()));
             }
@@ -376,7 +373,7 @@ impl ModularAgent {
 
         // add the given patch into patches
         let inserted = {
-            let mut patches = self.patches.lock().unwrap();
+            let mut patches = self.patches.lock();
             if patches.contains_key(&id) {
                 false
             } else {
@@ -386,7 +383,7 @@ impl ModularAgent {
         };
         if !inserted {
             if let Some(name) = &name {
-                self.patch_names.lock().unwrap().swap_remove(name);
+                self.patch_names.lock().swap_remove(name);
             }
             return Err(AgentError::DuplicateId(id));
         }
@@ -407,7 +404,7 @@ impl ModularAgent {
             .ok_or_else(|| AgentError::PatchNotFound(id.to_string()))?;
 
         {
-            let mut names = self.patch_names.lock().unwrap();
+            let mut names = self.patch_names.lock();
             if let Some(owner) = names.get(&new_name)
                 && owner != id
             {
@@ -427,8 +424,8 @@ impl ModularAgent {
         // this check to come after the insert; either remove_patch's
         // cleanup runs after our insert and clears it, or we observe the id
         // gone here and roll the reservation back.
-        if !self.patches.lock().unwrap().contains_key(id) {
-            let mut names = self.patch_names.lock().unwrap();
+        if !self.patches.lock().contains_key(id) {
+            let mut names = self.patch_names.lock();
             if names.get(&new_name).is_some_and(|owner| owner == id) {
                 names.swap_remove(&new_name);
             }
@@ -477,10 +474,10 @@ impl ModularAgent {
 
         // Remove the patch entry from the map
         {
-            let mut patches = self.patches.lock().unwrap();
+            let mut patches = self.patches.lock();
             patches.swap_remove(id);
         }
-        self.patch_names.lock().unwrap().retain(|_, v| v != id);
+        self.patch_names.lock().retain(|_, v| v != id);
         self.remove_patch_token(id);
 
         self.emit_patch_removed(id.to_string(), name);
@@ -625,7 +622,7 @@ impl ModularAgent {
     /// Get infos of all patches.
     pub async fn get_patch_infos(&self) -> Vec<PatchInfo> {
         let patches = {
-            let patches = self.patches.lock().unwrap();
+            let patches = self.patches.lock();
             patches.values().cloned().collect::<Vec<_>>()
         };
         let mut patch_infos = Vec::new();
@@ -648,7 +645,7 @@ impl ModularAgent {
         let def_name = def.name.clone();
         let def_global_configs = def.global_configs.clone();
 
-        let mut defs = self.defs.lock().unwrap();
+        let mut defs = self.defs.lock();
         defs.insert(def.name.clone(), def);
 
         // if there is a global config, set it
@@ -665,7 +662,7 @@ impl ModularAgent {
     ///
     /// Returns a map of definition name to [`AgentDefinition`].
     pub fn get_agent_definitions(&self) -> AgentDefinitions {
-        let defs = self.defs.lock().unwrap();
+        let defs = self.defs.lock();
         defs.clone()
     }
 
@@ -673,13 +670,13 @@ impl ModularAgent {
     ///
     /// The name is typically in the format `module::path::StructName`.
     pub fn get_agent_definition(&self, def_name: &str) -> Option<AgentDefinition> {
-        let defs = self.defs.lock().unwrap();
+        let defs = self.defs.lock();
         defs.get(def_name).cloned()
     }
 
     /// Get the config specs of an agent definition by name.
     pub fn get_agent_config_specs(&self, def_name: &str) -> Option<AgentConfigSpecs> {
-        let defs = self.defs.lock().unwrap();
+        let defs = self.defs.lock();
         let def = defs.get(def_name)?;
         def.configs.clone()
     }
@@ -687,7 +684,7 @@ impl ModularAgent {
     /// Get the agent spec by id.
     pub async fn get_agent_spec(&self, agent_id: &str) -> Option<AgentSpec> {
         let agent = {
-            let agents = self.agents.lock().unwrap();
+            let agents = self.agents.lock();
             agents.get(agent_id)?.clone()
         };
         let agent = agent.lock().await;
@@ -702,7 +699,7 @@ impl ModularAgent {
     /// instance spec.
     pub(crate) async fn find_stored_agent_spec(&self, agent_id: &str) -> Option<AgentSpec> {
         let patches = {
-            let patches = self.patches.lock().unwrap();
+            let patches = self.patches.lock();
             patches.values().cloned().collect::<Vec<_>>()
         };
         for patch in patches {
@@ -734,7 +731,7 @@ impl ModularAgent {
     /// holds the id either.
     pub async fn update_agent_spec(&self, agent_id: &str, value: &Value) -> Result<(), AgentError> {
         let agent = {
-            let agents = self.agents.lock().unwrap();
+            let agents = self.agents.lock();
             agents.get(agent_id).cloned()
         };
         let Some(agent) = agent else {
@@ -798,7 +795,7 @@ impl ModularAgent {
         // Take a snapshot and release the patches lock: a patch's async
         // mutex must never be awaited while the sync map lock is held.
         let patches = {
-            let patches = self.patches.lock().unwrap();
+            let patches = self.patches.lock();
             patches.values().cloned().collect::<Vec<_>>()
         };
 
@@ -855,7 +852,7 @@ impl ModularAgent {
         patch_id: String,
         spec: AgentSpec,
     ) -> Result<AgentSpec, AgentError> {
-        let mut agents = self.agents.lock().unwrap();
+        let mut agents = self.agents.lock();
         if agents.contains_key(&spec.id) {
             return Err(AgentError::AgentAlreadyExists(spec.id.to_string()));
         }
@@ -871,7 +868,7 @@ impl ModularAgent {
 
     /// Get the agent by id.
     pub fn get_agent(&self, agent_id: &str) -> Option<SharedAgent> {
-        let agents = self.agents.lock().unwrap();
+        let agents = self.agents.lock();
         agents.get(agent_id).cloned()
     }
 
@@ -886,7 +883,7 @@ impl ModularAgent {
     ) -> Result<(), AgentError> {
         // check if the source and target agents exist
         {
-            let agents = self.agents.lock().unwrap();
+            let agents = self.agents.lock();
             if !agents.contains_key(&connection.source) {
                 return Err(AgentError::AgentNotFound(connection.source.to_string()));
             }
@@ -918,7 +915,7 @@ impl ModularAgent {
     }
 
     fn add_connection_internal(&self, connection: ConnectionSpec) -> Result<(), AgentError> {
-        let mut connections = self.connections.lock().unwrap();
+        let mut connections = self.connections.lock();
         if let Some(targets) = connections.get_mut(&connection.source) {
             if targets
                 .iter()
@@ -954,7 +951,7 @@ impl ModularAgent {
     /// nobody listens to; `agent_out` would only drop them after the
     /// conversion cost has already been paid.
     pub fn has_connections(&self, source_agent: &str, port: &str) -> bool {
-        let connections = self.connections.lock().unwrap();
+        let connections = self.connections.lock();
         connections.get(source_agent).is_some_and(|targets| {
             targets
                 .iter()
@@ -1022,7 +1019,7 @@ impl ModularAgent {
             // The rolled-back agents were never started, so no stop or
             // channel teardown is needed; dropping the map entries undoes
             // add_agent_internal completely.
-            let mut agents_map = self.agents.lock().unwrap();
+            let mut agents_map = self.agents.lock();
             for agent in agents.iter().take(added_agents) {
                 patch.remove_agent(&agent.id);
                 agents_map.swap_remove(&agent.id);
@@ -1074,7 +1071,7 @@ impl ModularAgent {
 
         // remove from connections
         {
-            let mut connections = self.connections.lock().unwrap();
+            let mut connections = self.connections.lock();
             let mut sources_to_remove = Vec::new();
             for (source, targets) in connections.iter_mut() {
                 targets.retain(|(target, _, _)| target != agent_id);
@@ -1090,7 +1087,7 @@ impl ModularAgent {
 
         // remove from agents
         {
-            let mut agents = self.agents.lock().unwrap();
+            let mut agents = self.agents.lock();
             agents.swap_remove(agent_id);
         }
 
@@ -1123,7 +1120,7 @@ impl ModularAgent {
     }
 
     fn remove_connection_internal(&self, connection: &ConnectionSpec) {
-        let mut connections = self.connections.lock().unwrap();
+        let mut connections = self.connections.lock();
         if let Some(targets) = connections.get_mut(&connection.source) {
             targets.retain(|(target, source_handle, target_handle)| {
                 *target != connection.target
@@ -1140,7 +1137,7 @@ impl ModularAgent {
 
     /// Returns the parent cancellation token for a patch, creating it if needed.
     fn patch_token(&self, patch_id: &str) -> CancellationToken {
-        let mut tokens = self.patch_tokens.lock().unwrap();
+        let mut tokens = self.patch_tokens.lock();
         tokens.entry(patch_id.to_string()).or_default().clone()
     }
 
@@ -1149,7 +1146,7 @@ impl ModularAgent {
     /// A fired `CancellationToken` cannot be reset, so this is called when a
     /// patch starts to replace the token cancelled by a previous stop.
     pub(crate) fn reset_patch_token(&self, patch_id: &str) {
-        let mut tokens = self.patch_tokens.lock().unwrap();
+        let mut tokens = self.patch_tokens.lock();
         tokens.insert(patch_id.to_string(), CancellationToken::new());
     }
 
@@ -1163,14 +1160,14 @@ impl ModularAgent {
     /// entry once every agent has stopped, so a later `start_agent` derives
     /// a live token instead of a child of the fired one.
     pub(crate) fn cancel_patch_token(&self, patch_id: &str) {
-        let token = self.patch_tokens.lock().unwrap().get(patch_id).cloned();
+        let token = self.patch_tokens.lock().get(patch_id).cloned();
         if let Some(token) = token {
             token.cancel();
         }
     }
 
     pub(crate) fn remove_patch_token(&self, patch_id: &str) {
-        self.patch_tokens.lock().unwrap().swap_remove(patch_id);
+        self.patch_tokens.lock().swap_remove(patch_id);
     }
 
     /// Creates and tracks a fresh cancellation token for an agent as a child
@@ -1181,7 +1178,6 @@ impl ModularAgent {
         let token = self.patch_token(patch_id).child_token();
         self.agent_tokens
             .lock()
-            .unwrap()
             .insert(agent_id.to_string(), (generation, token.clone()));
         (generation, token)
     }
@@ -1202,9 +1198,9 @@ impl ModularAgent {
     ) -> Option<CancellationToken> {
         // Look up (never create) the parent: a lagging loop must not
         // resurrect the token entry of a removed patch.
-        let parent = self.patch_tokens.lock().unwrap().get(patch_id).cloned()?;
+        let parent = self.patch_tokens.lock().get(patch_id).cloned()?;
         let fresh = parent.child_token();
-        let mut tokens = self.agent_tokens.lock().unwrap();
+        let mut tokens = self.agent_tokens.lock();
         let slot = tokens.get_mut(agent_id)?;
         if slot.0 != generation {
             return None;
@@ -1220,7 +1216,7 @@ impl ModularAgent {
     /// dead entries can be pruned. Pruning starts once the registry reaches
     /// [`CONTEXT_TOKEN_PRUNE_THRESHOLD`], but live entries are never evicted.
     pub(crate) fn context_token(&self, ctx_id: usize) -> Arc<CancellationToken> {
-        let mut tokens = self.context_tokens.lock().unwrap();
+        let mut tokens = self.context_tokens.lock();
         if let Some(token) = tokens.get(&ctx_id).and_then(Weak::upgrade) {
             return token;
         }
@@ -1250,7 +1246,6 @@ impl ModularAgent {
         let token = self
             .context_tokens
             .lock()
-            .unwrap()
             .get(&ctx_id)
             .and_then(Weak::upgrade);
         match token {
@@ -1275,7 +1270,7 @@ impl ModularAgent {
     /// on a dedicated OS thread instead of the tokio runtime.
     pub async fn start_agent(&self, agent_id: &str) -> Result<(), AgentError> {
         let agent = {
-            let agents = self.agents.lock().unwrap();
+            let agents = self.agents.lock();
             let Some(a) = agents.get(agent_id) else {
                 return Err(AgentError::AgentNotFound(agent_id.to_string()));
             };
@@ -1286,7 +1281,7 @@ impl ModularAgent {
             (agent.def_name().to_string(), agent.patch_id().to_string())
         };
         let uses_native_thread = {
-            let defs = self.defs.lock().unwrap();
+            let defs = self.defs.lock();
             let Some(def) = defs.get(&def_name) else {
                 return Err(AgentError::AgentDefinitionNotFound(agent_id.to_string()));
             };
@@ -1300,10 +1295,23 @@ impl ModularAgent {
         if agent_status == AgentStatus::Init {
             log::info!("Starting agent {}", agent_id);
 
+            // Build the runtime before registering the channel and token so a
+            // failure here leaves no half-started agent behind.
+            let native_rt = if uses_native_thread {
+                Some(
+                    tokio::runtime::Builder::new_current_thread()
+                        .enable_all()
+                        .build()
+                        .map_err(|e| AgentError::IoError(e.to_string()))?,
+                )
+            } else {
+                None
+            };
+
             let (tx, mut rx) = mpsc::channel(MESSAGE_LIMIT);
 
             {
-                let mut agent_txs = self.agent_txs.lock().unwrap();
+                let mut agent_txs = self.agent_txs.lock();
                 agent_txs.insert(agent_id.to_string(), tx.clone());
             };
 
@@ -1399,12 +1407,8 @@ impl ModularAgent {
                 }
             };
 
-            if uses_native_thread {
+            if let Some(rt) = native_rt {
                 std::thread::spawn(move || {
-                    let rt = tokio::runtime::Builder::new_current_thread()
-                        .enable_all()
-                        .build()
-                        .unwrap();
                     rt.block_on(agent_loop);
                 });
             } else {
@@ -1421,7 +1425,7 @@ impl ModularAgent {
     pub async fn stop_agent(&self, agent_id: &str) -> Result<(), AgentError> {
         {
             // remove the sender first to prevent new messages being sent
-            let mut agent_txs = self.agent_txs.lock().unwrap();
+            let mut agent_txs = self.agent_txs.lock();
             if let Some(tx) = agent_txs.swap_remove(agent_id)
                 && let Err(e) = tx.try_send(AgentMessage::Stop)
             {
@@ -1435,13 +1439,13 @@ impl ModularAgent {
         // completes. Removing the entry first keeps the fired token in the
         // loop so inputs queued ahead of Stop are skipped rather than
         // processed with a renewed token.
-        let token = self.agent_tokens.lock().unwrap().swap_remove(agent_id);
+        let token = self.agent_tokens.lock().swap_remove(agent_id);
         if let Some((_, token)) = token {
             token.cancel();
         }
 
         let agent = {
-            let agents = self.agents.lock().unwrap();
+            let agents = self.agents.lock();
             let Some(a) = agents.get(agent_id) else {
                 return Err(AgentError::AgentNotFound(agent_id.to_string()));
             };
@@ -1474,14 +1478,14 @@ impl ModularAgent {
         configs: AgentConfigs,
     ) -> Result<(), AgentError> {
         let tx = {
-            let agent_txs = self.agent_txs.lock().unwrap();
+            let agent_txs = self.agent_txs.lock();
             agent_txs.get(&agent_id).cloned()
         };
 
         let Some(tx) = tx else {
             // The agent is not running. We can set the configs directly.
             let agent = {
-                let agents = self.agents.lock().unwrap();
+                let agents = self.agents.lock();
                 agents.get(&agent_id).cloned()
             };
             let Some(agent) = agent else {
@@ -1523,13 +1527,13 @@ impl ModularAgent {
 
     /// Get global configs for the agent definition by name.
     pub fn get_global_configs(&self, def_name: &str) -> Option<AgentConfigs> {
-        let global_configs_map = self.global_configs_map.lock().unwrap();
+        let global_configs_map = self.global_configs_map.lock();
         global_configs_map.get(def_name).cloned()
     }
 
     /// Set global configs for the agent definition by name.
     pub fn set_global_configs(&self, def_name: String, configs: AgentConfigs) {
-        let mut global_configs_map = self.global_configs_map.lock().unwrap();
+        let mut global_configs_map = self.global_configs_map.lock();
 
         let Some(existing_configs) = global_configs_map.get_mut(&def_name) else {
             global_configs_map.insert(def_name, configs);
@@ -1543,7 +1547,7 @@ impl ModularAgent {
 
     /// Get the global configs map.
     pub fn get_global_configs_map(&self) -> AgentConfigsMap {
-        let global_configs_map = self.global_configs_map.lock().unwrap();
+        let global_configs_map = self.global_configs_map.lock();
         global_configs_map.clone()
     }
 
@@ -1576,14 +1580,14 @@ impl ModularAgent {
         };
 
         let tx = {
-            let agent_txs = self.agent_txs.lock().unwrap();
+            let agent_txs = self.agent_txs.lock();
             agent_txs.get(&agent_id).cloned()
         };
 
         let Some(tx) = tx else {
             // The agent is not running. If it's a config message, we can set it directly.
             let agent: SharedAgent = {
-                let agents = self.agents.lock().unwrap();
+                let agents = self.agents.lock();
                 let Some(a) = agents.get(&agent_id) else {
                     return Err(AgentError::AgentNotFound(agent_id.to_string()));
                 };
@@ -1683,7 +1687,7 @@ impl ModularAgent {
         // TODO: settings for the channel size
         let (tx, mut rx) = mpsc::channel(4096);
         {
-            let mut tx_lock = self.tx.lock().unwrap();
+            let mut tx_lock = self.tx.lock();
             *tx_lock = Some(tx);
         }
 

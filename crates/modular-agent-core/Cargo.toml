@@ -28,6 +28,7 @@ inventory = "0.3"
 # (file/http via reqwest) that are unneeded for validating local tool schemas.
 jsonschema = { version = "0.48.1", optional = true, default-features = false }
 log = { workspace = true }
+parking_lot = { workspace = true }
 photon-rs = { version = "0.3.3", optional = true }
 regex = { version = "1.12.2", optional = true }
 rmcp = { version = "3.1", features = ["client", "transport-child-process"], optional = true }

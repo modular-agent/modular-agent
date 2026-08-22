@@ -1,14 +1,11 @@
 use anyhow::{Context as _, Result};
 use modular_agent_core::mcp_server::{McpServerConfig, McpServerHandle, start_mcp_server};
 use modular_agent_core::{AgentConfigs, AgentValue};
+use parking_lot::Mutex;
 use rand::Rng as _;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::{
-    collections::HashMap,
-    ops::Not,
-    sync::{LazyLock, Mutex},
-};
+use std::{collections::HashMap, ops::Not, sync::LazyLock};
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_modular_agent::ModularAgentExt;
 use tauri_plugin_store::StoreExt;
@@ -27,7 +24,7 @@ pub fn save(app: &AppHandle) -> Result<()> {
     let core_settings = app.state::<Mutex<CoreSettings>>();
     let settings_json;
     {
-        let core_settings = core_settings.lock().unwrap();
+        let core_settings = core_settings.lock();
         settings_json = serde_json::to_value(&*core_settings)?;
     }
     store.set("core", settings_json);
@@ -206,7 +203,7 @@ pub async fn apply_mcp_server(app: &AppHandle) -> Result<()> {
 
     let (enabled, port, mut token) = {
         let settings = app.state::<Mutex<CoreSettings>>();
-        let settings = settings.lock().unwrap();
+        let settings = settings.lock();
         (
             settings.mcp_server_enabled,
             settings.mcp_server_port,
@@ -218,7 +215,7 @@ pub async fn apply_mcp_server(app: &AppHandle) -> Result<()> {
         let new_token = generate_token();
         {
             let settings = app.state::<Mutex<CoreSettings>>();
-            let mut settings = settings.lock().unwrap();
+            let mut settings = settings.lock();
             settings.mcp_server_token = Some(new_token.clone());
         }
         save(app)?;
@@ -258,7 +255,7 @@ fn json_merge(a: &mut Value, b: Value) {
 
 #[tauri::command]
 pub fn get_core_settings_cmd(settings: State<Mutex<CoreSettings>>) -> Result<Value, String> {
-    let settings = settings.lock().unwrap();
+    let settings = settings.lock();
     let json = serde_json::to_value(&*settings).map_err(|e| e.to_string())?;
     Ok(json)
 }
@@ -283,7 +280,7 @@ pub async fn set_core_settings_cmd(
 
     // Capture old runtime-applied values before merge
     let (old_autostart, old_mcp) = {
-        let current = settings.lock().unwrap();
+        let current = settings.lock();
         (
             current.autostart,
             (current.mcp_server_enabled, current.mcp_server_port),
@@ -292,7 +289,7 @@ pub async fn set_core_settings_cmd(
 
     // Merge new settings into existing settings
     if new_settings.is_object() {
-        let mut settings = settings.lock().unwrap();
+        let mut settings = settings.lock();
         let mut value = serde_json::to_value(&*settings)
             .map_err(|e| format!("Failed to serialize current settings: {}", e))?;
         json_merge(&mut value, new_settings);
@@ -306,7 +303,7 @@ pub async fn set_core_settings_cmd(
 
     // Apply autostart and MCP server changes at runtime (after lock is released)
     let (new_autostart, new_mcp) = {
-        let current = settings.lock().unwrap();
+        let current = settings.lock();
         (
             current.autostart,
             (current.mcp_server_enabled, current.mcp_server_port),
@@ -340,7 +337,7 @@ pub async fn regenerate_mcp_server_token_cmd(
 ) -> Result<String, String> {
     let token = generate_token();
     {
-        let mut settings = settings.lock().unwrap();
+        let mut settings = settings.lock();
         settings.mcp_server_token = Some(token.clone());
     }
     save(&app).map_err(|e| e.to_string())?;
