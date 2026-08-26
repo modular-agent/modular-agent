@@ -575,6 +575,24 @@ impl ChatAgent {
                 .map_err(|e| AgentError::IoError(format!("OpenAI stream parse error: {}", e)))?;
 
             for c in &chunk.choices {
+                if let Some(reasoning) = c
+                    .delta
+                    .reasoning_content
+                    .as_ref()
+                    .or(c.delta.reasoning.as_ref())
+                    && !reasoning.is_empty()
+                {
+                    thinking.push_str(reasoning);
+                    message.content = crate::content::content_with_thinking(&thinking, &content);
+                    self.emit_event(
+                        ctx,
+                        MessageEvent::ThinkingDelta {
+                            delta: reasoning.clone(),
+                            partial: message.clone(),
+                        },
+                    )
+                    .await?;
+                }
                 if let Some(ref delta_content) = c.delta.content {
                     content.push_str(delta_content);
                     if !delta_content.is_empty() {
