@@ -265,6 +265,14 @@ pub(crate) struct ChatResponseMessage {
     pub content: Option<String>,
     pub refusal: Option<String>,
     pub tool_calls: Option<Vec<ChatToolCall>>,
+    // Reasoning text from OpenAI-compatible servers: `reasoning_content`
+    // (LM Studio, DeepSeek) or `reasoning` (some proxies). Two separate
+    // fields rather than a serde alias so a server sending both keys does
+    // not fail deserialization; merged at conversion time.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reasoning_content: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reasoning: Option<String>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
@@ -308,6 +316,11 @@ pub(crate) struct ChatStreamDelta {
     pub content: Option<String>,
     pub tool_calls: Option<Vec<ChatToolCallChunk>>,
     pub refusal: Option<String>,
+    // See ChatResponseMessage: two fields, no alias, merged by the consumer.
+    #[serde(default)]
+    pub reasoning_content: Option<String>,
+    #[serde(default)]
+    pub reasoning: Option<String>,
 }
 
 #[derive(serde::Deserialize, Clone)]
@@ -526,11 +539,16 @@ pub fn message_from_chat_response(msg: &ChatResponseMessage) -> Message {
     let content = msg.content.clone().unwrap_or_default();
     let mut message = Message::new(msg.role.clone(), content);
 
-    let thinking = msg
-        .refusal
-        .as_ref()
-        .map(|r| format!("Refusal: {}", r))
-        .unwrap_or_default();
+    let mut parts: Vec<String> = Vec::new();
+    if let Some(reasoning) = msg.reasoning_content.as_ref().or(msg.reasoning.as_ref())
+        && !reasoning.is_empty()
+    {
+        parts.push(reasoning.clone());
+    }
+    if let Some(refusal) = &msg.refusal {
+        parts.push(format!("Refusal: {}", refusal));
+    }
+    let thinking = parts.join("\n");
     if !thinking.is_empty() {
         message.content = crate::content::content_with_thinking(&thinking, &message.text());
     }
@@ -981,6 +999,8 @@ mod tests {
             content: Some("Hello!".to_string()),
             refusal: None,
             tool_calls: None,
+            reasoning_content: None,
+            reasoning: None,
         };
         let result = message_from_chat_response(&msg);
         assert_eq!(result.text(), "Hello!");
@@ -1002,6 +1022,8 @@ mod tests {
                     arguments: r#"{"location":"Tokyo"}"#.to_string(),
                 },
             }]),
+            reasoning_content: None,
+            reasoning: None,
         };
         let result = message_from_chat_response(&msg);
         assert_eq!(result.text(), "I'll check.");
@@ -1018,11 +1040,76 @@ mod tests {
             content: Some("".to_string()),
             refusal: Some("I cannot do that.".to_string()),
             tool_calls: None,
+            reasoning_content: None,
+            reasoning: None,
         };
         let result = message_from_chat_response(&msg);
         assert_eq!(
             result.thinking(),
             Some("Refusal: I cannot do that.".to_string())
+        );
+    }
+
+    #[test]
+    fn test_message_from_chat_response_reasoning_content() {
+        let msg = ChatResponseMessage {
+            role: "assistant".to_string(),
+            content: Some("Answer.".to_string()),
+            refusal: None,
+            tool_calls: None,
+            reasoning_content: Some("Let me think.".to_string()),
+            reasoning: None,
+        };
+        let result = message_from_chat_response(&msg);
+        assert_eq!(result.text(), "Answer.");
+        assert_eq!(result.thinking(), Some("Let me think.".to_string()));
+    }
+
+    #[test]
+    fn test_message_from_chat_response_reasoning_key() {
+        let msg = ChatResponseMessage {
+            role: "assistant".to_string(),
+            content: Some("Answer.".to_string()),
+            refusal: None,
+            tool_calls: None,
+            reasoning_content: None,
+            reasoning: Some("Let me think.".to_string()),
+        };
+        let result = message_from_chat_response(&msg);
+        assert_eq!(result.thinking(), Some("Let me think.".to_string()));
+    }
+
+    #[test]
+    fn test_message_from_chat_response_reasoning_content_wins_over_reasoning() {
+        let msg = ChatResponseMessage {
+            role: "assistant".to_string(),
+            content: Some("Answer.".to_string()),
+            refusal: None,
+            tool_calls: None,
+            reasoning_content: Some("From reasoning_content.".to_string()),
+            reasoning: Some("From reasoning.".to_string()),
+        };
+        let result = message_from_chat_response(&msg);
+        assert_eq!(
+            result.thinking(),
+            Some("From reasoning_content.".to_string())
+        );
+    }
+
+    #[test]
+    fn test_message_from_chat_response_reasoning_and_refusal() {
+        let msg = ChatResponseMessage {
+            role: "assistant".to_string(),
+            content: Some("".to_string()),
+            refusal: Some("I cannot do that.".to_string()),
+            tool_calls: None,
+            reasoning_content: Some("Let me think.".to_string()),
+            reasoning: None,
+        };
+        let result = message_from_chat_response(&msg);
+        assert_eq!(
+            result.thinking(),
+            Some("Let me think.\nRefusal: I cannot do that.".to_string())
         );
     }
 
@@ -1146,6 +1233,44 @@ mod tests {
         let chunk: ChatStreamChunk = serde_json::from_str(json).unwrap();
         assert_eq!(chunk.choices.len(), 1);
         assert_eq!(chunk.choices[0].delta.content, Some("Hello".to_string()));
+    }
+
+    #[test]
+    fn test_serde_chat_stream_chunk_reasoning_content() {
+        let json = r#"{
+            "id": "chatcmpl-123",
+            "choices": [
+                {
+                    "index": 0,
+                    "delta": {"reasoning_content": "Let me think."},
+                    "finish_reason": null
+                }
+            ]
+        }"#;
+        let chunk: ChatStreamChunk = serde_json::from_str(json).unwrap();
+        assert_eq!(
+            chunk.choices[0].delta.reasoning_content,
+            Some("Let me think.".to_string())
+        );
+        assert_eq!(chunk.choices[0].delta.content, None);
+    }
+
+    // A compat server sending both keys must not fail deserialization —
+    // this is why the fields are separate instead of a serde alias.
+    #[test]
+    fn test_serde_chat_response_message_both_reasoning_keys() {
+        let json = r#"{
+            "role": "assistant",
+            "content": "Answer.",
+            "reasoning_content": "From reasoning_content.",
+            "reasoning": "From reasoning."
+        }"#;
+        let msg: ChatResponseMessage = serde_json::from_str(json).unwrap();
+        let result = message_from_chat_response(&msg);
+        assert_eq!(
+            result.thinking(),
+            Some("From reasoning_content.".to_string())
+        );
     }
 
     #[test]
