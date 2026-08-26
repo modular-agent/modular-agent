@@ -4,7 +4,6 @@ use modular_agent_core::{
     Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
     ModularAgent, async_trait, modular_agent,
 };
-use serde_json::json;
 
 const CATEGORY: &str = "Std/String";
 
@@ -277,7 +276,7 @@ impl AsAgent for TemplateStringAgent {
                 .as_array()
                 .ok_or_else(|| AgentError::InvalidArrayValue("Expected array".into()))?
             {
-                let data = json!({"value": v});
+                let data = template_data(v);
                 let rendered_string = reg.render_template(&template, &data).map_err(|e| {
                     AgentError::InvalidValue(format!("Failed to render template: {}", e))
                 })?;
@@ -286,7 +285,7 @@ impl AsAgent for TemplateStringAgent {
             self.output(ctx, PORT_STRING, AgentValue::array(out_arr.into()))
                 .await
         } else {
-            let data = json!({"value": value});
+            let data = template_data(&value);
             let rendered_string = reg.render_template(&template, &data).map_err(|e| {
                 AgentError::InvalidValue(format!("Failed to render template: {}", e))
             })?;
@@ -338,7 +337,7 @@ impl AsAgent for TemplateTextAgent {
                 .as_array()
                 .ok_or_else(|| AgentError::InvalidArrayValue("Expected array".into()))?
             {
-                let data = json!({"value": v});
+                let data = template_data(v);
                 let rendered_string = reg.render_template(&template, &data).map_err(|e| {
                     AgentError::InvalidValue(format!("Failed to render template: {}", e))
                 })?;
@@ -347,7 +346,7 @@ impl AsAgent for TemplateTextAgent {
             self.output(ctx, PORT_STRING, AgentValue::array(out_arr.into()))
                 .await
         } else {
-            let data = json!({"value": value});
+            let data = template_data(&value);
             let rendered_string = reg.render_template(&template, &data).map_err(|e| {
                 AgentError::InvalidValue(format!("Failed to render template: {}", e))
             })?;
@@ -410,6 +409,19 @@ impl AsAgent for TemplateArrayAgent {
     }
 }
 
+/// Build the template root: an object's entries are exposed at the top level so
+/// `{{color}}` works, and `value` always holds the whole input (winning on collision)
+/// so `{{value}}` / `{{value.color}}` keep their meaning.
+fn template_data(value: &AgentValue) -> serde_json::Value {
+    let v = serde_json::to_value(value).unwrap_or(serde_json::Value::Null);
+    let mut map = match &v {
+        serde_json::Value::Object(obj) => obj.clone(),
+        _ => serde_json::Map::new(),
+    };
+    map.insert("value".to_string(), v);
+    serde_json::Value::Object(map)
+}
+
 fn handlebars_new<'a>() -> Handlebars<'a> {
     let mut reg = Handlebars::new();
     reg.register_escape_fn(handlebars::no_escape);
@@ -452,4 +464,37 @@ fn to_yaml_helper(
         out.write(&yaml_str)?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+
+    #[test]
+    fn test_template_data_object_spreads_entries() {
+        let value = AgentValue::from_json(json!({"color": "blue", "count": 3})).unwrap();
+        let data = template_data(&value);
+        assert_eq!(data["color"], json!("blue"));
+        assert_eq!(data["count"], json!(3));
+        assert_eq!(data["value"], json!({"color": "blue", "count": 3}));
+    }
+
+    #[test]
+    fn test_template_data_value_key_wins_on_collision() {
+        let value = AgentValue::from_json(json!({"value": "inner", "x": 1})).unwrap();
+        let data = template_data(&value);
+        assert_eq!(data["x"], json!(1));
+        assert_eq!(data["value"], json!({"value": "inner", "x": 1}));
+    }
+
+    #[test]
+    fn test_template_data_non_object() {
+        let data = template_data(&AgentValue::string("hello"));
+        assert_eq!(data, json!({"value": "hello"}));
+
+        let data = template_data(&AgentValue::integer(42));
+        assert_eq!(data, json!({"value": 42}));
+    }
 }
