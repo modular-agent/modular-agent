@@ -533,6 +533,158 @@
       },
       "x": 12,
       "y": 3744
+    },
+    {
+      "id": "160",
+      "def_name": "modular_agent_std::string::RegexMatchAgent",
+      "inputs": [
+        "string"
+      ],
+      "outputs": [
+        "string",
+        "unmatched"
+      ],
+      "configs": {
+        "regex": "[0-9]+"
+      },
+      "config_specs": {
+        "regex": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": 300,
+      "y": 4008
+    },
+    {
+      "id": "161",
+      "def_name": "modular_agent_core::external_agent::LocalInputAgent",
+      "outputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "regex_match_in"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": 12,
+      "y": 4008
+    },
+    {
+      "id": "162",
+      "def_name": "modular_agent_core::external_agent::LocalOutputAgent",
+      "inputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "regex_match_out"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": 588,
+      "y": 4008
+    },
+    {
+      "id": "163",
+      "def_name": "modular_agent_core::external_agent::LocalOutputAgent",
+      "inputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "regex_match_unmatched"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": 588,
+      "y": 4236
+    },
+    {
+      "id": "164",
+      "def_name": "modular_agent_std::string::RegexMatchAllAgent",
+      "inputs": [
+        "string"
+      ],
+      "outputs": [
+        "strings",
+        "unmatched"
+      ],
+      "configs": {
+        "regex": "[0-9]+"
+      },
+      "config_specs": {
+        "regex": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": 300,
+      "y": 4512
+    },
+    {
+      "id": "165",
+      "def_name": "modular_agent_core::external_agent::LocalInputAgent",
+      "outputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "regex_match_all_in"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": 12,
+      "y": 4512
+    },
+    {
+      "id": "166",
+      "def_name": "modular_agent_core::external_agent::LocalOutputAgent",
+      "inputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "regex_match_all_out"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": 588,
+      "y": 4512
+    },
+    {
+      "id": "167",
+      "def_name": "modular_agent_core::external_agent::LocalOutputAgent",
+      "inputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "regex_match_all_unmatched"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": 588,
+      "y": 4740
     }
   ],
   "connections": [
@@ -667,6 +819,42 @@
       "source_handle": "value",
       "target": "149",
       "target_handle": "config:template"
+    },
+    {
+      "source": "161",
+      "source_handle": "value",
+      "target": "160",
+      "target_handle": "string"
+    },
+    {
+      "source": "160",
+      "source_handle": "string",
+      "target": "162",
+      "target_handle": "value"
+    },
+    {
+      "source": "160",
+      "source_handle": "unmatched",
+      "target": "163",
+      "target_handle": "value"
+    },
+    {
+      "source": "165",
+      "source_handle": "value",
+      "target": "164",
+      "target_handle": "string"
+    },
+    {
+      "source": "164",
+      "source_handle": "strings",
+      "target": "166",
+      "target_handle": "value"
+    },
+    {
+      "source": "164",
+      "source_handle": "unmatched",
+      "target": "167",
+      "target_handle": "value"
     }
   ],
   "viewport": {
