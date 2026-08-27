@@ -685,6 +685,130 @@
       },
       "x": 588,
       "y": 4740
+    },
+    {
+      "id": "170",
+      "def_name": "modular_agent_std::string::RegexReplaceAgent",
+      "inputs": [
+        "string"
+      ],
+      "outputs": [
+        "string"
+      ],
+      "configs": {
+        "regex": "[0-9]+",
+        "replacement": "#"
+      },
+      "config_specs": {
+        "regex": {
+          "value": "",
+          "type": "string"
+        },
+        "replacement": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": 300,
+      "y": 5016
+    },
+    {
+      "id": "171",
+      "def_name": "modular_agent_core::external_agent::LocalInputAgent",
+      "outputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "regex_replace_in"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": 12,
+      "y": 5016
+    },
+    {
+      "id": "172",
+      "def_name": "modular_agent_core::external_agent::LocalOutputAgent",
+      "inputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "regex_replace_out"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": 588,
+      "y": 5016
+    },
+    {
+      "id": "173",
+      "def_name": "modular_agent_std::string::RegexReplaceAllAgent",
+      "inputs": [
+        "string"
+      ],
+      "outputs": [
+        "string"
+      ],
+      "configs": {
+        "regex": "[0-9]+",
+        "replacement": "#"
+      },
+      "config_specs": {
+        "regex": {
+          "value": "",
+          "type": "string"
+        },
+        "replacement": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": 300,
+      "y": 5292
+    },
+    {
+      "id": "174",
+      "def_name": "modular_agent_core::external_agent::LocalInputAgent",
+      "outputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "regex_replace_all_in"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": 12,
+      "y": 5292
+    },
+    {
+      "id": "175",
+      "def_name": "modular_agent_core::external_agent::LocalOutputAgent",
+      "inputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "regex_replace_all_out"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": 588,
+      "y": 5292
     }
   ],
   "connections": [
@@ -854,6 +978,30 @@
       "source": "164",
       "source_handle": "unmatched",
       "target": "167",
+      "target_handle": "value"
+    },
+    {
+      "source": "171",
+      "source_handle": "value",
+      "target": "170",
+      "target_handle": "string"
+    },
+    {
+      "source": "170",
+      "source_handle": "string",
+      "target": "172",
+      "target_handle": "value"
+    },
+    {
+      "source": "174",
+      "source_handle": "value",
+      "target": "173",
+      "target_handle": "string"
+    },
+    {
+      "source": "173",
+      "source_handle": "string",
+      "target": "175",
       "target_handle": "value"
     }
   ],

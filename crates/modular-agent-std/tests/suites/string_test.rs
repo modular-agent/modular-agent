@@ -275,6 +275,96 @@ async fn test_regex_match_all() {
 }
 
 #[tokio::test]
+async fn test_regex_replace() {
+    let ma = test_utils::setup_modular_agent().await;
+
+    let patch_id = test_utils::open_and_start_patch(&ma, "tests/patches/Std_String_test.json")
+        .await
+        .unwrap();
+
+    // Only the first match is replaced
+    test_utils::write_and_expect_local_value(
+        &ma,
+        &patch_id,
+        "regex_replace_in",
+        AgentValue::string("abc123def456"),
+    )
+    .await
+    .unwrap();
+    test_utils::expect_local_value(
+        &patch_id,
+        "regex_replace_out",
+        &AgentValue::string("abc#def456"),
+    )
+    .await
+    .unwrap();
+
+    // No match -> unchanged
+    test_utils::write_and_expect_local_value(
+        &ma,
+        &patch_id,
+        "regex_replace_in",
+        AgentValue::string("abcdef"),
+    )
+    .await
+    .unwrap();
+    test_utils::expect_local_value(
+        &patch_id,
+        "regex_replace_out",
+        &AgentValue::string("abcdef"),
+    )
+    .await
+    .unwrap();
+
+    ma.quit();
+}
+
+#[tokio::test]
+async fn test_regex_replace_all() {
+    let ma = test_utils::setup_modular_agent().await;
+
+    let patch_id = test_utils::open_and_start_patch(&ma, "tests/patches/Std_String_test.json")
+        .await
+        .unwrap();
+
+    // Every match is replaced
+    test_utils::write_and_expect_local_value(
+        &ma,
+        &patch_id,
+        "regex_replace_all_in",
+        AgentValue::string("abc123def456"),
+    )
+    .await
+    .unwrap();
+    test_utils::expect_local_value(
+        &patch_id,
+        "regex_replace_all_out",
+        &AgentValue::string("abc#def#"),
+    )
+    .await
+    .unwrap();
+
+    // No match -> unchanged
+    test_utils::write_and_expect_local_value(
+        &ma,
+        &patch_id,
+        "regex_replace_all_in",
+        AgentValue::string("abcdef"),
+    )
+    .await
+    .unwrap();
+    test_utils::expect_local_value(
+        &patch_id,
+        "regex_replace_all_out",
+        &AgentValue::string("abcdef"),
+    )
+    .await
+    .unwrap();
+
+    ma.quit();
+}
+
+#[tokio::test]
 async fn test_template_string() {
     let ma = test_utils::setup_modular_agent().await;
 

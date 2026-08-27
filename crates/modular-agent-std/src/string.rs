@@ -18,6 +18,7 @@ const PORT_F: &str = "f";
 const CONFIG_LEN: &str = "len";
 const CONFIG_OVERLAP: &str = "overlap";
 const CONFIG_REGEX: &str = "regex";
+const CONFIG_REPLACEMENT: &str = "replacement";
 const CONFIG_SEP: &str = "sep";
 const CONFIG_TEMPLATE: &str = "template";
 
@@ -578,6 +579,170 @@ impl AsAgent for RegexMatchAllAgent {
             self.output(ctx, PORT_STRINGS, AgentValue::array(matches.into()))
                 .await
         }
+    }
+}
+
+/// Replaces the first substring matching a regular expression.
+///
+/// The pattern is searched unanchored, so it matches anywhere in the input string.
+/// Only the first match is replaced; the rest of the string is left untouched. The
+/// replacement may reference capture groups as `$1` or `${name}`, and a literal `$`
+/// is written as `$$`. When the pattern does not match, the input string is emitted
+/// unchanged.
+///
+/// # Ports
+/// - Input `string`: String to rewrite. A non-string input is an error.
+/// - Output `string`: The rewritten string.
+///
+/// # Configuration
+/// - `regex`: Regular expression to search for. Processing fails while it is empty or
+///   invalid.
+/// - `replacement`: Replacement text. May reference capture groups (default: empty,
+///   which deletes the match).
+///
+/// # Example
+/// With `regex` set to `[0-9]+` and `replacement` set to `#`, the input
+/// `"abc123def456"` emits `"abc#def456"`, while `"abcdef"` is emitted unchanged.
+#[modular_agent(
+    title = "Regex Replace",
+    category = CATEGORY,
+    inputs = [PORT_STRING],
+    outputs = [PORT_STRING],
+    string_config(name = CONFIG_REGEX),
+    string_config(name = CONFIG_REPLACEMENT, default = ""),
+    hint(color=5),
+)]
+struct RegexReplaceAgent {
+    data: AgentData,
+    regex: Option<Regex>,
+}
+
+#[async_trait]
+impl AsAgent for RegexReplaceAgent {
+    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+        // Keep an invalid regex from blocking the load of a patch; it is reported
+        // on the first process() call instead.
+        let regex = load_regex_config(&spec).unwrap_or(None);
+        Ok(Self {
+            data: AgentData::new(ma, id, spec),
+            regex,
+        })
+    }
+
+    fn configs_changed(&mut self) -> Result<(), AgentError> {
+        // The config value is already committed when this is called, so the previous
+        // regex must be dropped even when the new one fails to compile. Otherwise the
+        // agent would keep matching by a pattern the config no longer holds.
+        match load_regex_config(&self.data.spec) {
+            Ok(regex) => {
+                self.regex = regex;
+                Ok(())
+            }
+            Err(e) => {
+                self.regex = None;
+                Err(e)
+            }
+        }
+    }
+
+    async fn process(
+        &mut self,
+        ctx: AgentContext,
+        _port: String,
+        value: AgentValue,
+    ) -> Result<(), AgentError> {
+        let Some(re) = self.regex.as_ref() else {
+            return Err(AgentError::InvalidConfig(
+                "config regex must be a valid regular expression".into(),
+            ));
+        };
+        let replacement = self.configs()?.get_string_or_default(CONFIG_REPLACEMENT);
+        let s = value
+            .as_str()
+            .ok_or_else(|| AgentError::InvalidValue("Input value must be a string".into()))?;
+        let out = re.replace(s, replacement.as_str()).into_owned();
+        self.output(ctx, PORT_STRING, AgentValue::string(out)).await
+    }
+}
+
+/// Replaces every substring matching a regular expression.
+///
+/// The pattern is searched unanchored and matches do not overlap. The replacement may
+/// reference capture groups as `$1` or `${name}`, and a literal `$` is written as
+/// `$$`. When the pattern does not match, the input string is emitted unchanged.
+///
+/// # Ports
+/// - Input `string`: String to rewrite. A non-string input is an error.
+/// - Output `string`: The rewritten string.
+///
+/// # Configuration
+/// - `regex`: Regular expression to search for. Processing fails while it is empty or
+///   invalid.
+/// - `replacement`: Replacement text. May reference capture groups (default: empty,
+///   which deletes the matches).
+///
+/// # Example
+/// With `regex` set to `[0-9]+` and `replacement` set to `#`, the input
+/// `"abc123def456"` emits `"abc#def#"`, while `"abcdef"` is emitted unchanged.
+#[modular_agent(
+    title = "Regex Replace All",
+    category = CATEGORY,
+    inputs = [PORT_STRING],
+    outputs = [PORT_STRING],
+    string_config(name = CONFIG_REGEX),
+    string_config(name = CONFIG_REPLACEMENT, default = ""),
+    hint(color=5),
+)]
+struct RegexReplaceAllAgent {
+    data: AgentData,
+    regex: Option<Regex>,
+}
+
+#[async_trait]
+impl AsAgent for RegexReplaceAllAgent {
+    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+        // Keep an invalid regex from blocking the load of a patch; it is reported
+        // on the first process() call instead.
+        let regex = load_regex_config(&spec).unwrap_or(None);
+        Ok(Self {
+            data: AgentData::new(ma, id, spec),
+            regex,
+        })
+    }
+
+    fn configs_changed(&mut self) -> Result<(), AgentError> {
+        // The config value is already committed when this is called, so the previous
+        // regex must be dropped even when the new one fails to compile. Otherwise the
+        // agent would keep matching by a pattern the config no longer holds.
+        match load_regex_config(&self.data.spec) {
+            Ok(regex) => {
+                self.regex = regex;
+                Ok(())
+            }
+            Err(e) => {
+                self.regex = None;
+                Err(e)
+            }
+        }
+    }
+
+    async fn process(
+        &mut self,
+        ctx: AgentContext,
+        _port: String,
+        value: AgentValue,
+    ) -> Result<(), AgentError> {
+        let Some(re) = self.regex.as_ref() else {
+            return Err(AgentError::InvalidConfig(
+                "config regex must be a valid regular expression".into(),
+            ));
+        };
+        let replacement = self.configs()?.get_string_or_default(CONFIG_REPLACEMENT);
+        let s = value
+            .as_str()
+            .ok_or_else(|| AgentError::InvalidValue("Input value must be a string".into()))?;
+        let out = re.replace_all(s, replacement.as_str()).into_owned();
+        self.output(ctx, PORT_STRING, AgentValue::string(out)).await
     }
 }
 
