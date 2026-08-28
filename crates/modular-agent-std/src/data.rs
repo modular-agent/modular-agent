@@ -80,19 +80,13 @@ impl AsAgent for GetValueAgent {
                 let extracted: Vector<AgentValue> = arr
                     .iter()
                     .map(|item| {
-                        get_nested_value(item, &self.target_keys)
-                            .cloned()
-                            .unwrap_or(AgentValue::Unit)
+                        get_nested_value(item, &self.target_keys).unwrap_or(AgentValue::Unit)
                     })
                     .collect();
                 AgentValue::Array(extracted)
             }
 
-            AgentValue::Object(_) => get_nested_value(&value, &self.target_keys)
-                .cloned()
-                .unwrap_or(AgentValue::Unit),
-
-            _ => AgentValue::Unit,
+            other => get_nested_value(&other, &self.target_keys).unwrap_or(AgentValue::Unit),
         };
 
         self.output(ctx, PORT_VALUE, output_value).await
@@ -294,16 +288,15 @@ impl AsAgent for FromJsonAgent {
     }
 }
 
-pub(crate) fn get_nested_value<'a, K: AsRef<str>>(
-    value: &'a AgentValue,
+pub(crate) fn get_nested_value<K: AsRef<str>>(
+    value: &AgentValue,
     keys: &[K],
-) -> Option<&'a AgentValue> {
-    let mut current_value = value;
+) -> Option<AgentValue> {
+    let mut current = value.clone(); // cheap: Arc/im structures
     for key in keys {
-        let obj = current_value.as_object()?;
-        current_value = obj.get(key.as_ref())?;
+        current = current.get_prop(key.as_ref())?;
     }
-    Some(current_value)
+    Some(current)
 }
 
 fn set_nested_value<K: AsRef<str>>(root: &mut AgentValue, keys: &[K], new_value: AgentValue) {
@@ -665,23 +658,61 @@ mod tests {
         // Case 1: Successfully retrieve an existing value
         let keys = vec!["users", "admin", "name"];
         let result = get_nested_value(&root, &keys);
-        assert_eq!(result, Some(&AgentValue::string("Alice")));
+        assert_eq!(result, Some(AgentValue::string("Alice")));
 
         // Case 2: Intermediate key does not exist (users -> guest)
         let keys_missing = vec!["users", "guest", "name"];
         let result_missing = get_nested_value(&root, &keys_missing);
         assert_eq!(result_missing, None);
 
-        // Case 3: Intermediate path is not an object (users -> admin -> name -> something)
+        // Case 3: Intermediate path has no such property (users -> admin -> name -> something)
         // "name" is a string, so we cannot traverse deeper -> Should return None
         let keys_not_obj = vec!["users", "admin", "name", "length"];
         let result_not_obj = get_nested_value(&root, &keys_not_obj);
-        assert_eq!(result_not_obj, None); // Filtered out by as_object()?
+        assert_eq!(result_not_obj, None);
 
         // Case 4: Empty keys (Should return the root object)
         let keys_empty: Vec<&str> = vec![];
         let result_root = get_nested_value(&root, &keys_empty);
-        assert_eq!(result_root, Some(&root));
+        assert_eq!(result_root, Some(root));
+    }
+
+    #[test]
+    fn test_get_nested_value_through_message() {
+        use modular_agent_core::llm::{Message, Usage};
+
+        // Mattermost Listener shape: { message: Message, user, channel }
+        let mut message = Message::user("hello world".to_string());
+        message.usage = Some(Usage {
+            input_tokens: 3,
+            ..Default::default()
+        });
+        let root = AgentValue::object(hashmap! {
+            "message".to_string() => AgentValue::message(message),
+            "user".to_string() => AgentValue::string("alice"),
+            "channel".to_string() => AgentValue::string("town-square"),
+        });
+
+        // Message at leaf
+        let result = get_nested_value(&root, &["message"]);
+        assert!(matches!(result, Some(AgentValue::Message(_))));
+
+        // Properties through the Message
+        assert_eq!(
+            get_nested_value(&root, &["message", "content"]),
+            Some(AgentValue::string("hello world"))
+        );
+        assert_eq!(
+            get_nested_value(&root, &["message", "role"]),
+            Some(AgentValue::string("user"))
+        );
+        assert_eq!(
+            get_nested_value(&root, &["message", "usage", "input_tokens"]),
+            Some(AgentValue::integer(3))
+        );
+
+        // Missing property on the Message
+        assert_eq!(get_nested_value(&root, &["message", "nope"]), None);
     }
 
     /// Verify if a deeply nested structure (a.b.c) can be auto-generated from an empty state.

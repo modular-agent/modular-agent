@@ -1,0 +1,94 @@
+{
+  "agents": [
+    {
+      "id": "301",
+      "def_name": "modular_agent_std::data::GetValueAgent",
+      "inputs": ["value"],
+      "outputs": ["value"],
+      "configs": {
+        "key": "message.content"
+      },
+      "config_specs": {
+        "key": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": 264,
+      "y": 108
+    },
+    {
+      "id": "302",
+      "def_name": "modular_agent_core::external_agent::LocalInputAgent",
+      "outputs": ["value"],
+      "configs": {
+        "name": "get_in"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": -36,
+      "y": 108
+    },
+    {
+      "id": "303",
+      "def_name": "modular_agent_core::external_agent::LocalInputAgent",
+      "outputs": ["value"],
+      "configs": {
+        "name": "get_key"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": -36,
+      "y": 336
+    },
+    {
+      "id": "304",
+      "def_name": "modular_agent_core::external_agent::LocalOutputAgent",
+      "inputs": ["value"],
+      "configs": {
+        "name": "get_out"
+      },
+      "config_specs": {
+        "name": {
+          "value": "",
+          "type": "string"
+        }
+      },
+      "x": 516,
+      "y": 108
+    }
+  ],
+  "connections": [
+    {
+      "source": "302",
+      "source_handle": "value",
+      "target": "301",
+      "target_handle": "value"
+    },
+    {
+      "source": "303",
+      "source_handle": "value",
+      "target": "301",
+      "target_handle": "config:key"
+    },
+    {
+      "source": "301",
+      "source_handle": "value",
+      "target": "304",
+      "target_handle": "value"
+    }
+  ],
+  "viewport": {
+    "x": 100,
+    "y": 100,
+    "zoom": 0.5
+  }
+}

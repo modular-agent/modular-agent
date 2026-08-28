@@ -272,20 +272,17 @@ fn cmp_cond(lit: &CondLit, value: &AgentValue) -> Option<Ordering> {
 /// matches. Order comparisons against an incomparable value yield `false` instead of an
 /// error, so that a type mismatch routes the value instead of stopping the flow.
 fn eval_cond(cond: &Cond, value: &AgentValue) -> bool {
-    // `AgentValue` has drop glue, so a temporary cannot be promoted to a `'static`
-    // reference; bind it to a local that outlives `target`.
-    let unit = AgentValue::unit();
     let target = if cond.key.is_empty() {
-        value
+        value.clone()
     } else {
-        get_nested_value(value, &cond.key).unwrap_or(&unit)
+        get_nested_value(value, &cond.key).unwrap_or(AgentValue::Unit)
     };
 
     match cond.op {
-        CondOp::Eq => eq_cond(&cond.lit, target),
-        CondOp::Ne => !eq_cond(&cond.lit, target),
+        CondOp::Eq => eq_cond(&cond.lit, &target),
+        CondOp::Ne => !eq_cond(&cond.lit, &target),
         _ => {
-            let Some(ord) = cmp_cond(&cond.lit, target) else {
+            let Some(ord) = cmp_cond(&cond.lit, &target) else {
                 return false;
             };
             match cond.op {
@@ -318,10 +315,11 @@ fn eval_cond(cond: &Cond, value: &AgentValue) -> bool {
 /// The key is a dot-separated list of object keys. When it is omitted, the input value
 /// itself is tested. Whether or not a key is used, the value emitted on `t` / `f` is
 /// always the original input value - the key only selects what the condition looks at.
-/// A key that does not resolve (the input is not an object, a key is missing, or an
-/// intermediate value is not an object) is tested as `null` rather than raising an error,
-/// so `user.age == null` detects a missing field. Key names containing `=`, `!`, `<` or
-/// `>` cannot be addressed, because the first such character ends the key.
+/// Message values expose their serialized fields, so `message.content == /err.*/` works.
+/// A key that does not resolve (a key is missing, or a value along the path has no such
+/// property) is tested as `null` rather than raising an error, so `user.age == null`
+/// detects a missing field. Key names containing `=`, `!`, `<` or `>` cannot be
+/// addressed, because the first such character ends the key.
 ///
 /// Numbers compare through their numeric value, so `== 10` matches both an integer and a
 /// float input, but never the string `"10"`. Values that cannot be compared with the
@@ -665,9 +663,10 @@ impl AsAgent for SwitchAgent {
 ///
 /// The `key` is a dot-separated list of object keys, and only selects what is compared -
 /// the value emitted is always the original input value. When `key` is omitted, the input
-/// value itself is compared. A key that does not resolve (the input is not an object, a
-/// key is missing, or an intermediate value is not an object) is compared as `null` rather
-/// than raising an error, so a case of `null` catches a missing field.
+/// value itself is compared. Message values expose their serialized fields, so a key like
+/// `message.content` works. A key that does not resolve (a key is missing, or a value
+/// along the path has no such property) is compared as `null` rather than raising an
+/// error, so a case of `null` catches a missing field.
 ///
 /// # Ports
 /// - Input `value`: Value to test.
@@ -771,21 +770,18 @@ impl AsAgent for MatchAgent {
         _port: String,
         value: AgentValue,
     ) -> Result<(), AgentError> {
-        // `AgentValue` has drop glue, so a temporary cannot be promoted to a `'static`
-        // reference; bind it to a local that outlives `target`.
-        let unit = AgentValue::unit();
         let matched = match self.key.as_ref() {
             // An invalid key matches nothing, so everything goes to `_`.
             None => None,
             Some(key) => {
                 let target = if key.is_empty() {
-                    &value
+                    value.clone()
                 } else {
-                    get_nested_value(&value, key).unwrap_or(&unit)
+                    get_nested_value(&value, key).unwrap_or(AgentValue::Unit)
                 };
                 self.cases
                     .iter()
-                    .position(|case| case.as_ref().is_some_and(|lit| eq_cond(lit, target)))
+                    .position(|case| case.as_ref().is_some_and(|lit| eq_cond(lit, &target)))
             }
         };
 
@@ -1005,6 +1001,56 @@ mod tests {
         ));
         // Without a key the scalar itself is still tested
         assert!(eval_cond(&parse_cond("> 18").expect("valid"), &scalar));
+    }
+
+    #[test]
+    fn test_eval_cond_message_key() {
+        use modular_agent_core::llm::Message;
+
+        // Mattermost Listener shape: { message: Message, user, ... }
+        let value = AgentValue::object(im::hashmap! {
+            "message".to_string() =>
+                AgentValue::message(Message::user("hello world".to_string())),
+            "user".to_string() => AgentValue::string("alice"),
+        });
+
+        assert!(eval_cond(
+            &parse_cond("message.role == \"user\"").expect("valid"),
+            &value
+        ));
+        assert!(eval_cond(
+            &parse_cond("message.content == /hello.*/").expect("valid"),
+            &value
+        ));
+        assert!(!eval_cond(
+            &parse_cond("message.content == /bye.*/").expect("valid"),
+            &value
+        ));
+        // A field the Message does not have is still tested as null
+        assert!(eval_cond(
+            &parse_cond("message.missing == null").expect("valid"),
+            &value
+        ));
+    }
+
+    #[test]
+    fn test_match_case_through_message_key() {
+        use modular_agent_core::llm::Message;
+
+        // The Match agent compares `get_nested_value(key)` against case
+        // literals with `eq_cond`; a Message key must select the right case.
+        let value = AgentValue::object(im::hashmap! {
+            "message".to_string() =>
+                AgentValue::message(Message::user("hello world".to_string())),
+        });
+
+        let target = get_nested_value(&value, &["message", "content"]).unwrap_or(AgentValue::Unit);
+        assert!(eq_cond(
+            &parse_lit("\"hello world\"").expect("valid"),
+            &target
+        ));
+        assert!(eq_cond(&parse_lit("/hello.*/").expect("valid"), &target));
+        assert!(!eq_cond(&parse_lit("/bye.*/").expect("valid"), &target));
     }
 
     #[test]
