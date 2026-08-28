@@ -364,6 +364,130 @@ impl Message {
             _ => None,
         }
     }
+
+    /// Typed write counterpart of [`Message::get_prop`]: same keys, and
+    /// `Unit` clears an optional field (the symmetric inverse of `get_prop`
+    /// returning `None` when unset). A type mismatch or unknown key is an
+    /// error — a write must never silently drop data.
+    pub fn set_prop(&mut self, key: &str, value: AgentValue) -> Result<(), AgentError> {
+        fn req_string(value: AgentValue, key: &str) -> Result<String, AgentError> {
+            match value {
+                AgentValue::String(s) => Ok(s.to_string()),
+                _ => Err(AgentError::InvalidValue(format!(
+                    "'{key}' must be a string"
+                ))),
+            }
+        }
+        fn opt_string(value: AgentValue, key: &str) -> Result<Option<String>, AgentError> {
+            match value {
+                AgentValue::Unit => Ok(None),
+                _ => Ok(Some(req_string(value, key)?)),
+            }
+        }
+
+        match key {
+            "id" => self.id = opt_string(value, "id")?,
+            "role" => self.role = req_string(value, "role")?,
+            "content" => {
+                self.content = match value {
+                    AgentValue::String(s) => MessageContent::Text(s.to_string()),
+                    AgentValue::Array(_) => {
+                        MessageContent::Blocks(serde_json::from_value(value.to_json()).map_err(
+                            |e| AgentError::InvalidValue(format!("Invalid content blocks: {e}")),
+                        )?)
+                    }
+                    _ => {
+                        return Err(AgentError::InvalidValue(
+                            "'content' must be a string or an array of content blocks".to_string(),
+                        ));
+                    }
+                }
+            }
+            "tokens" => {
+                self.tokens = match value {
+                    AgentValue::Unit => None,
+                    AgentValue::Integer(i) if i >= 0 => Some(i as usize),
+                    _ => {
+                        return Err(AgentError::InvalidValue(
+                            "'tokens' must be a non-negative integer".to_string(),
+                        ));
+                    }
+                }
+            }
+            "streaming" => {
+                self.streaming = match value {
+                    AgentValue::Unit => false,
+                    AgentValue::Boolean(b) => b,
+                    _ => {
+                        return Err(AgentError::InvalidValue(
+                            "'streaming' must be a boolean".to_string(),
+                        ));
+                    }
+                }
+            }
+            "tool_calls" => {
+                self.tool_calls = match value {
+                    AgentValue::Unit => None,
+                    AgentValue::Array(_) => {
+                        Some(serde_json::from_value(value.to_json()).map_err(|e| {
+                            AgentError::InvalidValue(format!("Invalid tool_calls: {e}"))
+                        })?)
+                    }
+                    _ => {
+                        return Err(AgentError::InvalidValue(
+                            "'tool_calls' must be an array".to_string(),
+                        ));
+                    }
+                }
+            }
+            "tool_name" => self.tool_name = opt_string(value, "tool_name")?,
+            "is_error" => {
+                self.is_error = match value {
+                    AgentValue::Unit => None,
+                    AgentValue::Boolean(b) => Some(b),
+                    _ => {
+                        return Err(AgentError::InvalidValue(
+                            "'is_error' must be a boolean".to_string(),
+                        ));
+                    }
+                }
+            }
+            "stop_reason" => self.stop_reason = opt_string(value, "stop_reason")?,
+            "usage" => {
+                self.usage = match value {
+                    AgentValue::Unit => None,
+                    AgentValue::Object(_) => Some(
+                        serde_json::from_value(value.to_json())
+                            .map_err(|e| AgentError::InvalidValue(format!("Invalid usage: {e}")))?,
+                    ),
+                    _ => {
+                        return Err(AgentError::InvalidValue(
+                            "'usage' must be an object".to_string(),
+                        ));
+                    }
+                }
+            }
+            #[cfg(feature = "image")]
+            "image" => {
+                self.image = match value {
+                    AgentValue::Unit => None,
+                    AgentValue::Image(img) => Some(img),
+                    AgentValue::String(s) => Some(Arc::new(crate::value::image_from_base64(&s)?)),
+                    _ => {
+                        return Err(AgentError::InvalidValue(
+                            "'image' must be an image or a base64 string".to_string(),
+                        ));
+                    }
+                }
+            }
+            _ => {
+                return Err(AgentError::InvalidValue(format!(
+                    "Message has no property `{key}`"
+                )));
+            }
+        }
+        Ok(())
+    }
 }
 
 impl PartialEq for Message {
@@ -522,8 +646,9 @@ impl<'de> Deserialize<'de> for Message {
             let image_str = image
                 .as_str()
                 .ok_or_else(|| serde::de::Error::custom("image must be a string"))?;
-            let image = Arc::new(PhotonImage::new_from_base64(image_str));
-            message.image = Some(image);
+            let image =
+                crate::value::image_from_base64(image_str).map_err(serde::de::Error::custom)?;
+            message.image = Some(Arc::new(image));
         }
         Ok(message)
     }
@@ -905,9 +1030,7 @@ impl TryFrom<AgentValue> for Message {
                     if let Some(image_value) = obj.get("image") {
                         match image_value {
                             AgentValue::String(s) => {
-                                message.image = Some(Arc::new(PhotonImage::new_from_base64(
-                                    s.trim_start_matches("data:image/png;base64,"),
-                                )));
+                                message.image = Some(Arc::new(crate::value::image_from_base64(s)?));
                             }
                             AgentValue::Image(img) => {
                                 message.image = Some(img.clone());
@@ -1103,6 +1226,194 @@ mod tests {
         let mut msg = Message::user("pic".to_string());
         msg.image = Some(Arc::new(PhotonImage::new(vec![0, 0, 0, 255], 1, 1)));
         assert!(msg.get_prop("image").unwrap().is_image());
+    }
+
+    #[test]
+    fn test_message_set_prop_content() {
+        let mut msg = Message::user("hello".to_string());
+
+        // String -> Text
+        msg.set_prop("content", AgentValue::string("edited"))
+            .unwrap();
+        assert_eq!(msg.content, MessageContent::Text("edited".to_string()));
+
+        // Block array -> Blocks
+        let blocks = AgentValue::from_serialize(&vec![
+            ContentBlock::Thinking {
+                thinking: "t".to_string(),
+                signature: None,
+                redacted: false,
+            },
+            ContentBlock::Text {
+                text: "answer".to_string(),
+            },
+        ])
+        .unwrap();
+        msg.set_prop("content", blocks).unwrap();
+        assert_eq!(msg.text(), "answer");
+        assert_eq!(msg.thinking().as_deref(), Some("t"));
+
+        // Type mismatch is an error and leaves the message untouched
+        assert!(msg.set_prop("content", AgentValue::integer(42)).is_err());
+        assert_eq!(msg.text(), "answer");
+    }
+
+    #[test]
+    fn test_message_set_prop_optionals_and_unknown() {
+        let mut msg = Message::user("hello".to_string());
+
+        // Unknown key is an error
+        assert!(msg.set_prop("no_such_key", AgentValue::integer(1)).is_err());
+
+        // Unit clears an optional field, symmetric with get_prop's None
+        msg.set_prop("id", AgentValue::string("m1")).unwrap();
+        assert_eq!(msg.get_prop("id"), Some(AgentValue::string("m1")));
+        msg.set_prop("id", AgentValue::unit()).unwrap();
+        assert_eq!(msg.get_prop("id"), None);
+
+        // usage: typed parse from an object, strict on bad values
+        msg.set_prop(
+            "usage",
+            AgentValue::object(hashmap! {
+                "input_tokens".to_string() => AgentValue::integer(5),
+            }),
+        )
+        .unwrap();
+        let usage = msg.usage.unwrap();
+        assert_eq!(usage.input_tokens, 5);
+        assert_eq!(usage.output_tokens, 0);
+        assert!(msg.set_prop("usage", AgentValue::string("bad")).is_err());
+        msg.set_prop("usage", AgentValue::unit()).unwrap();
+        assert_eq!(msg.usage, None);
+    }
+
+    #[cfg(feature = "image")]
+    #[test]
+    fn test_message_set_prop_image_from_string() {
+        // 1x1 transparent PNG
+        const PNG_BASE64: &str = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAEElEQVR4AQEFAPr/AAAAAAAABQABZHiVOAAAAABJRU5ErkJggg==";
+
+        let mut msg = Message::user("pic".to_string());
+
+        // With and without a data URI prefix
+        msg.set_prop(
+            "image",
+            AgentValue::string(format!("data:image/png;base64,{PNG_BASE64}")),
+        )
+        .unwrap();
+        assert!(msg.image.is_some());
+        msg.set_prop("image", AgentValue::unit()).unwrap();
+        assert!(msg.image.is_none());
+        msg.set_prop("image", AgentValue::string(PNG_BASE64))
+            .unwrap();
+        assert!(msg.image.is_some());
+
+        // Malformed base64 and non-image bytes are errors, not panics
+        assert!(
+            msg.set_prop(
+                "image",
+                AgentValue::string("data:image/png;base64,@@not-base64@@")
+            )
+            .is_err()
+        );
+        assert!(
+            msg.set_prop("image", AgentValue::string("aGVsbG8gd29ybGQ=")) // "hello world"
+                .is_err()
+        );
+        // The previous image survives the failed writes
+        assert!(msg.image.is_some());
+    }
+
+    #[cfg(feature = "image")]
+    #[test]
+    fn test_message_with_image_serde_round_trip() {
+        // Serialize emits image as a data-URI-prefixed base64 string; the
+        // deserializer must accept its own output (it used to panic because
+        // the prefix was never stripped).
+        let mut msg = Message::user("pic".to_string());
+        msg.image = Some(Arc::new(PhotonImage::new(vec![0, 0, 0, 255], 1, 1)));
+
+        let json = serde_json::to_value(&msg).unwrap();
+        let restored: Message = serde_json::from_value(json).unwrap();
+        assert!(restored.image.is_some());
+        assert_eq!(restored.text(), "pic");
+    }
+
+    #[cfg(feature = "image")]
+    #[test]
+    fn test_message_deserialize_invalid_image_is_error() {
+        // Malformed image data is an error, not a panic — both through serde
+        // and through TryFrom<AgentValue>.
+        let json = serde_json::json!({
+            "role": "user",
+            "content": "pic",
+            "image": "data:image/png;base64,@@not-base64@@",
+        });
+        assert!(serde_json::from_value::<Message>(json).is_err());
+
+        let obj = AgentValue::object(hashmap! {
+            "role".to_string() => AgentValue::string("user"),
+            "content".to_string() => AgentValue::string("pic"),
+            "image".to_string() => AgentValue::string("data:image/png;base64,@@not-base64@@"),
+        });
+        assert!(Message::try_from(obj).is_err());
+    }
+
+    #[test]
+    fn test_message_get_set_prop_symmetry() {
+        // For every key `Serialize` emits, `set_prop(k, get_prop(k))` onto a
+        // fresh message must reproduce `get_prop(k)`. Sweeping serde's keys
+        // catches a future field added to `Serialize`/`get_prop` but
+        // forgotten in `set_prop`. `get_prop` equality (not field equality)
+        // is deliberate: all-Text block content normalizes to `Text` on the
+        // way back, with no observable difference. `streaming` must be true
+        // here or serde omits its key and the sweep silently skips it.
+        let mut msg = Message::assistant("".to_string());
+        msg.id = Some("m1".to_string());
+        msg.content = MessageContent::Blocks(vec![
+            ContentBlock::Thinking {
+                thinking: "let me think".to_string(),
+                signature: None,
+                redacted: false,
+            },
+            ContentBlock::Text {
+                text: "answer".to_string(),
+            },
+        ]);
+        msg.tokens = Some(42);
+        msg.streaming = true;
+        msg.tool_calls = Some(vector![ToolCall {
+            function: ToolCallFunction {
+                id: Some("call1".to_string()),
+                name: "get_weather".to_string(),
+                parameters: serde_json::json!({"city": "Tokyo"}),
+                parse_error: None,
+            },
+        }]);
+        msg.tool_name = Some("get_weather".to_string());
+        msg.is_error = Some(false);
+        msg.stop_reason = Some("stop".to_string());
+        msg.usage = Some(Usage {
+            input_tokens: 1,
+            output_tokens: 2,
+            cache_read_tokens: 3,
+            cache_write_tokens: 4,
+        });
+        #[cfg(feature = "image")]
+        {
+            msg.image = Some(Arc::new(PhotonImage::new(vec![0, 0, 0, 255], 1, 1)));
+        }
+
+        let json = serde_json::to_value(&msg).unwrap();
+        let mut copy = Message::default();
+        for key in json.as_object().unwrap().keys() {
+            let original = msg
+                .get_prop(key)
+                .unwrap_or_else(|| panic!("get_prop is missing serialized key `{key}`"));
+            copy.set_prop(key, original.clone())
+                .unwrap_or_else(|e| panic!("set_prop rejected key `{key}`: {e}"));
+            assert_eq!(copy.get_prop(key), Some(original), "key `{key}`");
+        }
     }
 
     #[test]

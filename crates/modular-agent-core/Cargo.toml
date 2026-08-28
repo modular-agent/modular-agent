@@ -11,6 +11,9 @@ repository.workspace = true
 async-trait = { workspace = true }
 # mcp-server only: serves the rmcp streamable-http tower service.
 axum = { version = "0.8", optional = true }
+# image only: fallible base64 decoding for image strings (photon's own
+# base64 entry points panic on malformed input).
+base64 = { version = "0.22", optional = true }
 # default-features = false + clock: only Utc::now() is needed for RFC3339
 # session timestamps.
 chrono = { version = "0.4", optional = true, default-features = false, features = ["clock"] }
@@ -58,7 +61,7 @@ tempfile = "3"
 [features]
 default = ["file", "image", "llm", "mcp"]
 file = []
-image = ["photon-rs"]
+image = ["photon-rs", "base64"]
 # tokio/fs + tokio/io-util: used only by the session module (JSONL persistence).
 llm = ["regex", "jsonschema", "futures-util", "uuid", "chrono", "tokio/fs", "tokio/io-util"]
 mcp = ["rmcp", "llm"]

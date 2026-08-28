@@ -16,6 +16,32 @@ use crate::llm::Message;
 #[cfg(feature = "image")]
 pub(crate) const IMAGE_BASE64_PREFIX: &str = "data:image/png;base64,";
 
+/// Decodes a base64 image string — with or without a `data:<mime>;base64,`
+/// prefix — into a `PhotonImage`. Unlike `PhotonImage::new_from_base64`,
+/// malformed base64 or non-image bytes are an error, not a panic.
+#[cfg(feature = "image")]
+pub(crate) fn image_from_base64(s: &str) -> Result<PhotonImage, AgentError> {
+    use base64::Engine as _;
+    use base64::engine::{DecodePaddingMode, GeneralPurpose, GeneralPurposeConfig};
+
+    // Padding-indifferent: the previous photon/base64-0.13 path accepted
+    // unpadded input, so external payloads must keep decoding.
+    const B64: GeneralPurpose = GeneralPurpose::new(
+        &base64::alphabet::STANDARD,
+        GeneralPurposeConfig::new().with_decode_padding_mode(DecodePaddingMode::Indifferent),
+    );
+
+    let payload = match s.split_once(";base64,") {
+        Some((prefix, rest)) if prefix.starts_with("data:") => rest,
+        _ => s,
+    };
+    let bytes = B64
+        .decode(payload.trim())
+        .map_err(|e| AgentError::InvalidValue(format!("Invalid base64 image data: {e}")))?;
+    photon_rs::native::open_image_from_bytes(&bytes)
+        .map_err(|e| AgentError::InvalidValue(format!("Invalid image data: {e}")))
+}
+
 /// The value type passed between agents.
 ///
 /// Supports multiple data types with immutable data structures for efficient cloning.
@@ -185,8 +211,7 @@ impl AgentValue {
             serde_json::Value::String(s) => {
                 #[cfg(feature = "image")]
                 if s.starts_with(IMAGE_BASE64_PREFIX) {
-                    let img =
-                        PhotonImage::new_from_base64(s.trim_start_matches(IMAGE_BASE64_PREFIX));
+                    let img = image_from_base64(&s)?;
                     Ok(AgentValue::Image(Arc::new(img)))
                 } else {
                     Ok(AgentValue::String(Arc::new(s)))
@@ -667,6 +692,36 @@ impl AgentValue {
         }
     }
 
+    /// Sets a named property, seeing through variants that expose
+    /// properties without being an `Object`: an `Object` inserts the key,
+    /// a `Message` updates the matching typed field in place (see
+    /// [`Message::set_prop`]; copy-on-write when the `Arc` is shared).
+    /// Other variants — and a type mismatch or unknown key on a `Message`
+    /// — are an error rather than a silent drop.
+    pub fn set_prop(&mut self, key: &str, value: AgentValue) -> Result<(), AgentError> {
+        match self {
+            AgentValue::Object(o) => {
+                o.insert(key.to_string(), value);
+                Ok(())
+            }
+            #[cfg(feature = "llm")]
+            AgentValue::Message(m) => Arc::make_mut(m).set_prop(key, value),
+            _ => Err(AgentError::InvalidValue(format!(
+                "Cannot set property `{key}` on this value"
+            ))),
+        }
+    }
+
+    /// True when the value exposes named properties (`Object`, `Message`).
+    pub fn has_props(&self) -> bool {
+        match self {
+            AgentValue::Object(_) => true,
+            #[cfg(feature = "llm")]
+            AgentValue::Message(_) => true,
+            _ => false,
+        }
+    }
+
     /// Gets a mutable reference to a value by key from an `Object`.
     pub fn get_mut(&mut self, key: &str) -> Option<&mut AgentValue> {
         self.as_object_mut().and_then(|o| o.get_mut(key))
@@ -1131,6 +1186,31 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "image")]
+    #[test]
+    fn test_image_from_base64_errors_and_padding() {
+        // 1x1 transparent PNG, standard padded encoding
+        const PNG_BASE64: &str = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAEElEQVR4AQEFAPr/AAAAAAAABQABZHiVOAAAAABJRU5ErkJggg==";
+
+        // A string claiming the PNG data URI prefix with a corrupt payload is
+        // an error, not a panic — through from_json and the serde surface.
+        let bad = format!("{IMAGE_BASE64_PREFIX}@@not-base64@@");
+        assert!(AgentValue::from_json(serde_json::json!(bad)).is_err());
+        assert!(serde_json::from_str::<AgentValue>(&format!("\"{bad}\"")).is_err());
+
+        // Valid data still sniffs into an Image
+        let good = format!("{IMAGE_BASE64_PREFIX}{PNG_BASE64}");
+        assert!(
+            AgentValue::from_json(serde_json::json!(good))
+                .unwrap()
+                .is_image()
+        );
+
+        // Unpadded input keeps decoding (the old base64 0.13 path allowed it)
+        let unpadded = PNG_BASE64.trim_end_matches('=');
+        assert!(image_from_base64(unpadded).is_ok());
+    }
+
     #[test]
     fn test_agent_value_test_methods() {
         // Test test methods on AgentValue
@@ -1447,6 +1527,38 @@ mod tests {
         assert_eq!(AgentValue::integer(42).get_prop("k"), None);
         assert_eq!(AgentValue::string("s").get_prop("k"), None);
         assert_eq!(AgentValue::unit().get_prop("k"), None);
+    }
+
+    #[test]
+    fn test_agent_value_set_prop() {
+        // Object: plain insert
+        let mut obj = AgentValue::object_default();
+        obj.set_prop("k", AgentValue::integer(1)).unwrap();
+        assert_eq!(obj.get_prop("k"), Some(AgentValue::integer(1)));
+        assert!(obj.has_props());
+
+        // Message: typed in-place update, stays a Message; a shared clone
+        // is untouched (copy-on-write through Arc::make_mut)
+        #[cfg(feature = "llm")]
+        {
+            let mut msg = AgentValue::message(Message::user("hello".to_string()));
+            let shared = msg.clone();
+            msg.set_prop("content", AgentValue::string("edited"))
+                .unwrap();
+            assert!(msg.is_message());
+            assert_eq!(msg.get_prop("content"), Some(AgentValue::string("edited")));
+            assert_eq!(
+                shared.get_prop("content"),
+                Some(AgentValue::string("hello"))
+            );
+            assert!(msg.has_props());
+        }
+
+        // Scalars reject property writes
+        let mut scalar = AgentValue::integer(42);
+        assert!(scalar.set_prop("k", AgentValue::integer(1)).is_err());
+        assert!(!scalar.has_props());
+        assert!(!AgentValue::unit().has_props());
     }
 
     #[test]
