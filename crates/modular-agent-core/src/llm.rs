@@ -105,6 +105,23 @@ impl MessageContent {
                 .collect(),
         }
     }
+
+    /// The flattened plain text when the content is `Text` or all-`Text`
+    /// blocks — the legacy string form emitted by `Serialize` — or `None`
+    /// when block content cannot be flattened without losing information.
+    pub(crate) fn flat_text(&self) -> Option<String> {
+        match self {
+            MessageContent::Text(s) => Some(s.clone()),
+            MessageContent::Blocks(blocks)
+                if blocks
+                    .iter()
+                    .all(|b| matches!(b, ContentBlock::Text { .. })) =>
+            {
+                Some(self.text())
+            }
+            MessageContent::Blocks(_) => None,
+        }
+    }
 }
 
 /// Absorbs the legacy top-level `thinking` string field into a leading
@@ -311,6 +328,42 @@ impl Message {
             Some(parts.join("\n"))
         }
     }
+
+    /// Named-field access mirroring the `Serialize` impl: same keys, same
+    /// content flattening, and fields that `Serialize` omits when unset
+    /// return `None`. This is what makes key-path lookups (Get Value, If,
+    /// Match) agree with what templates see. One deliberate divergence:
+    /// `image` is returned as a live [`AgentValue::Image`] (cheap `Arc`
+    /// clone) instead of the base64 string serde emits.
+    pub fn get_prop(&self, key: &str) -> Option<AgentValue> {
+        match key {
+            "id" => self.id.as_ref().map(AgentValue::string),
+            "role" => Some(AgentValue::string(self.role.clone())),
+            "content" => match &self.content {
+                MessageContent::Text(s) => Some(AgentValue::string(s.clone())),
+                MessageContent::Blocks(blocks) => Some(match self.content.flat_text() {
+                    Some(s) => AgentValue::string(s),
+                    None => AgentValue::from_serialize(blocks).ok()?,
+                }),
+            },
+            "tokens" => self.tokens.map(|t| AgentValue::integer(t as i64)),
+            "streaming" => self.streaming.then_some(AgentValue::boolean(true)),
+            "tool_calls" => self
+                .tool_calls
+                .as_ref()
+                .and_then(|tc| AgentValue::from_serialize(tc).ok()),
+            "tool_name" => self.tool_name.as_ref().map(AgentValue::string),
+            "is_error" => self.is_error.map(AgentValue::boolean),
+            "stop_reason" => self.stop_reason.as_ref().map(AgentValue::string),
+            "usage" => self
+                .usage
+                .as_ref()
+                .and_then(|u| AgentValue::from_serialize(u).ok()),
+            #[cfg(feature = "image")]
+            "image" => self.image.as_ref().map(|i| AgentValue::Image(i.clone())),
+            _ => None,
+        }
+    }
 }
 
 impl PartialEq for Message {
@@ -335,19 +388,14 @@ impl Serialize for Message {
         // Text-only content keeps the legacy string form so histories that
         // never used thinking or image blocks stay readable by older
         // versions. Only block content that cannot be flattened to plain
-        // text is written as an array.
+        // text is written as an array. Keep this mapping in sync with
+        // `Message::get_prop`, which mirrors it for key-path access.
         let content_value = match &self.content {
             MessageContent::Text(s) => serde_json::Value::String(s.clone()),
-            MessageContent::Blocks(blocks)
-                if blocks
-                    .iter()
-                    .all(|b| matches!(b, ContentBlock::Text { .. })) =>
-            {
-                serde_json::Value::String(self.content.text())
-            }
-            MessageContent::Blocks(blocks) => {
-                serde_json::to_value(blocks).map_err(serde::ser::Error::custom)?
-            }
+            MessageContent::Blocks(blocks) => match self.content.flat_text() {
+                Some(s) => serde_json::Value::String(s),
+                None => serde_json::to_value(blocks).map_err(serde::ser::Error::custom)?,
+            },
         };
         map.insert("content".to_string(), content_value);
         if let Some(tokens) = &self.tokens {
@@ -943,6 +991,118 @@ mod tests {
         let msg_converted: Message = value.try_into().unwrap();
         assert_eq!(msg_converted.role, "user");
         assert_eq!(msg_converted.text(), "What is the weather today?");
+    }
+
+    #[test]
+    fn test_message_get_prop_basic() {
+        let msg = Message::user("hello".to_string());
+        assert_eq!(msg.get_prop("role"), Some(AgentValue::string("user")));
+        assert_eq!(msg.get_prop("content"), Some(AgentValue::string("hello")));
+
+        // Unset optionals mirror serde's omit-when-unset: absent, not null.
+        assert_eq!(msg.get_prop("id"), None);
+        assert_eq!(msg.get_prop("usage"), None);
+        assert_eq!(msg.get_prop("no_such_key"), None);
+
+        // `streaming` is only exposed while true, like serde.
+        assert_eq!(msg.get_prop("streaming"), None);
+        let mut streaming = msg.clone();
+        streaming.streaming = true;
+        assert_eq!(
+            streaming.get_prop("streaming"),
+            Some(AgentValue::boolean(true))
+        );
+    }
+
+    #[test]
+    fn test_message_get_prop_content_flattening() {
+        // All-Text blocks flatten to the legacy string form.
+        let mut msg = Message::user("".to_string());
+        msg.content = MessageContent::Blocks(vec![
+            ContentBlock::Text {
+                text: "a".to_string(),
+            },
+            ContentBlock::Text {
+                text: "b".to_string(),
+            },
+        ]);
+        assert_eq!(msg.get_prop("content"), Some(AgentValue::string("ab")));
+    }
+
+    #[test]
+    fn test_message_get_prop_usage_nested() {
+        let mut msg = Message::assistant("ok".to_string());
+        msg.usage = Some(Usage {
+            input_tokens: 5,
+            output_tokens: 7,
+            ..Default::default()
+        });
+        let usage = msg.get_prop("usage").unwrap();
+        assert_eq!(usage.get_prop("input_tokens"), Some(AgentValue::integer(5)));
+        assert_eq!(
+            usage.get_prop("output_tokens"),
+            Some(AgentValue::integer(7))
+        );
+    }
+
+    #[test]
+    fn test_message_get_prop_serde_parity() {
+        // Every key `Serialize` emits must resolve through `get_prop` to the
+        // same JSON (`image` excepted: `get_prop` deliberately returns a live
+        // Image value instead of serde's base64 string). Sweeping serde's keys
+        // instead of enumerating fields catches a future field added to
+        // `Serialize` but forgotten in `get_prop`, which would otherwise
+        // silently resolve as absent.
+        let mut msg = Message::assistant("".to_string());
+        msg.id = Some("m1".to_string());
+        msg.content = MessageContent::Blocks(vec![
+            ContentBlock::Thinking {
+                thinking: "let me think".to_string(),
+                signature: None,
+                redacted: false,
+            },
+            ContentBlock::Text {
+                text: "answer".to_string(),
+            },
+        ]);
+        msg.tokens = Some(42);
+        msg.streaming = true;
+        msg.tool_calls = Some(vector![ToolCall {
+            function: ToolCallFunction {
+                id: Some("call1".to_string()),
+                name: "get_weather".to_string(),
+                parameters: serde_json::json!({"city": "Tokyo"}),
+                parse_error: None,
+            },
+        }]);
+        msg.tool_name = Some("get_weather".to_string());
+        msg.is_error = Some(false);
+        msg.stop_reason = Some("stop".to_string());
+        msg.usage = Some(Usage {
+            input_tokens: 1,
+            output_tokens: 2,
+            cache_read_tokens: 3,
+            cache_write_tokens: 4,
+        });
+
+        let json = serde_json::to_value(&msg).unwrap();
+        for (key, expected) in json.as_object().unwrap() {
+            if key == "image" {
+                continue;
+            }
+            let got = msg
+                .get_prop(key)
+                .unwrap_or_else(|| panic!("get_prop is missing serialized key `{key}`"));
+            assert_eq!(got.to_json(), *expected, "key `{key}`");
+        }
+    }
+
+    #[cfg(feature = "image")]
+    #[test]
+    fn test_message_get_prop_image_is_live_value() {
+        let mut msg = Message::user("pic".to_string());
+        msg.image = Some(Arc::new(PhotonImage::new(vec![0, 0, 0, 255], 1, 1)));
+        assert!(msg.get_prop("image").unwrap().is_image());
     }
 
     #[test]

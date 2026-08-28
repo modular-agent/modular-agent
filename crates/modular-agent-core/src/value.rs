@@ -653,6 +653,20 @@ impl AgentValue {
         self.as_object().and_then(|o| o.get(key))
     }
 
+    /// Looks up a named property, seeing through variants that expose
+    /// properties without being an `Object` (currently `Message`, whose
+    /// fields resolve as they serialize). Returns an owned value because
+    /// non-`Object` variants materialize their properties on demand;
+    /// `Object` lookups are cheap `Arc`/`im` clones.
+    pub fn get_prop(&self, key: &str) -> Option<AgentValue> {
+        match self {
+            AgentValue::Object(o) => o.get(key).cloned(),
+            #[cfg(feature = "llm")]
+            AgentValue::Message(m) => m.get_prop(key),
+            _ => None,
+        }
+    }
+
     /// Gets a mutable reference to a value by key from an `Object`.
     pub fn get_mut(&mut self, key: &str) -> Option<&mut AgentValue> {
         self.as_object_mut().and_then(|o| o.get_mut(key))
@@ -1409,6 +1423,30 @@ mod tests {
             let img = AgentValue::image(PhotonImage::new(vec![0u8; 4], 1, 1));
             assert_eq!(img.get(KEY), None);
         }
+    }
+
+    #[test]
+    fn test_agent_value_get_prop() {
+        // Object: same lookup as `get`, but owned.
+        let obj = AgentValue::object(hashmap! {
+            "k".to_string() => AgentValue::integer(1),
+        });
+        assert_eq!(obj.get_prop("k"), Some(AgentValue::integer(1)));
+        assert_eq!(obj.get_prop("missing"), None);
+
+        // Message: fields resolve as they serialize.
+        #[cfg(feature = "llm")]
+        {
+            let msg = AgentValue::message(Message::user("hello".to_string()));
+            assert_eq!(msg.get_prop("role"), Some(AgentValue::string("user")));
+            assert_eq!(msg.get_prop("content"), Some(AgentValue::string("hello")));
+            assert_eq!(msg.get_prop("missing"), None);
+        }
+
+        // Scalars have no properties.
+        assert_eq!(AgentValue::integer(42).get_prop("k"), None);
+        assert_eq!(AgentValue::string("s").get_prop("k"), None);
+        assert_eq!(AgentValue::unit().get_prop("k"), None);
     }
 
     #[test]
