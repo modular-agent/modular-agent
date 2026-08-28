@@ -6,6 +6,7 @@ use mini_moka::sync::Cache;
 use modular_agent_core::{
     AgentConfigSpec, AgentConfigSpecs, AgentConfigs, AgentContext, AgentData, AgentError,
     AgentOutput, AgentSpec, AgentValue, AsAgent, ModularAgent, async_trait, modular_agent,
+    parse_index,
 };
 
 const CATEGORY: &str = "Std/Data";
@@ -47,6 +48,22 @@ impl GetValueAgent {
         let target_keys = key_str.split('.').map(|s| s.to_string()).collect();
         Ok(target_keys)
     }
+
+    fn extract(value: AgentValue, target_keys: &[String]) -> AgentValue {
+        match value {
+            // A root array broadcasts the key path over its elements — unless
+            // the path starts with an index, which addresses the array itself.
+            AgentValue::Array(arr) if parse_index(&target_keys[0]).is_none() => {
+                let extracted: Vector<AgentValue> = arr
+                    .iter()
+                    .map(|item| get_nested_value(item, target_keys).unwrap_or(AgentValue::Unit))
+                    .collect();
+                AgentValue::Array(extracted)
+            }
+
+            other => get_nested_value(&other, target_keys).unwrap_or(AgentValue::Unit),
+        }
+    }
 }
 
 #[async_trait]
@@ -75,20 +92,7 @@ impl AsAgent for GetValueAgent {
             return Ok(());
         }
 
-        let output_value = match value {
-            AgentValue::Array(arr) => {
-                let extracted: Vector<AgentValue> = arr
-                    .iter()
-                    .map(|item| {
-                        get_nested_value(item, &self.target_keys).unwrap_or(AgentValue::Unit)
-                    })
-                    .collect();
-                AgentValue::Array(extracted)
-            }
-
-            other => get_nested_value(&other, &self.target_keys).unwrap_or(AgentValue::Unit),
-        };
-
+        let output_value = Self::extract(value, &self.target_keys);
         self.output(ctx, PORT_VALUE, output_value).await
     }
 }
@@ -326,8 +330,9 @@ fn set_nested_value<K: AsRef<str>>(
             .or_insert_with(AgentValue::object_default);
         set_nested_value(sub, rest, new_value)
     } else {
-        // Message: read-modify-write the materialized property, then store
-        // it back through the typed setter.
+        // Message and Array: read-modify-write the materialized property,
+        // then store it back through the typed setter, which rejects an
+        // unknown Message key or a bad array index with the root untouched.
         let mut sub = root
             .get_prop(key)
             .unwrap_or_else(AgentValue::object_default);
@@ -640,7 +645,7 @@ impl AsAgent for ZipToObjectAgent {
 
 #[cfg(test)]
 mod tests {
-    use im::hashmap;
+    use im::{hashmap, vector};
 
     use super::*;
 
@@ -959,6 +964,140 @@ mod tests {
         assert_eq!(
             root.get("message").unwrap().as_message().unwrap().text(),
             "hello"
+        );
+    }
+
+    /// Index segments resolve into arrays anywhere in the path.
+    #[test]
+    fn test_get_nested_value_through_array() {
+        // { "items": [ { "name": "a" }, { "name": "b" } ] }
+        let root = AgentValue::object(hashmap! {
+            "items".to_string() => AgentValue::array(vector![
+                AgentValue::object(hashmap! {
+                    "name".to_string() => AgentValue::string("a"),
+                }),
+                AgentValue::object(hashmap! {
+                    "name".to_string() => AgentValue::string("b"),
+                }),
+            ]),
+        });
+
+        assert_eq!(
+            get_nested_value(&root, &["items", "0", "name"]),
+            Some(AgentValue::string("a"))
+        );
+        assert_eq!(
+            get_nested_value(&root, &["items", "1", "name"]),
+            Some(AgentValue::string("b"))
+        );
+
+        // Out-of-range index and non-index key on the array
+        assert_eq!(get_nested_value(&root, &["items", "2", "name"]), None);
+        assert_eq!(get_nested_value(&root, &["items", "name"]), None);
+
+        // Index on a root array
+        let arr = AgentValue::array(vector![AgentValue::string("x"), AgentValue::string("y"),]);
+        assert_eq!(
+            get_nested_value(&arr, &["1"]),
+            Some(AgentValue::string("y"))
+        );
+    }
+
+    /// Writing through an index segment updates the element in place instead
+    /// of destroying the array.
+    #[test]
+    fn test_set_nested_value_through_array() {
+        let mut root = AgentValue::object(hashmap! {
+            "items".to_string() => AgentValue::array(vector![
+                AgentValue::object(hashmap! {
+                    "name".to_string() => AgentValue::string("a"),
+                }),
+                AgentValue::object(hashmap! {
+                    "name".to_string() => AgentValue::string("b"),
+                }),
+            ]),
+        });
+
+        // Field inside an element
+        set_nested_value(
+            &mut root,
+            &["items", "0", "name"],
+            AgentValue::string("edited"),
+        )
+        .unwrap();
+        let items = root.get("items").unwrap().as_array().unwrap();
+        assert_eq!(items.len(), 2);
+        assert_eq!(items[0].get_str("name"), Some("edited"));
+        assert_eq!(items[1].get_str("name"), Some("b"));
+
+        // Direct element replacement
+        set_nested_value(&mut root, &["items", "1"], AgentValue::integer(42)).unwrap();
+        let items = root.get("items").unwrap().as_array().unwrap();
+        assert_eq!(items[1], AgentValue::integer(42));
+    }
+
+    /// An out-of-range index or a non-index key on an array is an error
+    /// instead of silently destroying the array.
+    #[test]
+    fn test_set_nested_value_array_errors() {
+        let mut root = AgentValue::object(hashmap! {
+            "items".to_string() => AgentValue::array(vector![AgentValue::string("a")]),
+        });
+
+        assert!(set_nested_value(&mut root, &["items", "5"], AgentValue::integer(1)).is_err());
+        assert!(
+            set_nested_value(&mut root, &["items", "5", "name"], AgentValue::integer(1)).is_err()
+        );
+        assert!(set_nested_value(&mut root, &["items", "foo"], AgentValue::integer(1)).is_err());
+
+        // The array survives the failed writes
+        let items = root.get("items").unwrap().as_array().unwrap();
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0], AgentValue::string("a"));
+    }
+
+    /// A root array broadcasts non-index key paths over its elements, but an
+    /// index-first path addresses the array itself.
+    #[test]
+    fn test_get_value_extract_root_array() {
+        let arr = AgentValue::array(vector![
+            AgentValue::object(hashmap! {
+                "name".to_string() => AgentValue::string("a"),
+            }),
+            AgentValue::object(hashmap! {
+                "name".to_string() => AgentValue::string("b"),
+            }),
+        ]);
+
+        // Broadcast: "name" applies to each element
+        assert_eq!(
+            GetValueAgent::extract(arr.clone(), &["name".to_string()]),
+            AgentValue::array(vector![AgentValue::string("a"), AgentValue::string("b")]),
+        );
+
+        // Index-first: "1.name" addresses the array
+        assert_eq!(
+            GetValueAgent::extract(arr, &["1".to_string(), "name".to_string()]),
+            AgentValue::string("b"),
+        );
+
+        // Deliberate precedence: even when the elements themselves carry a
+        // numeric string key, an index-first path addresses the array — the
+        // key "0" returns the first element, not a broadcast of each
+        // element's "0" property.
+        let numeric_keyed = AgentValue::array(vector![
+            AgentValue::object(hashmap! {
+                "0".to_string() => AgentValue::string("a"),
+            }),
+            AgentValue::object(hashmap! {
+                "0".to_string() => AgentValue::string("b"),
+            }),
+        ]);
+        assert_eq!(
+            GetValueAgent::extract(numeric_keyed, &["0".to_string()]),
+            AgentValue::object(hashmap! {
+                "0".to_string() => AgentValue::string("a"),
+            }),
         );
     }
 

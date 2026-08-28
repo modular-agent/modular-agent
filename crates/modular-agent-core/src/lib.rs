@@ -117,4 +117,4 @@ pub use session::{
     InMemorySessionStore, JsonlSessionStore, SessionEntry, SessionMeta, SessionStore, build_context,
 };
 pub use spec::{AgentSpec, ConnectionSpec, PatchSpec, PatchSpecs};
-pub use value::{AgentValue, AgentValueMap};
+pub use value::{AgentValue, AgentValueMap, parse_index};

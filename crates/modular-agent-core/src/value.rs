@@ -680,12 +680,15 @@ impl AgentValue {
 
     /// Looks up a named property, seeing through variants that expose
     /// properties without being an `Object` (currently `Message`, whose
-    /// fields resolve as they serialize). Returns an owned value because
-    /// non-`Object` variants materialize their properties on demand;
-    /// `Object` lookups are cheap `Arc`/`im` clones.
+    /// fields resolve as they serialize, and `Array`, which resolves an
+    /// index key like `"0"` — see [`parse_index`] — to its element).
+    /// Returns an owned value because non-`Object` variants materialize
+    /// their properties on demand; `Object` and `Array` lookups are cheap
+    /// `Arc`/`im` clones.
     pub fn get_prop(&self, key: &str) -> Option<AgentValue> {
         match self {
             AgentValue::Object(o) => o.get(key).cloned(),
+            AgentValue::Array(a) => a.get(parse_index(key)?).cloned(),
             #[cfg(feature = "llm")]
             AgentValue::Message(m) => m.get_prop(key),
             _ => None,
@@ -694,16 +697,31 @@ impl AgentValue {
 
     /// Sets a named property, seeing through variants that expose
     /// properties without being an `Object`: an `Object` inserts the key,
-    /// a `Message` updates the matching typed field in place (see
-    /// [`Message::set_prop`]; copy-on-write when the `Arc` is shared).
-    /// Other variants — and a type mismatch or unknown key on a `Message`
-    /// — are an error rather than a silent drop.
+    /// an `Array` replaces the element at an in-range index key (see
+    /// [`parse_index`]), a `Message` updates the matching typed field in
+    /// place (see [`Message::set_prop`]; copy-on-write when the `Arc` is
+    /// shared). Other variants — and a non-index or out-of-range key on an
+    /// `Array`, or a type mismatch or unknown key on a `Message` — are an
+    /// error rather than a silent drop.
     pub fn set_prop(&mut self, key: &str, value: AgentValue) -> Result<(), AgentError> {
         match self {
             AgentValue::Object(o) => {
                 o.insert(key.to_string(), value);
                 Ok(())
             }
+            AgentValue::Array(a) => match parse_index(key) {
+                Some(i) if i < a.len() => {
+                    a.set(i, value);
+                    Ok(())
+                }
+                Some(i) => Err(AgentError::InvalidValue(format!(
+                    "Index {i} is out of range for array of length {}",
+                    a.len()
+                ))),
+                None => Err(AgentError::InvalidValue(format!(
+                    "Cannot set property `{key}` on an array; expected an index"
+                ))),
+            },
             #[cfg(feature = "llm")]
             AgentValue::Message(m) => Arc::make_mut(m).set_prop(key, value),
             _ => Err(AgentError::InvalidValue(format!(
@@ -712,10 +730,12 @@ impl AgentValue {
         }
     }
 
-    /// True when the value exposes named properties (`Object`, `Message`).
+    /// True when the value exposes properties by key (`Object`, `Array`,
+    /// `Message`).
     pub fn has_props(&self) -> bool {
         match self {
             AgentValue::Object(_) => true,
+            AgentValue::Array(_) => true,
             #[cfg(feature = "llm")]
             AgentValue::Message(_) => true,
             _ => false,
@@ -818,6 +838,21 @@ impl AgentValue {
             ))
         }
     }
+}
+
+/// Parses a key-path segment as an array index: ASCII digits only, no
+/// sign, no leading zeros (except `"0"` itself). This single definition
+/// decides what counts as an index everywhere — property access here and
+/// the root-array handling in Get Value must agree, or a key could skip
+/// one path and fail the other.
+pub fn parse_index(key: &str) -> Option<usize> {
+    if key.is_empty() || !key.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    if key.len() > 1 && key.starts_with('0') {
+        return None;
+    }
+    key.parse().ok()
 }
 
 impl PartialEq for AgentValue {
@@ -1523,10 +1558,33 @@ mod tests {
             assert_eq!(msg.get_prop("missing"), None);
         }
 
+        // Array: index keys resolve to elements.
+        let arr = AgentValue::array(vector![AgentValue::integer(10), AgentValue::integer(20)]);
+        assert_eq!(arr.get_prop("0"), Some(AgentValue::integer(10)));
+        assert_eq!(arr.get_prop("1"), Some(AgentValue::integer(20)));
+        assert_eq!(arr.get_prop("2"), None);
+        assert_eq!(arr.get_prop("name"), None);
+
         // Scalars have no properties.
         assert_eq!(AgentValue::integer(42).get_prop("k"), None);
         assert_eq!(AgentValue::string("s").get_prop("k"), None);
         assert_eq!(AgentValue::unit().get_prop("k"), None);
+    }
+
+    #[test]
+    fn test_parse_index() {
+        assert_eq!(parse_index("0"), Some(0));
+        assert_eq!(parse_index("12"), Some(12));
+
+        // ASCII digits only, no sign, no leading zeros, no whitespace.
+        assert_eq!(parse_index(""), None);
+        assert_eq!(parse_index("+1"), None);
+        assert_eq!(parse_index("-1"), None);
+        assert_eq!(parse_index("00"), None);
+        assert_eq!(parse_index("01"), None);
+        assert_eq!(parse_index(" 0"), None);
+        assert_eq!(parse_index("1a"), None);
+        assert_eq!(parse_index("١"), None); // non-ASCII digit
     }
 
     #[test]
@@ -1553,6 +1611,19 @@ mod tests {
             );
             assert!(msg.has_props());
         }
+
+        // Array: in-range index replaces the element; a shared clone is
+        // untouched (im::Vector copy-on-write). Out-of-range or non-index
+        // keys error with the array intact.
+        let mut arr = AgentValue::array(vector![AgentValue::integer(10), AgentValue::integer(20)]);
+        let shared_arr = arr.clone();
+        arr.set_prop("1", AgentValue::integer(99)).unwrap();
+        assert_eq!(arr.get_prop("1"), Some(AgentValue::integer(99)));
+        assert_eq!(shared_arr.get_prop("1"), Some(AgentValue::integer(20)));
+        assert!(arr.has_props());
+        assert!(arr.set_prop("2", AgentValue::integer(1)).is_err());
+        assert!(arr.set_prop("name", AgentValue::integer(1)).is_err());
+        assert_eq!(arr.as_array().unwrap().len(), 2);
 
         // Scalars reject property writes
         let mut scalar = AgentValue::integer(42);
