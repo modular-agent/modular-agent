@@ -115,7 +115,11 @@ impl SetValueAgent {
             .as_ref()
             .map(|cfg| cfg.get_string_or_default(CONFIG_KEY))
             .unwrap_or_default();
-        let target_keys = key_str.split('.').map(|s| s.to_string()).collect();
+        let target_keys = if key_str.is_empty() {
+            Vec::new()
+        } else {
+            key_str.split('.').map(|s| s.to_string()).collect()
+        };
         let target_value = spec
             .configs
             .as_ref()
@@ -153,7 +157,7 @@ impl AsAgent for SetValueAgent {
             return Ok(());
         }
 
-        set_nested_value(&mut value, &self.target_keys, self.target_value.clone());
+        set_nested_value(&mut value, &self.target_keys, self.target_value.clone())?;
         self.output(ctx, PORT_VALUE, value).await
     }
 }
@@ -213,7 +217,7 @@ impl AsAgent for ToObjectAgent {
         }
 
         let mut new_value = AgentValue::object_default();
-        set_nested_value(&mut new_value, &self.target_keys, value);
+        set_nested_value(&mut new_value, &self.target_keys, value)?;
 
         self.output(ctx, PORT_VALUE, new_value).await
     }
@@ -299,38 +303,36 @@ pub(crate) fn get_nested_value<K: AsRef<str>>(
     Some(current)
 }
 
-fn set_nested_value<K: AsRef<str>>(root: &mut AgentValue, keys: &[K], new_value: AgentValue) {
-    if keys.is_empty() {
-        return;
+fn set_nested_value<K: AsRef<str>>(
+    root: &mut AgentValue,
+    keys: &[K],
+    new_value: AgentValue,
+) -> Result<(), AgentError> {
+    let Some((first, rest)) = keys.split_first() else {
+        return Ok(());
+    };
+    let key = first.as_ref();
+
+    // A value without properties is overwritten with an empty Object, as before.
+    if !root.has_props() {
+        *root = AgentValue::object_default();
     }
 
-    // Split into the last key and the path before it
-    // keys = ["a", "b", "c"] -> path=["a", "b"], last_key="c"
-    let (last_key, path) = keys.split_last().unwrap();
-
-    let mut current = root;
-
-    // Traverse down to just before the target
-    for key in path {
-        // If current position is not an Object, forcibly overwrite it with an empty Object
-        if !current.is_object() {
-            *current = AgentValue::object_default();
-        }
-
-        let obj = current.as_object_mut().unwrap();
-
-        current = obj
-            .entry(key.as_ref().to_string())
+    if rest.is_empty() {
+        root.set_prop(key, new_value)
+    } else if let Some(obj) = root.as_object_mut() {
+        let sub = obj
+            .entry(key.to_string())
             .or_insert_with(AgentValue::object_default);
-    }
-
-    // Set the value for the last key
-    if !current.is_object() {
-        *current = AgentValue::object_default();
-    }
-
-    if let Some(obj) = current.as_object_mut() {
-        obj.insert(last_key.as_ref().to_string(), new_value);
+        set_nested_value(sub, rest, new_value)
+    } else {
+        // Message: read-modify-write the materialized property, then store
+        // it back through the typed setter.
+        let mut sub = root
+            .get_prop(key)
+            .unwrap_or_else(AgentValue::object_default);
+        set_nested_value(&mut sub, rest, new_value)?;
+        root.set_prop(key, sub)
     }
 }
 
@@ -722,7 +724,7 @@ mod tests {
         let keys = vec!["users", "admin", "name"];
         let value = AgentValue::string("Alice");
 
-        set_nested_value(&mut root, &keys, value);
+        set_nested_value(&mut root, &keys, value).unwrap();
 
         // Verify: root["users"]["admin"]["name"] == "Alice"
         if let Some(users) = root.get_mut("users") {
@@ -747,7 +749,7 @@ mod tests {
         let keys = vec!["config", "timeout"];
         let value = AgentValue::string("30s");
 
-        set_nested_value(&mut root, &keys, value);
+        set_nested_value(&mut root, &keys, value).unwrap();
 
         // Verify
         let config = root.get_mut("config").unwrap();
@@ -768,7 +770,7 @@ mod tests {
         // Execute overwrite
         let keys = vec!["app", "version"];
         let new_val = AgentValue::string("v2");
-        set_nested_value(&mut root, &keys, new_val);
+        set_nested_value(&mut root, &keys, new_val).unwrap();
 
         // Verify
         let app = root.get_mut("app").unwrap();
@@ -841,7 +843,7 @@ mod tests {
         let value = AgentValue::string("value");
 
         // Ensure it returns without crashing
-        set_nested_value(&mut root, &keys, value);
+        set_nested_value(&mut root, &keys, value).unwrap();
 
         // Verify that "tags" remains a string
         let tags = root.get_mut("tags").unwrap();
@@ -851,5 +853,121 @@ mod tests {
                 "new_key".to_string() => AgentValue::string("value")
             })
         );
+    }
+
+    /// Writing through a Message updates the typed field in place instead of
+    /// destroying the Message (Message::eq only compares id/role/content, so
+    /// preserved fields are asserted individually).
+    #[test]
+    fn test_set_nested_value_through_message() {
+        use modular_agent_core::llm::{Message, Usage};
+
+        let mut message = Message::user("hello".to_string());
+        message.usage = Some(Usage {
+            input_tokens: 3,
+            output_tokens: 7,
+            ..Default::default()
+        });
+        let mut root = AgentValue::object(hashmap! {
+            "message".to_string() => AgentValue::message(message),
+            "user".to_string() => AgentValue::string("alice"),
+        });
+
+        set_nested_value(
+            &mut root,
+            &["message", "content"],
+            AgentValue::string("edited"),
+        )
+        .unwrap();
+
+        // Still a Message, with only content replaced
+        let msg = root.get("message").unwrap().as_message().unwrap();
+        assert_eq!(msg.role, "user");
+        assert_eq!(msg.text(), "edited");
+        assert_eq!(msg.usage.unwrap().input_tokens, 3);
+        // Sibling untouched
+        assert_eq!(root.get("user"), Some(&AgentValue::string("alice")));
+
+        // A Message as the new value is inserted as-is
+        set_nested_value(
+            &mut root,
+            &["reply"],
+            AgentValue::message(Message::assistant("hi".to_string())),
+        )
+        .unwrap();
+        assert!(root.get("reply").unwrap().is_message());
+    }
+
+    /// Writing below a Message field (usage) round-trips through the typed
+    /// setter and preserves the field's other members.
+    #[test]
+    fn test_set_nested_value_message_nested_usage() {
+        use modular_agent_core::llm::{Message, Usage};
+
+        let mut message = Message::user("hello".to_string());
+        message.usage = Some(Usage {
+            input_tokens: 3,
+            output_tokens: 7,
+            ..Default::default()
+        });
+        let mut root = AgentValue::object(hashmap! {
+            "message".to_string() => AgentValue::message(message),
+        });
+
+        set_nested_value(
+            &mut root,
+            &["message", "usage", "input_tokens"],
+            AgentValue::integer(99),
+        )
+        .unwrap();
+
+        let msg = root.get("message").unwrap().as_message().unwrap();
+        assert_eq!(msg.text(), "hello");
+        let usage = msg.usage.unwrap();
+        assert_eq!(usage.input_tokens, 99);
+        assert_eq!(usage.output_tokens, 7);
+    }
+
+    /// A bare Message root stays a Message when a field is set.
+    #[test]
+    fn test_set_nested_value_bare_message_root() {
+        use modular_agent_core::llm::Message;
+
+        let mut root = AgentValue::message(Message::user("hello".to_string()));
+        set_nested_value(&mut root, &["content"], AgentValue::string("edited")).unwrap();
+
+        let msg = root.as_message().unwrap();
+        assert_eq!(msg.role, "user");
+        assert_eq!(msg.text(), "edited");
+    }
+
+    /// An unknown Message property or a type mismatch is an error instead of
+    /// silently destroying the Message.
+    #[test]
+    fn test_set_nested_value_message_errors() {
+        use modular_agent_core::llm::Message;
+
+        let mut root = AgentValue::object(hashmap! {
+            "message".to_string() => AgentValue::message(Message::user("hello".to_string())),
+        });
+
+        assert!(set_nested_value(&mut root, &["message", "foo"], AgentValue::integer(1)).is_err());
+        assert!(
+            set_nested_value(&mut root, &["message", "content"], AgentValue::integer(42)).is_err()
+        );
+        // The Message survives the failed writes
+        assert_eq!(
+            root.get("message").unwrap().as_message().unwrap().text(),
+            "hello"
+        );
+    }
+
+    /// An empty key config is a no-op selection, like Get Value / To Object.
+    #[test]
+    fn test_set_value_update_spec_empty_key() {
+        let mut spec = AgentSpec::default();
+        let (target_keys, target_value) = SetValueAgent::update_spec(&mut spec).unwrap();
+        assert!(target_keys.is_empty());
+        assert_eq!(target_value, AgentValue::Unit);
     }
 }
