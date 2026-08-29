@@ -7,7 +7,7 @@
 //! - The `Tool` trait for implementing custom tools
 //! - Agents for working with tools in workflows:
 //!   - `ListToolsAgent` - Lists available tools matching a pattern
-//!   - `PatchToolAgent` - Exposes a workflow as a callable tool
+//!   - `CustomToolAgent` - Exposes a workflow as a callable tool
 //!   - `CallToolMessageAgent` - Processes tool calls from LLM messages
 //!   - `LoopControlAgent` - Guards tool-call cycles with an iteration limit
 //!   - `CallToolAgent` - Directly invokes a tool by name
@@ -946,7 +946,7 @@ impl AsAgent for ListToolsAgent {
 /// * Input `tool_out` - Receives the tool's result from the workflow
 /// * Output `tool_in` - Emits the tool call arguments to the workflow
 #[modular_agent(
-    title="Patch Tool",
+    title="Custom Tool",
     category=CATEGORY,
     inputs=[PORT_TOOL_OUT],
     outputs=[PORT_TOOL_IN],
@@ -955,7 +955,7 @@ impl AsAgent for ListToolsAgent {
     object_config(name=CONFIG_TOOL_PARAMETERS),
     integer_config(name=CONFIG_TIMEOUT_SECS, default=60),
 )]
-pub struct PatchToolAgent {
+pub struct CustomToolAgent {
     data: AgentData,
     name: String,
     description: String,
@@ -964,7 +964,7 @@ pub struct PatchToolAgent {
     pending: Arc<Mutex<HashMap<usize, oneshot::Sender<AgentValue>>>>,
 }
 
-impl PatchToolAgent {
+impl CustomToolAgent {
     /// Initiates a tool call and returns a receiver for the result.
     ///
     /// Emits the arguments to the workflow and registers a pending receiver
@@ -990,7 +990,7 @@ impl PatchToolAgent {
 }
 
 #[async_trait]
-impl AsAgent for PatchToolAgent {
+impl AsAgent for CustomToolAgent {
     fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
         let def_name = spec.def_name.clone();
         let configs = spec.configs.clone();
@@ -1032,7 +1032,7 @@ impl AsAgent for PatchToolAgent {
         if self.data.status == AgentStatus::Start {
             if !is_valid_tool_name(&self.name) {
                 log::warn!(
-                    "PatchToolAgent {} has invalid tool name {:?}; \
+                    "CustomToolAgent {} has invalid tool name {:?}; \
                      tool names must match ^[a-zA-Z0-9_-]{{1,64}}$",
                     self.id(),
                     self.name
@@ -1042,7 +1042,7 @@ impl AsAgent for PatchToolAgent {
                 .ma()
                 .get_agent(self.id())
                 .ok_or_else(|| AgentError::AgentNotFound(self.id().to_string()))?;
-            let tool = PatchTool::new(
+            let tool = CustomTool::new(
                 self.name.clone(),
                 self.description.clone(),
                 self.parameters.clone(),
@@ -1067,7 +1067,7 @@ impl AsAgent for PatchToolAgent {
         // an invalid name only fails later at API-call time, so surface it early.
         if !is_valid_tool_name(&self.name) {
             log::warn!(
-                "PatchToolAgent {} has invalid tool name {:?}; \
+                "CustomToolAgent {} has invalid tool name {:?}; \
                  tool names must match ^[a-zA-Z0-9_-]{{1,64}}$",
                 self.id(),
                 self.name
@@ -1077,7 +1077,7 @@ impl AsAgent for PatchToolAgent {
             .ma()
             .get_agent(self.id())
             .ok_or_else(|| AgentError::AgentNotFound(self.id().to_string()))?;
-        let tool = PatchTool::new(
+        let tool = CustomTool::new(
             self.name.clone(),
             self.description.clone(),
             self.parameters.clone(),
@@ -1106,14 +1106,14 @@ impl AsAgent for PatchToolAgent {
     }
 }
 
-/// Internal Tool implementation that delegates to a PatchToolAgent.
-struct PatchTool {
+/// Internal Tool implementation that delegates to a CustomToolAgent.
+struct CustomTool {
     info: ToolInfo,
     agent: SharedAgent,
 }
 
-impl PatchTool {
-    /// Creates a new PatchTool wrapping a PatchToolAgent.
+impl CustomTool {
+    /// Creates a new CustomTool wrapping a CustomToolAgent.
     fn new(
         name: String,
         description: String,
@@ -1149,8 +1149,10 @@ impl PatchTool {
         let cancel = ctx.cancel_token().cloned();
         let (rx, timeout_secs, pending) = {
             let mut guard = self.agent.lock().await;
-            let Some(patch_tool_agent) = guard.as_agent_mut::<PatchToolAgent>() else {
-                return Err(AgentError::Other("Agent is not PatchToolAgent".to_string()));
+            let Some(custom_tool_agent) = guard.as_agent_mut::<CustomToolAgent>() else {
+                return Err(AgentError::Other(
+                    "Agent is not CustomToolAgent".to_string(),
+                ));
             };
             // Cancellation may have fired while waiting for the agent lock.
             // Check again immediately before pending state is registered and
@@ -1158,12 +1160,12 @@ impl PatchTool {
             if ctx.is_cancelled() {
                 return Err(AgentError::Cancelled);
             }
-            let timeout_secs = patch_tool_agent
+            let timeout_secs = custom_tool_agent
                 .configs()
                 .map(|c| c.get_integer_or(CONFIG_TIMEOUT_SECS, DEFAULT_TIMEOUT_SECS))
                 .unwrap_or(DEFAULT_TIMEOUT_SECS);
-            let pending = patch_tool_agent.pending.clone();
-            let rx = patch_tool_agent.start_tool_call(ctx, args)?;
+            let pending = custom_tool_agent.pending.clone();
+            let rx = custom_tool_agent.start_tool_call(ctx, args)?;
             (rx, timeout_secs, pending)
         };
 
@@ -1174,7 +1176,7 @@ impl PatchTool {
         // is keyed by context id, which is shared by every tool call in the
         // same flow (including an LLM retry after an error), so a leftover
         // sender would deliver a late tool_out to whichever call registers
-        // under the same id next. PatchTool registers with
+        // under the same id next. CustomTool registers with
         // ExecutionMode::Sequential and call_tools never runs a Sequential
         // call concurrently with anything, so within a flow no newer call can
         // have registered a sender while this one is alive — the guard cannot
@@ -1214,7 +1216,7 @@ impl PatchTool {
 }
 
 #[async_trait]
-impl Tool for PatchTool {
+impl Tool for CustomTool {
     fn info(&self) -> &ToolInfo {
         &self.info
     }
@@ -1624,12 +1626,12 @@ mod tests {
     }
 
     #[test]
-    fn test_patch_tool_timeout_config_default() {
-        let def = PatchToolAgent::agent_definition();
+    fn test_custom_tool_timeout_config_default() {
+        let def = CustomToolAgent::agent_definition();
         let specs = def
             .configs
             .as_ref()
-            .expect("PatchToolAgent should have config specs");
+            .expect("CustomToolAgent should have config specs");
         let spec = specs
             .get(CONFIG_TIMEOUT_SECS)
             .expect("timeout_secs config should be present");

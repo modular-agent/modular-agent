@@ -3,20 +3,20 @@ extern crate modular_agent_core as ma;
 use ma::tool::get_tool;
 use ma::{AgentValue, ModularAgent};
 
-const PATCH_TOOL_DEF: &str = "modular_agent_core::tool::PatchToolAgent";
+const CUSTOM_TOOL_DEF: &str = "modular_agent_core::tool::CustomToolAgent";
 
 #[tokio::test]
 async fn configs_changed_reregisters_running_tool() {
     // Unique names to avoid clashes in the process-global registry
     // shared with other tests running in parallel.
-    let old_name = "patch_tool_test_cfg_old";
-    let new_name = "patch_tool_test_cfg_new";
+    let old_name = "custom_tool_test_cfg_old";
+    let new_name = "custom_tool_test_cfg_new";
 
     let ma = ModularAgent::init().unwrap();
     ma.ready().await.unwrap();
 
     let patch_id = ma.new_patch().unwrap();
-    let def = ma.get_agent_definition(PATCH_TOOL_DEF).unwrap();
+    let def = ma.get_agent_definition(CUSTOM_TOOL_DEF).unwrap();
     let spec = def.to_spec();
     let agent_id = ma.add_agent(patch_id.clone(), spec).await.unwrap();
 

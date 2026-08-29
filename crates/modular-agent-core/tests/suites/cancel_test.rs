@@ -13,7 +13,7 @@ use crate::common;
 use common::agents::{CancelWaitAgent, StuckSleepAgent};
 
 const EXT_IN_DEF: &str = "modular_agent_core::external_agent::ExternalInputAgent";
-const PATCH_TOOL_DEF: &str = "modular_agent_core::tool::PatchToolAgent";
+const CUSTOM_TOOL_DEF: &str = "modular_agent_core::tool::CustomToolAgent";
 
 fn set_config(spec: &mut AgentSpec, key: &str, value: AgentValue) {
     let mut configs = spec.configs.take().unwrap_or_default();
@@ -201,14 +201,14 @@ async fn start_agent_after_stop_patch_processes_inputs() {
 }
 
 #[tokio::test]
-async fn already_cancelled_patch_tool_does_not_emit_tool_in() {
-    let tool_name = "cancel_test_patch_tool";
+async fn already_cancelled_custom_tool_does_not_emit_tool_in() {
+    let tool_name = "cancel_test_custom_tool";
 
     let ma = ModularAgent::init().unwrap();
     ma.ready().await.unwrap();
 
     let patch_id = ma.new_patch().unwrap();
-    let mut spec = ma.new_agent_spec(PATCH_TOOL_DEF).unwrap();
+    let mut spec = ma.new_agent_spec(CUSTOM_TOOL_DEF).unwrap();
     set_config(&mut spec, "name", AgentValue::string(tool_name));
     let agent_id = ma.add_agent(patch_id.clone(), spec).await.unwrap();
     let probe_spec = ma.new_agent_spec(TestProbeAgent::DEF_NAME).unwrap();
