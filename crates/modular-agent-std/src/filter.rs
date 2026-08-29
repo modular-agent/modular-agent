@@ -315,7 +315,6 @@ fn eval_cond(cond: &Cond, value: &AgentValue) -> bool {
 /// The key is a dot-separated list of object keys. When it is omitted, the input value
 /// itself is tested. Whether or not a key is used, the value emitted on `t` / `f` is
 /// always the original input value - the key only selects what the condition looks at.
-/// Message values expose their serialized fields, so `message.content == /err.*/` works.
 /// A key that does not resolve (a key is missing, or a value along the path has no such
 /// property) is tested as `null` rather than raising an error, so `user.age == null`
 /// detects a missing field. Key names containing `=`, `!`, `<` or `>` cannot be
@@ -663,8 +662,7 @@ impl AsAgent for SwitchAgent {
 ///
 /// The `key` is a dot-separated list of object keys, and only selects what is compared -
 /// the value emitted is always the original input value. When `key` is omitted, the input
-/// value itself is compared. Message values expose their serialized fields, so a key like
-/// `message.content` works. A key that does not resolve (a key is missing, or a value
+/// value itself is compared. A key that does not resolve (a key is missing, or a value
 /// along the path has no such property) is compared as `null` rather than raising an
 /// error, so a case of `null` catches a missing field.
 ///

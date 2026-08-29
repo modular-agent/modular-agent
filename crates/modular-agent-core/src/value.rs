@@ -680,8 +680,9 @@ impl AgentValue {
 
     /// Looks up a named property, seeing through variants that expose
     /// properties without being an `Object` (currently `Message`, whose
-    /// fields resolve as they serialize, and `Array`, which resolves an
-    /// index key like `"0"` — see [`parse_index`] — to its element).
+    /// fields resolve as they serialize, `Image`, which exposes `width`
+    /// and `height`, and `Array`, which resolves an index key like `"0"`
+    /// — see [`parse_index`] — to its element).
     /// Returns an owned value because non-`Object` variants materialize
     /// their properties on demand; `Object` and `Array` lookups are cheap
     /// `Arc`/`im` clones.
@@ -691,6 +692,12 @@ impl AgentValue {
             AgentValue::Array(a) => a.get(parse_index(key)?).cloned(),
             #[cfg(feature = "llm")]
             AgentValue::Message(m) => m.get_prop(key),
+            #[cfg(feature = "image")]
+            AgentValue::Image(i) => match key {
+                "width" => Some(AgentValue::integer(i.get_width() as i64)),
+                "height" => Some(AgentValue::integer(i.get_height() as i64)),
+                _ => None,
+            },
             _ => None,
         }
     }
@@ -698,10 +705,11 @@ impl AgentValue {
     /// Sets a named property, seeing through variants that expose
     /// properties without being an `Object`: an `Object` inserts the key,
     /// an `Array` replaces the element at an in-range index key (see
-    /// [`parse_index`]). A `Message` is read-only through this surface —
-    /// its properties resolve via [`AgentValue::get_prop`], but writing one
-    /// is an error. Other variants — and a non-index or out-of-range key on
-    /// an `Array` — are an error rather than a silent drop.
+    /// [`parse_index`]). A `Message` and an `Image` are read-only through
+    /// this surface — their properties resolve via
+    /// [`AgentValue::get_prop`], but writing one is an error. Other
+    /// variants — and a non-index or out-of-range key on an `Array` — are
+    /// an error rather than a silent drop.
     pub fn set_prop(&mut self, key: &str, value: AgentValue) -> Result<(), AgentError> {
         match self {
             AgentValue::Object(o) => {
@@ -725,6 +733,10 @@ impl AgentValue {
             AgentValue::Message(_) => Err(AgentError::InvalidValue(format!(
                 "Cannot set property `{key}` on a Message"
             ))),
+            #[cfg(feature = "image")]
+            AgentValue::Image(_) => Err(AgentError::InvalidValue(format!(
+                "Cannot set property `{key}` on an Image"
+            ))),
             _ => Err(AgentError::InvalidValue(format!(
                 "Cannot set property `{key}` on this value"
             ))),
@@ -732,13 +744,15 @@ impl AgentValue {
     }
 
     /// True when the value exposes properties by key (`Object`, `Array`,
-    /// `Message`).
+    /// `Message`, `Image`).
     pub fn has_props(&self) -> bool {
         match self {
             AgentValue::Object(_) => true,
             AgentValue::Array(_) => true,
             #[cfg(feature = "llm")]
             AgentValue::Message(_) => true,
+            #[cfg(feature = "image")]
+            AgentValue::Image(_) => true,
             _ => false,
         }
     }
@@ -1559,6 +1573,15 @@ mod tests {
             assert_eq!(msg.get_prop("missing"), None);
         }
 
+        // Image: width and height resolve as integers.
+        #[cfg(feature = "image")]
+        {
+            let img = AgentValue::image(PhotonImage::new(vec![0u8; 8], 2, 1));
+            assert_eq!(img.get_prop("width"), Some(AgentValue::integer(2)));
+            assert_eq!(img.get_prop("height"), Some(AgentValue::integer(1)));
+            assert_eq!(img.get_prop("missing"), None);
+        }
+
         // Array: index keys resolve to elements.
         let arr = AgentValue::array(vector![AgentValue::integer(10), AgentValue::integer(20)]);
         assert_eq!(arr.get_prop("0"), Some(AgentValue::integer(10)));
@@ -1608,6 +1631,16 @@ mod tests {
             );
             assert!(msg.is_message());
             assert_eq!(msg.get_prop("content"), Some(AgentValue::string("hello")));
+        }
+
+        // Image: same read-only contract as Message
+        #[cfg(feature = "image")]
+        {
+            let mut img = AgentValue::image(PhotonImage::new(vec![0u8; 4], 1, 1));
+            assert!(img.has_props());
+            assert!(img.set_prop("width", AgentValue::integer(2)).is_err());
+            assert!(img.is_image());
+            assert_eq!(img.get_prop("width"), Some(AgentValue::integer(1)));
         }
 
         // Array: in-range index replaces the element; a shared clone is

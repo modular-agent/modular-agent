@@ -332,9 +332,9 @@ fn set_nested_value<K: AsRef<str>>(
     } else {
         // Array: read-modify-write the materialized element, then store it
         // back through set_prop, which rejects a bad index with the root
-        // untouched. A Message also lands here (its properties materialize
-        // via get_prop) but its set_prop is always an error — Messages are
-        // read-only through key paths.
+        // untouched. A Message or an Image also lands here (their properties
+        // materialize via get_prop) but their set_prop is always an error —
+        // both are read-only through key paths.
         let mut sub = root
             .get_prop(key)
             .unwrap_or_else(AgentValue::object_default);
@@ -724,6 +724,38 @@ mod tests {
         assert_eq!(get_nested_value(&root, &["message", "nope"]), None);
     }
 
+    #[cfg(feature = "image")]
+    #[test]
+    fn test_get_nested_value_through_image() {
+        use modular_agent_core::PhotonImage;
+        use modular_agent_core::llm::Message;
+        use std::sync::Arc;
+
+        let mut message = Message::user("pic".to_string());
+        message.image = Some(Arc::new(PhotonImage::new(vec![0u8; 8], 2, 1)));
+        let root = AgentValue::object(hashmap! {
+            "message".to_string() => AgentValue::message(message),
+        });
+
+        // Dimensions through a Message-held Image
+        assert_eq!(
+            get_nested_value(&root, &["message", "image", "width"]),
+            Some(AgentValue::integer(2))
+        );
+        assert_eq!(
+            get_nested_value(&root, &["message", "image", "height"]),
+            Some(AgentValue::integer(1))
+        );
+        assert_eq!(get_nested_value(&root, &["message", "image", "nope"]), None);
+
+        // Bare Image root
+        let img = AgentValue::image(PhotonImage::new(vec![0u8; 8], 2, 1));
+        assert_eq!(
+            get_nested_value(&img, &["width"]),
+            Some(AgentValue::integer(2))
+        );
+    }
+
     /// Verify if a deeply nested structure (a.b.c) can be auto-generated from an empty state.
     #[test]
     fn test_create_deeply_nested_structure() {
@@ -917,6 +949,30 @@ mod tests {
         )
         .unwrap();
         assert!(root.get("reply").unwrap().is_message());
+    }
+
+    /// A key path into an Image is an error instead of silently replacing
+    /// the Image with an empty Object; the Image survives untouched.
+    #[cfg(feature = "image")]
+    #[test]
+    fn test_set_nested_value_image_is_read_only() {
+        use modular_agent_core::PhotonImage;
+
+        let mut root = AgentValue::object(hashmap! {
+            "image".to_string() => AgentValue::image(PhotonImage::new(vec![0u8; 8], 2, 1)),
+        });
+
+        assert!(set_nested_value(&mut root, &["image", "width"], AgentValue::integer(9)).is_err());
+
+        let img = root.get("image").unwrap();
+        assert!(img.is_image());
+        assert_eq!(img.get_prop("width"), Some(AgentValue::integer(2)));
+        assert_eq!(img.get_prop("height"), Some(AgentValue::integer(1)));
+
+        // A bare Image root rejects writes too, and stays intact
+        let mut bare = AgentValue::image(PhotonImage::new(vec![0u8; 4], 1, 1));
+        assert!(set_nested_value(&mut bare, &["width"], AgentValue::integer(9)).is_err());
+        assert!(bare.is_image());
     }
 
     /// Index segments resolve into arrays anywhere in the path.
