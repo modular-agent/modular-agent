@@ -24,11 +24,11 @@ repository = "https://github.com/modular-agent/modular-agent"
 # In-tree crates: `path` is what the workspace builds against, `version` is what
 # a published crate records for its dependents. Each crate keeps its own semver
 # line; only core and macros are bumped together.
-modular-agent-macros = { version = "0.29.0", path = "crates/modular-agent-macros" }
-modular-agent-core = { version = "0.29.0", path = "crates/modular-agent-core" }
-modular-agent-std = { version = "0.19.0", path = "crates/modular-agent-std" }
-modular-agent-llm = { version = "0.17.0", path = "crates/modular-agent-llm" }
-tauri-plugin-modular-agent = { version = "0.20.0", path = "crates/tauri-plugin-modular-agent" }
+modular-agent-macros = { version = "0.30.0", path = "crates/modular-agent-macros" }
+modular-agent-core = { version = "0.30.0", path = "crates/modular-agent-core" }
+modular-agent-std = { version = "0.20.0", path = "crates/modular-agent-std" }
+modular-agent-llm = { version = "0.18.0", path = "crates/modular-agent-llm" }
+tauri-plugin-modular-agent = { version = "0.21.0", path = "crates/tauri-plugin-modular-agent" }
 
 # Shared external dependencies. Crates whose feature sets diverge (tokio,
 # reqwest) keep their own entries.

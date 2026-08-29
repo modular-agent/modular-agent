@@ -28,14 +28,14 @@ Agent implementations live in separate crates: [modular-agent-std](https://githu
 
 ```toml
 [dependencies]
-modular-agent-core = "0.29"
+modular-agent-core = "0.30"
 ```
 
 To disable default features:
 
 ```toml
 [dependencies]
-modular-agent-core = { version = "0.29", default-features = false, features = ["llm"] }
+modular-agent-core = { version = "0.30", default-features = false, features = ["llm"] }
 ```
 
 ## Quick Start
@@ -255,7 +255,7 @@ echo "Hello" | ma ./patch.json
 With the `mcp-server` feature, a host application can expose its running `ModularAgent` over a localhost MCP endpoint, so external AI agents such as Claude Code can inspect agent definitions, build and edit patches, and verify running flows through natural language.
 
 ```toml
-modular-agent-core = { version = "0.29", features = ["mcp-server"] }
+modular-agent-core = { version = "0.30", features = ["mcp-server"] }
 ```
 
 ```rust

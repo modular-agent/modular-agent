@@ -28,14 +28,14 @@ modular-agent-core は [Modular Agent](https://github.com/modular-agent/modular-
 
 ```toml
 [dependencies]
-modular-agent-core = "0.29"
+modular-agent-core = "0.30"
 ```
 
 デフォルト Feature を無効にする場合:
 
 ```toml
 [dependencies]
-modular-agent-core = { version = "0.29", default-features = false, features = ["llm"] }
+modular-agent-core = { version = "0.30", default-features = false, features = ["llm"] }
 ```
 
 ## クイックスタート
@@ -255,7 +255,7 @@ echo "Hello" | ma ./patch.json
 `mcp-server` feature を有効にすると、ホストアプリケーションは実行中の `ModularAgent` を localhost の MCP エンドポイントとして公開でき、Claude Code などの外部 AI エージェントが自然言語からエージェント定義の参照、パッチの構築・編集、実行中フローの動作確認を行えるようになります。
 
 ```toml
-modular-agent-core = { version = "0.29", features = ["mcp-server"] }
+modular-agent-core = { version = "0.30", features = ["mcp-server"] }
 ```
 
 ```rust
