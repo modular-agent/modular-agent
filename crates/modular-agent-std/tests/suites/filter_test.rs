@@ -5,6 +5,36 @@ use ma::{AgentValue, test_utils};
 
 const PATCH: &str = "tests/patches/Std_Filter_test.json";
 
+const SWITCH_DEF: &str = "modular_agent_std::filter::SwitchAgent";
+
+/// Pins the reload contract: reconcile_spec parks the undeclared `c2` config under a
+/// `_` prefix on patch load, and Switch's new() must pick the value back up.
+#[tokio::test]
+async fn test_switch_restores_parked_conditions() {
+    let ma = test_utils::setup_modular_agent().await;
+
+    let patch_id = ma.new_patch().unwrap();
+    let def = ma.get_agent_definition(SWITCH_DEF).unwrap();
+
+    let mut spec = def.to_spec();
+    let mut configs = spec.configs.take().unwrap();
+    configs.set("n".into(), AgentValue::integer(3));
+    configs.set("_c2".into(), AgentValue::string("status == \"error\""));
+    spec.configs = Some(configs);
+    let agent_id = ma.add_agent(patch_id.clone(), spec).await.unwrap();
+
+    let created = ma.get_agent_spec(&agent_id).await.unwrap();
+    let configs = created.configs.expect("configs must be present");
+    assert_eq!(configs.get_string("c2").unwrap(), "status == \"error\"");
+    assert!(!configs.contains_key("_c2"), "the parked key must be gone");
+    assert_eq!(
+        created.outputs.expect("outputs must be present"),
+        vec!["0", "1", "2", "_"]
+    );
+
+    ma.quit();
+}
+
 #[tokio::test]
 async fn test_if_number() {
     let ma = test_utils::setup_modular_agent().await;
