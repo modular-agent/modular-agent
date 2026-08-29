@@ -34,12 +34,20 @@ enum CondOp {
     Ge,
     Lt,
     Le,
+    Match,
+    NotMatch,
 }
 
 impl CondOp {
     /// Order comparisons (`>`, `>=`, `<`, `<=`) are only meaningful for numbers and strings.
     fn is_order(&self) -> bool {
         matches!(self, CondOp::Gt | CondOp::Ge | CondOp::Lt | CondOp::Le)
+    }
+
+    /// Regex searches (`=~`, `!~`) take only a regex literal, matched unanchored like the
+    /// Regex Match agent.
+    fn is_match(&self) -> bool {
+        matches!(self, CondOp::Match | CondOp::NotMatch)
     }
 }
 
@@ -63,7 +71,9 @@ enum CondLit {
     String(String),
     Boolean(bool),
     Null,
-    /// A regular expression matched against the string value in full (anchored `^(?:...)$`).
+    /// A compiled regular expression. How the pattern was wrapped depends on the operator:
+    /// `==` / `!=` and Match cases anchor it as `^(?s:...)$` for a whole-string match,
+    /// `=~` / `!~` compile it bare for an unanchored search.
     Regex(CondRegex),
 }
 
@@ -75,14 +85,16 @@ struct Cond {
     lit: CondLit,
 }
 
-/// Parses a condition expression such as `> 10`, `== "abc"` or `user.age >= 18`.
+/// Parses a condition expression such as `> 10`, `== "abc"`, `user.age >= 18` or
+/// `status =~ /err/`.
 ///
 /// The part before the first operator character is the key; scanning stops there, so an
 /// operator character inside the literal (`name == "a>b"`) is never mistaken for the
 /// operator. Key names containing `=`, `!`, `<` or `>` are therefore not addressable.
 ///
 /// Two-character operators are matched before one-character ones so that `>=` is not
-/// read as `>` followed by the literal `= 10`.
+/// read as `>` followed by the literal `= 10`. `=~` and `!~` also start with an operator
+/// character, so the scan finds them without `~` in its set.
 fn parse_cond(src: &str) -> Result<Cond, AgentError> {
     let src = src.trim();
 
@@ -100,6 +112,10 @@ fn parse_cond(src: &str) -> Result<Cond, AgentError> {
         (CondOp::Eq, rest)
     } else if let Some(rest) = op_src.strip_prefix("!=") {
         (CondOp::Ne, rest)
+    } else if let Some(rest) = op_src.strip_prefix("=~") {
+        (CondOp::Match, rest)
+    } else if let Some(rest) = op_src.strip_prefix("!~") {
+        (CondOp::NotMatch, rest)
     } else if let Some(rest) = op_src.strip_prefix(">=") {
         (CondOp::Ge, rest)
     } else if let Some(rest) = op_src.strip_prefix("<=") {
@@ -110,7 +126,7 @@ fn parse_cond(src: &str) -> Result<Cond, AgentError> {
         (CondOp::Lt, rest)
     } else {
         return Err(AgentError::InvalidConfig(format!(
-            "Condition must start with one of ==, !=, >, >=, <, <=: {}",
+            "Condition must start with one of ==, !=, =~, !~, >, >=, <, <=: {}",
             src
         )));
     };
@@ -123,11 +139,22 @@ fn parse_cond(src: &str) -> Result<Cond, AgentError> {
         )));
     }
 
-    let lit = parse_lit(rest)?;
+    let mode = if op.is_match() {
+        RegexMode::Search
+    } else {
+        RegexMode::Full
+    };
+    let lit = parse_lit_mode(rest, mode)?;
 
     if op.is_order() && matches!(lit, CondLit::Boolean(_) | CondLit::Null | CondLit::Regex(_)) {
         return Err(AgentError::InvalidConfig(format!(
             "Order comparison is not supported for boolean, null or regex literals: {}",
+            src
+        )));
+    }
+    if op.is_match() && !matches!(lit, CondLit::Regex(_)) {
+        return Err(AgentError::InvalidConfig(format!(
+            "=~ and !~ take a regex literal such as /err/: {}",
             src
         )));
     }
@@ -157,8 +184,27 @@ fn parse_key(src: &str) -> Result<Vec<String>, AgentError> {
     Ok(key)
 }
 
-/// Parses a literal: a regex between slashes, or any scalar JSON value.
+/// How a regex literal is compiled, decided by the operator it follows.
+#[derive(Clone, Copy)]
+enum RegexMode {
+    /// Anchored `^(?s:...)$`: the whole string must match, with `.` also matching
+    /// newlines. Used for `==`, `!=` and Match cases.
+    Full,
+    /// The bare pattern, searched anywhere in the string - the same semantics as the
+    /// Regex Match agent. Used for `=~` and `!~`.
+    Search,
+}
+
+/// Parses a literal with full-match regex semantics: a regex between slashes, or any
+/// scalar JSON value. This is the Match agent's case syntax; `parse_cond` picks the
+/// regex mode from the operator via `parse_lit_mode` instead.
 fn parse_lit(src: &str) -> Result<CondLit, AgentError> {
+    parse_lit_mode(src, RegexMode::Full)
+}
+
+/// Parses a literal: a regex between slashes (compiled per `mode`), or any scalar JSON
+/// value.
+fn parse_lit_mode(src: &str, mode: RegexMode) -> Result<CondLit, AgentError> {
     let src = src.trim();
     if src.is_empty() {
         return Err(AgentError::InvalidConfig("Literal is missing".into()));
@@ -201,17 +247,28 @@ fn parse_lit(src: &str) -> Result<CondLit, AgentError> {
             src
         )));
     };
-    // Validate the bare pattern first: an unbalanced pattern such as `a)|(b` is invalid
-    // on its own but would merge with the anchoring wrapper below into a valid -
-    // and unanchored - regex instead of being reported as an error.
-    Regex::new(pattern).map_err(|e| {
-        AgentError::InvalidConfig(format!("Invalid regex literal `/{}/`: {}", pattern, e))
-    })?;
-    // Anchor the whole match. `(?:...)` groups the pattern so an alternation such as
-    // `a|b` is anchored as a whole rather than as `^a` or `b$`.
-    let re = Regex::new(&format!("^(?:{pattern})$")).map_err(|e| {
-        AgentError::InvalidConfig(format!("Invalid regex literal `/{}/`: {}", pattern, e))
-    })?;
+    let re = match mode {
+        RegexMode::Full => {
+            // Validate the bare pattern first: an unbalanced pattern such as `a)|(b` is
+            // invalid on its own but would merge with the anchoring wrapper below into a
+            // valid - and unanchored - regex instead of being reported as an error.
+            Regex::new(pattern).map_err(|e| {
+                AgentError::InvalidConfig(format!("Invalid regex literal `/{}/`: {}", pattern, e))
+            })?;
+            // Anchor the whole match. `(?s:...)` groups the pattern so an alternation
+            // such as `a|b` is anchored as a whole rather than as `^a` or `b$`, and turns
+            // on the `s` flag so `.` also matches newlines - a whole-string match treats
+            // the input as one blob, not as lines. `(?-s)` inside the pattern turns it
+            // back off, and the anchors sit outside the group so an inline `(?m)` cannot
+            // affect them.
+            Regex::new(&format!("^(?s:{pattern})$")).map_err(|e| {
+                AgentError::InvalidConfig(format!("Invalid regex literal `/{}/`: {}", pattern, e))
+            })?
+        }
+        RegexMode::Search => Regex::new(pattern).map_err(|e| {
+            AgentError::InvalidConfig(format!("Invalid regex literal `/{}/`: {}", pattern, e))
+        })?,
+    };
     Ok(CondLit::Regex(CondRegex(re)))
 }
 
@@ -243,7 +300,9 @@ fn eq_cond(lit: &CondLit, value: &AgentValue) -> bool {
         CondLit::String(s) => value.as_str() == Some(s.as_str()),
         CondLit::Boolean(b) => value.as_bool() == Some(*b),
         CondLit::Null => value.is_unit(),
-        // A non-string value never matches, so `==` is false and `!=` (its negation) is true.
+        // A non-string value never matches, so `==` / `=~` are false and `!=` / `!~`
+        // (their negations) are true. The anchoring difference between `==` and `=~` is
+        // baked into the compiled regex at parse time.
         CondLit::Regex(re) => value.as_str().is_some_and(|s| re.0.is_match(s)),
     }
 }
@@ -279,8 +338,8 @@ fn eval_cond(cond: &Cond, value: &AgentValue) -> bool {
     };
 
     match cond.op {
-        CondOp::Eq => eq_cond(&cond.lit, &target),
-        CondOp::Ne => !eq_cond(&cond.lit, &target),
+        CondOp::Eq | CondOp::Match => eq_cond(&cond.lit, &target),
+        CondOp::Ne | CondOp::NotMatch => !eq_cond(&cond.lit, &target),
         _ => {
             let Some(ord) = cmp_cond(&cond.lit, &target) else {
                 return false;
@@ -290,7 +349,7 @@ fn eval_cond(cond: &Cond, value: &AgentValue) -> bool {
                 CondOp::Ge => ord != Ordering::Less,
                 CondOp::Lt => ord == Ordering::Less,
                 CondOp::Le => ord != Ordering::Greater,
-                CondOp::Eq | CondOp::Ne => unreachable!(),
+                CondOp::Eq | CondOp::Ne | CondOp::Match | CondOp::NotMatch => unreachable!(),
             }
         }
     }
@@ -299,18 +358,22 @@ fn eval_cond(cond: &Cond, value: &AgentValue) -> bool {
 /// Routes the input value to `t` or `f` depending on a condition.
 ///
 /// The condition is written as `[key] <operator> <literal>`, for example `> 10`,
-/// `== "abc"` or `user.age >= 18`. Supported operators are `==`, `!=`, `>`, `>=`, `<` and
-/// `<=`; supported literals are numbers, strings, booleans, `null` and regular expressions.
-/// Order operators reject boolean, null and regex literals at parse time.
+/// `== "abc"` or `user.age >= 18`. Supported operators are `==`, `!=`, `=~`, `!~`, `>`,
+/// `>=`, `<` and `<=`; supported literals are numbers, strings, booleans, `null` and
+/// regular expressions. Order operators reject boolean, null and regex literals at parse
+/// time, and `=~` / `!~` take only a regex literal.
 ///
-/// A regex literal is written between slashes, `== /err.*/`, and is matched against a string
-/// value in full: the pattern is implicitly anchored as `^(?:...)$`, so `/err.*/` matches
-/// `"error"` but not `"my error"` - write `/.*err.*/` for a substring match. Use the inline
-/// `(?i)` flag for a case-insensitive match, as in `/(?i)error/`. A non-string value (a
-/// number, an object, or an unresolved key) never matches, so `==` is false and `!=` is
-/// true for it. A `/` inside the pattern needs no escaping as long as the literal still ends
-/// with a `/` (`/a/b/` is the pattern `a/b`). An invalid regex is a configuration error,
-/// reported the same way as any other invalid condition.
+/// A regex literal is written between slashes. With `==` it must match the string value
+/// in full: the pattern is implicitly anchored as `^(?s:...)$`, so `== /err.*/` matches
+/// `"error"` but not `"my error"`. The `s` flag is on, so `.` also matches newlines and a
+/// multi-line string is matched as a whole; write `(?-s)` to turn that off. With `=~` the
+/// pattern is searched anywhere in the string instead - the same semantics as the Regex
+/// Match agent - so `=~ /err/` matches `"my error"`; `!~` is its exact negation. Use the
+/// inline `(?i)` flag for a case-insensitive match, as in `/(?i)error/`. A non-string
+/// value (a number, an object, or an unresolved key) never matches a regex, so `==` / `=~`
+/// are false and `!=` / `!~` are true for it. A `/` inside the pattern needs no escaping
+/// as long as the literal still ends with a `/` (`/a/b/` is the pattern `a/b`). An invalid
+/// regex is a configuration error, reported the same way as any other invalid condition.
 ///
 /// The key is a dot-separated list of object keys. When it is omitted, the input value
 /// itself is tested. Whether or not a key is used, the value emitted on `t` / `f` is
@@ -532,13 +595,15 @@ fn parse_all<T>(
 /// error, while an invalid condition loaded from a patch is only kept as never-matching.
 ///
 /// Condition syntax and comparison semantics are the same as the If agent:
-/// `[key] <operator> <literal>` with `==`, `!=`, `>`, `>=`, `<`, `<=` and number, string,
-/// boolean, null or regex literals; order operators reject boolean, null and regex literals.
-/// A regex literal such as `== /err.*/` matches a string
-/// value in full (implicitly anchored as `^(?:...)$`; use `(?i)` for case-insensitivity), and
-/// a non-string value never matches it. Values that cannot be compared with a literal do not
-/// match that condition instead of raising an error, and an invalid regex is kept as a
-/// never-matching condition like any other invalid one.
+/// `[key] <operator> <literal>` with `==`, `!=`, `=~`, `!~`, `>`, `>=`, `<`, `<=` and
+/// number, string, boolean, null or regex literals; order operators reject boolean, null
+/// and regex literals, and `=~` / `!~` take only a regex literal. A regex literal such as
+/// `== /err.*/` matches a string value in full (implicitly anchored as `^(?s:...)$`, so
+/// `.` also matches newlines; use `(?i)` for case-insensitivity), while `=~ /err/`
+/// searches the pattern anywhere in the string like the Regex Match agent, and `!~` is
+/// its exact negation. A non-string value never matches a regex. Values that cannot be
+/// compared with a literal do not match that condition instead of raising an error, and
+/// an invalid regex is kept as a never-matching condition like any other invalid one.
 ///
 /// Each condition carries its own optional key, so different conditions can look at
 /// different fields of the same input. The condition tests the value at the key, but the
@@ -655,10 +720,12 @@ impl AsAgent for SwitchAgent {
 /// Case values use the same literal syntax as the If and Switch conditions: numbers,
 /// strings, booleans, `null` and regular expressions, written as JSON (`"abc"`, `10`,
 /// `true`, `null`) or as `/pattern/`. A regex matches a string value in full (implicitly
-/// anchored as `^(?:...)$`; use `(?i)` for case-insensitivity), and a non-string value
-/// never matches it. Comparison is by type as well as value, so the case `10` matches
-/// neither the string `"10"` nor `true`, but numbers compare through their numeric value,
-/// so `10` matches both an integer and a float input.
+/// anchored as `^(?s:...)$`, so `.` also matches newlines; use `(?i)` for
+/// case-insensitivity), and a non-string value never matches it. To route by a substring
+/// search instead, use the Switch agent's `=~` operator. Comparison is by type as well as
+/// value, so the case `10` matches neither the string `"10"` nor `true`, but numbers
+/// compare through their numeric value, so `10` matches both an integer and a float
+/// input.
 ///
 /// The `key` is a dot-separated list of object keys, and only selects what is compared -
 /// the value emitted is always the original input value. When `key` is omitted, the input
@@ -925,7 +992,7 @@ mod tests {
         assert_eq!(parse_lit("null").expect("valid"), CondLit::Null);
         assert_eq!(
             parse_lit(" /err.*/ ").expect("valid"),
-            CondLit::Regex(CondRegex(Regex::new("^(?:err.*)$").unwrap()))
+            CondLit::Regex(CondRegex(Regex::new("^(?s:err.*)$").unwrap()))
         );
 
         // Empty
@@ -1085,7 +1152,7 @@ mod tests {
             Cond {
                 key: vec![],
                 op: CondOp::Eq,
-                lit: CondLit::Regex(CondRegex(Regex::new("^(?:err.*)$").unwrap())),
+                lit: CondLit::Regex(CondRegex(Regex::new("^(?s:err.*)$").unwrap())),
             }
         );
         // A key together with `!=`
@@ -1094,7 +1161,7 @@ mod tests {
             Cond {
                 key: vec!["status".to_string()],
                 op: CondOp::Ne,
-                lit: CondLit::Regex(CondRegex(Regex::new("^(?:ok)$").unwrap())),
+                lit: CondLit::Regex(CondRegex(Regex::new("^(?s:ok)$").unwrap())),
             }
         );
         // A `/` inside the pattern needs no escaping; the last `/` closes the literal
@@ -1103,7 +1170,7 @@ mod tests {
             Cond {
                 key: vec![],
                 op: CondOp::Eq,
-                lit: CondLit::Regex(CondRegex(Regex::new("^(?:a/b)$").unwrap())),
+                lit: CondLit::Regex(CondRegex(Regex::new("^(?s:a/b)$").unwrap())),
             }
         );
         // Operator characters inside the pattern are taken literally
@@ -1112,7 +1179,7 @@ mod tests {
             Cond {
                 key: vec![],
                 op: CondOp::Eq,
-                lit: CondLit::Regex(CondRegex(Regex::new("^(?:a=b)$").unwrap())),
+                lit: CondLit::Regex(CondRegex(Regex::new("^(?s:a=b)$").unwrap())),
             }
         );
         // `//` is the empty pattern, not an error
@@ -1121,7 +1188,7 @@ mod tests {
             Cond {
                 key: vec![],
                 op: CondOp::Eq,
-                lit: CondLit::Regex(CondRegex(Regex::new("^(?:)$").unwrap())),
+                lit: CondLit::Regex(CondRegex(Regex::new("^(?s:)$").unwrap())),
             }
         );
     }
@@ -1133,13 +1200,46 @@ mod tests {
         assert!(parse_cond("== /").is_err());
         // Invalid regex pattern
         assert!(parse_cond("== /[/").is_err());
-        // An unbalanced pattern is rejected instead of merging with the `^(?:...)$`
+        // An unbalanced pattern is rejected instead of merging with the `^(?s:...)$`
         // anchoring wrapper into a valid but unanchored regex
         assert!(parse_cond("== /a)|(b/").is_err());
         assert!(parse_cond("== /)(/").is_err());
         // Order operators reject a regex literal at parse time
         assert!(parse_cond("> /a/").is_err());
         assert!(parse_cond(">= /a/").is_err());
+    }
+
+    #[test]
+    fn test_parse_cond_match_op() {
+        // `=~` compiles the bare pattern, unanchored
+        assert_eq!(
+            parse_cond("=~ /err/").expect("valid"),
+            Cond {
+                key: vec![],
+                op: CondOp::Match,
+                lit: CondLit::Regex(CondRegex(Regex::new("err").unwrap())),
+            }
+        );
+        // A key together with `!~`
+        assert_eq!(
+            parse_cond("status !~ /ok/").expect("valid"),
+            Cond {
+                key: vec!["status".to_string()],
+                op: CondOp::NotMatch,
+                lit: CondLit::Regex(CondRegex(Regex::new("ok").unwrap())),
+            }
+        );
+
+        // `=~` / `!~` take only a regex literal
+        assert!(parse_cond("=~ \"abc\"").is_err());
+        assert!(parse_cond("=~ 10").is_err());
+        assert!(parse_cond("=~ null").is_err());
+        assert!(parse_cond("!~ true").is_err());
+        // The usual regex errors apply
+        assert!(parse_cond("=~ /abc").is_err());
+        assert!(parse_cond("=~ /[/").is_err());
+        // A bare `~` is not an operator
+        assert!(parse_cond("~ /a/").is_err());
     }
 
     #[test]
@@ -1192,6 +1292,69 @@ mod tests {
         assert!(eval_cond(
             &parse_cond("missing != /.*/").expect("valid"),
             &obj
+        ));
+    }
+
+    #[test]
+    fn test_eval_cond_regex_multiline() {
+        // The full match treats the string as one blob: `.` also matches newlines
+        let url = parse_cond("== /.*https?:\\/\\/.*/").expect("valid");
+        assert!(eval_cond(
+            &url,
+            &AgentValue::string("line1\nhttps://example.com\nline3")
+        ));
+        assert!(eval_cond(
+            &url,
+            &AgentValue::string("https://example.com\n")
+        ));
+        assert!(!eval_cond(&url, &AgentValue::string("no url here")));
+
+        // `(?-s)` turns newline-matching back off inside the pattern
+        let strict = parse_cond("== /(?-s).*/").expect("valid");
+        assert!(eval_cond(&strict, &AgentValue::string("ab")));
+        assert!(!eval_cond(&strict, &AgentValue::string("a\nb")));
+    }
+
+    #[test]
+    fn test_eval_cond_match_op() {
+        // `=~` searches anywhere, so the substring in "my error" matches
+        let cond = parse_cond("=~ /err/").expect("valid");
+        assert!(eval_cond(&cond, &AgentValue::string("error")));
+        assert!(eval_cond(&cond, &AgentValue::string("my error")));
+        assert!(!eval_cond(&cond, &AgentValue::string("ok")));
+
+        // `!~` is the exact negation
+        let ne = parse_cond("!~ /err/").expect("valid");
+        assert!(!eval_cond(&ne, &AgentValue::string("my error")));
+        assert!(eval_cond(&ne, &AgentValue::string("ok")));
+
+        // A search needs no `.*` around the pattern, and newlines are no obstacle
+        assert!(eval_cond(
+            &parse_cond("=~ /https?:\\/\\//").expect("valid"),
+            &AgentValue::string("line1\nhttps://example.com\nline3")
+        ));
+
+        // Key-based search
+        let value = AgentValue::object(im::hashmap! {
+            "status".to_string() => AgentValue::string("my error".to_string()),
+        });
+        assert!(eval_cond(
+            &parse_cond("status =~ /err/").expect("valid"),
+            &value
+        ));
+
+        // A non-string target never matches: `=~` is false, `!~` is true
+        let num = AgentValue::integer(10);
+        assert!(!eval_cond(&parse_cond("=~ /10/").expect("valid"), &num));
+        assert!(eval_cond(&parse_cond("!~ /10/").expect("valid"), &num));
+        // An unresolved key is unit, which is not a string either
+        assert!(!eval_cond(
+            &parse_cond("missing =~ /.*/").expect("valid"),
+            &value
+        ));
+        assert!(eval_cond(
+            &parse_cond("missing !~ /.*/").expect("valid"),
+            &value
         ));
     }
 }
