@@ -9,6 +9,8 @@ mod suites {
     mod input_test;
     mod sequence_test;
     mod string_test;
+    mod time_test;
+    mod utils_test;
     #[cfg(feature = "watch")]
     mod watch_test;
 }
