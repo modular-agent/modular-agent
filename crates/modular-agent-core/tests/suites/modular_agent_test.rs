@@ -28,9 +28,9 @@ fn test_init() {
         "modular_agent_core::test_utils::TestProbeAgent",
         "modular_agent_core::tool::CallToolAgent",
         "modular_agent_core::tool::CallToolMessageAgent",
+        "modular_agent_core::tool::CustomToolAgent",
         "modular_agent_core::tool::ListToolsAgent",
         "modular_agent_core::tool::LoopControlAgent",
-        "modular_agent_core::tool::PatchToolAgent",
     ];
     assert_eq!(keys, expected);
 

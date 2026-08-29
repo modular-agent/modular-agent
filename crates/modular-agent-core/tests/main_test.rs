@@ -7,12 +7,12 @@ mod suites {
     mod call_tools_test;
     mod cancel_test;
     mod counter_test;
+    mod custom_tool_test;
     mod event_test;
     mod external_test;
     mod modular_agent_test;
     mod patch_name_test;
     mod patch_test;
-    mod patch_tool_test;
     mod shutdown_test;
     mod var_disabled_test;
     mod var_test;

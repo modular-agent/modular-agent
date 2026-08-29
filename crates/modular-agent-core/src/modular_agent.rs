@@ -1279,7 +1279,7 @@ impl ModularAgent {
     /// Cancels the context's cancellation token, which every agent handling
     /// the flow received via [`AgentContext::cancel_token`]. Cancellation is
     /// cooperative for work already in flight: agents that `select!` on the
-    /// token (LLM streaming loops, [`PatchToolAgent`](crate::tool::PatchToolAgent)
+    /// token (LLM streaming loops, [`CustomToolAgent`](crate::tool::CustomToolAgent)
     /// result waits) abort promptly with [`AgentError::Cancelled`], while
     /// agents that ignore it run to completion. Inputs dispatched after the
     /// token fires are skipped before `process()` is called. The cancelled
