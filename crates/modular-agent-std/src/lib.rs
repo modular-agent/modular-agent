@@ -3,6 +3,7 @@
 pub mod array;
 pub mod data;
 pub mod display;
+mod dynamic_spec;
 pub mod example;
 pub mod file;
 pub mod filter;

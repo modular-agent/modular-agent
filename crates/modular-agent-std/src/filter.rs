@@ -1,12 +1,13 @@
 use std::cmp::Ordering;
 
 use modular_agent_core::{
-    AgentConfigSpec, AgentConfigSpecs, AgentConfigs, AgentContext, AgentData, AgentError,
-    AgentOutput, AgentSpec, AgentValue, AsAgent, ModularAgent, async_trait, modular_agent,
+    AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent, ModularAgent,
+    async_trait, modular_agent,
 };
 use regex::Regex;
 
 use crate::data::get_nested_value;
+use crate::dynamic_spec::{self, NumberedPorts, NumberedSpecOptions};
 
 const CATEGORY: &str = "Std/Filter";
 
@@ -20,9 +21,6 @@ const CONFIG_N: &str = "n";
 const CONFIG_KEY: &str = "key";
 const CONFIG_C0: &str = "c0";
 const CONFIG_C1: &str = "c1";
-
-/// Upper bound for the Switch / Match agents' `n` config.
-const MAX_N: i64 = 64;
 
 // Condition expression: `[<key>] <operator> <JSON literal>`
 
@@ -472,99 +470,6 @@ impl AsAgent for IfAgent {
     }
 }
 
-/// Regenerates the dynamic part of a Switch / Match spec: reads `n` (clamped to 1..=64),
-/// carries over the `n` config and the given extra string configs, and rebuilds the
-/// numbered `c0`..`c(n-1)` configs and the output ports `0`..`n-1` plus `_`.
-///
-/// Returns `n`, the current values of the extra configs (in the given order) and the
-/// current values of `c0`..`c(n-1)`.
-fn update_numbered_spec(
-    spec: &mut AgentSpec,
-    extra_strings: &[&str],
-) -> Result<(usize, Vec<String>, Vec<String>), AgentError> {
-    let n = spec
-        .configs
-        .as_ref()
-        .map(|cfg| cfg.get_integer_or(CONFIG_N, 2))
-        .unwrap_or(2);
-    // The upper bound keeps a stray config value from requesting a huge allocation.
-    let n = n.clamp(1, MAX_N) as usize;
-
-    let extra_values: Vec<String> = extra_strings
-        .iter()
-        .map(|name| {
-            spec.configs
-                .as_ref()
-                .map(|cfg| cfg.get_string_or_default(name))
-                .unwrap_or_default()
-        })
-        .collect();
-
-    // Dynamic generation of config definitions (ConfigSpecs)
-    let mut configs = AgentConfigs::new();
-    let mut config_specs = AgentConfigSpecs::default();
-
-    // Re-set required configurations
-    for name in extra_strings.iter().copied().chain([CONFIG_N]) {
-        let Some(config_spec) = spec
-            .config_specs
-            .as_ref()
-            .and_then(|cs| cs.get(name))
-            .cloned()
-        else {
-            return Err(AgentError::InvalidConfig(format!(
-                "config {} must be present",
-                name
-            )));
-        };
-        config_specs.insert(name.to_string(), config_spec);
-    }
-    for (name, value) in extra_strings.iter().zip(&extra_values) {
-        configs.set(name.to_string(), AgentValue::string(value.clone()));
-    }
-    configs.set(CONFIG_N.to_string(), AgentValue::integer(n as i64));
-
-    let mut srcs = Vec::with_capacity(n);
-    for i in 0..n {
-        let name = format!("c{}", i);
-        // `AgentDefinition::reconcile_spec` moves every config the definition does not
-        // declare - which includes the dynamic `c0`..`c(n-1)` - to a `_`-prefixed key when
-        // a patch is loaded. Fall back to it so saved values survive a reload.
-        let v = spec
-            .configs
-            .as_ref()
-            .map(|cfg| {
-                if cfg.contains_key(&name) {
-                    cfg.get_string_or(&name, "")
-                } else {
-                    cfg.get_string_or(&format!("_{}", name), "")
-                }
-            })
-            .unwrap_or_default();
-
-        srcs.push(v.clone());
-
-        configs.set(name.clone(), AgentValue::string(v));
-        config_specs.insert(
-            name,
-            AgentConfigSpec {
-                value: AgentValue::string_default(),
-                type_: Some("string".to_string()),
-                ..Default::default()
-            },
-        );
-    }
-
-    spec.configs = Some(configs);
-    spec.config_specs = Some(config_specs);
-
-    let mut outputs: Vec<String> = (0..n).map(|i| i.to_string()).collect();
-    outputs.push(PORT_DEFAULT.to_string());
-    spec.outputs = Some(outputs);
-
-    Ok((n, extra_values, srcs))
-}
-
 /// Parses each source with `parse`, keeping a failed one as a never-matching `None`, and
 /// returns the first error alongside the results.
 fn parse_all<T>(
@@ -647,10 +552,21 @@ struct SwitchAgent {
     conds: Vec<Option<Cond>>,
 }
 
+impl SwitchAgent {
+    fn numbered_opts() -> NumberedSpecOptions<'static> {
+        NumberedSpecOptions {
+            prefix: "c",
+            statics: &[CONFIG_N],
+            index_default: |_| String::new(),
+            ports: NumberedPorts::OutputsWithDefault,
+        }
+    }
+}
+
 #[async_trait]
 impl AsAgent for SwitchAgent {
     fn new(ma: ModularAgent, id: String, mut spec: AgentSpec) -> Result<Self, AgentError> {
-        let (n, _, cond_srcs) = update_numbered_spec(&mut spec, &[])?;
+        let (n, cond_srcs) = dynamic_spec::update_numbered_spec(&mut spec, &Self::numbered_opts())?;
         // Invalid conditions are kept as never-matching instead of blocking the load.
         let (conds, _) = parse_all(&cond_srcs, load_cond);
         let data = AgentData::new(ma, id, spec);
@@ -663,7 +579,8 @@ impl AsAgent for SwitchAgent {
     }
 
     fn configs_changed(&mut self) -> Result<(), AgentError> {
-        let (n, _, cond_srcs) = update_numbered_spec(&mut self.data.spec, &[])?;
+        let (n, cond_srcs) =
+            dynamic_spec::update_numbered_spec(&mut self.data.spec, &Self::numbered_opts())?;
         if n == self.n && cond_srcs == self.cond_srcs {
             return Ok(());
         }
@@ -775,11 +692,29 @@ struct MatchAgent {
     cases: Vec<Option<CondLit>>,
 }
 
+impl MatchAgent {
+    fn numbered_opts() -> NumberedSpecOptions<'static> {
+        NumberedSpecOptions {
+            prefix: "c",
+            statics: &[CONFIG_KEY, CONFIG_N],
+            index_default: |_| String::new(),
+            ports: NumberedPorts::OutputsWithDefault,
+        }
+    }
+
+    fn key_src_from(spec: &AgentSpec) -> String {
+        spec.configs
+            .as_ref()
+            .map(|cfg| cfg.get_string_or_default(CONFIG_KEY))
+            .unwrap_or_default()
+    }
+}
+
 #[async_trait]
 impl AsAgent for MatchAgent {
     fn new(ma: ModularAgent, id: String, mut spec: AgentSpec) -> Result<Self, AgentError> {
-        let (n, extras, case_srcs) = update_numbered_spec(&mut spec, &[CONFIG_KEY])?;
-        let key_src = extras.into_iter().next().unwrap_or_default();
+        let (n, case_srcs) = dynamic_spec::update_numbered_spec(&mut spec, &Self::numbered_opts())?;
+        let key_src = Self::key_src_from(&spec);
         // An invalid key or case is kept as never-matching instead of blocking the load.
         let key = parse_key(&key_src).ok();
         let (cases, _) = parse_all(&case_srcs, load_lit);
@@ -795,8 +730,9 @@ impl AsAgent for MatchAgent {
     }
 
     fn configs_changed(&mut self) -> Result<(), AgentError> {
-        let (n, extras, case_srcs) = update_numbered_spec(&mut self.data.spec, &[CONFIG_KEY])?;
-        let key_src = extras.into_iter().next().unwrap_or_default();
+        let (n, case_srcs) =
+            dynamic_spec::update_numbered_spec(&mut self.data.spec, &Self::numbered_opts())?;
+        let key_src = Self::key_src_from(&self.data.spec);
         if n == self.n && key_src == self.key_src && case_srcs == self.case_srcs {
             return Ok(());
         }

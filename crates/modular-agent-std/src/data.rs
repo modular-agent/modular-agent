@@ -4,10 +4,11 @@ use std::{collections::VecDeque, vec};
 use im::{HashMap, Vector};
 use mini_moka::sync::Cache;
 use modular_agent_core::{
-    AgentConfigSpec, AgentConfigSpecs, AgentConfigs, AgentContext, AgentData, AgentError,
-    AgentOutput, AgentSpec, AgentValue, AsAgent, ModularAgent, async_trait, modular_agent,
-    parse_index,
+    AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent, ModularAgent,
+    async_trait, modular_agent, parse_index,
 };
+
+use crate::dynamic_spec::{self, NumberedPorts, NumberedSpecOptions};
 
 const CATEGORY: &str = "Std/Data";
 
@@ -390,124 +391,28 @@ struct PendingZip {
 }
 
 impl ZipToObjectAgent {
+    fn numbered_opts() -> NumberedSpecOptions<'static> {
+        NumberedSpecOptions {
+            prefix: "k",
+            statics: &[CONFIG_N, CONFIG_USE_CTX, CONFIG_TTL_SEC, CONFIG_CAPACITY],
+            index_default: |i| i.to_string(),
+            ports: NumberedPorts::Inputs,
+        }
+    }
+
     fn update_spec(
         spec: &mut AgentSpec,
     ) -> Result<(usize, bool, u64, u64, Vec<String>), AgentError> {
-        let n = spec
-            .configs
-            .as_ref()
-            .map(|cfg| cfg.get_integer_or(CONFIG_N, 2))
-            .unwrap_or(2) as usize;
-        let n = if n < 1 { 1 } else { n };
-
-        let use_ctx = spec
-            .configs
-            .as_ref()
-            .map(|cfg| cfg.get_bool_or_default(CONFIG_USE_CTX))
-            .unwrap_or(false);
-
-        let ttl_sec = spec
-            .configs
-            .as_ref()
-            .map(|c| c.get_integer_or(CONFIG_TTL_SEC, 60))
-            .unwrap_or(60) as u64;
-
-        let capacity = spec
-            .configs
-            .as_ref()
-            .map(|c| c.get_integer_or(CONFIG_CAPACITY, 1000))
-            .unwrap_or(1000) as u64;
-
-        // Dynamic generation of config definitions (ConfigSpecs)
-        let mut configs = AgentConfigs::new();
-        let mut config_specs = AgentConfigSpecs::default();
-
-        // Re-set required configurations
-        configs.set(CONFIG_N.to_string(), AgentValue::integer(n as i64));
-        let Some(n_spec) = spec
-            .config_specs
-            .as_ref()
-            .and_then(|cs| cs.get(CONFIG_N))
-            .cloned()
-        else {
-            return Err(AgentError::InvalidConfig("config n must be present".into()));
+        let (n, keys) = dynamic_spec::update_numbered_spec(spec, &Self::numbered_opts())?;
+        let (use_ctx, ttl_sec, capacity) = match spec.configs.as_ref() {
+            Some(cfg) => (
+                cfg.get_bool_or_default(CONFIG_USE_CTX),
+                cfg.get_integer_or(CONFIG_TTL_SEC, 60) as u64,
+                cfg.get_integer_or(CONFIG_CAPACITY, 1000) as u64,
+            ),
+            None => (false, 60, 1000),
         };
-        config_specs.insert(CONFIG_N.to_string(), n_spec);
-
-        configs.set(CONFIG_USE_CTX.to_string(), AgentValue::boolean(use_ctx));
-        let Some(use_ctx_spec) = spec
-            .config_specs
-            .as_ref()
-            .and_then(|cs| cs.get(CONFIG_USE_CTX))
-            .cloned()
-        else {
-            return Err(AgentError::InvalidConfig(
-                "config use_ctx must be present".into(),
-            ));
-        };
-        config_specs.insert(CONFIG_USE_CTX.to_string(), use_ctx_spec);
-
-        configs.set(
-            CONFIG_TTL_SEC.to_string(),
-            AgentValue::integer(ttl_sec as i64),
-        );
-        let Some(ttl_spec) = spec
-            .config_specs
-            .as_ref()
-            .and_then(|cs| cs.get(CONFIG_TTL_SEC))
-            .cloned()
-        else {
-            return Err(AgentError::InvalidConfig(
-                "config ttl_sec must be present".into(),
-            ));
-        };
-        config_specs.insert(CONFIG_TTL_SEC.to_string(), ttl_spec);
-
-        configs.set(
-            CONFIG_CAPACITY.to_string(),
-            AgentValue::integer(capacity as i64),
-        );
-        let Some(capacity_spec) = spec
-            .config_specs
-            .as_ref()
-            .and_then(|cs| cs.get(CONFIG_CAPACITY))
-            .cloned()
-        else {
-            return Err(AgentError::InvalidConfig(
-                "config capacity must be present".into(),
-            ));
-        };
-        config_specs.insert(CONFIG_CAPACITY.to_string(), capacity_spec);
-
-        let mut keys = Vec::with_capacity(n);
-        for i in 0..n {
-            let key_name = format!("k{}", i);
-            let default_key = i.to_string();
-            let v = spec
-                .configs
-                .as_ref()
-                .map(|cfg| cfg.get_string_or(&key_name, &default_key))
-                .unwrap_or(default_key);
-
-            keys.push(v.clone());
-
-            configs.set(key_name.clone(), AgentValue::string(v));
-            config_specs.insert(
-                key_name,
-                AgentConfigSpec {
-                    value: AgentValue::string_default(),
-                    type_: Some("string".to_string()),
-                    ..Default::default()
-                },
-            );
-        }
-
-        spec.configs = Some(configs);
-        spec.config_specs = Some(config_specs);
-
-        spec.inputs = Some((0..n).map(|i| i.to_string()).collect());
-
-        Ok((n as usize, use_ctx, ttl_sec, capacity, keys))
+        Ok((n, use_ctx, ttl_sec, capacity, keys))
     }
 
     fn reset_state(&mut self) {
@@ -648,6 +553,7 @@ impl AsAgent for ZipToObjectAgent {
 #[cfg(test)]
 mod tests {
     use im::{hashmap, vector};
+    use modular_agent_core::{AgentConfigSpec, AgentConfigSpecs, AgentConfigs};
 
     use super::*;
 
