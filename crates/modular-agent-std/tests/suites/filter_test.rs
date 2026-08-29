@@ -142,6 +142,57 @@ async fn test_if_regex() {
         .await
         .unwrap();
 
+    // The full match treats the string as one blob, so `.` also matches newlines
+    test_utils::write_and_expect_local_value(
+        &ma,
+        &patch_id,
+        "if_cond",
+        AgentValue::string("== /hello.*/"),
+    )
+    .await
+    .unwrap();
+
+    test_utils::write_and_expect_local_value(
+        &ma,
+        &patch_id,
+        "if_in",
+        AgentValue::string("hello\nworld"),
+    )
+    .await
+    .unwrap();
+    test_utils::expect_local_value(&patch_id, "if_t", &AgentValue::string("hello\nworld"))
+        .await
+        .unwrap();
+
+    // `=~` searches the pattern anywhere in the string instead of matching in full
+    test_utils::write_and_expect_local_value(
+        &ma,
+        &patch_id,
+        "if_cond",
+        AgentValue::string("=~ /world/"),
+    )
+    .await
+    .unwrap();
+
+    test_utils::write_and_expect_local_value(
+        &ma,
+        &patch_id,
+        "if_in",
+        AgentValue::string("hello world"),
+    )
+    .await
+    .unwrap();
+    test_utils::expect_local_value(&patch_id, "if_t", &AgentValue::string("hello world"))
+        .await
+        .unwrap();
+
+    test_utils::write_and_expect_local_value(&ma, &patch_id, "if_in", AgentValue::string("hello"))
+        .await
+        .unwrap();
+    test_utils::expect_local_value(&patch_id, "if_f", &AgentValue::string("hello"))
+        .await
+        .unwrap();
+
     ma.quit();
 }
 
@@ -462,6 +513,23 @@ async fn test_switch_regex() {
         .await
         .unwrap();
     test_utils::expect_local_value(&patch_id, "switch_default", &partial)
+        .await
+        .unwrap();
+
+    // `=~` searches the pattern anywhere in the status, so the same input now matches
+    test_utils::write_and_expect_local_value(
+        &ma,
+        &patch_id,
+        "switch_c0",
+        AgentValue::string("status =~ /err/"),
+    )
+    .await
+    .unwrap();
+
+    test_utils::write_and_expect_local_value(&ma, &patch_id, "switch_in", partial.clone())
+        .await
+        .unwrap();
+    test_utils::expect_local_value(&patch_id, "switch_0", &partial)
         .await
         .unwrap();
 
