@@ -330,9 +330,11 @@ fn set_nested_value<K: AsRef<str>>(
             .or_insert_with(AgentValue::object_default);
         set_nested_value(sub, rest, new_value)
     } else {
-        // Message and Array: read-modify-write the materialized property,
-        // then store it back through the typed setter, which rejects an
-        // unknown Message key or a bad array index with the root untouched.
+        // Array: read-modify-write the materialized element, then store it
+        // back through set_prop, which rejects a bad index with the root
+        // untouched. A Message also lands here (its properties materialize
+        // via get_prop) but its set_prop is always an error — Messages are
+        // read-only through key paths.
         let mut sub = root
             .get_prop(key)
             .unwrap_or_else(AgentValue::object_default);
@@ -860,11 +862,11 @@ mod tests {
         );
     }
 
-    /// Writing through a Message updates the typed field in place instead of
-    /// destroying the Message (Message::eq only compares id/role/content, so
-    /// preserved fields are asserted individually).
+    /// A key path into a Message is an error instead of silently replacing
+    /// the Message with an empty Object; the Message survives untouched.
+    /// Inserting a Message as a value still works.
     #[test]
-    fn test_set_nested_value_through_message() {
+    fn test_set_nested_value_message_is_read_only() {
         use modular_agent_core::llm::{Message, Usage};
 
         let mut message = Message::user("hello".to_string());
@@ -875,23 +877,37 @@ mod tests {
         });
         let mut root = AgentValue::object(hashmap! {
             "message".to_string() => AgentValue::message(message),
-            "user".to_string() => AgentValue::string("alice"),
         });
 
-        set_nested_value(
-            &mut root,
-            &["message", "content"],
-            AgentValue::string("edited"),
-        )
-        .unwrap();
+        assert!(
+            set_nested_value(
+                &mut root,
+                &["message", "content"],
+                AgentValue::string("edited"),
+            )
+            .is_err()
+        );
+        assert!(
+            set_nested_value(
+                &mut root,
+                &["message", "usage", "input_tokens"],
+                AgentValue::integer(99),
+            )
+            .is_err()
+        );
 
-        // Still a Message, with only content replaced
+        // A bare Message root rejects writes too, and stays intact
+        let mut bare = AgentValue::message(Message::user("hello".to_string()));
+        assert!(set_nested_value(&mut bare, &["content"], AgentValue::string("edited")).is_err());
+        assert_eq!(bare.as_message().unwrap().text(), "hello");
+
+        // The Message survives the failed writes intact
         let msg = root.get("message").unwrap().as_message().unwrap();
         assert_eq!(msg.role, "user");
-        assert_eq!(msg.text(), "edited");
-        assert_eq!(msg.usage.unwrap().input_tokens, 3);
-        // Sibling untouched
-        assert_eq!(root.get("user"), Some(&AgentValue::string("alice")));
+        assert_eq!(msg.text(), "hello");
+        let usage = msg.usage.as_ref().unwrap();
+        assert_eq!(usage.input_tokens, 3);
+        assert_eq!(usage.output_tokens, 7);
 
         // A Message as the new value is inserted as-is
         set_nested_value(
@@ -901,70 +917,6 @@ mod tests {
         )
         .unwrap();
         assert!(root.get("reply").unwrap().is_message());
-    }
-
-    /// Writing below a Message field (usage) round-trips through the typed
-    /// setter and preserves the field's other members.
-    #[test]
-    fn test_set_nested_value_message_nested_usage() {
-        use modular_agent_core::llm::{Message, Usage};
-
-        let mut message = Message::user("hello".to_string());
-        message.usage = Some(Usage {
-            input_tokens: 3,
-            output_tokens: 7,
-            ..Default::default()
-        });
-        let mut root = AgentValue::object(hashmap! {
-            "message".to_string() => AgentValue::message(message),
-        });
-
-        set_nested_value(
-            &mut root,
-            &["message", "usage", "input_tokens"],
-            AgentValue::integer(99),
-        )
-        .unwrap();
-
-        let msg = root.get("message").unwrap().as_message().unwrap();
-        assert_eq!(msg.text(), "hello");
-        let usage = msg.usage.unwrap();
-        assert_eq!(usage.input_tokens, 99);
-        assert_eq!(usage.output_tokens, 7);
-    }
-
-    /// A bare Message root stays a Message when a field is set.
-    #[test]
-    fn test_set_nested_value_bare_message_root() {
-        use modular_agent_core::llm::Message;
-
-        let mut root = AgentValue::message(Message::user("hello".to_string()));
-        set_nested_value(&mut root, &["content"], AgentValue::string("edited")).unwrap();
-
-        let msg = root.as_message().unwrap();
-        assert_eq!(msg.role, "user");
-        assert_eq!(msg.text(), "edited");
-    }
-
-    /// An unknown Message property or a type mismatch is an error instead of
-    /// silently destroying the Message.
-    #[test]
-    fn test_set_nested_value_message_errors() {
-        use modular_agent_core::llm::Message;
-
-        let mut root = AgentValue::object(hashmap! {
-            "message".to_string() => AgentValue::message(Message::user("hello".to_string())),
-        });
-
-        assert!(set_nested_value(&mut root, &["message", "foo"], AgentValue::integer(1)).is_err());
-        assert!(
-            set_nested_value(&mut root, &["message", "content"], AgentValue::integer(42)).is_err()
-        );
-        // The Message survives the failed writes
-        assert_eq!(
-            root.get("message").unwrap().as_message().unwrap().text(),
-            "hello"
-        );
     }
 
     /// Index segments resolve into arrays anywhere in the path.

@@ -698,11 +698,10 @@ impl AgentValue {
     /// Sets a named property, seeing through variants that expose
     /// properties without being an `Object`: an `Object` inserts the key,
     /// an `Array` replaces the element at an in-range index key (see
-    /// [`parse_index`]), a `Message` updates the matching typed field in
-    /// place (see [`Message::set_prop`]; copy-on-write when the `Arc` is
-    /// shared). Other variants — and a non-index or out-of-range key on an
-    /// `Array`, or a type mismatch or unknown key on a `Message` — are an
-    /// error rather than a silent drop.
+    /// [`parse_index`]). A `Message` is read-only through this surface —
+    /// its properties resolve via [`AgentValue::get_prop`], but writing one
+    /// is an error. Other variants — and a non-index or out-of-range key on
+    /// an `Array` — are an error rather than a silent drop.
     pub fn set_prop(&mut self, key: &str, value: AgentValue) -> Result<(), AgentError> {
         match self {
             AgentValue::Object(o) => {
@@ -723,7 +722,9 @@ impl AgentValue {
                 ))),
             },
             #[cfg(feature = "llm")]
-            AgentValue::Message(m) => Arc::make_mut(m).set_prop(key, value),
+            AgentValue::Message(_) => Err(AgentError::InvalidValue(format!(
+                "Cannot set property `{key}` on a Message"
+            ))),
             _ => Err(AgentError::InvalidValue(format!(
                 "Cannot set property `{key}` on this value"
             ))),
@@ -1595,21 +1596,18 @@ mod tests {
         assert_eq!(obj.get_prop("k"), Some(AgentValue::integer(1)));
         assert!(obj.has_props());
 
-        // Message: typed in-place update, stays a Message; a shared clone
-        // is untouched (copy-on-write through Arc::make_mut)
+        // Message: exposes properties (so key-path writes don't clobber it
+        // with an empty Object) but rejects writes, leaving it untouched
         #[cfg(feature = "llm")]
         {
             let mut msg = AgentValue::message(Message::user("hello".to_string()));
-            let shared = msg.clone();
-            msg.set_prop("content", AgentValue::string("edited"))
-                .unwrap();
-            assert!(msg.is_message());
-            assert_eq!(msg.get_prop("content"), Some(AgentValue::string("edited")));
-            assert_eq!(
-                shared.get_prop("content"),
-                Some(AgentValue::string("hello"))
-            );
             assert!(msg.has_props());
+            assert!(
+                msg.set_prop("content", AgentValue::string("edited"))
+                    .is_err()
+            );
+            assert!(msg.is_message());
+            assert_eq!(msg.get_prop("content"), Some(AgentValue::string("hello")));
         }
 
         // Array: in-range index replaces the element; a shared clone is
