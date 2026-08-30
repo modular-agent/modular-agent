@@ -49,14 +49,13 @@ pub async fn send_agent_out(
             port,
             value,
         })
-        .await
         .map_err(|_| AgentError::SendMessageFailed("Failed to send AgentOut message".to_string()))
 }
 
-/// Tries to send an agent output message without blocking.
+/// Sends an agent output message from a synchronous context.
 ///
-/// Returns immediately even if the channel is full.
-/// Use `send_agent_out` if async await is acceptable.
+/// The queue is unbounded, so enqueueing always succeeds immediately;
+/// this fails only when the message loop has shut down.
 pub fn try_send_agent_out(
     ma: &ModularAgent,
     agent: String,
@@ -65,7 +64,7 @@ pub fn try_send_agent_out(
     value: AgentValue,
 ) -> Result<(), AgentError> {
     ma.tx()?
-        .try_send(AgentEventMessage::AgentOut {
+        .send(AgentEventMessage::AgentOut {
             agent,
             ctx,
             port,
@@ -88,7 +87,6 @@ pub async fn send_external_output(
 ) -> Result<(), AgentError> {
     ma.tx()?
         .send(AgentEventMessage::ExternalOutput { name, ctx, value })
-        .await
         .map_err(|_| {
             AgentError::SendMessageFailed("Failed to send ExternalOutput message".to_string())
         })

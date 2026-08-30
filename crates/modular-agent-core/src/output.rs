@@ -24,8 +24,9 @@ pub trait AgentOutput {
 
     /// Sends a value to an output port asynchronously.
     ///
-    /// This method waits until the value is accepted by the channel.
-    /// Use `try_output` if you want non-blocking behavior.
+    /// The queue is unbounded, so enqueueing always succeeds immediately;
+    /// this fails only when the orchestrator has shut down. Use
+    /// `try_output` from synchronous contexts.
     fn output<S: Into<String>>(
         &self,
         ctx: AgentContext,
@@ -35,9 +36,7 @@ pub trait AgentOutput {
         self.output_raw(ctx, port.into(), value)
     }
 
-    /// Tries to send a value to an output port without blocking (raw version).
-    ///
-    /// Returns immediately, even if the channel is full.
+    /// Sends a value to an output port from a synchronous context (raw version).
     fn try_output_raw(
         &self,
         ctx: AgentContext,
@@ -45,7 +44,7 @@ pub trait AgentOutput {
         value: AgentValue,
     ) -> Result<(), AgentError>;
 
-    /// Tries to send a value to an output port without blocking.
+    /// Sends a value to an output port from a synchronous context.
     fn try_output<S: Into<String>>(
         &self,
         ctx: AgentContext,
