@@ -1,4 +1,4 @@
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 
@@ -21,7 +21,9 @@ use crate::registry;
 use crate::spec::{AgentSpec, ConnectionSpec, PatchSpec};
 use crate::value::AgentValue;
 
-const MESSAGE_LIMIT: usize = 1024;
+/// Message queues are unbounded, so instead of backpressure a queue that
+/// crosses this depth logs escalating warnings (at 1024, 2048, 4096, ...).
+const QUEUE_HIGH_WATER: usize = 1024;
 const EVENT_CHANNEL_CAPACITY: usize = 256;
 
 /// Registry size at which dead context-token entries are pruned. Entries are
@@ -85,13 +87,62 @@ pub type SharedAgent = Arc<AsyncMutex<Box<dyn Agent>>>;
 // target agent id / source handle / target handle
 pub(crate) type ConnectionTarget = (String, String, String);
 
+/// Sender half of an agent's inbox. The channel is unbounded, so the queue
+/// depth is tracked alongside the sender and runaway growth is surfaced with
+/// escalating warnings instead of backpressure.
+#[derive(Clone)]
+pub(crate) struct AgentInbox {
+    tx: mpsc::UnboundedSender<AgentMessage>,
+    depth: Arc<AtomicUsize>,
+    warn_at: Arc<AtomicUsize>,
+}
+
+impl AgentInbox {
+    fn new(tx: mpsc::UnboundedSender<AgentMessage>) -> Self {
+        Self {
+            tx,
+            depth: Arc::new(AtomicUsize::new(0)),
+            warn_at: Arc::new(AtomicUsize::new(QUEUE_HIGH_WATER)),
+        }
+    }
+
+    /// Send a message, counting it toward the queue depth. The agent loop
+    /// decrements the depth as it dequeues, so the check runs on the sender
+    /// side — a receiver-side check would stay silent exactly when it
+    /// matters, while the loop is stuck inside a slow `process()`.
+    fn send(&self, agent_id: &str, message: AgentMessage) -> Result<(), AgentError> {
+        self.tx.send(message).map_err(|_| {
+            AgentError::SendMessageFailed("Failed to send input message".to_string())
+        })?;
+        let depth = self.depth.fetch_add(1, Ordering::Relaxed) + 1;
+        // Depth races with concurrent sends and dequeues; the worst case is
+        // a duplicated or skipped log line, so Relaxed everywhere is fine.
+        let warn_at = self.warn_at.load(Ordering::Relaxed);
+        if depth >= warn_at {
+            log::warn!(
+                "Agent {} inbox depth reached {} (unbounded queue, consumer falling behind)",
+                agent_id,
+                depth
+            );
+            let mut next = warn_at;
+            while next <= depth {
+                next *= 2;
+            }
+            self.warn_at.store(next, Ordering::Relaxed);
+        } else if depth < QUEUE_HIGH_WATER / 2 && warn_at > QUEUE_HIGH_WATER {
+            self.warn_at.store(QUEUE_HIGH_WATER, Ordering::Relaxed);
+        }
+        Ok(())
+    }
+}
+
 #[derive(Clone)]
 pub struct ModularAgent {
     // agent id -> agent
     pub(crate) agents: Arc<Mutex<FnvIndexMap<String, SharedAgent>>>,
 
-    // agent id -> sender
-    pub(crate) agent_txs: Arc<Mutex<FnvIndexMap<String, mpsc::Sender<AgentMessage>>>>,
+    // agent id -> inbox sender
+    pub(crate) agent_txs: Arc<Mutex<FnvIndexMap<String, AgentInbox>>>,
 
     // channel name -> [external input agent id]
     pub(crate) external_input_agents: Arc<Mutex<FnvIndexMap<String, Vec<String>>>>,
@@ -129,7 +180,7 @@ pub struct ModularAgent {
     pub(crate) context_tokens: Arc<Mutex<FnvIndexMap<usize, Weak<CancellationToken>>>>,
 
     // message sender
-    pub(crate) tx: Arc<Mutex<Option<mpsc::Sender<AgentEventMessage>>>>,
+    pub(crate) tx: Arc<Mutex<Option<mpsc::UnboundedSender<AgentEventMessage>>>>,
 
     // observers
     pub(crate) observers: broadcast::Sender<EventEnvelope>,
@@ -207,7 +258,7 @@ impl ModularAgent {
         }
     }
 
-    pub(crate) fn tx(&self) -> Result<mpsc::Sender<AgentEventMessage>, AgentError> {
+    pub(crate) fn tx(&self) -> Result<mpsc::UnboundedSender<AgentEventMessage>, AgentError> {
         self.tx.lock().clone().ok_or(AgentError::TxNotInitialized)
     }
 
@@ -1334,11 +1385,13 @@ impl ModularAgent {
         if agent_status == AgentStatus::Init {
             log::info!("Starting agent {}", agent_id);
 
-            let (tx, mut rx) = mpsc::channel(MESSAGE_LIMIT);
+            let (tx, mut rx) = mpsc::unbounded_channel();
+            let inbox = AgentInbox::new(tx);
+            let inbox_depth = inbox.depth.clone();
 
             {
                 let mut agent_txs = self.agent_txs.lock();
-                agent_txs.insert(agent_id.to_string(), tx.clone());
+                agent_txs.insert(agent_id.to_string(), inbox);
             };
 
             let agent_clone = agent.clone();
@@ -1373,6 +1426,7 @@ impl ModularAgent {
                 }
 
                 while let Some(message) = rx.recv().await {
+                    inbox_depth.fetch_sub(1, Ordering::Relaxed);
                     match message {
                         AgentMessage::Input { ctx, port, value } => {
                             // Attach the flow's cancellation token so
@@ -1446,8 +1500,8 @@ impl ModularAgent {
         {
             // remove the sender first to prevent new messages being sent
             let mut agent_txs = self.agent_txs.lock();
-            if let Some(tx) = agent_txs.swap_remove(agent_id)
-                && let Err(e) = tx.try_send(AgentMessage::Stop)
+            if let Some(inbox) = agent_txs.swap_remove(agent_id)
+                && let Err(e) = inbox.send(agent_id, AgentMessage::Stop)
             {
                 log::warn!("Failed to send stop message to agent {}: {}", agent_id, e);
             }
@@ -1497,12 +1551,12 @@ impl ModularAgent {
         agent_id: String,
         configs: AgentConfigs,
     ) -> Result<(), AgentError> {
-        let tx = {
+        let inbox = {
             let agent_txs = self.agent_txs.lock();
             agent_txs.get(&agent_id).cloned()
         };
 
-        let Some(tx) = tx else {
+        let Some(inbox) = inbox else {
             // The agent is not running. We can set the configs directly.
             let agent = {
                 let agents = self.agents.lock();
@@ -1536,9 +1590,7 @@ impl ModularAgent {
         let message = AgentMessage::Configs {
             configs: configs.clone(),
         };
-        tx.send(message).await.map_err(|_| {
-            AgentError::SendMessageFailed("Failed to send config message".to_string())
-        })?;
+        inbox.send(&agent_id, message)?;
         for (key, value) in configs {
             self.emit_agent_config_updated(agent_id.clone(), key, value);
         }
@@ -1599,12 +1651,12 @@ impl ModularAgent {
             }
         };
 
-        let tx = {
+        let inbox = {
             let agent_txs = self.agent_txs.lock();
             agent_txs.get(&agent_id).cloned()
         };
 
-        let Some(tx) = tx else {
+        let Some(inbox) = inbox else {
             // The agent is not running. If it's a config message, we can set it directly.
             let agent: SharedAgent = {
                 let agents = self.agents.lock();
@@ -1618,9 +1670,7 @@ impl ModularAgent {
             }
             return Ok(());
         };
-        tx.send(message).await.map_err(|_| {
-            AgentError::SendMessageFailed("Failed to send input message".to_string())
-        })?;
+        inbox.send(&agent_id, message)?;
 
         self.emit_agent_input(agent_id.to_string(), port);
 
@@ -1704,8 +1754,7 @@ impl ModularAgent {
     }
 
     async fn spawn_message_loop(&self) -> Result<(), AgentError> {
-        // TODO: settings for the channel size
-        let (tx, mut rx) = mpsc::channel(4096);
+        let (tx, mut rx) = mpsc::unbounded_channel();
         {
             let mut tx_lock = self.tx.lock();
             *tx_lock = Some(tx);
@@ -1715,7 +1764,24 @@ impl ModularAgent {
         // messages are never attributed to the caller of ready().
         let ma = self.base();
         self.tasks.spawn(async move {
+            // Receiver-side depth check is enough here: unlike an agent loop,
+            // this loop never blocks on delivery, so it keeps returning to
+            // recv() and the check keeps running.
+            let mut warn_at = QUEUE_HIGH_WATER;
             while let Some(message) = rx.recv().await {
+                let depth = rx.len();
+                if depth >= warn_at {
+                    log::warn!(
+                        "Router queue depth reached {} (unbounded queue, routing falling behind)",
+                        depth
+                    );
+                    while warn_at <= depth {
+                        warn_at *= 2;
+                    }
+                } else if depth < QUEUE_HIGH_WATER / 2 {
+                    warn_at = QUEUE_HIGH_WATER;
+                }
+
                 use AgentEventMessage::*;
 
                 match message {
