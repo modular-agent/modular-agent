@@ -43,6 +43,31 @@ Running patches can also be inspected and edited live by external AI agents (e.g
 
 The [core README](crates/modular-agent-core/README.md) covers these concepts in depth; the [documentation site](https://modular-agent.github.io/docs/) walks through building your first patches.
 
+## Quick Install
+
+With the [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) (Rust,
+Node.js, and the platform toolchain) in place, one command clones the repository
+and builds from source — it asks whether to build the desktop app or the `ma` CLI,
+and whether to include the
+[recommended agent packages](custom_agents/README.md#recommended-agent-repositories).
+A first desktop build typically takes 20-40 minutes and ~10 GB of disk:
+
+```bash
+# macOS / Linux
+curl -fsSL https://raw.githubusercontent.com/modular-agent/modular-agent/main/scripts/install.sh | sh
+```
+
+```powershell
+# Windows (PowerShell)
+irm https://raw.githubusercontent.com/modular-agent/modular-agent/main/scripts/install.ps1 | iex
+```
+
+To update later, run the same command again from the same directory: it pulls the
+existing clones and rebuilds with the same configuration.
+
+For manual build steps and changing the agent selection, see the
+[installation guide](https://modular-agent.github.io/docs/getting-started/installation/).
+
 ## Documentation
 
 > **Developer Preview** — pre-built binaries are not yet available; the docs walk through building from source.

@@ -1,3 +1,7 @@
+# Standalone: never joins the surrounding workspace, wherever the repo is
+# checked out (the root manifest's exclude only matches the primary checkout).
+[workspace]
+
 [package]
 name = "ma-config"
 version = "0.1.0"
