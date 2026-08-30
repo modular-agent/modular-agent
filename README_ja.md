@@ -43,6 +43,24 @@ Modular Agent は、シンセサイザーのモジュールを配線するよう
 
 概念の詳細は [core README](crates/modular-agent-core/README_ja.md)、最初のパッチの作り方は[ドキュメントサイト](https://modular-agent.github.io/docs/ja/)を参照してください。
 
+## クイックインストール
+
+[Tauri の前提条件](https://v2.tauri.app/start/prerequisites/)（Rust、Node.js、プラットフォームのツールチェーン）が揃っていれば、1 コマンドでリポジトリのクローンからソースビルドまで行えます。デスクトップアプリと `ma` CLI のどちらをビルドするか、[推奨エージェントパッケージ](custom_agents/README.md#recommended-agent-repositories)を含めるかは対話で選べます。デスクトップアプリの初回ビルドは 20〜40 分・約 10 GB のディスクを使います:
+
+```bash
+# macOS / Linux
+curl -fsSL https://raw.githubusercontent.com/modular-agent/modular-agent/main/scripts/install.sh | sh
+```
+
+```powershell
+# Windows (PowerShell)
+irm https://raw.githubusercontent.com/modular-agent/modular-agent/main/scripts/install.ps1 | iex
+```
+
+アップデートするには、同じディレクトリで同じコマンドをもう一度実行してください。既存のクローンを pull し、同じ構成でリビルドします。
+
+手動でのビルド手順とエージェント選択の変更は[インストールガイド](https://modular-agent.github.io/docs/ja/getting-started/installation/)を参照してください。
+
 ## ドキュメント
 
 > **Developer Preview** — ビルド済みバイナリはまだ提供されていません。docs ではソースからのビルド手順を案内しています。

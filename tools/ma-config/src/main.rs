@@ -25,6 +25,11 @@ struct Args {
     #[arg(long)]
     apply: bool,
 
+    /// Select the registry defaults for this app without prompting; refuses to
+    /// overwrite an existing ma-config.toml
+    #[arg(long)]
+    defaults: bool,
+
     /// Path to the in-tree agent registry YAML file
     #[arg(long, default_value = "registry.yaml")]
     registry: String,
@@ -58,6 +63,14 @@ fn run(args: Args) -> Result<(), String> {
     let existing = configs.get(&app).cloned();
 
     let build_config = match &existing {
+        Some(_) if args.defaults => {
+            return Err(format!(
+                "--defaults would overwrite the existing {}; re-run with --apply to keep \
+                 the saved selection, or delete the file to start from the defaults",
+                rel(&app.config_path(&root), &root)
+            ));
+        }
+        None if args.defaults => default_config(app, &registry)?,
         Some(existing_config) if args.apply => existing_config.clone(),
         Some(existing_config) => {
             let items = &[
@@ -87,8 +100,10 @@ fn run(args: Args) -> Result<(), String> {
         None => tui::run_wizard(app, None, &registry)?,
     };
 
+    let non_interactive = args.apply || args.defaults;
+
     configs.insert(app, build_config.clone());
-    tui::check_conflicts(&configs, &registry, !args.apply)?;
+    tui::check_conflicts(&configs, &registry, !non_interactive)?;
 
     // Saved before validation so a missing clone does not throw away the
     // selection: clone what the error names, then re-run with --apply.
@@ -108,7 +123,7 @@ fn run(args: Args) -> Result<(), String> {
         codegen::ensure_mod_agents(app, &root)?;
     }
 
-    let should_update = args.apply
+    let should_update = non_interactive
         || Confirm::new()
             .with_prompt("Run cargo update?")
             .default(true)
@@ -120,6 +135,39 @@ fn run(args: Args) -> Result<(), String> {
 
     println!("\nDone! {}", app.build_hint());
     Ok(())
+}
+
+/// The selection a fresh wizard run starts from, taken as-is: every agent whose
+/// `default_for` lists this app, with `crate_features: None` (= its registry
+/// default features).
+fn default_config(app: AppKind, registry: &registry::Registry) -> Result<BuildConfig, String> {
+    let agents: Vec<config::AgentEntry> = registry
+        .agents
+        .iter()
+        .filter(|known| known.is_default_for(app))
+        .map(|known| config::AgentEntry {
+            name: known.name.clone(),
+            source: known.in_tree.then_some(config::AgentSource::Workspace),
+            crate_features: None,
+        })
+        .collect();
+
+    if agents.is_empty() {
+        return Err(format!(
+            "no registry agent is a default for '{}'",
+            app.slug()
+        ));
+    }
+    println!(
+        "Selected defaults for {}: {}",
+        app.slug(),
+        agents
+            .iter()
+            .map(|a| a.name.as_str())
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
+    Ok(BuildConfig { agents })
 }
 
 fn load_all_configs(root: &Path) -> Result<BTreeMap<AppKind, BuildConfig>, String> {
@@ -134,6 +182,10 @@ fn load_all_configs(root: &Path) -> Result<BTreeMap<AppKind, BuildConfig>, Strin
 }
 
 /// Walk up from the current directory to the manifest that declares the workspace.
+///
+/// An empty `[workspace]` table only opts a crate out of the surrounding
+/// workspace (this tool carries one itself), so only a manifest with actual
+/// workspace content counts.
 fn resolve_workspace_root() -> Result<PathBuf, String> {
     let current = std::env::current_dir().map_err(|e| e.to_string())?;
     for dir in current.ancestors() {
@@ -143,7 +195,12 @@ fn resolve_workspace_root() -> Result<PathBuf, String> {
         }
         let content = std::fs::read_to_string(&manifest)
             .map_err(|e| format!("Failed to read {}: {e}", manifest.display()))?;
-        if content.contains("[workspace]") {
+        let is_workspace_root = content
+            .parse::<toml::Table>()
+            .ok()
+            .and_then(|t| t.get("workspace").and_then(toml::Value::as_table).cloned())
+            .is_some_and(|workspace| !workspace.is_empty());
+        if is_workspace_root {
             return Ok(dir.to_path_buf());
         }
     }
