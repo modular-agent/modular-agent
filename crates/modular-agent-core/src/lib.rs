@@ -114,7 +114,8 @@ pub use patch::{Patch, PatchInfo};
 pub use registry::AgentRegistration;
 #[cfg(feature = "llm")]
 pub use session::{
-    InMemorySessionStore, JsonlSessionStore, SessionEntry, SessionMeta, SessionStore, build_context,
+    InMemorySessionStore, JsonlSessionStore, SessionEntry, SessionMeta, SessionStore,
+    build_context, build_context_with_ids,
 };
 pub use spec::{AgentSpec, ConnectionSpec, PatchSpec, PatchSpecs};
 pub use value::{AgentValue, AgentValueMap, parse_index};

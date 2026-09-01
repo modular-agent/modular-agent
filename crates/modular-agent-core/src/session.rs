@@ -20,10 +20,13 @@
 //! 1. **Only finalized messages reach the store.** Callers must append only
 //!    messages with `streaming == false`; partial streaming emissions and
 //!    their id-based dedup/replacement stay in the caller's memory.
-//! 2. **The store API is append-only.** No delete, update, or overwrite
-//!    operations exist. Compaction is recorded as a new entry that changes
-//!    how the context is *built*, never by rewriting history. A crash can
-//!    lose at most the single in-flight entry (appends flush immediately).
+//! 2. **History mutation is limited to trimming.** Besides appending, the
+//!    only write operation is [`SessionStore::remove_entries`], which
+//!    history-trimming owners use to drop entries that fell out of their
+//!    retention window. There is no update or overwrite. Compaction is
+//!    still recorded as a new entry that changes how the context is
+//!    *built*. A crash can lose at most the single in-flight entry
+//!    (appends flush immediately).
 
 #![cfg(feature = "llm")]
 
@@ -168,11 +171,12 @@ impl SessionEntry {
     }
 }
 
-/// Append-only storage for session logs.
+/// Storage for session logs.
 ///
-/// The trait surface is deliberately append-only (invariant 2 of the
-/// [module docs](self)): implementations must not expose delete, update, or
-/// overwrite operations.
+/// The trait surface is append-plus-trim (invariant 2 of the
+/// [module docs](self)): entries are appended and may later be removed by
+/// id via [`SessionStore::remove_entries`], but never updated or
+/// overwritten in place.
 #[async_trait]
 pub trait SessionStore: Send + Sync {
     /// Creates a new session from its header and returns the session id.
@@ -189,6 +193,18 @@ pub trait SessionStore: Send + Sync {
 
     /// Loads all entries of a session in append order.
     async fn load(&self, session_id: &str) -> Result<Vec<SessionEntry>, AgentError>;
+
+    /// Removes the entries with the given entry ids from a session.
+    ///
+    /// Used by history-trimming owners to drop entries that fell out of
+    /// their retention window. Ids that match no entry are ignored, so the
+    /// call is idempotent and a retry after a partial failure needs no
+    /// bookkeeping.
+    async fn remove_entries(
+        &self,
+        session_id: &str,
+        entry_ids: &[String],
+    ) -> Result<(), AgentError>;
 
     /// Lists the headers of all sessions in the store.
     async fn list(&self) -> Result<Vec<SessionMeta>, AgentError>;
@@ -245,6 +261,22 @@ impl SessionStore for InMemorySessionStore {
         Ok(entries.clone())
     }
 
+    async fn remove_entries(
+        &self,
+        session_id: &str,
+        entry_ids: &[String],
+    ) -> Result<(), AgentError> {
+        if entry_ids.is_empty() {
+            return Ok(());
+        }
+        let mut sessions = self.sessions.lock();
+        let (_, entries) = sessions
+            .get_mut(session_id)
+            .ok_or_else(|| session_not_found(session_id))?;
+        entries.retain(|e| !entry_ids.iter().any(|id| id == e.id()));
+        Ok(())
+    }
+
     async fn list(&self) -> Result<Vec<SessionMeta>, AgentError> {
         let sessions = self.sessions.lock();
         Ok(sessions.values().map(|(meta, _)| meta.clone()).collect())
@@ -261,6 +293,8 @@ impl SessionStore for InMemorySessionStore {
 /// crash-truncated tail without a trailing newline) is discarded and
 /// truncated from the file, so later appends stay line-aligned instead of
 /// fusing onto the fragment; an unparseable complete line is an error.
+/// Removing entries rewrites the file (header plus the retained lines)
+/// through a temp file in the same directory, replaced with a rename.
 #[derive(Debug, Clone)]
 pub struct JsonlSessionStore {
     dir: PathBuf,
@@ -391,6 +425,65 @@ impl SessionStore for JsonlSessionStore {
         Ok(entries)
     }
 
+    async fn remove_entries(
+        &self,
+        session_id: &str,
+        entry_ids: &[String],
+    ) -> Result<(), AgentError> {
+        if entry_ids.is_empty() {
+            return Ok(());
+        }
+        let path = self.session_path(session_id);
+        let content = tokio::fs::read_to_string(&path).await.map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                session_not_found(session_id)
+            } else {
+                AgentError::IoError(format!("Failed to read session file: {e}"))
+            }
+        })?;
+        // Same crash-truncated-tail handling as load(): the fragment holds
+        // no complete entry, so dropping it here is the same repair.
+        let complete_len = if content.ends_with('\n') {
+            content.len()
+        } else {
+            content.rfind('\n').map(|i| i + 1).unwrap_or(0)
+        };
+        let mut lines = content[..complete_len].lines();
+        let Some(header) = lines.next() else {
+            return Err(AgentError::JsonParseError(format!(
+                "Session file for {session_id} is empty (missing header line)"
+            )));
+        };
+        serde_json::from_str::<SessionMeta>(header).map_err(|e| {
+            AgentError::JsonParseError(format!("Invalid session header for {session_id}: {e}"))
+        })?;
+        let mut out = String::with_capacity(complete_len);
+        out.push_str(header);
+        out.push('\n');
+        for (i, line) in lines.enumerate() {
+            let entry = serde_json::from_str::<SessionEntry>(line).map_err(|e| {
+                AgentError::JsonParseError(format!(
+                    "Invalid entry at line {} of session {session_id}: {e}",
+                    i + 2
+                ))
+            })?;
+            if !entry_ids.iter().any(|id| id == entry.id()) {
+                out.push_str(line);
+                out.push('\n');
+            }
+        }
+        // The temp file lives in the session directory so the rename never
+        // crosses volumes; rename replaces an existing file on Windows too.
+        let tmp = self.dir.join(format!("{session_id}.jsonl.tmp"));
+        tokio::fs::write(&tmp, out)
+            .await
+            .map_err(|e| AgentError::IoError(format!("Failed to write session file: {e}")))?;
+        tokio::fs::rename(&tmp, &path)
+            .await
+            .map_err(|e| AgentError::IoError(format!("Failed to replace session file: {e}")))?;
+        Ok(())
+    }
+
     async fn list(&self) -> Result<Vec<SessionMeta>, AgentError> {
         let mut read_dir = match tokio::fs::read_dir(&self.dir).await {
             Ok(rd) => rd,
@@ -464,9 +557,21 @@ impl SessionStore for JsonlSessionStore {
 /// Message entry matches `first_kept_id`, the summary message is instead
 /// followed by all Message entries positioned *after* that Compaction entry.
 ///
-/// Entries before the cut are dropped from the returned context only — the
-/// store keeps the full history (invariant 2 of the [module docs](self)).
+/// Entries before the cut are dropped from the returned context only;
+/// whether they stay in the store is the owner's call (history-trimming
+/// owners remove them via [`SessionStore::remove_entries`]).
 pub fn build_context(entries: &[SessionEntry]) -> Vec<Message> {
+    build_context_with_ids(entries)
+        .into_iter()
+        .map(|(_, message)| message)
+        .collect()
+}
+
+/// Like [`build_context`], but pairs each message with the id of the
+/// [`SessionEntry`] it came from, for callers that need to map context
+/// positions back to store entries. The injected summary message of a
+/// compaction has no backing Message entry and carries `None`.
+pub fn build_context_with_ids(entries: &[SessionEntry]) -> Vec<(Option<String>, Message)> {
     let last_compaction = entries.iter().enumerate().rev().find_map(|(i, e)| match e {
         SessionEntry::Compaction {
             summary,
@@ -477,21 +582,24 @@ pub fn build_context(entries: &[SessionEntry]) -> Vec<Message> {
     });
 
     let Some((compaction_index, summary, first_kept_id)) = last_compaction else {
-        return entries.iter().filter_map(entry_message).collect();
+        return entries.iter().filter_map(entry_id_message).collect();
     };
 
-    let mut context = vec![Message::user(format!("[Conversation summary]\n{summary}"))];
+    let mut context = vec![(
+        None,
+        Message::user(format!("[Conversation summary]\n{summary}")),
+    )];
     let start = entries
         .iter()
         .position(|e| matches!(e, SessionEntry::Message { id, .. } if id == first_kept_id))
         .unwrap_or(compaction_index + 1);
-    context.extend(entries[start..].iter().filter_map(entry_message));
+    context.extend(entries[start..].iter().filter_map(entry_id_message));
     context
 }
 
-fn entry_message(entry: &SessionEntry) -> Option<Message> {
+fn entry_id_message(entry: &SessionEntry) -> Option<(Option<String>, Message)> {
     match entry {
-        SessionEntry::Message { message, .. } => Some(message.clone()),
+        SessionEntry::Message { id, message, .. } => Some((Some(id.clone()), message.clone())),
         _ => None,
     }
 }
@@ -550,6 +658,39 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_in_memory_remove_entries_ignores_unknown_ids() {
+        let store = InMemorySessionStore::new();
+        let id = store.create(SessionMeta::new()).await.unwrap();
+        let e1 = message_entry("e1", "a");
+        let e2 = message_entry("e2", "b");
+        let e3 = message_entry("e3", "c");
+        for e in [&e1, &e2, &e3] {
+            store.append(&id, e.clone()).await.unwrap();
+        }
+
+        store
+            .remove_entries(&id, &["e1".to_string(), "unknown".to_string()])
+            .await
+            .unwrap();
+        assert_eq!(store.load(&id).await.unwrap(), vec![e2.clone(), e3.clone()]);
+
+        // Removing the same ids again is a no-op, as is an empty id list.
+        store
+            .remove_entries(&id, &["e1".to_string()])
+            .await
+            .unwrap();
+        store.remove_entries(&id, &[]).await.unwrap();
+        assert_eq!(store.load(&id).await.unwrap(), vec![e2, e3]);
+
+        assert!(
+            store
+                .remove_entries("missing", &["e1".to_string()])
+                .await
+                .is_err()
+        );
+    }
+
+    #[tokio::test]
     async fn test_in_memory_unknown_session_errors() {
         let store = InMemorySessionStore::new();
         assert!(store.load("missing").await.is_err());
@@ -582,6 +723,43 @@ mod tests {
 
         let metas = reopened.list().await.unwrap();
         assert_eq!(metas, vec![meta]);
+    }
+
+    #[tokio::test]
+    async fn test_jsonl_remove_entries_rewrites_file_and_keeps_header() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = JsonlSessionStore::new(dir.path());
+        let meta = SessionMeta::new();
+        let id = store.create(meta.clone()).await.unwrap();
+        let e1 = message_entry("e1", "a");
+        let e2 = message_entry("e2", "b");
+        let e3 = message_entry("e3", "c");
+        for e in [&e1, &e2, &e3] {
+            store.append(&id, e.clone()).await.unwrap();
+        }
+
+        store
+            .remove_entries(&id, &["e2".to_string(), "unknown".to_string()])
+            .await
+            .unwrap();
+
+        // A brand-new store over the same directory sees the trimmed log
+        // with the header intact.
+        let reopened = JsonlSessionStore::new(dir.path());
+        assert_eq!(
+            reopened.load(&id).await.unwrap(),
+            vec![e1.clone(), e3.clone()]
+        );
+        assert_eq!(reopened.list().await.unwrap(), vec![meta]);
+
+        // The removed line is gone from the file, no temp file remains, and
+        // later appends extend the rewritten log normally.
+        let content = std::fs::read_to_string(dir.path().join(format!("{id}.jsonl"))).unwrap();
+        assert!(!content.contains("\"e2\""));
+        assert!(!dir.path().join(format!("{id}.jsonl.tmp")).exists());
+        let e4 = message_entry("e4", "d");
+        store.append(&id, e4.clone()).await.unwrap();
+        assert_eq!(store.load(&id).await.unwrap(), vec![e1, e3, e4]);
     }
 
     #[tokio::test]
@@ -740,6 +918,23 @@ mod tests {
         assert_eq!(context[0].text(), "[Conversation summary]\nthe summary");
         assert_eq!(context[1].text(), "after1");
         assert_eq!(context[2].text(), "after2");
+    }
+
+    #[test]
+    fn test_build_context_with_ids_pairs_entry_ids() {
+        let entries = vec![
+            message_entry("e1", "old"),
+            message_entry("e2", "kept"),
+            message_entry("e3", "tail"),
+            compaction_entry("c1", "the summary", "e2"),
+        ];
+        let context = build_context_with_ids(&entries);
+        assert_eq!(context.len(), 3);
+        // The injected summary has no backing entry.
+        assert_eq!(context[0].0, None);
+        assert_eq!(context[0].1.text(), "[Conversation summary]\nthe summary");
+        assert_eq!(context[1].0.as_deref(), Some("e2"));
+        assert_eq!(context[2].0.as_deref(), Some("e3"));
     }
 
     // Serde tests
