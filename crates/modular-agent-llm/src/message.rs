@@ -4,8 +4,14 @@ use im::{Vector, vector};
 use modular_agent_core::{
     Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
     ContentBlock, InMemorySessionStore, JsonlSessionStore, Message, MessageContent, ModularAgent,
-    SessionEntry, SessionMeta, SessionStore, async_trait, build_context, build_context_with_ids,
-    estimate_context_tokens, estimate_message_tokens, modular_agent,
+    SessionEntry, SessionMeta, SessionStore, async_trait, build_context_with_ids,
+    estimate_message_tokens, modular_agent,
+};
+
+use crate::provider::ModelIdentifier;
+use crate::retry::RetryPolicy;
+use crate::summarize::{
+    ProviderManagers, SUMMARY_RETRY_BASE_DELAY_MS, SUMMARY_TIMEOUT_SECS, build_summary_prompt,
 };
 
 const CATEGORY: &str = "LLM/Message";
@@ -25,6 +31,8 @@ const CONFIG_PREAMBLE: &str = "preamble";
 const CONFIG_PRUNE_FILE: &str = "prune_file";
 const CONFIG_SESSION_DIR: &str = "session_dir";
 const CONFIG_SESSION_ID: &str = "session_id";
+const CONFIG_SUMMARIZE_MODEL: &str = "summarize_model";
+const CONFIG_SUMMARY_MAX_TOKENS: &str = "summary_max_tokens";
 
 /// Old patches stored the history in a hidden `messages` config;
 /// `reconcile_spec()` renames it to `_messages` for lazy migration.
@@ -34,11 +42,6 @@ const STALE_CONFIG_MESSAGES: &str = "_messages";
 /// moved to the File Messages agent; `reconcile_spec()` renames a leftover
 /// value to `_session_dir`, which `new()` reads to warn about the change.
 const STALE_CONFIG_SESSION_DIR: &str = "_session_dir";
-
-/// Must match the prefix `build_context` (modular-agent-core) puts on the
-/// injected summary message; used to recognize a genuine head message the
-/// compactor mistook for an injected summary.
-const SUMMARY_PREFIX: &str = "[Conversation summary]\n";
 
 /// Marker inserted where middle-trimming removed text.
 const TRIM_MARKER: &str = "\n[...]\n";
@@ -309,11 +312,6 @@ struct SessionState {
 
     /// In-memory cache of the session's entries, replayed in `start()`.
     entries: Vec<SessionEntry>,
-
-    /// Whether entries have been pruned from this session. A baseline-less
-    /// compaction record's `dropped` count is resolved against the entry
-    /// log's head, so once the head has moved it can no longer be trusted.
-    pruned: bool,
 }
 
 impl SessionState {
@@ -338,6 +336,9 @@ trait SessionMessages: AsAgent {
     fn prune_store(&self) -> Result<bool, AgentError> {
         Ok(true)
     }
+
+    /// Provider clients for the `summarize_model` rolling summary.
+    fn summarizer(&self) -> &ProviderManagers;
 }
 
 /// Resolve the session to append to at start: create a fresh one when no id
@@ -418,184 +419,10 @@ async fn append_messages(
     Ok(())
 }
 
-/// Record a compaction marker received on the `message` port (emitted by
-/// `CompactMessagesAgent`'s `compaction` output).
-///
-/// The record's `dropped` count refers to the context the compactor
-/// received, whose head is the previous compaction's first kept entry
-/// (or the log's head when none exists). Skipping `dropped` Message
-/// entries from there yields the new `first_kept_id`. The entry is
-/// appended to the store and the cache, but nothing is emitted:
-/// re-emitting the compacted context would re-trigger the downstream
-/// ChatAgent and issue a duplicate request. The next turn picks the
-/// compaction up naturally via [`build_context`]. The partial slot is
-/// left untouched.
-///
-/// The record's `previous_summary` identifies the baseline it was
-/// computed against; a record whose baseline no longer matches the
-/// session's latest compaction is *discarded* with a warning. The
-/// summarization call takes seconds, so a stale record is realistic:
-/// a `reset` can swap in a fresh session while the call is in flight
-/// (applying the old conversation's summary would leak it into the new
-/// session), and a second same-baseline compaction can race the first
-/// (resolving it against the newer compaction would silently drop
-/// messages its summary does not cover). A first compaction carries no
-/// baseline, so it is sanity-checked by size instead: a record whose
-/// `tokens_before` is more than twice the session's current estimate
-/// cannot describe this session and is discarded.
-async fn record_compaction(
-    store: &Arc<dyn SessionStore>,
-    state: &mut SessionState,
-    value: &AgentValue,
-) -> Result<(), AgentError> {
-    let summary = value
-        .get_str("summary")
-        .filter(|s| !s.is_empty())
-        .ok_or_else(|| {
-            AgentError::InvalidValue("Compaction record must have a non-empty summary".to_string())
-        })?
-        .to_string();
-    let dropped = value
-        .get("dropped")
-        .and_then(|v| v.as_i64())
-        .filter(|d| *d >= 0)
-        .ok_or_else(|| {
-            AgentError::InvalidValue(
-                "Compaction record must have a non-negative integer dropped count".to_string(),
-            )
-        })? as usize;
-    let tokens_before = value
-        .get("tokens_before")
-        .and_then(|v| v.as_i64())
-        .and_then(|v| u64::try_from(v).ok());
-    let previous_summary = value.get_str("previous_summary").map(str::to_string);
-
-    let session_id = state.session_id()?.to_string();
-
-    let last_compaction = state
-        .entries
-        .iter()
-        .enumerate()
-        .rev()
-        .find_map(|(i, e)| match e {
-            SessionEntry::Compaction {
-                summary,
-                first_kept_id,
-                ..
-            } => Some((i, summary.clone(), first_kept_id.clone())),
-            _ => None,
-        });
-
-    // Where the compactor's received context started. The record's
-    // baseline (`previous_summary`) must agree with the session's state;
-    // otherwise the record is stale and applying it would corrupt the
-    // session.
-    let start = match (&previous_summary, &last_compaction) {
-        // Baseline is the latest compaction: its first kept Message
-        // entry, or the entry right after it when the id is unknown.
-        (Some(previous), Some((compaction_index, last_summary, first_kept_id)))
-            if previous == last_summary =>
-        {
-            state
-                .entries
-                .iter()
-                .position(|e| matches!(e, SessionEntry::Message { id, .. } if id == first_kept_id))
-                .unwrap_or(compaction_index + 1)
-        }
-        // No compaction on either side: the record claims to cover this
-        // session's head. With no baseline to compare, cross-check the
-        // record's size instead: the compactor computed `tokens_before`
-        // from a context that must be a prefix of this session's
-        // entries, so the session's own estimate can only be larger
-        // (the tail may have grown since), never substantially smaller.
-        // A much smaller session means the record came from a different
-        // session — a reset raced the in-flight summarization call. The
-        // factor of 2 absorbs usage-anchor drift (a fresh reply
-        // re-anchoring a heuristically estimated tail).
-        (None, None) => {
-            // The record's `dropped` count is anchored to the log's head; a
-            // prune has moved the head, so the walk below would skip past
-            // messages the summary does not cover.
-            if state.pruned {
-                log::warn!(
-                    "Discarding a baseline-less compaction record: the session's \
-                     history has been pruned since it was computed"
-                );
-                return Ok(());
-            }
-            if let Some(tokens_before) = tokens_before {
-                let current = estimate_context_tokens(&build_context(&state.entries));
-                if tokens_before > current.saturating_mul(2) {
-                    log::warn!(
-                        "Discarding a compaction record sized for another session \
-                         (record covers ~{tokens_before} tokens, session holds \
-                         ~{current}); the session has likely been reset since"
-                    );
-                    return Ok(());
-                }
-            }
-            0
-        }
-        // A baseline with no compaction on file: the compactor mistook a
-        // genuine head message for an injected summary. It excluded that
-        // head from `dropped`, so the walk must skip the matching entry
-        // too.
-        (Some(previous), None) => {
-            let head = state.entries.iter().position(|e| {
-                matches!(e, SessionEntry::Message { message, .. }
-                    if message.role == "user"
-                        && message.text() == format!("{SUMMARY_PREFIX}{previous}"))
-            });
-            let Some(head_index) = head else {
-                log::warn!(
-                    "Discarding a compaction record computed against an unknown \
-                     previous summary; the session has likely been reset since"
-                );
-                return Ok(());
-            };
-            head_index + 1
-        }
-        _ => {
-            log::warn!(
-                "Discarding a stale compaction record: its baseline does not match \
-                 the session's latest compaction"
-            );
-            return Ok(());
-        }
-    };
-
-    let first_kept_id = state.entries[start..]
-        .iter()
-        .filter_map(|e| match e {
-            SessionEntry::Message { id, .. } => Some(id),
-            _ => None,
-        })
-        .nth(dropped)
-        .cloned();
-    let Some(first_kept_id) = first_kept_id else {
-        // A consistent record always resolves (the compactor keeps at
-        // least one message), so exhaustion means the record belongs to
-        // another state of the world — e.g. a session reset during the
-        // summarization call. Recording it anyway would inject a foreign
-        // summary into this session.
-        log::warn!(
-            "Discarding a compaction record: its dropped count {dropped} exceeds \
-             the session's messages"
-        );
-        return Ok(());
-    };
-
-    let entry = SessionEntry::compaction(summary, first_kept_id, tokens_before);
-    store.append(&session_id, entry.clone()).await?;
-    state.entries.push(entry);
-    Ok(())
-}
-
 /// Shared `process()` body for the Messages agents: `reset` swaps in a new
-/// session, a unit input re-emits the current window, a compaction record
-/// appends a marker, and anything else is appended as messages — emitting
-/// the context window only when the arriving message is a user message or
-/// tool result.
+/// session, a unit input re-emits the current window, and anything else is
+/// appended as messages — emitting the context window only when the
+/// arriving message is a user message or tool result.
 async fn process_session_input<A: SessionMessages>(
     agent: &mut A,
     ctx: AgentContext,
@@ -609,7 +436,6 @@ async fn process_session_input<A: SessionMessages>(
         let state = agent.session_state_mut();
         state.session_id = Some(id.clone());
         state.entries.clear();
-        state.pruned = false;
         // Publish the switch before the (ambiguous) empty context so
         // downstream agents can tell a reset from an empty session.
         agent
@@ -626,13 +452,6 @@ async fn process_session_input<A: SessionMessages>(
         return emit_window(agent, ctx, false).await;
     }
 
-    // Dispatch by shape, before message conversion: Message objects carry
-    // role/content and never a "type" key, so this cannot collide.
-    if value.get_str("type") == Some("compaction") {
-        let store = agent.store()?;
-        return record_compaction(&store, agent.session_state_mut(), &value).await;
-    }
-
     let Some(in_values) = to_message_batch(value)? else {
         return Ok(());
     };
@@ -647,6 +466,7 @@ async fn process_session_input<A: SessionMessages>(
     let configs = agent.configs()?;
     let max_message_tokens = configs.get_integer_or_default(CONFIG_MAX_MESSAGE_TOKENS);
     let max_context_tokens = configs.get_integer_or_default(CONFIG_MAX_CONTEXT_TOKENS);
+    let summarize_model = configs.get_string_or_default(CONFIG_SUMMARIZE_MODEL);
 
     // The arriving message — the batch's last non-streaming one — decides
     // whether the window is emitted: only a user message or tool result
@@ -671,16 +491,28 @@ async fn process_session_input<A: SessionMessages>(
             anchor = trimmed;
         }
         if max_context_tokens > 0 {
-            // The minimal window is the pinned system message plus this
-            // user message; trim the user so at least that pair fits.
-            let context = build_context(&agent.session_state_mut().entries);
+            // The minimal window is the pinned system message — plus the
+            // pinned summary when summarization is on — plus this user
+            // message; trim the user so at least that much fits.
+            let (context_ids, context): (Vec<Option<String>>, Vec<Message>) =
+                build_context_with_ids(&agent.session_state_mut().entries)
+                    .into_iter()
+                    .unzip();
             let system_tokens = context
                 .iter()
                 .rev()
                 .find(|m| m.role == "system")
                 .map(estimate_message_tokens)
                 .unwrap_or(0);
-            let budget = (max_context_tokens as u64).saturating_sub(system_tokens);
+            let summarize_enabled =
+                !summarize_model.is_empty() && ModelIdentifier::parse(&summarize_model).is_ok();
+            let summary_tokens =
+                if summarize_enabled && context_ids.first().is_some_and(|id| id.is_none()) {
+                    estimate_message_tokens(&context[0])
+                } else {
+                    0
+                };
+            let budget = (max_context_tokens as u64).saturating_sub(system_tokens + summary_tokens);
             if let Some(trimmed) = middle_trim(&anchor, budget) {
                 anchor = trimmed;
             }
@@ -704,10 +536,11 @@ async fn process_session_input<A: SessionMessages>(
 
 /// The context window selected by [`select_window`]: indices into the built
 /// context of the first kept non-system message and of the pinned system
-/// message.
+/// message, plus whether the injected summary head is pinned.
 struct Window {
     cut: usize,
     pinned_system: Option<usize>,
+    pinned_summary: bool,
 }
 
 /// Selects the emitted window over a built context.
@@ -723,10 +556,16 @@ struct Window {
 /// A group runs from a user message up to the next user message, so an
 /// in-flight assistant/tool exchange is never split. Budgets of 0 or less
 /// are inactive.
+///
+/// With `pin_summary_head` set the caller vouches that `context[0]` is the
+/// summary injected by `build_context`; it is pinned like the system
+/// message — always emitted, its tokens counted against the budgets, never
+/// part of a prunable group — so a rolling summary cannot evict itself.
 fn select_window(
     context: &[Message],
     max_context_tokens: i64,
     max_messages: i64,
+    pin_summary_head: bool,
 ) -> Option<Window> {
     let last = context.last()?;
     if last.role != "user" && last.role != "tool" {
@@ -742,6 +581,12 @@ fn select_window(
         .map(|i| estimate_message_tokens(&context[i]))
         .unwrap_or(0);
     let mut total_count = pinned_system.is_some() as u64;
+    // With anchor == 0 the summary head *is* the anchor and the loop below
+    // counts it; adding it here too would double-count.
+    if pin_summary_head && anchor > 0 {
+        total_tokens += estimate_message_tokens(&context[0]);
+        total_count += 1;
+    }
     for message in &context[anchor..] {
         if message.role == "system" {
             continue;
@@ -753,7 +598,8 @@ fn select_window(
     let mut cut = anchor;
     let mut pending_tokens: u64 = 0;
     let mut pending_count: u64 = 0;
-    for i in (0..anchor).rev() {
+    let floor = usize::from(pin_summary_head);
+    for i in (floor..anchor).rev() {
         let message = &context[i];
         if message.role == "system" {
             continue;
@@ -775,37 +621,55 @@ fn select_window(
         }
     }
 
-    Some(Window { cut, pinned_system })
+    if pin_summary_head {
+        // The pinned head is emitted separately; `cut` must not reach it
+        // even when the anchor itself sits at index 0.
+        cut = cut.max(1);
+    }
+
+    Some(Window {
+        cut,
+        pinned_system,
+        pinned_summary: pin_summary_head,
+    })
+}
+
+/// What [`prunable_entry_ids`] resolved from the window: the removable
+/// entry ids and the entry id of the first kept context message.
+struct Prunable {
+    ids: Vec<String>,
+    first_kept_entry_id: Option<String>,
 }
 
 /// Entry ids that fell out of the window and can be removed from the
 /// session: Message entries before the first kept one (except the pinned
 /// system message's), plus compaction markers — all of them when the
 /// injected summary fell out of the window, all but the latest when it is
-/// kept. Everything a kept marker still hides lies before its first kept
-/// entry, so removal never changes what [`build_context`] returns.
+/// kept (a pinned summary is always kept). Everything a kept marker still
+/// hides lies before its first kept entry, so removal never changes what
+/// [`build_context`](modular_agent_core::build_context) returns.
 fn prunable_entry_ids(
     entries: &[SessionEntry],
     context_ids: &[Option<String>],
     window: &Window,
-) -> Vec<String> {
+) -> Prunable {
     // Entry index of the first kept context message that has a backing
     // entry. A window holding only the injected summary keeps everything
     // (conservative, and it costs nothing: the window is recomputed at
     // every emit).
-    let cut_index = context_ids[window.cut..]
-        .iter()
-        .flatten()
-        .next()
+    let first_kept_entry_id = context_ids[window.cut..].iter().flatten().next().cloned();
+    let cut_index = first_kept_entry_id
+        .as_ref()
         .and_then(|id| entries.iter().position(|e| e.id() == id))
         .unwrap_or(0);
-    let summary_kept = window.cut == 0 && context_ids.first().is_some_and(|id| id.is_none());
+    let summary_kept = window.pinned_summary
+        || (window.cut == 0 && context_ids.first().is_some_and(|id| id.is_none()));
     let pinned_entry_id = window.pinned_system.and_then(|i| context_ids[i].as_deref());
     let latest_marker = entries
         .iter()
         .rposition(|e| matches!(e, SessionEntry::Compaction { .. }));
 
-    entries
+    let ids = entries
         .iter()
         .enumerate()
         .filter_map(|(i, entry)| match entry {
@@ -816,7 +680,12 @@ fn prunable_entry_ids(
                 (i < cut_index && pinned_entry_id != Some(id.as_str())).then(|| id.clone())
             }
         })
-        .collect()
+        .collect();
+
+    Prunable {
+        ids,
+        first_kept_entry_id,
+    }
 }
 
 /// Emits the current context window on `messages`, or nothing when the
@@ -824,7 +693,9 @@ fn prunable_entry_ids(
 /// set and a window budget active, entries outside the window are removed —
 /// from the store first (per [`SessionMessages::prune_store`]), then from
 /// the cache, so a cancellation mid-way leaves a superset that the next
-/// emit re-trims.
+/// emit re-trims. With `summarize_model` configured, the removed history is
+/// first folded into the rolling summary; the window is emitted *before*
+/// the summarization request, so the downstream turn never waits on it.
 async fn emit_window<A: SessionMessages>(
     agent: &mut A,
     ctx: AgentContext,
@@ -833,12 +704,36 @@ async fn emit_window<A: SessionMessages>(
     let configs = agent.configs()?;
     let max_context_tokens = configs.get_integer_or_default(CONFIG_MAX_CONTEXT_TOKENS);
     let max_messages = configs.get_integer_or_default(CONFIG_MAX_MESSAGES);
+    let summary_max_tokens = configs.get_integer_or_default(CONFIG_SUMMARY_MAX_TOKENS);
+    let summarize_model = configs.get_string_or_default(CONFIG_SUMMARIZE_MODEL);
+
+    // Parsed before the window is selected: a broken model name disables
+    // summarization for the whole emit, so the summary head is not pinned
+    // and pruning falls back to plain deletion. Falling back *after* a
+    // pinned-window prune instead would delete the latest marker's first
+    // kept entry and silently orphan the marker.
+    let summarize_model_id = if summarize_model.is_empty() {
+        None
+    } else {
+        match ModelIdentifier::parse(&summarize_model) {
+            Ok(id) => Some(id),
+            Err(e) => {
+                log::warn!("Invalid summarize_model; evicted history will be deleted: {e}");
+                None
+            }
+        }
+    };
 
     let (context_ids, context): (Vec<Option<String>>, Vec<Message>) =
         build_context_with_ids(&agent.session_state_mut().entries)
             .into_iter()
             .unzip();
-    let Some(window) = select_window(&context, max_context_tokens, max_messages) else {
+    // The injected summary is the only context message without a backing
+    // entry id.
+    let pin_summary_head =
+        summarize_model_id.is_some() && context_ids.first().is_some_and(|id| id.is_none());
+    let Some(window) = select_window(&context, max_context_tokens, max_messages, pin_summary_head)
+    else {
         return Ok(());
     };
 
@@ -846,32 +741,163 @@ async fn emit_window<A: SessionMessages>(
     if let Some(i) = window.pinned_system {
         out.push_back(context[i].clone().into());
     }
+    if window.pinned_summary {
+        out.push_back(context[0].clone().into());
+    }
     for message in &context[window.cut..] {
         if message.role != "system" {
             out.push_back(message.clone().into());
         }
     }
 
+    agent
+        .output(ctx.clone(), PORT_MESSAGES, AgentValue::array(out))
+        .await?;
+
     if prune && (max_context_tokens > 0 || max_messages > 0) {
         let prunable =
             prunable_entry_ids(&agent.session_state_mut().entries, &context_ids, &window);
-        if !prunable.is_empty() {
-            if agent.prune_store()? {
-                let store = agent.store()?;
-                let session_id = agent.session_state_mut().session_id()?.to_string();
-                store.remove_entries(&session_id, &prunable).await?;
+        if prunable.ids.is_empty() {
+            return Ok(());
+        }
+        match &summarize_model_id {
+            Some(model_id) => {
+                summarize_and_prune(agent, &ctx, prunable, model_id, summary_max_tokens).await?;
             }
-            let state = agent.session_state_mut();
-            state
-                .entries
-                .retain(|e| !prunable.iter().any(|id| id == e.id()));
-            state.pruned = true;
+            None => remove_prunable(agent, &prunable.ids).await?,
         }
     }
+    Ok(())
+}
 
-    agent
-        .output(ctx, PORT_MESSAGES, AgentValue::array(out))
+/// Remove pruned entries — from the store when
+/// [`SessionMessages::prune_store`] says so, always from the cache.
+async fn remove_prunable<A: SessionMessages>(
+    agent: &mut A,
+    ids: &[String],
+) -> Result<(), AgentError> {
+    if agent.prune_store()? {
+        let store = agent.store()?;
+        let session_id = agent.session_state_mut().session_id()?.to_string();
+        store.remove_entries(&session_id, ids).await?;
+    }
+    let state = agent.session_state_mut();
+    state.entries.retain(|e| !ids.iter().any(|id| id == e.id()));
+    Ok(())
+}
+
+/// Fold the history that fell out of the window into the rolling summary,
+/// then prune it: previous summary + newly evicted messages → new summary,
+/// recorded as a compaction marker so
+/// [`build_context`](modular_agent_core::build_context) injects it and the
+/// session file replays it.
+///
+/// The summarization request runs once, with no retries — the agent
+/// processes inputs serially, and retrying here would stall the whole
+/// conversation behind it. On failure nothing is pruned: the entries stay
+/// a superset of the context (the emitted window is budgeted regardless),
+/// and the next user/tool arrival triggers a fresh attempt covering the
+/// kept history plus whatever was evicted since.
+async fn summarize_and_prune<A: SessionMessages>(
+    agent: &mut A,
+    ctx: &AgentContext,
+    prunable: Prunable,
+    model_id: &ModelIdentifier,
+    summary_max_tokens: i64,
+) -> Result<(), AgentError> {
+    // The latest marker's summary is the incremental baseline; Message
+    // entries before its first kept entry are already covered by it and
+    // must not be summarized twice.
+    let state = agent.session_state_mut();
+    let latest_marker = state
+        .entries
+        .iter()
+        .enumerate()
+        .rev()
+        .find_map(|(i, e)| match e {
+            SessionEntry::Compaction {
+                id,
+                summary,
+                first_kept_id,
+                ..
+            } => Some((i, id.clone(), summary.clone(), first_kept_id.clone())),
+            _ => None,
+        });
+    let (marker_id, previous_summary, boundary) = match &latest_marker {
+        Some((marker_index, id, summary, first_kept_id)) => {
+            let boundary = state
+                .entries
+                .iter()
+                .position(|e| matches!(e, SessionEntry::Message { id, .. } if id == first_kept_id))
+                .unwrap_or(marker_index + 1);
+            (Some(id.clone()), Some(summary.clone()), boundary)
+        }
+        None => (None, None, 0),
+    };
+    let newly_evicted: Vec<Message> = state
+        .entries
+        .iter()
+        .enumerate()
+        .filter_map(|(i, e)| match e {
+            SessionEntry::Message { id, message, .. }
+                if i >= boundary && prunable.ids.iter().any(|p| p == id) =>
+            {
+                Some(message.clone())
+            }
+            _ => None,
+        })
+        .collect();
+
+    if newly_evicted.is_empty() {
+        // Only marker-hidden history and dead markers are being cleaned;
+        // the summary already covers all of it.
+        return remove_prunable(agent, &prunable.ids).await;
+    }
+    let Some(first_kept_id) = prunable.first_kept_entry_id else {
+        // A window holding only the injected summary keeps everything
+        // (conservative, matching prunable_entry_ids' stance).
+        return Ok(());
+    };
+
+    let size_hint = if summary_max_tokens > 0 {
+        format!("Keep the summary under approximately {summary_max_tokens} tokens.")
+    } else {
+        String::new()
+    };
+    let prompt = build_summary_prompt(previous_summary.as_deref(), &newly_evicted, &size_hint);
+    let retry = RetryPolicy::from_configs(0, SUMMARY_RETRY_BASE_DELAY_MS, SUMMARY_TIMEOUT_SECS);
+    let cap =
+        (summary_max_tokens > 0).then(|| u32::try_from(summary_max_tokens).unwrap_or(u32::MAX));
+    let ma = agent.ma().clone();
+    let summary = match agent
+        .summarizer()
+        .summarize(&ma, ctx, model_id, prompt, retry, cap)
         .await
+    {
+        Ok(summary) => summary,
+        Err(AgentError::Cancelled) => return Ok(()),
+        Err(e) => {
+            log::warn!("Summarizing evicted history failed; keeping it for the next attempt: {e}");
+            return Ok(());
+        }
+    };
+
+    // Append the new marker before removing anything: an interruption in
+    // between leaves two markers, of which build_context takes the last
+    // and the next prune collects the older.
+    let store = agent.store()?;
+    let session_id = agent.session_state_mut().session_id()?.to_string();
+    let entry = SessionEntry::compaction(summary, first_kept_id, None);
+    store.append(&session_id, entry.clone()).await?;
+    agent.session_state_mut().entries.push(entry);
+
+    let mut removal = prunable.ids;
+    if let Some(id) = marker_id
+        && !removal.contains(&id)
+    {
+        removal.push(id);
+    }
+    remove_prunable(agent, &removal).await
 }
 
 /// Middle-trims a message's text so its estimated tokens fit
@@ -1036,28 +1062,27 @@ fn ceil_char_boundary(s: &str, mut index: usize) -> usize {
 /// not kept — and messages already in the session (e.g. resumed history)
 /// are not re-trimmed.
 ///
+/// With `summarize_model` set to a provider-prefixed model, history that
+/// falls out of the window is not deleted outright: it is folded into a
+/// rolling summary — the previous summary merged with the newly evicted
+/// messages by one non-streaming LLM request, without retries — and
+/// recorded as a compaction marker. The emitted window then always starts
+/// with the injected `[Conversation summary]` block (after the system
+/// message), whose tokens count against `max_context_tokens`;
+/// `summary_max_tokens` bounds the summary's length. The window is emitted
+/// *before* the summarization request, so the downstream turn never waits
+/// on it — only this agent's own next inputs queue behind the request. On
+/// a failed request the evicted history is kept (the session can
+/// temporarily exceed the budgets; the emitted window stays bounded) and
+/// the next eviction retries, covering it along with anything evicted
+/// since. An unparsable `summarize_model` disables summarization with a
+/// warning and history is deleted as usual.
+///
 /// An input on `reset` starts a new session: a fresh `session_id` is issued,
 /// written back to the config, and emitted on the `session_id` port, then an
 /// empty array is emitted on `messages`. The previous session is left
 /// untouched; to resume a past conversation, set `session_id` to its id and
 /// restart the agent.
-///
-/// The `message` port also accepts a compaction record — an object whose
-/// `type` key is `"compaction"` — as emitted by the `compaction` output of
-/// the Compact Messages agent. The record is stored as a non-destructive
-/// compaction marker (its `dropped` count resolved to the first kept entry
-/// id) and **nothing is emitted**: emitting would re-send the compacted
-/// context and re-trigger a downstream Chat agent. From the next input on,
-/// the emitted context starts with the summary followed by the kept
-/// messages. A record whose `previous_summary` baseline no longer matches
-/// the session's latest compaction — or whose `dropped` count exceeds the
-/// session's messages, or whose `tokens_before` is more than twice the
-/// session's current estimate (first compactions only, which carry no
-/// baseline to compare), or which carries no baseline after this agent has
-/// deleted history — is discarded with a warning instead of being recorded:
-/// the summarization call behind a record takes seconds, and a `reset`, a
-/// second compaction, or a window deletion in that time makes the record
-/// stale.
 ///
 /// Patches saved before session support carried the history in a hidden
 /// `messages` config. On the first start that history is imported once into
@@ -1069,11 +1094,7 @@ fn ceil_char_boundary(s: &str, mut index: usize) -> usize {
 ///   window is emitted only when the last non-streaming message is a user
 ///   message or tool result. A unit value re-emits the current window
 ///   without appending — and emits nothing when the context does not end
-///   with a user message or tool result. A compaction record (object with
-///   `type` `"compaction"`, a non-empty `summary`, a non-negative integer
-///   `dropped`, an optional `tokens_before`, and an optional
-///   `previous_summary` baseline) appends a compaction marker to the
-///   session and emits nothing; a stale record is discarded
+///   with a user message or tool result
 /// - Input `reset`: Start a new session and emit an empty array
 /// - Output `messages`: Prompt-ready context window as an array of messages
 /// - Output `session_id`: The freshly issued session id, emitted when
@@ -1089,8 +1110,19 @@ fn ceil_char_boundary(s: &str, mut index: usize) -> usize {
 /// - `max_message_tokens`: Estimated-token cap for each arriving non-system
 ///   message; the middle of an oversized message is cut before it is
 ///   stored. 0 disables the cap (default: 0)
+/// - `summarize_model`: Provider-prefixed model (e.g. "openai/gpt-5-nano")
+///   that folds evicted history into a rolling summary instead of deleting
+///   it. Empty: evicted history is deleted (default: "")
+/// - `summary_max_tokens`: Approximate token bound for the rolling summary,
+///   passed as prompt guidance and as the request's output-token cap.
+///   0: no bound (default: 0)
 /// - `session_id`: Session to resume on start. Empty: a new session is
 ///   created and its id is written back to this config (default: "")
+///
+/// # Global Configuration
+/// With `summarize_model` set, uses the same provider credentials as the
+/// `Chat` agent (`claude_api_key`, `openai_api_key`, `ollama_url`, and the
+/// corresponding base URLs).
 #[modular_agent(
     title="Messages",
     category=CATEGORY,
@@ -1099,6 +1131,8 @@ fn ceil_char_boundary(s: &str, mut index: usize) -> usize {
     integer_config(name=CONFIG_MAX_CONTEXT_TOKENS),
     integer_config(name=CONFIG_MAX_MESSAGES),
     integer_config(name=CONFIG_MAX_MESSAGE_TOKENS),
+    string_config(name=CONFIG_SUMMARIZE_MODEL, default=""),
+    integer_config(name=CONFIG_SUMMARY_MAX_TOKENS, detail),
     string_config(name=CONFIG_SESSION_ID, default="", detail),
     hint(width = 2, height = 1),
 )]
@@ -1111,6 +1145,8 @@ pub struct MessagesAgent {
     store: Option<Arc<dyn SessionStore>>,
 
     state: SessionState,
+
+    managers: ProviderManagers,
 
     /// History read from the stale `_messages` config, imported into the
     /// store once on the first `start()`.
@@ -1137,6 +1173,10 @@ impl SessionMessages for MessagesAgent {
 
     fn session_state_mut(&mut self) -> &mut SessionState {
         &mut self.state
+    }
+
+    fn summarizer(&self) -> &ProviderManagers {
+        &self.managers
     }
 }
 
@@ -1182,6 +1222,7 @@ impl AsAgent for MessagesAgent {
             data: AgentData::new(ma, id, spec),
             store: None,
             state: SessionState::default(),
+            managers: ProviderManagers::new(),
             pending_import,
         })
     }
@@ -1197,7 +1238,6 @@ impl AsAgent for MessagesAgent {
         }
         self.state.session_id = Some(session_id.clone());
         self.state.entries = entries;
-        self.state.pruned = false;
 
         // One-way migration of the pre-session `messages` config. The
         // pending history is cleared only once the import is resolved: a
@@ -1280,28 +1320,29 @@ impl AsAgent for MessagesAgent {
 /// not kept — and messages already in the session (e.g. resumed history)
 /// are not re-trimmed.
 ///
+/// With `summarize_model` set to a provider-prefixed model, history that
+/// falls out of the window is not deleted outright: it is folded into a
+/// rolling summary — the previous summary merged with the newly evicted
+/// messages by one non-streaming LLM request, without retries — and
+/// recorded as a compaction marker. The emitted window then always starts
+/// with the injected `[Conversation summary]` block (after the system
+/// message), whose tokens count against `max_context_tokens`;
+/// `summary_max_tokens` bounds the summary's length. The window is emitted
+/// *before* the summarization request, so the downstream turn never waits
+/// on it — only this agent's own next inputs queue behind the request. On
+/// a failed request the evicted history is kept (the session can
+/// temporarily exceed the budgets; the emitted window stays bounded) and
+/// the next eviction retries, covering it along with anything evicted
+/// since. An unparsable `summarize_model` disables summarization with a
+/// warning and history is deleted as usual. The marker is appended to the
+/// session file even with `prune_file` off — the file then keeps the full
+/// log plus the marker, and replay takes the last marker.
+///
 /// An input on `reset` starts a new session: a fresh `session_id` is issued,
 /// written back to the config, and emitted on the `session_id` port, then an
 /// empty array is emitted on `messages`. The previous session is left
 /// untouched; to resume a past conversation, set `session_id` to its id and
 /// restart the agent.
-///
-/// The `message` port also accepts a compaction record — an object whose
-/// `type` key is `"compaction"` — as emitted by the `compaction` output of
-/// the Compact Messages agent. The record is stored as a non-destructive
-/// compaction marker (its `dropped` count resolved to the first kept entry
-/// id) and **nothing is emitted**: emitting would re-send the compacted
-/// context and re-trigger a downstream Chat agent. From the next input on,
-/// the emitted context starts with the summary followed by the kept
-/// messages. A record whose `previous_summary` baseline no longer matches
-/// the session's latest compaction — or whose `dropped` count exceeds the
-/// session's messages, or whose `tokens_before` is more than twice the
-/// session's current estimate (first compactions only, which carry no
-/// baseline to compare), or which carries no baseline after this agent has
-/// deleted history — is discarded with a warning instead of being recorded:
-/// the summarization call behind a record takes seconds, and a `reset`, a
-/// second compaction, or a window deletion in that time makes the record
-/// stale.
 ///
 /// `session_dir` is applied when the agent starts; the agent fails to start
 /// while it is empty. Changing it while the agent is running makes further
@@ -1312,11 +1353,7 @@ impl AsAgent for MessagesAgent {
 ///   window is emitted only when the last non-streaming message is a user
 ///   message or tool result. A unit value re-emits the current window
 ///   without appending — and emits nothing when the context does not end
-///   with a user message or tool result. A compaction record (object with
-///   `type` `"compaction"`, a non-empty `summary`, a non-negative integer
-///   `dropped`, an optional `tokens_before`, and an optional
-///   `previous_summary` baseline) appends a compaction marker to the
-///   session and emits nothing; a stale record is discarded
+///   with a user message or tool result
 /// - Input `reset`: Start a new session and emit an empty array
 /// - Output `messages`: Prompt-ready context window as an array of messages
 /// - Output `session_id`: The freshly issued session id, emitted when
@@ -1334,6 +1371,12 @@ impl AsAgent for MessagesAgent {
 /// - `max_message_tokens`: Estimated-token cap for each arriving non-system
 ///   message; the middle of an oversized message is cut before it is
 ///   stored. 0 disables the cap (default: 0)
+/// - `summarize_model`: Provider-prefixed model (e.g. "openai/gpt-5-nano")
+///   that folds evicted history into a rolling summary instead of deleting
+///   it. Empty: evicted history is deleted (default: "")
+/// - `summary_max_tokens`: Approximate token bound for the rolling summary,
+///   passed as prompt guidance and as the request's output-token cap.
+///   0: no bound (default: 0)
 /// - `prune_file`: Also delete history that fell out of the window from the
 ///   session file; memory always drops it. Beware: resuming a long session
 ///   with a window limit set irreversibly deletes everything outside the
@@ -1342,6 +1385,11 @@ impl AsAgent for MessagesAgent {
 ///   to keep the full history on disk (default: true)
 /// - `session_id`: Session to resume on start. Empty: a new session is
 ///   created and its id is written back to this config (default: "")
+///
+/// # Global Configuration
+/// With `summarize_model` set, uses the same provider credentials as the
+/// `Chat` agent (`claude_api_key`, `openai_api_key`, `ollama_url`, and the
+/// corresponding base URLs).
 #[modular_agent(
     title="File Messages",
     category=CATEGORY,
@@ -1351,6 +1399,8 @@ impl AsAgent for MessagesAgent {
     integer_config(name=CONFIG_MAX_CONTEXT_TOKENS),
     integer_config(name=CONFIG_MAX_MESSAGES),
     integer_config(name=CONFIG_MAX_MESSAGE_TOKENS),
+    string_config(name=CONFIG_SUMMARIZE_MODEL, default=""),
+    integer_config(name=CONFIG_SUMMARY_MAX_TOKENS, detail),
     boolean_config(name=CONFIG_PRUNE_FILE, default=true, detail),
     string_config(name=CONFIG_SESSION_ID, default="", detail),
     hint(width = 2, height = 1),
@@ -1362,6 +1412,8 @@ pub struct FileMessagesAgent {
     store: Option<(String, Arc<dyn SessionStore>)>,
 
     state: SessionState,
+
+    managers: ProviderManagers,
 }
 
 impl FileMessagesAgent {
@@ -1409,6 +1461,10 @@ impl SessionMessages for FileMessagesAgent {
     fn prune_store(&self) -> Result<bool, AgentError> {
         Ok(self.configs()?.get_bool_or(CONFIG_PRUNE_FILE, true))
     }
+
+    fn summarizer(&self) -> &ProviderManagers {
+        &self.managers
+    }
 }
 
 #[async_trait]
@@ -1418,6 +1474,7 @@ impl AsAgent for FileMessagesAgent {
             data: AgentData::new(ma, id, spec),
             store: None,
             state: SessionState::default(),
+            managers: ProviderManagers::new(),
         })
     }
 
@@ -1432,7 +1489,6 @@ impl AsAgent for FileMessagesAgent {
         }
         self.state.session_id = Some(session_id);
         self.state.entries = entries;
-        self.state.pruned = false;
         Ok(())
     }
 
@@ -1669,6 +1725,10 @@ mod tests {
     use im::hashmap;
     use modular_agent_core::test_utils::{ProbeReceiver, TestProbeAgent, probe_receiver};
     use modular_agent_core::{AgentStatus, ConnectionSpec};
+
+    /// The prefix `build_context` (modular-agent-core) puts on the injected
+    /// summary message.
+    const SUMMARY_PREFIX: &str = "[Conversation summary]\n";
 
     /// `start_patch` returns before the spawned agent loop has run
     /// `AsAgent::start`; wait until the status flips to `Start` (set under
@@ -2134,334 +2194,6 @@ mod tests {
         assert_eq!(messages[0].text(), "q");
     }
 
-    fn compaction_record(
-        summary: Option<&str>,
-        dropped: Option<i64>,
-        tokens_before: Option<i64>,
-    ) -> AgentValue {
-        compaction_record_with_previous(summary, dropped, tokens_before, None)
-    }
-
-    fn compaction_record_with_previous(
-        summary: Option<&str>,
-        dropped: Option<i64>,
-        tokens_before: Option<i64>,
-        previous_summary: Option<&str>,
-    ) -> AgentValue {
-        let mut map = hashmap! {
-            "type".to_string() => AgentValue::string("compaction"),
-        };
-        if let Some(s) = summary {
-            map.insert("summary".to_string(), AgentValue::string(s));
-        }
-        if let Some(d) = dropped {
-            map.insert("dropped".to_string(), AgentValue::integer(d));
-        }
-        if let Some(t) = tokens_before {
-            map.insert("tokens_before".to_string(), AgentValue::integer(t));
-        }
-        if let Some(p) = previous_summary {
-            map.insert("previous_summary".to_string(), AgentValue::string(p));
-        }
-        AgentValue::object(map)
-    }
-
-    fn message_entry_ids(entries: &[SessionEntry]) -> Vec<String> {
-        entries
-            .iter()
-            .filter_map(|e| match e {
-                SessionEntry::Message { id, .. } => Some(id.clone()),
-                _ => None,
-            })
-            .collect()
-    }
-
-    #[tokio::test]
-    async fn file_messages_agent_compaction_record_appends_marker_and_emits_nothing() {
-        let dir = tempfile::tempdir().unwrap();
-        let (ma, _patch_id, agent_id, probe_rx, _session_rx) = setup_file_messages_agent(vec![(
-            CONFIG_SESSION_DIR,
-            AgentValue::string(dir.path().to_string_lossy()),
-        )])
-        .await;
-
-        let batch = AgentValue::array(vector![
-            Message::user("a".to_string()).into(),
-            Message::assistant("b".to_string()).into(),
-            Message::user("c".to_string()).into(),
-            Message::assistant("d".to_string()).into(),
-        ]);
-        send_file(&ma, &agent_id, PORT_MESSAGE, batch).await;
-        assert_no_emit(&probe_rx).await;
-
-        // The record appends a marker and emits nothing (an emit here would
-        // re-trigger a downstream ChatAgent with the compacted context).
-        send_file(
-            &ma,
-            &agent_id,
-            PORT_MESSAGE,
-            compaction_record(Some("S"), Some(2), Some(3)),
-        )
-        .await;
-        assert_no_emit(&probe_rx).await;
-
-        // The marker landed in the store, dropped=2 resolved to the third
-        // message's entry id.
-        let session_id = session_id_config(&ma, &agent_id).await;
-        let store = JsonlSessionStore::new(dir.path());
-        let entries = store.load(&session_id).await.unwrap();
-        assert_eq!(entries.len(), 5);
-        let msg_ids = message_entry_ids(&entries);
-        let SessionEntry::Compaction {
-            summary,
-            first_kept_id,
-            tokens_before,
-            ..
-        } = &entries[4]
-        else {
-            panic!("expected a Compaction entry");
-        };
-        assert_eq!(summary, "S");
-        assert_eq!(*first_kept_id, msg_ids[2]);
-        assert_eq!(*tokens_before, Some(3));
-
-        // The next user arrival emits the compacted context via
-        // build_context.
-        send_file(
-            &ma,
-            &agent_id,
-            PORT_MESSAGE,
-            Message::user("e".to_string()).into(),
-        )
-        .await;
-        let messages = recv_messages(&probe_rx).await;
-        assert_eq!(messages.len(), 4);
-        assert_eq!(messages[0].role, "user");
-        assert_eq!(messages[0].text(), "[Conversation summary]\nS");
-        assert_eq!(messages[1].text(), "c");
-        assert_eq!(messages[2].text(), "d");
-        assert_eq!(messages[3].text(), "e");
-
-        // A second compaction counts dropped from the first one's kept head:
-        // context was [summary, c, d, e], dropped=1 skips "c", keeping "d".
-        // Its record carries the first summary as its baseline.
-        send_file(
-            &ma,
-            &agent_id,
-            PORT_MESSAGE,
-            compaction_record_with_previous(Some("S2"), Some(1), None, Some("S")),
-        )
-        .await;
-
-        let entries = store.load(&session_id).await.unwrap();
-        let msg_ids = message_entry_ids(&entries);
-        let Some(SessionEntry::Compaction {
-            summary,
-            first_kept_id,
-            ..
-        }) = entries.last()
-        else {
-            panic!("expected a Compaction entry");
-        };
-        assert_eq!(summary, "S2");
-        assert_eq!(*first_kept_id, msg_ids[3]);
-
-        send_file(&ma, &agent_id, PORT_MESSAGE, AgentValue::unit()).await;
-        let messages = recv_messages(&probe_rx).await;
-        assert_eq!(messages.len(), 3);
-        assert_eq!(messages[0].text(), "[Conversation summary]\nS2");
-        assert_eq!(messages[1].text(), "d");
-        assert_eq!(messages[2].text(), "e");
-    }
-
-    #[tokio::test]
-    async fn messages_agent_compaction_dropped_beyond_history_discards_record() {
-        let (ma, _patch_id, agent_id, probe_rx, _session_rx) = setup_messages_agent(vec![]).await;
-
-        let batch = AgentValue::array(vector![
-            Message::user("a".to_string()).into(),
-            Message::assistant("b".to_string()).into(),
-        ]);
-        send(&ma, &agent_id, PORT_MESSAGE, batch).await;
-        assert_no_emit(&probe_rx).await;
-
-        // dropped exceeds the history: the record cannot describe this
-        // session (e.g. it raced a reset), so it is discarded — recording
-        // it would inject a foreign summary.
-        send(
-            &ma,
-            &agent_id,
-            PORT_MESSAGE,
-            compaction_record(Some("S"), Some(10), None),
-        )
-        .await;
-
-        send(
-            &ma,
-            &agent_id,
-            PORT_MESSAGE,
-            Message::user("c".to_string()).into(),
-        )
-        .await;
-        let messages = recv_messages(&probe_rx).await;
-        assert_eq!(messages.len(), 3);
-        assert_eq!(messages[0].text(), "a");
-        assert_eq!(messages[1].text(), "b");
-        assert_eq!(messages[2].text(), "c");
-    }
-
-    #[tokio::test]
-    async fn messages_agent_discards_oversized_first_compaction_record() {
-        let (ma, _patch_id, agent_id, probe_rx, _session_rx) = setup_messages_agent(vec![]).await;
-
-        let batch = AgentValue::array(vector![
-            Message::user("a".to_string()).into(),
-            Message::assistant("b".to_string()).into(),
-            Message::user("c".to_string()).into(),
-        ]);
-        send(&ma, &agent_id, PORT_MESSAGE, batch).await;
-        assert_eq!(recv_messages(&probe_rx).await.len(), 3);
-
-        // A first compaction record (no baseline) sized for a ~200k-token
-        // context cannot describe this tiny session: it was computed from
-        // another session across a reset and must be discarded.
-        send(
-            &ma,
-            &agent_id,
-            PORT_MESSAGE,
-            compaction_record(Some("S"), Some(1), Some(200_000)),
-        )
-        .await;
-
-        send(&ma, &agent_id, PORT_MESSAGE, AgentValue::unit()).await;
-        let messages = recv_messages(&probe_rx).await;
-        assert_eq!(messages.len(), 3);
-        assert_eq!(messages[0].text(), "a");
-        assert_eq!(messages[1].text(), "b");
-        assert_eq!(messages[2].text(), "c");
-    }
-
-    #[tokio::test]
-    async fn messages_agent_discards_stale_compaction_records() {
-        let (ma, _patch_id, agent_id, probe_rx, _session_rx) = setup_messages_agent(vec![]).await;
-
-        let batch = AgentValue::array(vector![
-            Message::user("a".to_string()).into(),
-            Message::assistant("b".to_string()).into(),
-            Message::user("c".to_string()).into(),
-        ]);
-        send(&ma, &agent_id, PORT_MESSAGE, batch).await;
-        assert_eq!(recv_messages(&probe_rx).await.len(), 3);
-
-        send(
-            &ma,
-            &agent_id,
-            PORT_MESSAGE,
-            compaction_record(Some("S"), Some(1), None),
-        )
-        .await;
-
-        // A record computed before the compaction above (no baseline) and
-        // one computed against a different summary are both stale.
-        send(
-            &ma,
-            &agent_id,
-            PORT_MESSAGE,
-            compaction_record(Some("stale"), Some(1), None),
-        )
-        .await;
-        send(
-            &ma,
-            &agent_id,
-            PORT_MESSAGE,
-            compaction_record_with_previous(Some("stale"), Some(1), None, Some("other")),
-        )
-        .await;
-
-        // Only the first compaction took effect: [summary S, b, c].
-        send(&ma, &agent_id, PORT_MESSAGE, AgentValue::unit()).await;
-        let messages = recv_messages(&probe_rx).await;
-        assert_eq!(messages.len(), 3);
-        assert_eq!(messages[0].text(), "[Conversation summary]\nS");
-        assert_eq!(messages[1].text(), "b");
-        assert_eq!(messages[2].text(), "c");
-
-        // A reset swaps in a fresh session; a record from the old
-        // conversation (baseline = old summary) must not leak into it.
-        send(&ma, &agent_id, PORT_RESET, AgentValue::unit()).await;
-        assert_eq!(recv_messages(&probe_rx).await.len(), 0);
-        send(
-            &ma,
-            &agent_id,
-            PORT_MESSAGE,
-            compaction_record_with_previous(Some("S2"), Some(1), None, Some("S")),
-        )
-        .await;
-
-        // The fresh session is empty, so a unit input emits nothing.
-        send(&ma, &agent_id, PORT_MESSAGE, AgentValue::unit()).await;
-        assert_no_emit(&probe_rx).await;
-    }
-
-    #[tokio::test]
-    async fn messages_agent_compaction_resolves_pseudo_summary_head() {
-        // A genuine first user message that happens to carry the summary
-        // prefix: the compactor excludes it from `dropped`, and the walk
-        // must skip the matching head entry to stay aligned.
-        let (ma, _patch_id, agent_id, probe_rx, _session_rx) = setup_messages_agent(vec![]).await;
-
-        let batch = AgentValue::array(vector![
-            Message::user("[Conversation summary]\nold".to_string()).into(),
-            Message::user("m1".to_string()).into(),
-            Message::assistant("m2".to_string()).into(),
-            Message::user("m3".to_string()).into(),
-        ]);
-        send(&ma, &agent_id, PORT_MESSAGE, batch).await;
-        assert_eq!(recv_messages(&probe_rx).await.len(), 4);
-
-        send(
-            &ma,
-            &agent_id,
-            PORT_MESSAGE,
-            compaction_record_with_previous(Some("S"), Some(2), None, Some("old")),
-        )
-        .await;
-
-        // dropped=2 skips m1 and m2 counted from *after* the pseudo-summary
-        // head, so the kept tail starts at m3 — matching the compactor.
-        send(&ma, &agent_id, PORT_MESSAGE, AgentValue::unit()).await;
-        let messages = recv_messages(&probe_rx).await;
-        assert_eq!(messages.len(), 2);
-        assert_eq!(messages[0].text(), "[Conversation summary]\nS");
-        assert_eq!(messages[1].text(), "m3");
-    }
-
-    #[tokio::test]
-    async fn messages_agent_invalid_compaction_record_errors() {
-        let (ma, _patch_id, agent_id, _probe_rx, _session_rx) = setup_messages_agent(vec![]).await;
-
-        let agent = ma.get_agent(&agent_id).unwrap();
-        let mut guard = agent.lock().await;
-        let messages_agent = guard.as_agent_mut::<MessagesAgent>().unwrap();
-
-        // Missing summary, missing dropped, and negative dropped all fail.
-        for record in [
-            compaction_record(None, Some(1), None),
-            compaction_record(Some(""), Some(1), None),
-            compaction_record(Some("S"), None, None),
-            compaction_record(Some("S"), Some(-1), None),
-        ] {
-            let result = AsAgent::process(
-                messages_agent,
-                AgentContext::new(),
-                PORT_MESSAGE.to_string(),
-                record,
-            )
-            .await;
-            assert!(matches!(result, Err(AgentError::InvalidValue(_))));
-        }
-    }
-
     #[tokio::test]
     async fn messages_agent_window_prunes_history_from_memory_store() {
         let (ma, patch_id, agent_id, probe_rx, _session_rx) =
@@ -2634,56 +2366,38 @@ mod tests {
         assert_eq!(messages[0].text(), "two");
     }
 
-    #[tokio::test]
-    async fn messages_agent_discards_baseline_less_record_after_prune() {
-        let (ma, _patch_id, agent_id, probe_rx, _session_rx) =
-            setup_messages_agent(vec![(CONFIG_MAX_CONTEXT_TOKENS, AgentValue::integer(15))]).await;
-
-        send(
-            &ma,
-            &agent_id,
-            PORT_MESSAGE,
-            Message::user("x".repeat(40)).into(),
-        )
-        .await;
-        assert_eq!(recv_messages(&probe_rx).await.len(), 1);
-        send(
-            &ma,
-            &agent_id,
-            PORT_MESSAGE,
-            Message::assistant("y".repeat(40)).into(),
-        )
-        .await;
-        send(
-            &ma,
-            &agent_id,
-            PORT_MESSAGE,
-            Message::user("u2".to_string()).into(),
-        )
-        .await;
-        assert_eq!(recv_messages(&probe_rx).await.len(), 1);
-
-        // The prune moved the log's head; a baseline-less record anchored
-        // to the old head can no longer be resolved and is discarded.
-        send(
-            &ma,
-            &agent_id,
-            PORT_MESSAGE,
-            compaction_record(Some("S"), Some(0), None),
-        )
-        .await;
-
-        send(
-            &ma,
-            &agent_id,
-            PORT_MESSAGE,
-            Message::user("u3".to_string()).into(),
-        )
-        .await;
-        let messages = recv_messages(&probe_rx).await;
-        assert_eq!(messages.len(), 2);
-        assert_eq!(messages[0].text(), "u2");
-        assert_eq!(messages[1].text(), "u3");
+    /// Appends a compaction marker whose `first_kept_id` is the entry of
+    /// the stored message with `first_kept_text`, mimicking what an earlier
+    /// summarization run leaves behind.
+    async fn append_marker(
+        ma: &ModularAgent,
+        agent_id: &str,
+        summary: &str,
+        first_kept_text: &str,
+    ) {
+        let agent = ma.get_agent(agent_id).unwrap();
+        let mut guard = agent.lock().await;
+        let target = guard.as_agent_mut::<MessagesAgent>().unwrap();
+        let first_kept_id = target
+            .state
+            .entries
+            .iter()
+            .find_map(|e| match e {
+                SessionEntry::Message { id, message, .. } if message.text() == first_kept_text => {
+                    Some(id.clone())
+                }
+                _ => None,
+            })
+            .unwrap();
+        let entry = SessionEntry::compaction(summary.to_string(), first_kept_id, None);
+        let session_id = target.state.session_id().unwrap().to_string();
+        target
+            .store()
+            .unwrap()
+            .append(&session_id, entry.clone())
+            .await
+            .unwrap();
+        target.state.entries.push(entry);
     }
 
     #[tokio::test]
@@ -2699,13 +2413,7 @@ mod tests {
         ]);
         send(&ma, &agent_id, PORT_MESSAGE, batch).await;
         assert_eq!(recv_messages(&probe_rx).await.len(), 3);
-        send(
-            &ma,
-            &agent_id,
-            PORT_MESSAGE,
-            compaction_record(Some("S"), Some(1), None),
-        )
-        .await;
+        append_marker(&ma, &agent_id, "S", "b").await;
 
         // The summary stays in the window, so the marker survives while
         // the history it hides ("a") is pruned.
@@ -2744,13 +2452,7 @@ mod tests {
         ]);
         send(&ma, &agent_id, PORT_MESSAGE, batch).await;
         assert_eq!(recv_messages(&probe_rx).await.len(), 3);
-        send(
-            &ma,
-            &agent_id,
-            PORT_MESSAGE,
-            compaction_record(Some("S"), Some(1), None),
-        )
-        .await;
+        append_marker(&ma, &agent_id, "S", "b").await;
 
         // The 10-token user pushes the summary (and "b") out of the window;
         // the marker is deleted along with the history it covered.
@@ -2823,6 +2525,444 @@ mod tests {
         }
     }
 
+    /// Serves canned Ollama /api/chat responses over a raw TCP socket, one
+    /// connection per response (`connection: close` defeats reqwest's
+    /// keep-alive pooling). Request bodies are forwarded on the returned
+    /// channel; `Err` entries answer with HTTP 500.
+    #[cfg(feature = "ollama")]
+    async fn spawn_mock_ollama(
+        responses: Vec<Result<&'static str, ()>>,
+    ) -> (String, tokio::sync::mpsc::UnboundedReceiver<String>) {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}", listener.local_addr().unwrap());
+        let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+        tokio::spawn(async move {
+            for response in responses {
+                let Ok((mut socket, _)) = listener.accept().await else {
+                    return;
+                };
+                let mut buf = Vec::new();
+                let mut tmp = [0u8; 4096];
+                let body = loop {
+                    let n = socket.read(&mut tmp).await.unwrap_or(0);
+                    if n == 0 {
+                        break None;
+                    }
+                    buf.extend_from_slice(&tmp[..n]);
+                    if let Some(header_end) = buf.windows(4).position(|w| w == b"\r\n\r\n") {
+                        let headers = String::from_utf8_lossy(&buf[..header_end]).to_lowercase();
+                        let content_length: usize = headers
+                            .lines()
+                            .find_map(|l| l.strip_prefix("content-length:"))
+                            .and_then(|v| v.trim().parse().ok())
+                            .unwrap_or(0);
+                        let body_start = header_end + 4;
+                        if buf.len() >= body_start + content_length {
+                            break Some(
+                                String::from_utf8_lossy(
+                                    &buf[body_start..body_start + content_length],
+                                )
+                                .to_string(),
+                            );
+                        }
+                    }
+                };
+                let Some(body) = body else {
+                    return;
+                };
+                let _ = tx.send(body);
+                let payload = match response {
+                    Ok(content) => {
+                        let json = serde_json::json!({
+                            "model": "test",
+                            "created_at": "now",
+                            "message": {"role": "assistant", "content": content},
+                            "done": true,
+                        })
+                        .to_string();
+                        format!(
+                            "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\n\
+                             content-length: {}\r\nconnection: close\r\n\r\n{}",
+                            json.len(),
+                            json
+                        )
+                    }
+                    Err(()) => "HTTP/1.1 500 Internal Server Error\r\n\
+                                content-length: 0\r\nconnection: close\r\n\r\n"
+                        .to_string(),
+                };
+                let _ = socket.write_all(payload.as_bytes()).await;
+                let _ = socket.shutdown().await;
+            }
+        });
+        (url, rx)
+    }
+
+    #[cfg(feature = "ollama")]
+    fn point_ollama_at(ma: &ModularAgent, url: &str) {
+        let mut configs = modular_agent_core::AgentConfigs::new();
+        configs.set("ollama_url".into(), AgentValue::string(url));
+        ma.set_global_configs(crate::chat::ChatAgent::DEF_NAME.to_string(), configs);
+    }
+
+    /// The summarization prompt sent in a mock request body.
+    #[cfg(feature = "ollama")]
+    fn request_prompt(body: &str) -> String {
+        let v: serde_json::Value = serde_json::from_str(body).unwrap();
+        v["messages"][0]["content"].as_str().unwrap().to_string()
+    }
+
+    /// (message entries, compaction entries, latest summary) of the agent's
+    /// session cache.
+    async fn entry_stats(ma: &ModularAgent, agent_id: &str) -> (usize, usize, Option<String>) {
+        let agent = ma.get_agent(agent_id).unwrap();
+        let mut guard = agent.lock().await;
+        let target = guard.as_agent_mut::<MessagesAgent>().unwrap();
+        let mut messages = 0;
+        let mut markers = 0;
+        let mut summary = None;
+        for entry in &target.state.entries {
+            match entry {
+                SessionEntry::Message { .. } => messages += 1,
+                SessionEntry::Compaction { summary: s, .. } => {
+                    markers += 1;
+                    summary = Some(s.clone());
+                }
+            }
+        }
+        (messages, markers, summary)
+    }
+
+    #[cfg(feature = "ollama")]
+    #[tokio::test]
+    async fn messages_agent_summarizes_evicted_history_incrementally() {
+        let (url, mut request_rx) = spawn_mock_ollama(vec![Ok("SUM"), Ok("SUM2")]).await;
+        let (ma, _patch_id, agent_id, probe_rx, _session_rx) = setup_messages_agent(vec![
+            (CONFIG_MAX_CONTEXT_TOKENS, AgentValue::integer(15)),
+            (CONFIG_SUMMARIZE_MODEL, AgentValue::string("ollama/test")),
+            (CONFIG_SUMMARY_MAX_TOKENS, AgentValue::integer(5)),
+        ])
+        .await;
+        point_ollama_at(&ma, &url);
+
+        send(
+            &ma,
+            &agent_id,
+            PORT_MESSAGE,
+            Message::user("x".repeat(40)).into(),
+        )
+        .await;
+        assert_eq!(recv_messages(&probe_rx).await.len(), 1);
+        send(
+            &ma,
+            &agent_id,
+            PORT_MESSAGE,
+            Message::assistant("y".repeat(40)).into(),
+        )
+        .await;
+        send(
+            &ma,
+            &agent_id,
+            PORT_MESSAGE,
+            Message::user("zzzzzzzz".to_string()).into(),
+        )
+        .await;
+
+        // The eviction turn emits its window before the summary exists.
+        let messages = recv_messages(&probe_rx).await;
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0].text(), "zzzzzzzz");
+
+        // First request: fresh-summary prompt with the size hint and cap.
+        let body = request_rx.recv().await.unwrap();
+        let prompt = request_prompt(&body);
+        assert!(prompt.contains("Summarize the following conversation"));
+        assert!(!prompt.contains("Current summary:"));
+        assert!(prompt.contains("Keep the summary under approximately 5 tokens."));
+        let v: serde_json::Value = serde_json::from_str(&body).unwrap();
+        assert_eq!(v["options"]["num_predict"], 5);
+
+        // The evicted pair was folded into one marker.
+        assert_eq!(
+            entry_stats(&ma, &agent_id).await,
+            (1, 1, Some("SUM".to_string()))
+        );
+        send(&ma, &agent_id, PORT_MESSAGE, AgentValue::unit()).await;
+        let messages = recv_messages(&probe_rx).await;
+        assert_eq!(messages.len(), 2);
+        assert_eq!(messages[0].text(), format!("{SUMMARY_PREFIX}SUM"));
+        assert_eq!(messages[1].text(), "zzzzzzzz");
+
+        // Second eviction: the emitted head still carries the old summary
+        // (the window goes out before the summarization request), and the
+        // request merges into it.
+        send(
+            &ma,
+            &agent_id,
+            PORT_MESSAGE,
+            Message::assistant("b".repeat(40)).into(),
+        )
+        .await;
+        send(
+            &ma,
+            &agent_id,
+            PORT_MESSAGE,
+            Message::user("uu".to_string()).into(),
+        )
+        .await;
+        let messages = recv_messages(&probe_rx).await;
+        assert_eq!(messages.len(), 2);
+        assert_eq!(messages[0].text(), format!("{SUMMARY_PREFIX}SUM"));
+        assert_eq!(messages[1].text(), "uu");
+        let prompt = request_prompt(&request_rx.recv().await.unwrap());
+        assert!(prompt.contains("Current summary:\nSUM"));
+
+        assert_eq!(
+            entry_stats(&ma, &agent_id).await,
+            (1, 1, Some("SUM2".to_string()))
+        );
+        send(&ma, &agent_id, PORT_MESSAGE, AgentValue::unit()).await;
+        let messages = recv_messages(&probe_rx).await;
+        assert_eq!(messages[0].text(), format!("{SUMMARY_PREFIX}SUM2"));
+        assert_eq!(messages[1].text(), "uu");
+    }
+
+    #[cfg(feature = "ollama")]
+    #[tokio::test]
+    async fn messages_agent_keeps_history_when_summarize_fails() {
+        let (url, _request_rx) = spawn_mock_ollama(vec![Err(()), Ok("SUM")]).await;
+        let (ma, _patch_id, agent_id, probe_rx, _session_rx) = setup_messages_agent(vec![
+            (CONFIG_MAX_CONTEXT_TOKENS, AgentValue::integer(15)),
+            (CONFIG_SUMMARIZE_MODEL, AgentValue::string("ollama/test")),
+        ])
+        .await;
+        point_ollama_at(&ma, &url);
+
+        send(
+            &ma,
+            &agent_id,
+            PORT_MESSAGE,
+            Message::user("x".repeat(40)).into(),
+        )
+        .await;
+        assert_eq!(recv_messages(&probe_rx).await.len(), 1);
+        send(
+            &ma,
+            &agent_id,
+            PORT_MESSAGE,
+            Message::assistant("y".repeat(40)).into(),
+        )
+        .await;
+        send(
+            &ma,
+            &agent_id,
+            PORT_MESSAGE,
+            Message::user("zzzzzzzz".to_string()).into(),
+        )
+        .await;
+
+        // The window still goes out, but the failed request keeps the
+        // evicted pair on file for the next attempt.
+        assert_eq!(recv_messages(&probe_rx).await.len(), 1);
+        assert_eq!(entry_stats(&ma, &agent_id).await, (3, 0, None));
+
+        // The next eviction retries, covering the previously kept pair.
+        send(
+            &ma,
+            &agent_id,
+            PORT_MESSAGE,
+            Message::assistant("b".repeat(40)).into(),
+        )
+        .await;
+        send(
+            &ma,
+            &agent_id,
+            PORT_MESSAGE,
+            Message::user("uu".to_string()).into(),
+        )
+        .await;
+        assert_eq!(recv_messages(&probe_rx).await.len(), 3);
+        assert_eq!(
+            entry_stats(&ma, &agent_id).await,
+            (3, 1, Some("SUM".to_string()))
+        );
+        send(&ma, &agent_id, PORT_MESSAGE, AgentValue::unit()).await;
+        let messages = recv_messages(&probe_rx).await;
+        assert_eq!(messages[0].text(), format!("{SUMMARY_PREFIX}SUM"));
+    }
+
+    #[tokio::test]
+    async fn messages_agent_deletes_history_on_invalid_summarize_model() {
+        // No provider prefix: the parse fails before any request, and
+        // eviction falls back to plain deletion.
+        let (ma, _patch_id, agent_id, probe_rx, _session_rx) = setup_messages_agent(vec![
+            (CONFIG_MAX_CONTEXT_TOKENS, AgentValue::integer(15)),
+            (CONFIG_SUMMARIZE_MODEL, AgentValue::string("bogus")),
+        ])
+        .await;
+
+        send(
+            &ma,
+            &agent_id,
+            PORT_MESSAGE,
+            Message::user("x".repeat(40)).into(),
+        )
+        .await;
+        assert_eq!(recv_messages(&probe_rx).await.len(), 1);
+        send(
+            &ma,
+            &agent_id,
+            PORT_MESSAGE,
+            Message::assistant("y".repeat(40)).into(),
+        )
+        .await;
+        send(
+            &ma,
+            &agent_id,
+            PORT_MESSAGE,
+            Message::user("zzzzzzzz".to_string()).into(),
+        )
+        .await;
+        assert_eq!(recv_messages(&probe_rx).await.len(), 1);
+        assert_eq!(entry_stats(&ma, &agent_id).await, (1, 0, None));
+    }
+
+    #[cfg(feature = "ollama")]
+    #[tokio::test]
+    async fn file_messages_agent_summarizes_without_pruning_file() {
+        let (url, _request_rx) = spawn_mock_ollama(vec![Ok("SUM")]).await;
+        let dir = tempfile::tempdir().unwrap();
+        let (ma, patch_id, agent_id, probe_rx, _session_rx) = setup_file_messages_agent(vec![
+            (
+                CONFIG_SESSION_DIR,
+                AgentValue::string(dir.path().to_string_lossy()),
+            ),
+            (CONFIG_MAX_CONTEXT_TOKENS, AgentValue::integer(15)),
+            (CONFIG_SUMMARIZE_MODEL, AgentValue::string("ollama/test")),
+            (CONFIG_PRUNE_FILE, AgentValue::boolean(false)),
+        ])
+        .await;
+        point_ollama_at(&ma, &url);
+
+        send_file(
+            &ma,
+            &agent_id,
+            PORT_MESSAGE,
+            Message::user("x".repeat(40)).into(),
+        )
+        .await;
+        assert_eq!(recv_messages(&probe_rx).await.len(), 1);
+        send_file(
+            &ma,
+            &agent_id,
+            PORT_MESSAGE,
+            Message::assistant("y".repeat(40)).into(),
+        )
+        .await;
+        send_file(
+            &ma,
+            &agent_id,
+            PORT_MESSAGE,
+            Message::user("u2".to_string()).into(),
+        )
+        .await;
+        assert_eq!(recv_messages(&probe_rx).await.len(), 1);
+
+        // The marker is appended even though deletions are off: the file
+        // keeps the full log plus the marker, and replay takes the last
+        // marker.
+        let session_id = session_id_config(&ma, &agent_id).await;
+        let store = JsonlSessionStore::new(dir.path());
+        let entries = store.load(&session_id).await.unwrap();
+        assert_eq!(entries.len(), 4);
+        assert!(matches!(
+            entries.last().unwrap(),
+            SessionEntry::Compaction { summary, .. } if summary == "SUM"
+        ));
+
+        ma.stop_patch(&patch_id).await.unwrap();
+        ma.start_patch(&patch_id).await.unwrap();
+        wait_until_started(&ma, &agent_id).await;
+        send_file(&ma, &agent_id, PORT_MESSAGE, AgentValue::unit()).await;
+        let messages = recv_messages(&probe_rx).await;
+        assert_eq!(messages.len(), 2);
+        assert_eq!(messages[0].text(), format!("{SUMMARY_PREFIX}SUM"));
+        assert_eq!(messages[1].text(), "u2");
+    }
+
+    #[test]
+    fn test_select_window_pins_summary_head() {
+        // 40-char messages estimate to 10 tokens; the summary head weighs
+        // 10 and the anchor 2.
+        let summary = Message::user(format!("{SUMMARY_PREFIX}{}", "s".repeat(17)));
+        let context = [
+            summary.clone(),
+            plain("user", &"u".repeat(40)),
+            plain("assistant", &"a".repeat(40)),
+            plain("user", "zzzzzzzz"),
+        ];
+
+        // Unpinned, the (u, a) pair fits in 25 tokens and the summary group
+        // is the one that falls out.
+        let window = select_window(&context, 25, 0, false).unwrap();
+        assert_eq!(window.cut, 1);
+        assert!(!window.pinned_summary);
+
+        // Pinned, the summary's 10 tokens count first and push the pair out.
+        let window = select_window(&context, 25, 0, true).unwrap();
+        assert_eq!(window.cut, 3);
+        assert!(window.pinned_summary);
+
+        // With the summary as the only user message (anchor == 0), the cut
+        // is normalized past the pinned head instead of double-emitting it.
+        let context = [summary, plain("assistant", "a"), plain("tool", "t")];
+        assert_eq!(select_window(&context, 0, 0, false).unwrap().cut, 0);
+        let window = select_window(&context, 0, 0, true).unwrap();
+        assert_eq!(window.cut, 1);
+        assert!(window.pinned_summary);
+    }
+
+    #[test]
+    fn test_prunable_keeps_latest_marker_when_summary_pinned() {
+        let m1 = SessionEntry::message(plain("user", "u1"));
+        let m2 = SessionEntry::message(plain("assistant", "a1"));
+        let m3 = SessionEntry::message(plain("user", "u2"));
+        let marker_old = SessionEntry::compaction("S0".to_string(), m1.id().to_string(), None);
+        let marker_new = SessionEntry::compaction("S1".to_string(), m2.id().to_string(), None);
+        let entries = [
+            m1.clone(),
+            marker_old.clone(),
+            m2.clone(),
+            m3.clone(),
+            marker_new,
+        ];
+
+        // build_context: injected summary (no entry id), then m2, m3.
+        let (context_ids, _context): (Vec<Option<String>>, Vec<Message>) =
+            build_context_with_ids(&entries).into_iter().unzip();
+        assert_eq!(context_ids[0], None);
+
+        // A pinned-summary window that evicts m2: the latest marker and the
+        // first kept message survive, everything the summary covers goes.
+        let window = Window {
+            cut: 2,
+            pinned_system: None,
+            pinned_summary: true,
+        };
+        let prunable = prunable_entry_ids(&entries, &context_ids, &window);
+        assert_eq!(prunable.first_kept_entry_id.as_deref(), Some(m3.id()));
+        let mut expected = vec![
+            m1.id().to_string(),
+            marker_old.id().to_string(),
+            m2.id().to_string(),
+        ];
+        expected.sort();
+        let mut ids = prunable.ids;
+        ids.sort();
+        assert_eq!(ids, expected);
+    }
+
     fn plain(role: &str, text: &str) -> Message {
         match role {
             "user" => Message::user(text.to_string()),
@@ -2835,10 +2975,14 @@ mod tests {
 
     #[test]
     fn test_select_window_requires_user_or_tool_tail() {
-        assert!(select_window(&[], 0, 0).is_none());
-        assert!(select_window(&[plain("user", "u"), plain("assistant", "a")], 0, 0).is_none());
+        assert!(select_window(&[], 0, 0, false).is_none());
+        assert!(
+            select_window(&[plain("user", "u"), plain("assistant", "a")], 0, 0, false).is_none()
+        );
         // A tool tail with no user anywhere has no window head.
-        assert!(select_window(&[plain("assistant", "a"), plain("tool", "t")], 0, 0).is_none());
+        assert!(
+            select_window(&[plain("assistant", "a"), plain("tool", "t")], 0, 0, false).is_none()
+        );
     }
 
     #[test]
@@ -2851,12 +2995,12 @@ mod tests {
             plain("user", "55555555"),
         ];
         // anchor 2 + newest pair 20 = 22 fits 25; the next pair would not.
-        let window = select_window(&context, 25, 0).unwrap();
+        let window = select_window(&context, 25, 0, false).unwrap();
         assert_eq!(window.cut, 2);
         assert_eq!(window.pinned_system, None);
 
         // No limits: everything is kept.
-        assert_eq!(select_window(&context, 0, 0).unwrap().cut, 0);
+        assert_eq!(select_window(&context, 0, 0, false).unwrap().cut, 0);
     }
 
     #[test]
@@ -2865,7 +3009,7 @@ mod tests {
             plain("system", &"s".repeat(40)),
             plain("user", &"u".repeat(40)),
         ];
-        let window = select_window(&context, 5, 1).unwrap();
+        let window = select_window(&context, 5, 1, false).unwrap();
         assert_eq!(window.cut, 1);
         assert_eq!(window.pinned_system, Some(0));
     }
@@ -2878,8 +3022,8 @@ mod tests {
             plain("assistant", "a1"),
             plain("user", "u2"),
         ];
-        assert_eq!(select_window(&context, 0, 4).unwrap().cut, 1);
-        assert_eq!(select_window(&context, 0, 3).unwrap().cut, 3);
+        assert_eq!(select_window(&context, 0, 4, false).unwrap().cut, 1);
+        assert_eq!(select_window(&context, 0, 3, false).unwrap().cut, 3);
     }
 
     #[test]
@@ -2894,11 +3038,11 @@ mod tests {
         ];
         // The (user, assistant, tool) group is added as one unit: 2 + 30
         // fits 35, the next pair would not.
-        let window = select_window(&context, 35, 0).unwrap();
+        let window = select_window(&context, 35, 0, false).unwrap();
         assert_eq!(window.cut, 2);
 
         // A tool tail's minimal window runs from the latest user.
-        let window = select_window(&context[..5], 1, 0).unwrap();
+        let window = select_window(&context[..5], 1, 0, false).unwrap();
         assert_eq!(window.cut, 2);
     }
 
@@ -2910,7 +3054,7 @@ mod tests {
             plain("system", "s2"),
             plain("user", "u2"),
         ];
-        let window = select_window(&context, 0, 0).unwrap();
+        let window = select_window(&context, 0, 0, false).unwrap();
         assert_eq!(window.cut, 1);
         assert_eq!(window.pinned_system, Some(2));
 
@@ -2921,7 +3065,7 @@ mod tests {
             plain("assistant", "a1"),
             plain("user", "u2"),
         ];
-        assert_eq!(select_window(&context, 0, 0).unwrap().cut, 1);
+        assert_eq!(select_window(&context, 0, 0, false).unwrap().cut, 1);
 
         // Consecutive users each form their own group.
         let context = vec![
@@ -2929,7 +3073,7 @@ mod tests {
             plain("user", "u2"),
             plain("user", "u3"),
         ];
-        assert_eq!(select_window(&context, 0, 0).unwrap().cut, 0);
+        assert_eq!(select_window(&context, 0, 0, false).unwrap().cut, 0);
     }
 
     #[test]
@@ -3065,8 +3209,8 @@ mod tests {
 
         // image + user
         #[cfg(feature = "image")]
-        let img = AgentValue::image(modular_agent_core::PhotonImage::new(vec![0u8; 4], 1, 1));
         {
+            let img = AgentValue::image(modular_agent_core::PhotonImage::new(vec![0u8; 4], 1, 1));
             let msg = Message::user("Check this image".to_string());
             let result = append_message(img, msg);
             assert!(result.is_array());

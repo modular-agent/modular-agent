@@ -42,8 +42,7 @@ const CONFIG_TIMEOUT_SECS: &str = "timeout_secs";
 const CONFIG_TOOLS: &str = "tools";
 const CONFIG_TOP_P: &str = "top_p";
 
-/// Shared with CompactMessagesAgent so both nodes default to the same model.
-pub(crate) const DEFAULT_CONFIG_MODEL: &str = "openai/gpt-5-nano";
+const DEFAULT_CONFIG_MODEL: &str = "openai/gpt-5-nano";
 
 /// Chat Agent that routes to different LLM providers based on model prefix.
 ///

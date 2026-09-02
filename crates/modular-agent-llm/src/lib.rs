@@ -19,10 +19,16 @@ pub(crate) mod prepare;
 
 pub mod chat;
 
-// CompactMessagesAgent issues a summarization request, so the node exists
-// only when at least one provider feature is enabled.
-#[cfg(any(feature = "openai", feature = "claude", feature = "ollama"))]
-pub mod compact;
+// Summarization machinery (prompt builder, provider-routed request) behind
+// the Messages agents' rolling summary. The module is feature-independent so
+// message.rs compiles unconditionally; without any provider feature the
+// request path degenerates to an error, parts of it go dead, and the code
+// after the always-diverging provider match becomes unreachable.
+#[cfg_attr(
+    not(any(feature = "openai", feature = "claude", feature = "ollama")),
+    allow(dead_code, unreachable_code)
+)]
+pub(crate) mod summarize;
 
 pub mod completion;
 pub mod embeddings;
@@ -45,7 +51,7 @@ pub(crate) mod http_error;
 
 // MessageContent assembly shared by the provider response converters, plus
 // the string-only flattening fallback also used by feature-independent code
-// (prepare, compact), so the module is not gated on provider features.
+// (prepare, summarize), so the module is not gated on provider features.
 pub(crate) mod content;
 
 // Only the providers that transport tool arguments as strings need the
