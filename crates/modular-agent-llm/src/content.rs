@@ -27,7 +27,7 @@ pub(crate) fn content_from_blocks(blocks: &[ContentBlock]) -> MessageContent {
 
 /// Flattened text form of message content for string-only sinks: providers
 /// whose tool role only accepts a string (OpenAI, Ollama), orphan tool-result
-/// demotion, and the compaction transcript. Text blocks pass through and each
+/// demotion, and the summarization transcript. Text blocks pass through and each
 /// image block becomes an `[image: <mime_type>]` placeholder line, so the
 /// model at least learns an image was returned instead of it being silently
 /// dropped. Plain-text content is returned verbatim.
