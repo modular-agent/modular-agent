@@ -335,10 +335,9 @@ export class EditorState {
       this.updateNodeExtension(nodeId, key, oldValue, value);
     };
 
-    // Inspector: sync ViewModel from Model (nodes + edges)
+    // Inspector: sync ViewModel from Model (nodes)
     $effect(() => {
       const nodes = this.nodes; // tracked: triggers on any node change
-      const edges = this.edges; // tracked: triggers on edge add/remove
       untrack(() => {
         const selected = nodes.filter((n) => n.selected);
         const node = selected.length === 1 ? selected[0] : null;
@@ -370,9 +369,6 @@ export class EditorState {
         this.inspector.inputs = data.inputs ?? [];
         this.inspector.outputs = data.outputs ?? [];
         this.inspector.agentDef = getAgentDefinitions()[data.def_name] ?? null;
-        this.inspector.connectedConfigs = edges
-          .filter((e) => e.target === node.id && e.targetHandle?.startsWith("config:"))
-          .map((e) => e.targetHandle?.substring(7) ?? "");
 
         // Sync extension attributes
         const ext: Record<string, any> = {};

@@ -38,8 +38,6 @@ export interface NodeViewProps {
   updateConfig: (key: string, value: unknown) => void;
   /** The agent-node's existing agentEvent ($state proxy, reactive through props). */
   agentEvent: AgentEventState;
-  /** Config keys currently connected by an edge (disable inputs while connected). */
-  connectedConfigs: string[];
   running: boolean;
 }
 

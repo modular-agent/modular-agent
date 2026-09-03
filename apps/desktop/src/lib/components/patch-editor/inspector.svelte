@@ -187,7 +187,6 @@
                     name={key}
                     {value}
                     configSpec={inspector.configSpecs[key]}
-                    connected={inspector.connectedConfigs.includes(key)}
                     {updateConfig}
                   />
                 {/each}

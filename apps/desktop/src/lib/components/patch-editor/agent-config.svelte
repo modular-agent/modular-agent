@@ -19,11 +19,17 @@
     name: string;
     value: any;
     configSpec: AgentConfigSpec | undefined;
-    connected: boolean;
     updateConfig: (key: string, value: any) => void;
   };
 
-  let { name, value, configSpec, connected = false, updateConfig }: Props = $props();
+  let { name, value, configSpec, updateConfig }: Props = $props();
+
+  // While the input is focused, the value prop is frozen at its focus-time
+  // value so external config updates (wire deliveries, MCP edits, other
+  // windows) can't clobber the in-progress draft; blur restores the live
+  // value. One flag suffices — each instance renders a single config.
+  let focused = $state(false);
+  let frozen = $state<any>();
 
   const CONFIG_HANDLE_STYLE =
     "width: 10px; height: 10px; background-color: #000; border: 2px solid #fff;";
@@ -191,7 +197,12 @@
   <Input
     type="number"
     class="nodrag flex-none shadow-none"
-    value={v}
+    value={focused ? frozen : v}
+    onfocus={() => {
+      frozen = v;
+      focused = true;
+    }}
+    onblur={() => (focused = false)}
     onkeydown={(evt) => {
       if (evt.key === "Enter") {
         let intValue = parseInt(evt.currentTarget.value);
@@ -215,7 +226,12 @@
   <Input
     class="nodrag flex-none shadow-none"
     type="text"
-    value={v}
+    value={focused ? frozen : v}
+    onfocus={() => {
+      frozen = v;
+      focused = true;
+    }}
+    onblur={() => (focused = false)}
     onkeydown={(evt) => {
       if (evt.key === "Enter") {
         let numValue = parseFloat(evt.currentTarget.value);
@@ -240,7 +256,12 @@
     class="nodrag flex-none shadow-none"
     spellcheck="false"
     type="text"
-    value={v}
+    value={focused ? frozen : v}
+    onfocus={() => {
+      frozen = v;
+      focused = true;
+    }}
+    onblur={() => (focused = false)}
     onkeydown={(evt) => {
       if (evt.key === "Enter") {
         updateConfig(key, evt.currentTarget.value);
@@ -258,7 +279,12 @@
   <Input
     class="nodrag flex-none shadow-none"
     type="password"
-    value={v}
+    value={focused ? frozen : v}
+    onfocus={() => {
+      frozen = v;
+      focused = true;
+    }}
+    onblur={() => (focused = false)}
     onkeydown={(evt) => {
       if (evt.key === "Enter") {
         updateConfig(key, evt.currentTarget.value);
@@ -271,7 +297,12 @@
   <Textarea
     class="nodrag nowheel flex-1 shadow-none"
     spellcheck="false"
-    value={v}
+    value={focused ? frozen : v}
+    onfocus={() => {
+      frozen = v;
+      focused = true;
+    }}
+    onblur={() => (focused = false)}
     onkeydown={(evt) => {
       if (evt.ctrlKey && evt.key === "Enter") {
         evt.preventDefault();
@@ -294,7 +325,12 @@
   <Textarea
     class="nodrag nowheel flex-1 shadow-none"
     spellcheck="false"
-    value={JSON.stringify(v, null, 2)}
+    value={JSON.stringify(focused ? frozen : v, null, 2)}
+    onfocus={() => {
+      frozen = v;
+      focused = true;
+    }}
+    onblur={() => (focused = false)}
     onkeydown={(evt) => {
       if (evt.ctrlKey && evt.key === "Enter") {
         evt.preventDefault();
@@ -354,14 +390,12 @@
       />
     {/if}
   </div>
-  {#if !connected}
-    {@const Widget = configSpec && getConfigWidget(ty)}
-    {#if Widget && configSpec}
-      <Widget configKey={name} {value} {configSpec} readonly={false} {updateConfig} />
-    {:else}
-      {@const renderInput = inputRenderers[ty ?? "default"] ?? inputRenderers.default}
-      {@render renderInput(name, value)}
-    {/if}
+  {@const Widget = configSpec && getConfigWidget(ty)}
+  {#if Widget && configSpec}
+    <Widget configKey={name} {value} {configSpec} readonly={false} {updateConfig} />
+  {:else}
+    {@const renderInput = inputRenderers[ty ?? "default"] ?? inputRenderers.default}
+    {@render renderInput(name, value)}
   {/if}
 {/if}
 

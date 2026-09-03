@@ -1666,11 +1666,23 @@ impl ModularAgent {
                 a.clone()
             };
             if let AgentMessage::Config { key, value } = message {
-                agent.lock().await.set_config(key, value)?;
+                agent.lock().await.set_config(key.clone(), value.clone())?;
+                self.emit_agent_config_updated(agent_id, key, value);
             }
             return Ok(());
         };
+        // Same delivery semantics as set_agent_configs: the event reports
+        // successful delivery to the agent's channel, not completed
+        // application. This is what lets hosts show wire-driven config
+        // values live.
+        let config_update = match &message {
+            AgentMessage::Config { key, value } => Some((key.clone(), value.clone())),
+            _ => None,
+        };
         inbox.send(&agent_id, message)?;
+        if let Some((key, value)) = config_update {
+            self.emit_agent_config_updated(agent_id.clone(), key, value);
+        }
 
         self.emit_agent_input(agent_id.to_string(), port);
 

@@ -6,17 +6,17 @@
   so it is implemented as a NodeView (per agent type) instead of a
   ConfigWidget keyed on a fake type_. Also demonstrates placing ConfigHandle
   so configs keep accepting edge connections when the default rendering is
-  replaced, and honoring connectedConfigs (no input while connected, matching
-  the default rendering).
+  replaced.
 
   Writes back via updateConfig on "change" (not "input") so continuous drags
-  don't flood the undo history / IPC; a local drag value keeps the numeric
-  label live while dragging.
+  don't flood the undo history / IPC; a local drag value keeps the thumb and
+  numeric label under the user's control while dragging, so external config
+  updates (e.g. a wire driving this config) can't yank the thumb mid-drag.
 -->
 <script lang="ts">
   import { ConfigHandle, type NodeViewProps } from "@modular-agent/widget-kit";
 
-  let { configs, configSpecs, updateConfig, connectedConfigs }: NodeViewProps = $props();
+  let { configs, configSpecs, updateConfig }: NodeViewProps = $props();
 
   // AgentConfigSpec carries no min/max/step metadata today; use sensible defaults.
   const MIN = 0;
@@ -48,31 +48,29 @@
         <ConfigHandle name={key} />
       {/if}
     </div>
-    {#if !connectedConfigs.includes(key)}
-      <div class="slider-row">
-        <input
-          type="range"
-          class="nodrag slider-input"
-          min={MIN}
-          max={MAX}
-          step={STEP}
-          value={numValue(key)}
-          oninput={(evt) => {
-            dragValues[key] = Number(evt.currentTarget.value);
-          }}
-          onchange={(evt) => {
-            delete dragValues[key];
-            const v = Number(evt.currentTarget.value);
-            if (!Number.isNaN(v) && v !== numValue(key)) {
-              updateConfig(key, v);
-            }
-          }}
-        />
-        <span class="slider-value">
-          {dragValues[key] ?? numValue(key)}
-        </span>
-      </div>
-    {/if}
+    <div class="slider-row">
+      <input
+        type="range"
+        class="nodrag slider-input"
+        min={MIN}
+        max={MAX}
+        step={STEP}
+        value={dragValues[key] ?? numValue(key)}
+        oninput={(evt) => {
+          dragValues[key] = Number(evt.currentTarget.value);
+        }}
+        onchange={(evt) => {
+          delete dragValues[key];
+          const v = Number(evt.currentTarget.value);
+          if (!Number.isNaN(v) && v !== numValue(key)) {
+            updateConfig(key, v);
+          }
+        }}
+      />
+      <span class="slider-value">
+        {dragValues[key] ?? numValue(key)}
+      </span>
+    </div>
   {/each}
   {#if sliderKeys.length === 0}
     <p class="slider-empty">No integer configs</p>

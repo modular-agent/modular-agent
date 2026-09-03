@@ -97,11 +97,17 @@ See `src/types.ts` for the full documented contracts:
 
 - `NodeViewProps` — `configs` (reactive), `configSpecs`, `updateConfig`
   (routes through the app's undo/redo coalescing), `agentEvent`,
-  `connectedConfigs`, `running`. Size is intentionally not a prop: measure
+  `running`. Size is intentionally not a prop: measure
   with `bind:clientWidth` / `bind:clientHeight` on your root element.
 - `ConfigWidgetProps` — config-local only (`configKey`, `value`,
   `configSpec`, `readonly`, `updateConfig`) so widgets work both in the node
   view and in the sidebar inspector.
+
+A config stays editable while an edge is wired into its config port, and
+external updates (a wire driving the config, MCP edits) arrive as live
+`value` / `configs` changes. A widget with a text-editing surface must keep
+its own draft state while the user is editing so an external update can't
+clobber the draft (the built-in markdown input does this).
 
 Interactive elements **must** carry xyflow's `nodrag` class (inputs, buttons,
 switches, scrollbar thumbs, and any internal drag handles), and
