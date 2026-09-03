@@ -300,6 +300,57 @@ async fn test_update_agent_spec_announces_dynamic_config_changes() {
 }
 
 #[tokio::test]
+async fn test_wire_delivery_to_config_port_emits_config_updated() {
+    let ma = ModularAgent::init().unwrap();
+    ma.ready().await.unwrap();
+
+    let patch_id = ma.new_patch().unwrap();
+    let in_id = ma
+        .add_agent(patch_id.clone(), ext_agent_spec(&ma, EXT_IN_DEF, "cfg_in"))
+        .await
+        .unwrap();
+    let def = ma
+        .get_agent_definition(crate::common::agents::NumberedConfigAgent::DEF_NAME)
+        .unwrap();
+    let target_id = ma.add_agent(patch_id.clone(), def.to_spec()).await.unwrap();
+    ma.add_connection(
+        &patch_id,
+        ConnectionSpec {
+            source: in_id,
+            source_handle: "value".into(),
+            target: target_id.clone(),
+            target_handle: "config:n".into(),
+        },
+    )
+    .await
+    .unwrap();
+
+    ma.start_patch(&patch_id).await.unwrap();
+    let mut rx = ma.subscribe();
+
+    ma.write_external_input("cfg_in".into(), AgentValue::integer(7))
+        .await
+        .unwrap();
+
+    // A wire delivery to a config port announces the delivered value so
+    // hosts can show it live. Same delivery semantics as set_agent_configs,
+    // and no origin: the agent runtime routed it.
+    let envelope = expect_event(&mut rx, |e| {
+        matches!(e, ModularAgentEvent::AgentConfigUpdated(id, key, _)
+            if id == &target_id && key == "n")
+    })
+    .await;
+    assert!(matches!(
+        envelope.event,
+        ModularAgentEvent::AgentConfigUpdated(_, _, ref v) if v == &AgentValue::integer(7)
+    ));
+    assert_eq!(envelope.origin, None);
+
+    ma.stop_patch(&patch_id).await.unwrap();
+    ma.quit();
+}
+
+#[tokio::test]
 async fn test_ext_in_renamed_while_stopped_delivers_once() {
     let ma = ModularAgent::init().unwrap();
     ma.ready().await.unwrap();

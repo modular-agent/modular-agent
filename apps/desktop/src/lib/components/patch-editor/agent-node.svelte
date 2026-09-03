@@ -5,7 +5,7 @@
   import { onDestroy, untrack } from "svelte";
 
   import AlertCircleIcon from "@lucide/svelte/icons/alert-circle";
-  import { useSvelteFlow, useNodeConnections, type NodeProps } from "@xyflow/svelte";
+  import { useSvelteFlow, type NodeProps } from "@xyflow/svelte";
   import { getAgentSpec } from "tauri-plugin-modular-agent-api";
   import type { AgentSpec } from "tauri-plugin-modular-agent-api";
 
@@ -40,14 +40,6 @@
   let errorMessages = $state<string[]>([]);
   let inputMessage = $state<string>("");
   let inputCount = $state(0);
-
-  const connections = useNodeConnections({ handleType: "target" });
-
-  let connectedConfigs = $derived(
-    connections.current
-      .filter((c) => c.target === id && c.targetHandle?.startsWith("config:"))
-      .map((c) => c.targetHandle?.substring(7) ?? ""),
-  );
 
   const agentEvent = sharedAgentEvents.getAgent(nodeId);
 
@@ -207,19 +199,12 @@
       configSpecs={data.config_specs ?? {}}
       {updateConfig}
       {agentEvent}
-      {connectedConfigs}
       running={editor.running}
     />
   {:else if data.configs}
     <form class="grow flex flex-col gap-1 pl-7 pr-7 pb-4">
       {#each Object.entries(data.configs) as [key, value]}
-        <AgentConfig
-          name={key}
-          {value}
-          configSpec={data.config_specs?.[key]}
-          connected={connectedConfigs.includes(key)}
-          {updateConfig}
-        />
+        <AgentConfig name={key} {value} configSpec={data.config_specs?.[key]} {updateConfig} />
       {/each}
     </form>
   {/if}

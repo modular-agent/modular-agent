@@ -13,7 +13,6 @@ export class InspectorState {
   showErr = $state(false);
   configs = $state<Record<string, any>>({});
   configSpecs = $state<Record<string, AgentConfigSpec>>({});
-  connectedConfigs = $state<string[]>([]);
   inputs = $state<string[]>([]);
   outputs = $state<string[]>([]);
   selectedCount = $state(0);
