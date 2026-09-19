@@ -5,7 +5,7 @@ use serde_json::Value as JsonValue;
 
 use crate::FnvIndexMap;
 use crate::config::ModuleConfigs;
-use crate::error::{Error, Result};
+use crate::error::Result;
 use crate::id::new_id;
 use crate::modular_agent::ModularAgent;
 use crate::module::Module;
@@ -681,6 +681,7 @@ impl ModuleConfigSpec {
 
 #[cfg(test)]
 mod tests {
+    use crate::error::Error;
     use im::{hashmap, vector};
 
     use super::*;

@@ -53,7 +53,7 @@ use rmcp::{
     ErrorData as McpError, ServerHandler,
     handler::server::wrapper::{Json, Parameters},
     model::{
-        CallToolResult, ContentBlock, Implementation, JsonObject, ServerCapabilities, ServerInfo,
+        CallToolResult, ContentBlock, Implementation, JsonObject, ServerCapabilities, ServerConfig,
     },
     tool, tool_handler, tool_router,
     transport::streamable_http_server::{
@@ -1415,8 +1415,8 @@ impl McpServer {
 
 #[tool_handler]
 impl ServerHandler for McpServer {
-    fn get_info(&self) -> ServerInfo {
-        ServerInfo::new(ServerCapabilities::builder().enable_tools().build())
+    fn get_info(&self) -> ServerConfig {
+        ServerConfig::new(ServerCapabilities::builder().enable_tools().build())
             .with_server_info(
                 Implementation::new("modular-agent", env!("CARGO_PKG_VERSION"))
                     .with_title("Modular Agent"),
