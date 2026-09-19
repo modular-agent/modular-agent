@@ -4,8 +4,8 @@ use std::time::Duration;
 use im::{Vector, vector};
 use mini_moka::sync::Cache;
 use modular_agent_core::{
-    AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent, ModularAgent,
-    async_trait, modular_agent,
+    AsModule, Error, ModularAgent, ModuleContext, ModuleData, ModuleOutput, ModuleSpec, Result,
+    Value, async_trait, modular_agent,
 };
 
 const CATEGORY: &str = "Std/Array";
@@ -27,22 +27,17 @@ const CONFIG_CAPACITY: &str = "capacity";
     inputs = [PORT_VALUE],
     outputs = [PORT_T, PORT_F],
 )]
-struct IsArrayAgent {
-    data: AgentData,
+struct IsArrayModule {
+    data: ModuleData,
 }
 
 #[async_trait]
-impl AsAgent for IsArrayAgent {
-    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
-        let data = AgentData::new(ma, id, spec);
+impl AsModule for IsArrayModule {
+    fn new(ma: ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
+        let data = ModuleData::new(ma, id, spec);
         Ok(Self { data })
     }
-    async fn process(
-        &mut self,
-        ctx: AgentContext,
-        _port: String,
-        value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, ctx: ModuleContext, _port: String, value: Value) -> Result<()> {
         if value.is_array() {
             self.output(ctx, PORT_T, value).await
         } else {
@@ -59,23 +54,18 @@ impl AsAgent for IsArrayAgent {
     inputs = [PORT_ARRAY],
     outputs = [PORT_T, PORT_F],
 )]
-struct IsEmptyArrayAgent {
-    data: AgentData,
+struct IsEmptyArrayModule {
+    data: ModuleData,
 }
 
 #[async_trait]
-impl AsAgent for IsEmptyArrayAgent {
-    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
-        let data = AgentData::new(ma, id, spec);
+impl AsModule for IsEmptyArrayModule {
+    fn new(ma: ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
+        let data = ModuleData::new(ma, id, spec);
         Ok(Self { data })
     }
 
-    async fn process(
-        &mut self,
-        ctx: AgentContext,
-        _port: String,
-        value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, ctx: ModuleContext, _port: String, value: Value) -> Result<()> {
         let mut is_empty = false;
         if value.is_array() {
             let arr = value.as_array().unwrap();
@@ -100,31 +90,25 @@ impl AsAgent for IsEmptyArrayAgent {
     inputs = [PORT_ARRAY],
     outputs = [PORT_VALUE],
 )]
-struct ArrayLengthAgent {
-    data: AgentData,
+struct ArrayLengthModule {
+    data: ModuleData,
 }
 
 #[async_trait]
-impl AsAgent for ArrayLengthAgent {
-    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
-        let data = AgentData::new(ma, id, spec);
+impl AsModule for ArrayLengthModule {
+    fn new(ma: ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
+        let data = ModuleData::new(ma, id, spec);
         Ok(Self { data })
     }
 
-    async fn process(
-        &mut self,
-        ctx: AgentContext,
-        _port: String,
-        value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, ctx: ModuleContext, _port: String, value: Value) -> Result<()> {
         let length = if value.is_array() {
             let arr = value.as_array().unwrap();
             arr.len() as i64
         } else {
             1
         };
-        self.output(ctx, PORT_VALUE, AgentValue::integer(length))
-            .await
+        self.output(ctx, PORT_VALUE, Value::integer(length)).await
     }
 }
 
@@ -137,29 +121,24 @@ impl AsAgent for ArrayLengthAgent {
     inputs = [PORT_ARRAY],
     outputs = [PORT_VALUE],
 )]
-struct ArrayFirstAgent {
-    data: AgentData,
+struct ArrayFirstModule {
+    data: ModuleData,
 }
 
 #[async_trait]
-impl AsAgent for ArrayFirstAgent {
-    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
-        let data = AgentData::new(ma, id, spec);
+impl AsModule for ArrayFirstModule {
+    fn new(ma: ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
+        let data = ModuleData::new(ma, id, spec);
         Ok(Self { data })
     }
 
-    async fn process(
-        &mut self,
-        ctx: AgentContext,
-        _port: String,
-        value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, ctx: ModuleContext, _port: String, value: Value) -> Result<()> {
         match value {
-            AgentValue::Array(mut arr) => {
+            Value::Array(mut arr) => {
                 if let Some(first_item) = arr.pop_front() {
                     self.output(ctx, PORT_VALUE, first_item).await
                 } else {
-                    Err(AgentError::InvalidValue(
+                    Err(Error::InvalidValue(
                         "Input array is empty, no first item".into(),
                     ))
                 }
@@ -178,34 +157,26 @@ impl AsAgent for ArrayFirstAgent {
     inputs = [PORT_ARRAY],
     outputs = [PORT_ARRAY],
 )]
-struct ArrayRestAgent {
-    data: AgentData,
+struct ArrayRestModule {
+    data: ModuleData,
 }
 
 #[async_trait]
-impl AsAgent for ArrayRestAgent {
-    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
-        let data = AgentData::new(ma, id, spec);
+impl AsModule for ArrayRestModule {
+    fn new(ma: ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
+        let data = ModuleData::new(ma, id, spec);
         Ok(Self { data })
     }
 
-    async fn process(
-        &mut self,
-        ctx: AgentContext,
-        _port: String,
-        value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, ctx: ModuleContext, _port: String, value: Value) -> Result<()> {
         if let Some(mut arr) = value.into_array() {
             if arr.is_empty() {
-                return self
-                    .output(ctx, PORT_ARRAY, AgentValue::array_default())
-                    .await;
+                return self.output(ctx, PORT_ARRAY, Value::array_default()).await;
             }
             arr.pop_front();
-            self.output(ctx, PORT_ARRAY, AgentValue::array(arr)).await
+            self.output(ctx, PORT_ARRAY, Value::array(arr)).await
         } else {
-            self.output(ctx, PORT_ARRAY, AgentValue::array_default())
-                .await
+            self.output(ctx, PORT_ARRAY, Value::array_default()).await
         }
     }
 }
@@ -219,29 +190,24 @@ impl AsAgent for ArrayRestAgent {
     inputs = [PORT_ARRAY],
     outputs = [PORT_VALUE],
 )]
-struct ArrayLastAgent {
-    data: AgentData,
+struct ArrayLastModule {
+    data: ModuleData,
 }
 
 #[async_trait]
-impl AsAgent for ArrayLastAgent {
-    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
-        let data = AgentData::new(ma, id, spec);
+impl AsModule for ArrayLastModule {
+    fn new(ma: ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
+        let data = ModuleData::new(ma, id, spec);
         Ok(Self { data })
     }
 
-    async fn process(
-        &mut self,
-        ctx: AgentContext,
-        _port: String,
-        value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, ctx: ModuleContext, _port: String, value: Value) -> Result<()> {
         match value {
-            AgentValue::Array(mut arr) => {
+            Value::Array(mut arr) => {
                 if let Some(last_item) = arr.pop_back() {
                     self.output(ctx, PORT_VALUE, last_item).await
                 } else {
-                    Err(AgentError::InvalidValue(
+                    Err(Error::InvalidValue(
                         "Input array is empty, no last item".into(),
                     ))
                 }
@@ -261,23 +227,18 @@ impl AsAgent for ArrayLastAgent {
     outputs = [PORT_VALUE],
     integer_config(name = CONFIG_N, default = 0),
 )]
-struct ArrayNthAgent {
-    data: AgentData,
+struct ArrayNthModule {
+    data: ModuleData,
 }
 
 #[async_trait]
-impl AsAgent for ArrayNthAgent {
-    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
-        let data = AgentData::new(ma, id, spec);
+impl AsModule for ArrayNthModule {
+    fn new(ma: ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
+        let data = ModuleData::new(ma, id, spec);
         Ok(Self { data })
     }
 
-    async fn process(
-        &mut self,
-        ctx: AgentContext,
-        _port: String,
-        value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, ctx: ModuleContext, _port: String, value: Value) -> Result<()> {
         let n = self
             .data
             .spec
@@ -286,16 +247,16 @@ impl AsAgent for ArrayNthAgent {
             .map(|cfg| cfg.get_integer_or(CONFIG_N, 0))
             .unwrap_or(0);
         if n < 0 {
-            return Err(AgentError::InvalidConfig("n must be non-negative".into()));
+            return Err(Error::InvalidConfig("n must be non-negative".into()));
         }
         let n = n as usize;
 
         match value {
-            AgentValue::Array(arr) => {
+            Value::Array(arr) => {
                 if let Some(item) = arr.get(n) {
                     self.output(ctx, PORT_VALUE, item.clone()).await
                 } else {
-                    Err(AgentError::InvalidValue(format!(
+                    Err(Error::InvalidValue(format!(
                         "Input array length {} is less than n+1={}",
                         arr.len(),
                         n + 1
@@ -306,7 +267,7 @@ impl AsAgent for ArrayNthAgent {
                 if n == 0 {
                     self.output(ctx, PORT_VALUE, other).await
                 } else {
-                    Err(AgentError::InvalidValue(
+                    Err(Error::InvalidValue(
                         "Input is not an array and n != 0".into(),
                     ))
                 }
@@ -325,23 +286,18 @@ impl AsAgent for ArrayNthAgent {
     outputs = [PORT_ARRAY],
     integer_config(name = CONFIG_N, default = 0),
 )]
-struct ArrayTakeAgent {
-    data: AgentData,
+struct ArrayTakeModule {
+    data: ModuleData,
 }
 
 #[async_trait]
-impl AsAgent for ArrayTakeAgent {
-    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
-        let data = AgentData::new(ma, id, spec);
+impl AsModule for ArrayTakeModule {
+    fn new(ma: ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
+        let data = ModuleData::new(ma, id, spec);
         Ok(Self { data })
     }
 
-    async fn process(
-        &mut self,
-        ctx: AgentContext,
-        _port: String,
-        value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, ctx: ModuleContext, _port: String, value: Value) -> Result<()> {
         let n = self
             .data
             .spec
@@ -351,9 +307,7 @@ impl AsAgent for ArrayTakeAgent {
             .unwrap_or(0);
         if n <= 0 {
             // output empty array
-            return self
-                .output(ctx, PORT_ARRAY, AgentValue::array_default())
-                .await;
+            return self.output(ctx, PORT_ARRAY, Value::array_default()).await;
         }
         let n = n as usize;
 
@@ -363,10 +317,10 @@ impl AsAgent for ArrayTakeAgent {
                 return self.output(ctx, PORT_ARRAY, value).await;
             }
             let taken_items = arr.take(n);
-            self.output(ctx, PORT_ARRAY, AgentValue::array(taken_items))
+            self.output(ctx, PORT_ARRAY, Value::array(taken_items))
                 .await
         } else {
-            self.output(ctx, PORT_ARRAY, AgentValue::array(vector![value]))
+            self.output(ctx, PORT_ARRAY, Value::array(vector![value]))
                 .await
         }
     }
@@ -380,25 +334,20 @@ impl AsAgent for ArrayTakeAgent {
     inputs = [PORT_ARRAY],
     outputs = [PORT_VALUE],
 )]
-struct MapAgent {
-    data: AgentData,
+struct MapModule {
+    data: ModuleData,
 }
 
 #[async_trait]
-impl AsAgent for MapAgent {
-    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
-        let data = AgentData::new(ma, id, spec);
+impl AsModule for MapModule {
+    fn new(ma: ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
+        let data = ModuleData::new(ma, id, spec);
         Ok(Self { data })
     }
 
-    async fn process(
-        &mut self,
-        ctx: AgentContext,
-        _port: String,
-        value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, ctx: ModuleContext, _port: String, value: Value) -> Result<()> {
         match value {
-            AgentValue::Array(arr) => {
+            Value::Array(arr) => {
                 let n = arr.len();
                 for (i, item) in arr.into_iter().enumerate() {
                     let c = ctx.push_map_frame(i, n)?;
@@ -428,14 +377,14 @@ impl AsAgent for MapAgent {
     inputs = [PORT_VALUE],
     outputs = [PORT_ARRAY],
 )]
-struct CollectAgent {
-    data: AgentData,
+struct CollectModule {
+    data: ModuleData,
 
     // Records the context ID being processed to prevent other contexts from mixing
     current_ctx_id: Option<usize>,
 
     // Data buffer
-    input_values: Vec<Option<AgentValue>>,
+    input_values: Vec<Option<Value>>,
 
     // Expected size of the array
     expected_size: usize,
@@ -445,9 +394,9 @@ struct CollectAgent {
 }
 
 #[async_trait]
-impl AsAgent for CollectAgent {
-    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
-        let data = AgentData::new(ma, id, spec);
+impl AsModule for CollectModule {
+    fn new(ma: ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
+        let data = ModuleData::new(ma, id, spec);
         Ok(Self {
             data,
             current_ctx_id: None,
@@ -457,12 +406,7 @@ impl AsAgent for CollectAgent {
         })
     }
 
-    async fn process(
-        &mut self,
-        ctx: AgentContext,
-        _port: String,
-        value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, ctx: ModuleContext, _port: String, value: Value) -> Result<()> {
         // Check for map frame
         // If not within a map, pass the value through as-is.
         let Some((idx, n)) = ctx.current_map_frame()? else {
@@ -491,12 +435,12 @@ impl AsAgent for CollectAgent {
         // Validation
         if n != self.expected_size {
             // Size shouldn't change within the same context ID, but check just in case
-            return Err(AgentError::InvalidValue(
+            return Err(Error::InvalidValue(
                 "Map frame size mismatch within the same context".into(),
             ));
         }
         if idx >= n {
-            return Err(AgentError::InvalidValue(
+            return Err(Error::InvalidValue(
                 "Map frame index is out of bounds".into(),
             ));
         }
@@ -520,8 +464,7 @@ impl AsAgent for CollectAgent {
 
             // Pop one map frame and output
             let next_ctx = ctx.pop_map_frame()?;
-            self.output(next_ctx, PORT_ARRAY, AgentValue::array(arr))
-                .await
+            self.output(next_ctx, PORT_ARRAY, Value::array(arr)).await
         } else {
             // Not yet complete, keep waiting
             Ok(())
@@ -529,7 +472,7 @@ impl AsAgent for CollectAgent {
     }
 }
 
-impl CollectAgent {
+impl CollectModule {
     fn reset_state(&mut self) {
         self.current_ctx_id = None;
         self.input_values.clear(); // Capacity is preserved for efficient reuse
@@ -538,10 +481,10 @@ impl CollectAgent {
     }
 
     // Drain the buffer contents and convert to im::Vector
-    fn drain_buffer_to_vector(&mut self) -> Vector<AgentValue> {
+    fn drain_buffer_to_vector(&mut self) -> Vector<Value> {
         self.input_values
             .drain(..)
-            .map(|v| v.unwrap_or(AgentValue::Unit)) // Fill missing values with Unit
+            .map(|v| v.unwrap_or(Value::Unit)) // Fill missing values with Unit
             .collect()
     }
 }
@@ -569,14 +512,14 @@ impl CollectAgent {
     integer_config(name = CONFIG_TTL_SEC, default = 60),
     integer_config(name = CONFIG_CAPACITY, default = 1000),
 )]
-struct ZipToArrayAgent {
-    data: AgentData,
+struct ZipToArrayModule {
+    data: ModuleData,
     n: usize,
     use_ctx: bool,
 
     ttl_sec: u64,
     capacity: u64,
-    queues: Vec<VecDeque<AgentValue>>, // for non-ctx mode
+    queues: Vec<VecDeque<Value>>, // for non-ctx mode
 
     // Context Key -> PendingZip
     ctx_buffers: Cache<String, PendingZip>,
@@ -584,12 +527,12 @@ struct ZipToArrayAgent {
 
 #[derive(Clone)]
 struct PendingZip {
-    values: Vec<Option<AgentValue>>,
+    values: Vec<Option<Value>>,
     count: usize,
 }
 
-impl ZipToArrayAgent {
-    fn update_spec(spec: &mut AgentSpec) -> Result<(usize, bool, u64, u64), AgentError> {
+impl ZipToArrayModule {
+    fn update_spec(spec: &mut ModuleSpec) -> Result<(usize, bool, u64, u64)> {
         let mut n = spec
             .configs
             .as_ref()
@@ -634,8 +577,8 @@ impl ZipToArrayAgent {
 }
 
 #[async_trait]
-impl AsAgent for ZipToArrayAgent {
-    fn new(ma: ModularAgent, id: String, mut spec: AgentSpec) -> Result<Self, AgentError> {
+impl AsModule for ZipToArrayModule {
+    fn new(ma: ModularAgent, id: String, mut spec: ModuleSpec) -> Result<Self> {
         let (n, use_ctx, ttl_sec, capacity) = Self::update_spec(&mut spec)?;
 
         let cache = Cache::builder()
@@ -643,7 +586,7 @@ impl AsAgent for ZipToArrayAgent {
             .time_to_live(Duration::from_secs(ttl_sec)) // TTL (entries expire X seconds after write)
             .build();
 
-        let data = AgentData::new(ma, id, spec);
+        let data = ModuleData::new(ma, id, spec);
 
         Ok(Self {
             data,
@@ -656,7 +599,7 @@ impl AsAgent for ZipToArrayAgent {
         })
     }
 
-    fn configs_changed(&mut self) -> Result<(), AgentError> {
+    fn configs_changed(&mut self) -> Result<()> {
         let (n, use_ctx, ttl_sec, capacity) = Self::update_spec(&mut self.data.spec)?;
         let mut changed = false;
         if n != self.n {
@@ -677,28 +620,20 @@ impl AsAgent for ZipToArrayAgent {
         }
         if changed {
             self.reset_state();
-            self.emit_agent_spec_updated();
+            self.emit_module_spec_updated();
         }
         Ok(())
     }
 
-    async fn stop(&mut self) -> Result<(), AgentError> {
+    async fn stop(&mut self) -> Result<()> {
         self.reset_state();
         Ok(())
     }
 
-    async fn process(
-        &mut self,
-        ctx: AgentContext,
-        port: String,
-        value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, ctx: ModuleContext, port: String, value: Value) -> Result<()> {
         // Parse port number
         let Some(idx) = port.parse::<usize>().ok().filter(|&i| i < self.n) else {
-            return Err(AgentError::InvalidValue(format!(
-                "Invalid input port: {}",
-                port
-            )));
+            return Err(Error::InvalidValue(format!("Invalid input port: {}", port)));
         };
 
         if self.use_ctx {
@@ -724,10 +659,9 @@ impl AsAgent for ZipToArrayAgent {
                 // All inputs collected, remove from cache (invalidate)
                 self.ctx_buffers.invalidate(&ctx_key);
 
-                let arr: Vector<AgentValue> =
-                    entry.values.into_iter().map(|v| v.unwrap()).collect();
+                let arr: Vector<Value> = entry.values.into_iter().map(|v| v.unwrap()).collect();
 
-                return self.output(ctx, PORT_ARRAY, AgentValue::array(arr)).await;
+                return self.output(ctx, PORT_ARRAY, Value::array(arr)).await;
             }
 
             // mini_moka's get returns a clone, so the updated entry must be
@@ -741,13 +675,13 @@ impl AsAgent for ZipToArrayAgent {
 
         // Check if all queues have data
         if self.queues.iter().all(|q| !q.is_empty()) {
-            let arr: Vector<AgentValue> = self
+            let arr: Vector<Value> = self
                 .queues
                 .iter_mut()
                 .map(|q| q.pop_front().unwrap())
                 .collect();
 
-            self.output(ctx, PORT_ARRAY, AgentValue::array(arr)).await
+            self.output(ctx, PORT_ARRAY, Value::array(arr)).await
         } else {
             Ok(())
         }

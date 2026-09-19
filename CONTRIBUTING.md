@@ -2,12 +2,12 @@
 
 Thank you for your interest in contributing to **Modular Agent**.
 
-Modular Agent is a multi-agent workflow system focused on
-agent orchestration and reusable agents.
+Modular Agent composes modules into an agent through JSON patches,
+with a focus on stream-based orchestration and reusable modules.
 
-This repository is a monorepo. It holds the engine, the agent libraries every build
+This repository is a monorepo. It holds the engine, the module libraries every build
 needs, both applications, and the build configurator — see the table in
-[README.md](README.md) for the full layout. Agent libraries that only some builds need
+[README.md](README.md) for the full layout. Module libraries that only some builds need
 live in their own repositories under [github.com/modular-agent](https://github.com/modular-agent);
 please file issues about those on the repository that owns them.
 

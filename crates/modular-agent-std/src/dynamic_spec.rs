@@ -1,8 +1,8 @@
-//! Shared spec rebuilding for agents with a numbered family of string configs
+//! Shared spec rebuilding for modules with a numbered family of string configs
 //! (`c0`..`c(n-1)` conditions, `k0`..`k(n-1)` keys, ...) sized by an `n` config.
 
 use modular_agent_core::{
-    AgentConfigSpec, AgentConfigSpecs, AgentConfigs, AgentError, AgentSpec, AgentValue,
+    Error, ModuleConfigSpec, ModuleConfigSpecs, ModuleConfigs, ModuleSpec, Result, Value,
 };
 
 const CONFIG_N: &str = "n";
@@ -11,7 +11,7 @@ const PORT_DEFAULT: &str = "_";
 /// Upper bound for `n`, keeping a stray config value from requesting a huge allocation.
 pub(crate) const MAX_N: i64 = 64;
 
-/// Which side of the agent's ports is rebuilt as the numbered `0`..`n-1` set.
+/// Which side of the module's ports is rebuilt as the numbered `0`..`n-1` set.
 pub(crate) enum NumberedPorts {
     /// Inputs become `0`..`n-1` (ZipToObject).
     Inputs,
@@ -32,25 +32,25 @@ pub(crate) struct NumberedSpecOptions<'a> {
     pub ports: NumberedPorts,
 }
 
-/// Regenerates the dynamic part of a numbered-config agent spec: reads `n` (clamped
+/// Regenerates the dynamic part of a numbered-config module spec: reads `n` (clamped
 /// to 1..=MAX_N), rebuilds `configs` / `config_specs` from scratch with the static
 /// configs carried over, regenerates the numbered `prefix0`..`prefix(n-1)` string
 /// configs, and rewrites the chosen port side to `0`..`n-1`.
 ///
-/// `AgentDefinition::reconcile_spec` moves every config the definition does not
+/// `ModuleDefinition::reconcile_spec` moves every config the definition does not
 /// declare - which includes the dynamic numbered configs - to a `_`-prefixed key
-/// when a patch is loaded, and `AgentData::new` strips those keys afterwards. The
+/// when a patch is loaded, and `ModuleData::new` strips those keys afterwards. The
 /// numbered lookup therefore falls back to the parked `_`-prefixed key, so saved
-/// values survive a reload - which is why `AsAgent::new` implementations must call
-/// this on the spec argument before handing it to `AgentData::new`. When called
+/// values survive a reload - which is why `AsModule::new` implementations must call
+/// this on the spec argument before handing it to `ModuleData::new`. When called
 /// later from `configs_changed`, no `_`-prefixed key exists and the fallback is a
 /// no-op.
 ///
 /// Returns `n` and the current values of the numbered configs.
 pub(crate) fn update_numbered_spec(
-    spec: &mut AgentSpec,
+    spec: &mut ModuleSpec,
     opts: &NumberedSpecOptions,
-) -> Result<(usize, Vec<String>), AgentError> {
+) -> Result<(usize, Vec<String>)> {
     let n = spec
         .configs
         .as_ref()
@@ -58,8 +58,8 @@ pub(crate) fn update_numbered_spec(
         .unwrap_or(2);
     let n = n.clamp(1, MAX_N) as usize;
 
-    let mut configs = AgentConfigs::new();
-    let mut config_specs = AgentConfigSpecs::default();
+    let mut configs = ModuleConfigs::new();
+    let mut config_specs = ModuleConfigSpecs::default();
 
     for name in opts.statics.iter().copied() {
         let Some(config_spec) = spec
@@ -68,13 +68,13 @@ pub(crate) fn update_numbered_spec(
             .and_then(|cs| cs.get(name))
             .cloned()
         else {
-            return Err(AgentError::InvalidConfig(format!(
+            return Err(Error::InvalidConfig(format!(
                 "config {} must be present",
                 name
             )));
         };
         let value = if name == CONFIG_N {
-            AgentValue::integer(n as i64)
+            Value::integer(n as i64)
         } else {
             spec.configs
                 .as_ref()
@@ -103,11 +103,11 @@ pub(crate) fn update_numbered_spec(
 
         values.push(v.clone());
 
-        configs.set(name.clone(), AgentValue::string(v));
+        configs.set(name.clone(), Value::string(v));
         config_specs.insert(
             name,
-            AgentConfigSpec {
-                value: AgentValue::string_default(),
+            ModuleConfigSpec {
+                value: Value::string_default(),
                 type_: Some("string".to_string()),
                 ..Default::default()
             },

@@ -6,7 +6,6 @@
   import { resetMode, setMode } from "mode-watcher";
   import { toast } from "svelte-sonner";
 
-  import { getAgentDefinitions, getCoreSettings, setCoreSettings } from "$lib/agent";
   import { Button } from "$lib/components/ui/button/index.js";
   import * as Card from "$lib/components/ui/card/index.js";
   import { FieldGroup, Field, FieldLabel } from "$lib/components/ui/field/index.js";
@@ -19,6 +18,7 @@
     getCoreSettings as fetchCoreSettings,
     regenerateMcpServerToken,
   } from "$lib/modular_agent";
+  import { getModuleDefinitions, getCoreSettings, setCoreSettings } from "$lib/module";
   import type { CoreSettings } from "$lib/types";
 
   interface Props {
@@ -58,10 +58,10 @@
   // Global shortcut definition
   const globalShortcutDef = DEFAULT_HOTKEYS.find((d) => d.id === "global_shortcut")!;
 
-  // Agent definitions for Quick Add selector
-  const agentDefs = getAgentDefinitions();
-  const agentOptions = $derived(
-    Object.entries(agentDefs)
+  // Module definitions for Quick Add selector
+  const moduleDefs = getModuleDefinitions();
+  const moduleOptions = $derived(
+    Object.entries(moduleDefs)
       .map(([defName, def]) => ({
         value: defName,
         label: def.title ?? def.name ?? defName,
@@ -69,8 +69,8 @@
       .sort((a, b) => a.label.localeCompare(b.label)),
   );
 
-  function getAgentLabel(defName: string): string {
-    const def = agentDefs[defName];
+  function getModuleLabel(defName: string): string {
+    const def = moduleDefs[defName];
     return def?.title ?? def?.name ?? defName;
   }
 
@@ -94,8 +94,8 @@
     const keys: Record<string, string> = {};
     for (const def of DEFAULT_HOTKEYS) {
       keys[def.id] = userKeys[def.id] ?? def.defaultKey;
-      if (def.defaultAgent) {
-        keys[`${def.id}.agent`] = userKeys[`${def.id}.agent`] ?? def.defaultAgent;
+      if (def.defaultModule) {
+        keys[`${def.id}.module`] = userKeys[`${def.id}.module`] ?? def.defaultModule;
       }
     }
     shortcut_keys = keys;
@@ -124,8 +124,8 @@
 
   async function resetKey(def: HotkeyDefinition) {
     shortcut_keys[def.id] = def.defaultKey;
-    if (def.defaultAgent) {
-      shortcut_keys[`${def.id}.agent`] = def.defaultAgent;
+    if (def.defaultModule) {
+      shortcut_keys[`${def.id}.module`] = def.defaultModule;
     }
     await autoSaveShortcutKeys();
   }
@@ -450,21 +450,21 @@
                 Reset
               </Button>
             </div>
-            {#if def.defaultAgent}
+            {#if def.defaultModule}
               <div class="flex items-center gap-2 ml-[168px]">
                 <Select.Root
                   type="single"
-                  value={shortcut_keys[`${def.id}.agent`] ?? def.defaultAgent}
+                  value={shortcut_keys[`${def.id}.module`] ?? def.defaultModule}
                   onValueChange={(v) => {
-                    shortcut_keys[`${def.id}.agent`] = v;
+                    shortcut_keys[`${def.id}.module`] = v;
                     autoSaveShortcutKeys();
                   }}
                 >
                   <Select.Trigger class="max-w-xs h-8 text-sm">
-                    {getAgentLabel(shortcut_keys[`${def.id}.agent`] ?? def.defaultAgent ?? "")}
+                    {getModuleLabel(shortcut_keys[`${def.id}.module`] ?? def.defaultModule ?? "")}
                   </Select.Trigger>
                   <Select.Content class="max-h-60">
-                    {#each agentOptions as opt}
+                    {#each moduleOptions as opt}
                       <Select.Item value={opt.value}>{opt.label}</Select.Item>
                     {/each}
                   </Select.Content>

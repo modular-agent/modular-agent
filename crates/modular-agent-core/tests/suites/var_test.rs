@@ -1,6 +1,6 @@
 extern crate modular_agent_core as ma;
 
-use ma::{AgentValue, test_utils};
+use ma::{Value, test_utils};
 use serial_test::serial;
 
 #[serial(external_group)]
@@ -13,16 +13,11 @@ async fn test_var_routing() {
         .await
         .unwrap();
 
-    test_utils::write_and_expect_local_value(
-        &ma,
-        &var_patch_id,
-        "var1",
-        AgentValue::string("hello"),
-    )
-    .await
-    .unwrap();
+    test_utils::write_and_expect_local_value(&ma, &var_patch_id, "var1", Value::string("hello"))
+        .await
+        .unwrap();
 
-    test_utils::expect_local_value(&var_patch_id, "var2", &AgentValue::string("hello"))
+    test_utils::expect_local_value(&var_patch_id, "var2", &Value::string("hello"))
         .await
         .unwrap();
 

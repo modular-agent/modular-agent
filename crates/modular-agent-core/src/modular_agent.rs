@@ -3,23 +3,23 @@ use std::sync::{Arc, Weak};
 use std::time::Duration;
 
 use parking_lot::Mutex;
-use serde_json::Value;
+use serde_json::Value as JsonValue;
 use tokio::sync::{Mutex as AsyncMutex, broadcast, broadcast::error::RecvError, mpsc};
 use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
 
 use crate::FnvIndexMap;
-use crate::agent::{Agent, AgentMessage, AgentStatus, agent_new};
-use crate::config::{AgentConfigs, AgentConfigsMap};
-use crate::context::AgentContext;
-use crate::definition::{AgentConfigSpecs, AgentDefinition, AgentDefinitions};
-use crate::error::AgentError;
+use crate::config::{ModuleConfigs, ModuleConfigsMap};
+use crate::context::ModuleContext;
+use crate::definition::{ModuleConfigSpecs, ModuleDefinition, ModuleDefinitions};
+use crate::error::{Error, Result};
 use crate::id::{new_id, update_ids};
-use crate::message::{self, AgentEventMessage};
+use crate::message::{self, ModuleEventMessage};
+use crate::module::{Module, ModuleMessage, ModuleStatus, module_new};
 use crate::patch::{Patch, PatchInfo};
 use crate::registry;
-use crate::spec::{AgentSpec, ConnectionSpec, PatchSpec};
-use crate::value::AgentValue;
+use crate::spec::{ConnectionSpec, ModuleSpec, PatchSpec};
+use crate::value::Value;
 
 /// Message queues are unbounded, so instead of backpressure a queue that
 /// crosses this depth logs escalating warnings (at 1024, 2048, 4096, ...).
@@ -32,73 +32,29 @@ const EVENT_CHANNEL_CAPACITY: usize = 256;
 /// live entries must remain tracked so every flow stays abortable.
 const CONTEXT_TOKEN_PRUNE_THRESHOLD: usize = 1024;
 
-/// Distinguishes which agent-loop incarnation owns the `agent_tokens` slot,
+/// Distinguishes which module-loop incarnation owns the `module_tokens` slot,
 /// so a draining old loop cannot clobber the token installed for a restarted
-/// agent's new loop (tokens themselves have no identity to compare).
-static AGENT_TOKEN_GENERATION: AtomicU64 = AtomicU64::new(1);
+/// module's new loop (tokens themselves have no identity to compare).
+static MODULE_TOKEN_GENERATION: AtomicU64 = AtomicU64::new(1);
 
-/// The central orchestrator for the modular agent system.
-///
-/// `ModularAgent` manages agent lifecycle, connections, and message routing.
-/// It maintains agent instances, connection maps, and handles [`ModularAgentEvent`]s.
-///
-/// # Lifecycle
-///
-/// 1. [`init()`](Self::init) - Create instance and register agent definitions
-/// 2. [`ready()`](Self::ready) - Start the internal message loop
-/// 3. Load patches with [`open_patch_from_file()`](Self::open_patch_from_file) or [`add_patch()`](Self::add_patch)
-/// 4. [`start_patch()`](Self::start_patch) - Start agents in a patch
-/// 5. Interact via [`write_external_input()`](Self::write_external_input) and [`subscribe()`](Self::subscribe)
-/// 6. [`stop_patch()`](Self::stop_patch) - Stop agents
-/// 7. [`shutdown()`](Self::shutdown) - Stop remaining patches, wait for the
-///    spawned tasks to finish, and release external resources ([`quit()`](Self::quit)
-///    is the lightweight variant for tests and simple programs)
-///
-/// Restarting with [`ready()`](Self::ready) after `shutdown()` is not supported;
-/// create a new instance instead.
-///
-/// # Example
-///
-#[cfg_attr(feature = "file", doc = "```rust,no_run")]
-#[cfg_attr(not(feature = "file"), doc = "```rust,no_run,ignore")]
-/// use modular_agent_core::{ModularAgent, AgentValue, ModularAgentEvent};
-///
-/// #[tokio::main]
-/// async fn main() -> Result<(), Box<dyn std::error::Error>> {
-///     // Initialize and start
-///     let ma = ModularAgent::init()?;
-///     ma.ready().await?;
-///
-///     // Load a patch
-///     let patch_id = ma.open_patch_from_file("my_patch.json", None).await?;
-///     ma.start_patch(&patch_id).await?;
-///
-///     // Send external input
-///     ma.write_external_input("input".to_string(), AgentValue::string("hello")).await?;
-///
-///     // Cleanup
-///     ma.shutdown(std::time::Duration::from_secs(5)).await?;
-///     Ok(())
-/// }
-/// ```
-/// Shared, lockable handle to a running agent instance.
-pub type SharedAgent = Arc<AsyncMutex<Box<dyn Agent>>>;
+/// Shared, lockable handle to a running module instance.
+pub type SharedModule = Arc<AsyncMutex<Box<dyn Module>>>;
 
-// target agent id / source handle / target handle
+// target module id / source handle / target handle
 pub(crate) type ConnectionTarget = (String, String, String);
 
-/// Sender half of an agent's inbox. The channel is unbounded, so the queue
+/// Sender half of a module's inbox. The channel is unbounded, so the queue
 /// depth is tracked alongside the sender and runaway growth is surfaced with
 /// escalating warnings instead of backpressure.
 #[derive(Clone)]
-pub(crate) struct AgentInbox {
-    tx: mpsc::UnboundedSender<AgentMessage>,
+pub(crate) struct ModuleInbox {
+    tx: mpsc::UnboundedSender<ModuleMessage>,
     depth: Arc<AtomicUsize>,
     warn_at: Arc<AtomicUsize>,
 }
 
-impl AgentInbox {
-    fn new(tx: mpsc::UnboundedSender<AgentMessage>) -> Self {
+impl ModuleInbox {
+    fn new(tx: mpsc::UnboundedSender<ModuleMessage>) -> Self {
         Self {
             tx,
             depth: Arc::new(AtomicUsize::new(0)),
@@ -106,22 +62,22 @@ impl AgentInbox {
         }
     }
 
-    /// Send a message, counting it toward the queue depth. The agent loop
+    /// Send a message, counting it toward the queue depth. The module loop
     /// decrements the depth as it dequeues, so the check runs on the sender
     /// side — a receiver-side check would stay silent exactly when it
     /// matters, while the loop is stuck inside a slow `process()`.
-    fn send(&self, agent_id: &str, message: AgentMessage) -> Result<(), AgentError> {
-        self.tx.send(message).map_err(|_| {
-            AgentError::SendMessageFailed("Failed to send input message".to_string())
-        })?;
+    fn send(&self, module_id: &str, message: ModuleMessage) -> Result<()> {
+        self.tx
+            .send(message)
+            .map_err(|_| Error::SendMessageFailed("Failed to send input message".to_string()))?;
         let depth = self.depth.fetch_add(1, Ordering::Relaxed) + 1;
         // Depth races with concurrent sends and dequeues; the worst case is
         // a duplicated or skipped log line, so Relaxed everywhere is fine.
         let warn_at = self.warn_at.load(Ordering::Relaxed);
         if depth >= warn_at {
             log::warn!(
-                "Agent {} inbox depth reached {} (unbounded queue, consumer falling behind)",
-                agent_id,
+                "Module {} inbox depth reached {} (unbounded queue, consumer falling behind)",
+                module_id,
                 depth
             );
             let mut next = warn_at;
@@ -136,25 +92,69 @@ impl AgentInbox {
     }
 }
 
+/// The central orchestrator for the modular agent system.
+///
+/// `ModularAgent` manages module lifecycle, connections, and message routing.
+/// It maintains module instances, connection maps, and handles [`ModularAgentEvent`]s.
+///
+/// # Lifecycle
+///
+/// 1. [`init()`](Self::init) - Create instance and register module definitions
+/// 2. [`ready()`](Self::ready) - Start the internal message loop
+/// 3. Load patches with [`open_patch_from_file()`](Self::open_patch_from_file) or [`add_patch()`](Self::add_patch)
+/// 4. [`start_patch()`](Self::start_patch) - Start modules in a patch
+/// 5. Interact via [`write_external_input()`](Self::write_external_input) and [`subscribe()`](Self::subscribe)
+/// 6. [`stop_patch()`](Self::stop_patch) - Stop modules
+/// 7. [`shutdown()`](Self::shutdown) - Stop remaining patches, wait for the
+///    spawned tasks to finish, and release external resources ([`quit()`](Self::quit)
+///    is the lightweight variant for tests and simple programs)
+///
+/// Restarting with [`ready()`](Self::ready) after `shutdown()` is not supported;
+/// create a new instance instead.
+///
+/// # Example
+///
+#[cfg_attr(feature = "file", doc = "```rust,no_run")]
+#[cfg_attr(not(feature = "file"), doc = "```rust,no_run,ignore")]
+/// use modular_agent_core::{ModularAgent, Value, ModularAgentEvent};
+///
+/// #[tokio::main]
+/// async fn main() -> Result<(), Box<dyn std::error::Error>> {
+///     // Initialize and start
+///     let ma = ModularAgent::init()?;
+///     ma.ready().await?;
+///
+///     // Load a patch
+///     let patch_id = ma.open_patch_from_file("my_patch.json", None).await?;
+///     ma.start_patch(&patch_id).await?;
+///
+///     // Send external input
+///     ma.write_external_input("input".to_string(), Value::string("hello")).await?;
+///
+///     // Cleanup
+///     ma.shutdown(std::time::Duration::from_secs(5)).await?;
+///     Ok(())
+/// }
+/// ```
 #[derive(Clone)]
 pub struct ModularAgent {
-    // agent id -> agent
-    pub(crate) agents: Arc<Mutex<FnvIndexMap<String, SharedAgent>>>,
+    // module id -> module
+    pub(crate) modules: Arc<Mutex<FnvIndexMap<String, SharedModule>>>,
 
-    // agent id -> inbox sender
-    pub(crate) agent_txs: Arc<Mutex<FnvIndexMap<String, AgentInbox>>>,
+    // module id -> inbox sender
+    pub(crate) module_txs: Arc<Mutex<FnvIndexMap<String, ModuleInbox>>>,
 
-    // channel name -> [external input agent id]
-    pub(crate) external_input_agents: Arc<Mutex<FnvIndexMap<String, Vec<String>>>>,
+    // channel name -> [external input module id]
+    pub(crate) external_input_modules: Arc<Mutex<FnvIndexMap<String, Vec<String>>>>,
 
     // channel name -> value
-    pub(crate) external_values: Arc<Mutex<FnvIndexMap<String, AgentValue>>>,
+    pub(crate) external_values: Arc<Mutex<FnvIndexMap<String, Value>>>,
 
-    // source agent id -> [connection targets]
+    // source module id -> [connection targets]
     pub(crate) connections: Arc<Mutex<FnvIndexMap<String, Vec<ConnectionTarget>>>>,
 
-    // agent def name -> agent definition
-    pub(crate) defs: Arc<Mutex<AgentDefinitions>>,
+    // module def name -> module definition
+    pub(crate) defs: Arc<Mutex<ModuleDefinitions>>,
 
     // patches (patch id -> patch)
     pub(crate) patches: Arc<Mutex<FnvIndexMap<String, Arc<AsyncMutex<Patch>>>>>,
@@ -167,25 +167,25 @@ pub struct ModularAgent {
     /// holding this lock.
     pub(crate) patch_names: Arc<Mutex<FnvIndexMap<String, String>>>,
 
-    // agent def name -> config
-    pub(crate) global_configs_map: Arc<Mutex<FnvIndexMap<String, AgentConfigs>>>,
+    // module def name -> config
+    pub(crate) global_configs_map: Arc<Mutex<FnvIndexMap<String, ModuleConfigs>>>,
 
-    // patch id -> parent cancellation token for the patch's agents
+    // patch id -> parent cancellation token for the patch's modules
     pub(crate) patch_tokens: Arc<Mutex<FnvIndexMap<String, CancellationToken>>>,
 
-    // agent id -> (loop generation, current cancellation token of that loop)
-    pub(crate) agent_tokens: Arc<Mutex<FnvIndexMap<String, (u64, CancellationToken)>>>,
+    // module id -> (loop generation, current cancellation token of that loop)
+    pub(crate) module_tokens: Arc<Mutex<FnvIndexMap<String, (u64, CancellationToken)>>>,
 
     // context id -> cancellation token (weak: dies with the flow's contexts)
     pub(crate) context_tokens: Arc<Mutex<FnvIndexMap<usize, Weak<CancellationToken>>>>,
 
     // message sender
-    pub(crate) tx: Arc<Mutex<Option<mpsc::UnboundedSender<AgentEventMessage>>>>,
+    pub(crate) tx: Arc<Mutex<Option<mpsc::UnboundedSender<ModuleEventMessage>>>>,
 
     // observers
     pub(crate) observers: broadcast::Sender<EventEnvelope>,
 
-    /// Tracks the message loop, agent loops, and event forwarders so
+    /// Tracks the message loop, module loops, and event forwarders so
     /// `shutdown` can wait for them.
     pub(crate) tasks: TaskTracker,
 
@@ -205,16 +205,16 @@ impl Default for ModularAgent {
 }
 
 impl ModularAgent {
-    /// Create a new `ModularAgent` instance without registering agents.
+    /// Create a new `ModularAgent` instance without registering modules.
     ///
     /// For most use cases, prefer [`init()`](Self::init) which also registers
-    /// all agent definitions from the inventory.
+    /// all module definitions from the inventory.
     pub fn new() -> Self {
         let (tx, _rx) = broadcast::channel(EVENT_CHANNEL_CAPACITY);
         Self {
-            agents: Default::default(),
-            agent_txs: Default::default(),
-            external_input_agents: Default::default(),
+            modules: Default::default(),
+            module_txs: Default::default(),
+            external_input_modules: Default::default(),
             external_values: Default::default(),
             connections: Default::default(),
             defs: Default::default(),
@@ -222,7 +222,7 @@ impl ModularAgent {
             patch_names: Default::default(),
             global_configs_map: Default::default(),
             patch_tokens: Default::default(),
-            agent_tokens: Default::default(),
+            module_tokens: Default::default(),
             context_tokens: Default::default(),
             tx: Arc::new(Mutex::new(None)),
             observers: tx,
@@ -247,10 +247,10 @@ impl ModularAgent {
 
     /// Returns a clone of this handle with no origin tag.
     ///
-    /// Invariant: every handle stored beyond the current call (agent data,
+    /// Invariant: every handle stored beyond the current call (module data,
     /// spawned loops) must be created through this method. Otherwise runtime
     /// events emitted later would be attributed to whichever tagged entry
-    /// point happened to create the agent or loop.
+    /// point happened to create the module or loop.
     pub(crate) fn base(&self) -> Self {
         Self {
             origin: None,
@@ -258,13 +258,13 @@ impl ModularAgent {
         }
     }
 
-    pub(crate) fn tx(&self) -> Result<mpsc::UnboundedSender<AgentEventMessage>, AgentError> {
-        self.tx.lock().clone().ok_or(AgentError::TxNotInitialized)
+    pub(crate) fn tx(&self) -> Result<mpsc::UnboundedSender<ModuleEventMessage>> {
+        self.tx.lock().clone().ok_or(Error::TxNotInitialized)
     }
 
     /// Initialize a new `ModularAgent` instance.
     ///
-    /// This creates a new `ModularAgent` and registers all available agent definitions
+    /// This creates a new `ModularAgent` and registers all available module definitions
     /// from the inventory. Call [`ready`](Self::ready) after this to start the message loop.
     ///
     /// # Example
@@ -274,20 +274,20 @@ impl ModularAgent {
     ///
     /// let ma = ModularAgent::init().unwrap();
     /// ```
-    pub fn init() -> Result<Self, AgentError> {
+    pub fn init() -> Result<Self> {
         let ma = Self::new();
-        ma.register_agents();
+        ma.register_modules();
         Ok(ma)
     }
 
-    fn register_agents(&self) {
-        registry::register_inventory_agents(self);
+    fn register_modules(&self) {
+        registry::register_inventory_modules(self);
     }
 
     /// Start the internal message loop.
     ///
     /// This must be called after [`init`](Self::init) before loading patches or sending messages.
-    /// The message loop handles routing between agents and external output events.
+    /// The message loop handles routing between modules and external output events.
     ///
     /// # Example
     ///
@@ -300,7 +300,7 @@ impl ModularAgent {
     ///     ma.ready().await.unwrap(); // Start the message loop
     /// }
     /// ```
-    pub async fn ready(&self) -> Result<(), AgentError> {
+    pub async fn ready(&self) -> Result<()> {
         self.spawn_message_loop().await?;
         Ok(())
     }
@@ -332,14 +332,14 @@ impl ModularAgent {
 
     /// Gracefully shut down the `ModularAgent` and release external resources.
     ///
-    /// Within `timeout`, this stops every running patch (calling each agent's
-    /// [`stop()`](crate::AsAgent::stop)), stops the internal message loop, cancels
+    /// Within `timeout`, this stops every running patch (calling each module's
+    /// [`stop()`](crate::AsModule::stop)), stops the internal message loop, cancels
     /// event forwarders created by [`subscribe_to_event`](Self::subscribe_to_event),
     /// and waits for all of those tasks to finish. Afterwards, whether or not the
     /// timeout elapsed, pooled MCP server connections are closed so their child
     /// processes do not leak.
     ///
-    /// Returns [`AgentError::ShutdownTimeout`] when the tasks did not finish in time.
+    /// Returns [`Error::ShutdownTimeout`] when the tasks did not finish in time.
     /// Events already forwarded to a `subscribe_to_event` receiver remain readable
     /// with `try_recv` after shutdown.
     ///
@@ -357,7 +357,7 @@ impl ModularAgent {
     /// ma.shutdown(Duration::from_secs(5)).await.unwrap();
     /// # }
     /// ```
-    pub async fn shutdown(&self, timeout: Duration) -> Result<(), AgentError> {
+    pub async fn shutdown(&self, timeout: Duration) -> Result<()> {
         let result = tokio::time::timeout(timeout, async {
             let patch_ids: Vec<String> = self.patches.lock().keys().cloned().collect();
             for id in patch_ids {
@@ -381,7 +381,7 @@ impl ModularAgent {
         #[cfg(feature = "mcp")]
         crate::mcp::shutdown_all_mcp_connections().await?;
 
-        result.map_err(|_| AgentError::ShutdownTimeout(timeout))
+        result.map_err(|_| Error::ShutdownTimeout(timeout))
     }
 
     // Patch management
@@ -389,8 +389,8 @@ impl ModularAgent {
     /// Create a new empty patch.
     ///
     /// Returns the id of the new patch. The patch is created with default settings
-    /// and contains no agents or connections initially.
-    pub fn new_patch(&self) -> Result<String, AgentError> {
+    /// and contains no modules or connections initially.
+    pub fn new_patch(&self) -> Result<String> {
         let spec = PatchSpec::default();
         let id = self.add_patch(spec)?;
         Ok(id)
@@ -399,7 +399,7 @@ impl ModularAgent {
     /// Create a new empty patch with the given name.
     ///
     /// Returns the id of the new patch.
-    pub fn new_patch_with_name(&self, name: String) -> Result<String, AgentError> {
+    pub fn new_patch_with_name(&self, name: String) -> Result<String> {
         let spec = PatchSpec::default();
         let id = self.add_patch_with_name(spec, name)?;
         Ok(id)
@@ -423,40 +423,40 @@ impl ModularAgent {
 
     /// Add a new patch with the given spec, and returns the id of the new patch.
     ///
-    /// The ids of the given spec, including agents and connections, are changed to new unique ids.
+    /// The ids of the given spec, including modules and connections, are changed to new unique ids.
     /// This allows the same spec to be added multiple times without id conflicts.
-    pub fn add_patch(&self, spec: PatchSpec) -> Result<String, AgentError> {
+    pub fn add_patch(&self, spec: PatchSpec) -> Result<String> {
         self.add_patch_raw(spec, None)
     }
 
     /// Add a new patch with the given name and spec, and returns the id of the new patch.
     ///
-    /// The ids of the given spec, including agents and connections, are changed to new unique ids.
-    pub fn add_patch_with_name(&self, spec: PatchSpec, name: String) -> Result<String, AgentError> {
+    /// The ids of the given spec, including modules and connections, are changed to new unique ids.
+    pub fn add_patch_with_name(&self, spec: PatchSpec, name: String) -> Result<String> {
         self.add_patch_raw(spec, Some(name))
     }
 
-    fn add_patch_raw(&self, spec: PatchSpec, name: Option<String>) -> Result<String, AgentError> {
+    fn add_patch_raw(&self, spec: PatchSpec, name: Option<String>) -> Result<String> {
         let mut patch = Patch::new(spec);
         if let Some(name) = &name {
             patch.set_name(name.clone());
         }
         let id = patch.id().to_string();
 
-        // Reserve the name first so a duplicate fails before any agents are
+        // Reserve the name first so a duplicate fails before any modules are
         // created; the reservation is rolled back if a later step fails.
         if let Some(name) = &name {
             let mut names = self.patch_names.lock();
             if names.contains_key(name) {
-                return Err(AgentError::PatchNameExists(name.clone()));
+                return Err(Error::PatchNameExists(name.clone()));
             }
             names.insert(name.clone(), id.clone());
         }
 
-        // add agents
-        for agent in &patch.spec().agents {
-            if let Err(e) = self.add_agent_internal(id.clone(), agent.clone()) {
-                log::error!("Failed to add_agent {}: {}", agent.id, e);
+        // add modules
+        for module in &patch.spec().modules {
+            if let Err(e) = self.add_module_internal(id.clone(), module.clone()) {
+                log::error!("Failed to add_module {}: {}", module.id, e);
             }
         }
 
@@ -482,7 +482,7 @@ impl ModularAgent {
             if let Some(name) = &name {
                 self.patch_names.lock().swap_remove(name);
             }
-            return Err(AgentError::DuplicateId(id));
+            return Err(Error::DuplicateId(id));
         }
 
         self.emit_patch_added(id.clone(), name);
@@ -492,20 +492,20 @@ impl ModularAgent {
 
     /// Rename a patch by id.
     ///
-    /// Fails with [`AgentError::PatchNameExists`] when another patch
+    /// Fails with [`Error::PatchNameExists`] when another patch
     /// already uses `new_name`. Renaming a patch to its current name is a
     /// no-op and succeeds. Emits [`ModularAgentEvent::PatchRenamed`].
-    pub async fn rename_patch(&self, id: &str, new_name: String) -> Result<(), AgentError> {
+    pub async fn rename_patch(&self, id: &str, new_name: String) -> Result<()> {
         let patch = self
             .get_patch(id)
-            .ok_or_else(|| AgentError::PatchNotFound(id.to_string()))?;
+            .ok_or_else(|| Error::PatchNotFound(id.to_string()))?;
 
         {
             let mut names = self.patch_names.lock();
             if let Some(owner) = names.get(&new_name)
                 && owner != id
             {
-                return Err(AgentError::PatchNameExists(new_name));
+                return Err(Error::PatchNameExists(new_name));
             }
             // Remove by id so a previously unnamed patch gaining its first
             // name is handled too.
@@ -526,7 +526,7 @@ impl ModularAgent {
             if names.get(&new_name).is_some_and(|owner| owner == id) {
                 names.swap_remove(&new_name);
             }
-            return Err(AgentError::PatchNotFound(id.to_string()));
+            return Err(Error::PatchNotFound(id.to_string()));
         }
 
         let old_name = {
@@ -541,12 +541,12 @@ impl ModularAgent {
 
     /// Remove a patch by id.
     ///
-    /// Stops the patch if running, then removes all associated agents and connections.
+    /// Stops the patch if running, then removes all associated modules and connections.
     /// Emits [`ModularAgentEvent::PatchRemoved`] after teardown.
-    pub async fn remove_patch(&self, id: &str) -> Result<(), AgentError> {
+    pub async fn remove_patch(&self, id: &str) -> Result<()> {
         let patch = self
             .get_patch(id)
-            .ok_or_else(|| AgentError::PatchNotFound(id.to_string()))?;
+            .ok_or_else(|| Error::PatchNotFound(id.to_string()))?;
 
         let mut patch = patch.lock().await;
         let name = patch.name().map(str::to_string);
@@ -554,12 +554,12 @@ impl ModularAgent {
             log::error!("Failed to stop patch {}: {}", id, e);
         });
 
-        // Remove all agents and connections associated with the patch
-        for agent in &patch.spec().agents {
-            self.remove_agent_internal(&agent.id)
+        // Remove all modules and connections associated with the patch
+        for module in &patch.spec().modules {
+            self.remove_module_internal(&module.id)
                 .await
                 .unwrap_or_else(|e| {
-                    log::error!("Failed to remove_agent {}: {}", agent.id, e);
+                    log::error!("Failed to remove_module {}: {}", module.id, e);
                 });
         }
         for connection in &patch.spec().connections {
@@ -584,15 +584,15 @@ impl ModularAgent {
 
     /// Start a patch by id.
     ///
-    /// This starts all agents in the patch, enabling message flow between them.
-    /// Each agent's [`start()`](crate::AsAgent::start) method is called.
+    /// This starts all modules in the patch, enabling message flow between them.
+    /// Each module's [`start()`](crate::AsModule::start) method is called.
     ///
     /// Emits [`ModularAgentEvent::PatchStarted`] when the patch was not
     /// already running.
-    pub async fn start_patch(&self, id: &str) -> Result<(), AgentError> {
+    pub async fn start_patch(&self, id: &str) -> Result<()> {
         let patch = self
             .get_patch(id)
-            .ok_or_else(|| AgentError::PatchNotFound(id.to_string()))?;
+            .ok_or_else(|| Error::PatchNotFound(id.to_string()))?;
         // Emit outside the patch lock so observers cannot deadlock against it.
         let started = {
             let mut patch = patch.lock().await;
@@ -609,14 +609,14 @@ impl ModularAgent {
 
     /// Stop a patch by id.
     ///
-    /// This stops all agents in the patch, terminating message processing.
-    /// Each agent's [`stop()`](crate::AsAgent::stop) method is called.
+    /// This stops all modules in the patch, terminating message processing.
+    /// Each module's [`stop()`](crate::AsModule::stop) method is called.
     ///
     /// Emits [`ModularAgentEvent::PatchStopped`] when the patch was running.
-    pub async fn stop_patch(&self, id: &str) -> Result<(), AgentError> {
+    pub async fn stop_patch(&self, id: &str) -> Result<()> {
         let patch = self
             .get_patch(id)
-            .ok_or_else(|| AgentError::PatchNotFound(id.to_string()))?;
+            .ok_or_else(|| Error::PatchNotFound(id.to_string()))?;
         let stopped = {
             let mut patch = patch.lock().await;
             let was_running = patch.running();
@@ -640,13 +640,8 @@ impl ModularAgent {
     /// * `path` - Path to the JSON patch file
     /// * `name` - Optional custom name for the patch
     #[cfg(feature = "file")]
-    pub async fn open_patch_from_file(
-        &self,
-        path: &str,
-        name: Option<String>,
-    ) -> Result<String, AgentError> {
-        let json_str =
-            std::fs::read_to_string(path).map_err(|e| AgentError::IoError(e.to_string()))?;
+    pub async fn open_patch_from_file(&self, path: &str, name: Option<String>) -> Result<String> {
+        let json_str = std::fs::read_to_string(path).map_err(|e| Error::IoError(e.to_string()))?;
         let spec = PatchSpec::from_json(&json_str)?;
         let id = self.add_patch_raw(spec, name)?;
         Ok(id)
@@ -654,17 +649,17 @@ impl ModularAgent {
 
     /// Save a patch to a JSON file.
     ///
-    /// Serializes the current patch state (including agent configs) to JSON
+    /// Serializes the current patch state (including module configs) to JSON
     /// and writes it to the specified path. Emits
     /// [`ModularAgentEvent::PatchSaved`] when the patch has a name; unnamed
     /// patches have no list entry to refresh, so no event is emitted for them.
     #[cfg(feature = "file")]
-    pub async fn save_patch(&self, id: &str, path: &str) -> Result<(), AgentError> {
+    pub async fn save_patch(&self, id: &str, path: &str) -> Result<()> {
         let Some(patch_spec) = self.get_patch_spec(id).await else {
-            return Err(AgentError::PatchNotFound(id.to_string()));
+            return Err(Error::PatchNotFound(id.to_string()));
         };
         let json_str = patch_spec.to_json()?;
-        std::fs::write(path, json_str).map_err(|e| AgentError::IoError(e.to_string()))?;
+        std::fs::write(path, json_str).map_err(|e| Error::IoError(e.to_string()))?;
         if let Some(name) = self.get_patch_info(id).await.and_then(|info| info.name) {
             self.emit_patch_saved(id.to_string(), name);
         }
@@ -681,13 +676,13 @@ impl ModularAgent {
             patch.spec().clone()
         };
 
-        // Overlay live agent specs onto the stored entries. An agent whose
+        // Overlay live module specs onto the stored entries. A module whose
         // definition is not registered in this build has no live instance;
         // keep its stored spec so it survives the editor round-trip and the
         // save that follows (save_patch writes exactly what this returns).
-        for agent in &mut patch_spec.agents {
-            if let Some(spec) = self.get_agent_spec(&agent.id).await {
-                *agent = spec;
+        for module in &mut patch_spec.modules {
+            if let Some(spec) = self.get_module_spec(&module.id).await {
+                *module = spec;
             }
         }
 
@@ -697,10 +692,10 @@ impl ModularAgent {
     }
 
     /// Update the patch spec
-    pub async fn update_patch_spec(&self, id: &str, value: &Value) -> Result<(), AgentError> {
+    pub async fn update_patch_spec(&self, id: &str, value: &JsonValue) -> Result<()> {
         let patch = self
             .get_patch(id)
-            .ok_or_else(|| AgentError::PatchNotFound(id.to_string()))?;
+            .ok_or_else(|| Error::PatchNotFound(id.to_string()))?;
         let mut patch = patch.lock().await;
         patch.update_spec(value)?;
         drop(patch);
@@ -730,15 +725,15 @@ impl ModularAgent {
         patch_infos
     }
 
-    // Agents
+    // Modules
 
-    /// Register an agent definition.
+    /// Register a module definition.
     ///
-    /// This makes the agent type available for use in patches. The definition
+    /// This makes the module type available for use in patches. The definition
     /// includes metadata (title, category), input/output ports, and config specs.
     ///
-    /// Note: Agents using `#[modular_agent]` macro are registered automatically via inventory.
-    pub fn register_agent_definiton(&self, def: AgentDefinition) {
+    /// Note: Modules using `#[modular_agent]` macro are registered automatically via inventory.
+    pub fn register_module_definition(&self, def: ModuleDefinition) {
         let def_name = def.name.clone();
         let def_global_configs = def.global_configs.clone();
 
@@ -747,7 +742,7 @@ impl ModularAgent {
 
         // if there is a global config, set it
         if let Some(def_global_configs) = def_global_configs {
-            let mut new_configs = AgentConfigs::default();
+            let mut new_configs = ModuleConfigs::default();
             for (key, config_entry) in def_global_configs.iter() {
                 new_configs.set(key.clone(), config_entry.value.clone());
             }
@@ -755,98 +750,98 @@ impl ModularAgent {
         }
     }
 
-    /// Get all registered agent definitions.
+    /// Get all registered module definitions.
     ///
-    /// Returns a map of definition name to [`AgentDefinition`].
-    pub fn get_agent_definitions(&self) -> AgentDefinitions {
+    /// Returns a map of definition name to [`ModuleDefinition`].
+    pub fn get_module_definitions(&self) -> ModuleDefinitions {
         let defs = self.defs.lock();
         defs.clone()
     }
 
-    /// Get an agent definition by name.
+    /// Get a module definition by name.
     ///
     /// The name is typically in the format `module::path::StructName`.
-    pub fn get_agent_definition(&self, def_name: &str) -> Option<AgentDefinition> {
+    pub fn get_module_definition(&self, def_name: &str) -> Option<ModuleDefinition> {
         let defs = self.defs.lock();
         defs.get(def_name).cloned()
     }
 
-    /// Get the config specs of an agent definition by name.
-    pub fn get_agent_config_specs(&self, def_name: &str) -> Option<AgentConfigSpecs> {
+    /// Get the config specs of a module definition by name.
+    pub fn get_module_config_specs(&self, def_name: &str) -> Option<ModuleConfigSpecs> {
         let defs = self.defs.lock();
         let def = defs.get(def_name)?;
         def.configs.clone()
     }
 
-    /// Get the agent spec by id.
-    pub async fn get_agent_spec(&self, agent_id: &str) -> Option<AgentSpec> {
-        let agent = {
-            let agents = self.agents.lock();
-            agents.get(agent_id)?.clone()
+    /// Get the module spec by id.
+    pub async fn get_module_spec(&self, module_id: &str) -> Option<ModuleSpec> {
+        let module = {
+            let modules = self.modules.lock();
+            modules.get(module_id)?.clone()
         };
-        let agent = agent.lock().await;
-        Some(agent.spec().clone())
+        let module = module.lock().await;
+        Some(module.spec().clone())
     }
 
-    /// Look up the stored patch spec entry of an agent by id.
+    /// Look up the stored patch spec entry of a module by id.
     ///
-    /// Unlike [`Self::get_agent_spec`] this also finds spec-only agents
+    /// Unlike [`Self::get_module_spec`] this also finds spec-only modules
     /// (whose definition is not registered in this build), which have no
-    /// live instance. For a live agent it returns the stored entry, not the
+    /// live instance. For a live module it returns the stored entry, not the
     /// instance spec.
-    pub(crate) async fn find_stored_agent_spec(&self, agent_id: &str) -> Option<AgentSpec> {
+    pub(crate) async fn find_stored_module_spec(&self, module_id: &str) -> Option<ModuleSpec> {
         let patches = {
             let patches = self.patches.lock();
             patches.values().cloned().collect::<Vec<_>>()
         };
         for patch in patches {
             let patch = patch.lock().await;
-            if let Some(agent) = patch.spec().agents.iter().find(|a| a.id == agent_id) {
-                return Some(agent.clone());
+            if let Some(module) = patch.spec().modules.iter().find(|a| a.id == module_id) {
+                return Some(module.clone());
             }
         }
         None
     }
 
-    /// Update the agent spec by id.
+    /// Update the module spec by id.
     ///
-    /// A patch containing `configs` calls the agent's
-    /// [`AsAgent::configs_changed`], so agents that derive ports or further
+    /// A patch containing `configs` calls the module's
+    /// [`AsModule::configs_changed`], so modules that derive ports or further
     /// configs from their config values rebuild them; an error it reports is
-    /// propagated, as with [`ModularAgent::set_agent_configs`].
+    /// propagated, as with [`ModularAgent::set_module_configs`].
     ///
-    /// Emits [`ModularAgentEvent::AgentSpecUpdated`], and additionally
+    /// Emits [`ModularAgentEvent::ModuleSpecUpdated`], and additionally
     /// [`ModularAgentEvent::PatchStructureChanged`] when the patch contains
     /// keys other than `configs`. The events are emitted even when an error
-    /// is returned: the agent may have committed the patch before failing
+    /// is returned: the module may have committed the patch before failing
     /// (`configs_changed` runs after the merge), and a spec change must never
     /// go unannounced to hosts.
     ///
-    /// An agent with no live instance (its definition is not registered in
+    /// A module with no live instance (its definition is not registered in
     /// this build) is patched in the patch spec that holds it, with the same
-    /// events; [`AgentError::AgentNotFound`] is returned only when no patch
+    /// events; [`Error::ModuleNotFound`] is returned only when no patch
     /// holds the id either.
-    pub async fn update_agent_spec(&self, agent_id: &str, value: &Value) -> Result<(), AgentError> {
-        let agent = {
-            let agents = self.agents.lock();
-            agents.get(agent_id).cloned()
+    pub async fn update_module_spec(&self, module_id: &str, value: &JsonValue) -> Result<()> {
+        let module = {
+            let modules = self.modules.lock();
+            modules.get(module_id).cloned()
         };
-        let Some(agent) = agent else {
-            // No live instance: the agent may still exist as a spec-only
+        let Some(module) = module else {
+            // No live instance: the module may still exist as a spec-only
             // entry, whose stored spec is the only place a patch can land.
-            return self.update_spec_only_agent(agent_id, value).await;
+            return self.update_spec_only_module(module_id, value).await;
         };
         let (patch_id, updated) = {
-            let mut agent = agent.lock().await;
-            let updated = agent.update_spec(value);
-            (agent.patch_id().to_string(), updated)
+            let mut module = module.lock().await;
+            let updated = module.update_spec(value);
+            (module.patch_id().to_string(), updated)
         };
 
-        // A failure may have left the patch committed (an agent can reject a
+        // A failure may have left the patch committed (a module can reject a
         // value in configs_changed after storing it, as Switch does with an
         // unparsable condition), so announce first and propagate after: a
         // spurious refresh is harmless, an unannounced spec change is not.
-        self.emit_agent_spec_updated(agent_id.to_string());
+        self.emit_module_spec_updated(module_id.to_string());
 
         if is_structural_spec_patch(value) {
             self.emit_patch_structure_changed(patch_id);
@@ -854,41 +849,38 @@ impl ModularAgent {
         updated
     }
 
-    /// Patch the stored spec entry of an agent that has no live instance.
+    /// Patch the stored spec entry of a module that has no live instance.
     ///
-    /// A spec-only agent (its definition is not registered in this build)
+    /// A spec-only module (its definition is not registered in this build)
     /// never got instantiated, so the patch spec is the only place its
     /// layout, ports or configs can be recorded. The event contract matches
     /// the live path so hosts cannot tell the two apart.
-    async fn update_spec_only_agent(
-        &self,
-        agent_id: &str,
-        value: &Value,
-    ) -> Result<(), AgentError> {
-        let Some((patch_id, updated)) = self.patch_stored_agent_spec(agent_id, value).await else {
-            return Err(AgentError::AgentNotFound(agent_id.to_string()));
+    async fn update_spec_only_module(&self, module_id: &str, value: &JsonValue) -> Result<()> {
+        let Some((patch_id, updated)) = self.patch_stored_module_spec(module_id, value).await
+        else {
+            return Err(Error::ModuleNotFound(module_id.to_string()));
         };
 
         // A rejected key can follow keys that were already merged, so a
         // failed patch still has to announce the change.
-        self.emit_agent_spec_updated(agent_id.to_string());
+        self.emit_module_spec_updated(module_id.to_string());
         if is_structural_spec_patch(value) {
             self.emit_patch_structure_changed(patch_id);
         }
         updated
     }
 
-    /// Applies a patch to an agent's stored spec entry, emitting no events.
+    /// Applies a patch to a module's stored spec entry, emitting no events.
     ///
-    /// Returns the id of the patch that holds the agent together with the
+    /// Returns the id of the patch that holds the module together with the
     /// patch result, or `None` when no patch spec contains the id. The
     /// patch id is returned even when the patch failed, so callers can
     /// still announce a partially merged change.
-    async fn patch_stored_agent_spec(
+    async fn patch_stored_module_spec(
         &self,
-        agent_id: &str,
-        value: &Value,
-    ) -> Option<(String, Result<(), AgentError>)> {
+        module_id: &str,
+        value: &JsonValue,
+    ) -> Option<(String, Result<()>)> {
         // Take a snapshot and release the patches lock: a patch's async
         // mutex must never be awaited while the sync map lock is held.
         let patches = {
@@ -899,7 +891,7 @@ impl ModularAgent {
         for patch in patches {
             // One patch at a time, so no two patch locks are ever held.
             let mut patch = patch.lock().await;
-            match patch.update_agent_spec(agent_id, value) {
+            match patch.update_module_spec(module_id, value) {
                 Ok(false) => continue,
                 result => return Some((patch.id().to_string(), result.map(|_| ()))),
             }
@@ -907,36 +899,32 @@ impl ModularAgent {
         None
     }
 
-    /// Create a new agent spec from the given agent definition name.
-    pub fn new_agent_spec(&self, def_name: &str) -> Result<AgentSpec, AgentError> {
+    /// Create a new module spec from the given module definition name.
+    pub fn new_module_spec(&self, def_name: &str) -> Result<ModuleSpec> {
         let def = self
-            .get_agent_definition(def_name)
-            .ok_or_else(|| AgentError::AgentDefinitionNotFound(def_name.to_string()))?;
+            .get_module_definition(def_name)
+            .ok_or_else(|| Error::ModuleDefinitionNotFound(def_name.to_string()))?;
         Ok(def.to_spec())
     }
 
-    /// Add an agent to the specified patch.
+    /// Add a module to the specified patch.
     ///
-    /// Creates a new agent instance from the given spec and adds it to the patch.
-    /// Returns the id of the newly created agent. The agent is not started automatically;
-    /// call [`start_patch`](Self::start_patch) or [`start_agent`](Self::start_agent) to start it.
-    pub async fn add_agent(
-        &self,
-        patch_id: String,
-        mut spec: AgentSpec,
-    ) -> Result<String, AgentError> {
+    /// Creates a new module instance from the given spec and adds it to the patch.
+    /// Returns the id of the newly created module. The module is not started automatically;
+    /// call [`start_patch`](Self::start_patch) or [`start_module`](Self::start_module) to start it.
+    pub async fn add_module(&self, patch_id: String, mut spec: ModuleSpec) -> Result<String> {
         let patch = self
             .get_patch(&patch_id)
-            .ok_or_else(|| AgentError::PatchNotFound(patch_id.to_string()))?;
+            .ok_or_else(|| Error::PatchNotFound(patch_id.to_string()))?;
 
         let id = new_id();
         spec.id = id.clone();
         // Register the constructed spec: new() may have generated dynamic
         // configs/ports via update_spec, and the patch must reflect them.
-        let constructed = self.add_agent_internal(patch_id.clone(), spec)?;
+        let constructed = self.add_module_internal(patch_id.clone(), spec)?;
 
         let mut patch = patch.lock().await;
-        patch.add_agent(constructed);
+        patch.add_module(constructed);
         drop(patch);
 
         self.emit_patch_structure_changed(patch_id);
@@ -944,62 +932,54 @@ impl ModularAgent {
         Ok(id)
     }
 
-    fn add_agent_internal(
-        &self,
-        patch_id: String,
-        spec: AgentSpec,
-    ) -> Result<AgentSpec, AgentError> {
-        let mut agents = self.agents.lock();
-        if agents.contains_key(&spec.id) {
-            return Err(AgentError::AgentAlreadyExists(spec.id.to_string()));
+    fn add_module_internal(&self, patch_id: String, spec: ModuleSpec) -> Result<ModuleSpec> {
+        let mut modules = self.modules.lock();
+        if modules.contains_key(&spec.id) {
+            return Err(Error::ModuleAlreadyExists(spec.id.to_string()));
         }
         let spec_id = spec.id.clone();
-        // base(): the agent keeps this handle for its lifetime, so runtime
+        // base(): the module keeps this handle for its lifetime, so runtime
         // events it emits later must not inherit the creator's origin tag.
-        let mut agent = agent_new(self.base(), spec_id.clone(), spec)?;
-        agent.set_patch_id(patch_id);
-        let constructed = agent.spec().clone();
-        agents.insert(spec_id, Arc::new(AsyncMutex::new(agent)));
+        let mut module = module_new(self.base(), spec_id.clone(), spec)?;
+        module.set_patch_id(patch_id);
+        let constructed = module.spec().clone();
+        modules.insert(spec_id, Arc::new(AsyncMutex::new(module)));
         Ok(constructed)
     }
 
-    /// Get the agent by id.
-    pub fn get_agent(&self, agent_id: &str) -> Option<SharedAgent> {
-        let agents = self.agents.lock();
-        agents.get(agent_id).cloned()
+    /// Get the module by id.
+    pub fn get_module(&self, module_id: &str) -> Option<SharedModule> {
+        let modules = self.modules.lock();
+        modules.get(module_id).cloned()
     }
 
-    /// Add a connection between two agents in the specified patch.
+    /// Add a connection between two modules in the specified patch.
     ///
-    /// When the source agent outputs a value on the source handle (port),
-    /// it will be delivered to the target agent's target handle (port).
-    pub async fn add_connection(
-        &self,
-        patch_id: &str,
-        connection: ConnectionSpec,
-    ) -> Result<(), AgentError> {
-        // check if the source and target agents exist
+    /// When the source module outputs a value on the source handle (port),
+    /// it will be delivered to the target module's target handle (port).
+    pub async fn add_connection(&self, patch_id: &str, connection: ConnectionSpec) -> Result<()> {
+        // check if the source and target modules exist
         {
-            let agents = self.agents.lock();
-            if !agents.contains_key(&connection.source) {
-                return Err(AgentError::AgentNotFound(connection.source.to_string()));
+            let modules = self.modules.lock();
+            if !modules.contains_key(&connection.source) {
+                return Err(Error::ModuleNotFound(connection.source.to_string()));
             }
-            if !agents.contains_key(&connection.target) {
-                return Err(AgentError::AgentNotFound(connection.target.to_string()));
+            if !modules.contains_key(&connection.target) {
+                return Err(Error::ModuleNotFound(connection.target.to_string()));
             }
         }
 
         // check if handles are valid
         if connection.source_handle.is_empty() {
-            return Err(AgentError::EmptySourceHandle);
+            return Err(Error::EmptySourceHandle);
         }
         if connection.target_handle.is_empty() {
-            return Err(AgentError::EmptyTargetHandle);
+            return Err(Error::EmptyTargetHandle);
         }
 
         let patch = self
             .get_patch(patch_id)
-            .ok_or_else(|| AgentError::PatchNotFound(patch_id.to_string()))?;
+            .ok_or_else(|| Error::PatchNotFound(patch_id.to_string()))?;
         let mut patch = patch.lock().await;
         // Register the routing entry first: it is the fallible step
         // (duplicate detection), and a failure must leave the patch spec
@@ -1011,7 +991,7 @@ impl ModularAgent {
         Ok(())
     }
 
-    fn add_connection_internal(&self, connection: ConnectionSpec) -> Result<(), AgentError> {
+    fn add_connection_internal(&self, connection: ConnectionSpec) -> Result<()> {
         let mut connections = self.connections.lock();
         if let Some(targets) = connections.get_mut(&connection.source) {
             if targets
@@ -1022,7 +1002,7 @@ impl ModularAgent {
                         && *target_handle == connection.target_handle
                 })
             {
-                return Err(AgentError::ConnectionAlreadyExists);
+                return Err(Error::ConnectionAlreadyExists);
             }
             targets.push((
                 connection.target,
@@ -1042,53 +1022,53 @@ impl ModularAgent {
         Ok(())
     }
 
-    /// Returns true if any connection originates from `source_agent`'s `port`.
+    /// Returns true if any connection originates from `source_module`'s `port`.
     ///
     /// Producers can use this to skip building expensive values for ports
-    /// nobody listens to; `agent_out` would only drop them after the
+    /// nobody listens to; `module_out` would only drop them after the
     /// conversion cost has already been paid.
-    pub fn has_connections(&self, source_agent: &str, port: &str) -> bool {
+    pub fn has_connections(&self, source_module: &str, port: &str) -> bool {
         let connections = self.connections.lock();
-        connections.get(source_agent).is_some_and(|targets| {
+        connections.get(source_module).is_some_and(|targets| {
             targets
                 .iter()
                 .any(|(_, source_port, _)| source_port == port)
         })
     }
 
-    /// Add agents and connections to the specified patch.
+    /// Add modules and connections to the specified patch.
     ///
-    /// The ids of the given agents and connections are changed to new unique ids.
-    /// The agents are not started automatically, even if the patch is running.
-    pub async fn add_agents_and_connections(
+    /// The ids of the given modules and connections are changed to new unique ids.
+    /// The modules are not started automatically, even if the patch is running.
+    pub async fn add_modules_and_connections(
         &self,
         patch_id: &str,
-        agents: &Vec<AgentSpec>,
+        modules: &Vec<ModuleSpec>,
         connections: &Vec<ConnectionSpec>,
-    ) -> Result<(Vec<AgentSpec>, Vec<ConnectionSpec>), AgentError> {
-        let (agents, connections) = update_ids(agents, connections);
+    ) -> Result<(Vec<ModuleSpec>, Vec<ConnectionSpec>)> {
+        let (modules, connections) = update_ids(modules, connections);
 
         let patch = self
             .get_patch(patch_id)
-            .ok_or_else(|| AgentError::PatchNotFound(patch_id.to_string()))?;
+            .ok_or_else(|| Error::PatchNotFound(patch_id.to_string()))?;
         let mut patch = patch.lock().await;
 
         // Track progress so a mid-batch failure can be rolled back: a
-        // partial batch must not leave agents in the spec (or the runtime
+        // partial batch must not leave modules in the spec (or the runtime
         // maps) while returning an error without any event.
-        let mut added_agents = 0;
+        let mut added_modules = 0;
         let mut added_connections = 0;
         let mut result = Ok(());
 
         // Collect the constructed specs (with dynamic configs/ports from
         // new()) so the patch and the caller both see the real state.
-        let mut constructed_agents = Vec::with_capacity(agents.len());
-        for agent in &agents {
-            match self.add_agent_internal(patch_id.to_string(), agent.clone()) {
+        let mut constructed_modules = Vec::with_capacity(modules.len());
+        for module in &modules {
+            match self.add_module_internal(patch_id.to_string(), module.clone()) {
                 Ok(constructed) => {
-                    patch.add_agent(constructed.clone());
-                    constructed_agents.push(constructed);
-                    added_agents += 1;
+                    patch.add_module(constructed.clone());
+                    constructed_modules.push(constructed);
+                    added_modules += 1;
                 }
                 Err(e) => {
                     result = Err(e);
@@ -1113,13 +1093,13 @@ impl ModularAgent {
                 patch.remove_connection(connection);
                 self.remove_connection_internal(connection);
             }
-            // The rolled-back agents were never started, so no stop or
+            // The rolled-back modules were never started, so no stop or
             // channel teardown is needed; dropping the map entries undoes
-            // add_agent_internal completely.
-            let mut agents_map = self.agents.lock();
-            for agent in agents.iter().take(added_agents) {
-                patch.remove_agent(&agent.id);
-                agents_map.swap_remove(&agent.id);
+            // add_module_internal completely.
+            let mut modules_map = self.modules.lock();
+            for module in modules.iter().take(added_modules) {
+                patch.remove_module(&module.id);
+                modules_map.swap_remove(&module.id);
             }
             return Err(e);
         }
@@ -1127,51 +1107,51 @@ impl ModularAgent {
 
         self.emit_patch_structure_changed(patch_id.to_string());
 
-        Ok((constructed_agents, connections))
+        Ok((constructed_modules, connections))
     }
 
-    /// Remove an agent from the specified patch.
+    /// Remove a module from the specified patch.
     ///
-    /// If the agent is running, it will be stopped first.
-    pub async fn remove_agent(&self, patch_id: &str, agent_id: &str) -> Result<(), AgentError> {
+    /// If the module is running, it will be stopped first.
+    pub async fn remove_module(&self, patch_id: &str, module_id: &str) -> Result<()> {
         let patch = self
             .get_patch(patch_id)
-            .ok_or_else(|| AgentError::PatchNotFound(patch_id.to_string()))?;
+            .ok_or_else(|| Error::PatchNotFound(patch_id.to_string()))?;
 
         // Tear down the runtime instance before touching the spec so a
         // failure leaves the spec unchanged and no spec change ever goes
-        // unannounced. An agent can exist in the spec without a runtime
+        // unannounced. A module can exist in the spec without a runtime
         // instance (its definition was unknown when the patch was added);
-        // such an agent is still removable from the spec.
-        let runtime_removed = match self.remove_agent_internal(agent_id).await {
+        // such a module is still removable from the spec.
+        let runtime_removed = match self.remove_module_internal(module_id).await {
             Ok(()) => true,
-            Err(AgentError::AgentNotFound(_)) => false,
+            Err(Error::ModuleNotFound(_)) => false,
             Err(e) => return Err(e),
         };
 
         let spec_removed = {
             let mut patch = patch.lock().await;
-            let count_before = patch.spec().agents.len();
-            patch.remove_agent(agent_id);
-            patch.spec().agents.len() != count_before
+            let count_before = patch.spec().modules.len();
+            patch.remove_module(module_id);
+            patch.spec().modules.len() != count_before
         };
 
         if !runtime_removed && !spec_removed {
-            return Err(AgentError::AgentNotFound(agent_id.to_string()));
+            return Err(Error::ModuleNotFound(module_id.to_string()));
         }
         self.emit_patch_structure_changed(patch_id.to_string());
         Ok(())
     }
 
-    async fn remove_agent_internal(&self, agent_id: &str) -> Result<(), AgentError> {
-        self.stop_agent(agent_id).await?;
+    async fn remove_module_internal(&self, module_id: &str) -> Result<()> {
+        self.stop_module(module_id).await?;
 
         // remove from connections
         {
             let mut connections = self.connections.lock();
             let mut sources_to_remove = Vec::new();
             for (source, targets) in connections.iter_mut() {
-                targets.retain(|(target, _, _)| target != agent_id);
+                targets.retain(|(target, _, _)| target != module_id);
                 if targets.is_empty() {
                     sources_to_remove.push(source.clone());
                 }
@@ -1179,13 +1159,13 @@ impl ModularAgent {
             for source in sources_to_remove {
                 connections.swap_remove(&source);
             }
-            connections.swap_remove(agent_id);
+            connections.swap_remove(module_id);
         }
 
-        // remove from agents
+        // remove from modules
         {
-            let mut agents = self.agents.lock();
-            agents.swap_remove(agent_id);
+            let mut modules = self.modules.lock();
+            modules.swap_remove(module_id);
         }
 
         Ok(())
@@ -1196,13 +1176,13 @@ impl ModularAgent {
         &self,
         patch_id: &str,
         connection: &ConnectionSpec,
-    ) -> Result<(), AgentError> {
+    ) -> Result<()> {
         let patch = self
             .get_patch(patch_id)
-            .ok_or_else(|| AgentError::PatchNotFound(patch_id.to_string()))?;
+            .ok_or_else(|| Error::PatchNotFound(patch_id.to_string()))?;
         let mut patch = patch.lock().await;
         let Some(connection) = patch.remove_connection(connection) else {
-            return Err(AgentError::ConnectionNotFound(format!(
+            return Err(Error::ConnectionNotFound(format!(
                 "{}:{}->{}:{}",
                 connection.source,
                 connection.source_handle,
@@ -1248,13 +1228,13 @@ impl ModularAgent {
     }
 
     /// Cancels the patch's parent token, aborting the in-flight `process()`
-    /// of every agent in the patch at once.
+    /// of every module in the patch at once.
     ///
     /// The entry is kept (in its cancelled state) for the duration of the
-    /// stop sequence so agent tokens renewed while agents are still being
+    /// stop sequence so module tokens renewed while modules are still being
     /// stopped are born cancelled and queued inputs are skipped instead of
     /// processed. [`Patch::stop`](crate::patch::Patch::stop) removes the
-    /// entry once every agent has stopped, so a later `start_agent` derives
+    /// entry once every module has stopped, so a later `start_module` derives
     /// a live token instead of a child of the fired one.
     pub(crate) fn cancel_patch_token(&self, patch_id: &str) {
         let token = self.patch_tokens.lock().get(patch_id).cloned();
@@ -1267,38 +1247,38 @@ impl ModularAgent {
         self.patch_tokens.lock().swap_remove(patch_id);
     }
 
-    /// Creates and tracks a fresh cancellation token for an agent as a child
+    /// Creates and tracks a fresh cancellation token for a module as a child
     /// of its patch's parent token. The returned generation identifies the
-    /// agent-loop incarnation that owns the slot.
-    fn create_agent_token(&self, patch_id: &str, agent_id: &str) -> (u64, CancellationToken) {
-        let generation = AGENT_TOKEN_GENERATION.fetch_add(1, Ordering::Relaxed);
+    /// module-loop incarnation that owns the slot.
+    fn create_module_token(&self, patch_id: &str, module_id: &str) -> (u64, CancellationToken) {
+        let generation = MODULE_TOKEN_GENERATION.fetch_add(1, Ordering::Relaxed);
         let token = self.patch_token(patch_id).child_token();
-        self.agent_tokens
+        self.module_tokens
             .lock()
-            .insert(agent_id.to_string(), (generation, token.clone()));
+            .insert(module_id.to_string(), (generation, token.clone()));
         (generation, token)
     }
 
-    /// Replaces a fired agent token with a fresh child of the patch token.
+    /// Replaces a fired module token with a fresh child of the patch token.
     ///
-    /// Called by the agent loop after its token fired. Returns `None` when
+    /// Called by the module loop after its token fired. Returns `None` when
     /// the slot no longer belongs to the calling loop — either
-    /// [`stop_agent`](Self::stop_agent) removed the entry, a restarted
-    /// agent's new loop installed its own token (different generation), or
+    /// [`stop_module`](Self::stop_module) removed the entry, a restarted
+    /// module's new loop installed its own token (different generation), or
     /// the whole patch was removed. The caller then keeps its fired token
     /// so queued inputs are skipped until the `Stop` message arrives.
-    fn renew_agent_token(
+    fn renew_module_token(
         &self,
         patch_id: &str,
-        agent_id: &str,
+        module_id: &str,
         generation: u64,
     ) -> Option<CancellationToken> {
         // Look up (never create) the parent: a lagging loop must not
         // resurrect the token entry of a removed patch.
         let parent = self.patch_tokens.lock().get(patch_id).cloned()?;
         let fresh = parent.child_token();
-        let mut tokens = self.agent_tokens.lock();
-        let slot = tokens.get_mut(agent_id)?;
+        let mut tokens = self.module_tokens.lock();
+        let slot = tokens.get_mut(module_id)?;
         if slot.0 != generation {
             return None;
         }
@@ -1327,18 +1307,18 @@ impl ModularAgent {
 
     /// Aborts the flow identified by `ctx_id`.
     ///
-    /// Cancels the context's cancellation token, which every agent handling
-    /// the flow received via [`AgentContext::cancel_token`]. Cancellation is
-    /// cooperative for work already in flight: agents that `select!` on the
-    /// token (LLM streaming loops, [`CustomToolAgent`](crate::tool::CustomToolAgent)
-    /// result waits) abort promptly with [`AgentError::Cancelled`], while
-    /// agents that ignore it run to completion. Inputs dispatched after the
+    /// Cancels the context's cancellation token, which every module handling
+    /// the flow received via [`ModuleContext::cancel_token`]. Cancellation is
+    /// cooperative for work already in flight: modules that `select!` on the
+    /// token (LLM streaming loops, [`CustomToolModule`](crate::tool::CustomToolModule)
+    /// result waits) abort promptly with [`Error::Cancelled`], while
+    /// modules that ignore it run to completion. Inputs dispatched after the
     /// token fires are skipped before `process()` is called. The cancelled
     /// token stays alive as long as any context of the flow does, so queued
     /// and cyclic inputs for the flow are skipped too.
     ///
     /// Returns `false` when no live flow is tracked under `ctx_id` (the flow
-    /// already finished, or never reached an agent): nothing is cancelled.
+    /// already finished, or never reached a module): nothing is cancelled.
     pub fn abort_context(&self, ctx_id: usize) -> bool {
         let token = self
             .context_tokens
@@ -1357,69 +1337,69 @@ impl ModularAgent {
         }
     }
 
-    /// Start an agent by id.
+    /// Start a module by id.
     ///
-    /// Creates a message channel for the agent and spawns its event loop.
-    /// The agent's [`start()`](crate::AsAgent::start) method is called, then
-    /// the agent begins processing incoming messages.
-    pub async fn start_agent(&self, agent_id: &str) -> Result<(), AgentError> {
-        let agent = {
-            let agents = self.agents.lock();
-            let Some(a) = agents.get(agent_id) else {
-                return Err(AgentError::AgentNotFound(agent_id.to_string()));
+    /// Creates a message channel for the module and spawns its event loop.
+    /// The module's [`start()`](crate::AsModule::start) method is called, then
+    /// the module begins processing incoming messages.
+    pub async fn start_module(&self, module_id: &str) -> Result<()> {
+        let module = {
+            let modules = self.modules.lock();
+            let Some(a) = modules.get(module_id) else {
+                return Err(Error::ModuleNotFound(module_id.to_string()));
             };
             a.clone()
         };
         let (def_name, patch_id) = {
-            let agent = agent.lock().await;
-            (agent.def_name().to_string(), agent.patch_id().to_string())
+            let module = module.lock().await;
+            (module.def_name().to_string(), module.patch_id().to_string())
         };
         if !self.defs.lock().contains_key(&def_name) {
-            return Err(AgentError::AgentDefinitionNotFound(def_name));
+            return Err(Error::ModuleDefinitionNotFound(def_name));
         }
-        let agent_status = {
-            // This will not block since the agent is not started yet.
-            let agent = agent.lock().await;
-            agent.status().clone()
+        let module_status = {
+            // This will not block since the module is not started yet.
+            let module = module.lock().await;
+            module.status().clone()
         };
-        if agent_status == AgentStatus::Init {
-            log::info!("Starting agent {}", agent_id);
+        if module_status == ModuleStatus::Init {
+            log::info!("Starting module {}", module_id);
 
             let (tx, mut rx) = mpsc::unbounded_channel();
-            let inbox = AgentInbox::new(tx);
+            let inbox = ModuleInbox::new(tx);
             let inbox_depth = inbox.depth.clone();
 
             {
-                let mut agent_txs = self.agent_txs.lock();
-                agent_txs.insert(agent_id.to_string(), inbox);
+                let mut module_txs = self.module_txs.lock();
+                module_txs.insert(module_id.to_string(), inbox);
             };
 
-            let agent_clone = agent.clone();
-            let agent_id_clone = agent_id.to_string();
-            // base(): the agent loop outlives this call, so it must not
+            let module_clone = module.clone();
+            let module_id_clone = module_id.to_string();
+            // base(): the module loop outlives this call, so it must not
             // stamp runtime events with the caller's origin.
             let ma = self.base();
-            // Created before spawning so stop_agent can cancel it immediately.
-            let (generation, mut token) = self.create_agent_token(&patch_id, agent_id);
+            // Created before spawning so stop_module can cancel it immediately.
+            let (generation, mut token) = self.create_module_token(&patch_id, module_id);
 
-            let agent_loop = async move {
+            let module_loop = async move {
                 // Race start() against the token too: a start() stuck on
-                // slow I/O holds the agent lock, and without the race
-                // stop_agent would block on that lock until start() returns
+                // slow I/O holds the module lock, and without the race
+                // stop_module would block on that lock until start() returns
                 // on its own.
                 let start = async {
-                    let mut agent_guard = agent_clone.lock().await;
-                    agent_guard.start().await
+                    let mut module_guard = module_clone.lock().await;
+                    module_guard.start().await
                 };
                 tokio::select! {
                     biased;
                     _ = token.cancelled() => {
-                        log::info!("Start cancelled: {}", agent_id_clone);
+                        log::info!("Start cancelled: {}", module_id_clone);
                         return;
                     }
                     r = start => {
                         if let Err(e) = r {
-                            log::error!("Failed to start agent {}: {}", agent_id_clone, e);
+                            log::error!("Failed to start module {}: {}", module_id_clone, e);
                             return;
                         }
                     }
@@ -1428,7 +1408,7 @@ impl ModularAgent {
                 while let Some(message) = rx.recv().await {
                     inbox_depth.fetch_sub(1, Ordering::Relaxed);
                     match message {
-                        AgentMessage::Input { ctx, port, value } => {
+                        ModuleMessage::Input { ctx, port, value } => {
                             // Attach the flow's cancellation token so
                             // downstream awaits (tool result waits, LLM
                             // streams) can observe per-context aborts.
@@ -1438,48 +1418,48 @@ impl ModularAgent {
                                 ctx
                             };
                             let fut =
-                                async { agent_clone.lock().await.process(ctx, port, value).await };
+                                async { module_clone.lock().await.process(ctx, port, value).await };
                             tokio::select! {
                                 biased;
                                 _ = token.cancelled() => {
-                                    log::info!("Process cancelled: {}", agent_id_clone);
+                                    log::info!("Process cancelled: {}", module_id_clone);
                                     // Dropping the future aborts any in-flight
-                                    // I/O and releases the agent lock. A fired
+                                    // I/O and releases the module lock. A fired
                                     // token cannot be reset, so install a fresh
                                     // one unless this loop no longer owns the
-                                    // token slot (agent stopping or restarted).
-                                    if let Some(fresh) = ma.renew_agent_token(
+                                    // token slot (module stopping or restarted).
+                                    if let Some(fresh) = ma.renew_module_token(
                                         &patch_id,
-                                        &agent_id_clone,
+                                        &module_id_clone,
                                         generation,
                                     ) {
                                         token = fresh;
                                     }
                                 }
                                 r = fut => r.unwrap_or_else(|e| {
-                                    log::error!("Process Error {}: {}", agent_id_clone, e);
+                                    log::error!("Process Error {}: {}", module_id_clone, e);
                                 }),
                             }
                         }
-                        AgentMessage::Config { key, value } => {
-                            agent_clone
+                        ModuleMessage::Config { key, value } => {
+                            module_clone
                                 .lock()
                                 .await
                                 .set_config(key, value)
                                 .unwrap_or_else(|e| {
-                                    log::error!("Config Error {}: {}", agent_id_clone, e);
+                                    log::error!("Config Error {}: {}", module_id_clone, e);
                                 });
                         }
-                        AgentMessage::Configs { configs } => {
-                            agent_clone
+                        ModuleMessage::Configs { configs } => {
+                            module_clone
                                 .lock()
                                 .await
                                 .set_configs(configs)
                                 .unwrap_or_else(|e| {
-                                    log::error!("Configs Error {}: {}", agent_id_clone, e);
+                                    log::error!("Configs Error {}: {}", module_id_clone, e);
                                 });
                         }
-                        AgentMessage::Stop => {
+                        ModuleMessage::Stop => {
                             rx.close();
                             break;
                         }
@@ -1487,124 +1467,124 @@ impl ModularAgent {
                 }
             };
 
-            self.tasks.spawn(agent_loop);
+            self.tasks.spawn(module_loop);
         }
         Ok(())
     }
 
-    /// Stop an agent by id.
+    /// Stop a module by id.
     ///
-    /// Sends a stop message to the agent, closes its message channel,
-    /// and calls the agent's [`stop()`](crate::AsAgent::stop) method.
-    pub async fn stop_agent(&self, agent_id: &str) -> Result<(), AgentError> {
+    /// Sends a stop message to the module, closes its message channel,
+    /// and calls the module's [`stop()`](crate::AsModule::stop) method.
+    pub async fn stop_module(&self, module_id: &str) -> Result<()> {
         {
             // remove the sender first to prevent new messages being sent
-            let mut agent_txs = self.agent_txs.lock();
-            if let Some(inbox) = agent_txs.swap_remove(agent_id)
-                && let Err(e) = inbox.send(agent_id, AgentMessage::Stop)
+            let mut module_txs = self.module_txs.lock();
+            if let Some(inbox) = module_txs.swap_remove(module_id)
+                && let Err(e) = inbox.send(module_id, ModuleMessage::Stop)
             {
-                log::warn!("Failed to send stop message to agent {}: {}", agent_id, e);
+                log::warn!("Failed to send stop message to module {}: {}", module_id, e);
             }
         }
 
-        // Cancel BEFORE awaiting the agent lock: a long-running process()
-        // holds the lock, and cancelling makes the agent loop drop that
+        // Cancel BEFORE awaiting the module lock: a long-running process()
+        // holds the lock, and cancelling makes the module loop drop that
         // future (releasing the lock) instead of blocking stop until it
         // completes. Removing the entry first keeps the fired token in the
         // loop so inputs queued ahead of Stop are skipped rather than
         // processed with a renewed token.
-        let token = self.agent_tokens.lock().swap_remove(agent_id);
+        let token = self.module_tokens.lock().swap_remove(module_id);
         if let Some((_, token)) = token {
             token.cancel();
         }
 
-        let agent = {
-            let agents = self.agents.lock();
-            let Some(a) = agents.get(agent_id) else {
-                return Err(AgentError::AgentNotFound(agent_id.to_string()));
+        let module = {
+            let modules = self.modules.lock();
+            let Some(a) = modules.get(module_id) else {
+                return Err(Error::ModuleNotFound(module_id.to_string()));
             };
             a.clone()
         };
-        let mut agent_guard = agent.lock().await;
-        if *agent_guard.status() == AgentStatus::Start {
-            log::info!("Stopping agent {}", agent_id);
-            agent_guard.stop().await?;
+        let mut module_guard = module.lock().await;
+        if *module_guard.status() == ModuleStatus::Start {
+            log::info!("Stopping module {}", module_id);
+            module_guard.stop().await?;
         }
 
         Ok(())
     }
 
-    /// Set configs for an agent by id.
+    /// Set configs for a module by id.
     ///
-    /// Emits [`ModularAgentEvent::AgentConfigUpdated`] for each key once the
-    /// configs have been handed to the agent. When the agent is running, the
+    /// Emits [`ModularAgentEvent::ModuleConfigUpdated`] for each key once the
+    /// configs have been handed to the module. When the module is running, the
     /// configs travel through its message channel and are applied
     /// asynchronously: the events report successful delivery, not completed
     /// application. Events are emitted regardless of whether a key's value
     /// actually changed.
     ///
-    /// An agent with no live instance (its definition is not registered in
+    /// A module with no live instance (its definition is not registered in
     /// this build) has the configs merged into its stored patch spec entry,
     /// so the edit survives a save.
-    pub async fn set_agent_configs(
+    pub async fn set_module_configs(
         &self,
-        agent_id: String,
-        configs: AgentConfigs,
-    ) -> Result<(), AgentError> {
+        module_id: String,
+        configs: ModuleConfigs,
+    ) -> Result<()> {
         let inbox = {
-            let agent_txs = self.agent_txs.lock();
-            agent_txs.get(&agent_id).cloned()
+            let module_txs = self.module_txs.lock();
+            module_txs.get(&module_id).cloned()
         };
 
         let Some(inbox) = inbox else {
-            // The agent is not running. We can set the configs directly.
-            let agent = {
-                let agents = self.agents.lock();
-                agents.get(&agent_id).cloned()
+            // The module is not running. We can set the configs directly.
+            let module = {
+                let modules = self.modules.lock();
+                modules.get(&module_id).cloned()
             };
-            let Some(agent) = agent else {
-                // A spec-only agent has no instance to configure, so write
+            let Some(module) = module else {
+                // A spec-only module has no instance to configure, so write
                 // through to its stored spec entry instead; otherwise the
                 // edit would be lost on the next save. Same event contract
-                // as the live branch below - per-key AgentConfigUpdated, no
-                // AgentSpecUpdated - so hosts cannot tell the two apart.
+                // as the live branch below - per-key ModuleConfigUpdated, no
+                // ModuleSpecUpdated - so hosts cannot tell the two apart.
                 let configs_value = serde_json::to_value(&configs)
-                    .map_err(|e| AgentError::SerializationError(e.to_string()))?;
+                    .map_err(|e| Error::SerializationError(e.to_string()))?;
                 let patch = serde_json::json!({ "configs": configs_value });
-                let Some((_, updated)) = self.patch_stored_agent_spec(&agent_id, &patch).await
+                let Some((_, updated)) = self.patch_stored_module_spec(&module_id, &patch).await
                 else {
-                    return Err(AgentError::AgentNotFound(agent_id.to_string()));
+                    return Err(Error::ModuleNotFound(module_id.to_string()));
                 };
                 updated?;
                 for (key, value) in configs {
-                    self.emit_agent_config_updated(agent_id.clone(), key, value);
+                    self.emit_module_config_updated(module_id.clone(), key, value);
                 }
                 return Ok(());
             };
-            agent.lock().await.set_configs(configs.clone())?;
+            module.lock().await.set_configs(configs.clone())?;
             for (key, value) in configs {
-                self.emit_agent_config_updated(agent_id.clone(), key, value);
+                self.emit_module_config_updated(module_id.clone(), key, value);
             }
             return Ok(());
         };
-        let message = AgentMessage::Configs {
+        let message = ModuleMessage::Configs {
             configs: configs.clone(),
         };
-        inbox.send(&agent_id, message)?;
+        inbox.send(&module_id, message)?;
         for (key, value) in configs {
-            self.emit_agent_config_updated(agent_id.clone(), key, value);
+            self.emit_module_config_updated(module_id.clone(), key, value);
         }
         Ok(())
     }
 
-    /// Get global configs for the agent definition by name.
-    pub fn get_global_configs(&self, def_name: &str) -> Option<AgentConfigs> {
+    /// Get global configs for the module definition by name.
+    pub fn get_global_configs(&self, def_name: &str) -> Option<ModuleConfigs> {
         let global_configs_map = self.global_configs_map.lock();
         global_configs_map.get(def_name).cloned()
     }
 
-    /// Set global configs for the agent definition by name.
-    pub fn set_global_configs(&self, def_name: String, configs: AgentConfigs) {
+    /// Set global configs for the module definition by name.
+    pub fn set_global_configs(&self, def_name: String, configs: ModuleConfigs) {
         let mut global_configs_map = self.global_configs_map.lock();
 
         let Some(existing_configs) = global_configs_map.get_mut(&def_name) else {
@@ -1618,33 +1598,33 @@ impl ModularAgent {
     }
 
     /// Get the global configs map.
-    pub fn get_global_configs_map(&self) -> AgentConfigsMap {
+    pub fn get_global_configs_map(&self) -> ModuleConfigsMap {
         let global_configs_map = self.global_configs_map.lock();
         global_configs_map.clone()
     }
 
     /// Set the global configs map.
-    pub fn set_global_configs_map(&self, new_configs_map: AgentConfigsMap) {
-        for (agent_name, new_configs) in new_configs_map {
-            self.set_global_configs(agent_name, new_configs);
+    pub fn set_global_configs_map(&self, new_configs_map: ModuleConfigsMap) {
+        for (module_name, new_configs) in new_configs_map {
+            self.set_global_configs(module_name, new_configs);
         }
     }
 
-    /// Send input to an agent.
-    pub(crate) async fn agent_input(
+    /// Send input to a module.
+    pub(crate) async fn module_input(
         &self,
-        agent_id: String,
-        ctx: AgentContext,
+        module_id: String,
+        ctx: ModuleContext,
         port: String,
-        value: AgentValue,
-    ) -> Result<(), AgentError> {
+        value: Value,
+    ) -> Result<()> {
         let message = if let Some(config_key) = port.strip_prefix("config:") {
-            AgentMessage::Config {
+            ModuleMessage::Config {
                 key: config_key.to_string(),
                 value,
             }
         } else {
-            AgentMessage::Input {
+            ModuleMessage::Input {
                 ctx,
                 port: port.clone(),
                 value,
@@ -1652,120 +1632,111 @@ impl ModularAgent {
         };
 
         let inbox = {
-            let agent_txs = self.agent_txs.lock();
-            agent_txs.get(&agent_id).cloned()
+            let module_txs = self.module_txs.lock();
+            module_txs.get(&module_id).cloned()
         };
 
         let Some(inbox) = inbox else {
-            // The agent is not running. If it's a config message, we can set it directly.
-            let agent: SharedAgent = {
-                let agents = self.agents.lock();
-                let Some(a) = agents.get(&agent_id) else {
-                    return Err(AgentError::AgentNotFound(agent_id.to_string()));
+            // The module is not running. If it's a config message, we can set it directly.
+            let module: SharedModule = {
+                let modules = self.modules.lock();
+                let Some(a) = modules.get(&module_id) else {
+                    return Err(Error::ModuleNotFound(module_id.to_string()));
                 };
                 a.clone()
             };
-            if let AgentMessage::Config { key, value } = message {
-                agent.lock().await.set_config(key.clone(), value.clone())?;
-                self.emit_agent_config_updated(agent_id, key, value);
+            if let ModuleMessage::Config { key, value } = message {
+                module.lock().await.set_config(key.clone(), value.clone())?;
+                self.emit_module_config_updated(module_id, key, value);
             }
             return Ok(());
         };
-        // Same delivery semantics as set_agent_configs: the event reports
-        // successful delivery to the agent's channel, not completed
+        // Same delivery semantics as set_module_configs: the event reports
+        // successful delivery to the module's channel, not completed
         // application. This is what lets hosts show wire-driven config
         // values live.
         let config_update = match &message {
-            AgentMessage::Config { key, value } => Some((key.clone(), value.clone())),
+            ModuleMessage::Config { key, value } => Some((key.clone(), value.clone())),
             _ => None,
         };
-        inbox.send(&agent_id, message)?;
+        inbox.send(&module_id, message)?;
         if let Some((key, value)) = config_update {
-            self.emit_agent_config_updated(agent_id.clone(), key, value);
+            self.emit_module_config_updated(module_id.clone(), key, value);
         }
 
-        self.emit_agent_input(agent_id.to_string(), port);
+        self.emit_module_input(module_id.to_string(), port);
 
         Ok(())
     }
 
-    /// Send output from an agent. (Async version)
-    pub async fn send_agent_out(
+    /// Send output from a module. (Async version)
+    pub async fn send_module_out(
         &self,
-        agent_id: String,
-        ctx: AgentContext,
+        module_id: String,
+        ctx: ModuleContext,
         port: String,
-        value: AgentValue,
-    ) -> Result<(), AgentError> {
-        message::send_agent_out(self, agent_id, ctx, port, value).await
+        value: Value,
+    ) -> Result<()> {
+        message::send_module_out(self, module_id, ctx, port, value).await
     }
 
-    /// Send output from an agent.
-    pub fn try_send_agent_out(
+    /// Send output from a module.
+    pub fn try_send_module_out(
         &self,
-        agent_id: String,
-        ctx: AgentContext,
+        module_id: String,
+        ctx: ModuleContext,
         port: String,
-        value: AgentValue,
-    ) -> Result<(), AgentError> {
-        message::try_send_agent_out(self, agent_id, ctx, port, value)
+        value: Value,
+    ) -> Result<()> {
+        message::try_send_module_out(self, module_id, ctx, port, value)
     }
 
     /// Write a value to a named channel.
     ///
-    /// This is the primary method for sending external input into the agent network.
-    /// The value will be delivered to all [`ExternalInputAgent`](crate::external_agent::ExternalInputAgent)
+    /// This is the primary method for sending external input into the module network.
+    /// The value will be delivered to all [`ExternalInputModule`](crate::external_module::ExternalInputModule)
     /// instances listening to the specified channel name, which will then forward it to
-    /// their connected agents.
+    /// their connected modules.
     ///
     /// # Arguments
     ///
-    /// * `name` - The channel name to write to. Must match the `name` config of an `ExternalInputAgent`.
+    /// * `name` - The channel name to write to. Must match the `name` config of an `ExternalInputModule`.
     /// * `value` - The value to send.
     ///
     /// # Example
     ///
     /// ```rust,no_run
-    /// # use modular_agent_core::{ModularAgent, AgentValue};
+    /// # use modular_agent_core::{ModularAgent, Value};
     /// # async fn example(ma: ModularAgent) {
     /// // Send a string to the "input" channel
-    /// ma.write_external_input("input".to_string(), AgentValue::string("hello")).await.unwrap();
+    /// ma.write_external_input("input".to_string(), Value::string("hello")).await.unwrap();
     ///
     /// // Send an integer
-    /// ma.write_external_input("numbers".to_string(), AgentValue::integer(42)).await.unwrap();
+    /// ma.write_external_input("numbers".to_string(), Value::integer(42)).await.unwrap();
     /// # }
     /// ```
-    pub async fn write_external_input(
-        &self,
-        name: String,
-        value: AgentValue,
-    ) -> Result<(), AgentError> {
-        self.send_external_output(name, AgentContext::new(), value)
+    pub async fn write_external_input(&self, name: String, value: Value) -> Result<()> {
+        self.send_external_output(name, ModuleContext::new(), value)
             .await
     }
 
     /// Write a value to the local variable channel.
-    pub async fn write_local_input(
-        &self,
-        patch_id: &str,
-        name: &str,
-        value: AgentValue,
-    ) -> Result<(), AgentError> {
+    pub async fn write_local_input(&self, patch_id: &str, name: &str, value: Value) -> Result<()> {
         let channel_name = format!("%{}/{}", patch_id, name);
-        self.send_external_output(channel_name, AgentContext::new(), value)
+        self.send_external_output(channel_name, ModuleContext::new(), value)
             .await
     }
 
     pub(crate) async fn send_external_output(
         &self,
         name: String,
-        ctx: AgentContext,
-        value: AgentValue,
-    ) -> Result<(), AgentError> {
+        ctx: ModuleContext,
+        value: Value,
+    ) -> Result<()> {
         message::send_external_output(self, name, ctx, value).await
     }
 
-    async fn spawn_message_loop(&self) -> Result<(), AgentError> {
+    async fn spawn_message_loop(&self) -> Result<()> {
         let (tx, mut rx) = mpsc::unbounded_channel();
         {
             let mut tx_lock = self.tx.lock();
@@ -1776,7 +1747,7 @@ impl ModularAgent {
         // messages are never attributed to the caller of ready().
         let ma = self.base();
         self.tasks.spawn(async move {
-            // Receiver-side depth check is enough here: unlike an agent loop,
+            // Receiver-side depth check is enough here: unlike a module loop,
             // this loop never blocks on delivery, so it keeps returning to
             // recv() and the check keeps running.
             let mut warn_at = QUEUE_HIGH_WATER;
@@ -1794,16 +1765,16 @@ impl ModularAgent {
                     warn_at = QUEUE_HIGH_WATER;
                 }
 
-                use AgentEventMessage::*;
+                use ModuleEventMessage::*;
 
                 match message {
-                    AgentOut {
-                        agent,
+                    ModuleOut {
+                        module,
                         ctx,
                         port,
                         value,
                     } => {
-                        message::agent_out(&ma, agent, ctx, port, value).await;
+                        message::module_out(&ma, module, ctx, port, value).await;
                     }
                     ExternalOutput { name, ctx, value } => {
                         message::external_input(&ma, name, ctx, value).await;
@@ -1849,7 +1820,7 @@ impl ModularAgent {
     /// # Example
     ///
     /// ```rust,no_run
-    /// use modular_agent_core::{ModularAgent, ModularAgentEvent, AgentValue};
+    /// use modular_agent_core::{ModularAgent, ModularAgentEvent, Value};
     ///
     /// # async fn example(ma: &ModularAgent) {
     /// // Subscribe to a specific channel's output
@@ -1908,25 +1879,22 @@ impl ModularAgent {
         rx
     }
 
-    pub(crate) fn emit_agent_config_updated(
-        &self,
-        agent_id: String,
-        key: String,
-        value: AgentValue,
-    ) {
-        self.notify_observers(ModularAgentEvent::AgentConfigUpdated(agent_id, key, value));
+    pub(crate) fn emit_module_config_updated(&self, module_id: String, key: String, value: Value) {
+        self.notify_observers(ModularAgentEvent::ModuleConfigUpdated(
+            module_id, key, value,
+        ));
     }
 
-    pub(crate) fn emit_agent_error(&self, agent_id: String, message: String) {
-        self.notify_observers(ModularAgentEvent::AgentError(agent_id, message));
+    pub(crate) fn emit_module_error(&self, module_id: String, message: String) {
+        self.notify_observers(ModularAgentEvent::ModuleError(module_id, message));
     }
 
-    pub(crate) fn emit_agent_input(&self, agent_id: String, port: String) {
-        self.notify_observers(ModularAgentEvent::AgentIn(agent_id, port));
+    pub(crate) fn emit_module_input(&self, module_id: String, port: String) {
+        self.notify_observers(ModularAgentEvent::ModuleIn(module_id, port));
     }
 
-    pub(crate) fn emit_agent_spec_updated(&self, agent_id: String) {
-        self.notify_observers(ModularAgentEvent::AgentSpecUpdated(agent_id));
+    pub(crate) fn emit_module_spec_updated(&self, module_id: String) {
+        self.notify_observers(ModularAgentEvent::ModuleSpecUpdated(module_id));
     }
 
     pub(crate) fn emit_patch_structure_changed(&self, patch_id: String) {
@@ -1967,7 +1935,7 @@ impl ModularAgent {
         self.notify_observers(ModularAgentEvent::PatchSaved { patch_id, name });
     }
 
-    pub(crate) fn emit_external_output(&self, name: String, value: AgentValue) {
+    pub(crate) fn emit_external_output(&self, name: String, value: Value) {
         // // ignore local variables
         // if name.starts_with('%') {
         //     return;
@@ -1985,12 +1953,12 @@ impl ModularAgent {
     }
 }
 
-/// Whether an agent spec patch warrants a `PatchStructureChanged`.
+/// Whether a module spec patch warrants a `PatchStructureChanged`.
 ///
 /// Any non-config key (ports, title, layout, ...) may change how hosts render
 /// the patch, so treat those patches as structural. Config-only patches stay
-/// quiet here; they are covered by `AgentSpecUpdated`.
-fn is_structural_spec_patch(value: &Value) -> bool {
+/// quiet here; they are covered by `ModuleSpecUpdated`.
+fn is_structural_spec_patch(value: &JsonValue) -> bool {
     value
         .as_object()
         .is_some_and(|map| map.keys().any(|key| key != "configs"))
@@ -2000,7 +1968,7 @@ fn is_structural_spec_patch(value: &Value) -> bool {
 ///
 /// `origin` identifies the entry point that performed the mutation which
 /// produced the event (see [`ModularAgent::with_origin`]). `None` means the
-/// event originated inside the agent runtime itself.
+/// event originated inside the module runtime itself.
 #[derive(Clone, Debug)]
 pub struct EventEnvelope {
     pub origin: Option<Arc<str>>,
@@ -2031,34 +1999,34 @@ pub struct EventEnvelope {
 #[derive(Clone, Debug)]
 #[non_exhaustive]
 pub enum ModularAgentEvent {
-    /// An agent's configuration was updated.
+    /// A module's configuration was updated.
     ///
-    /// Fields: `(agent_id, config_key, new_value)`
-    AgentConfigUpdated(String, String, AgentValue),
+    /// Fields: `(module_id, config_key, new_value)`
+    ModuleConfigUpdated(String, String, Value),
 
-    /// An agent encountered an error.
+    /// A module encountered an error.
     ///
-    /// Fields: `(agent_id, error_message)`
-    AgentError(String, String),
+    /// Fields: `(module_id, error_message)`
+    ModuleError(String, String),
 
-    /// An agent received input on a port.
+    /// A module received input on a port.
     ///
-    /// Fields: `(agent_id, port_name)`
-    AgentIn(String, String),
+    /// Fields: `(module_id, port_name)`
+    ModuleIn(String, String),
 
-    /// An agent's spec was updated.
+    /// A module's spec was updated.
     ///
-    /// Fields: `(agent_id)`
-    AgentSpecUpdated(String),
+    /// Fields: `(module_id)`
+    ModuleSpecUpdated(String),
 
-    /// A patch's structure (agents, connections, or non-config spec keys)
+    /// A patch's structure (modules, connections, or non-config spec keys)
     /// was changed.
     ///
-    /// Emitted by [`ModularAgent::add_agent`], [`ModularAgent::remove_agent`],
+    /// Emitted by [`ModularAgent::add_module`], [`ModularAgent::remove_module`],
     /// [`ModularAgent::add_connection`], [`ModularAgent::remove_connection`],
-    /// [`ModularAgent::add_agents_and_connections`],
+    /// [`ModularAgent::add_modules_and_connections`],
     /// [`ModularAgent::update_patch_spec`], and by
-    /// [`ModularAgent::update_agent_spec`] when the patch contains keys other
+    /// [`ModularAgent::update_module_spec`] when the patch contains keys other
     /// than `configs`, so hosts can refresh their view of the patch.
     PatchStructureChanged { patch_id: String },
 
@@ -2075,7 +2043,7 @@ pub enum ModularAgentEvent {
     /// A patch was removed.
     ///
     /// Emitted by [`ModularAgent::remove_patch`] after the patch and its
-    /// agents have been torn down, so hosts can close any view of it.
+    /// modules have been torn down, so hosts can close any view of it.
     PatchRemoved {
         patch_id: String,
         name: Option<String>,
@@ -2114,10 +2082,10 @@ pub enum ModularAgentEvent {
     ///
     /// This event is emitted when:
     /// - [`ModularAgent::write_external_input`] is called and flows through the network
-    /// - An [`ExternalOutputAgent`](crate::external_agent::ExternalOutputAgent) receives a value
+    /// - An [`ExternalOutputModule`](crate::external_module::ExternalOutputModule) receives a value
     ///
     /// Fields: `(channel_name, value)`
-    ExternalOutput(String, AgentValue),
+    ExternalOutput(String, Value),
 }
 
 #[cfg(test)]

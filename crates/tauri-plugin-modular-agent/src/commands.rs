@@ -1,8 +1,8 @@
 use modular_agent_core::{
-    AgentConfigs, AgentConfigsMap, AgentDefinition, AgentDefinitions, AgentSpec, AgentValue,
-    ConnectionSpec, PatchSpec,
+    ConnectionSpec, ModuleConfigs, ModuleConfigsMap, ModuleDefinition, ModuleDefinitions,
+    ModuleSpec, PatchSpec, Value,
 };
-use serde_json::Value;
+use serde_json::Value as JsonValue;
 use tauri::{AppHandle, Runtime};
 
 use crate::ModularAgentExt;
@@ -72,7 +72,7 @@ pub async fn get_patch_spec<R: Runtime>(app: AppHandle<R>, id: String) -> Option
 pub async fn update_patch_spec<R: Runtime>(
     app: AppHandle<R>,
     id: String,
-    value: Value,
+    value: JsonValue,
 ) -> Result<()> {
     app.ma()
         .update_patch_spec(&id, &value)
@@ -95,64 +95,70 @@ pub async fn get_patch_infos<R: Runtime>(app: AppHandle<R>) -> Vec<modular_agent
     app.ma().get_patch_infos().await
 }
 
-// agent management
+// module management
 
-// agent definition
+// module definition
 
 #[tauri::command]
-pub fn get_agent_definition<R: Runtime>(
+pub fn get_module_definition<R: Runtime>(
     app: AppHandle<R>,
     def_name: String,
-) -> Option<AgentDefinition> {
-    app.ma().get_agent_definition(&def_name)
+) -> Option<ModuleDefinition> {
+    app.ma().get_module_definition(&def_name)
 }
 
 #[tauri::command]
-pub fn get_agent_definitions<R: Runtime>(app: AppHandle<R>) -> AgentDefinitions {
-    app.ma().get_agent_definitions()
+pub fn get_module_definitions<R: Runtime>(app: AppHandle<R>) -> ModuleDefinitions {
+    app.ma().get_module_definitions()
 }
 
-// agent spec
+// module spec
 
 #[tauri::command]
-pub async fn get_agent_spec<R: Runtime>(app: AppHandle<R>, agent_id: String) -> Option<AgentSpec> {
-    app.ma().get_agent_spec(&agent_id).await
-}
-
-#[tauri::command]
-pub async fn update_agent_spec<R: Runtime>(
+pub async fn get_module_spec<R: Runtime>(
     app: AppHandle<R>,
-    agent_id: String,
-    value: Value,
+    module_id: String,
+) -> Option<ModuleSpec> {
+    app.ma().get_module_spec(&module_id).await
+}
+
+#[tauri::command]
+pub async fn update_module_spec<R: Runtime>(
+    app: AppHandle<R>,
+    module_id: String,
+    value: JsonValue,
 ) -> Result<()> {
     app.ma()
-        .update_agent_spec(&agent_id, &value)
+        .update_module_spec(&module_id, &value)
         .await
         .map_err(Into::into)
 }
 
 #[tauri::command]
-pub fn new_agent_spec<R: Runtime>(app: AppHandle<R>, def_name: String) -> Result<AgentSpec> {
-    app.ma().new_agent_spec(&def_name).map_err(Into::into)
+pub fn new_module_spec<R: Runtime>(app: AppHandle<R>, def_name: String) -> Result<ModuleSpec> {
+    app.ma().new_module_spec(&def_name).map_err(Into::into)
 }
 
 #[tauri::command]
-pub async fn add_agent<R: Runtime>(
+pub async fn add_module<R: Runtime>(
     app: AppHandle<R>,
     patch_id: String,
-    spec: AgentSpec,
+    spec: ModuleSpec,
 ) -> Result<String> {
-    app.ma().add_agent(patch_id, spec).await.map_err(Into::into)
+    app.ma()
+        .add_module(patch_id, spec)
+        .await
+        .map_err(Into::into)
 }
 
 #[tauri::command]
-pub async fn remove_agent<R: Runtime>(
+pub async fn remove_module<R: Runtime>(
     app: AppHandle<R>,
     patch_id: String,
-    agent_id: String,
+    module_id: String,
 ) -> Result<()> {
     app.ma()
-        .remove_agent(&patch_id, &agent_id)
+        .remove_module(&patch_id, &module_id)
         .await
         .map_err(Into::into)
 }
@@ -184,61 +190,64 @@ pub async fn remove_connection<R: Runtime>(
 }
 
 #[tauri::command]
-pub async fn add_agents_and_connections<R: Runtime>(
+pub async fn add_modules_and_connections<R: Runtime>(
     app: AppHandle<R>,
     patch_id: &str,
-    agents: Vec<AgentSpec>,
+    modules: Vec<ModuleSpec>,
     connections: Vec<ConnectionSpec>,
-) -> Result<(Vec<AgentSpec>, Vec<ConnectionSpec>)> {
+) -> Result<(Vec<ModuleSpec>, Vec<ConnectionSpec>)> {
     app.ma()
-        .add_agents_and_connections(patch_id, &agents, &connections)
+        .add_modules_and_connections(patch_id, &modules, &connections)
         .await
         .map_err(Into::into)
 }
 
-// agent
+// module
 
 #[tauri::command]
-pub async fn start_agent<R: Runtime>(app: AppHandle<R>, agent_id: String) -> Result<()> {
-    app.ma().start_agent(&agent_id).await.map_err(Into::into)
+pub async fn start_module<R: Runtime>(app: AppHandle<R>, module_id: String) -> Result<()> {
+    app.ma().start_module(&module_id).await.map_err(Into::into)
 }
 
 #[tauri::command]
-pub async fn stop_agent<R: Runtime>(app: AppHandle<R>, agent_id: String) -> Result<()> {
-    app.ma().stop_agent(&agent_id).await.map_err(Into::into)
+pub async fn stop_module<R: Runtime>(app: AppHandle<R>, module_id: String) -> Result<()> {
+    app.ma().stop_module(&module_id).await.map_err(Into::into)
 }
 
 // config
 
 #[tauri::command]
-pub async fn set_agent_configs<R: Runtime>(
+pub async fn set_module_configs<R: Runtime>(
     app: AppHandle<R>,
-    agent_id: String,
-    configs: AgentConfigs,
+    module_id: String,
+    configs: ModuleConfigs,
 ) -> Result<()> {
     app.ma()
-        .set_agent_configs(agent_id, configs)
+        .set_module_configs(module_id, configs)
         .await
         .map_err(Into::into)
 }
 
 #[tauri::command]
-pub fn get_global_configs<R: Runtime>(app: AppHandle<R>, def_name: String) -> Option<AgentConfigs> {
+pub fn get_global_configs<R: Runtime>(
+    app: AppHandle<R>,
+    def_name: String,
+) -> Option<ModuleConfigs> {
     app.ma().get_global_configs(&def_name)
 }
 
 #[tauri::command]
-pub fn get_global_configs_map<R: Runtime>(app: AppHandle<R>) -> AgentConfigsMap {
+pub fn get_global_configs_map<R: Runtime>(app: AppHandle<R>) -> ModuleConfigsMap {
     app.ma().get_global_configs_map()
 }
 
 #[tauri::command]
-pub fn set_global_configs<R: Runtime>(app: AppHandle<R>, def_name: String, configs: AgentConfigs) {
+pub fn set_global_configs<R: Runtime>(app: AppHandle<R>, def_name: String, configs: ModuleConfigs) {
     app.ma().set_global_configs(def_name, configs);
 }
 
 #[tauri::command]
-pub fn set_global_configs_map<R: Runtime>(app: AppHandle<R>, configs: AgentConfigsMap) {
+pub fn set_global_configs_map<R: Runtime>(app: AppHandle<R>, configs: ModuleConfigsMap) {
     app.ma().set_global_configs_map(configs)
 }
 
@@ -251,7 +260,7 @@ pub async fn write_external_input<R: Runtime>(
     message: String,
 ) -> Result<()> {
     app.ma()
-        .write_external_input(name, AgentValue::string(message))
+        .write_external_input(name, Value::string(message))
         .await
         .map_err(Into::into)
 }

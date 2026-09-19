@@ -16,7 +16,7 @@ use config::BuildConfig;
 
 #[derive(Parser)]
 #[command(name = "ma-config")]
-#[command(about = "TUI wizard for choosing which agent crates an app links")]
+#[command(about = "TUI wizard for choosing which module crates an app links")]
 struct Args {
     /// Application to configure: desktop or cli
     app: String,
@@ -30,7 +30,7 @@ struct Args {
     #[arg(long)]
     defaults: bool,
 
-    /// Path to the in-tree agent registry YAML file
+    /// Path to the in-tree module registry YAML file
     #[arg(long, default_value = "registry.yaml")]
     registry: String,
 }
@@ -116,11 +116,11 @@ fn run(args: Args) -> Result<(), String> {
     println!("Updating {}...", rel(&app.manifest_path(&root), &root));
     codegen::update_manifest(app, &build_config, &registry, &root)?;
 
-    println!("Generating {}...", rel(&app.agents_rs_path(&root), &root));
-    codegen::generate_agents_rs(app, &build_config, &root)?;
+    println!("Generating {}...", rel(&app.modules_rs_path(&root), &root));
+    codegen::generate_modules_rs(app, &build_config, &root)?;
 
-    if app.needs_mod_agents() {
-        codegen::ensure_mod_agents(app, &root)?;
+    if app.needs_mod_modules() {
+        codegen::ensure_mod_modules(app, &root)?;
     }
 
     let should_update = non_interactive
@@ -137,37 +137,37 @@ fn run(args: Args) -> Result<(), String> {
     Ok(())
 }
 
-/// The selection a fresh wizard run starts from, taken as-is: every agent whose
+/// The selection a fresh wizard run starts from, taken as-is: every module whose
 /// `default_for` lists this app, with `crate_features: None` (= its registry
 /// default features).
 fn default_config(app: AppKind, registry: &registry::Registry) -> Result<BuildConfig, String> {
-    let agents: Vec<config::AgentEntry> = registry
-        .agents
+    let modules: Vec<config::ModuleEntry> = registry
+        .modules
         .iter()
         .filter(|known| known.is_default_for(app))
-        .map(|known| config::AgentEntry {
+        .map(|known| config::ModuleEntry {
             name: known.name.clone(),
-            source: known.in_tree.then_some(config::AgentSource::Workspace),
+            source: known.in_tree.then_some(config::ModuleSource::Workspace),
             crate_features: None,
         })
         .collect();
 
-    if agents.is_empty() {
+    if modules.is_empty() {
         return Err(format!(
-            "no registry agent is a default for '{}'",
+            "no registry module is a default for '{}'",
             app.slug()
         ));
     }
     println!(
         "Selected defaults for {}: {}",
         app.slug(),
-        agents
+        modules
             .iter()
             .map(|a| a.name.as_str())
             .collect::<Vec<_>>()
             .join(", ")
     );
-    Ok(BuildConfig { agents })
+    Ok(BuildConfig { modules })
 }
 
 fn load_all_configs(root: &Path) -> Result<BTreeMap<AppKind, BuildConfig>, String> {

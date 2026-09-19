@@ -3,8 +3,8 @@ use std::time::Duration;
 
 use im::hashmap;
 use modular_agent_core::{
-    Agent, AgentContext, AgentData, AgentError, AgentSpec, AgentStatus, AgentValue, AsAgent,
-    ModularAgent, async_trait, modular_agent,
+    AsModule, Error, ModularAgent, Module, ModuleContext, ModuleData, ModuleSpec, ModuleStatus,
+    Result, Value, async_trait, modular_agent,
 };
 use notify_debouncer_full::notify::event::ModifyKind;
 use notify_debouncer_full::notify::{EventKind, RecommendedWatcher, RecursiveMode};
@@ -28,8 +28,8 @@ const DEBOUNCE_DEFAULT: &str = "500ms";
 /// example, the duplicate modify events some platforms produce for a single save)
 /// are collapsed, and one event is emitted after the `debounce` interval has
 /// passed without further activity. File access notifications are dropped.
-/// When `path` is empty, the agent stays idle and watches nothing. Changing any
-/// configuration while the agent is running restarts the watcher with the new
+/// When `path` is empty, the module stays idle and watches nothing. Changing any
+/// configuration while the module is running restarts the watcher with the new
 /// settings.
 ///
 /// # Ports
@@ -50,8 +50,8 @@ const DEBOUNCE_DEFAULT: &str = "500ms";
     boolean_config(name = CONFIG_RECURSIVE, default = true),
     string_config(name = CONFIG_DEBOUNCE, default = DEBOUNCE_DEFAULT, description = "(ex. 500ms, 2s)", detail),
 )]
-struct WatchDirectoryAgent {
-    data: AgentData,
+struct WatchDirectoryModule {
+    data: ModuleData,
     watcher: Option<Debouncer<RecommendedWatcher, RecommendedCache>>,
     path: String,
     recursive: bool,
@@ -69,14 +69,14 @@ fn event_kind_str(kind: &EventKind) -> Option<&'static str> {
     }
 }
 
-impl WatchDirectoryAgent {
-    fn start_watcher(&mut self) -> Result<(), AgentError> {
+impl WatchDirectoryModule {
+    fn start_watcher(&mut self) -> Result<()> {
         if self.path.is_empty() {
             return Ok(());
         }
 
         let ma = self.ma().clone();
-        let agent_id = self.id().to_string();
+        let module_id = self.id().to_string();
 
         let handler = move |result: DebounceEventResult| match result {
             Ok(events) => {
@@ -84,24 +84,24 @@ impl WatchDirectoryAgent {
                     let Some(kind) = event_kind_str(&event.kind) else {
                         continue;
                     };
-                    let paths: im::Vector<AgentValue> = event
+                    let paths: im::Vector<Value> = event
                         .paths
                         .iter()
-                        .map(|p| AgentValue::string(p.to_string_lossy().to_string()))
+                        .map(|p| Value::string(p.to_string_lossy().to_string()))
                         .collect();
                     let path = event
                         .paths
                         .first()
                         .map(|p| p.to_string_lossy().to_string())
                         .unwrap_or_default();
-                    let value = AgentValue::object(hashmap! {
-                        "kind".to_string() => AgentValue::string(kind),
-                        "path".to_string() => AgentValue::string(path),
-                        "paths".to_string() => AgentValue::array(paths),
+                    let value = Value::object(hashmap! {
+                        "kind".to_string() => Value::string(kind),
+                        "path".to_string() => Value::string(path),
+                        "paths".to_string() => Value::array(paths),
                     });
-                    if let Err(e) = ma.try_send_agent_out(
-                        agent_id.clone(),
-                        AgentContext::new(),
+                    if let Err(e) = ma.try_send_module_out(
+                        module_id.clone(),
+                        ModuleContext::new(),
                         PORT_EVENT.to_string(),
                         value,
                     ) {
@@ -122,16 +122,16 @@ impl WatchDirectoryAgent {
         let tick = Duration::from_millis((self.debounce_ms / 4).clamp(1, 250));
         let mut debouncer =
             new_debouncer(Duration::from_millis(self.debounce_ms), Some(tick), handler)
-                .map_err(|e| AgentError::IoError(format!("Failed to create watcher: {}", e)))?;
+                .map_err(|e| Error::IoError(format!("Failed to create watcher: {}", e)))?;
 
         let mode = if self.recursive {
             RecursiveMode::Recursive
         } else {
             RecursiveMode::NonRecursive
         };
-        debouncer.watch(Path::new(&self.path), mode).map_err(|e| {
-            AgentError::IoError(format!("Failed to watch path '{}': {}", self.path, e))
-        })?;
+        debouncer
+            .watch(Path::new(&self.path), mode)
+            .map_err(|e| Error::IoError(format!("Failed to watch path '{}': {}", self.path, e)))?;
 
         self.watcher = Some(debouncer);
         Ok(())
@@ -146,16 +146,16 @@ impl WatchDirectoryAgent {
 }
 
 #[async_trait]
-impl AsAgent for WatchDirectoryAgent {
-    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
-        let configs = spec.configs.as_ref().ok_or(AgentError::NoConfig)?;
+impl AsModule for WatchDirectoryModule {
+    fn new(ma: ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
+        let configs = spec.configs.as_ref().ok_or(Error::NoConfig)?;
         let path = configs.get_string_or_default(CONFIG_PATH);
         let recursive = configs.get_bool_or(CONFIG_RECURSIVE, true);
         let debounce = configs.get_string_or(CONFIG_DEBOUNCE, DEBOUNCE_DEFAULT);
         let debounce_ms = parse_duration_to_ms(&debounce)?;
 
         Ok(Self {
-            data: AgentData::new(ma, id, spec),
+            data: ModuleData::new(ma, id, spec),
             watcher: None,
             path,
             recursive,
@@ -163,16 +163,16 @@ impl AsAgent for WatchDirectoryAgent {
         })
     }
 
-    async fn start(&mut self) -> Result<(), AgentError> {
+    async fn start(&mut self) -> Result<()> {
         self.start_watcher()
     }
 
-    async fn stop(&mut self) -> Result<(), AgentError> {
+    async fn stop(&mut self) -> Result<()> {
         self.stop_watcher();
         Ok(())
     }
 
-    fn configs_changed(&mut self) -> Result<(), AgentError> {
+    fn configs_changed(&mut self) -> Result<()> {
         let configs = self.configs()?;
         let path = configs.get_string_or_default(CONFIG_PATH);
         let recursive = configs.get_bool_or(CONFIG_RECURSIVE, true);
@@ -183,7 +183,7 @@ impl AsAgent for WatchDirectoryAgent {
             self.path = path;
             self.recursive = recursive;
             self.debounce_ms = debounce_ms;
-            if *self.status() == AgentStatus::Start {
+            if *self.status() == ModuleStatus::Start {
                 // Restart the watcher with the new settings
                 self.stop_watcher();
                 self.start_watcher()?;

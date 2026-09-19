@@ -1,7 +1,7 @@
 <!--
   ConfigHandle: the edge-connection Handle for a config, following the
   "config:{name}" id convention used by the default rendering in
-  agent-config.svelte. NodeViews that replace the contents area must place
+  module-config.svelte. NodeViews that replace the contents area must place
   this themselves for every config that should accept edge connections —
   otherwise existing patch edges to that config have no handle to attach to.
 
@@ -21,7 +21,7 @@
 
   let { name, style = "" }: Props = $props();
 
-  // Keep in sync with CONFIG_HANDLE_STYLE in agent-config.svelte.
+  // Keep in sync with CONFIG_HANDLE_STYLE in module-config.svelte.
   const CONFIG_HANDLE_STYLE =
     "width: 10px; height: 10px; background-color: #000; border: 2px solid #fff;";
 </script>

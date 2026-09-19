@@ -97,7 +97,7 @@
             <button
               aria-label="Color {n}"
               class="w-4 h-4 rounded-full border border-border hover:scale-110 transition-transform"
-              style="background-color: var(--color-agent-{n})"
+              style="background-color: var(--color-module-{n})"
               onclick={() => {
                 oncolor?.(n);
                 open = false;

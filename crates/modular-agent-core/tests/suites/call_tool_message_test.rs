@@ -1,16 +1,17 @@
 extern crate modular_agent_core as ma;
 
+use modular_agent_core::Result;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use ma::test_utils::{TestProbeAgent, probe_receiver, recv_probe};
-use ma::tool::{CallToolMessageAgent, Tool, ToolInfo, register_tool, unregister_tool};
+use ma::test_utils::{TestProbeModule, probe_receiver, recv_probe};
+use ma::tool::{CallToolMessageModule, Tool, ToolInfo, register_tool, unregister_tool};
 use ma::{
-    Agent, AgentContext, AgentError, AgentValue, AsAgent, ConnectionSpec, Message, ModularAgent,
-    ToolCall, ToolCallFunction, async_trait,
+    AsModule, ConnectionSpec, Message, ModularAgent, Module, ModuleContext, ToolCall,
+    ToolCallFunction, Value, async_trait,
 };
 
-const CALL_TOOL_MESSAGE_DEF: &str = CallToolMessageAgent::DEF_NAME;
+const CALL_TOOL_MESSAGE_DEF: &str = CallToolMessageModule::DEF_NAME;
 
 /// Test tool that counts how many times it has been invoked.
 struct CountingTool {
@@ -24,9 +25,9 @@ impl Tool for CountingTool {
         &self.info
     }
 
-    async fn call(&self, _ctx: AgentContext, _args: AgentValue) -> Result<AgentValue, AgentError> {
+    async fn call(&self, _ctx: ModuleContext, _args: Value) -> Result<Value> {
         self.count.fetch_add(1, Ordering::SeqCst);
-        Ok(AgentValue::string("ok"))
+        Ok(Value::string("ok"))
     }
 }
 
@@ -41,7 +42,7 @@ fn register_counting_tool(name: &str) -> Arc<AtomicUsize> {
 }
 
 /// Builds an assistant message carrying a single tool call.
-fn tool_call_message(tool_name: &str, id: Option<&str>, streaming: bool) -> AgentValue {
+fn tool_call_message(tool_name: &str, id: Option<&str>, streaming: bool) -> Value {
     let mut msg = Message::assistant(String::new());
     msg.streaming = streaming;
     msg.tool_calls = Some(
@@ -55,17 +56,17 @@ fn tool_call_message(tool_name: &str, id: Option<&str>, streaming: bool) -> Agen
         }]
         .into(),
     );
-    AgentValue::message(msg)
+    Value::message(msg)
 }
 
-async fn setup_agent(ma: &ModularAgent) -> CallToolMessageAgent {
-    let def = ma.get_agent_definition(CALL_TOOL_MESSAGE_DEF).unwrap();
+async fn setup_module(ma: &ModularAgent) -> CallToolMessageModule {
+    let def = ma.get_module_definition(CALL_TOOL_MESSAGE_DEF).unwrap();
     let spec = def.to_spec();
-    let mut agent =
-        <CallToolMessageAgent as AsAgent>::new(ma.clone(), "call_tool_message".into(), spec)
+    let mut module =
+        <CallToolMessageModule as AsModule>::new(ma.clone(), "call_tool_message".into(), spec)
             .unwrap();
-    Agent::start(&mut agent).await.unwrap();
-    agent
+    Module::start(&mut module).await.unwrap();
+    module
 }
 
 #[tokio::test]
@@ -74,11 +75,11 @@ async fn streaming_message_does_not_execute_tool() {
     ma.ready().await.unwrap();
     let tool_name = "call_tool_message_test_streaming";
     let count = register_counting_tool(tool_name);
-    let mut agent = setup_agent(&ma).await;
+    let mut module = setup_module(&ma).await;
 
-    let ctx = AgentContext::new();
+    let ctx = ModuleContext::new();
     let value = tool_call_message(tool_name, Some("call1"), true);
-    Agent::process(&mut agent, ctx, "message".into(), value)
+    Module::process(&mut module, ctx, "message".into(), value)
         .await
         .unwrap();
 
@@ -94,13 +95,13 @@ async fn duplicate_call_id_executes_once() {
     ma.ready().await.unwrap();
     let tool_name = "call_tool_message_test_dedup";
     let count = register_counting_tool(tool_name);
-    let mut agent = setup_agent(&ma).await;
+    let mut module = setup_module(&ma).await;
 
     // Same ctx and same call id delivered twice (e.g. Claude's duplicate final emit).
-    let ctx = AgentContext::new();
+    let ctx = ModuleContext::new();
     for _ in 0..2 {
         let value = tool_call_message(tool_name, Some("call1"), false);
-        Agent::process(&mut agent, ctx.clone(), "message".into(), value)
+        Module::process(&mut module, ctx.clone(), "message".into(), value)
             .await
             .unwrap();
     }
@@ -118,32 +119,32 @@ async fn length_stop_reason_skips_execution_and_synthesizes_error_results() {
     let tool_name = "call_tool_message_test_length";
     let count = register_counting_tool(tool_name);
 
-    // Wire CallToolMessageAgent's message output to a probe so the synthetic
+    // Wire CallToolMessageModule's message output to a probe so the synthetic
     // tool results can be observed.
     let patch_id = ma.new_patch().unwrap();
-    let call_def = ma.get_agent_definition(CALL_TOOL_MESSAGE_DEF).unwrap();
-    let call_agent_id = ma
-        .add_agent(patch_id.clone(), call_def.to_spec())
+    let call_def = ma.get_module_definition(CALL_TOOL_MESSAGE_DEF).unwrap();
+    let call_module_id = ma
+        .add_module(patch_id.clone(), call_def.to_spec())
         .await
         .unwrap();
-    let probe_def = ma.get_agent_definition(TestProbeAgent::DEF_NAME).unwrap();
-    let probe_agent_id = ma
-        .add_agent(patch_id.clone(), probe_def.to_spec())
+    let probe_def = ma.get_module_definition(TestProbeModule::DEF_NAME).unwrap();
+    let probe_module_id = ma
+        .add_module(patch_id.clone(), probe_def.to_spec())
         .await
         .unwrap();
     ma.add_connection(
         &patch_id,
         ConnectionSpec {
-            source: call_agent_id.clone(),
+            source: call_module_id.clone(),
             source_handle: "message".into(),
-            target: probe_agent_id.clone(),
+            target: probe_module_id.clone(),
             target_handle: "value".into(),
         },
     )
     .await
     .unwrap();
     ma.start_patch(&patch_id).await.unwrap();
-    let probe_rx = probe_receiver(&ma, &probe_agent_id).await.unwrap();
+    let probe_rx = probe_receiver(&ma, &probe_module_id).await.unwrap();
 
     let mut msg = Message::assistant(String::new());
     msg.stop_reason = Some("length".to_string());
@@ -169,15 +170,11 @@ async fn length_stop_reason_skips_execution_and_synthesizes_error_results() {
         .into(),
     );
 
-    let agent = ma.get_agent(&call_agent_id).unwrap();
-    agent
+    let module = ma.get_module(&call_module_id).unwrap();
+    module
         .lock()
         .await
-        .process(
-            AgentContext::new(),
-            "message".into(),
-            AgentValue::message(msg),
-        )
+        .process(ModuleContext::new(), "message".into(), Value::message(msg))
         .await
         .unwrap();
 
@@ -202,13 +199,13 @@ async fn missing_call_id_is_not_deduped() {
     ma.ready().await.unwrap();
     let tool_name = "call_tool_message_test_no_id";
     let count = register_counting_tool(tool_name);
-    let mut agent = setup_agent(&ma).await;
+    let mut module = setup_module(&ma).await;
 
     // Calls without an id keep legacy behavior: every delivery executes.
-    let ctx = AgentContext::new();
+    let ctx = ModuleContext::new();
     for _ in 0..2 {
         let value = tool_call_message(tool_name, None, false);
-        Agent::process(&mut agent, ctx.clone(), "message".into(), value)
+        Module::process(&mut module, ctx.clone(), "message".into(), value)
             .await
             .unwrap();
     }

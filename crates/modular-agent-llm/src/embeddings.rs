@@ -1,6 +1,6 @@
 use modular_agent_core::{
-    Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AgentValueMap,
-    AsAgent, ModularAgent, async_trait, modular_agent,
+    AsModule, Error, ModularAgent, Module, ModuleContext, ModuleData, ModuleOutput, ModuleSpec,
+    Result, Value, ValueMap, async_trait, modular_agent,
 };
 
 use crate::provider::{ModelIdentifier, ProviderKind};
@@ -26,7 +26,7 @@ const CONFIG_OPTIONS: &str = "options";
 
 const DEFAULT_CONFIG_MODEL: &str = "openai/text-embedding-3-small";
 
-/// Embeddings Agent that routes to different LLM providers based on model prefix.
+/// Embeddings Module that routes to different LLM providers based on model prefix.
 ///
 /// # Model Format
 /// - `openai/text-embedding-3-small` - Uses OpenAI API
@@ -46,8 +46,8 @@ const DEFAULT_CONFIG_MODEL: &str = "openai/text-embedding-3-small";
     object_config(name = CONFIG_OPTIONS),
     hint(width = 2, height = 2),
 )]
-pub struct EmbeddingsAgent {
-    data: AgentData,
+pub struct EmbeddingsModule {
+    data: ModuleData,
     #[cfg(feature = "openai")]
     openai_manager: openai_client::OpenAIManager,
     #[cfg(feature = "ollama")]
@@ -55,10 +55,10 @@ pub struct EmbeddingsAgent {
 }
 
 #[async_trait]
-impl AsAgent for EmbeddingsAgent {
-    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+impl AsModule for EmbeddingsModule {
+    fn new(ma: ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
         Ok(Self {
-            data: AgentData::new(ma, id, spec),
+            data: ModuleData::new(ma, id, spec),
             #[cfg(feature = "openai")]
             openai_manager: openai_client::OpenAIManager::new(),
             #[cfg(feature = "ollama")]
@@ -66,15 +66,10 @@ impl AsAgent for EmbeddingsAgent {
         })
     }
 
-    async fn process(
-        &mut self,
-        ctx: AgentContext,
-        port: String,
-        value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, ctx: ModuleContext, port: String, value: Value) -> Result<()> {
         let config_model = self.configs()?.get_string_or_default(CONFIG_MODEL);
         if config_model.is_empty() {
-            return Err(AgentError::InvalidConfig("model is not set".to_string()));
+            return Err(Error::InvalidConfig("model is not set".to_string()));
         }
 
         // Parse model identifier to determine provider
@@ -86,7 +81,7 @@ impl AsAgent for EmbeddingsAgent {
         // Route to appropriate provider
         match model_id.provider {
             #[cfg(feature = "claude")]
-            ProviderKind::Claude => Err(AgentError::InvalidConfig(
+            ProviderKind::Claude => Err(Error::InvalidConfig(
                 "Claude does not support embeddings. Use OpenAI or Ollama instead.".into(),
             )),
             #[cfg(feature = "openai")]
@@ -100,7 +95,7 @@ impl AsAgent for EmbeddingsAgent {
                     .await
             }
             #[allow(unreachable_patterns)]
-            _ => Err(AgentError::InvalidConfig(format!(
+            _ => Err(Error::InvalidConfig(format!(
                 "Provider {:?} not enabled. Enable the corresponding feature.",
                 model_id.provider
             ))),
@@ -108,22 +103,22 @@ impl AsAgent for EmbeddingsAgent {
     }
 }
 
-impl EmbeddingsAgent {
+impl EmbeddingsModule {
     #[cfg(feature = "openai")]
     async fn process_openai(
         &mut self,
-        ctx: AgentContext,
+        ctx: ModuleContext,
         port: String,
-        value: AgentValue,
+        value: Value,
         model_name: &str,
-        config_options: AgentValueMap<String, AgentValue>,
-    ) -> Result<(), AgentError> {
+        config_options: ValueMap<String, Value>,
+    ) -> Result<()> {
         let client = self.openai_manager.get_client(self.ma())?;
 
         if port == PORT_STRING {
             let text = value.as_str().unwrap_or_default();
             if text.is_empty() {
-                return Err(AgentError::InvalidValue(
+                return Err(Error::InvalidValue(
                     "Input text is an empty string".to_string(),
                 ));
             }
@@ -135,7 +130,7 @@ impl EmbeddingsAgent {
             )
             .await?;
             if embeddings.len() != 1 {
-                return Err(AgentError::Other(
+                return Err(Error::Other(
                     "Expected exactly one embedding for single string input".to_string(),
                 ));
             }
@@ -143,7 +138,7 @@ impl EmbeddingsAgent {
                 .output(
                     ctx,
                     PORT_EMBEDDING,
-                    AgentValue::tensor(embeddings.into_iter().next().unwrap()),
+                    Value::tensor(embeddings.into_iter().next().unwrap()),
                 )
                 .await;
         }
@@ -152,7 +147,7 @@ impl EmbeddingsAgent {
             let (offsets, texts) = Self::parse_chunks(&value)?;
             if texts.is_empty() {
                 return self
-                    .output(ctx.clone(), PORT_EMBEDDINGS, AgentValue::array_default())
+                    .output(ctx.clone(), PORT_EMBEDDINGS, Value::array_default())
                     .await;
             }
             let embeddings =
@@ -164,7 +159,7 @@ impl EmbeddingsAgent {
                 .output(
                     ctx,
                     PORT_EMBEDDINGS,
-                    AgentValue::array(embedding_values_with_offsets),
+                    Value::array(embedding_values_with_offsets),
                 )
                 .await;
         }
@@ -173,12 +168,12 @@ impl EmbeddingsAgent {
             let (texts, indices, is_single) = Self::extract_texts_from_doc(&value)?;
             if texts.is_empty() {
                 if is_single {
-                    return Err(AgentError::InvalidValue(
+                    return Err(Error::InvalidValue(
                         "No text found in the document".to_string(),
                     ));
                 }
                 return self
-                    .output(ctx.clone(), PORT_DOC, AgentValue::array_default())
+                    .output(ctx.clone(), PORT_DOC, Value::array_default())
                     .await;
             }
 
@@ -191,31 +186,31 @@ impl EmbeddingsAgent {
                 .await;
         }
 
-        Err(AgentError::InvalidPin(port))
+        Err(Error::InvalidPin(port))
     }
 
     #[cfg(feature = "ollama")]
     async fn process_ollama(
         &mut self,
-        ctx: AgentContext,
+        ctx: ModuleContext,
         port: String,
-        value: AgentValue,
+        value: Value,
         model_name: &str,
-        config_options: AgentValueMap<String, AgentValue>,
-    ) -> Result<(), AgentError> {
+        config_options: ValueMap<String, Value>,
+    ) -> Result<()> {
         let client = self.ollama_manager.get_client(self.ma())?;
 
         let options_json = if config_options.is_empty() {
             serde_json::Value::Null
         } else {
             serde_json::to_value(&config_options)
-                .map_err(|e| AgentError::InvalidConfig(format!("Invalid JSON in options: {}", e)))?
+                .map_err(|e| Error::InvalidConfig(format!("Invalid JSON in options: {}", e)))?
         };
 
         if port == PORT_STRING {
             let text = value.as_str().unwrap_or_default();
             if text.is_empty() {
-                return Err(AgentError::InvalidValue(
+                return Err(Error::InvalidValue(
                     "Input text is an empty string".to_string(),
                 ));
             }
@@ -223,7 +218,7 @@ impl EmbeddingsAgent {
                 .generate_embeddings(vec![text.to_string()], model_name, &options_json)
                 .await?;
             if embeddings.len() != 1 {
-                return Err(AgentError::Other(
+                return Err(Error::Other(
                     "Expected exactly one embedding for single string input".to_string(),
                 ));
             }
@@ -231,7 +226,7 @@ impl EmbeddingsAgent {
                 .output(
                     ctx,
                     PORT_EMBEDDING,
-                    AgentValue::tensor(embeddings.into_iter().next().unwrap()),
+                    Value::tensor(embeddings.into_iter().next().unwrap()),
                 )
                 .await;
         }
@@ -240,7 +235,7 @@ impl EmbeddingsAgent {
             let (offsets, texts) = Self::parse_chunks(&value)?;
             if texts.is_empty() {
                 return self
-                    .output(ctx.clone(), PORT_EMBEDDINGS, AgentValue::array_default())
+                    .output(ctx.clone(), PORT_EMBEDDINGS, Value::array_default())
                     .await;
             }
             let embeddings = client
@@ -252,7 +247,7 @@ impl EmbeddingsAgent {
                 .output(
                     ctx,
                     PORT_EMBEDDINGS,
-                    AgentValue::array(embedding_values_with_offsets),
+                    Value::array(embedding_values_with_offsets),
                 )
                 .await;
         }
@@ -261,12 +256,12 @@ impl EmbeddingsAgent {
             let (texts, indices, is_single) = Self::extract_texts_from_doc(&value)?;
             if texts.is_empty() {
                 if is_single {
-                    return Err(AgentError::InvalidValue(
+                    return Err(Error::InvalidValue(
                         "No text found in the document".to_string(),
                     ));
                 }
                 return self
-                    .output(ctx.clone(), PORT_DOC, AgentValue::array_default())
+                    .output(ctx.clone(), PORT_DOC, Value::array_default())
                     .await;
             }
 
@@ -279,14 +274,14 @@ impl EmbeddingsAgent {
                 .await;
         }
 
-        Err(AgentError::InvalidPin(port))
+        Err(Error::InvalidPin(port))
     }
 
     // Helper functions
 
-    fn parse_chunks(value: &AgentValue) -> Result<(Vec<i64>, Vec<String>), AgentError> {
+    fn parse_chunks(value: &Value) -> Result<(Vec<i64>, Vec<String>)> {
         if !value.is_array() {
-            return Err(AgentError::InvalidValue(
+            return Err(Error::InvalidValue(
                 "Input must be an array of strings".to_string(),
             ));
         }
@@ -294,22 +289,20 @@ impl EmbeddingsAgent {
         let mut texts = vec![];
         for item in value.as_array().unwrap().iter() {
             let arr = item.as_array().ok_or_else(|| {
-                AgentError::InvalidValue("Input chunks must be (offset, string) pairs".to_string())
+                Error::InvalidValue("Input chunks must be (offset, string) pairs".to_string())
             })?;
             if arr.len() != 2 {
-                return Err(AgentError::InvalidValue(
+                return Err(Error::InvalidValue(
                     "Input chunks must be (offset, string) pairs".to_string(),
                 ));
             }
             let offset = arr[0].as_i64().ok_or_else(|| {
-                AgentError::InvalidValue("Input chunks must be (offset, string) pairs".to_string())
+                Error::InvalidValue("Input chunks must be (offset, string) pairs".to_string())
             })?;
             let text = arr[1]
                 .as_str()
                 .ok_or_else(|| {
-                    AgentError::InvalidValue(
-                        "Input chunks must be (offset, string) pairs".to_string(),
-                    )
+                    Error::InvalidValue("Input chunks must be (offset, string) pairs".to_string())
                 })?
                 .to_string();
             if !text.is_empty() {
@@ -320,25 +313,15 @@ impl EmbeddingsAgent {
         Ok((offsets, texts))
     }
 
-    fn zip_embeddings_with_offsets(
-        offsets: Vec<i64>,
-        embeddings: Vec<Vec<f32>>,
-    ) -> Vector<AgentValue> {
+    fn zip_embeddings_with_offsets(offsets: Vec<i64>, embeddings: Vec<Vec<f32>>) -> Vector<Value> {
         offsets
             .into_iter()
             .zip(embeddings)
-            .map(|(offset, emb)| {
-                AgentValue::array(vector![
-                    AgentValue::integer(offset),
-                    AgentValue::tensor(emb)
-                ])
-            })
+            .map(|(offset, emb)| Value::array(vector![Value::integer(offset), Value::tensor(emb)]))
             .collect()
     }
 
-    fn extract_texts_from_doc(
-        value: &AgentValue,
-    ) -> Result<(Vec<String>, Vec<i64>, bool), AgentError> {
+    fn extract_texts_from_doc(value: &Value) -> Result<(Vec<String>, Vec<i64>, bool)> {
         let mut texts = vec![];
         let mut indices = vec![];
         let is_single = value.is_object();
@@ -358,7 +341,7 @@ impl EmbeddingsAgent {
                 }
             }
         } else {
-            return Err(AgentError::InvalidValue(
+            return Err(Error::InvalidValue(
                 "Input must be a document object or an array of document objects".to_string(),
             ));
         }
@@ -368,14 +351,14 @@ impl EmbeddingsAgent {
 
     async fn output_doc_embeddings(
         &mut self,
-        ctx: AgentContext,
-        value: AgentValue,
+        ctx: ModuleContext,
+        value: Value,
         embeddings: Vec<Vec<f32>>,
         indices: Vec<i64>,
         is_single: bool,
-    ) -> Result<(), AgentError> {
+    ) -> Result<()> {
         if embeddings.len() != indices.len() {
-            return Err(AgentError::Other(
+            return Err(Error::Other(
                 "Mismatch between number of embeddings and texts".to_string(),
             ));
         }
@@ -383,21 +366,17 @@ impl EmbeddingsAgent {
         if is_single {
             let embedding = embeddings.into_iter().next().unwrap();
             let mut output = value.clone();
-            output.set("embedding".to_string(), AgentValue::tensor(embedding))?;
+            output.set("embedding".to_string(), Value::tensor(embedding))?;
             return self.output(ctx.clone(), PORT_DOC, output).await;
         } else {
             let mut arr = value.clone().into_array().unwrap();
             for i in 0..embeddings.len() {
                 let embedding = &embeddings[i];
                 let index = indices[i];
-                arr[index as usize].set(
-                    "embedding".to_string(),
-                    AgentValue::tensor(embedding.clone()),
-                )?;
+                arr[index as usize]
+                    .set("embedding".to_string(), Value::tensor(embedding.clone()))?;
             }
-            return self
-                .output(ctx.clone(), PORT_DOC, AgentValue::array(arr))
-                .await;
+            return self.output(ctx.clone(), PORT_DOC, Value::array(arr)).await;
         }
     }
 }

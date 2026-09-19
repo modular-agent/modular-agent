@@ -14,7 +14,7 @@
      start/stop leaves the thumb where the backend actually is. -->
 <Switch
   bind:checked={() => running, (v) => (v ? onStart?.() : onStop?.())}
-  class="data-[state=checked]:bg-[var(--color-agent-2)]"
+  class="data-[state=checked]:bg-[var(--color-module-2)]"
   aria-label="Run patch"
   title={running ? "Running" : "Stopped"}
 />

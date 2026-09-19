@@ -1,5 +1,5 @@
 <!--
-  NodeView for ChartDemoAgent: renders numeric array data from the agent's
+  NodeView for ChartDemoModule: renders numeric array data from the module's
   configs as a viewBox-based SVG line/scatter chart.
 
   Demonstrates the NodeView mechanism:

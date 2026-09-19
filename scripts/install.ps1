@@ -1,7 +1,7 @@
 # Modular Agent one-command installer for Windows.
 #
 # Clones the repository and builds the desktop app or the `ma` CLI from
-# source, with the recommended agent packages unless a minimal build is
+# source, with the recommended module packages unless a minimal build is
 # chosen. What to build is asked interactively; passing any option skips
 # the questions. Assumes the Tauri prerequisites (git, Rust, Node.js,
 # Visual Studio Build Tools) are installed:
@@ -12,8 +12,8 @@
 #
 # Options (any option skips the questions; download the script to pass them):
 #   -Cli        Install the `ma` command-line runner instead of the desktop app
-#   -Minimal    Build with only the in-tree agent packages (std, llm); skip
-#               cloning the recommended agent packages
+#   -Minimal    Build with only the in-tree module packages (std, llm); skip
+#               cloning the recommended module packages
 #   -Dir <dir>  Clone destination (default: .\modular-agent)
 
 param(
@@ -26,8 +26,8 @@ $ErrorActionPreference = "Stop"
 $RepoUrl = "https://github.com/modular-agent/modular-agent.git"
 $DocsUrl = "https://modular-agent.github.io/docs/getting-started"
 
-# The recommended starting set from custom_agents/README.md.
-$RecommendedAgents = @(
+# The recommended starting set from custom_modules/README.md.
+$RecommendedModules = @(
     "modular-agent-lifelog", "modular-agent-mattermost", "modular-agent-monty",
     "modular-agent-slack", "modular-agent-sqlx", "modular-agent-web", "modular-agent-zapcode"
 )
@@ -46,7 +46,7 @@ if ($PSBoundParameters.Count -eq 0) {
     Write-Host ""
     $ans = Read-Host "Build the desktop app or the ma CLI? [desktop/cli] (desktop)"
     if ($ans -match '^[cC]') { $BuildCli = $true }
-    $ans = Read-Host "Include the recommended agent packages (web, scripting, messaging, databases)? [Y/n] (Y)"
+    $ans = Read-Host "Include the recommended module packages (web, scripting, messaging, databases)? [Y/n] (Y)"
     if ($ans -match '^[nN]') { $BuildMinimal = $true }
 }
 
@@ -63,12 +63,12 @@ else {
     if ($LASTEXITCODE -ne 0) { Fail "git clone failed" }
 }
 
-# --- Agent packages ----------------------------------------------------------
+# --- Module packages ----------------------------------------------------------
 
 if (-not $BuildMinimal) {
-    Info "Cloning the recommended agent packages"
-    foreach ($name in $RecommendedAgents) {
-        $cloneDir = Join-Path $Dir "custom_agents\$name"
+    Info "Cloning the recommended module packages"
+    foreach ($name in $RecommendedModules) {
+        $cloneDir = Join-Path $Dir "custom_modules\$name"
         if (Test-Path (Join-Path $cloneDir ".git")) {
             Write-Host "  ${name}: updating existing clone"
             & git -C $cloneDir pull --ff-only
@@ -82,11 +82,11 @@ if (-not $BuildMinimal) {
 
     $app = if ($BuildCli) { "cli" } else { "desktop" }
     if (Test-Path (Join-Path $Dir "apps\$app\ma-config.toml")) {
-        Info "Building the configurator and applying the existing agent selection"
+        Info "Building the configurator and applying the existing module selection"
         $maConfigFlag = "--apply"
     }
     else {
-        Info "Building the configurator and selecting the default agent set (first compile, a few minutes)"
+        Info "Building the configurator and selecting the default module set (first compile, a few minutes)"
         $maConfigFlag = "--defaults"
     }
     Push-Location $Dir
@@ -123,5 +123,5 @@ else {
 Write-Host ""
 Write-Host "Next: build your first patch: $DocsUrl/first-patch/"
 if (-not $BuildMinimal) {
-    Write-Host "To change the agent package selection: $DocsUrl/installation/#adding-agent-packages"
+    Write-Host "To change the module package selection: $DocsUrl/installation/#adding-module-packages"
 }

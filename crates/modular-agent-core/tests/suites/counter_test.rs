@@ -1,18 +1,18 @@
 extern crate modular_agent_core as ma;
 
-use ma::{Agent, AgentContext, AgentStatus, AgentValue, AsAgent, ModularAgent};
+use ma::{AsModule, ModularAgent, Module, ModuleContext, ModuleStatus, Value};
 
 use crate::common;
-use common::agents::CounterAgent;
+use common::modules::CounterModule;
 
-const COUNTER_DEF: &str = CounterAgent::DEF_NAME;
+const COUNTER_DEF: &str = CounterModule::DEF_NAME;
 
 #[test]
-fn test_register_agent_definiton() {
+fn test_register_module_definition() {
     let ma = ModularAgent::init().unwrap();
 
-    // Check the properties of the counter agent
-    let counter_def = ma.get_agent_definition(COUNTER_DEF).unwrap();
+    // Check the properties of the counter module
+    let counter_def = ma.get_module_definition(COUNTER_DEF).unwrap();
     assert_eq!(counter_def.title, Some("Counter".into()));
     assert_eq!(counter_def.inputs, Some(vec!["in".into(), "reset".into()]));
     assert_eq!(counter_def.outputs, Some(vec!["count".into()]));
@@ -21,71 +21,71 @@ fn test_register_agent_definiton() {
 }
 
 #[test]
-fn test_agent_new() {
+fn test_module_new() {
     let ma = ModularAgent::init().unwrap();
-    let def = ma.get_agent_definition(COUNTER_DEF).unwrap();
+    let def = ma.get_module_definition(COUNTER_DEF).unwrap();
     let spec = def.to_spec();
-    let agent = <CounterAgent as AsAgent>::new(ma.clone(), "agent_1".into(), spec).unwrap();
-    assert_eq!(Agent::def_name(&agent), COUNTER_DEF);
-    assert_eq!(Agent::id(&agent), "agent_1");
-    assert_eq!(Agent::status(&agent), &AgentStatus::Init);
+    let module = <CounterModule as AsModule>::new(ma.clone(), "module_1".into(), spec).unwrap();
+    assert_eq!(Module::def_name(&module), COUNTER_DEF);
+    assert_eq!(Module::id(&module), "module_1");
+    assert_eq!(Module::status(&module), &ModuleStatus::Init);
 
     ma.quit();
 }
 
 #[tokio::test]
-async fn test_agent_start() {
+async fn test_module_start() {
     let ma = ModularAgent::init().unwrap();
-    let def = ma.get_agent_definition(COUNTER_DEF).unwrap();
+    let def = ma.get_module_definition(COUNTER_DEF).unwrap();
     let spec = def.to_spec();
-    let mut agent = <CounterAgent as AsAgent>::new(ma.clone(), "agent_1".into(), spec).unwrap();
-    Agent::start(&mut agent).await.unwrap();
+    let mut module = <CounterModule as AsModule>::new(ma.clone(), "module_1".into(), spec).unwrap();
+    Module::start(&mut module).await.unwrap();
 
-    assert_eq!(Agent::status(&agent), &AgentStatus::Start);
+    assert_eq!(Module::status(&module), &ModuleStatus::Start);
 
     ma.quit();
 }
 
 #[tokio::test]
-async fn test_agent_process() {
+async fn test_module_process() {
     let ma = ModularAgent::init().unwrap();
     ma.ready().await.unwrap();
 
-    let counter_def = ma.get_agent_definition(COUNTER_DEF).unwrap();
+    let counter_def = ma.get_module_definition(COUNTER_DEF).unwrap();
     let counter_spec = counter_def.to_spec();
 
-    let mut counter_agent =
-        <CounterAgent as AsAgent>::new(ma.clone(), "agent_1".into(), counter_spec).unwrap();
-    Agent::start(&mut counter_agent).await.unwrap();
+    let mut counter_module =
+        <CounterModule as AsModule>::new(ma.clone(), "module_1".into(), counter_spec).unwrap();
+    Module::start(&mut counter_module).await.unwrap();
 
-    let ctx = AgentContext::new();
-    Agent::process(&mut counter_agent, ctx, "in".into(), AgentValue::unit())
+    let ctx = ModuleContext::new();
+    Module::process(&mut counter_module, ctx, "in".into(), Value::unit())
         .await
         .unwrap();
 
-    assert_eq!(counter_agent.count, 1);
+    assert_eq!(counter_module.count, 1);
 
     ma.quit();
 }
 
 #[tokio::test]
-async fn test_agent_stop() {
+async fn test_module_stop() {
     let ma = ModularAgent::init().unwrap();
 
     ma.ready().await.unwrap();
 
-    let def = ma.get_agent_definition(COUNTER_DEF).unwrap();
+    let def = ma.get_module_definition(COUNTER_DEF).unwrap();
     let spec = def.to_spec();
-    let mut agent = <CounterAgent as AsAgent>::new(ma.clone(), "agent_1".into(), spec).unwrap();
-    Agent::start(&mut agent).await.unwrap();
+    let mut module = <CounterModule as AsModule>::new(ma.clone(), "module_1".into(), spec).unwrap();
+    Module::start(&mut module).await.unwrap();
 
-    let ctx = AgentContext::new();
-    Agent::process(&mut agent, ctx, "in".into(), AgentValue::unit())
+    let ctx = ModuleContext::new();
+    Module::process(&mut module, ctx, "in".into(), Value::unit())
         .await
         .unwrap();
 
-    Agent::stop(&mut agent).await.unwrap();
-    assert_eq!(Agent::status(&agent), &AgentStatus::Init);
+    Module::stop(&mut module).await.unwrap();
+    assert_eq!(Module::status(&module), &ModuleStatus::Init);
 
     ma.quit();
 }

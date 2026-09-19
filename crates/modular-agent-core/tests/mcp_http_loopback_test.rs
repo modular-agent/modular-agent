@@ -15,7 +15,7 @@ use std::net::Ipv4Addr;
 use ma::mcp::{register_tools_from_mcp_json, shutdown_all_mcp_connections};
 use ma::mcp_server::{McpServerConfig, start_mcp_server};
 use ma::tool::get_tool;
-use ma::{AgentContext, AgentValue, ModularAgent};
+use ma::{ModularAgent, ModuleContext, Value};
 use serde_json::json;
 
 const TOKEN: &str = "loopback-test-token";
@@ -70,8 +70,8 @@ async fn http_loopback_lists_tools_and_returns_structured_content() {
     let create = get_tool("loopback::create_patch").unwrap();
     let created = create
         .call(
-            AgentContext::new(),
-            AgentValue::from_json(json!({"name": "loopback-e2e"})).unwrap(),
+            ModuleContext::new(),
+            Value::from_json(json!({"name": "loopback-e2e"})).unwrap(),
         )
         .await
         .unwrap();
@@ -79,25 +79,25 @@ async fn http_loopback_lists_tools_and_returns_structured_content() {
         .as_object()
         .expect("create_patch must return a structured object")
         .get("patch_id")
-        .and_then(AgentValue::as_str)
+        .and_then(Value::as_str)
         .expect("structured response must carry patch_id")
         .to_string();
 
     let list = get_tool("loopback::list_patches").unwrap();
     let listed = list
-        .call(AgentContext::new(), AgentValue::object_default())
+        .call(ModuleContext::new(), Value::object_default())
         .await
         .unwrap();
     let infos = listed
         .as_object()
         .and_then(|obj| obj.get("patches"))
-        .and_then(AgentValue::as_array)
+        .and_then(Value::as_array)
         .expect("list_patches must return a structured object with a patches array");
     assert!(
         infos.iter().any(|info| {
             info.as_object()
                 .and_then(|obj| obj.get("id"))
-                .and_then(AgentValue::as_str)
+                .and_then(Value::as_str)
                 == Some(patch_id.as_str())
         }),
         "created patch {patch_id} missing from list_patches result: {listed:?}"

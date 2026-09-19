@@ -2,9 +2,9 @@ use std::sync::Arc;
 
 use im::{Vector, vector};
 use modular_agent_core::{
-    Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
-    ContentBlock, InMemorySessionStore, JsonlSessionStore, Message, MessageContent, ModularAgent,
-    SessionEntry, SessionMeta, SessionStore, async_trait, build_context_with_ids,
+    AsModule, ContentBlock, Error, InMemorySessionStore, JsonlSessionStore, Message,
+    MessageContent, ModularAgent, Module, ModuleContext, ModuleData, ModuleOutput, ModuleSpec,
+    Result, SessionEntry, SessionMeta, SessionStore, Value, async_trait, build_context_with_ids,
     estimate_message_tokens, modular_agent,
 };
 
@@ -38,8 +38,8 @@ const CONFIG_SUMMARY_MAX_TOKENS: &str = "summary_max_tokens";
 /// `reconcile_spec()` renames it to `_messages` for lazy migration.
 const STALE_CONFIG_MESSAGES: &str = "_messages";
 
-/// `session_dir` was removed from the Messages agent when file persistence
-/// moved to the File Messages agent; `reconcile_spec()` renames a leftover
+/// `session_dir` was removed from the Messages module when file persistence
+/// moved to the File Messages module; `reconcile_spec()` renames a leftover
 /// value to `_session_dir`, which `new()` reads to warn about the change.
 const STALE_CONFIG_SESSION_DIR: &str = "_session_dir";
 
@@ -50,7 +50,7 @@ const TRIM_MARKER: &str = "\n[...]\n";
 /// empties a message even when the budget says it should.
 const TRIM_FLOOR_BYTES: usize = 16;
 
-// Assistant Message Agent
+// Assistant Message Module
 #[modular_agent(
     title="Assistant Message",
     category=CATEGORY,
@@ -59,24 +59,19 @@ const TRIM_FLOOR_BYTES: usize = 16;
     text_config(name=CONFIG_MESSAGE),
     hint(width = 2, height = 1),
 )]
-pub struct AssistantMessageAgent {
-    data: AgentData,
+pub struct AssistantMessageModule {
+    data: ModuleData,
 }
 
 #[async_trait]
-impl AsAgent for AssistantMessageAgent {
-    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+impl AsModule for AssistantMessageModule {
+    fn new(ma: ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
         Ok(Self {
-            data: AgentData::new(ma, id, spec),
+            data: ModuleData::new(ma, id, spec),
         })
     }
 
-    async fn process(
-        &mut self,
-        ctx: AgentContext,
-        _port: String,
-        value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, ctx: ModuleContext, _port: String, value: Value) -> Result<()> {
         let message = self.configs()?.get_string(CONFIG_MESSAGE)?;
         let message = Message::assistant(message);
         let messages = append_message(value, message);
@@ -96,24 +91,19 @@ impl AsAgent for AssistantMessageAgent {
     text_config(name=CONFIG_MESSAGE),
     hint(width = 2, height = 1),
 )]
-pub struct SystemMessageAgent {
-    data: AgentData,
+pub struct SystemMessageModule {
+    data: ModuleData,
 }
 
 #[async_trait]
-impl AsAgent for SystemMessageAgent {
-    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+impl AsModule for SystemMessageModule {
+    fn new(ma: ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
         Ok(Self {
-            data: AgentData::new(ma, id, spec),
+            data: ModuleData::new(ma, id, spec),
         })
     }
 
-    async fn process(
-        &mut self,
-        ctx: AgentContext,
-        _port: String,
-        value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, ctx: ModuleContext, _port: String, value: Value) -> Result<()> {
         let message = self.configs()?.get_string(CONFIG_MESSAGE)?;
         let message = Message::system(message);
         let messages = prepend_message(value, message);
@@ -122,7 +112,7 @@ impl AsAgent for SystemMessageAgent {
     }
 }
 
-// User Message Agent
+// User Message Module
 #[modular_agent(
     title="User Message",
     category=CATEGORY,
@@ -131,24 +121,19 @@ impl AsAgent for SystemMessageAgent {
     text_config(name=CONFIG_MESSAGE),
     hint(width = 2, height = 1),
 )]
-pub struct UserMessageAgent {
-    data: AgentData,
+pub struct UserMessageModule {
+    data: ModuleData,
 }
 
 #[async_trait]
-impl AsAgent for UserMessageAgent {
-    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+impl AsModule for UserMessageModule {
+    fn new(ma: ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
         Ok(Self {
-            data: AgentData::new(ma, id, spec),
+            data: ModuleData::new(ma, id, spec),
         })
     }
 
-    async fn process(
-        &mut self,
-        ctx: AgentContext,
-        _port: String,
-        value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, ctx: ModuleContext, _port: String, value: Value) -> Result<()> {
         let message = self.configs()?.get_string(CONFIG_MESSAGE)?;
         let message = Message::user(message);
         let messages = append_message(value, message);
@@ -157,11 +142,11 @@ impl AsAgent for UserMessageAgent {
     }
 }
 
-fn append_message(value: AgentValue, message: Message) -> AgentValue {
+fn append_message(value: Value, message: Message) -> Value {
     #[cfg(feature = "image")]
-    if let AgentValue::Image(img) = &value {
+    if let Value::Image(img) = &value {
         let message = message.with_image(img.clone());
-        return AgentValue::array(vector![message.into()]);
+        return Value::array(vector![message.into()]);
     }
 
     let Some(value) = value.to_message_value() else {
@@ -171,13 +156,13 @@ fn append_message(value: AgentValue, message: Message) -> AgentValue {
     if value.is_array() {
         let mut arr = value.into_array().unwrap_or_default();
         arr.push_back(message.into());
-        return AgentValue::array(arr);
+        return Value::array(arr);
     }
 
-    AgentValue::array(vector![value, message.into()])
+    Value::array(vector![value, message.into()])
 }
 
-fn prepend_message(value: AgentValue, message: Message) -> AgentValue {
+fn prepend_message(value: Value, message: Message) -> Value {
     let Some(value) = value.to_message_value() else {
         return message.into();
     };
@@ -185,10 +170,10 @@ fn prepend_message(value: AgentValue, message: Message) -> AgentValue {
     if value.is_array() {
         let mut arr = value.into_array().unwrap_or_default();
         arr.push_front(message.into());
-        return AgentValue::array(arr);
+        return Value::array(arr);
     }
 
-    AgentValue::array(vector![message.into(), value])
+    Value::array(vector![message.into(), value])
 }
 
 /// Prepend a preamble message to the first input message.
@@ -202,15 +187,15 @@ fn prepend_message(value: AgentValue, message: Message) -> AgentValue {
     object_config(name=CONFIG_PREAMBLE),
     hint(width = 2, height = 2),
 )]
-pub struct PreambleAgent {
-    data: AgentData,
-    preamble: Option<Vector<AgentValue>>,
+pub struct PreambleModule {
+    data: ModuleData,
+    preamble: Option<Vector<Value>>,
     prepended: bool,
 }
 
 #[async_trait]
-impl AsAgent for PreambleAgent {
-    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+impl AsModule for PreambleModule {
+    fn new(ma: ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
         let preamble = spec
             .configs
             .as_ref()
@@ -227,7 +212,7 @@ impl AsAgent for PreambleAgent {
                 }
             }
         };
-        let data = AgentData::new(ma, id, spec);
+        let data = ModuleData::new(ma, id, spec);
         Ok(Self {
             data,
             preamble,
@@ -235,7 +220,7 @@ impl AsAgent for PreambleAgent {
         })
     }
 
-    fn configs_changed(&mut self) -> Result<(), AgentError> {
+    fn configs_changed(&mut self) -> Result<()> {
         let preamble = self.configs()?.get(CONFIG_PREAMBLE)?.to_message_value();
         self.preamble = match preamble {
             None => None,
@@ -250,35 +235,26 @@ impl AsAgent for PreambleAgent {
         Ok(())
     }
 
-    async fn start(&mut self) -> Result<(), AgentError> {
+    async fn start(&mut self) -> Result<()> {
         self.prepended = false;
         Ok(())
     }
 
-    async fn process(
-        &mut self,
-        ctx: AgentContext,
-        port: String,
-        value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, ctx: ModuleContext, port: String, value: Value) -> Result<()> {
         if port == PORT_RESET {
             self.prepended = false;
             return Ok(());
         }
 
         let Some(message) = value.to_message() else {
-            return Err(AgentError::InvalidValue(
+            return Err(Error::InvalidValue(
                 "Input value is not a Message".to_string(),
             ));
         };
 
         if self.prepended {
             return self
-                .output(
-                    ctx,
-                    PORT_MESSAGES,
-                    AgentValue::array(vector![message.into()]),
-                )
+                .output(ctx, PORT_MESSAGES, Value::array(vector![message.into()]))
                 .await;
         }
 
@@ -286,28 +262,24 @@ impl AsAgent for PreambleAgent {
 
         let Some(preamble) = &self.preamble else {
             return self
-                .output(
-                    ctx,
-                    PORT_MESSAGES,
-                    AgentValue::array(vector![message.into()]),
-                )
+                .output(ctx, PORT_MESSAGES, Value::array(vector![message.into()]))
                 .await;
         };
 
         let mut messages = preamble.clone();
         messages.push_back(message.into());
-        self.output(ctx, PORT_MESSAGES, AgentValue::array(messages))
+        self.output(ctx, PORT_MESSAGES, Value::array(messages))
             .await?;
 
         Ok(())
     }
 }
 
-/// State shared by the session-backed Messages agents: the active session
+/// State shared by the session-backed Messages modules: the active session
 /// and the in-memory caches used to build the emitted context.
 #[derive(Default)]
 struct SessionState {
-    /// Session the agent appends to, resolved in `start()`.
+    /// Session the module appends to, resolved in `start()`.
     session_id: Option<String>,
 
     /// In-memory cache of the session's entries, replayed in `start()`.
@@ -315,25 +287,25 @@ struct SessionState {
 }
 
 impl SessionState {
-    fn session_id(&self) -> Result<&str, AgentError> {
+    fn session_id(&self) -> Result<&str> {
         self.session_id
             .as_deref()
-            .ok_or_else(|| AgentError::Other("Session is not initialized".to_string()))
+            .ok_or_else(|| Error::Other("Session is not initialized".to_string()))
     }
 }
 
 /// Store and state access shared by [`process_session_input`] across the
-/// Messages agents; each agent keeps its own store kind (in-memory vs JSONL
+/// Messages modules; each module keeps its own store kind (in-memory vs JSONL
 /// files).
-trait SessionMessages: AsAgent {
-    fn store(&self) -> Result<Arc<dyn SessionStore>, AgentError>;
+trait SessionMessages: AsModule {
+    fn store(&self) -> Result<Arc<dyn SessionStore>>;
 
     fn session_state_mut(&mut self) -> &mut SessionState;
 
     /// Whether pruned entries are also removed from the store. The
-    /// in-memory agent always prunes its store (that store *is* the memory
-    /// being bounded); the file agent consults its `prune_file` config.
-    fn prune_store(&self) -> Result<bool, AgentError> {
+    /// in-memory module always prunes its store (that store *is* the memory
+    /// being bounded); the file module consults its `prune_file` config.
+    fn prune_store(&self) -> Result<bool> {
         Ok(true)
     }
 
@@ -346,7 +318,7 @@ trait SessionMessages: AsAgent {
 async fn resolve_session(
     store: &Arc<dyn SessionStore>,
     configured_id: String,
-) -> Result<(String, Vec<SessionEntry>), AgentError> {
+) -> Result<(String, Vec<SessionEntry>)> {
     if configured_id.is_empty() {
         let id = store.create(SessionMeta::new()).await?;
         return Ok((id, Vec::new()));
@@ -372,18 +344,18 @@ async fn resolve_session(
 
 /// Write an issued session id back to the config and push it to the UI;
 /// `set_config` alone emits no event.
-fn publish_session_id<A: SessionMessages>(agent: &mut A, id: &str) -> Result<(), AgentError> {
-    agent.set_config(CONFIG_SESSION_ID.to_string(), AgentValue::string(id))?;
-    agent.emit_config_updated(CONFIG_SESSION_ID, AgentValue::string(id));
+fn publish_session_id<A: SessionMessages>(module: &mut A, id: &str) -> Result<()> {
+    module.set_config(CONFIG_SESSION_ID.to_string(), Value::string(id))?;
+    module.emit_config_updated(CONFIG_SESSION_ID, Value::string(id));
     Ok(())
 }
 
 /// Convert an input value into a batch of message values, or `None` when the
 /// input is empty and there is nothing to append.
-fn to_message_batch(value: AgentValue) -> Result<Option<Vector<AgentValue>>, AgentError> {
+fn to_message_batch(value: Value) -> Result<Option<Vector<Value>>> {
     let message = value
         .to_message_value()
-        .ok_or_else(|| AgentError::InvalidValue("Input contains non-Message values".to_string()))?;
+        .ok_or_else(|| Error::InvalidValue("Input contains non-Message values".to_string()))?;
     let messages = if message.is_array() {
         message.into_array().unwrap_or_default()
     } else {
@@ -401,7 +373,7 @@ async fn append_messages(
     state: &mut SessionState,
     messages: &[Message],
     max_message_tokens: i64,
-) -> Result<(), AgentError> {
+) -> Result<()> {
     let session_id = state.session_id()?.to_string();
     for message in messages {
         if message.streaming {
@@ -419,37 +391,37 @@ async fn append_messages(
     Ok(())
 }
 
-/// Shared `process()` body for the Messages agents: `reset` swaps in a new
+/// Shared `process()` body for the Messages modules: `reset` swaps in a new
 /// session, a unit input re-emits the current window, and anything else is
 /// appended as messages — emitting the context window only when the
 /// arriving message is a user message or tool result.
 async fn process_session_input<A: SessionMessages>(
-    agent: &mut A,
-    ctx: AgentContext,
+    module: &mut A,
+    ctx: ModuleContext,
     port: String,
-    value: AgentValue,
-) -> Result<(), AgentError> {
+    value: Value,
+) -> Result<()> {
     if port == PORT_RESET {
-        let store = agent.store()?;
+        let store = module.store()?;
         let id = store.create(SessionMeta::new()).await?;
-        publish_session_id(agent, &id)?;
-        let state = agent.session_state_mut();
+        publish_session_id(module, &id)?;
+        let state = module.session_state_mut();
         state.session_id = Some(id.clone());
         state.entries.clear();
         // Publish the switch before the (ambiguous) empty context so
-        // downstream agents can tell a reset from an empty session.
-        agent
-            .output(ctx.clone(), PORT_SESSION_ID, AgentValue::string(id))
+        // downstream modules can tell a reset from an empty session.
+        module
+            .output(ctx.clone(), PORT_SESSION_ID, Value::string(id))
             .await?;
-        agent
-            .output(ctx, PORT_MESSAGES, AgentValue::array_default())
+        module
+            .output(ctx, PORT_MESSAGES, Value::array_default())
             .await?;
         return Ok(());
     }
 
     if value.is_unit() {
         // Re-emit without appending; read-only, so nothing is pruned.
-        return emit_window(agent, ctx, false).await;
+        return emit_window(module, ctx, false).await;
     }
 
     let Some(in_values) = to_message_batch(value)? else {
@@ -457,33 +429,33 @@ async fn process_session_input<A: SessionMessages>(
     };
     let mut in_messages: Vec<Message> = Vec::with_capacity(in_values.len());
     for value in &in_values {
-        let message = value.as_message().ok_or_else(|| {
-            AgentError::InvalidValue("Input contains non-Message values".to_string())
-        })?;
+        let message = value
+            .as_message()
+            .ok_or_else(|| Error::InvalidValue("Input contains non-Message values".to_string()))?;
         in_messages.push(message.clone());
     }
 
-    let configs = agent.configs()?;
+    let configs = module.configs()?;
     let max_message_tokens = configs.get_integer_or_default(CONFIG_MAX_MESSAGE_TOKENS);
     let max_context_tokens = configs.get_integer_or_default(CONFIG_MAX_CONTEXT_TOKENS);
     let summarize_model = configs.get_string_or_default(CONFIG_SUMMARIZE_MODEL);
 
     // The arriving message — the batch's last non-streaming one — decides
     // whether the window is emitted: only a user message or tool result
-    // gives a downstream Chat agent something to respond to.
+    // gives a downstream Chat module something to respond to.
     let trigger = in_messages
         .iter()
         .rposition(|m| !m.streaming)
         .map(|i| (i, in_messages[i].role.clone()));
 
-    let store = agent.store()?;
+    let store = module.store()?;
     if let Some((anchor_index, role)) = &trigger
         && role == "user"
     {
         // Append everything before the anchor first, so the anchor's budget
         // trim sees the system message even when it arrived in this batch.
         let (head, tail) = in_messages.split_at(*anchor_index);
-        append_messages(&store, agent.session_state_mut(), head, max_message_tokens).await?;
+        append_messages(&store, module.session_state_mut(), head, max_message_tokens).await?;
         let mut anchor = tail[0].clone();
         if max_message_tokens > 0
             && let Some(trimmed) = middle_trim(&anchor, max_message_tokens as u64)
@@ -495,7 +467,7 @@ async fn process_session_input<A: SessionMessages>(
             // pinned summary when summarization is on — plus this user
             // message; trim the user so at least that much fits.
             let (context_ids, context): (Vec<Option<String>>, Vec<Message>) =
-                build_context_with_ids(&agent.session_state_mut().entries)
+                build_context_with_ids(&module.session_state_mut().entries)
                     .into_iter()
                     .unzip();
             let system_tokens = context
@@ -517,11 +489,11 @@ async fn process_session_input<A: SessionMessages>(
                 anchor = trimmed;
             }
         }
-        append_messages(&store, agent.session_state_mut(), &[anchor], 0).await?;
+        append_messages(&store, module.session_state_mut(), &[anchor], 0).await?;
     } else {
         append_messages(
             &store,
-            agent.session_state_mut(),
+            module.session_state_mut(),
             &in_messages,
             max_message_tokens,
         )
@@ -529,7 +501,7 @@ async fn process_session_input<A: SessionMessages>(
     }
 
     match trigger.as_ref().map(|(_, role)| role.as_str()) {
-        Some("user") | Some("tool") => emit_window(agent, ctx, true).await,
+        Some("user") | Some("tool") => emit_window(module, ctx, true).await,
         _ => Ok(()),
     }
 }
@@ -697,11 +669,11 @@ fn prunable_entry_ids(
 /// first folded into the rolling summary; the window is emitted *before*
 /// the summarization request, so the downstream turn never waits on it.
 async fn emit_window<A: SessionMessages>(
-    agent: &mut A,
-    ctx: AgentContext,
+    module: &mut A,
+    ctx: ModuleContext,
     prune: bool,
-) -> Result<(), AgentError> {
-    let configs = agent.configs()?;
+) -> Result<()> {
+    let configs = module.configs()?;
     let max_context_tokens = configs.get_integer_or_default(CONFIG_MAX_CONTEXT_TOKENS);
     let max_messages = configs.get_integer_or_default(CONFIG_MAX_MESSAGES);
     let summary_max_tokens = configs.get_integer_or_default(CONFIG_SUMMARY_MAX_TOKENS);
@@ -725,7 +697,7 @@ async fn emit_window<A: SessionMessages>(
     };
 
     let (context_ids, context): (Vec<Option<String>>, Vec<Message>) =
-        build_context_with_ids(&agent.session_state_mut().entries)
+        build_context_with_ids(&module.session_state_mut().entries)
             .into_iter()
             .unzip();
     // The injected summary is the only context message without a backing
@@ -737,7 +709,7 @@ async fn emit_window<A: SessionMessages>(
         return Ok(());
     };
 
-    let mut out: Vector<AgentValue> = Vector::new();
+    let mut out: Vector<Value> = Vector::new();
     if let Some(i) = window.pinned_system {
         out.push_back(context[i].clone().into());
     }
@@ -750,21 +722,21 @@ async fn emit_window<A: SessionMessages>(
         }
     }
 
-    agent
-        .output(ctx.clone(), PORT_MESSAGES, AgentValue::array(out))
+    module
+        .output(ctx.clone(), PORT_MESSAGES, Value::array(out))
         .await?;
 
     if prune && (max_context_tokens > 0 || max_messages > 0) {
         let prunable =
-            prunable_entry_ids(&agent.session_state_mut().entries, &context_ids, &window);
+            prunable_entry_ids(&module.session_state_mut().entries, &context_ids, &window);
         if prunable.ids.is_empty() {
             return Ok(());
         }
         match &summarize_model_id {
             Some(model_id) => {
-                summarize_and_prune(agent, &ctx, prunable, model_id, summary_max_tokens).await?;
+                summarize_and_prune(module, &ctx, prunable, model_id, summary_max_tokens).await?;
             }
-            None => remove_prunable(agent, &prunable.ids).await?,
+            None => remove_prunable(module, &prunable.ids).await?,
         }
     }
     Ok(())
@@ -772,16 +744,13 @@ async fn emit_window<A: SessionMessages>(
 
 /// Remove pruned entries — from the store when
 /// [`SessionMessages::prune_store`] says so, always from the cache.
-async fn remove_prunable<A: SessionMessages>(
-    agent: &mut A,
-    ids: &[String],
-) -> Result<(), AgentError> {
-    if agent.prune_store()? {
-        let store = agent.store()?;
-        let session_id = agent.session_state_mut().session_id()?.to_string();
+async fn remove_prunable<A: SessionMessages>(module: &mut A, ids: &[String]) -> Result<()> {
+    if module.prune_store()? {
+        let store = module.store()?;
+        let session_id = module.session_state_mut().session_id()?.to_string();
         store.remove_entries(&session_id, ids).await?;
     }
-    let state = agent.session_state_mut();
+    let state = module.session_state_mut();
     state.entries.retain(|e| !ids.iter().any(|id| id == e.id()));
     Ok(())
 }
@@ -792,23 +761,23 @@ async fn remove_prunable<A: SessionMessages>(
 /// [`build_context`](modular_agent_core::build_context) injects it and the
 /// session file replays it.
 ///
-/// The summarization request runs once, with no retries — the agent
+/// The summarization request runs once, with no retries — the module
 /// processes inputs serially, and retrying here would stall the whole
 /// conversation behind it. On failure nothing is pruned: the entries stay
 /// a superset of the context (the emitted window is budgeted regardless),
 /// and the next user/tool arrival triggers a fresh attempt covering the
 /// kept history plus whatever was evicted since.
 async fn summarize_and_prune<A: SessionMessages>(
-    agent: &mut A,
-    ctx: &AgentContext,
+    module: &mut A,
+    ctx: &ModuleContext,
     prunable: Prunable,
     model_id: &ModelIdentifier,
     summary_max_tokens: i64,
-) -> Result<(), AgentError> {
+) -> Result<()> {
     // The latest marker's summary is the incremental baseline; Message
     // entries before its first kept entry are already covered by it and
     // must not be summarized twice.
-    let state = agent.session_state_mut();
+    let state = module.session_state_mut();
     let latest_marker = state
         .entries
         .iter()
@@ -851,7 +820,7 @@ async fn summarize_and_prune<A: SessionMessages>(
     if newly_evicted.is_empty() {
         // Only marker-hidden history and dead markers are being cleaned;
         // the summary already covers all of it.
-        return remove_prunable(agent, &prunable.ids).await;
+        return remove_prunable(module, &prunable.ids).await;
     }
     let Some(first_kept_id) = prunable.first_kept_entry_id else {
         // A window holding only the injected summary keeps everything
@@ -868,14 +837,14 @@ async fn summarize_and_prune<A: SessionMessages>(
     let retry = RetryPolicy::from_configs(0, SUMMARY_RETRY_BASE_DELAY_MS, SUMMARY_TIMEOUT_SECS);
     let cap =
         (summary_max_tokens > 0).then(|| u32::try_from(summary_max_tokens).unwrap_or(u32::MAX));
-    let ma = agent.ma().clone();
-    let summary = match agent
+    let ma = module.ma().clone();
+    let summary = match module
         .summarizer()
         .summarize(&ma, ctx, model_id, prompt, retry, cap)
         .await
     {
         Ok(summary) => summary,
-        Err(AgentError::Cancelled) => return Ok(()),
+        Err(Error::Cancelled) => return Ok(()),
         Err(e) => {
             log::warn!("Summarizing evicted history failed; keeping it for the next attempt: {e}");
             return Ok(());
@@ -885,11 +854,11 @@ async fn summarize_and_prune<A: SessionMessages>(
     // Append the new marker before removing anything: an interruption in
     // between leaves two markers, of which build_context takes the last
     // and the next prune collects the older.
-    let store = agent.store()?;
-    let session_id = agent.session_state_mut().session_id()?.to_string();
+    let store = module.store()?;
+    let session_id = module.session_state_mut().session_id()?.to_string();
     let entry = SessionEntry::compaction(summary, first_kept_id, None);
     store.append(&session_id, entry.clone()).await?;
-    agent.session_state_mut().entries.push(entry);
+    module.session_state_mut().entries.push(entry);
 
     let mut removal = prunable.ids;
     if let Some(id) = marker_id
@@ -897,7 +866,7 @@ async fn summarize_and_prune<A: SessionMessages>(
     {
         removal.push(id);
     }
-    remove_prunable(agent, &removal).await
+    remove_prunable(module, &removal).await
 }
 
 /// Middle-trims a message's text so its estimated tokens fit
@@ -1027,17 +996,17 @@ fn ceil_char_boundary(s: &str, mut index: usize) -> usize {
 /// Accumulate messages in an in-memory session store.
 ///
 /// Received messages are appended to a session (a conversation log). The
-/// history lives in memory only: it is retained across agent stop/start
+/// history lives in memory only: it is retained across module stop/start
 /// within the same process and lost when the process exits. To persist
-/// sessions as files that survive restarts, use the File Messages agent
+/// sessions as files that survive restarts, use the File Messages module
 /// instead.
 ///
 /// The conversation context is emitted on `messages` only when the arriving
 /// message — the last non-streaming message of the input — is a user
-/// message or a tool result, i.e. exactly when a downstream Chat agent has
+/// message or a tool result, i.e. exactly when a downstream Chat module has
 /// something to respond to. Assistant messages are stored without emitting;
 /// streaming partials (`streaming == true`) are ignored entirely, neither
-/// stored nor emitted — emit intermediate output from the Chat agent's own
+/// stored nor emitted — emit intermediate output from the Chat module's own
 /// message port instead. The emitted array is prompt-ready: an optional
 /// system message first (when the history holds several, only the last one
 /// is kept), then messages starting with a user message and ending with the
@@ -1071,7 +1040,7 @@ fn ceil_char_boundary(s: &str, mut index: usize) -> usize {
 /// message), whose tokens count against `max_context_tokens`;
 /// `summary_max_tokens` bounds the summary's length. The window is emitted
 /// *before* the summarization request, so the downstream turn never waits
-/// on it — only this agent's own next inputs queue behind the request. On
+/// on it — only this module's own next inputs queue behind the request. On
 /// a failed request the evicted history is kept (the session can
 /// temporarily exceed the budgets; the emitted window stays bounded) and
 /// the next eviction retries, covering it along with anything evicted
@@ -1082,7 +1051,7 @@ fn ceil_char_boundary(s: &str, mut index: usize) -> usize {
 /// written back to the config, and emitted on the `session_id` port, then an
 /// empty array is emitted on `messages`. The previous session is left
 /// untouched; to resume a past conversation, set `session_id` to its id and
-/// restart the agent.
+/// restart the module.
 ///
 /// Patches saved before session support carried the history in a hidden
 /// `messages` config. On the first start that history is imported once into
@@ -1121,7 +1090,7 @@ fn ceil_char_boundary(s: &str, mut index: usize) -> usize {
 ///
 /// # Global Configuration
 /// With `summarize_model` set, uses the same provider credentials as the
-/// `Chat` agent (`claude_api_key`, `openai_api_key`, `ollama_url`, and the
+/// `Chat` module (`claude_api_key`, `openai_api_key`, `ollama_url`, and the
 /// corresponding base URLs).
 #[modular_agent(
     title="Messages",
@@ -1136,10 +1105,10 @@ fn ceil_char_boundary(s: &str, mut index: usize) -> usize {
     string_config(name=CONFIG_SESSION_ID, default="", detail),
     hint(width = 2, height = 1),
 )]
-pub struct MessagesAgent {
-    data: AgentData,
+pub struct MessagesModule {
+    data: ModuleData,
 
-    /// The agent instance owns its store, and keeping it here across
+    /// The module instance owns its store, and keeping it here across
     /// stop()/start() is what preserves the history for the lifetime of
     /// the process.
     store: Option<Arc<dyn SessionStore>>,
@@ -1153,7 +1122,7 @@ pub struct MessagesAgent {
     pending_import: Option<Vec<Message>>,
 }
 
-impl MessagesAgent {
+impl MessagesModule {
     fn resolve_store(&mut self) -> Arc<dyn SessionStore> {
         if let Some(store) = &self.store {
             return store.clone();
@@ -1164,11 +1133,11 @@ impl MessagesAgent {
     }
 }
 
-impl SessionMessages for MessagesAgent {
-    fn store(&self) -> Result<Arc<dyn SessionStore>, AgentError> {
+impl SessionMessages for MessagesModule {
+    fn store(&self) -> Result<Arc<dyn SessionStore>> {
         self.store
             .clone()
-            .ok_or_else(|| AgentError::Other("Session store is not initialized".to_string()))
+            .ok_or_else(|| Error::Other("Session store is not initialized".to_string()))
     }
 
     fn session_state_mut(&mut self) -> &mut SessionState {
@@ -1181,9 +1150,9 @@ impl SessionMessages for MessagesAgent {
 }
 
 #[async_trait]
-impl AsAgent for MessagesAgent {
-    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
-        // Read the stale keys here: AgentData::new() strips `_`-prefixed
+impl AsModule for MessagesModule {
+    fn new(ma: ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
+        // Read the stale keys here: ModuleData::new() strips `_`-prefixed
         // config keys preserved by reconcile_spec().
         let pending_import: Option<Vec<Message>> = spec
             .configs
@@ -1202,7 +1171,7 @@ impl AsAgent for MessagesAgent {
 
         // A leftover `session_dir` means this node persisted its sessions
         // before the in-memory/file split; that is now the File Messages
-        // agent's job.
+        // module's job.
         let stale_dir = spec
             .configs
             .as_ref()
@@ -1213,13 +1182,13 @@ impl AsAgent for MessagesAgent {
             .is_some_and(|d| !d.is_empty())
         {
             log::warn!(
-                "Messages agent {id} no longer saves sessions to disk; \
-                 replace it with a File Messages agent to keep them in files"
+                "Messages module {id} no longer saves sessions to disk; \
+                 replace it with a File Messages module to keep them in files"
             );
         }
 
         Ok(Self {
-            data: AgentData::new(ma, id, spec),
+            data: ModuleData::new(ma, id, spec),
             store: None,
             state: SessionState::default(),
             managers: ProviderManagers::new(),
@@ -1227,7 +1196,7 @@ impl AsAgent for MessagesAgent {
         })
     }
 
-    async fn start(&mut self) -> Result<(), AgentError> {
+    async fn start(&mut self) -> Result<()> {
         let store = self.resolve_store();
 
         let configured_id = self.configs()?.get_string_or_default(CONFIG_SESSION_ID);
@@ -1272,12 +1241,7 @@ impl AsAgent for MessagesAgent {
         Ok(())
     }
 
-    async fn process(
-        &mut self,
-        ctx: AgentContext,
-        port: String,
-        value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, ctx: ModuleContext, port: String, value: Value) -> Result<()> {
         process_session_input(self, ctx, port, value).await
     }
 }
@@ -1286,15 +1250,15 @@ impl AsAgent for MessagesAgent {
 ///
 /// Received messages are appended to a session (a conversation log)
 /// persisted as `<session_dir>/<session_id>.jsonl`. Sessions survive
-/// restarts; to keep the history in memory only, use the Messages agent
+/// restarts; to keep the history in memory only, use the Messages module
 /// instead.
 ///
 /// The conversation context is emitted on `messages` only when the arriving
 /// message — the last non-streaming message of the input — is a user
-/// message or a tool result, i.e. exactly when a downstream Chat agent has
+/// message or a tool result, i.e. exactly when a downstream Chat module has
 /// something to respond to. Assistant messages are stored without emitting;
 /// streaming partials (`streaming == true`) are ignored entirely, neither
-/// stored nor emitted — emit intermediate output from the Chat agent's own
+/// stored nor emitted — emit intermediate output from the Chat module's own
 /// message port instead. The emitted array is prompt-ready: an optional
 /// system message first (when the history holds several, only the last one
 /// is kept), then messages starting with a user message and ending with the
@@ -1329,7 +1293,7 @@ impl AsAgent for MessagesAgent {
 /// message), whose tokens count against `max_context_tokens`;
 /// `summary_max_tokens` bounds the summary's length. The window is emitted
 /// *before* the summarization request, so the downstream turn never waits
-/// on it — only this agent's own next inputs queue behind the request. On
+/// on it — only this module's own next inputs queue behind the request. On
 /// a failed request the evicted history is kept (the session can
 /// temporarily exceed the budgets; the emitted window stays bounded) and
 /// the next eviction retries, covering it along with anything evicted
@@ -1342,11 +1306,11 @@ impl AsAgent for MessagesAgent {
 /// written back to the config, and emitted on the `session_id` port, then an
 /// empty array is emitted on `messages`. The previous session is left
 /// untouched; to resume a past conversation, set `session_id` to its id and
-/// restart the agent.
+/// restart the module.
 ///
-/// `session_dir` is applied when the agent starts; the agent fails to start
-/// while it is empty. Changing it while the agent is running makes further
-/// inputs fail with a config error until the agent is restarted.
+/// `session_dir` is applied when the module starts; the module fails to start
+/// while it is empty. Changing it while the module is running makes further
+/// inputs fail with a config error until the module is restarted.
 ///
 /// # Ports
 /// - Input `message`: Message or array of messages to append. The context
@@ -1361,7 +1325,7 @@ impl AsAgent for MessagesAgent {
 ///
 /// # Configuration
 /// - `session_dir`: Directory for the JSONL session files. Required; the
-///   agent fails to start while it is empty (default: "")
+///   module fails to start while it is empty (default: "")
 /// - `max_context_tokens`: Estimated-token budget for the emitted window;
 ///   history outside the window is dropped (see `prune_file`). 0 disables
 ///   the limit (default: 0)
@@ -1380,7 +1344,7 @@ impl AsAgent for MessagesAgent {
 /// - `prune_file`: Also delete history that fell out of the window from the
 ///   session file; memory always drops it. Beware: resuming a long session
 ///   with a window limit set irreversibly deletes everything outside the
-///   window on the first emit, and when two agents share one session file,
+///   window on the first emit, and when two modules share one session file,
 ///   a rewrite by one can lose an append the other made meanwhile. Turn off
 ///   to keep the full history on disk (default: true)
 /// - `session_id`: Session to resume on start. Empty: a new session is
@@ -1388,7 +1352,7 @@ impl AsAgent for MessagesAgent {
 ///
 /// # Global Configuration
 /// With `summarize_model` set, uses the same provider credentials as the
-/// `Chat` agent (`claude_api_key`, `openai_api_key`, `ollama_url`, and the
+/// `Chat` module (`claude_api_key`, `openai_api_key`, `ollama_url`, and the
 /// corresponding base URLs).
 #[modular_agent(
     title="File Messages",
@@ -1405,8 +1369,8 @@ impl AsAgent for MessagesAgent {
     string_config(name=CONFIG_SESSION_ID, default="", detail),
     hint(width = 2, height = 1),
 )]
-pub struct FileMessagesAgent {
-    data: AgentData,
+pub struct FileMessagesModule {
+    data: ModuleData,
 
     /// Active store tagged with the `session_dir` it was created for.
     store: Option<(String, Arc<dyn SessionStore>)>,
@@ -1416,13 +1380,11 @@ pub struct FileMessagesAgent {
     managers: ProviderManagers,
 }
 
-impl FileMessagesAgent {
-    fn resolve_store(&mut self) -> Result<Arc<dyn SessionStore>, AgentError> {
+impl FileMessagesModule {
+    fn resolve_store(&mut self) -> Result<Arc<dyn SessionStore>> {
         let dir = self.configs()?.get_string_or_default(CONFIG_SESSION_DIR);
         if dir.is_empty() {
-            return Err(AgentError::InvalidConfig(
-                "session_dir is required".to_string(),
-            ));
+            return Err(Error::InvalidConfig("session_dir is required".to_string()));
         }
         if let Some((store_dir, store)) = &self.store
             && *store_dir == dir
@@ -1435,19 +1397,19 @@ impl FileMessagesAgent {
     }
 }
 
-impl SessionMessages for FileMessagesAgent {
-    fn store(&self) -> Result<Arc<dyn SessionStore>, AgentError> {
+impl SessionMessages for FileMessagesModule {
+    fn store(&self) -> Result<Arc<dyn SessionStore>> {
         let (store_dir, store) = self
             .store
             .as_ref()
-            .ok_or_else(|| AgentError::Other("Session store is not initialized".to_string()))?;
+            .ok_or_else(|| Error::Other("Session store is not initialized".to_string()))?;
         // The store is bound to session_dir in start(). Failing loudly on a
         // runtime mismatch beats silently writing into the old directory
         // while the config points at the new one.
         let dir = self.configs()?.get_string_or_default(CONFIG_SESSION_DIR);
         if *store_dir != dir {
-            return Err(AgentError::InvalidConfig(
-                "session_dir changed while the agent is running; restart the agent to apply it"
+            return Err(Error::InvalidConfig(
+                "session_dir changed while the module is running; restart the module to apply it"
                     .to_string(),
             ));
         }
@@ -1458,7 +1420,7 @@ impl SessionMessages for FileMessagesAgent {
         &mut self.state
     }
 
-    fn prune_store(&self) -> Result<bool, AgentError> {
+    fn prune_store(&self) -> Result<bool> {
         Ok(self.configs()?.get_bool_or(CONFIG_PRUNE_FILE, true))
     }
 
@@ -1468,17 +1430,17 @@ impl SessionMessages for FileMessagesAgent {
 }
 
 #[async_trait]
-impl AsAgent for FileMessagesAgent {
-    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+impl AsModule for FileMessagesModule {
+    fn new(ma: ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
         Ok(Self {
-            data: AgentData::new(ma, id, spec),
+            data: ModuleData::new(ma, id, spec),
             store: None,
             state: SessionState::default(),
             managers: ProviderManagers::new(),
         })
     }
 
-    async fn start(&mut self) -> Result<(), AgentError> {
+    async fn start(&mut self) -> Result<()> {
         let store = self.resolve_store()?;
 
         let configured_id = self.configs()?.get_string_or_default(CONFIG_SESSION_ID);
@@ -1492,21 +1454,16 @@ impl AsAgent for FileMessagesAgent {
         Ok(())
     }
 
-    async fn process(
-        &mut self,
-        ctx: AgentContext,
-        port: String,
-        value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, ctx: ModuleContext, port: String, value: Value) -> Result<()> {
         process_session_input(self, ctx, port, value).await
     }
 }
 
 /// Trim a message history to fit a prompt budget.
 ///
-/// For message streams assembled without the session-backed agents; the
-/// Messages and File Messages agents apply their own `max_context_tokens`
-/// window before emitting and do not need this agent downstream.
+/// For message streams assembled without the session-backed modules; the
+/// Messages and File Messages modules apply their own `max_context_tokens`
+/// window before emitting and do not need this module downstream.
 ///
 /// Selects messages from newest to oldest until the budget is exhausted,
 /// so the most recent conversation always survives. A leading system
@@ -1540,24 +1497,19 @@ impl AsAgent for FileMessagesAgent {
     integer_config(name=CONFIG_MAX_SIZE),
     hint(width = 2, height = 1),
 )]
-pub struct MessagesForPromptAgent {
-    data: AgentData,
+pub struct MessagesForPromptModule {
+    data: ModuleData,
 }
 
 #[async_trait]
-impl AsAgent for MessagesForPromptAgent {
-    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+impl AsModule for MessagesForPromptModule {
+    fn new(ma: ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
         Ok(Self {
-            data: AgentData::new(ma, id, spec),
+            data: ModuleData::new(ma, id, spec),
         })
     }
 
-    async fn process(
-        &mut self,
-        ctx: AgentContext,
-        _port: String,
-        value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, ctx: ModuleContext, _port: String, value: Value) -> Result<()> {
         let configs = self.configs()?;
         let max_size = configs.get_integer_or_default(CONFIG_MAX_SIZE);
         let max_tokens = configs.get_integer_or_default(CONFIG_MAX_TOKENS);
@@ -1567,9 +1519,9 @@ impl AsAgent for MessagesForPromptAgent {
             return Ok(());
         }
 
-        let messages_value = value.to_message_value().ok_or_else(|| {
-            AgentError::InvalidValue("Input contains non-Message values".to_string())
-        })?;
+        let messages_value = value
+            .to_message_value()
+            .ok_or_else(|| Error::InvalidValue("Input contains non-Message values".to_string()))?;
         let mut messages = if messages_value.is_array() {
             messages_value.as_array().unwrap().clone()
         } else {
@@ -1590,7 +1542,7 @@ impl AsAgent for MessagesForPromptAgent {
         let mut total: u64 = 0;
 
         // Extract system message if exists
-        let mut system_message: Option<AgentValue> = None;
+        let mut system_message: Option<Value> = None;
         if messages.front().unwrap().as_message().unwrap().role == "system" {
             let msg = messages.pop_front().unwrap();
             let m = msg.as_message().unwrap();
@@ -1603,7 +1555,7 @@ impl AsAgent for MessagesForPromptAgent {
         }
 
         // Collect messages in reverse order
-        let mut selected_messages: Vec<AgentValue> = Vec::with_capacity(messages.len());
+        let mut selected_messages: Vec<Value> = Vec::with_capacity(messages.len());
         while !messages.is_empty() {
             let value = messages.pop_back().unwrap();
             let msg = value.as_message().unwrap();
@@ -1651,7 +1603,7 @@ impl AsAgent for MessagesForPromptAgent {
             total += msg_size;
 
             if let Some(m) = stripped {
-                selected_messages.push(AgentValue::message(m));
+                selected_messages.push(Value::message(m));
             } else {
                 selected_messages.push(value);
             }
@@ -1723,42 +1675,42 @@ fn strip_unsigned_thinking(msg: &Message) -> Option<Message> {
 mod tests {
     use super::*;
     use im::hashmap;
-    use modular_agent_core::test_utils::{ProbeReceiver, TestProbeAgent, probe_receiver};
-    use modular_agent_core::{AgentStatus, ConnectionSpec};
+    use modular_agent_core::test_utils::{ProbeReceiver, TestProbeModule, probe_receiver};
+    use modular_agent_core::{ConnectionSpec, ModuleStatus};
 
     /// The prefix `build_context` (modular-agent-core) puts on the injected
     /// summary message.
     const SUMMARY_PREFIX: &str = "[Conversation summary]\n";
 
-    /// `start_patch` returns before the spawned agent loop has run
-    /// `AsAgent::start`; wait until the status flips to `Start` (set under
+    /// `start_patch` returns before the spawned module loop has run
+    /// `AsModule::start`; wait until the status flips to `Start` (set under
     /// the same lock as `start()`, so seeing it means `start()` finished).
-    async fn wait_until_started(ma: &ModularAgent, agent_id: &str) {
+    async fn wait_until_started(ma: &ModularAgent, module_id: &str) {
         for _ in 0..200 {
             {
-                let agent = ma.get_agent(agent_id).unwrap();
-                let guard = agent.lock().await;
-                if *guard.status() == AgentStatus::Start {
+                let module = ma.get_module(module_id).unwrap();
+                let guard = module.lock().await;
+                if *guard.status() == ModuleStatus::Start {
                     return;
                 }
             }
             tokio::time::sleep(std::time::Duration::from_millis(10)).await;
         }
-        panic!("agent {agent_id} did not start in time");
+        panic!("module {module_id} did not start in time");
     }
 
-    /// Build a running patch with a session-backed agent of `def_name`
+    /// Build a running patch with a session-backed module of `def_name`
     /// (configured via `configs`) whose `messages` and `session_id` ports
     /// each feed a probe.
-    async fn setup_session_agent(
+    async fn setup_session_module(
         def_name: &str,
-        configs: Vec<(&str, AgentValue)>,
+        configs: Vec<(&str, Value)>,
     ) -> (ModularAgent, String, String, ProbeReceiver, ProbeReceiver) {
         let ma = ModularAgent::init().unwrap();
         ma.ready().await.unwrap();
 
         let patch_id = ma.new_patch().unwrap();
-        let def = ma.get_agent_definition(def_name).unwrap();
+        let def = ma.get_module_definition(def_name).unwrap();
         let mut spec = def.to_spec();
         {
             let spec_configs = spec.configs.as_mut().unwrap();
@@ -1766,17 +1718,17 @@ mod tests {
                 spec_configs.set(key.into(), value);
             }
         }
-        let agent_id = ma.add_agent(patch_id.clone(), spec).await.unwrap();
+        let module_id = ma.add_module(patch_id.clone(), spec).await.unwrap();
 
-        let probe_def = ma.get_agent_definition(TestProbeAgent::DEF_NAME).unwrap();
+        let probe_def = ma.get_module_definition(TestProbeModule::DEF_NAME).unwrap();
         let probe_id = ma
-            .add_agent(patch_id.clone(), probe_def.to_spec())
+            .add_module(patch_id.clone(), probe_def.to_spec())
             .await
             .unwrap();
         ma.add_connection(
             &patch_id,
             ConnectionSpec {
-                source: agent_id.clone(),
+                source: module_id.clone(),
                 source_handle: PORT_MESSAGES.into(),
                 target: probe_id.clone(),
                 target_handle: "value".into(),
@@ -1786,13 +1738,13 @@ mod tests {
         .unwrap();
 
         let session_probe_id = ma
-            .add_agent(patch_id.clone(), probe_def.to_spec())
+            .add_module(patch_id.clone(), probe_def.to_spec())
             .await
             .unwrap();
         ma.add_connection(
             &patch_id,
             ConnectionSpec {
-                source: agent_id.clone(),
+                source: module_id.clone(),
                 source_handle: PORT_SESSION_ID.into(),
                 target: session_probe_id.clone(),
                 target_handle: "value".into(),
@@ -1802,45 +1754,45 @@ mod tests {
         .unwrap();
 
         ma.start_patch(&patch_id).await.unwrap();
-        wait_until_started(&ma, &agent_id).await;
+        wait_until_started(&ma, &module_id).await;
         let probe_rx = probe_receiver(&ma, &probe_id).await.unwrap();
         let session_rx = probe_receiver(&ma, &session_probe_id).await.unwrap();
 
-        (ma, patch_id, agent_id, probe_rx, session_rx)
+        (ma, patch_id, module_id, probe_rx, session_rx)
     }
 
-    async fn setup_messages_agent(
-        configs: Vec<(&str, AgentValue)>,
+    async fn setup_messages_module(
+        configs: Vec<(&str, Value)>,
     ) -> (ModularAgent, String, String, ProbeReceiver, ProbeReceiver) {
-        setup_session_agent(MessagesAgent::DEF_NAME, configs).await
+        setup_session_module(MessagesModule::DEF_NAME, configs).await
     }
 
-    async fn setup_file_messages_agent(
-        configs: Vec<(&str, AgentValue)>,
+    async fn setup_file_messages_module(
+        configs: Vec<(&str, Value)>,
     ) -> (ModularAgent, String, String, ProbeReceiver, ProbeReceiver) {
-        setup_session_agent(FileMessagesAgent::DEF_NAME, configs).await
+        setup_session_module(FileMessagesModule::DEF_NAME, configs).await
     }
 
-    async fn send_as<T: AsAgent>(ma: &ModularAgent, agent_id: &str, port: &str, value: AgentValue) {
-        let agent = ma.get_agent(agent_id).unwrap();
-        let mut guard = agent.lock().await;
-        let target = guard.as_agent_mut::<T>().unwrap();
-        AsAgent::process(target, AgentContext::new(), port.to_string(), value)
+    async fn send_as<T: AsModule>(ma: &ModularAgent, module_id: &str, port: &str, value: Value) {
+        let module = ma.get_module(module_id).unwrap();
+        let mut guard = module.lock().await;
+        let target = guard.as_module_mut::<T>().unwrap();
+        AsModule::process(target, ModuleContext::new(), port.to_string(), value)
             .await
             .unwrap();
     }
 
-    async fn send(ma: &ModularAgent, agent_id: &str, port: &str, value: AgentValue) {
-        send_as::<MessagesAgent>(ma, agent_id, port, value).await
+    async fn send(ma: &ModularAgent, module_id: &str, port: &str, value: Value) {
+        send_as::<MessagesModule>(ma, module_id, port, value).await
     }
 
-    async fn send_file(ma: &ModularAgent, agent_id: &str, port: &str, value: AgentValue) {
-        send_as::<FileMessagesAgent>(ma, agent_id, port, value).await
+    async fn send_file(ma: &ModularAgent, module_id: &str, port: &str, value: Value) {
+        send_as::<FileMessagesModule>(ma, module_id, port, value).await
     }
 
-    async fn session_id_config(ma: &ModularAgent, agent_id: &str) -> String {
-        let agent = ma.get_agent(agent_id).unwrap();
-        let guard = agent.lock().await;
+    async fn session_id_config(ma: &ModularAgent, module_id: &str) -> String {
+        let module = ma.get_module(module_id).unwrap();
+        let guard = module.lock().await;
         guard
             .configs()
             .unwrap()
@@ -1867,11 +1819,11 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn file_messages_agent_persists_only_finalized_messages() {
+    async fn file_messages_module_persists_only_finalized_messages() {
         let dir = tempfile::tempdir().unwrap();
-        let (ma, _patch_id, agent_id, probe_rx, _session_rx) = setup_file_messages_agent(vec![(
+        let (ma, _patch_id, module_id, probe_rx, _session_rx) = setup_file_messages_module(vec![(
             CONFIG_SESSION_DIR,
-            AgentValue::string(dir.path().to_string_lossy()),
+            Value::string(dir.path().to_string_lossy()),
         )])
         .await;
 
@@ -1880,17 +1832,17 @@ mod tests {
         let mut partial = Message::assistant("Hel".to_string());
         partial.id = Some("m1".to_string());
         partial.streaming = true;
-        send_file(&ma, &agent_id, PORT_MESSAGE, partial.into()).await;
+        send_file(&ma, &module_id, PORT_MESSAGE, partial.into()).await;
         assert_no_emit(&probe_rx).await;
 
         // A final assistant message is stored but not emitted either.
         let mut fin = Message::assistant("Hello".to_string());
         fin.id = Some("m1".to_string());
-        send_file(&ma, &agent_id, PORT_MESSAGE, fin.into()).await;
+        send_file(&ma, &module_id, PORT_MESSAGE, fin.into()).await;
         assert_no_emit(&probe_rx).await;
 
         // A fresh replay of the same session contains only the final message.
-        let session_id = session_id_config(&ma, &agent_id).await;
+        let session_id = session_id_config(&ma, &module_id).await;
         let store = JsonlSessionStore::new(dir.path());
         let entries = store.load(&session_id).await.unwrap();
         assert_eq!(entries.len(), 1);
@@ -1905,7 +1857,7 @@ mod tests {
         // nothing is deleted from the store.
         send_file(
             &ma,
-            &agent_id,
+            &module_id,
             PORT_MESSAGE,
             Message::user("q".to_string()).into(),
         )
@@ -1917,29 +1869,29 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn file_messages_agent_reset_starts_new_session_and_keeps_old_one() {
+    async fn file_messages_module_reset_starts_new_session_and_keeps_old_one() {
         let dir = tempfile::tempdir().unwrap();
-        let (ma, _patch_id, agent_id, probe_rx, session_rx) = setup_file_messages_agent(vec![(
+        let (ma, _patch_id, module_id, probe_rx, session_rx) = setup_file_messages_module(vec![(
             CONFIG_SESSION_DIR,
-            AgentValue::string(dir.path().to_string_lossy()),
+            Value::string(dir.path().to_string_lossy()),
         )])
         .await;
 
         send_file(
             &ma,
-            &agent_id,
+            &module_id,
             PORT_MESSAGE,
             Message::user("hello".to_string()).into(),
         )
         .await;
         assert_eq!(recv_messages(&probe_rx).await.len(), 1);
-        let old_session_id = session_id_config(&ma, &agent_id).await;
+        let old_session_id = session_id_config(&ma, &module_id).await;
 
-        send_file(&ma, &agent_id, PORT_RESET, AgentValue::unit()).await;
+        send_file(&ma, &module_id, PORT_RESET, Value::unit()).await;
         assert_eq!(recv_messages(&probe_rx).await.len(), 0);
 
         // A new session id was issued and written back to the config.
-        let new_session_id = session_id_config(&ma, &agent_id).await;
+        let new_session_id = session_id_config(&ma, &module_id).await;
         assert_ne!(new_session_id, old_session_id);
         assert!(!new_session_id.is_empty());
 
@@ -1956,7 +1908,7 @@ mod tests {
         // New inputs land in the new session only.
         send_file(
             &ma,
-            &agent_id,
+            &module_id,
             PORT_MESSAGE,
             Message::user("next".to_string()).into(),
         )
@@ -1967,7 +1919,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn file_messages_agent_resumes_existing_session() {
+    async fn file_messages_module_resumes_existing_session() {
         let dir = tempfile::tempdir().unwrap();
         let store = JsonlSessionStore::new(dir.path());
         let session_id = store.create(SessionMeta::new()).await.unwrap();
@@ -1986,25 +1938,25 @@ mod tests {
             .await
             .unwrap();
 
-        let (ma, _patch_id, agent_id, probe_rx, _session_rx) = setup_file_messages_agent(vec![
+        let (ma, _patch_id, module_id, probe_rx, _session_rx) = setup_file_messages_module(vec![
             (
                 CONFIG_SESSION_DIR,
-                AgentValue::string(dir.path().to_string_lossy()),
+                Value::string(dir.path().to_string_lossy()),
             ),
-            (CONFIG_SESSION_ID, AgentValue::string(session_id.clone())),
+            (CONFIG_SESSION_ID, Value::string(session_id.clone())),
         ])
         .await;
 
         // The replayed history ends with an assistant message, so a unit
         // input emits nothing.
-        send_file(&ma, &agent_id, PORT_MESSAGE, AgentValue::unit()).await;
+        send_file(&ma, &module_id, PORT_MESSAGE, Value::unit()).await;
         assert_no_emit(&probe_rx).await;
 
         // The next user message extends the same session and emits the
         // whole replayed history.
         send_file(
             &ma,
-            &agent_id,
+            &module_id,
             PORT_MESSAGE,
             Message::user("c".to_string()).into(),
         )
@@ -2018,43 +1970,43 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn file_messages_agent_requires_session_dir() {
+    async fn file_messages_module_requires_session_dir() {
         let ma = ModularAgent::init().unwrap();
         ma.ready().await.unwrap();
 
         let patch_id = ma.new_patch().unwrap();
         let def = ma
-            .get_agent_definition(FileMessagesAgent::DEF_NAME)
+            .get_module_definition(FileMessagesModule::DEF_NAME)
             .unwrap();
-        let agent_id = ma.add_agent(patch_id, def.to_spec()).await.unwrap();
+        let module_id = ma.add_module(patch_id, def.to_spec()).await.unwrap();
 
-        let agent = ma.get_agent(&agent_id).unwrap();
-        let mut guard = agent.lock().await;
-        let file_agent = guard.as_agent_mut::<FileMessagesAgent>().unwrap();
-        let result = AsAgent::start(file_agent).await;
-        assert!(matches!(result, Err(AgentError::InvalidConfig(_))));
+        let module = ma.get_module(&module_id).unwrap();
+        let mut guard = module.lock().await;
+        let file_module = guard.as_module_mut::<FileMessagesModule>().unwrap();
+        let result = AsModule::start(file_module).await;
+        assert!(matches!(result, Err(Error::InvalidConfig(_))));
     }
 
     #[tokio::test]
-    async fn messages_agent_migrates_stale_messages_config_once() {
-        let old_messages = AgentValue::array(vector![
-            AgentValue::object(hashmap! {
-                "role".into() => AgentValue::string("user"),
-                "content".into() => AgentValue::string("old user"),
+    async fn messages_module_migrates_stale_messages_config_once() {
+        let old_messages = Value::array(vector![
+            Value::object(hashmap! {
+                "role".into() => Value::string("user"),
+                "content".into() => Value::string("old user"),
             }),
-            AgentValue::object(hashmap! {
-                "role".into() => AgentValue::string("assistant"),
-                "content".into() => AgentValue::string("old assistant"),
+            Value::object(hashmap! {
+                "role".into() => Value::string("assistant"),
+                "content".into() => Value::string("old assistant"),
             }),
         ]);
-        let (ma, patch_id, agent_id, probe_rx, _session_rx) =
-            setup_messages_agent(vec![(STALE_CONFIG_MESSAGES, old_messages)]).await;
+        let (ma, patch_id, module_id, probe_rx, _session_rx) =
+            setup_messages_module(vec![(STALE_CONFIG_MESSAGES, old_messages)]).await;
 
         // The old history landed in the (in-memory) store: a user arrival
         // emits it in full.
         send(
             &ma,
-            &agent_id,
+            &module_id,
             PORT_MESSAGE,
             Message::user("q".to_string()).into(),
         )
@@ -2069,9 +2021,9 @@ mod tests {
         // is retained across the cycle.
         ma.stop_patch(&patch_id).await.unwrap();
         ma.start_patch(&patch_id).await.unwrap();
-        wait_until_started(&ma, &agent_id).await;
+        wait_until_started(&ma, &module_id).await;
 
-        send(&ma, &agent_id, PORT_MESSAGE, AgentValue::unit()).await;
+        send(&ma, &module_id, PORT_MESSAGE, Value::unit()).await;
         let messages = recv_messages(&probe_rx).await;
         assert_eq!(messages.len(), 3);
         assert_eq!(messages[0].text(), "old user");
@@ -2080,28 +2032,28 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn messages_agent_emits_only_on_user_or_tool_arrivals() {
-        let (ma, _patch_id, agent_id, probe_rx, _session_rx) = setup_messages_agent(vec![]).await;
+    async fn messages_module_emits_only_on_user_or_tool_arrivals() {
+        let (ma, _patch_id, module_id, probe_rx, _session_rx) = setup_messages_module(vec![]).await;
 
         // Unit input on an empty session emits nothing.
-        send(&ma, &agent_id, PORT_MESSAGE, AgentValue::unit()).await;
+        send(&ma, &module_id, PORT_MESSAGE, Value::unit()).await;
         assert_no_emit(&probe_rx).await;
 
         // A batch ending with an assistant message appends without emitting;
         // so does a unit input while the context ends with an assistant.
-        let batch = AgentValue::array(vector![
+        let batch = Value::array(vector![
             Message::user("a".to_string()).into(),
             Message::assistant("b".to_string()).into(),
         ]);
-        send(&ma, &agent_id, PORT_MESSAGE, batch).await;
+        send(&ma, &module_id, PORT_MESSAGE, batch).await;
         assert_no_emit(&probe_rx).await;
-        send(&ma, &agent_id, PORT_MESSAGE, AgentValue::unit()).await;
+        send(&ma, &module_id, PORT_MESSAGE, Value::unit()).await;
         assert_no_emit(&probe_rx).await;
 
         // A user arrival emits the accumulated context in order.
         send(
             &ma,
-            &agent_id,
+            &module_id,
             PORT_MESSAGE,
             Message::user("c".to_string()).into(),
         )
@@ -2115,17 +2067,17 @@ mod tests {
         assert_eq!(messages[2].text(), "c");
 
         // Unit input now re-emits the same window.
-        send(&ma, &agent_id, PORT_MESSAGE, AgentValue::unit()).await;
+        send(&ma, &module_id, PORT_MESSAGE, Value::unit()).await;
         assert_eq!(recv_messages(&probe_rx).await.len(), 3);
     }
 
     #[tokio::test]
-    async fn messages_agent_tool_result_emits_whole_exchange() {
-        let (ma, _patch_id, agent_id, probe_rx, _session_rx) = setup_messages_agent(vec![]).await;
+    async fn messages_module_tool_result_emits_whole_exchange() {
+        let (ma, _patch_id, module_id, probe_rx, _session_rx) = setup_messages_module(vec![]).await;
 
         send(
             &ma,
-            &agent_id,
+            &module_id,
             PORT_MESSAGE,
             Message::user("q".to_string()).into(),
         )
@@ -2133,10 +2085,10 @@ mod tests {
         assert_eq!(recv_messages(&probe_rx).await.len(), 1);
 
         // The assistant's tool call appends silently; the tool result
-        // re-emits the context so a downstream Chat agent can continue.
+        // re-emits the context so a downstream Chat module can continue.
         send(
             &ma,
-            &agent_id,
+            &module_id,
             PORT_MESSAGE,
             Message::assistant("calling".to_string()).into(),
         )
@@ -2144,7 +2096,7 @@ mod tests {
         assert_no_emit(&probe_rx).await;
         send(
             &ma,
-            &agent_id,
+            &module_id,
             PORT_MESSAGE,
             Message::tool("my_tool".to_string(), "result".to_string()).into(),
         )
@@ -2157,23 +2109,23 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn messages_agent_tool_tail_without_user_emits_nothing() {
+    async fn messages_module_tool_tail_without_user_emits_nothing() {
         // A tool exchange with no user message anywhere (e.g. right after a
         // reset raced a tool loop) has no window head: nothing is emitted
         // and nothing is deleted, even with limits active.
-        let (ma, _patch_id, agent_id, probe_rx, _session_rx) =
-            setup_messages_agent(vec![(CONFIG_MAX_CONTEXT_TOKENS, AgentValue::integer(5))]).await;
+        let (ma, _patch_id, module_id, probe_rx, _session_rx) =
+            setup_messages_module(vec![(CONFIG_MAX_CONTEXT_TOKENS, Value::integer(5))]).await;
 
         send(
             &ma,
-            &agent_id,
+            &module_id,
             PORT_MESSAGE,
             Message::assistant("calling".to_string()).into(),
         )
         .await;
         send(
             &ma,
-            &agent_id,
+            &module_id,
             PORT_MESSAGE,
             Message::tool("my_tool".to_string(), "result".to_string()).into(),
         )
@@ -2184,7 +2136,7 @@ mod tests {
         // emits, with the orphan exchange excluded from the window.
         send(
             &ma,
-            &agent_id,
+            &module_id,
             PORT_MESSAGE,
             Message::user("q".to_string()).into(),
         )
@@ -2195,14 +2147,14 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn messages_agent_window_prunes_history_from_memory_store() {
-        let (ma, patch_id, agent_id, probe_rx, _session_rx) =
-            setup_messages_agent(vec![(CONFIG_MAX_CONTEXT_TOKENS, AgentValue::integer(15))]).await;
+    async fn messages_module_window_prunes_history_from_memory_store() {
+        let (ma, patch_id, module_id, probe_rx, _session_rx) =
+            setup_messages_module(vec![(CONFIG_MAX_CONTEXT_TOKENS, Value::integer(15))]).await;
 
         // 10 tokens each: the pair plus the 2-token anchor breaks the budget.
         send(
             &ma,
-            &agent_id,
+            &module_id,
             PORT_MESSAGE,
             Message::user("x".repeat(40)).into(),
         )
@@ -2210,7 +2162,7 @@ mod tests {
         assert_eq!(recv_messages(&probe_rx).await.len(), 1);
         send(
             &ma,
-            &agent_id,
+            &module_id,
             PORT_MESSAGE,
             Message::assistant("y".repeat(40)).into(),
         )
@@ -2218,7 +2170,7 @@ mod tests {
         assert_no_emit(&probe_rx).await;
         send(
             &ma,
-            &agent_id,
+            &module_id,
             PORT_MESSAGE,
             Message::user("zzzzzzzz".to_string()).into(),
         )
@@ -2231,25 +2183,25 @@ mod tests {
         // only the surviving window.
         ma.stop_patch(&patch_id).await.unwrap();
         ma.start_patch(&patch_id).await.unwrap();
-        wait_until_started(&ma, &agent_id).await;
-        send(&ma, &agent_id, PORT_MESSAGE, AgentValue::unit()).await;
+        wait_until_started(&ma, &module_id).await;
+        send(&ma, &module_id, PORT_MESSAGE, Value::unit()).await;
         let messages = recv_messages(&probe_rx).await;
         assert_eq!(messages.len(), 1);
         assert_eq!(messages[0].text(), "zzzzzzzz");
     }
 
     #[tokio::test]
-    async fn messages_agent_max_messages_counts_system_message() {
-        let (ma, _patch_id, agent_id, probe_rx, _session_rx) =
-            setup_messages_agent(vec![(CONFIG_MAX_MESSAGES, AgentValue::integer(3))]).await;
+    async fn messages_module_max_messages_counts_system_message() {
+        let (ma, _patch_id, module_id, probe_rx, _session_rx) =
+            setup_messages_module(vec![(CONFIG_MAX_MESSAGES, Value::integer(3))]).await;
 
-        let batch = AgentValue::array(vector![
+        let batch = Value::array(vector![
             Message::system("sys".to_string()).into(),
             Message::user("u1".to_string()).into(),
             Message::assistant("a1".to_string()).into(),
             Message::user("u2".to_string()).into(),
         ]);
-        send(&ma, &agent_id, PORT_MESSAGE, batch).await;
+        send(&ma, &module_id, PORT_MESSAGE, batch).await;
 
         // system + u2 = 2; adding the (u1, a1) pair would make 4 > 3.
         let messages = recv_messages(&probe_rx).await;
@@ -2258,25 +2210,25 @@ mod tests {
         assert_eq!(messages[1].text(), "u2");
 
         // The pair was pruned; the system message survives.
-        send(&ma, &agent_id, PORT_MESSAGE, AgentValue::unit()).await;
+        send(&ma, &module_id, PORT_MESSAGE, Value::unit()).await;
         let messages = recv_messages(&probe_rx).await;
         assert_eq!(messages.len(), 2);
         assert_eq!(messages[0].role, "system");
     }
 
     #[tokio::test]
-    async fn messages_agent_trims_oversized_latest_user_and_stores_it() {
-        let (ma, _patch_id, agent_id, probe_rx, _session_rx) =
-            setup_messages_agent(vec![(CONFIG_MAX_CONTEXT_TOKENS, AgentValue::integer(12))]).await;
+    async fn messages_module_trims_oversized_latest_user_and_stores_it() {
+        let (ma, _patch_id, module_id, probe_rx, _session_rx) =
+            setup_messages_module(vec![(CONFIG_MAX_CONTEXT_TOKENS, Value::integer(12))]).await;
 
         // The system message (10 tokens) leaves 2 tokens for the user: the
         // user text is middle-trimmed down to the floor, the system message
         // is left whole.
-        let batch = AgentValue::array(vector![
+        let batch = Value::array(vector![
             Message::system("s".repeat(40)).into(),
             Message::user(format!("{}{}", "h".repeat(200), "t".repeat(200))).into(),
         ]);
-        send(&ma, &agent_id, PORT_MESSAGE, batch).await;
+        send(&ma, &module_id, PORT_MESSAGE, batch).await;
         let messages = recv_messages(&probe_rx).await;
         assert_eq!(messages.len(), 2);
         assert_eq!(messages[0].text().len(), 40);
@@ -2287,19 +2239,19 @@ mod tests {
         assert!(user_text.len() < 100);
 
         // The trimmed form is what was stored.
-        send(&ma, &agent_id, PORT_MESSAGE, AgentValue::unit()).await;
+        send(&ma, &module_id, PORT_MESSAGE, Value::unit()).await;
         let messages = recv_messages(&probe_rx).await;
         assert_eq!(messages[1].text(), user_text);
     }
 
     #[tokio::test]
-    async fn messages_agent_caps_each_arriving_message_except_system() {
-        let (ma, _patch_id, agent_id, probe_rx, _session_rx) =
-            setup_messages_agent(vec![(CONFIG_MAX_MESSAGE_TOKENS, AgentValue::integer(10))]).await;
+    async fn messages_module_caps_each_arriving_message_except_system() {
+        let (ma, _patch_id, module_id, probe_rx, _session_rx) =
+            setup_messages_module(vec![(CONFIG_MAX_MESSAGE_TOKENS, Value::integer(10))]).await;
 
         send(
             &ma,
-            &agent_id,
+            &module_id,
             PORT_MESSAGE,
             Message::user("q".to_string()).into(),
         )
@@ -2307,7 +2259,7 @@ mod tests {
         assert_eq!(recv_messages(&probe_rx).await.len(), 1);
         send(
             &ma,
-            &agent_id,
+            &module_id,
             PORT_MESSAGE,
             Message::assistant("a".repeat(400)).into(),
         )
@@ -2316,11 +2268,11 @@ mod tests {
 
         // The oversized assistant message was stored middle-trimmed; a
         // system message is never capped.
-        let batch = AgentValue::array(vector![
+        let batch = Value::array(vector![
             Message::system("s".repeat(400)).into(),
             Message::user("u2".to_string()).into(),
         ]);
-        send(&ma, &agent_id, PORT_MESSAGE, batch).await;
+        send(&ma, &module_id, PORT_MESSAGE, batch).await;
         let messages = recv_messages(&probe_rx).await;
         assert_eq!(messages.len(), 4);
         assert_eq!(messages[0].role, "system");
@@ -2333,23 +2285,22 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn messages_agent_keeps_only_last_system_and_prunes_older_ones() {
-        let (ma, patch_id, agent_id, probe_rx, _session_rx) =
-            setup_messages_agent(vec![(CONFIG_MAX_CONTEXT_TOKENS, AgentValue::integer(1000))])
-                .await;
+    async fn messages_module_keeps_only_last_system_and_prunes_older_ones() {
+        let (ma, patch_id, module_id, probe_rx, _session_rx) =
+            setup_messages_module(vec![(CONFIG_MAX_CONTEXT_TOKENS, Value::integer(1000))]).await;
 
-        let batch = AgentValue::array(vector![
+        let batch = Value::array(vector![
             Message::system("one".to_string()).into(),
             Message::user("u1".to_string()).into(),
         ]);
-        send(&ma, &agent_id, PORT_MESSAGE, batch).await;
+        send(&ma, &module_id, PORT_MESSAGE, batch).await;
         assert_eq!(recv_messages(&probe_rx).await.len(), 2);
 
-        let batch = AgentValue::array(vector![
+        let batch = Value::array(vector![
             Message::system("two".to_string()).into(),
             Message::user("u2".to_string()).into(),
         ]);
-        send(&ma, &agent_id, PORT_MESSAGE, batch).await;
+        send(&ma, &module_id, PORT_MESSAGE, batch).await;
         let messages = recv_messages(&probe_rx).await;
         assert_eq!(messages.len(), 3);
         assert_eq!(messages[0].text(), "two");
@@ -2359,8 +2310,8 @@ mod tests {
         // The superseded system message was pruned from the store.
         ma.stop_patch(&patch_id).await.unwrap();
         ma.start_patch(&patch_id).await.unwrap();
-        wait_until_started(&ma, &agent_id).await;
-        send(&ma, &agent_id, PORT_MESSAGE, AgentValue::unit()).await;
+        wait_until_started(&ma, &module_id).await;
+        send(&ma, &module_id, PORT_MESSAGE, Value::unit()).await;
         let messages = recv_messages(&probe_rx).await;
         assert_eq!(messages.len(), 3);
         assert_eq!(messages[0].text(), "two");
@@ -2371,13 +2322,13 @@ mod tests {
     /// summarization run leaves behind.
     async fn append_marker(
         ma: &ModularAgent,
-        agent_id: &str,
+        module_id: &str,
         summary: &str,
         first_kept_text: &str,
     ) {
-        let agent = ma.get_agent(agent_id).unwrap();
-        let mut guard = agent.lock().await;
-        let target = guard.as_agent_mut::<MessagesAgent>().unwrap();
+        let module = ma.get_module(module_id).unwrap();
+        let mut guard = module.lock().await;
+        let target = guard.as_module_mut::<MessagesModule>().unwrap();
         let first_kept_id = target
             .state
             .entries
@@ -2401,25 +2352,24 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn messages_agent_prunes_hidden_history_but_keeps_live_marker() {
-        let (ma, patch_id, agent_id, probe_rx, _session_rx) =
-            setup_messages_agent(vec![(CONFIG_MAX_CONTEXT_TOKENS, AgentValue::integer(1000))])
-                .await;
+    async fn messages_module_prunes_hidden_history_but_keeps_live_marker() {
+        let (ma, patch_id, module_id, probe_rx, _session_rx) =
+            setup_messages_module(vec![(CONFIG_MAX_CONTEXT_TOKENS, Value::integer(1000))]).await;
 
-        let batch = AgentValue::array(vector![
+        let batch = Value::array(vector![
             Message::user("a".to_string()).into(),
             Message::assistant("b".to_string()).into(),
             Message::user("c".to_string()).into(),
         ]);
-        send(&ma, &agent_id, PORT_MESSAGE, batch).await;
+        send(&ma, &module_id, PORT_MESSAGE, batch).await;
         assert_eq!(recv_messages(&probe_rx).await.len(), 3);
-        append_marker(&ma, &agent_id, "S", "b").await;
+        append_marker(&ma, &module_id, "S", "b").await;
 
         // The summary stays in the window, so the marker survives while
         // the history it hides ("a") is pruned.
         send(
             &ma,
-            &agent_id,
+            &module_id,
             PORT_MESSAGE,
             Message::user("d".to_string()).into(),
         )
@@ -2430,8 +2380,8 @@ mod tests {
 
         ma.stop_patch(&patch_id).await.unwrap();
         ma.start_patch(&patch_id).await.unwrap();
-        wait_until_started(&ma, &agent_id).await;
-        send(&ma, &agent_id, PORT_MESSAGE, AgentValue::unit()).await;
+        wait_until_started(&ma, &module_id).await;
+        send(&ma, &module_id, PORT_MESSAGE, Value::unit()).await;
         let messages = recv_messages(&probe_rx).await;
         assert_eq!(messages.len(), 4);
         assert_eq!(messages[0].text(), "[Conversation summary]\nS");
@@ -2441,24 +2391,24 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn messages_agent_drops_marker_when_summary_leaves_window() {
-        let (ma, patch_id, agent_id, probe_rx, _session_rx) =
-            setup_messages_agent(vec![(CONFIG_MAX_CONTEXT_TOKENS, AgentValue::integer(15))]).await;
+    async fn messages_module_drops_marker_when_summary_leaves_window() {
+        let (ma, patch_id, module_id, probe_rx, _session_rx) =
+            setup_messages_module(vec![(CONFIG_MAX_CONTEXT_TOKENS, Value::integer(15))]).await;
 
-        let batch = AgentValue::array(vector![
+        let batch = Value::array(vector![
             Message::user("a".to_string()).into(),
             Message::assistant("b".to_string()).into(),
             Message::user("c".to_string()).into(),
         ]);
-        send(&ma, &agent_id, PORT_MESSAGE, batch).await;
+        send(&ma, &module_id, PORT_MESSAGE, batch).await;
         assert_eq!(recv_messages(&probe_rx).await.len(), 3);
-        append_marker(&ma, &agent_id, "S", "b").await;
+        append_marker(&ma, &module_id, "S", "b").await;
 
         // The 10-token user pushes the summary (and "b") out of the window;
         // the marker is deleted along with the history it covered.
         send(
             &ma,
-            &agent_id,
+            &module_id,
             PORT_MESSAGE,
             Message::user("d".repeat(40)).into(),
         )
@@ -2470,30 +2420,31 @@ mod tests {
 
         ma.stop_patch(&patch_id).await.unwrap();
         ma.start_patch(&patch_id).await.unwrap();
-        wait_until_started(&ma, &agent_id).await;
-        send(&ma, &agent_id, PORT_MESSAGE, AgentValue::unit()).await;
+        wait_until_started(&ma, &module_id).await;
+        send(&ma, &module_id, PORT_MESSAGE, Value::unit()).await;
         let messages = recv_messages(&probe_rx).await;
         assert_eq!(messages.len(), 2);
         assert_eq!(messages[0].text(), "c");
     }
 
     #[tokio::test]
-    async fn file_messages_agent_prune_file_controls_file_deletion() {
+    async fn file_messages_module_prune_file_controls_file_deletion() {
         for (prune_file, expected_file_entries) in [(true, 1usize), (false, 3usize)] {
             let dir = tempfile::tempdir().unwrap();
-            let (ma, _patch_id, agent_id, probe_rx, _session_rx) = setup_file_messages_agent(vec![
-                (
-                    CONFIG_SESSION_DIR,
-                    AgentValue::string(dir.path().to_string_lossy()),
-                ),
-                (CONFIG_MAX_CONTEXT_TOKENS, AgentValue::integer(15)),
-                (CONFIG_PRUNE_FILE, AgentValue::boolean(prune_file)),
-            ])
-            .await;
+            let (ma, _patch_id, module_id, probe_rx, _session_rx) =
+                setup_file_messages_module(vec![
+                    (
+                        CONFIG_SESSION_DIR,
+                        Value::string(dir.path().to_string_lossy()),
+                    ),
+                    (CONFIG_MAX_CONTEXT_TOKENS, Value::integer(15)),
+                    (CONFIG_PRUNE_FILE, Value::boolean(prune_file)),
+                ])
+                .await;
 
             send_file(
                 &ma,
-                &agent_id,
+                &module_id,
                 PORT_MESSAGE,
                 Message::user("x".repeat(40)).into(),
             )
@@ -2501,21 +2452,21 @@ mod tests {
             assert_eq!(recv_messages(&probe_rx).await.len(), 1);
             send_file(
                 &ma,
-                &agent_id,
+                &module_id,
                 PORT_MESSAGE,
                 Message::assistant("y".repeat(40)).into(),
             )
             .await;
             send_file(
                 &ma,
-                &agent_id,
+                &module_id,
                 PORT_MESSAGE,
                 Message::user("u2".to_string()).into(),
             )
             .await;
             assert_eq!(recv_messages(&probe_rx).await.len(), 1);
 
-            let session_id = session_id_config(&ma, &agent_id).await;
+            let session_id = session_id_config(&ma, &module_id).await;
             let store = JsonlSessionStore::new(dir.path());
             assert_eq!(
                 store.load(&session_id).await.unwrap().len(),
@@ -2601,9 +2552,9 @@ mod tests {
 
     #[cfg(feature = "ollama")]
     fn point_ollama_at(ma: &ModularAgent, url: &str) {
-        let mut configs = modular_agent_core::AgentConfigs::new();
-        configs.set("ollama_url".into(), AgentValue::string(url));
-        ma.set_global_configs(crate::chat::ChatAgent::DEF_NAME.to_string(), configs);
+        let mut configs = modular_agent_core::ModuleConfigs::new();
+        configs.set("ollama_url".into(), Value::string(url));
+        ma.set_global_configs(crate::chat::ChatModule::DEF_NAME.to_string(), configs);
     }
 
     /// The summarization prompt sent in a mock request body.
@@ -2613,12 +2564,12 @@ mod tests {
         v["messages"][0]["content"].as_str().unwrap().to_string()
     }
 
-    /// (message entries, compaction entries, latest summary) of the agent's
+    /// (message entries, compaction entries, latest summary) of the module's
     /// session cache.
-    async fn entry_stats(ma: &ModularAgent, agent_id: &str) -> (usize, usize, Option<String>) {
-        let agent = ma.get_agent(agent_id).unwrap();
-        let mut guard = agent.lock().await;
-        let target = guard.as_agent_mut::<MessagesAgent>().unwrap();
+    async fn entry_stats(ma: &ModularAgent, module_id: &str) -> (usize, usize, Option<String>) {
+        let module = ma.get_module(module_id).unwrap();
+        let mut guard = module.lock().await;
+        let target = guard.as_module_mut::<MessagesModule>().unwrap();
         let mut messages = 0;
         let mut markers = 0;
         let mut summary = None;
@@ -2636,19 +2587,19 @@ mod tests {
 
     #[cfg(feature = "ollama")]
     #[tokio::test]
-    async fn messages_agent_summarizes_evicted_history_incrementally() {
+    async fn messages_module_summarizes_evicted_history_incrementally() {
         let (url, mut request_rx) = spawn_mock_ollama(vec![Ok("SUM"), Ok("SUM2")]).await;
-        let (ma, _patch_id, agent_id, probe_rx, _session_rx) = setup_messages_agent(vec![
-            (CONFIG_MAX_CONTEXT_TOKENS, AgentValue::integer(15)),
-            (CONFIG_SUMMARIZE_MODEL, AgentValue::string("ollama/test")),
-            (CONFIG_SUMMARY_MAX_TOKENS, AgentValue::integer(5)),
+        let (ma, _patch_id, module_id, probe_rx, _session_rx) = setup_messages_module(vec![
+            (CONFIG_MAX_CONTEXT_TOKENS, Value::integer(15)),
+            (CONFIG_SUMMARIZE_MODEL, Value::string("ollama/test")),
+            (CONFIG_SUMMARY_MAX_TOKENS, Value::integer(5)),
         ])
         .await;
         point_ollama_at(&ma, &url);
 
         send(
             &ma,
-            &agent_id,
+            &module_id,
             PORT_MESSAGE,
             Message::user("x".repeat(40)).into(),
         )
@@ -2656,14 +2607,14 @@ mod tests {
         assert_eq!(recv_messages(&probe_rx).await.len(), 1);
         send(
             &ma,
-            &agent_id,
+            &module_id,
             PORT_MESSAGE,
             Message::assistant("y".repeat(40)).into(),
         )
         .await;
         send(
             &ma,
-            &agent_id,
+            &module_id,
             PORT_MESSAGE,
             Message::user("zzzzzzzz".to_string()).into(),
         )
@@ -2685,10 +2636,10 @@ mod tests {
 
         // The evicted pair was folded into one marker.
         assert_eq!(
-            entry_stats(&ma, &agent_id).await,
+            entry_stats(&ma, &module_id).await,
             (1, 1, Some("SUM".to_string()))
         );
-        send(&ma, &agent_id, PORT_MESSAGE, AgentValue::unit()).await;
+        send(&ma, &module_id, PORT_MESSAGE, Value::unit()).await;
         let messages = recv_messages(&probe_rx).await;
         assert_eq!(messages.len(), 2);
         assert_eq!(messages[0].text(), format!("{SUMMARY_PREFIX}SUM"));
@@ -2699,14 +2650,14 @@ mod tests {
         // request merges into it.
         send(
             &ma,
-            &agent_id,
+            &module_id,
             PORT_MESSAGE,
             Message::assistant("b".repeat(40)).into(),
         )
         .await;
         send(
             &ma,
-            &agent_id,
+            &module_id,
             PORT_MESSAGE,
             Message::user("uu".to_string()).into(),
         )
@@ -2719,10 +2670,10 @@ mod tests {
         assert!(prompt.contains("Current summary:\nSUM"));
 
         assert_eq!(
-            entry_stats(&ma, &agent_id).await,
+            entry_stats(&ma, &module_id).await,
             (1, 1, Some("SUM2".to_string()))
         );
-        send(&ma, &agent_id, PORT_MESSAGE, AgentValue::unit()).await;
+        send(&ma, &module_id, PORT_MESSAGE, Value::unit()).await;
         let messages = recv_messages(&probe_rx).await;
         assert_eq!(messages[0].text(), format!("{SUMMARY_PREFIX}SUM2"));
         assert_eq!(messages[1].text(), "uu");
@@ -2730,18 +2681,18 @@ mod tests {
 
     #[cfg(feature = "ollama")]
     #[tokio::test]
-    async fn messages_agent_keeps_history_when_summarize_fails() {
+    async fn messages_module_keeps_history_when_summarize_fails() {
         let (url, _request_rx) = spawn_mock_ollama(vec![Err(()), Ok("SUM")]).await;
-        let (ma, _patch_id, agent_id, probe_rx, _session_rx) = setup_messages_agent(vec![
-            (CONFIG_MAX_CONTEXT_TOKENS, AgentValue::integer(15)),
-            (CONFIG_SUMMARIZE_MODEL, AgentValue::string("ollama/test")),
+        let (ma, _patch_id, module_id, probe_rx, _session_rx) = setup_messages_module(vec![
+            (CONFIG_MAX_CONTEXT_TOKENS, Value::integer(15)),
+            (CONFIG_SUMMARIZE_MODEL, Value::string("ollama/test")),
         ])
         .await;
         point_ollama_at(&ma, &url);
 
         send(
             &ma,
-            &agent_id,
+            &module_id,
             PORT_MESSAGE,
             Message::user("x".repeat(40)).into(),
         )
@@ -2749,14 +2700,14 @@ mod tests {
         assert_eq!(recv_messages(&probe_rx).await.len(), 1);
         send(
             &ma,
-            &agent_id,
+            &module_id,
             PORT_MESSAGE,
             Message::assistant("y".repeat(40)).into(),
         )
         .await;
         send(
             &ma,
-            &agent_id,
+            &module_id,
             PORT_MESSAGE,
             Message::user("zzzzzzzz".to_string()).into(),
         )
@@ -2765,46 +2716,46 @@ mod tests {
         // The window still goes out, but the failed request keeps the
         // evicted pair on file for the next attempt.
         assert_eq!(recv_messages(&probe_rx).await.len(), 1);
-        assert_eq!(entry_stats(&ma, &agent_id).await, (3, 0, None));
+        assert_eq!(entry_stats(&ma, &module_id).await, (3, 0, None));
 
         // The next eviction retries, covering the previously kept pair.
         send(
             &ma,
-            &agent_id,
+            &module_id,
             PORT_MESSAGE,
             Message::assistant("b".repeat(40)).into(),
         )
         .await;
         send(
             &ma,
-            &agent_id,
+            &module_id,
             PORT_MESSAGE,
             Message::user("uu".to_string()).into(),
         )
         .await;
         assert_eq!(recv_messages(&probe_rx).await.len(), 3);
         assert_eq!(
-            entry_stats(&ma, &agent_id).await,
+            entry_stats(&ma, &module_id).await,
             (3, 1, Some("SUM".to_string()))
         );
-        send(&ma, &agent_id, PORT_MESSAGE, AgentValue::unit()).await;
+        send(&ma, &module_id, PORT_MESSAGE, Value::unit()).await;
         let messages = recv_messages(&probe_rx).await;
         assert_eq!(messages[0].text(), format!("{SUMMARY_PREFIX}SUM"));
     }
 
     #[tokio::test]
-    async fn messages_agent_deletes_history_on_invalid_summarize_model() {
+    async fn messages_module_deletes_history_on_invalid_summarize_model() {
         // No provider prefix: the parse fails before any request, and
         // eviction falls back to plain deletion.
-        let (ma, _patch_id, agent_id, probe_rx, _session_rx) = setup_messages_agent(vec![
-            (CONFIG_MAX_CONTEXT_TOKENS, AgentValue::integer(15)),
-            (CONFIG_SUMMARIZE_MODEL, AgentValue::string("bogus")),
+        let (ma, _patch_id, module_id, probe_rx, _session_rx) = setup_messages_module(vec![
+            (CONFIG_MAX_CONTEXT_TOKENS, Value::integer(15)),
+            (CONFIG_SUMMARIZE_MODEL, Value::string("bogus")),
         ])
         .await;
 
         send(
             &ma,
-            &agent_id,
+            &module_id,
             PORT_MESSAGE,
             Message::user("x".repeat(40)).into(),
         )
@@ -2812,42 +2763,42 @@ mod tests {
         assert_eq!(recv_messages(&probe_rx).await.len(), 1);
         send(
             &ma,
-            &agent_id,
+            &module_id,
             PORT_MESSAGE,
             Message::assistant("y".repeat(40)).into(),
         )
         .await;
         send(
             &ma,
-            &agent_id,
+            &module_id,
             PORT_MESSAGE,
             Message::user("zzzzzzzz".to_string()).into(),
         )
         .await;
         assert_eq!(recv_messages(&probe_rx).await.len(), 1);
-        assert_eq!(entry_stats(&ma, &agent_id).await, (1, 0, None));
+        assert_eq!(entry_stats(&ma, &module_id).await, (1, 0, None));
     }
 
     #[cfg(feature = "ollama")]
     #[tokio::test]
-    async fn file_messages_agent_summarizes_without_pruning_file() {
+    async fn file_messages_module_summarizes_without_pruning_file() {
         let (url, _request_rx) = spawn_mock_ollama(vec![Ok("SUM")]).await;
         let dir = tempfile::tempdir().unwrap();
-        let (ma, patch_id, agent_id, probe_rx, _session_rx) = setup_file_messages_agent(vec![
+        let (ma, patch_id, module_id, probe_rx, _session_rx) = setup_file_messages_module(vec![
             (
                 CONFIG_SESSION_DIR,
-                AgentValue::string(dir.path().to_string_lossy()),
+                Value::string(dir.path().to_string_lossy()),
             ),
-            (CONFIG_MAX_CONTEXT_TOKENS, AgentValue::integer(15)),
-            (CONFIG_SUMMARIZE_MODEL, AgentValue::string("ollama/test")),
-            (CONFIG_PRUNE_FILE, AgentValue::boolean(false)),
+            (CONFIG_MAX_CONTEXT_TOKENS, Value::integer(15)),
+            (CONFIG_SUMMARIZE_MODEL, Value::string("ollama/test")),
+            (CONFIG_PRUNE_FILE, Value::boolean(false)),
         ])
         .await;
         point_ollama_at(&ma, &url);
 
         send_file(
             &ma,
-            &agent_id,
+            &module_id,
             PORT_MESSAGE,
             Message::user("x".repeat(40)).into(),
         )
@@ -2855,14 +2806,14 @@ mod tests {
         assert_eq!(recv_messages(&probe_rx).await.len(), 1);
         send_file(
             &ma,
-            &agent_id,
+            &module_id,
             PORT_MESSAGE,
             Message::assistant("y".repeat(40)).into(),
         )
         .await;
         send_file(
             &ma,
-            &agent_id,
+            &module_id,
             PORT_MESSAGE,
             Message::user("u2".to_string()).into(),
         )
@@ -2872,7 +2823,7 @@ mod tests {
         // The marker is appended even though deletions are off: the file
         // keeps the full log plus the marker, and replay takes the last
         // marker.
-        let session_id = session_id_config(&ma, &agent_id).await;
+        let session_id = session_id_config(&ma, &module_id).await;
         let store = JsonlSessionStore::new(dir.path());
         let entries = store.load(&session_id).await.unwrap();
         assert_eq!(entries.len(), 4);
@@ -2883,8 +2834,8 @@ mod tests {
 
         ma.stop_patch(&patch_id).await.unwrap();
         ma.start_patch(&patch_id).await.unwrap();
-        wait_until_started(&ma, &agent_id).await;
-        send_file(&ma, &agent_id, PORT_MESSAGE, AgentValue::unit()).await;
+        wait_until_started(&ma, &module_id).await;
+        send_file(&ma, &module_id, PORT_MESSAGE, Value::unit()).await;
         let messages = recv_messages(&probe_rx).await;
         assert_eq!(messages.len(), 2);
         assert_eq!(messages[0].text(), format!("{SUMMARY_PREFIX}SUM"));
@@ -3139,7 +3090,7 @@ mod tests {
     fn test_add_message() {
         // () + user
         // result should be the user message
-        let value = AgentValue::unit();
+        let value = Value::unit();
         let msg = Message::user("Hello".to_string());
         let result = append_message(value, msg);
         assert!(result.is_message());
@@ -3149,7 +3100,7 @@ mod tests {
 
         // string + assistant
         // result should be an array with user and assistant messages
-        let value = AgentValue::string("How are you?");
+        let value = Value::string("How are you?");
         let msg = Message::assistant("Hello".to_string());
         let result = append_message(value, msg);
         assert!(result.is_array());
@@ -3164,9 +3115,9 @@ mod tests {
 
         // object + user
         // result should be an array with the original object and the new user message
-        let value = AgentValue::object(hashmap! {
-            "role".into() => AgentValue::string("system"),
-            "content".into() => AgentValue::string("I am fine."),
+        let value = Value::object(hashmap! {
+            "role".into() => Value::string("system"),
+            "content".into() => Value::string("I am fine."),
         });
         let msg = Message::user("Hello".to_string());
         let result = append_message(value, msg);
@@ -3182,14 +3133,14 @@ mod tests {
 
         // array + user
         // result should be the original array with the new user message appended
-        let value = AgentValue::array(vector![
-            AgentValue::object(hashmap! {
-                "role".into() => AgentValue::string("system"),
-                "content".into() => AgentValue::string("Welcome!"),
+        let value = Value::array(vector![
+            Value::object(hashmap! {
+                "role".into() => Value::string("system"),
+                "content".into() => Value::string("Welcome!"),
             }),
-            AgentValue::object(hashmap! {
-                "role".into() => AgentValue::string("assistant"),
-                "content".into() => AgentValue::string("Hello!"),
+            Value::object(hashmap! {
+                "role".into() => Value::string("assistant"),
+                "content".into() => Value::string("Hello!"),
             }),
         ]);
         let msg = Message::user("How are you?".to_string());
@@ -3210,7 +3161,7 @@ mod tests {
         // image + user
         #[cfg(feature = "image")]
         {
-            let img = AgentValue::image(modular_agent_core::PhotonImage::new(vec![0u8; 4], 1, 1));
+            let img = Value::image(modular_agent_core::PhotonImage::new(vec![0u8; 4], 1, 1));
             let msg = Message::user("Check this image".to_string());
             let result = append_message(img, msg);
             assert!(result.is_array());
@@ -3279,7 +3230,7 @@ mod tests {
     #[test]
     fn test_strip_unsigned_thinking_none_when_nothing_to_strip() {
         // Plain text and fully signed content pass through untouched so the
-        // caller keeps the original AgentValue.
+        // caller keeps the original Value.
         let msg = Message::assistant("plain".to_string());
         assert!(strip_unsigned_thinking(&msg).is_none());
 
@@ -3297,17 +3248,17 @@ mod tests {
         assert!(strip_unsigned_thinking(&msg).is_none());
     }
 
-    /// Build a running patch with a MessagesForPromptAgent (configured via
+    /// Build a running patch with a MessagesForPromptModule (configured via
     /// `configs`) whose `messages` port feeds a probe.
-    async fn setup_prompt_agent(
-        configs: Vec<(&str, AgentValue)>,
+    async fn setup_prompt_module(
+        configs: Vec<(&str, Value)>,
     ) -> (ModularAgent, String, ProbeReceiver) {
         let ma = ModularAgent::init().unwrap();
         ma.ready().await.unwrap();
 
         let patch_id = ma.new_patch().unwrap();
         let def = ma
-            .get_agent_definition(MessagesForPromptAgent::DEF_NAME)
+            .get_module_definition(MessagesForPromptModule::DEF_NAME)
             .unwrap();
         let mut spec = def.to_spec();
         {
@@ -3316,17 +3267,17 @@ mod tests {
                 spec_configs.set(key.into(), value);
             }
         }
-        let agent_id = ma.add_agent(patch_id.clone(), spec).await.unwrap();
+        let module_id = ma.add_module(patch_id.clone(), spec).await.unwrap();
 
-        let probe_def = ma.get_agent_definition(TestProbeAgent::DEF_NAME).unwrap();
+        let probe_def = ma.get_module_definition(TestProbeModule::DEF_NAME).unwrap();
         let probe_id = ma
-            .add_agent(patch_id.clone(), probe_def.to_spec())
+            .add_module(patch_id.clone(), probe_def.to_spec())
             .await
             .unwrap();
         ma.add_connection(
             &patch_id,
             ConnectionSpec {
-                source: agent_id.clone(),
+                source: module_id.clone(),
                 source_handle: PORT_MESSAGES.into(),
                 target: probe_id.clone(),
                 target_handle: "value".into(),
@@ -3336,19 +3287,19 @@ mod tests {
         .unwrap();
 
         ma.start_patch(&patch_id).await.unwrap();
-        wait_until_started(&ma, &agent_id).await;
+        wait_until_started(&ma, &module_id).await;
         let probe_rx = probe_receiver(&ma, &probe_id).await.unwrap();
 
-        (ma, agent_id, probe_rx)
+        (ma, module_id, probe_rx)
     }
 
-    async fn send_to_prompt_agent(ma: &ModularAgent, agent_id: &str, value: AgentValue) {
-        let agent = ma.get_agent(agent_id).unwrap();
-        let mut guard = agent.lock().await;
-        let prompt_agent = guard.as_agent_mut::<MessagesForPromptAgent>().unwrap();
-        AsAgent::process(
-            prompt_agent,
-            AgentContext::new(),
+    async fn send_to_prompt_module(ma: &ModularAgent, module_id: &str, value: Value) {
+        let module = ma.get_module(module_id).unwrap();
+        let mut guard = module.lock().await;
+        let prompt_module = guard.as_module_mut::<MessagesForPromptModule>().unwrap();
+        AsModule::process(
+            prompt_module,
+            ModuleContext::new(),
             PORT_MESSAGES.to_string(),
             value,
         )
@@ -3358,18 +3309,18 @@ mod tests {
 
     #[tokio::test]
     async fn messages_for_prompt_max_tokens_keeps_newest_and_system() {
-        let (ma, agent_id, probe_rx) =
-            setup_prompt_agent(vec![(CONFIG_MAX_TOKENS, AgentValue::integer(10))]).await;
+        let (ma, module_id, probe_rx) =
+            setup_prompt_module(vec![(CONFIG_MAX_TOKENS, Value::integer(10))]).await;
 
         // system: 4 chars = 1 token; old pair: 20 tokens each; recent
         // user: 2 tokens. Budget 10 fits system + recent user only.
-        let input = AgentValue::array(vector![
+        let input = Value::array(vector![
             Message::system("sys.".to_string()).into(),
             Message::user("x".repeat(80)).into(),
             Message::assistant("y".repeat(80)).into(),
             Message::user("recent q".to_string()).into(),
         ]);
-        send_to_prompt_agent(&ma, &agent_id, input).await;
+        send_to_prompt_module(&ma, &module_id, input).await;
 
         let messages = recv_messages(&probe_rx).await;
         assert_eq!(messages.len(), 2);
@@ -3381,17 +3332,17 @@ mod tests {
 
     #[tokio::test]
     async fn messages_for_prompt_max_tokens_first_message_is_user() {
-        let (ma, agent_id, probe_rx) =
-            setup_prompt_agent(vec![(CONFIG_MAX_TOKENS, AgentValue::integer(5))]).await;
+        let (ma, module_id, probe_rx) =
+            setup_prompt_module(vec![(CONFIG_MAX_TOKENS, Value::integer(5))]).await;
 
         // The oldest user message (10 tokens) breaks the budget, leaving
         // the selection headed by an assistant message that must be popped.
-        let input = AgentValue::array(vector![
+        let input = Value::array(vector![
             Message::user("a".repeat(40)).into(),
             Message::assistant("bbbb".to_string()).into(),
             Message::user("cccc".to_string()).into(),
         ]);
-        send_to_prompt_agent(&ma, &agent_id, input).await;
+        send_to_prompt_module(&ma, &module_id, input).await;
 
         let messages = recv_messages(&probe_rx).await;
         assert_eq!(messages.len(), 1);
@@ -3403,18 +3354,18 @@ mod tests {
     async fn messages_for_prompt_max_tokens_takes_precedence_over_max_size() {
         // max_size alone would trim everything; the generous token budget
         // must win and keep the whole history.
-        let (ma, agent_id, probe_rx) = setup_prompt_agent(vec![
-            (CONFIG_MAX_SIZE, AgentValue::integer(1)),
-            (CONFIG_MAX_TOKENS, AgentValue::integer(1000)),
+        let (ma, module_id, probe_rx) = setup_prompt_module(vec![
+            (CONFIG_MAX_SIZE, Value::integer(1)),
+            (CONFIG_MAX_TOKENS, Value::integer(1000)),
         ])
         .await;
 
-        let input = AgentValue::array(vector![
+        let input = Value::array(vector![
             Message::user("hello".to_string()).into(),
             Message::assistant("world".to_string()).into(),
             Message::user("again".to_string()).into(),
         ]);
-        send_to_prompt_agent(&ma, &agent_id, input).await;
+        send_to_prompt_module(&ma, &module_id, input).await;
 
         let messages = recv_messages(&probe_rx).await;
         assert_eq!(messages.len(), 3);
@@ -3427,8 +3378,8 @@ mod tests {
     async fn messages_for_prompt_max_size_counts_image_blocks() {
         // An image tool result has no text, but its base64 payload is sent
         // to the provider, so it must count toward the byte budget.
-        let (ma, agent_id, probe_rx) =
-            setup_prompt_agent(vec![(CONFIG_MAX_SIZE, AgentValue::integer(100))]).await;
+        let (ma, module_id, probe_rx) =
+            setup_prompt_module(vec![(CONFIG_MAX_SIZE, Value::integer(100))]).await;
 
         let image_result = Message::tool_with_content(
             "screenshot".to_string(),
@@ -3437,12 +3388,12 @@ mod tests {
                 mime_type: "image/png".to_string(),
             }]),
         );
-        let input = AgentValue::array(vector![
+        let input = Value::array(vector![
             Message::user("old question".to_string()).into(),
             image_result.into(),
             Message::user("recent q".to_string()).into(),
         ]);
-        send_to_prompt_agent(&ma, &agent_id, input).await;
+        send_to_prompt_module(&ma, &module_id, input).await;
 
         // The 500-byte image breaks the 100-byte budget, so only the newest
         // user message survives.

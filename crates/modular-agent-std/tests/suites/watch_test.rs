@@ -3,7 +3,7 @@ extern crate modular_agent_core as ma;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use ma::{AgentValue, test_utils};
+use ma::{Value, test_utils};
 
 const PATCH: &str = "tests/patches/Std_Watch_test.json";
 
@@ -22,7 +22,7 @@ fn make_test_dir(name: &str) -> PathBuf {
     dir.canonicalize().unwrap()
 }
 
-// The path config travels through the agent graph asynchronously and the OS
+// The path config travels through the module graph asynchronously and the OS
 // watch registration happens after that, so no fixed sleep can guarantee the
 // watcher is live. Keep touching a sentinel file until its event arrives;
 // from that point on the watcher is known to observe the directory.
@@ -52,7 +52,7 @@ async fn wait_for_watcher_ready(patch_id: &str, dir: &Path) {
 // Receive watch events until one targets the given path. OS-dependent extra
 // events (e.g. for the parent directory) are skipped instead of failing the
 // test on an exact-match basis.
-async fn recv_event_for_path(patch_id: &str, path: &Path) -> AgentValue {
+async fn recv_event_for_path(patch_id: &str, path: &Path) -> Value {
     let expected_name = format!("%{}/watch_event", patch_id);
     let expected_path = path.to_string_lossy().to_string();
     let deadline = std::time::Instant::now() + EVENT_TIMEOUT;
@@ -83,7 +83,7 @@ async fn test_watch_create() {
         &ma,
         &patch_id,
         "watch_path",
-        AgentValue::string(dir.to_string_lossy().to_string()),
+        Value::string(dir.to_string_lossy().to_string()),
     )
     .await
     .unwrap();
@@ -119,7 +119,7 @@ async fn test_watch_remove() {
         &ma,
         &patch_id,
         "watch_path",
-        AgentValue::string(dir.to_string_lossy().to_string()),
+        Value::string(dir.to_string_lossy().to_string()),
     )
     .await
     .unwrap();

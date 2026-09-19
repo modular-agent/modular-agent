@@ -3,13 +3,13 @@ import { sveltekit } from "@sveltejs/kit/vite";
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "vite";
 
-import agentUi from "./vite-plugin-agent-ui.js";
+import moduleUi from "./vite-plugin-module-ui.js";
 
 const host = process.env.TAURI_DEV_HOST;
 
 // https://vitejs.dev/config/
 export default defineConfig(async () => ({
-  plugins: [agentUi(), tailwindcss(), sveltekit()],
+  plugins: [moduleUi(), tailwindcss(), sveltekit()],
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //

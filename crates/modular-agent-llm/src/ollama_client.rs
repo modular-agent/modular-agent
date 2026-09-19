@@ -2,11 +2,11 @@ use std::sync::{Arc, Mutex};
 
 use modular_agent_core::tool;
 use modular_agent_core::{
-    AgentError, AgentValue, AgentValueMap, ContentBlock, Message, MessageContent, ModularAgent,
-    ToolCall, ToolCallFunction, Usage,
+    ContentBlock, Error, Message, MessageContent, ModularAgent, Result, ToolCall, ToolCallFunction,
+    Usage, Value, ValueMap,
 };
 
-use crate::chat::ChatAgent;
+use crate::chat::ChatModule;
 use crate::provider::{CONFIG_OLLAMA_API_KEY, CONFIG_OLLAMA_URL, DEFAULT_OLLAMA_URL};
 
 use im::vector;
@@ -35,7 +35,7 @@ impl OllamaManager {
 
     pub fn get_ollama_url(ma: &ModularAgent) -> String {
         if let Some(ollama_url) = ma
-            .get_global_configs(ChatAgent::DEF_NAME)
+            .get_global_configs(ChatModule::DEF_NAME)
             .and_then(|cfg| cfg.get_string(CONFIG_OLLAMA_URL).ok())
             .filter(|url| !url.is_empty())
         {
@@ -50,7 +50,7 @@ impl OllamaManager {
     }
 
     pub fn get_ollama_api_key(ma: &ModularAgent) -> String {
-        ma.get_global_configs(ChatAgent::DEF_NAME)
+        ma.get_global_configs(ChatModule::DEF_NAME)
             .and_then(|cfg| cfg.get_string(CONFIG_OLLAMA_API_KEY).ok())
             .filter(|key| !key.is_empty())
             .or_else(|| {
@@ -61,7 +61,7 @@ impl OllamaManager {
             .unwrap_or_default()
     }
 
-    pub fn get_client(&self, ma: &ModularAgent) -> Result<OllamaClient, AgentError> {
+    pub fn get_client(&self, ma: &ModularAgent) -> Result<OllamaClient> {
         let mut client_guard = self.client.lock().unwrap();
 
         if let Some(client) = client_guard.as_ref() {
@@ -76,7 +76,7 @@ impl OllamaManager {
             .connect_timeout(std::time::Duration::from_secs(10))
             .read_timeout(std::time::Duration::from_secs(120))
             .build()
-            .map_err(|e| AgentError::IoError(format!("Ollama client build error: {}", e)))?;
+            .map_err(|e| Error::IoError(format!("Ollama client build error: {}", e)))?;
         let new_client = OllamaClient {
             http,
             api_base,
@@ -132,7 +132,7 @@ impl OllamaClient {
         &self,
         url: &str,
         body: &serde_json::Value,
-    ) -> Result<T, AgentError> {
+    ) -> Result<T> {
         let resp = self
             .apply_auth(self.http.post(url))
             .header("content-type", "application/json")
@@ -154,7 +154,7 @@ impl OllamaClient {
     }
 
     /// GET and parse typed response.
-    async fn get_json<T: serde::de::DeserializeOwned>(&self, url: &str) -> Result<T, AgentError> {
+    async fn get_json<T: serde::de::DeserializeOwned>(&self, url: &str) -> Result<T> {
         let resp = self
             .apply_auth(self.http.get(url))
             .send()
@@ -181,10 +181,7 @@ impl OllamaClient {
         &self,
         url: &str,
         body: &serde_json::Value,
-    ) -> Result<
-        std::pin::Pin<Box<dyn futures::Stream<Item = Result<T, AgentError>> + Send>>,
-        AgentError,
-    > {
+    ) -> Result<std::pin::Pin<Box<dyn futures::Stream<Item = Result<T>> + Send>>, Error> {
         use futures::StreamExt;
 
         let resp = self
@@ -221,7 +218,7 @@ impl OllamaClient {
         input: Vec<String>,
         model_name: &str,
         options: &serde_json::Value,
-    ) -> Result<Vec<Vec<f32>>, AgentError> {
+    ) -> Result<Vec<Vec<f32>>> {
         let mut request = serde_json::json!({
             "model": model_name,
             "input": input,
@@ -235,17 +232,14 @@ impl OllamaClient {
     }
 
     /// List local models via GET /api/tags.
-    pub(crate) async fn list_local_models(&self) -> Result<serde_json::Value, AgentError> {
+    pub(crate) async fn list_local_models(&self) -> Result<serde_json::Value> {
         let res: ListModelsResponse = self.get_json(&self.tags_url()).await?;
         serde_json::to_value(&res.models)
-            .map_err(|e| AgentError::IoError(format!("Serialization error: {}", e)))
+            .map_err(|e| Error::IoError(format!("Serialization error: {}", e)))
     }
 
     /// Show model info via POST /api/show.
-    pub(crate) async fn show_model_info(
-        &self,
-        model_name: &str,
-    ) -> Result<serde_json::Value, AgentError> {
+    pub(crate) async fn show_model_info(&self, model_name: &str) -> Result<serde_json::Value> {
         let request = serde_json::json!({ "name": model_name });
         let res: serde_json::Value = self.post_json(&self.show_url(), &request).await?;
         Ok(res)
@@ -256,10 +250,10 @@ impl OllamaClient {
 ///
 /// Buffers incoming string chunks, splits on newline boundaries, and
 /// deserializes each complete line as JSON of type T.
-fn ndjson_stream<T, S>(chunk_stream: S) -> impl futures::Stream<Item = Result<T, AgentError>>
+fn ndjson_stream<T, S>(chunk_stream: S) -> impl futures::Stream<Item = Result<T>>
 where
     T: serde::de::DeserializeOwned,
-    S: futures::Stream<Item = Result<String, AgentError>> + Unpin,
+    S: futures::Stream<Item = Result<String>> + Unpin,
 {
     use futures::StreamExt;
 
@@ -274,9 +268,8 @@ where
                     if line.is_empty() {
                         continue;
                     }
-                    let result = serde_json::from_str::<T>(&line).map_err(|e| {
-                        AgentError::IoError(format!("Ollama stream parse error: {}", e))
-                    });
+                    let result = serde_json::from_str::<T>(&line)
+                        .map_err(|e| Error::IoError(format!("Ollama stream parse error: {}", e)));
                     return Some((result, (stream, buffer)));
                 }
 
@@ -294,7 +287,7 @@ where
                         if !remaining.is_empty() {
                             buffer.clear();
                             let result = serde_json::from_str::<T>(&remaining).map_err(|e| {
-                                AgentError::IoError(format!("Ollama stream parse error: {}", e))
+                                Error::IoError(format!("Ollama stream parse error: {}", e))
                             });
                             return Some((result, (stream, buffer)));
                         }
@@ -306,31 +299,31 @@ where
     )
 }
 
-fn map_http_error(status: u16, body: &str, retry_after: Option<std::time::Duration>) -> AgentError {
+fn map_http_error(status: u16, body: &str, retry_after: Option<std::time::Duration>) -> Error {
     // 429 takes precedence over overflow detection so throttling responses
     // whose body happens to mention context size stay retryable.
     if status == 429 {
         let lower = body.to_lowercase();
         if crate::http_error::mentions_quota_exhausted(&lower) {
-            return AgentError::InvalidConfig(format!("Ollama quota exhausted: {}", body));
+            return Error::InvalidConfig(format!("Ollama quota exhausted: {}", body));
         }
-        return AgentError::RateLimited {
+        return Error::RateLimited {
             message: format!("Ollama rate limited: {}", body),
             retry_after,
         };
     }
     if is_context_overflow(body) {
-        return AgentError::ContextOverflow(format!("Ollama context overflow: {}", body));
+        return Error::ContextOverflow(format!("Ollama context overflow: {}", body));
     }
     match status {
-        400 => AgentError::InvalidValue(format!("Ollama Bad Request: {}", body)),
-        401 => AgentError::InvalidConfig(format!("Ollama authentication failed: {}", body)),
-        404 => AgentError::InvalidConfig(format!("Ollama model not found: {}", body)),
+        400 => Error::InvalidValue(format!("Ollama Bad Request: {}", body)),
+        401 => Error::InvalidConfig(format!("Ollama authentication failed: {}", body)),
+        404 => Error::InvalidConfig(format!("Ollama model not found: {}", body)),
         // Ollama returns 500 for deterministic runtime failures (crashed llama
         // runner, template errors), so only gateway/unavailable statuses are
         // treated as transient.
-        502..=504 => AgentError::Overloaded(format!("Ollama API Error ({}): {}", status, body)),
-        _ => AgentError::IoError(format!("Ollama API Error ({}): {}", status, body)),
+        502..=504 => Error::Overloaded(format!("Ollama API Error ({}): {}", status, body)),
+        _ => Error::IoError(format!("Ollama API Error ({}): {}", status, body)),
     }
 }
 
@@ -575,13 +568,13 @@ pub(crate) fn tool_info_to_ollama(info: tool::ToolInfo) -> OllamaToolInfo {
 /// model parameters like `temperature` to be nested under `"options"`.
 pub(crate) fn merge_options(
     request: &mut serde_json::Value,
-    config_options: &AgentValueMap<String, AgentValue>,
-) -> Result<(), AgentError> {
+    config_options: &ValueMap<String, Value>,
+) -> Result<()> {
     if config_options.is_empty() {
         return Ok(());
     }
     let options_json = serde_json::to_value(config_options)
-        .map_err(|e| AgentError::InvalidValue(format!("Invalid JSON in options: {}", e)))?;
+        .map_err(|e| Error::InvalidValue(format!("Invalid JSON in options: {}", e)))?;
     request["options"] = options_json;
     Ok(())
 }
@@ -953,7 +946,7 @@ mod tests {
     #[test]
     fn test_merge_options_empty() {
         let mut request = serde_json::json!({"model": "test"});
-        let options = AgentValueMap::new();
+        let options = ValueMap::new();
         merge_options(&mut request, &options).unwrap();
         assert!(request.get("options").is_none());
     }
@@ -961,8 +954,8 @@ mod tests {
     #[test]
     fn test_merge_options_nests_under_options_key() {
         let mut request = serde_json::json!({"model": "test"});
-        let mut options = AgentValueMap::new();
-        options.insert("temperature".to_string(), AgentValue::from(0.7f64));
+        let mut options = ValueMap::new();
+        options.insert("temperature".to_string(), Value::from(0.7f64));
         merge_options(&mut request, &options).unwrap();
         assert!(request["options"]["temperature"].is_number());
     }
@@ -975,19 +968,19 @@ mod tests {
     fn test_map_http_error() {
         assert!(matches!(
             map_http_error(400, "bad", None),
-            AgentError::InvalidValue(_)
+            Error::InvalidValue(_)
         ));
         assert!(matches!(
             map_http_error(401, "unauthorized", None),
-            AgentError::InvalidConfig(_)
+            Error::InvalidConfig(_)
         ));
         assert!(matches!(
             map_http_error(404, "not found", None),
-            AgentError::InvalidConfig(_)
+            Error::InvalidConfig(_)
         ));
         assert!(matches!(
             map_http_error(418, "teapot", None),
-            AgentError::IoError(_)
+            Error::IoError(_)
         ));
     }
 
@@ -996,7 +989,7 @@ mod tests {
         let err = map_http_error(429, "rate limited", None);
         assert!(matches!(
             err,
-            AgentError::RateLimited {
+            Error::RateLimited {
                 retry_after: None,
                 ..
             }
@@ -1004,9 +997,7 @@ mod tests {
 
         let retry_after = Some(std::time::Duration::from_secs(7));
         let err = map_http_error(429, "rate limited", retry_after);
-        assert!(
-            matches!(err, AgentError::RateLimited { retry_after: Some(d), .. } if d.as_secs() == 7)
-        );
+        assert!(matches!(err, Error::RateLimited { retry_after: Some(d), .. } if d.as_secs() == 7));
     }
 
     #[test]
@@ -1016,7 +1007,7 @@ mod tests {
             "You exceeded your current quota, please check your plan and billing details.",
             None,
         );
-        assert!(matches!(err, AgentError::InvalidConfig(_)));
+        assert!(matches!(err, Error::InvalidConfig(_)));
         assert!(!err.is_retryable());
     }
 
@@ -1025,22 +1016,22 @@ mod tests {
         // Ollama 500 is typically a deterministic runtime failure, not transient.
         assert!(matches!(
             map_http_error(500, "internal", None),
-            AgentError::IoError(_)
+            Error::IoError(_)
         ));
         assert!(matches!(
             map_http_error(503, "unavailable", None),
-            AgentError::Overloaded(_)
+            Error::Overloaded(_)
         ));
         assert!(matches!(
             map_http_error(502, "bad gateway", None),
-            AgentError::Overloaded(_)
+            Error::Overloaded(_)
         ));
         assert!(matches!(
             map_http_error(504, "gateway timeout", None),
-            AgentError::Overloaded(_)
+            Error::Overloaded(_)
         ));
         let err = map_http_error(503, "unavailable", None);
-        if let AgentError::Overloaded(msg) = err {
+        if let Error::Overloaded(msg) = err {
             assert!(msg.contains("503"), "msg was: {msg}");
             assert!(msg.contains("Ollama"), "msg was: {msg}");
         } else {
@@ -1056,12 +1047,12 @@ mod tests {
                 "the prompt exceeds the maximum context length of 4096",
                 None
             ),
-            AgentError::ContextOverflow(_)
+            Error::ContextOverflow(_)
         ));
         // "context length" alone is not enough
         assert!(matches!(
             map_http_error(400, "invalid context length option", None),
-            AgentError::InvalidValue(_)
+            Error::InvalidValue(_)
         ));
     }
 
@@ -1070,12 +1061,12 @@ mod tests {
         // A 429 whose body mentions context size must stay RateLimited
         assert!(matches!(
             map_http_error(429, "context length exceeded, rate limit", None),
-            AgentError::RateLimited { .. }
+            Error::RateLimited { .. }
         ));
         // A 400 mentioning both overflow and rate limit wording is not overflow
         assert!(matches!(
             map_http_error(400, "context length exceeded due to rate_limit", None),
-            AgentError::InvalidValue(_)
+            Error::InvalidValue(_)
         ));
     }
 }

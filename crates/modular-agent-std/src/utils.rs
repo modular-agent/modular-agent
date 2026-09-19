@@ -1,8 +1,8 @@
 use std::vec;
 
 use modular_agent_core::{
-    Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
-    ModularAgent, async_trait, modular_agent,
+    AsModule, ModularAgent, Module, ModuleContext, ModuleData, ModuleOutput, ModuleSpec, Result,
+    Value, async_trait, modular_agent,
 };
 
 const CATEGORY: &str = "Std/Utils";
@@ -26,43 +26,38 @@ const DISPLAY_COUNT: &str = "count";
     ),
     hint(color=6),
 )]
-struct CounterAgent {
-    data: AgentData,
+struct CounterModule {
+    data: ModuleData,
     count: i64,
 }
 
 #[async_trait]
-impl AsAgent for CounterAgent {
-    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+impl AsModule for CounterModule {
+    fn new(ma: ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
         Ok(Self {
-            data: AgentData::new(ma, id, spec),
+            data: ModuleData::new(ma, id, spec),
             count: 0,
         })
     }
 
-    async fn start(&mut self) -> Result<(), AgentError> {
+    async fn start(&mut self) -> Result<()> {
         self.count = 0;
         // The running count is only emitted, never persisted; this write
         // clears a count an older version saved into the patch.
-        self.set_config(DISPLAY_COUNT.to_string(), AgentValue::integer(0))?;
-        self.emit_config_updated(DISPLAY_COUNT, AgentValue::integer(0));
+        self.set_config(DISPLAY_COUNT.to_string(), Value::integer(0))?;
+        self.emit_config_updated(DISPLAY_COUNT, Value::integer(0));
         Ok(())
     }
 
-    async fn process(
-        &mut self,
-        ctx: AgentContext,
-        port: String,
-        _value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, ctx: ModuleContext, port: String, _value: Value) -> Result<()> {
         if port == PORT_RESET {
             self.count = 0;
         } else if port == PORT_VALUE {
             self.count += 1;
         }
-        self.output(ctx, PORT_COUNT, AgentValue::integer(self.count))
+        self.output(ctx, PORT_COUNT, Value::integer(self.count))
             .await?;
-        self.emit_config_updated(DISPLAY_COUNT, AgentValue::integer(self.count));
+        self.emit_config_updated(DISPLAY_COUNT, Value::integer(self.count));
 
         Ok(())
     }

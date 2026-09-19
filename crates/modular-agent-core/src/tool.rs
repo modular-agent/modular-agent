@@ -1,16 +1,16 @@
-//! Tool registry and agents for LLM function calling.
+//! Tool registry and modules for LLM function calling.
 //!
 //! This module provides infrastructure for registering, managing, and invoking tools
 //! that can be called by LLMs. It includes:
 //!
 //! - A global tool registry for registering and looking up tools by name
 //! - The `Tool` trait for implementing custom tools
-//! - Agents for working with tools in workflows:
-//!   - `ListToolsAgent` - Lists available tools matching a pattern
-//!   - `CustomToolAgent` - Exposes a workflow as a callable tool
-//!   - `CallToolMessageAgent` - Processes tool calls from LLM messages
-//!   - `LoopControlAgent` - Guards tool-call cycles with an iteration limit
-//!   - `CallToolAgent` - Directly invokes a tool by name
+//! - Modules for working with tools in workflows:
+//!   - `ListToolsModule` - Lists available tools matching a pattern
+//!   - `CustomToolModule` - Exposes a workflow as a callable tool
+//!   - `CallToolMessageModule` - Processes tool calls from LLM messages
+//!   - `LoopControlModule` - Guards tool-call cycles with an iteration limit
+//!   - `CallToolModule` - Directly invokes a tool by name
 //! ```
 
 #![cfg(feature = "llm")]
@@ -22,13 +22,14 @@ use std::{
     time::Duration,
 };
 
+use crate::error::Result;
 use parking_lot::{Mutex, RwLock};
 
 use tokio_util::sync::CancellationToken;
 
 use crate::{
-    Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentStatus, AgentValue,
-    AsAgent, Message, MessageContent, ModularAgent, SharedAgent, ToolCall, async_trait,
+    AsModule, Error, Message, MessageContent, ModularAgent, Module, ModuleContext, ModuleData,
+    ModuleOutput, ModuleSpec, ModuleStatus, SharedModule, ToolCall, Value, async_trait,
     modular_agent,
 };
 #[cfg(feature = "image")]
@@ -176,7 +177,7 @@ impl ToolInfo {
 /// # Example
 ///
 /// ```ignore
-/// use modular_agent_core::{Tool, ToolInfo, AgentContext, AgentValue, AgentError, async_trait};
+/// use modular_agent_core::{Tool, ToolInfo, ModuleContext, Value, Error, async_trait};
 ///
 /// struct MyTool {
 ///     info: ToolInfo,
@@ -188,9 +189,9 @@ impl ToolInfo {
 ///         &self.info
 ///     }
 ///
-///     async fn call(&self, ctx: AgentContext, args: AgentValue) -> Result<AgentValue, AgentError> {
+///     async fn call(&self, ctx: ModuleContext, args: Value) -> Result<Value> {
 ///         // Tool implementation
-///         Ok(AgentValue::string("result"))
+///         Ok(Value::string("result"))
 ///     }
 /// }
 /// ```
@@ -203,27 +204,24 @@ pub trait Tool {
     ///
     /// # Arguments
     ///
-    /// * `ctx` - The agent context for this invocation
+    /// * `ctx` - The module context for this invocation
     /// * `args` - Arguments passed to the tool (typically from LLM)
     ///
     /// # Returns
     ///
-    /// The tool's result as an `AgentValue`, or an error if the call fails.
-    async fn call(&self, ctx: AgentContext, args: AgentValue) -> Result<AgentValue, AgentError>;
+    /// The tool's result as a `Value`, or an error if the call fails.
+    async fn call(&self, ctx: ModuleContext, args: Value) -> Result<Value>;
 }
 
-impl From<ToolInfo> for AgentValue {
+impl From<ToolInfo> for Value {
     fn from(info: ToolInfo) -> Self {
-        let mut obj: BTreeMap<String, AgentValue> = BTreeMap::new();
-        obj.insert("name".to_string(), AgentValue::from(info.name));
-        obj.insert(
-            "description".to_string(),
-            AgentValue::from(info.description),
-        );
-        if let Ok(params_value) = AgentValue::from_serialize(&info.parameters) {
+        let mut obj: BTreeMap<String, Value> = BTreeMap::new();
+        obj.insert("name".to_string(), Value::from(info.name));
+        obj.insert("description".to_string(), Value::from(info.description));
+        if let Ok(params_value) = Value::from_serialize(&info.parameters) {
             obj.insert("parameters".to_string(), params_value);
         }
-        AgentValue::object(obj.into())
+        Value::object(obj.into())
     }
 }
 
@@ -419,20 +417,16 @@ pub fn get_tool(name: &str) -> Option<Arc<Box<dyn Tool + Send + Sync>>> {
 ///
 /// # Arguments
 ///
-/// * `ctx` - The agent context for the invocation
+/// * `ctx` - The module context for the invocation
 /// * `name` - The name of the tool to call
 /// * `args` - Arguments to pass to the tool
 ///
 /// # Returns
 ///
 /// The tool's result, or an error if the tool is not found or fails.
-pub async fn call_tool(
-    ctx: AgentContext,
-    name: &str,
-    args: AgentValue,
-) -> Result<AgentValue, AgentError> {
+pub async fn call_tool(ctx: ModuleContext, name: &str, args: Value) -> Result<Value> {
     if ctx.is_cancelled() {
-        return Err(AgentError::Cancelled);
+        return Err(Error::Cancelled);
     }
 
     let tool = {
@@ -441,7 +435,7 @@ pub async fn call_tool(
     };
 
     let Some(tool) = tool else {
-        return Err(AgentError::Other(format!("Tool '{}' not found", name)));
+        return Err(Error::Other(format!("Tool '{}' not found", name)));
     };
 
     tool.call(ctx, args).await
@@ -591,7 +585,7 @@ fn validate_tool_args(
 /// Executes a single tool call, funneling every failure (unparseable
 /// parameters, schema validation failure, tool error) through
 /// [`error_tool_result`] so a failing call never aborts its siblings.
-async fn execute_tool_call(ctx: &AgentContext, call: &ToolCall) -> Message {
+async fn execute_tool_call(ctx: &ModuleContext, call: &ToolCall) -> Message {
     // A provider argument string that failed to parse even after repair is
     // reported back to the model rather than executed with bogus arguments.
     if let Some(err) = &call.function.parse_error {
@@ -621,7 +615,7 @@ async fn execute_tool_call(ctx: &AgentContext, call: &ToolCall) -> Message {
             ),
         );
     }
-    let args = match AgentValue::from_json(parameters) {
+    let args = match Value::from_json(parameters) {
         Ok(args) => args,
         Err(e) => {
             return error_tool_result(call, format!("Failed to parse tool call parameters: {}", e));
@@ -648,17 +642,17 @@ async fn execute_tool_call(ctx: &AgentContext, call: &ToolCall) -> Message {
 /// legacy stringified-JSON form byte-for-byte: persisted sessions and
 /// downstream consumers compare against that exact string, so it must not
 /// change shape.
-fn tool_result_content(resp: &AgentValue) -> MessageContent {
+fn tool_result_content(resp: &Value) -> MessageContent {
     #[cfg(feature = "image")]
     match resp {
-        AgentValue::Image(img) => {
+        Value::Image(img) => {
             return MessageContent::Blocks(vec![image_block(img)]);
         }
-        AgentValue::Array(arr) if arr.iter().any(|v| matches!(v, AgentValue::Image(_))) => {
+        Value::Array(arr) if arr.iter().any(|v| matches!(v, Value::Image(_))) => {
             let blocks = arr
                 .iter()
                 .map(|v| match v {
-                    AgentValue::Image(img) => image_block(img),
+                    Value::Image(img) => image_block(img),
                     other => ContentBlock::Text {
                         text: other.to_json().to_string(),
                     },
@@ -695,7 +689,7 @@ fn image_block(img: &photon_rs::PhotonImage) -> ContentBlock {
 /// real result — their side effects happened, so reporting them aborted
 /// would mislead the model into re-issuing them.
 async fn flush_parallel_batch(
-    ctx: &AgentContext,
+    ctx: &ModuleContext,
     batch: &mut Vec<&ToolCall>,
     max_concurrency: usize,
     out: &mut Vec<Message>,
@@ -768,7 +762,7 @@ async fn flush_parallel_batch(
 /// # Cancellation
 ///
 /// When `ctx` carries a cancellation token (see
-/// [`AgentContext::cancel_token`]) and it fires mid-execution, in-flight
+/// [`ModuleContext::cancel_token`]) and it fires mid-execution, in-flight
 /// calls are dropped and every call without a real result receives a
 /// synthetic `is_error` tool message with content `"Operation aborted"`,
 /// carrying the original tool_call id. Calls that already completed keep
@@ -778,7 +772,7 @@ async fn flush_parallel_batch(
 ///
 /// # Arguments
 ///
-/// * `ctx` - The agent context for the invocations
+/// * `ctx` - The module context for the invocations
 /// * `tool_calls` - The tool calls to execute
 /// * `max_concurrency` - Upper bound on concurrently running `Parallel`
 ///   calls; values below 1 are treated as 1
@@ -787,10 +781,10 @@ async fn flush_parallel_batch(
 ///
 /// A vector of tool response messages, one for each tool call, in input order.
 pub async fn call_tools(
-    ctx: &AgentContext,
+    ctx: &ModuleContext,
     tool_calls: &Vector<ToolCall>,
     max_concurrency: usize,
-) -> Result<Vector<Message>, AgentError> {
+) -> Result<Vector<Message>> {
     if tool_calls.is_empty() {
         return Ok(vector![]);
     };
@@ -852,7 +846,7 @@ pub async fn call_tools(
     // History consistency on cancellation: every tool_call the model issued
     // must receive a result, so calls interrupted or never started get a
     // synthetic aborted result carrying the original tool_call id (mirrors
-    // the stop_reason == "length" guard in CallToolMessageAgent).
+    // the stop_reason == "length" guard in CallToolMessageModule).
     if aborted {
         for call in tool_calls.iter().skip(resp_messages.len()) {
             resp_messages.push(error_tool_result(call, ABORTED_TOOL_RESULT));
@@ -863,10 +857,10 @@ pub async fn call_tools(
 }
 
 // ============================================================================
-// Tool Agents
+// Tool Modules
 // ============================================================================
 
-/// Agent that lists available tools.
+/// Module that lists available tools.
 ///
 /// Outputs tool information for all registered tools, optionally filtered
 /// by regex patterns provided on the input port.
@@ -884,41 +878,36 @@ pub async fn call_tools(
     inputs=[PORT_PATTERNS],
     outputs=[PORT_TOOLS],
 )]
-pub struct ListToolsAgent {
-    data: AgentData,
+pub struct ListToolsModule {
+    data: ModuleData,
 }
 
 #[async_trait]
-impl AsAgent for ListToolsAgent {
-    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+impl AsModule for ListToolsModule {
+    fn new(ma: ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
         Ok(Self {
-            data: AgentData::new(ma, id, spec),
+            data: ModuleData::new(ma, id, spec),
         })
     }
 
-    async fn process(
-        &mut self,
-        ctx: AgentContext,
-        _port: String,
-        value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, ctx: ModuleContext, _port: String, value: Value) -> Result<()> {
         let Some(patterns) = value.as_str() else {
-            return Err(AgentError::InvalidValue(
+            return Err(Error::InvalidValue(
                 "patterns input must be a string".to_string(),
             ));
         };
 
         let tools = if !patterns.is_empty() {
             list_tool_infos_patterns(patterns)
-                .map_err(|e| AgentError::InvalidValue(format!("Invalid regex patterns: {}", e)))?
+                .map_err(|e| Error::InvalidValue(format!("Invalid regex patterns: {}", e)))?
         } else {
             list_tool_infos()
         };
         let tools = tools
             .into_iter()
             .map(|tool| tool.into())
-            .collect::<Vector<AgentValue>>();
-        let tools_array = AgentValue::array(tools);
+            .collect::<Vector<Value>>();
+        let tools_array = Value::array(tools);
 
         self.output(ctx, PORT_TOOLS, tools_array).await?;
 
@@ -926,15 +915,15 @@ impl AsAgent for ListToolsAgent {
     }
 }
 
-/// Agent that exposes a workflow as a callable tool.
+/// Module that exposes a workflow as a callable tool.
 ///
-/// This agent registers itself as a tool that can be invoked by LLMs.
+/// This module registers itself as a tool that can be invoked by LLMs.
 /// When called, it forwards the arguments to the `tool_in` output port
 /// and waits for a response on the `tool_out` input port.
 ///
 /// # Configuration
 ///
-/// * `name` - The tool name (defaults to agent definition name)
+/// * `name` - The tool name (defaults to module definition name)
 /// * `description` - Human-readable description of the tool
 /// * `parameters` - JSON Schema describing the tool's parameters
 /// * `timeout_secs` - Seconds to wait for the workflow's result before timing
@@ -955,25 +944,25 @@ impl AsAgent for ListToolsAgent {
     object_config(name=CONFIG_TOOL_PARAMETERS),
     integer_config(name=CONFIG_TIMEOUT_SECS, default=60),
 )]
-pub struct CustomToolAgent {
-    data: AgentData,
+pub struct CustomToolModule {
+    data: ModuleData,
     name: String,
     description: String,
     parameters: Option<serde_json::Value>,
     /// Pending tool calls awaiting results, keyed by context ID.
-    pending: Arc<Mutex<HashMap<usize, oneshot::Sender<AgentValue>>>>,
+    pending: Arc<Mutex<HashMap<usize, oneshot::Sender<Value>>>>,
 }
 
-impl CustomToolAgent {
+impl CustomToolModule {
     /// Initiates a tool call and returns a receiver for the result.
     ///
     /// Emits the arguments to the workflow and registers a pending receiver
     /// that will be fulfilled when the result arrives on the input port.
     fn start_tool_call(
         &mut self,
-        ctx: AgentContext,
-        args: AgentValue,
-    ) -> Result<oneshot::Receiver<AgentValue>, AgentError> {
+        ctx: ModuleContext,
+        args: Value,
+    ) -> Result<oneshot::Receiver<Value>> {
         let (tx, rx) = oneshot::channel();
 
         self.pending.lock().insert(ctx.id(), tx);
@@ -990,8 +979,8 @@ impl CustomToolAgent {
 }
 
 #[async_trait]
-impl AsAgent for CustomToolAgent {
-    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+impl AsModule for CustomToolModule {
+    fn new(ma: ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
         let def_name = spec.def_name.clone();
         let configs = spec.configs.clone();
         let name = configs
@@ -1007,7 +996,7 @@ impl AsAgent for CustomToolAgent {
             .and_then(|c| c.get(CONFIG_TOOL_PARAMETERS).ok())
             .and_then(|v| serde_json::to_value(v).ok());
         Ok(Self {
-            data: AgentData::new(ma, id, spec),
+            data: ModuleData::new(ma, id, spec),
             name,
             description,
             parameters,
@@ -1015,7 +1004,7 @@ impl AsAgent for CustomToolAgent {
         })
     }
 
-    fn configs_changed(&mut self) -> Result<(), AgentError> {
+    fn configs_changed(&mut self) -> Result<()> {
         let old_name = self.name.clone();
         self.name = self.configs()?.get_string_or_default(CONFIG_TOOL_NAME);
         self.description = self
@@ -1029,24 +1018,24 @@ impl AsAgent for CustomToolAgent {
 
         // Refresh the registration only while running; otherwise start() will
         // register the tool with the new values later.
-        if self.data.status == AgentStatus::Start {
+        if self.data.status == ModuleStatus::Start {
             if !is_valid_tool_name(&self.name) {
                 log::warn!(
-                    "CustomToolAgent {} has invalid tool name {:?}; \
+                    "CustomToolModule {} has invalid tool name {:?}; \
                      tool names must match ^[a-zA-Z0-9_-]{{1,64}}$",
                     self.id(),
                     self.name
                 );
             }
-            let agent_handle = self
+            let module_handle = self
                 .ma()
-                .get_agent(self.id())
-                .ok_or_else(|| AgentError::AgentNotFound(self.id().to_string()))?;
+                .get_module(self.id())
+                .ok_or_else(|| Error::ModuleNotFound(self.id().to_string()))?;
             let tool = CustomTool::new(
                 self.name.clone(),
                 self.description.clone(),
                 self.parameters.clone(),
-                agent_handle,
+                module_handle,
             );
             // Register first: for an in-place refresh this overwrites the entry
             // atomically, so concurrent lookups never hit a missing tool. The
@@ -1062,43 +1051,38 @@ impl AsAgent for CustomToolAgent {
         Ok(())
     }
 
-    async fn start(&mut self) -> Result<(), AgentError> {
+    async fn start(&mut self) -> Result<()> {
         // Claude and OpenAI both require tool names to match ^[a-zA-Z0-9_-]{1,64}$;
         // an invalid name only fails later at API-call time, so surface it early.
         if !is_valid_tool_name(&self.name) {
             log::warn!(
-                "CustomToolAgent {} has invalid tool name {:?}; \
+                "CustomToolModule {} has invalid tool name {:?}; \
                  tool names must match ^[a-zA-Z0-9_-]{{1,64}}$",
                 self.id(),
                 self.name
             );
         }
-        let agent_handle = self
+        let module_handle = self
             .ma()
-            .get_agent(self.id())
-            .ok_or_else(|| AgentError::AgentNotFound(self.id().to_string()))?;
+            .get_module(self.id())
+            .ok_or_else(|| Error::ModuleNotFound(self.id().to_string()))?;
         let tool = CustomTool::new(
             self.name.clone(),
             self.description.clone(),
             self.parameters.clone(),
-            agent_handle,
+            module_handle,
         );
         register_tool(tool);
         Ok(())
     }
 
-    async fn stop(&mut self) -> Result<(), AgentError> {
+    async fn stop(&mut self) -> Result<()> {
         unregister_tool(&self.name);
         self.pending.lock().clear();
         Ok(())
     }
 
-    async fn process(
-        &mut self,
-        ctx: AgentContext,
-        _port: String,
-        value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, ctx: ModuleContext, _port: String, value: Value) -> Result<()> {
         if let Some(tx) = self.pending.lock().remove(&ctx.id()) {
             let _ = tx.send(value);
         }
@@ -1106,66 +1090,60 @@ impl AsAgent for CustomToolAgent {
     }
 }
 
-/// Internal Tool implementation that delegates to a CustomToolAgent.
+/// Internal Tool implementation that delegates to a CustomToolModule.
 struct CustomTool {
     info: ToolInfo,
-    agent: SharedAgent,
+    module: SharedModule,
 }
 
 impl CustomTool {
-    /// Creates a new CustomTool wrapping a CustomToolAgent.
+    /// Creates a new CustomTool wrapping a CustomToolModule.
     fn new(
         name: String,
         description: String,
         parameters: Option<serde_json::Value>,
-        agent: SharedAgent,
+        module: SharedModule,
     ) -> Self {
         Self {
             info: ToolInfo::new(name, description, parameters),
-            agent,
+            module,
         }
     }
 
-    /// Executes a tool call through the wrapped agent.
+    /// Executes a tool call through the wrapped module.
     ///
-    /// Waits up to the agent's `timeout_secs` config (default 60) for a result;
+    /// Waits up to the module's `timeout_secs` config (default 60) for a result;
     /// `0` waits indefinitely. The timeout is read at call time so runtime config
-    /// changes take effect. On timeout an `AgentError::Timeout` is returned, which
+    /// changes take effect. On timeout an `Error::Timeout` is returned, which
     /// the LLM tool-call path (`call_tools`) turns into an `is_error` tool result.
     ///
     /// When `ctx` carries a cancellation token, the wait also aborts as soon
-    /// as the token fires, returning [`AgentError::Cancelled`].
-    async fn tool_call(
-        &self,
-        ctx: AgentContext,
-        args: AgentValue,
-    ) -> Result<AgentValue, AgentError> {
+    /// as the token fires, returning [`Error::Cancelled`].
+    async fn tool_call(&self, ctx: ModuleContext, args: Value) -> Result<Value> {
         if ctx.is_cancelled() {
-            return Err(AgentError::Cancelled);
+            return Err(Error::Cancelled);
         }
 
         // Kick off the tool call while holding the lock, then drop it before awaiting the result
         let ctx_id = ctx.id();
         let cancel = ctx.cancel_token().cloned();
         let (rx, timeout_secs, pending) = {
-            let mut guard = self.agent.lock().await;
-            let Some(custom_tool_agent) = guard.as_agent_mut::<CustomToolAgent>() else {
-                return Err(AgentError::Other(
-                    "Agent is not CustomToolAgent".to_string(),
-                ));
+            let mut guard = self.module.lock().await;
+            let Some(custom_tool_module) = guard.as_module_mut::<CustomToolModule>() else {
+                return Err(Error::Other("Module is not CustomToolModule".to_string()));
             };
-            // Cancellation may have fired while waiting for the agent lock.
+            // Cancellation may have fired while waiting for the module lock.
             // Check again immediately before pending state is registered and
             // `tool_in` is emitted.
             if ctx.is_cancelled() {
-                return Err(AgentError::Cancelled);
+                return Err(Error::Cancelled);
             }
-            let timeout_secs = custom_tool_agent
+            let timeout_secs = custom_tool_module
                 .configs()
                 .map(|c| c.get_integer_or(CONFIG_TIMEOUT_SECS, DEFAULT_TIMEOUT_SECS))
                 .unwrap_or(DEFAULT_TIMEOUT_SECS);
-            let pending = custom_tool_agent.pending.clone();
-            let rx = custom_tool_agent.start_tool_call(ctx, args)?;
+            let pending = custom_tool_module.pending.clone();
+            let rx = custom_tool_module.start_tool_call(ctx, args)?;
             (rx, timeout_secs, pending)
         };
 
@@ -1182,7 +1160,7 @@ impl CustomTool {
         // have registered a sender while this one is alive — the guard cannot
         // remove a newer call's sender.
         struct PendingGuard {
-            pending: Arc<Mutex<HashMap<usize, oneshot::Sender<AgentValue>>>>,
+            pending: Arc<Mutex<HashMap<usize, oneshot::Sender<Value>>>>,
             ctx_id: usize,
         }
         impl Drop for PendingGuard {
@@ -1195,14 +1173,14 @@ impl CustomTool {
         let wait = async {
             let rx = async {
                 rx.await
-                    .map_err(|_| AgentError::Other("tool_out dropped".to_string()))
+                    .map_err(|_| Error::Other("tool_out dropped".to_string()))
             };
             if timeout_secs <= 0 {
                 rx.await
             } else {
                 match tokio::time::timeout(Duration::from_secs(timeout_secs as u64), rx).await {
                     Ok(result) => result,
-                    Err(_) => Err(AgentError::Timeout(format!(
+                    Err(_) => Err(Error::Timeout(format!(
                         "Tool call timed out after {} seconds",
                         timeout_secs
                     ))),
@@ -1211,7 +1189,7 @@ impl CustomTool {
         };
         run_unless_cancelled(cancel.as_ref(), wait)
             .await
-            .unwrap_or(Err(AgentError::Cancelled))
+            .unwrap_or(Err(Error::Cancelled))
     }
 }
 
@@ -1221,14 +1199,14 @@ impl Tool for CustomTool {
         &self.info
     }
 
-    async fn call(&self, ctx: AgentContext, args: AgentValue) -> Result<AgentValue, AgentError> {
+    async fn call(&self, ctx: ModuleContext, args: Value) -> Result<Value> {
         self.tool_call(ctx, args).await
     }
 }
 
-/// Agent that processes tool calls from LLM messages.
+/// Module that processes tool calls from LLM messages.
 ///
-/// When an LLM response contains tool calls, this agent executes them
+/// When an LLM response contains tool calls, this module executes them
 /// and outputs the results as tool response messages. Consecutive calls to
 /// tools registered with `ExecutionMode::Parallel` run concurrently (bounded
 /// by `max_concurrency`); calls to `Sequential` tools — the default — run one
@@ -1252,8 +1230,8 @@ impl Tool for CustomTool {
     string_config(name=CONFIG_TOOLS),
     integer_config(name=CONFIG_MAX_CONCURRENCY, default=8),
 )]
-pub struct CallToolMessageAgent {
-    data: AgentData,
+pub struct CallToolMessageModule {
+    data: ModuleData,
     /// Tool-call ids already executed, keyed by ctx_key, guarding against a
     /// streaming turn re-delivering the same final message (e.g. Claude emits
     /// identical tool_calls on both ContentBlockStop and MessageStop).
@@ -1265,7 +1243,7 @@ pub struct CallToolMessageAgent {
 /// Upper bound on tracked ctx_keys; the oldest entry is evicted when exceeded.
 const MAX_TRACKED_CTX_KEYS: usize = 1024;
 
-impl CallToolMessageAgent {
+impl CallToolMessageModule {
     fn is_executed(&self, ctx_key: &str, id: &str) -> bool {
         self.executed
             .get(ctx_key)
@@ -1289,27 +1267,22 @@ impl CallToolMessageAgent {
 }
 
 #[async_trait]
-impl AsAgent for CallToolMessageAgent {
-    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+impl AsModule for CallToolMessageModule {
+    fn new(ma: ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
         Ok(Self {
-            data: AgentData::new(ma, id, spec),
+            data: ModuleData::new(ma, id, spec),
             executed: BTreeMap::new(),
             ctx_key_order: VecDeque::new(),
         })
     }
 
-    async fn stop(&mut self) -> Result<(), AgentError> {
+    async fn stop(&mut self) -> Result<()> {
         self.executed.clear();
         self.ctx_key_order.clear();
         Ok(())
     }
 
-    async fn process(
-        &mut self,
-        ctx: AgentContext,
-        _port: String,
-        value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, ctx: ModuleContext, _port: String, value: Value) -> Result<()> {
         let Some(message) = value.as_message() else {
             return Ok(());
         };
@@ -1326,7 +1299,7 @@ impl AsAgent for CallToolMessageAgent {
         let config_tools = self.configs()?.get_string_or_default(CONFIG_TOOLS);
         if !config_tools.is_empty() {
             let tools = list_tool_infos_patterns(&config_tools)
-                .map_err(|e| AgentError::InvalidValue(format!("Invalid regex patterns: {}", e)))?;
+                .map_err(|e| Error::InvalidValue(format!("Invalid regex patterns: {}", e)))?;
             // FIXME: cache allowed tool names
             let allowed_tool_names: HashSet<String> = tools.into_iter().map(|t| t.name).collect();
             tool_calls = tool_calls
@@ -1371,7 +1344,7 @@ impl AsAgent for CallToolMessageAgent {
                         call.function.name
                     ),
                 );
-                self.output(ctx.clone(), PORT_MESSAGE, AgentValue::message(resp_msg))
+                self.output(ctx.clone(), PORT_MESSAGE, Value::message(resp_msg))
                     .await?;
             }
             return Ok(());
@@ -1386,16 +1359,16 @@ impl AsAgent for CallToolMessageAgent {
 
         let resp_messages = call_tools(&ctx, &tool_calls, max_concurrency).await?;
         for resp_msg in resp_messages {
-            self.output(ctx.clone(), PORT_MESSAGE, AgentValue::message(resp_msg))
+            self.output(ctx.clone(), PORT_MESSAGE, Value::message(resp_msg))
                 .await?;
         }
         Ok(())
     }
 }
 
-/// Agent that guards LLM tool-call cycles against runaway iteration.
+/// Module that guards LLM tool-call cycles against runaway iteration.
 ///
-/// Insert this agent between a chat agent's message output and the
+/// Insert this module between a chat module's message output and the
 /// tool-execution node. It forwards traffic transparently while counting,
 /// per flow, the final assistant messages that request tool calls. Once the
 /// count would exceed `max_iterations`, the triggering message is not
@@ -1414,7 +1387,7 @@ impl AsAgent for CallToolMessageAgent {
 ///
 /// Setting `max_iterations` to zero or a negative value disables the limit.
 /// Counters are kept per flow (`ctx_key`), capped at 1024 flows with
-/// oldest-first eviction, and cleared when the agent stops.
+/// oldest-first eviction, and cleared when the module stops.
 ///
 /// # Configuration
 ///
@@ -1432,8 +1405,8 @@ impl AsAgent for CallToolMessageAgent {
     outputs=[PORT_MESSAGE, PORT_LIMIT_EXCEEDED],
     integer_config(name=CONFIG_MAX_ITERATIONS, default=25),
 )]
-pub struct LoopControlAgent {
-    data: AgentData,
+pub struct LoopControlModule {
+    data: ModuleData,
     /// Iteration count and last counted message id, keyed by ctx_key. The id
     /// guards against a streaming turn re-delivering the same final message.
     counts: BTreeMap<String, (u32, Option<String>)>,
@@ -1441,7 +1414,7 @@ pub struct LoopControlAgent {
     ctx_key_order: VecDeque<String>,
 }
 
-impl LoopControlAgent {
+impl LoopControlModule {
     fn record_count(&mut self, ctx_key: &str, count: u32, id: Option<String>) {
         if !self.counts.contains_key(ctx_key) {
             if self.ctx_key_order.len() >= MAX_TRACKED_CTX_KEYS
@@ -1456,27 +1429,22 @@ impl LoopControlAgent {
 }
 
 #[async_trait]
-impl AsAgent for LoopControlAgent {
-    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+impl AsModule for LoopControlModule {
+    fn new(ma: ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
         Ok(Self {
-            data: AgentData::new(ma, id, spec),
+            data: ModuleData::new(ma, id, spec),
             counts: BTreeMap::new(),
             ctx_key_order: VecDeque::new(),
         })
     }
 
-    async fn stop(&mut self) -> Result<(), AgentError> {
+    async fn stop(&mut self) -> Result<()> {
         self.counts.clear();
         self.ctx_key_order.clear();
         Ok(())
     }
 
-    async fn process(
-        &mut self,
-        ctx: AgentContext,
-        _port: String,
-        value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, ctx: ModuleContext, _port: String, value: Value) -> Result<()> {
         let countable = value.as_message().is_some_and(|m| {
             m.role == "assistant"
                 && !m.streaming
@@ -1519,7 +1487,7 @@ impl AsAgent for LoopControlAgent {
                 max_iterations
             ));
             return self
-                .output(ctx, PORT_LIMIT_EXCEEDED, AgentValue::message(notice))
+                .output(ctx, PORT_LIMIT_EXCEEDED, Value::message(notice))
                 .await;
         }
 
@@ -1527,7 +1495,7 @@ impl AsAgent for LoopControlAgent {
     }
 }
 
-/// Agent that directly invokes a tool by name.
+/// Module that directly invokes a tool by name.
 ///
 /// Takes a tool call specification (name and parameters) and invokes
 /// the corresponding registered tool, outputting the result.
@@ -1542,31 +1510,27 @@ impl AsAgent for LoopControlAgent {
     inputs=[PORT_TOOL_CALL],
     outputs=[PORT_VALUE],
 )]
-pub struct CallToolAgent {
-    data: AgentData,
+pub struct CallToolModule {
+    data: ModuleData,
 }
 
 #[async_trait]
-impl AsAgent for CallToolAgent {
-    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+impl AsModule for CallToolModule {
+    fn new(ma: ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
         Ok(Self {
-            data: AgentData::new(ma, id, spec),
+            data: ModuleData::new(ma, id, spec),
         })
     }
 
-    async fn process(
-        &mut self,
-        ctx: AgentContext,
-        _port: String,
-        value: AgentValue,
-    ) -> Result<(), AgentError> {
-        let obj = value.as_object().ok_or_else(|| {
-            AgentError::InvalidValue("tool_call input must be an object".to_string())
-        })?;
-        let tool_name = obj.get("name").and_then(|v| v.as_str()).ok_or_else(|| {
-            AgentError::InvalidValue("tool_call.name must be a string".to_string())
-        })?;
-        let tool_parameters = obj.get("parameters").cloned().unwrap_or(AgentValue::unit());
+    async fn process(&mut self, ctx: ModuleContext, _port: String, value: Value) -> Result<()> {
+        let obj = value
+            .as_object()
+            .ok_or_else(|| Error::InvalidValue("tool_call input must be an object".to_string()))?;
+        let tool_name = obj
+            .get("name")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| Error::InvalidValue("tool_call.name must be a string".to_string()))?;
+        let tool_parameters = obj.get("parameters").cloned().unwrap_or(Value::unit());
 
         let resp = call_tool(ctx.clone(), tool_name, tool_parameters).await?;
         self.output(ctx, PORT_VALUE, resp).await?;
@@ -1627,15 +1591,15 @@ mod tests {
 
     #[test]
     fn test_custom_tool_timeout_config_default() {
-        let def = CustomToolAgent::agent_definition();
+        let def = CustomToolModule::module_definition();
         let specs = def
             .configs
             .as_ref()
-            .expect("CustomToolAgent should have config specs");
+            .expect("CustomToolModule should have config specs");
         let spec = specs
             .get(CONFIG_TIMEOUT_SECS)
             .expect("timeout_secs config should be present");
-        assert_eq!(spec.value, AgentValue::integer(DEFAULT_TIMEOUT_SECS));
+        assert_eq!(spec.value, Value::integer(DEFAULT_TIMEOUT_SECS));
     }
 
     #[test]
@@ -1688,11 +1652,7 @@ mod tests {
                 &self.info
             }
 
-            async fn call(
-                &self,
-                _ctx: AgentContext,
-                args: AgentValue,
-            ) -> Result<AgentValue, AgentError> {
+            async fn call(&self, _ctx: ModuleContext, args: Value) -> Result<Value> {
                 Ok(args)
             }
         }
@@ -1763,7 +1723,7 @@ mod tests {
             );
 
             let calls = vector![call(name, "c1", json!({"count": "42", "flag": "true"}))];
-            let msgs = call_tools(&AgentContext::new(), &calls, 8).await.unwrap();
+            let msgs = call_tools(&ModuleContext::new(), &calls, 8).await.unwrap();
             unregister_tool(name);
 
             assert_eq!(msgs.len(), 1);
@@ -1789,7 +1749,7 @@ mod tests {
             );
 
             let calls = vector![call(name, "c1", json!({"outer": {"n": "7"}}))];
-            let msgs = call_tools(&AgentContext::new(), &calls, 8).await.unwrap();
+            let msgs = call_tools(&ModuleContext::new(), &calls, 8).await.unwrap();
             unregister_tool(name);
 
             assert_eq!(msgs.len(), 1);
@@ -1813,7 +1773,7 @@ mod tests {
                 call(name, "bad", json!({"count": "abc"})),
                 call(name, "good", json!({"count": "5"})),
             ];
-            let msgs = call_tools(&AgentContext::new(), &calls, 8).await.unwrap();
+            let msgs = call_tools(&ModuleContext::new(), &calls, 8).await.unwrap();
             unregister_tool(name);
 
             assert_eq!(msgs.len(), 2);
@@ -1844,7 +1804,7 @@ mod tests {
             );
 
             let calls = vector![call(name, "bad", json!({"count": "abc", "flag": "xyz"}))];
-            let msgs = call_tools(&AgentContext::new(), &calls, 8).await.unwrap();
+            let msgs = call_tools(&ModuleContext::new(), &calls, 8).await.unwrap();
             unregister_tool(name);
 
             assert_eq!(msgs.len(), 1);
@@ -1861,7 +1821,7 @@ mod tests {
 
             let args = json!({"anything": [1, 2, 3], "nested": {"x": "y"}});
             let calls = vector![call(name, "c1", args.clone())];
-            let msgs = call_tools(&AgentContext::new(), &calls, 8).await.unwrap();
+            let msgs = call_tools(&ModuleContext::new(), &calls, 8).await.unwrap();
             unregister_tool(name);
 
             assert_eq!(msgs.len(), 1);
@@ -1876,7 +1836,7 @@ mod tests {
 
             let args = json!({"x": "1"});
             let calls = vector![call(name, "c1", args.clone())];
-            let msgs = call_tools(&AgentContext::new(), &calls, 8).await.unwrap();
+            let msgs = call_tools(&ModuleContext::new(), &calls, 8).await.unwrap();
             unregister_tool(name);
 
             assert_eq!(msgs.len(), 1);
@@ -1903,7 +1863,7 @@ mod tests {
                 call(name, "c2", json!({"v": "7"})),
                 call(name, "c3", json!({"v": 5})),
             ];
-            let msgs = call_tools(&AgentContext::new(), &calls, 8).await.unwrap();
+            let msgs = call_tools(&ModuleContext::new(), &calls, 8).await.unwrap();
             unregister_tool(name);
 
             assert_eq!(msgs.len(), 3);
@@ -1933,7 +1893,7 @@ mod tests {
             );
 
             let calls = vector![call(name, "c1", json!({"a": "5"}))];
-            let msgs = call_tools(&AgentContext::new(), &calls, 8).await.unwrap();
+            let msgs = call_tools(&ModuleContext::new(), &calls, 8).await.unwrap();
             unregister_tool(name);
 
             assert_eq!(msgs.len(), 1);
@@ -1948,7 +1908,7 @@ mod tests {
         /// Tool that returns a fixed value regardless of its arguments.
         struct FixedTool {
             info: ToolInfo,
-            value: AgentValue,
+            value: Value,
         }
 
         #[async_trait]
@@ -1957,16 +1917,12 @@ mod tests {
                 &self.info
             }
 
-            async fn call(
-                &self,
-                _ctx: AgentContext,
-                _args: AgentValue,
-            ) -> Result<AgentValue, AgentError> {
+            async fn call(&self, _ctx: ModuleContext, _args: Value) -> Result<Value> {
                 Ok(self.value.clone())
             }
         }
 
-        fn register_fixed(name: &str, value: AgentValue) {
+        fn register_fixed(name: &str, value: Value) {
             register_tool(FixedTool {
                 info: ToolInfo::new(name, "returns a fixed value for tests", None),
                 value,
@@ -1986,7 +1942,7 @@ mod tests {
 
         async fn run_single(name: &str) -> Message {
             let calls = vector![call(name, "c1")];
-            let mut msgs = call_tools(&AgentContext::new(), &calls, 8).await.unwrap();
+            let mut msgs = call_tools(&ModuleContext::new(), &calls, 8).await.unwrap();
             unregister_tool(name);
             assert_eq!(msgs.len(), 1);
             msgs.remove(0)
@@ -1996,7 +1952,7 @@ mod tests {
         #[tokio::test]
         async fn image_result_becomes_single_image_block() {
             let name = "result_content_image";
-            register_fixed(name, AgentValue::image_default());
+            register_fixed(name, Value::image_default());
 
             let msg = run_single(name).await;
             assert_eq!(msg.role, "tool");
@@ -2022,10 +1978,7 @@ mod tests {
             let name = "result_content_mixed_array";
             register_fixed(
                 name,
-                AgentValue::array(vector![
-                    AgentValue::image_default(),
-                    AgentValue::string("caption"),
-                ]),
+                Value::array(vector![Value::image_default(), Value::string("caption"),]),
             );
 
             let msg = run_single(name).await;
@@ -2043,12 +1996,11 @@ mod tests {
 
         #[tokio::test]
         async fn non_image_results_keep_legacy_text_form() {
-            let object = AgentValue::from_json(serde_json::json!({"a": 1, "b": "x"})).unwrap();
-            let imageless_array =
-                AgentValue::from_json(serde_json::json!([1, "two", null])).unwrap();
+            let object = Value::from_json(serde_json::json!({"a": 1, "b": "x"})).unwrap();
+            let imageless_array = Value::from_json(serde_json::json!([1, "two", null])).unwrap();
             let cases = [
                 ("result_content_object", object),
-                ("result_content_string", AgentValue::string("plain")),
+                ("result_content_string", Value::string("plain")),
                 ("result_content_array", imageless_array),
             ];
             for (name, value) in cases {
@@ -2063,7 +2015,7 @@ mod tests {
         async fn error_result_stays_text() {
             // An unregistered tool routes through error_tool_result.
             let calls = vector![call("result_content_no_such_tool", "c1")];
-            let msgs = call_tools(&AgentContext::new(), &calls, 8).await.unwrap();
+            let msgs = call_tools(&ModuleContext::new(), &calls, 8).await.unwrap();
             assert_eq!(msgs.len(), 1);
             assert_eq!(msgs[0].is_error, Some(true));
             assert!(matches!(msgs[0].content, MessageContent::Text(_)));
@@ -2075,39 +2027,39 @@ mod tests {
     mod loop_control {
         use super::*;
         use crate::test_utils::{ProbeReceiver, probe_receiver};
-        use crate::{AgentContext, ConnectionSpec, SharedAgent};
+        use crate::{ConnectionSpec, ModuleContext, SharedModule};
 
-        const LOOP_DEF: &str = "modular_agent_core::tool::LoopControlAgent";
-        const PROBE_DEF: &str = "modular_agent_core::test_utils::TestProbeAgent";
+        const LOOP_DEF: &str = "modular_agent_core::tool::LoopControlModule";
+        const PROBE_DEF: &str = "modular_agent_core::test_utils::TestProbeModule";
         const PROBE_PORT: &str = "value";
 
         struct Fixture {
             ma: ModularAgent,
-            loop_agent: SharedAgent,
+            loop_module: SharedModule,
             forwarded: ProbeReceiver,
             limit: ProbeReceiver,
         }
 
-        /// Builds a running patch: LoopControlAgent with its `message` and
-        /// `limit_exceeded` outputs each wired to a TestProbeAgent.
+        /// Builds a running patch: LoopControlModule with its `message` and
+        /// `limit_exceeded` outputs each wired to a TestProbeModule.
         async fn setup(max_iterations: i64) -> Fixture {
             let ma = ModularAgent::init().unwrap();
             ma.ready().await.unwrap();
             let patch_id = ma.new_patch().unwrap();
 
-            let loop_def = ma.get_agent_definition(LOOP_DEF).unwrap();
+            let loop_def = ma.get_module_definition(LOOP_DEF).unwrap();
             let loop_id = ma
-                .add_agent(patch_id.clone(), loop_def.to_spec())
+                .add_module(patch_id.clone(), loop_def.to_spec())
                 .await
                 .unwrap();
 
-            let probe_def = ma.get_agent_definition(PROBE_DEF).unwrap();
+            let probe_def = ma.get_module_definition(PROBE_DEF).unwrap();
             let fwd_id = ma
-                .add_agent(patch_id.clone(), probe_def.to_spec())
+                .add_module(patch_id.clone(), probe_def.to_spec())
                 .await
                 .unwrap();
             let lim_id = ma
-                .add_agent(patch_id.clone(), probe_def.to_spec())
+                .add_module(patch_id.clone(), probe_def.to_spec())
                 .await
                 .unwrap();
 
@@ -2128,14 +2080,11 @@ mod tests {
                 .unwrap();
             }
 
-            let loop_agent = ma.get_agent(&loop_id).unwrap();
-            loop_agent
+            let loop_module = ma.get_module(&loop_id).unwrap();
+            loop_module
                 .lock()
                 .await
-                .set_config(
-                    CONFIG_MAX_ITERATIONS.into(),
-                    AgentValue::integer(max_iterations),
-                )
+                .set_config(CONFIG_MAX_ITERATIONS.into(), Value::integer(max_iterations))
                 .unwrap();
 
             ma.start_patch(&patch_id).await.unwrap();
@@ -2145,13 +2094,13 @@ mod tests {
 
             Fixture {
                 ma,
-                loop_agent,
+                loop_module,
                 forwarded,
                 limit,
             }
         }
 
-        fn assistant_tool_call_msg(id: Option<&str>, streaming: bool) -> AgentValue {
+        fn assistant_tool_call_msg(id: Option<&str>, streaming: bool) -> Value {
             let mut msg = Message::assistant("use tools".to_string());
             msg.id = id.map(str::to_string);
             msg.streaming = streaming;
@@ -2163,12 +2112,12 @@ mod tests {
                     parse_error: None,
                 },
             }]);
-            AgentValue::message(msg)
+            Value::message(msg)
         }
 
-        async fn send(fixture: &Fixture, ctx: &AgentContext, value: AgentValue) {
+        async fn send(fixture: &Fixture, ctx: &ModuleContext, value: Value) {
             fixture
-                .loop_agent
+                .loop_module
                 .lock()
                 .await
                 .process(ctx.clone(), PORT_MESSAGE.to_string(), value)
@@ -2176,7 +2125,7 @@ mod tests {
                 .unwrap();
         }
 
-        async fn recv(rx: &ProbeReceiver) -> AgentValue {
+        async fn recv(rx: &ProbeReceiver) -> Value {
             let (_ctx, value) = rx.recv().await.unwrap();
             value
         }
@@ -2190,15 +2139,15 @@ mod tests {
         }
 
         async fn count_for(fixture: &Fixture, ctx_key: &str) -> Option<(u32, Option<String>)> {
-            let guard = fixture.loop_agent.lock().await;
-            let agent = guard.as_agent::<LoopControlAgent>().unwrap();
-            agent.counts.get(ctx_key).cloned()
+            let guard = fixture.loop_module.lock().await;
+            let module = guard.as_module::<LoopControlModule>().unwrap();
+            module.counts.get(ctx_key).cloned()
         }
 
         #[tokio::test]
         async fn streaming_partials_are_not_double_counted() {
             let fixture = setup(25).await;
-            let ctx = AgentContext::new();
+            let ctx = ModuleContext::new();
             let ctx_key = ctx.ctx_key().unwrap();
 
             // Streaming partials re-deliver accumulated tool_calls under the
@@ -2225,7 +2174,7 @@ mod tests {
         #[tokio::test]
         async fn same_id_final_redelivered_counts_once() {
             let fixture = setup(25).await;
-            let ctx = AgentContext::new();
+            let ctx = ModuleContext::new();
             let ctx_key = ctx.ctx_key().unwrap();
 
             send(&fixture, &ctx, assistant_tool_call_msg(Some("m1"), false)).await;
@@ -2248,7 +2197,7 @@ mod tests {
         #[tokio::test]
         async fn blocks_and_emits_limit_exceeded_after_max_iterations() {
             let fixture = setup(2).await;
-            let ctx = AgentContext::new();
+            let ctx = ModuleContext::new();
 
             send(&fixture, &ctx, assistant_tool_call_msg(Some("m1"), false)).await;
             send(&fixture, &ctx, assistant_tool_call_msg(Some("m2"), false)).await;
@@ -2280,7 +2229,7 @@ mod tests {
         #[tokio::test]
         async fn non_countable_values_pass_through_even_over_limit() {
             let fixture = setup(1).await;
-            let ctx = AgentContext::new();
+            let ctx = ModuleContext::new();
 
             send(&fixture, &ctx, assistant_tool_call_msg(Some("m1"), false)).await;
             let _ = recv(&fixture.forwarded).await;
@@ -2290,11 +2239,11 @@ mod tests {
 
             // Non-countable traffic must keep flowing untouched.
             let passthrough = [
-                AgentValue::message(Message::user("hi".to_string())),
-                AgentValue::message(Message::tool("my_tool".to_string(), "ok".to_string())),
-                AgentValue::message(Message::assistant("no tools".to_string())),
+                Value::message(Message::user("hi".to_string())),
+                Value::message(Message::tool("my_tool".to_string(), "ok".to_string())),
+                Value::message(Message::assistant("no tools".to_string())),
                 assistant_tool_call_msg(Some("m4"), true),
-                AgentValue::string("not a message"),
+                Value::string("not a message"),
             ];
             for value in passthrough {
                 send(&fixture, &ctx, value.clone()).await;
@@ -2309,8 +2258,8 @@ mod tests {
         #[tokio::test]
         async fn separate_ctx_keys_count_independently() {
             let fixture = setup(1).await;
-            let ctx_a = AgentContext::new();
-            let ctx_b = AgentContext::new();
+            let ctx_a = ModuleContext::new();
+            let ctx_b = ModuleContext::new();
 
             send(&fixture, &ctx_a, assistant_tool_call_msg(Some("a1"), false)).await;
             let value = recv(&fixture.forwarded).await;
@@ -2333,7 +2282,7 @@ mod tests {
         #[tokio::test]
         async fn stop_clears_counters() {
             let fixture = setup(1).await;
-            let ctx = AgentContext::new();
+            let ctx = ModuleContext::new();
 
             send(&fixture, &ctx, assistant_tool_call_msg(Some("m1"), false)).await;
             let _ = recv(&fixture.forwarded).await;
@@ -2341,7 +2290,7 @@ mod tests {
             let _ = recv(&fixture.limit).await;
 
             {
-                let mut guard = fixture.loop_agent.lock().await;
+                let mut guard = fixture.loop_module.lock().await;
                 guard.stop().await.unwrap();
                 guard.start().await.unwrap();
             }
@@ -2371,13 +2320,9 @@ mod tests {
                 &self.info
             }
 
-            async fn call(
-                &self,
-                _ctx: AgentContext,
-                _args: AgentValue,
-            ) -> Result<AgentValue, AgentError> {
+            async fn call(&self, _ctx: ModuleContext, _args: Value) -> Result<Value> {
                 tokio::time::sleep(Duration::from_secs(30)).await;
-                Ok(AgentValue::string("done"))
+                Ok(Value::string("done"))
             }
         }
 
@@ -2392,12 +2337,8 @@ mod tests {
                 &self.info
             }
 
-            async fn call(
-                &self,
-                _ctx: AgentContext,
-                _args: AgentValue,
-            ) -> Result<AgentValue, AgentError> {
-                Ok(AgentValue::string("fast done"))
+            async fn call(&self, _ctx: ModuleContext, _args: Value) -> Result<Value> {
+                Ok(Value::string("fast done"))
             }
         }
 
@@ -2422,7 +2363,7 @@ mod tests {
             });
 
             let token = CancellationToken::new();
-            let ctx = AgentContext::new().with_cancel_token(token.clone());
+            let ctx = ModuleContext::new().with_cancel_token(token.clone());
             let calls: Vector<ToolCall> =
                 vector![slow_call(tool_name, "c1"), slow_call(tool_name, "c2")];
 
@@ -2468,7 +2409,7 @@ mod tests {
             });
 
             let token = CancellationToken::new();
-            let ctx = AgentContext::new().with_cancel_token(token.clone());
+            let ctx = ModuleContext::new().with_cancel_token(token.clone());
             // The fast call sits behind the still-running slow call in input
             // order — its completed result must survive the abort.
             let calls: Vector<ToolCall> =

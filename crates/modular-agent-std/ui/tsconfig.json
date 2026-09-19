@@ -7,7 +7,7 @@
     "verbatimModuleSyntax": true,
     "skipLibCheck": true,
     "noEmit": true,
-    // Editor-only DX: at build time the desktop's vite-plugin-agent-ui
+    // Editor-only DX: at build time the desktop's vite-plugin-module-ui
     // aliases @modular-agent/widget-kit to the desktop's copy.
     "paths": {
       "@modular-agent/widget-kit": [

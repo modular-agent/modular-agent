@@ -1,38 +1,29 @@
 use modular_agent_core::{
-    AgentContext, AgentData, AgentError, AgentSpec, AgentValue, AsAgent, async_trait, modular_agent,
+    AsModule, ModuleContext, ModuleData, ModuleSpec, Result, Value, async_trait, modular_agent,
 };
 
 #[modular_agent(title = "No Kind", category = "Tests")]
-struct NoKindAgent {
-    data: AgentData,
+struct NoKindModule {
+    data: ModuleData,
 }
 
 #[async_trait]
-impl AsAgent for NoKindAgent {
-    fn new(
-        ma: modular_agent_core::ModularAgent,
-        id: String,
-        spec: AgentSpec,
-    ) -> Result<Self, AgentError> {
+impl AsModule for NoKindModule {
+    fn new(ma: modular_agent_core::ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
         Ok(Self {
-            data: AgentData::new(ma, id, spec),
+            data: ModuleData::new(ma, id, spec),
         })
     }
 
-    async fn process(
-        &mut self,
-        _ctx: AgentContext,
-        _port: String,
-        _value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, _ctx: ModuleContext, _port: String, _value: Value) -> Result<()> {
         Ok(())
     }
 }
 
 #[test]
-fn default_kind_is_agent() {
-    let def = NoKindAgent::agent_definition();
-    assert_eq!(def.kind, "Agent");
+fn default_kind_is_module() {
+    let def = NoKindModule::module_definition();
+    assert_eq!(def.kind, "Module");
     assert_eq!(def.title.as_deref(), Some("No Kind"));
     assert_eq!(def.category.as_deref(), Some("Tests"));
 }

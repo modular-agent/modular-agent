@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
 
-  import type { AgentConfigSpec } from "tauri-plugin-modular-agent-api";
+  import type { ModuleConfigSpec } from "tauri-plugin-modular-agent-api";
 
   import { Button } from "$lib/components/ui/button/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
@@ -14,7 +14,7 @@
   type Props = {
     name: string;
     value: any;
-    configSpec: AgentConfigSpec | undefined;
+    configSpec: ModuleConfigSpec | undefined;
     updateConfig: (key: string, value: any) => void;
   };
 

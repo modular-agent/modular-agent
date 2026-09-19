@@ -1,6 +1,6 @@
 use modular_agent_core::{
-    Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
-    ModularAgent, async_trait, modular_agent,
+    AsModule, Error, ModularAgent, Module, ModuleContext, ModuleData, ModuleOutput, ModuleSpec,
+    Result, Value, async_trait, modular_agent,
 };
 
 const CATEGORY: &str = "Example";
@@ -17,7 +17,7 @@ const CHART_BUFFER_CAP: usize = 100;
 
 /// Collects numeric inputs into a rolling buffer for chart rendering.
 ///
-/// Demo agent for the custom NodeView mechanism. A numeric input (integer or
+/// Demo module for the custom NodeView mechanism. A numeric input (integer or
 /// number) is appended to a rolling buffer capped at 100 entries; a numeric
 /// array input replaces the whole buffer. After each update the buffer is
 /// pushed to the frontend through the `data` config, so a companion chart
@@ -40,40 +40,33 @@ const CHART_BUFFER_CAP: usize = 100;
     array_config(name = CONFIG_DATA),
     hint(width = 2),
 )]
-struct ChartDemoAgent {
-    data: AgentData,
-    buf: im::Vector<AgentValue>,
+struct ChartDemoModule {
+    data: ModuleData,
+    buf: im::Vector<Value>,
 }
 
 #[async_trait]
-impl AsAgent for ChartDemoAgent {
-    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+impl AsModule for ChartDemoModule {
+    fn new(ma: ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
         Ok(Self {
-            data: AgentData::new(ma, id, spec),
+            data: ModuleData::new(ma, id, spec),
             buf: im::Vector::new(),
         })
     }
 
-    async fn start(&mut self) -> Result<(), AgentError> {
+    async fn start(&mut self) -> Result<()> {
         self.buf = im::Vector::new();
         // The buffer is only emitted, never persisted; this write clears a
         // buffer an older version saved into the patch.
-        self.set_config(CONFIG_DATA.to_string(), AgentValue::array_default())?;
-        self.emit_config_updated(CONFIG_DATA, AgentValue::array_default());
+        self.set_config(CONFIG_DATA.to_string(), Value::array_default())?;
+        self.emit_config_updated(CONFIG_DATA, Value::array_default());
         Ok(())
     }
 
-    async fn process(
-        &mut self,
-        _ctx: AgentContext,
-        _port: String,
-        value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, _ctx: ModuleContext, _port: String, value: Value) -> Result<()> {
         if let Some(arr) = value.as_array() {
             if arr.iter().any(|v| v.as_f64().is_none()) {
-                return Err(AgentError::InvalidValue(
-                    "Array elements must be numeric".into(),
-                ));
+                return Err(Error::InvalidValue("Array elements must be numeric".into()));
             }
             self.buf = arr.clone();
         } else if value.as_f64().is_some() {
@@ -82,18 +75,18 @@ impl AsAgent for ChartDemoAgent {
                 self.buf.pop_front();
             }
         } else {
-            return Err(AgentError::InvalidValue(
+            return Err(Error::InvalidValue(
                 "Expected a number or a numeric array".into(),
             ));
         }
-        self.emit_config_updated(CONFIG_DATA, AgentValue::array(self.buf.clone()));
+        self.emit_config_updated(CONFIG_DATA, Value::array(self.buf.clone()));
         Ok(())
     }
 }
 
 /// Emits the current slider value when triggered.
 ///
-/// Demo agent for the custom NodeView mechanism. The `value` config is meant
+/// Demo module for the custom NodeView mechanism. The `value` config is meant
 /// to be edited through a companion slider NodeView; any input on the `unit`
 /// port emits the current value downstream.
 ///
@@ -110,33 +103,27 @@ impl AsAgent for ChartDemoAgent {
     outputs = [PORT_VALUE],
     integer_config(name = CONFIG_VALUE, default = 50),
 )]
-struct SliderDemoAgent {
-    data: AgentData,
+struct SliderDemoModule {
+    data: ModuleData,
 }
 
 #[async_trait]
-impl AsAgent for SliderDemoAgent {
-    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+impl AsModule for SliderDemoModule {
+    fn new(ma: ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
         Ok(Self {
-            data: AgentData::new(ma, id, spec),
+            data: ModuleData::new(ma, id, spec),
         })
     }
 
-    async fn process(
-        &mut self,
-        ctx: AgentContext,
-        _port: String,
-        _value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, ctx: ModuleContext, _port: String, _value: Value) -> Result<()> {
         let value = self.configs()?.get_integer_or(CONFIG_VALUE, 50);
-        self.output(ctx, PORT_VALUE, AgentValue::integer(value))
-            .await
+        self.output(ctx, PORT_VALUE, Value::integer(value)).await
     }
 }
 
 /// Emits the current color when triggered.
 ///
-/// Demo agent for the custom ConfigWidget mechanism. The `color` config uses
+/// Demo module for the custom ConfigWidget mechanism. The `color` config uses
 /// the custom `color` value type (a `#rrggbb` string) so a registered color
 /// widget renders it as a color picker; any input on the `unit` port emits
 /// the current color string downstream.
@@ -154,26 +141,20 @@ impl AsAgent for SliderDemoAgent {
     outputs = [PORT_COLOR],
     custom_config(name = CONFIG_COLOR, type_ = "color", default = "#ff8800"),
 )]
-struct ColorDemoAgent {
-    data: AgentData,
+struct ColorDemoModule {
+    data: ModuleData,
 }
 
 #[async_trait]
-impl AsAgent for ColorDemoAgent {
-    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+impl AsModule for ColorDemoModule {
+    fn new(ma: ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
         Ok(Self {
-            data: AgentData::new(ma, id, spec),
+            data: ModuleData::new(ma, id, spec),
         })
     }
 
-    async fn process(
-        &mut self,
-        ctx: AgentContext,
-        _port: String,
-        _value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, ctx: ModuleContext, _port: String, _value: Value) -> Result<()> {
         let color = self.configs()?.get_string_or(CONFIG_COLOR, "#ff8800");
-        self.output(ctx, PORT_COLOR, AgentValue::string(color))
-            .await
+        self.output(ctx, PORT_COLOR, Value::string(color)).await
     }
 }

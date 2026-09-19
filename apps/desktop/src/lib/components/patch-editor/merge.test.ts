@@ -1,20 +1,20 @@
 import type {
-  AgentSpec,
+  ModuleSpec,
   ConnectionSpec,
   PatchInfo,
   PatchSpec,
 } from "tauri-plugin-modular-agent-api";
 import { describe, expect, it } from "vitest";
 
-import { patchToFlow } from "$lib/agent";
+import { patchToFlow } from "$lib/module";
 import type { PatchFlow } from "$lib/types";
 
 import { connKey, reconcileFlow } from "./merge";
 
-function agent(id: string, extra: Record<string, any> = {}): AgentSpec {
+function module(id: string, extra: Record<string, any> = {}): ModuleSpec {
   return {
     id,
-    def_name: "test_agent",
+    def_name: "test_module",
     inputs: ["in"],
     outputs: ["out"],
     configs: {},
@@ -28,9 +28,9 @@ function conn(source: string, target: string, extra: Partial<ConnectionSpec> = {
   return { source, source_handle: "out", target, target_handle: "in", ...extra };
 }
 
-function flow(agents: AgentSpec[], connections: ConnectionSpec[] = []): PatchFlow {
+function flow(modules: ModuleSpec[], connections: ConnectionSpec[] = []): PatchFlow {
   const info: PatchInfo = { id: "patch-1", name: "Test", running: false };
-  const spec: PatchSpec = { agents, connections, viewport: null };
+  const spec: PatchSpec = { modules, connections, viewport: null };
   return patchToFlow(info, spec);
 }
 
@@ -51,8 +51,8 @@ describe("connKey", () => {
 
 describe("reconcileFlow", () => {
   it("returns identical arrays and objects when nothing changed", () => {
-    const cur = flow([agent("a"), agent("b")], [conn("a", "b")]);
-    const target = flow([agent("a"), agent("b")], [conn("a", "b")]);
+    const cur = flow([module("a"), module("b")], [conn("a", "b")]);
+    const target = flow([module("a"), module("b")], [conn("a", "b")]);
 
     const result = reconcileFlow(cur.nodes, cur.edges, target);
 
@@ -61,13 +61,13 @@ describe("reconcileFlow", () => {
     expect(result.edges).toBe(cur.edges);
     expect(result.nodes[0]).toBe(cur.nodes[0]);
     expect(result.edges[0]).toBe(cur.edges[0]);
-    expect(result.removedAgentIds.size).toBe(0);
+    expect(result.removedModuleIds.size).toBe(0);
     expect(result.removedConnKeys.size).toBe(0);
   });
 
   it("appends added nodes and edges at the end", () => {
-    const cur = flow([agent("a")]);
-    const target = flow([agent("b"), agent("a")], [conn("a", "b")]);
+    const cur = flow([module("a")]);
+    const target = flow([module("b"), module("a")], [conn("a", "b")]);
 
     const result = reconcileFlow(cur.nodes, cur.edges, target);
 
@@ -76,13 +76,13 @@ describe("reconcileFlow", () => {
     expect(result.nodes[0]).toBe(cur.nodes[0]);
     expect(result.edges).toHaveLength(1);
     expect(result.edges[0].source).toBe("a");
-    expect(result.removedAgentIds.size).toBe(0);
+    expect(result.removedModuleIds.size).toBe(0);
     expect(result.removedConnKeys.size).toBe(0);
   });
 
   it("removes nodes and edges and reports removed sets", () => {
-    const cur = flow([agent("a"), agent("b")], [conn("a", "b")]);
-    const target = flow([agent("a")]);
+    const cur = flow([module("a"), module("b")], [conn("a", "b")]);
+    const target = flow([module("a")]);
 
     const result = reconcileFlow(cur.nodes, cur.edges, target);
 
@@ -90,13 +90,13 @@ describe("reconcileFlow", () => {
     expect(result.nodes.map((n) => n.id)).toEqual(["a"]);
     expect(result.nodes[0]).toBe(cur.nodes[0]);
     expect(result.edges).toHaveLength(0);
-    expect(result.removedAgentIds).toEqual(new Set(["b"]));
+    expect(result.removedModuleIds).toEqual(new Set(["b"]));
     expect(result.removedConnKeys).toEqual(new Set([connKey("a", "out", "b", "in")]));
   });
 
   it("applies a geometry-only change with a new node object", () => {
-    const cur = flow([agent("a")]);
-    const target = flow([agent("a", { x: 100, y: 50, width: 3, height: 2 })]);
+    const cur = flow([module("a")]);
+    const target = flow([module("a", { x: 100, y: 50, width: 3, height: 2 })]);
 
     const result = reconcileFlow(cur.nodes, cur.edges, target);
 
@@ -108,8 +108,8 @@ describe("reconcileFlow", () => {
   });
 
   it("applies a data-only change and keeps position", () => {
-    const cur = flow([agent("a")]);
-    const target = flow([agent("a", { configs: { key: "value" }, title: "Renamed" })]);
+    const cur = flow([module("a")]);
+    const target = flow([module("a", { configs: { key: "value" }, title: "Renamed" })]);
 
     const result = reconcileFlow(cur.nodes, cur.edges, target);
 
@@ -123,9 +123,9 @@ describe("reconcileFlow", () => {
   it("keeps identity when only the data copy of position is stale", () => {
     // A local move updates node.position (and the backend) but not the
     // x/y mirrored inside data — that difference must not count as a change.
-    const cur = flow([agent("a")]);
+    const cur = flow([module("a")]);
     cur.nodes[0] = { ...cur.nodes[0], position: { x: 100, y: 50 } };
-    const target = flow([agent("a", { x: 100, y: 50 })]);
+    const target = flow([module("a", { x: 100, y: 50 })]);
 
     const result = reconcileFlow(cur.nodes, cur.edges, target);
 
@@ -134,9 +134,9 @@ describe("reconcileFlow", () => {
   });
 
   it("keeps identity when only the data copy of width/height is stale", () => {
-    const cur = flow([agent("a", { width: 2, height: 1 })]);
+    const cur = flow([module("a", { width: 2, height: 1 })]);
     cur.nodes[0] = { ...cur.nodes[0], width: 3, height: 2 };
-    const target = flow([agent("a", { width: 3, height: 2 })]);
+    const target = flow([module("a", { width: 3, height: 2 })]);
 
     const result = reconcileFlow(cur.nodes, cur.edges, target);
 
@@ -145,9 +145,9 @@ describe("reconcileFlow", () => {
   });
 
   it("still applies non-geometry data changes when the data geometry is stale", () => {
-    const cur = flow([agent("a")]);
+    const cur = flow([module("a")]);
     cur.nodes[0] = { ...cur.nodes[0], position: { x: 100, y: 0 } };
-    const target = flow([agent("a", { x: 100, configs: { key: "v" } })]);
+    const target = flow([module("a", { x: 100, configs: { key: "v" } })]);
 
     const result = reconcileFlow(cur.nodes, cur.edges, target);
 
@@ -158,11 +158,11 @@ describe("reconcileFlow", () => {
   });
 
   it("preserves selected on changed nodes and edges", () => {
-    const cur = flow([agent("a"), agent("b")], [conn("a", "b")]);
+    const cur = flow([module("a"), module("b")], [conn("a", "b")]);
     cur.nodes[0].selected = true;
     cur.edges[0].selected = true;
     const target = flow(
-      [agent("a", { x: 10, port_colors: { out: 3 } }), agent("b")],
+      [module("a", { x: 10, port_colors: { out: 3 } }), module("b")],
       [conn("a", "b")],
     );
 
@@ -174,21 +174,21 @@ describe("reconcileFlow", () => {
   });
 
   it("propagates port_colors to the surviving edge style, keeping its id", () => {
-    const cur = flow([agent("a"), agent("b")], [conn("a", "b")]);
-    const target = flow([agent("a", { port_colors: { out: 3 } }), agent("b")], [conn("a", "b")]);
+    const cur = flow([module("a"), module("b")], [conn("a", "b")]);
+    const target = flow([module("a", { port_colors: { out: 3 } }), module("b")], [conn("a", "b")]);
 
     const result = reconcileFlow(cur.nodes, cur.edges, target);
 
     expect(result.changed).toBe(true);
     expect(result.edges[0]).not.toBe(cur.edges[0]);
     expect(result.edges[0].id).toBe(cur.edges[0].id);
-    expect(result.edges[0].style).toContain("var(--color-agent-3)");
+    expect(result.edges[0].style).toContain("var(--color-module-3)");
   });
 
   it("identifies edges by their full tuple, not endpoints alone", () => {
-    const cur = flow([agent("a"), agent("b", { configs: { key: 1 } })], [conn("a", "b")]);
+    const cur = flow([module("a"), module("b", { configs: { key: 1 } })], [conn("a", "b")]);
     const target = flow(
-      [agent("a"), agent("b", { configs: { key: 1 } })],
+      [module("a"), module("b", { configs: { key: 1 } })],
       [conn("a", "b", { target_handle: "config:key" })],
     );
 
@@ -202,8 +202,8 @@ describe("reconcileFlow", () => {
   });
 
   it("keeps surviving node order and appends additions after it", () => {
-    const cur = flow([agent("a"), agent("b")]);
-    const target = flow([agent("b"), agent("x"), agent("a")]);
+    const cur = flow([module("a"), module("b")]);
+    const target = flow([module("b"), module("x"), module("a")]);
 
     const result = reconcileFlow(cur.nodes, cur.edges, target);
 

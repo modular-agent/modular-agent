@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-stop-module"
+description = "Enables the stop_module command without any pre-configured scope."
+commands.allow = ["stop_module"]
+
+[[permission]]
+identifier = "deny-stop-module"
+description = "Denies the stop_module command without any pre-configured scope."
+commands.deny = ["stop_module"]

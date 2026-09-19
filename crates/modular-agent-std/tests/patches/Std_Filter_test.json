@@ -1,8 +1,8 @@
 {
-  "agents": [
+  "modules": [
     {
       "id": "201",
-      "def_name": "modular_agent_std::filter::IfAgent",
+      "def_name": "modular_agent_std::filter::IfModule",
       "inputs": [
         "value"
       ],
@@ -24,7 +24,7 @@
     },
     {
       "id": "202",
-      "def_name": "modular_agent_core::external_agent::LocalInputAgent",
+      "def_name": "modular_agent_core::external_module::LocalInputModule",
       "outputs": [
         "value"
       ],
@@ -42,7 +42,7 @@
     },
     {
       "id": "203",
-      "def_name": "modular_agent_core::external_agent::LocalInputAgent",
+      "def_name": "modular_agent_core::external_module::LocalInputModule",
       "outputs": [
         "value"
       ],
@@ -60,7 +60,7 @@
     },
     {
       "id": "204",
-      "def_name": "modular_agent_core::external_agent::LocalOutputAgent",
+      "def_name": "modular_agent_core::external_module::LocalOutputModule",
       "inputs": [
         "value"
       ],
@@ -78,7 +78,7 @@
     },
     {
       "id": "205",
-      "def_name": "modular_agent_core::external_agent::LocalOutputAgent",
+      "def_name": "modular_agent_core::external_module::LocalOutputModule",
       "inputs": [
         "value"
       ],
@@ -96,7 +96,7 @@
     },
     {
       "id": "211",
-      "def_name": "modular_agent_std::filter::SwitchAgent",
+      "def_name": "modular_agent_std::filter::SwitchModule",
       "inputs": [
         "value"
       ],
@@ -129,7 +129,7 @@
     },
     {
       "id": "212",
-      "def_name": "modular_agent_core::external_agent::LocalInputAgent",
+      "def_name": "modular_agent_core::external_module::LocalInputModule",
       "outputs": [
         "value"
       ],
@@ -147,7 +147,7 @@
     },
     {
       "id": "213",
-      "def_name": "modular_agent_core::external_agent::LocalOutputAgent",
+      "def_name": "modular_agent_core::external_module::LocalOutputModule",
       "inputs": [
         "value"
       ],
@@ -165,7 +165,7 @@
     },
     {
       "id": "214",
-      "def_name": "modular_agent_core::external_agent::LocalOutputAgent",
+      "def_name": "modular_agent_core::external_module::LocalOutputModule",
       "inputs": [
         "value"
       ],
@@ -183,7 +183,7 @@
     },
     {
       "id": "215",
-      "def_name": "modular_agent_core::external_agent::LocalOutputAgent",
+      "def_name": "modular_agent_core::external_module::LocalOutputModule",
       "inputs": [
         "value"
       ],
@@ -201,7 +201,7 @@
     },
     {
       "id": "216",
-      "def_name": "modular_agent_core::external_agent::LocalInputAgent",
+      "def_name": "modular_agent_core::external_module::LocalInputModule",
       "outputs": [
         "value"
       ],
@@ -219,7 +219,7 @@
     },
     {
       "id": "217",
-      "def_name": "modular_agent_core::external_agent::LocalInputAgent",
+      "def_name": "modular_agent_core::external_module::LocalInputModule",
       "outputs": [
         "value"
       ],
@@ -237,7 +237,7 @@
     },
     {
       "id": "218",
-      "def_name": "modular_agent_core::external_agent::LocalInputAgent",
+      "def_name": "modular_agent_core::external_module::LocalInputModule",
       "outputs": [
         "value"
       ],
@@ -255,7 +255,7 @@
     },
     {
       "id": "219",
-      "def_name": "modular_agent_core::external_agent::LocalOutputAgent",
+      "def_name": "modular_agent_core::external_module::LocalOutputModule",
       "inputs": [
         "value"
       ],
@@ -273,7 +273,7 @@
     },
     {
       "id": "221",
-      "def_name": "modular_agent_std::filter::MatchAgent",
+      "def_name": "modular_agent_std::filter::MatchModule",
       "inputs": [
         "value"
       ],
@@ -311,7 +311,7 @@
     },
     {
       "id": "222",
-      "def_name": "modular_agent_core::external_agent::LocalInputAgent",
+      "def_name": "modular_agent_core::external_module::LocalInputModule",
       "outputs": [
         "value"
       ],
@@ -329,7 +329,7 @@
     },
     {
       "id": "223",
-      "def_name": "modular_agent_core::external_agent::LocalOutputAgent",
+      "def_name": "modular_agent_core::external_module::LocalOutputModule",
       "inputs": [
         "value"
       ],
@@ -347,7 +347,7 @@
     },
     {
       "id": "224",
-      "def_name": "modular_agent_core::external_agent::LocalOutputAgent",
+      "def_name": "modular_agent_core::external_module::LocalOutputModule",
       "inputs": [
         "value"
       ],
@@ -365,7 +365,7 @@
     },
     {
       "id": "225",
-      "def_name": "modular_agent_core::external_agent::LocalOutputAgent",
+      "def_name": "modular_agent_core::external_module::LocalOutputModule",
       "inputs": [
         "value"
       ],
@@ -383,7 +383,7 @@
     },
     {
       "id": "226",
-      "def_name": "modular_agent_core::external_agent::LocalInputAgent",
+      "def_name": "modular_agent_core::external_module::LocalInputModule",
       "outputs": [
         "value"
       ],
@@ -401,7 +401,7 @@
     },
     {
       "id": "227",
-      "def_name": "modular_agent_core::external_agent::LocalInputAgent",
+      "def_name": "modular_agent_core::external_module::LocalInputModule",
       "outputs": [
         "value"
       ],
@@ -419,7 +419,7 @@
     },
     {
       "id": "228",
-      "def_name": "modular_agent_core::external_agent::LocalInputAgent",
+      "def_name": "modular_agent_core::external_module::LocalInputModule",
       "outputs": [
         "value"
       ],
@@ -437,7 +437,7 @@
     },
     {
       "id": "229",
-      "def_name": "modular_agent_core::external_agent::LocalInputAgent",
+      "def_name": "modular_agent_core::external_module::LocalInputModule",
       "outputs": [
         "value"
       ],
@@ -455,7 +455,7 @@
     },
     {
       "id": "230",
-      "def_name": "modular_agent_core::external_agent::LocalOutputAgent",
+      "def_name": "modular_agent_core::external_module::LocalOutputModule",
       "inputs": [
         "value"
       ],
@@ -473,7 +473,7 @@
     },
     {
       "id": "231",
-      "def_name": "modular_agent_core::external_agent::LocalInputAgent",
+      "def_name": "modular_agent_core::external_module::LocalInputModule",
       "outputs": [
         "value"
       ],

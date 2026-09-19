@@ -7,10 +7,10 @@
 
   import { goto } from "$app/navigation";
 
-  import { importPatch, newPatchWithName } from "$lib/agent";
   import PatchActionDialog from "$lib/components/patch-action-dialog.svelte";
   import { Button } from "$lib/components/ui/button/index.js";
   import * as Empty from "$lib/components/ui/empty/index.js";
+  import { importPatch, newPatchWithName } from "$lib/module";
   import { tabStore } from "$lib/tab-store.svelte";
 
   let openNewPatchDialog = $state(false);
@@ -43,7 +43,7 @@
     </Empty.Media>
     <Empty.Title>No patches yet</Empty.Title>
     <Empty.Description>
-      Create a patch to start wiring agents together, or import one you already have.
+      Create a patch to start wiring modules together, or import one you already have.
     </Empty.Description>
   </Empty.Header>
   <Empty.Content class="flex-row justify-center">

@@ -295,30 +295,6 @@
       "type": "string",
       "oneOf": [
         {
-          "description": "Enables the add_agent command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-add-agent",
-          "markdownDescription": "Enables the add_agent command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the add_agent command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-add-agent",
-          "markdownDescription": "Denies the add_agent command without any pre-configured scope."
-        },
-        {
-          "description": "Enables the add_agents_and_connections command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-add-agents-and-connections",
-          "markdownDescription": "Enables the add_agents_and_connections command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the add_agents_and_connections command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-add-agents-and-connections",
-          "markdownDescription": "Denies the add_agents_and_connections command without any pre-configured scope."
-        },
-        {
           "description": "Enables the add_connection command without any pre-configured scope.",
           "type": "string",
           "const": "allow-add-connection",
@@ -329,6 +305,30 @@
           "type": "string",
           "const": "deny-add-connection",
           "markdownDescription": "Denies the add_connection command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the add_module command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-add-module",
+          "markdownDescription": "Enables the add_module command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the add_module command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-add-module",
+          "markdownDescription": "Denies the add_module command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the add_modules_and_connections command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-add-modules-and-connections",
+          "markdownDescription": "Enables the add_modules_and_connections command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the add_modules_and_connections command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-add-modules-and-connections",
+          "markdownDescription": "Denies the add_modules_and_connections command without any pre-configured scope."
         },
         {
           "description": "Enables the add_patch command without any pre-configured scope.",
@@ -355,42 +355,6 @@
           "markdownDescription": "Denies the add_patch_with_name command without any pre-configured scope."
         },
         {
-          "description": "Enables the get_agent_definition command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-get-agent-definition",
-          "markdownDescription": "Enables the get_agent_definition command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the get_agent_definition command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-get-agent-definition",
-          "markdownDescription": "Denies the get_agent_definition command without any pre-configured scope."
-        },
-        {
-          "description": "Enables the get_agent_definitions command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-get-agent-definitions",
-          "markdownDescription": "Enables the get_agent_definitions command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the get_agent_definitions command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-get-agent-definitions",
-          "markdownDescription": "Denies the get_agent_definitions command without any pre-configured scope."
-        },
-        {
-          "description": "Enables the get_agent_spec command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-get-agent-spec",
-          "markdownDescription": "Enables the get_agent_spec command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the get_agent_spec command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-get-agent-spec",
-          "markdownDescription": "Denies the get_agent_spec command without any pre-configured scope."
-        },
-        {
           "description": "Enables the get_global_configs command without any pre-configured scope.",
           "type": "string",
           "const": "allow-get-global-configs",
@@ -413,6 +377,42 @@
           "type": "string",
           "const": "deny-get-global-configs-map",
           "markdownDescription": "Denies the get_global_configs_map command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the get_module_definition command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-module-definition",
+          "markdownDescription": "Enables the get_module_definition command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_module_definition command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-module-definition",
+          "markdownDescription": "Denies the get_module_definition command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the get_module_definitions command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-module-definitions",
+          "markdownDescription": "Enables the get_module_definitions command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_module_definitions command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-module-definitions",
+          "markdownDescription": "Denies the get_module_definitions command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the get_module_spec command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-module-spec",
+          "markdownDescription": "Enables the get_module_spec command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_module_spec command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-module-spec",
+          "markdownDescription": "Denies the get_module_spec command without any pre-configured scope."
         },
         {
           "description": "Enables the get_patch_info command without any pre-configured scope.",
@@ -451,16 +451,16 @@
           "markdownDescription": "Denies the get_patch_spec command without any pre-configured scope."
         },
         {
-          "description": "Enables the new_agent_spec command without any pre-configured scope.",
+          "description": "Enables the new_module_spec command without any pre-configured scope.",
           "type": "string",
-          "const": "allow-new-agent-spec",
-          "markdownDescription": "Enables the new_agent_spec command without any pre-configured scope."
+          "const": "allow-new-module-spec",
+          "markdownDescription": "Enables the new_module_spec command without any pre-configured scope."
         },
         {
-          "description": "Denies the new_agent_spec command without any pre-configured scope.",
+          "description": "Denies the new_module_spec command without any pre-configured scope.",
           "type": "string",
-          "const": "deny-new-agent-spec",
-          "markdownDescription": "Denies the new_agent_spec command without any pre-configured scope."
+          "const": "deny-new-module-spec",
+          "markdownDescription": "Denies the new_module_spec command without any pre-configured scope."
         },
         {
           "description": "Enables the new_patch command without any pre-configured scope.",
@@ -487,18 +487,6 @@
           "markdownDescription": "Denies the open_patch_from_file command without any pre-configured scope."
         },
         {
-          "description": "Enables the remove_agent command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-remove-agent",
-          "markdownDescription": "Enables the remove_agent command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the remove_agent command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-remove-agent",
-          "markdownDescription": "Denies the remove_agent command without any pre-configured scope."
-        },
-        {
           "description": "Enables the remove_connection command without any pre-configured scope.",
           "type": "string",
           "const": "allow-remove-connection",
@@ -509,6 +497,18 @@
           "type": "string",
           "const": "deny-remove-connection",
           "markdownDescription": "Denies the remove_connection command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the remove_module command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-remove-module",
+          "markdownDescription": "Enables the remove_module command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the remove_module command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-remove-module",
+          "markdownDescription": "Denies the remove_module command without any pre-configured scope."
         },
         {
           "description": "Enables the remove_patch command without any pre-configured scope.",
@@ -535,18 +535,6 @@
           "markdownDescription": "Denies the save_patch command without any pre-configured scope."
         },
         {
-          "description": "Enables the set_agent_configs command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-set-agent-configs",
-          "markdownDescription": "Enables the set_agent_configs command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the set_agent_configs command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-set-agent-configs",
-          "markdownDescription": "Denies the set_agent_configs command without any pre-configured scope."
-        },
-        {
           "description": "Enables the set_global_configs command without any pre-configured scope.",
           "type": "string",
           "const": "allow-set-global-configs",
@@ -571,16 +559,28 @@
           "markdownDescription": "Denies the set_global_configs_map command without any pre-configured scope."
         },
         {
-          "description": "Enables the start_agent command without any pre-configured scope.",
+          "description": "Enables the set_module_configs command without any pre-configured scope.",
           "type": "string",
-          "const": "allow-start-agent",
-          "markdownDescription": "Enables the start_agent command without any pre-configured scope."
+          "const": "allow-set-module-configs",
+          "markdownDescription": "Enables the set_module_configs command without any pre-configured scope."
         },
         {
-          "description": "Denies the start_agent command without any pre-configured scope.",
+          "description": "Denies the set_module_configs command without any pre-configured scope.",
           "type": "string",
-          "const": "deny-start-agent",
-          "markdownDescription": "Denies the start_agent command without any pre-configured scope."
+          "const": "deny-set-module-configs",
+          "markdownDescription": "Denies the set_module_configs command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the start_module command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-start-module",
+          "markdownDescription": "Enables the start_module command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the start_module command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-start-module",
+          "markdownDescription": "Denies the start_module command without any pre-configured scope."
         },
         {
           "description": "Enables the start_patch command without any pre-configured scope.",
@@ -595,16 +595,16 @@
           "markdownDescription": "Denies the start_patch command without any pre-configured scope."
         },
         {
-          "description": "Enables the stop_agent command without any pre-configured scope.",
+          "description": "Enables the stop_module command without any pre-configured scope.",
           "type": "string",
-          "const": "allow-stop-agent",
-          "markdownDescription": "Enables the stop_agent command without any pre-configured scope."
+          "const": "allow-stop-module",
+          "markdownDescription": "Enables the stop_module command without any pre-configured scope."
         },
         {
-          "description": "Denies the stop_agent command without any pre-configured scope.",
+          "description": "Denies the stop_module command without any pre-configured scope.",
           "type": "string",
-          "const": "deny-stop-agent",
-          "markdownDescription": "Denies the stop_agent command without any pre-configured scope."
+          "const": "deny-stop-module",
+          "markdownDescription": "Denies the stop_module command without any pre-configured scope."
         },
         {
           "description": "Enables the stop_patch command without any pre-configured scope.",
@@ -619,16 +619,16 @@
           "markdownDescription": "Denies the stop_patch command without any pre-configured scope."
         },
         {
-          "description": "Enables the update_agent_spec command without any pre-configured scope.",
+          "description": "Enables the update_module_spec command without any pre-configured scope.",
           "type": "string",
-          "const": "allow-update-agent-spec",
-          "markdownDescription": "Enables the update_agent_spec command without any pre-configured scope."
+          "const": "allow-update-module-spec",
+          "markdownDescription": "Enables the update_module_spec command without any pre-configured scope."
         },
         {
-          "description": "Denies the update_agent_spec command without any pre-configured scope.",
+          "description": "Denies the update_module_spec command without any pre-configured scope.",
           "type": "string",
-          "const": "deny-update-agent-spec",
-          "markdownDescription": "Denies the update_agent_spec command without any pre-configured scope."
+          "const": "deny-update-module-spec",
+          "markdownDescription": "Denies the update_module_spec command without any pre-configured scope."
         },
         {
           "description": "Enables the update_patch_spec command without any pre-configured scope.",
@@ -655,10 +655,10 @@
           "markdownDescription": "Denies the write_external_input command without any pre-configured scope."
         },
         {
-          "description": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-new-patch`\n- `allow-add-patch`\n- `allow-add-patch-with-name`\n- `allow-remove-patch`\n- `allow-start-patch`\n- `allow-stop-patch`\n- `allow-open-patch-from-file`\n- `allow-save-patch`\n- `allow-get-patch-spec`\n- `allow-update-patch-spec`\n- `allow-get-patch-info`\n- `allow-get-patch-infos`\n- `allow-get-agent-definition`\n- `allow-get-agent-definitions`\n- `allow-get-agent-spec`\n- `allow-update-agent-spec`\n- `allow-new-agent-spec`\n- `allow-add-agent`\n- `allow-remove-agent`\n- `allow-add-connection`\n- `allow-remove-connection`\n- `allow-add-agents-and-connections`\n- `allow-start-agent`\n- `allow-stop-agent`\n- `allow-set-agent-configs`\n- `allow-get-global-configs`\n- `allow-get-global-configs-map`\n- `allow-set-global-configs`\n- `allow-set-global-configs-map`\n- `allow-write-external-input`",
+          "description": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-new-patch`\n- `allow-add-patch`\n- `allow-add-patch-with-name`\n- `allow-remove-patch`\n- `allow-start-patch`\n- `allow-stop-patch`\n- `allow-open-patch-from-file`\n- `allow-save-patch`\n- `allow-get-patch-spec`\n- `allow-update-patch-spec`\n- `allow-get-patch-info`\n- `allow-get-patch-infos`\n- `allow-get-module-definition`\n- `allow-get-module-definitions`\n- `allow-get-module-spec`\n- `allow-update-module-spec`\n- `allow-new-module-spec`\n- `allow-add-module`\n- `allow-remove-module`\n- `allow-add-connection`\n- `allow-remove-connection`\n- `allow-add-modules-and-connections`\n- `allow-start-module`\n- `allow-stop-module`\n- `allow-set-module-configs`\n- `allow-get-global-configs`\n- `allow-get-global-configs-map`\n- `allow-set-global-configs`\n- `allow-set-global-configs-map`\n- `allow-write-external-input`",
           "type": "string",
           "const": "default",
-          "markdownDescription": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-new-patch`\n- `allow-add-patch`\n- `allow-add-patch-with-name`\n- `allow-remove-patch`\n- `allow-start-patch`\n- `allow-stop-patch`\n- `allow-open-patch-from-file`\n- `allow-save-patch`\n- `allow-get-patch-spec`\n- `allow-update-patch-spec`\n- `allow-get-patch-info`\n- `allow-get-patch-infos`\n- `allow-get-agent-definition`\n- `allow-get-agent-definitions`\n- `allow-get-agent-spec`\n- `allow-update-agent-spec`\n- `allow-new-agent-spec`\n- `allow-add-agent`\n- `allow-remove-agent`\n- `allow-add-connection`\n- `allow-remove-connection`\n- `allow-add-agents-and-connections`\n- `allow-start-agent`\n- `allow-stop-agent`\n- `allow-set-agent-configs`\n- `allow-get-global-configs`\n- `allow-get-global-configs-map`\n- `allow-set-global-configs`\n- `allow-set-global-configs-map`\n- `allow-write-external-input`"
+          "markdownDescription": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-new-patch`\n- `allow-add-patch`\n- `allow-add-patch-with-name`\n- `allow-remove-patch`\n- `allow-start-patch`\n- `allow-stop-patch`\n- `allow-open-patch-from-file`\n- `allow-save-patch`\n- `allow-get-patch-spec`\n- `allow-update-patch-spec`\n- `allow-get-patch-info`\n- `allow-get-patch-infos`\n- `allow-get-module-definition`\n- `allow-get-module-definitions`\n- `allow-get-module-spec`\n- `allow-update-module-spec`\n- `allow-new-module-spec`\n- `allow-add-module`\n- `allow-remove-module`\n- `allow-add-connection`\n- `allow-remove-connection`\n- `allow-add-modules-and-connections`\n- `allow-start-module`\n- `allow-stop-module`\n- `allow-set-module-configs`\n- `allow-get-global-configs`\n- `allow-get-global-configs-map`\n- `allow-set-global-configs`\n- `allow-set-global-configs-map`\n- `allow-write-external-input`"
         }
       ]
     }

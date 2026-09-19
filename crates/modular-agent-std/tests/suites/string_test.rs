@@ -1,7 +1,7 @@
 extern crate modular_agent_core as ma;
 
 use im::vector;
-use ma::{AgentValue, test_utils};
+use ma::{Value, test_utils};
 
 #[tokio::test]
 async fn test_is_string() {
@@ -12,10 +12,10 @@ async fn test_is_string() {
         .unwrap();
 
     // Unit -> f
-    test_utils::write_and_expect_local_value(&ma, &patch_id, "is_string_in", AgentValue::unit())
+    test_utils::write_and_expect_local_value(&ma, &patch_id, "is_string_in", Value::unit())
         .await
         .unwrap();
-    test_utils::expect_local_value(&patch_id, "is_string_f", &AgentValue::unit())
+    test_utils::expect_local_value(&patch_id, "is_string_f", &Value::unit())
         .await
         .unwrap();
 
@@ -24,11 +24,11 @@ async fn test_is_string() {
         &ma,
         &patch_id,
         "is_string_in",
-        AgentValue::string("hello"),
+        Value::string("hello"),
     )
     .await
     .unwrap();
-    test_utils::expect_local_value(&patch_id, "is_string_t", &AgentValue::string("hello"))
+    test_utils::expect_local_value(&patch_id, "is_string_t", &Value::string("hello"))
         .await
         .unwrap();
 
@@ -48,11 +48,11 @@ async fn test_is_empty_string() {
         &ma,
         &patch_id,
         "is_empty_string_in",
-        AgentValue::string(""),
+        Value::string(""),
     )
     .await
     .unwrap();
-    test_utils::expect_local_value(&patch_id, "is_empty_string_t", &AgentValue::string(""))
+    test_utils::expect_local_value(&patch_id, "is_empty_string_t", &Value::string(""))
         .await
         .unwrap();
 
@@ -61,24 +61,19 @@ async fn test_is_empty_string() {
         &ma,
         &patch_id,
         "is_empty_string_in",
-        AgentValue::string("hello"),
+        Value::string("hello"),
     )
     .await
     .unwrap();
-    test_utils::expect_local_value(&patch_id, "is_empty_string_f", &AgentValue::string("hello"))
+    test_utils::expect_local_value(&patch_id, "is_empty_string_f", &Value::string("hello"))
         .await
         .unwrap();
 
     // Non-string (Unit) -> f
-    test_utils::write_and_expect_local_value(
-        &ma,
-        &patch_id,
-        "is_empty_string_in",
-        AgentValue::unit(),
-    )
-    .await
-    .unwrap();
-    test_utils::expect_local_value(&patch_id, "is_empty_string_f", &AgentValue::unit())
+    test_utils::write_and_expect_local_value(&ma, &patch_id, "is_empty_string_in", Value::unit())
+        .await
+        .unwrap();
+    test_utils::expect_local_value(&patch_id, "is_empty_string_f", &Value::unit())
         .await
         .unwrap();
 
@@ -98,31 +93,24 @@ async fn test_string_join() {
         &ma,
         &patch_id,
         "string_join_in",
-        AgentValue::array(vector![
-            AgentValue::string("Hello"),
-            AgentValue::string("World"),
-        ]),
+        Value::array(vector![Value::string("Hello"), Value::string("World"),]),
     )
     .await
     .unwrap();
-    test_utils::expect_local_value(
-        &patch_id,
-        "string_join_out",
-        &AgentValue::string("Hello\nWorld"),
-    )
-    .await
-    .unwrap();
+    test_utils::expect_local_value(&patch_id, "string_join_out", &Value::string("Hello\nWorld"))
+        .await
+        .unwrap();
 
     // Non-array passthrough
     test_utils::write_and_expect_local_value(
         &ma,
         &patch_id,
         "string_join_in",
-        AgentValue::string("solo"),
+        Value::string("solo"),
     )
     .await
     .unwrap();
-    test_utils::expect_local_value(&patch_id, "string_join_out", &AgentValue::string("solo"))
+    test_utils::expect_local_value(&patch_id, "string_join_out", &Value::string("solo"))
         .await
         .unwrap();
 
@@ -142,14 +130,14 @@ async fn test_string_length_split() {
         &ma,
         &patch_id,
         "string_length_split_in",
-        AgentValue::string("Hello, World!"),
+        Value::string("Hello, World!"),
     )
     .await
     .unwrap();
     test_utils::expect_local_value(
         &patch_id,
         "string_length_split_out",
-        &AgentValue::array(vector![AgentValue::string("Hello, World!")]),
+        &Value::array(vector![Value::string("Hello, World!")]),
     )
     .await
     .unwrap();
@@ -159,7 +147,7 @@ async fn test_string_length_split() {
         &ma,
         &patch_id,
         "string_length_split_len",
-        AgentValue::integer(8),
+        Value::integer(8),
     )
     .await
     .unwrap();
@@ -167,7 +155,7 @@ async fn test_string_length_split() {
         &ma,
         &patch_id,
         "string_length_split_overlap",
-        AgentValue::integer(2),
+        Value::integer(2),
     )
     .await
     .unwrap();
@@ -175,17 +163,14 @@ async fn test_string_length_split() {
         &ma,
         &patch_id,
         "string_length_split_in",
-        AgentValue::string("Hello, World!"),
+        Value::string("Hello, World!"),
     )
     .await
     .unwrap();
     test_utils::expect_local_value(
         &patch_id,
         "string_length_split_out",
-        &AgentValue::array(vector![
-            AgentValue::string("Hello, W"),
-            AgentValue::string(" World!")
-        ]),
+        &Value::array(vector![Value::string("Hello, W"), Value::string(" World!")]),
     )
     .await
     .unwrap();
@@ -206,11 +191,11 @@ async fn test_regex_match() {
         &ma,
         &patch_id,
         "regex_match_in",
-        AgentValue::string("abc123def456"),
+        Value::string("abc123def456"),
     )
     .await
     .unwrap();
-    test_utils::expect_local_value(&patch_id, "regex_match_out", &AgentValue::string("123"))
+    test_utils::expect_local_value(&patch_id, "regex_match_out", &Value::string("123"))
         .await
         .unwrap();
 
@@ -219,11 +204,11 @@ async fn test_regex_match() {
         &ma,
         &patch_id,
         "regex_match_in",
-        AgentValue::string("abcdef"),
+        Value::string("abcdef"),
     )
     .await
     .unwrap();
-    test_utils::expect_local_value(&patch_id, "regex_match_unmatched", &AgentValue::unit())
+    test_utils::expect_local_value(&patch_id, "regex_match_unmatched", &Value::unit())
         .await
         .unwrap();
 
@@ -243,17 +228,14 @@ async fn test_regex_match_all() {
         &ma,
         &patch_id,
         "regex_match_all_in",
-        AgentValue::string("abc123def456"),
+        Value::string("abc123def456"),
     )
     .await
     .unwrap();
     test_utils::expect_local_value(
         &patch_id,
         "regex_match_all_out",
-        &AgentValue::array(vector![
-            AgentValue::string("123"),
-            AgentValue::string("456")
-        ]),
+        &Value::array(vector![Value::string("123"), Value::string("456")]),
     )
     .await
     .unwrap();
@@ -263,11 +245,11 @@ async fn test_regex_match_all() {
         &ma,
         &patch_id,
         "regex_match_all_in",
-        AgentValue::string("abcdef"),
+        Value::string("abcdef"),
     )
     .await
     .unwrap();
-    test_utils::expect_local_value(&patch_id, "regex_match_all_unmatched", &AgentValue::unit())
+    test_utils::expect_local_value(&patch_id, "regex_match_all_unmatched", &Value::unit())
         .await
         .unwrap();
 
@@ -287,34 +269,26 @@ async fn test_regex_replace() {
         &ma,
         &patch_id,
         "regex_replace_in",
-        AgentValue::string("abc123def456"),
+        Value::string("abc123def456"),
     )
     .await
     .unwrap();
-    test_utils::expect_local_value(
-        &patch_id,
-        "regex_replace_out",
-        &AgentValue::string("abc#def456"),
-    )
-    .await
-    .unwrap();
+    test_utils::expect_local_value(&patch_id, "regex_replace_out", &Value::string("abc#def456"))
+        .await
+        .unwrap();
 
     // No match -> unchanged
     test_utils::write_and_expect_local_value(
         &ma,
         &patch_id,
         "regex_replace_in",
-        AgentValue::string("abcdef"),
+        Value::string("abcdef"),
     )
     .await
     .unwrap();
-    test_utils::expect_local_value(
-        &patch_id,
-        "regex_replace_out",
-        &AgentValue::string("abcdef"),
-    )
-    .await
-    .unwrap();
+    test_utils::expect_local_value(&patch_id, "regex_replace_out", &Value::string("abcdef"))
+        .await
+        .unwrap();
 
     ma.quit();
 }
@@ -332,14 +306,14 @@ async fn test_regex_replace_all() {
         &ma,
         &patch_id,
         "regex_replace_all_in",
-        AgentValue::string("abc123def456"),
+        Value::string("abc123def456"),
     )
     .await
     .unwrap();
     test_utils::expect_local_value(
         &patch_id,
         "regex_replace_all_out",
-        &AgentValue::string("abc#def#"),
+        &Value::string("abc#def#"),
     )
     .await
     .unwrap();
@@ -349,17 +323,13 @@ async fn test_regex_replace_all() {
         &ma,
         &patch_id,
         "regex_replace_all_in",
-        AgentValue::string("abcdef"),
+        Value::string("abcdef"),
     )
     .await
     .unwrap();
-    test_utils::expect_local_value(
-        &patch_id,
-        "regex_replace_all_out",
-        &AgentValue::string("abcdef"),
-    )
-    .await
-    .unwrap();
+    test_utils::expect_local_value(&patch_id, "regex_replace_all_out", &Value::string("abcdef"))
+        .await
+        .unwrap();
 
     ma.quit();
 }
@@ -377,17 +347,13 @@ async fn test_template_string() {
         &ma,
         &patch_id,
         "template_string_in",
-        AgentValue::string("hello"),
+        Value::string("hello"),
     )
     .await
     .unwrap();
-    test_utils::expect_local_value(
-        &patch_id,
-        "template_string_out",
-        &AgentValue::string("hello"),
-    )
-    .await
-    .unwrap();
+    test_utils::expect_local_value(&patch_id, "template_string_out", &Value::string("hello"))
+        .await
+        .unwrap();
 
     ma.quit();
 }
@@ -405,11 +371,11 @@ async fn test_template_text() {
         &ma,
         &patch_id,
         "template_text_in",
-        AgentValue::string("world"),
+        Value::string("world"),
     )
     .await
     .unwrap();
-    test_utils::expect_local_value(&patch_id, "template_text_out", &AgentValue::string("world"))
+    test_utils::expect_local_value(&patch_id, "template_text_out", &Value::string("world"))
         .await
         .unwrap();
 
@@ -429,7 +395,7 @@ async fn test_template_array() {
         &ma,
         &patch_id,
         "template_array_template",
-        AgentValue::string("{{#each this}}{{this}}{{#unless @last}},{{/unless}}{{/each}}"),
+        Value::string("{{#each this}}{{this}}{{#unless @last}},{{/unless}}{{/each}}"),
     )
     .await
     .unwrap();
@@ -437,21 +403,17 @@ async fn test_template_array() {
         &ma,
         &patch_id,
         "template_array_in",
-        AgentValue::array(vector![
-            AgentValue::string("x"),
-            AgentValue::string("y"),
-            AgentValue::string("z"),
+        Value::array(vector![
+            Value::string("x"),
+            Value::string("y"),
+            Value::string("z"),
         ]),
     )
     .await
     .unwrap();
-    test_utils::expect_local_value(
-        &patch_id,
-        "template_array_out",
-        &AgentValue::string("x,y,z"),
-    )
-    .await
-    .unwrap();
+    test_utils::expect_local_value(&patch_id, "template_array_out", &Value::string("x,y,z"))
+        .await
+        .unwrap();
 
     ma.quit();
 }

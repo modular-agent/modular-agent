@@ -1,6 +1,6 @@
 extern crate modular_agent_core as ma;
 
-use ma::{AgentError, ModularAgent};
+use ma::{Error, ModularAgent};
 
 #[tokio::test]
 async fn test_duplicate_name_create_fails() {
@@ -10,7 +10,7 @@ async fn test_duplicate_name_create_fails() {
     let id = ma.new_patch_with_name("dup".into()).unwrap();
 
     let err = ma.new_patch_with_name("dup".into()).unwrap_err();
-    assert!(matches!(err, AgentError::PatchNameExists(ref name) if name == "dup"));
+    assert!(matches!(err, Error::PatchNameExists(ref name) if name == "dup"));
 
     // The failed create must not disturb the existing mapping.
     assert_eq!(ma.find_patch_id_by_name("dup"), Some(id));
@@ -27,7 +27,7 @@ async fn test_rename_onto_used_name_fails() {
     let id_b = ma.new_patch_with_name("b".into()).unwrap();
 
     let err = ma.rename_patch(&id_b, "a".into()).await.unwrap_err();
-    assert!(matches!(err, AgentError::PatchNameExists(ref name) if name == "a"));
+    assert!(matches!(err, Error::PatchNameExists(ref name) if name == "a"));
 
     // Both mappings survive the failed rename.
     assert_eq!(ma.find_patch_id_by_name("a"), Some(id_a));

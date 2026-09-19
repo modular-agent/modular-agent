@@ -1,30 +1,30 @@
 import type { Edge, Node } from "@xyflow/svelte";
-import type { AgentSpec, PatchInfo, Viewport } from "tauri-plugin-modular-agent-api";
+import type { ModuleSpec, PatchInfo, Viewport } from "tauri-plugin-modular-agent-api";
 
 // Messages
 
-export type AgentConfigUpdatedMessage = {
+export type ModuleConfigUpdatedMessage = {
   origin: string | null;
-  agent_id: string;
+  module_id: string;
   key: string;
   value: any;
 };
 
-export type AgentErrorMessage = {
+export type ModuleErrorMessage = {
   origin: string | null;
-  agent_id: string;
+  module_id: string;
   message: string;
 };
 
-export type AgentInMessage = {
+export type ModuleInMessage = {
   origin: string | null;
-  agent_id: string;
+  module_id: string;
   port: string;
 };
 
-export type AgentSpecUpdatedMessage = {
+export type ModuleSpecUpdatedMessage = {
   origin: string | null;
-  agent_id: string;
+  module_id: string;
 };
 
 export type PatchStructureChangedMessage = {
@@ -69,7 +69,7 @@ export type PatchFlow = {
 };
 
 export type PatchNode = Node & {
-  data: AgentSpec;
+  data: ModuleSpec;
   extensions?: Record<string, any>;
 };
 

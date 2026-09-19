@@ -1,9 +1,9 @@
 # @modular-agent/widget-kit
 
-Shared SDK for Modular Agent custom node UIs. Agent packages can bring their
+Shared SDK for Modular Agent custom node UIs. Module packages can bring their
 own Svelte 5 components into the desktop app's patch editor:
 
-- **NodeView** — registered per agent type (`def_name`). Replaces the default
+- **NodeView** — registered per module type (`def_name`). Replaces the default
   config rendering in the node's contents area. Title, ports, and resizer stay
   in the host node frame.
 - **ConfigWidget** — registered per config `type_`. Renders the input/display
@@ -11,19 +11,19 @@ own Svelte 5 components into the desktop app's patch editor:
   `type_` names a genuine **value type** (e.g. `color` = `#rrggbb` string) —
   never a presentation variant of a built-in type. A slider for an integer is
   a NodeView concern, not a fake `type_`.
-- **NodeStyle** — registered per agent type (`def_name`). Presentation
+- **NodeStyle** — registered per module type (`def_name`). Presentation
   overrides for the host node frame itself (currently `bodyBackground`, a
   function mapping the resolved background color to the background-color of
   the node body).
 
 This package is the single source of truth for the props contracts
-(`NodeViewProps`, `ConfigWidgetProps`, `AgentEventState`) and shared helper
-components (`ConfigHandle`). Both the desktop app and agent UI packages import
+(`NodeViewProps`, `ConfigWidgetProps`, `ModuleEventState`) and shared helper
+components (`ConfigHandle`). Both the desktop app and module UI packages import
 from here.
 
 ## How UI packages are discovered
 
-An agent crate ships its UI as a sibling `ui/` npm package:
+A module crate ships its UI as a sibling `ui/` npm package:
 
 ```text
 modular-agent-foo/
@@ -42,11 +42,11 @@ import FooColor from "./FooColor.svelte";
 import FooNodeView from "./FooNodeView.svelte";
 
 export const ui = {
-  nodeViews: { "modular_agent_foo::FooAgent": FooNodeView }, // key: def_name
+  nodeViews: { "modular_agent_foo::FooModule": FooNodeView }, // key: def_name
   configWidgets: { color: FooColor }, // key: config type_
   nodeStyles: {
     // key: def_name — frame presentation overrides (optional)
-    "modular_agent_foo::FooAgent": {
+    "modular_agent_foo::FooModule": {
       bodyBackground: (color) => `color-mix(in srgb, ${color} 85%, transparent)`,
     },
   },
@@ -55,12 +55,12 @@ export const ui = {
 
 All three manifest keys are optional.
 
-At build time, the desktop app's `vite-plugin-agent-ui` reads `ma-config.toml`
-and, for every selected agent, statically imports `<path>/ui/src/index.ts` when
-it exists (virtual module `virtual:agent-ui`). The path follows the same rules
+At build time, the desktop app's `vite-plugin-module-ui` reads `ma-config.toml`
+and, for every selected module, statically imports `<path>/ui/src/index.ts` when
+it exists (virtual module `virtual:module-ui`). The path follows the same rules
 ma-config uses: a `Workspace` source resolves to `crates/<name>/ui`, an explicit
-`Path` source to `<path>/ui`, and a registry agent — which carries no source at
-all — to `custom_agents/<name>/ui`, all relative to the workspace root. No
+`Path` source to `<path>/ui`, and a registry module — which carries no source at
+all — to `custom_modules/<name>/ui`, all relative to the workspace root. No
 dynamic loading, no npm registry access: the UI ships with the build the same
 way the Rust crate does.
 
@@ -96,7 +96,7 @@ Run `npm install` once inside `ui/` so package-local dependencies land in
 See `src/types.ts` for the full documented contracts:
 
 - `NodeViewProps` — `configs` (reactive), `configSpecs`, `updateConfig`
-  (routes through the app's undo/redo coalescing), `agentEvent`,
+  (routes through the app's undo/redo coalescing), `moduleEvent`,
   `running`. Size is intentionally not a prop: measure
   with `bind:clientWidth` / `bind:clientHeight` on your root element.
 - `ConfigWidgetProps` — config-local only (`configKey`, `value`,
@@ -115,5 +115,5 @@ internally-scrollable areas **must** carry `nowheel`. The node body is no
 longer blanket-`nodrag`, so an interactive element without `nodrag` drags the
 whole node when used, and a scroll area without `nowheel` zooms the canvas.
 Write back config values on `change` rather than `input` for drag-style
-controls to avoid flooding undo history and IPC. If you render agent-provided
+controls to avoid flooding undo history and IPC. If you render module-provided
 data with `{@html}`, sanitize it first.

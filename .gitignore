@@ -5,9 +5,9 @@ lcov.info
 # ma-config per-app selections (machine local)
 /apps/*/ma-config.toml
 
-# Out-of-tree agent crates, cloned by hand (see custom_agents/README.md)
-/custom_agents/*
-!/custom_agents/README.md
+# Out-of-tree agent crates, cloned by hand (see custom_modules/README.md)
+/custom_modules/*
+!/custom_modules/README.md
 
 *.bak
 __pycache__/

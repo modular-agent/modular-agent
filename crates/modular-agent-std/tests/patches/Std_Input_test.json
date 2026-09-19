@@ -1,8 +1,8 @@
 {
-  "agents": [
+  "modules": [
     {
       "id": "40",
-      "def_name": "modular_agent_std::display::DisplayValueAgent",
+      "def_name": "modular_agent_std::display::DisplayValueModule",
       "inputs": [
         "value"
       ],
@@ -22,7 +22,7 @@
     },
     {
       "id": "42",
-      "def_name": "modular_agent_std::display::DisplayValueAgent",
+      "def_name": "modular_agent_std::display::DisplayValueModule",
       "inputs": [
         "value"
       ],
@@ -42,7 +42,7 @@
     },
     {
       "id": "44",
-      "def_name": "modular_agent_std::display::DisplayValueAgent",
+      "def_name": "modular_agent_std::display::DisplayValueModule",
       "inputs": [
         "value"
       ],
@@ -62,7 +62,7 @@
     },
     {
       "id": "46",
-      "def_name": "modular_agent_std::display::DisplayValueAgent",
+      "def_name": "modular_agent_std::display::DisplayValueModule",
       "inputs": [
         "value"
       ],
@@ -82,7 +82,7 @@
     },
     {
       "id": "49",
-      "def_name": "modular_agent_std::display::DisplayValueAgent",
+      "def_name": "modular_agent_std::display::DisplayValueModule",
       "inputs": [
         "value"
       ],
@@ -102,7 +102,7 @@
     },
     {
       "id": "51",
-      "def_name": "modular_agent_std::display::DisplayValueAgent",
+      "def_name": "modular_agent_std::display::DisplayValueModule",
       "inputs": [
         "value"
       ],
@@ -122,7 +122,7 @@
     },
     {
       "id": "52",
-      "def_name": "modular_agent_core::external_agent::LocalOutputAgent",
+      "def_name": "modular_agent_core::external_module::LocalOutputModule",
       "inputs": [
         "value"
       ],
@@ -140,7 +140,7 @@
     },
     {
       "id": "53",
-      "def_name": "modular_agent_core::external_agent::LocalInputAgent",
+      "def_name": "modular_agent_core::external_module::LocalInputModule",
       "outputs": [
         "value"
       ],
@@ -158,7 +158,7 @@
     },
     {
       "id": "55",
-      "def_name": "modular_agent_core::external_agent::LocalInputAgent",
+      "def_name": "modular_agent_core::external_module::LocalInputModule",
       "outputs": [
         "value"
       ],
@@ -176,7 +176,7 @@
     },
     {
       "id": "57",
-      "def_name": "modular_agent_core::external_agent::LocalOutputAgent",
+      "def_name": "modular_agent_core::external_module::LocalOutputModule",
       "inputs": [
         "value"
       ],
@@ -194,7 +194,7 @@
     },
     {
       "id": "58",
-      "def_name": "modular_agent_core::external_agent::LocalInputAgent",
+      "def_name": "modular_agent_core::external_module::LocalInputModule",
       "outputs": [
         "value"
       ],
@@ -212,7 +212,7 @@
     },
     {
       "id": "60",
-      "def_name": "modular_agent_core::external_agent::LocalOutputAgent",
+      "def_name": "modular_agent_core::external_module::LocalOutputModule",
       "inputs": [
         "value"
       ],
@@ -230,7 +230,7 @@
     },
     {
       "id": "61",
-      "def_name": "modular_agent_core::external_agent::LocalOutputAgent",
+      "def_name": "modular_agent_core::external_module::LocalOutputModule",
       "inputs": [
         "value"
       ],
@@ -248,7 +248,7 @@
     },
     {
       "id": "62",
-      "def_name": "modular_agent_core::external_agent::LocalInputAgent",
+      "def_name": "modular_agent_core::external_module::LocalInputModule",
       "outputs": [
         "value"
       ],
@@ -266,7 +266,7 @@
     },
     {
       "id": "64",
-      "def_name": "modular_agent_std::display::DisplayValueAgent",
+      "def_name": "modular_agent_std::display::DisplayValueModule",
       "inputs": [
         "value"
       ],
@@ -286,7 +286,7 @@
     },
     {
       "id": "65",
-      "def_name": "modular_agent_core::external_agent::LocalInputAgent",
+      "def_name": "modular_agent_core::external_module::LocalInputModule",
       "outputs": [
         "value"
       ],
@@ -304,7 +304,7 @@
     },
     {
       "id": "67",
-      "def_name": "modular_agent_core::external_agent::LocalOutputAgent",
+      "def_name": "modular_agent_core::external_module::LocalOutputModule",
       "inputs": [
         "value"
       ],
@@ -322,7 +322,7 @@
     },
     {
       "id": "68",
-      "def_name": "modular_agent_core::external_agent::LocalInputAgent",
+      "def_name": "modular_agent_core::external_module::LocalInputModule",
       "outputs": [
         "value"
       ],
@@ -340,7 +340,7 @@
     },
     {
       "id": "70",
-      "def_name": "modular_agent_core::external_agent::LocalOutputAgent",
+      "def_name": "modular_agent_core::external_module::LocalOutputModule",
       "inputs": [
         "value"
       ],
@@ -358,7 +358,7 @@
     },
     {
       "id": "73",
-      "def_name": "modular_agent_std::input::IntegerInputAgent",
+      "def_name": "modular_agent_std::input::IntegerInputModule",
       "inputs": [
         "unit"
       ],
@@ -380,7 +380,7 @@
     },
     {
       "id": "75",
-      "def_name": "modular_agent_std::input::UnitInputAgent",
+      "def_name": "modular_agent_std::input::UnitInputModule",
       "outputs": [
         "unit"
       ],
@@ -399,7 +399,7 @@
     },
     {
       "id": "77",
-      "def_name": "modular_agent_std::input::BooleanInputAgent",
+      "def_name": "modular_agent_std::input::BooleanInputModule",
       "inputs": [
         "unit"
       ],
@@ -421,7 +421,7 @@
     },
     {
       "id": "79",
-      "def_name": "modular_agent_std::input::NumberInputAgent",
+      "def_name": "modular_agent_std::input::NumberInputModule",
       "inputs": [
         "unit"
       ],
@@ -443,7 +443,7 @@
     },
     {
       "id": "81",
-      "def_name": "modular_agent_std::input::StringInputAgent",
+      "def_name": "modular_agent_std::input::StringInputModule",
       "inputs": [
         "unit"
       ],
@@ -465,7 +465,7 @@
     },
     {
       "id": "83",
-      "def_name": "modular_agent_std::input::TextInputAgent",
+      "def_name": "modular_agent_std::input::TextInputModule",
       "inputs": [
         "unit"
       ],
@@ -489,7 +489,7 @@
     },
     {
       "id": "85",
-      "def_name": "modular_agent_std::input::ObjectInputAgent",
+      "def_name": "modular_agent_std::input::ObjectInputModule",
       "inputs": [
         "unit"
       ],

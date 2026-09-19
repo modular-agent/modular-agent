@@ -7,8 +7,8 @@ use chrono::{DateTime, Local, Utc};
 use cron::Schedule;
 use log;
 use modular_agent_core::{
-    Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentStatus, AgentValue,
-    AsAgent, ModularAgent, async_trait, modular_agent,
+    AsModule, Error, ModularAgent, Module, ModuleContext, ModuleData, ModuleOutput, ModuleSpec,
+    ModuleStatus, Result, Value, async_trait, modular_agent,
 };
 use regex::Regex;
 use tokio::task::JoinHandle;
@@ -29,7 +29,7 @@ const CAPACITY_DEFAULT: i64 = 10;
 const INTERVAL_DEFAULT: &str = "10s";
 const THROTTLE_INTERVAL_DEFAULT: &str = "1s";
 
-// Delay Agent
+// Delay Module
 #[modular_agent(
     title = "Delay",
     description = "Delays output by a specified time",
@@ -40,26 +40,21 @@ const THROTTLE_INTERVAL_DEFAULT: &str = "1s";
     integer_config(name = CONFIG_CAPACITY, default = CAPACITY_DEFAULT),
     hint(color=2),
 )]
-struct DelayAgent {
-    data: AgentData,
+struct DelayModule {
+    data: ModuleData,
     num_waiting_data: Arc<Mutex<i64>>,
 }
 
 #[async_trait]
-impl AsAgent for DelayAgent {
-    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+impl AsModule for DelayModule {
+    fn new(ma: ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
         Ok(Self {
-            data: AgentData::new(ma, id, spec),
+            data: ModuleData::new(ma, id, spec),
             num_waiting_data: Arc::new(Mutex::new(0)),
         })
     }
 
-    async fn process(
-        &mut self,
-        ctx: AgentContext,
-        port: String,
-        value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, ctx: ModuleContext, port: String, value: Value) -> Result<()> {
         let config = self.configs()?;
         let delay_ms = config.get_integer_or(CONFIG_DELAY, DELAY_MS_DEFAULT);
         let capacity = config.get_integer_or(CONFIG_CAPACITY, CAPACITY_DEFAULT);
@@ -85,7 +80,7 @@ impl AsAgent for DelayAgent {
     }
 }
 
-// Interval Timer Agent
+// Interval Timer Module
 #[modular_agent(
     title = "Interval Timer",
     description = "Outputs a unit signal at specified intervals",
@@ -94,19 +89,19 @@ impl AsAgent for DelayAgent {
     string_config(name = CONFIG_INTERVAL, default = INTERVAL_DEFAULT, description = "(ex. 10s, 5m, 100ms, 1h, 1d)"),
     hint(color=2),
 )]
-struct IntervalTimerAgent {
-    data: AgentData,
+struct IntervalTimerModule {
+    data: ModuleData,
     timer_handle: Arc<Mutex<Option<JoinHandle<()>>>>,
     interval_ms: u64,
 }
 
-impl IntervalTimerAgent {
-    fn start_timer(&mut self) -> Result<(), AgentError> {
+impl IntervalTimerModule {
+    fn start_timer(&mut self) -> Result<()> {
         let timer_handle = self.timer_handle.clone();
         let interval_ms = self.interval_ms;
 
         let ma = self.ma().clone();
-        let agent_id = self.id().to_string();
+        let module_id = self.id().to_string();
         let handle = self.runtime()?.spawn(async move {
             loop {
                 // Sleep for the configured interval
@@ -120,11 +115,11 @@ impl IntervalTimerAgent {
                 }
 
                 // Create a unit output
-                if let Err(e) = ma.try_send_agent_out(
-                    agent_id.clone(),
-                    AgentContext::new(),
+                if let Err(e) = ma.try_send_module_out(
+                    module_id.clone(),
+                    ModuleContext::new(),
                     PORT_UNIT.to_string(),
-                    AgentValue::unit(),
+                    Value::unit(),
                 ) {
                     log::error!("Failed to send interval timer output: {}", e);
                 }
@@ -139,7 +134,7 @@ impl IntervalTimerAgent {
         Ok(())
     }
 
-    fn stop_timer(&mut self) -> Result<(), AgentError> {
+    fn stop_timer(&mut self) -> Result<()> {
         // Cancel the timer
         if let Ok(mut timer_handle) = self.timer_handle.lock() {
             if let Some(handle) = timer_handle.take() {
@@ -151,37 +146,37 @@ impl IntervalTimerAgent {
 }
 
 #[async_trait]
-impl AsAgent for IntervalTimerAgent {
-    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+impl AsModule for IntervalTimerModule {
+    fn new(ma: ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
         let interval = spec
             .configs
             .as_ref()
-            .ok_or(AgentError::NoConfig)?
+            .ok_or(Error::NoConfig)?
             .get_string_or(CONFIG_INTERVAL, INTERVAL_DEFAULT);
         let interval_ms = parse_duration_to_ms(&interval)?;
 
         Ok(Self {
-            data: AgentData::new(ma, id, spec),
+            data: ModuleData::new(ma, id, spec),
             timer_handle: Default::default(),
             interval_ms,
         })
     }
 
-    async fn start(&mut self) -> Result<(), AgentError> {
+    async fn start(&mut self) -> Result<()> {
         self.start_timer()
     }
 
-    async fn stop(&mut self) -> Result<(), AgentError> {
+    async fn stop(&mut self) -> Result<()> {
         self.stop_timer()
     }
 
-    fn configs_changed(&mut self) -> Result<(), AgentError> {
+    fn configs_changed(&mut self) -> Result<()> {
         // Check if interval has changed
         let interval = self.configs()?.get_string(CONFIG_INTERVAL)?;
         let new_interval = parse_duration_to_ms(&interval)?;
         if new_interval != self.interval_ms {
             self.interval_ms = new_interval;
-            if *self.status() == AgentStatus::Start {
+            if *self.status() == ModuleStatus::Start {
                 // Restart the timer with the new interval
                 self.stop_timer()?;
                 self.start_timer()?;
@@ -199,33 +194,33 @@ impl AsAgent for IntervalTimerAgent {
     integer_config(name = CONFIG_DELAY, default = DELAY_MS_DEFAULT, title = "delay (ms)"),
     hint(color=2),
 )]
-struct OnStartAgent {
-    data: AgentData,
+struct OnStartModule {
+    data: ModuleData,
 }
 
 #[async_trait]
-impl AsAgent for OnStartAgent {
-    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+impl AsModule for OnStartModule {
+    fn new(ma: ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
         Ok(Self {
-            data: AgentData::new(ma, id, spec),
+            data: ModuleData::new(ma, id, spec),
         })
     }
 
-    async fn start(&mut self) -> Result<(), AgentError> {
+    async fn start(&mut self) -> Result<()> {
         let config = self.configs()?;
         let delay_ms = config.get_integer_or(CONFIG_DELAY, DELAY_MS_DEFAULT);
 
         let ma = self.ma().clone();
-        let agent_id = self.id().to_string();
+        let module_id = self.id().to_string();
 
         self.runtime()?.spawn(async move {
             tokio::time::sleep(Duration::from_millis(delay_ms as u64)).await;
 
-            if let Err(e) = ma.try_send_agent_out(
-                agent_id,
-                AgentContext::new(),
+            if let Err(e) = ma.try_send_module_out(
+                module_id,
+                ModuleContext::new(),
                 PORT_UNIT.to_string(),
-                AgentValue::unit(),
+                Value::unit(),
             ) {
                 log::error!("Failed to send delayed output: {}", e);
             }
@@ -235,7 +230,7 @@ impl AsAgent for OnStartAgent {
     }
 }
 
-// Schedule Timer Agent
+// Schedule Timer Module
 #[modular_agent(
     title = "Schedule Timer",
     category = CATEGORY,
@@ -243,20 +238,20 @@ impl AsAgent for OnStartAgent {
     string_config(name = CONFIG_SCHEDULE, default = "0 0 * * * *", description = "sec min hour day month week year"),
     hint(color=2),
 )]
-struct ScheduleTimerAgent {
-    data: AgentData,
+struct ScheduleTimerModule {
+    data: ModuleData,
     cron_schedule: Option<Schedule>,
     timer_handle: Arc<Mutex<Option<JoinHandle<()>>>>,
 }
 
-impl ScheduleTimerAgent {
-    fn start_timer(&mut self) -> Result<(), AgentError> {
+impl ScheduleTimerModule {
+    fn start_timer(&mut self) -> Result<()> {
         let Some(schedule) = &self.cron_schedule else {
-            return Err(AgentError::InvalidConfig("No schedule defined".into()));
+            return Err(Error::InvalidConfig("No schedule defined".into()));
         };
 
         let ma = self.ma().clone();
-        let agent_id = self.id().to_string();
+        let module_id = self.id().to_string();
         let timer_handle = self.timer_handle.clone();
         let schedule = schedule.clone();
 
@@ -286,7 +281,7 @@ impl ScheduleTimerAgent {
                 let next_local = next.with_timezone(&Local);
                 log::debug!(
                     "Scheduling timer for '{}' to fire at {} (in {:?})",
-                    agent_id,
+                    module_id,
                     next_local.format("%Y-%m-%d %H:%M:%S %z"),
                     duration
                 );
@@ -305,11 +300,11 @@ impl ScheduleTimerAgent {
                 let current_local_time = Local::now().timestamp();
 
                 // Output the timestamp as an integer
-                if let Err(e) = ma.try_send_agent_out(
-                    agent_id.clone(),
-                    AgentContext::new(),
+                if let Err(e) = ma.try_send_module_out(
+                    module_id.clone(),
+                    ModuleContext::new(),
                     PORT_TIME.to_string(),
-                    AgentValue::integer(current_local_time),
+                    Value::integer(current_local_time),
                 ) {
                     log::error!("Failed to send schedule timer output: {}", e);
                 }
@@ -324,7 +319,7 @@ impl ScheduleTimerAgent {
         Ok(())
     }
 
-    fn stop_timer(&mut self) -> Result<(), AgentError> {
+    fn stop_timer(&mut self) -> Result<()> {
         // Cancel the timer
         if let Ok(mut timer_handle) = self.timer_handle.lock() {
             if let Some(handle) = timer_handle.take() {
@@ -334,14 +329,14 @@ impl ScheduleTimerAgent {
         Ok(())
     }
 
-    fn parse_schedule(&mut self, schedule_str: &str) -> Result<(), AgentError> {
+    fn parse_schedule(&mut self, schedule_str: &str) -> Result<()> {
         if schedule_str.trim().is_empty() {
             self.cron_schedule = None;
             return Ok(());
         }
 
         let schedule = Schedule::from_str(schedule_str).map_err(|e| {
-            AgentError::InvalidConfig(format!("Invalid cron schedule '{}': {}", schedule_str, e))
+            Error::InvalidConfig(format!("Invalid cron schedule '{}': {}", schedule_str, e))
         })?;
         self.cron_schedule = Some(schedule);
         Ok(())
@@ -349,46 +344,46 @@ impl ScheduleTimerAgent {
 }
 
 #[async_trait]
-impl AsAgent for ScheduleTimerAgent {
-    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+impl AsModule for ScheduleTimerModule {
+    fn new(ma: ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
         let schedule_str = spec
             .configs
             .as_ref()
             .map(|cfg| cfg.get_string(CONFIG_SCHEDULE))
             .transpose()?;
 
-        let mut agent = Self {
-            data: AgentData::new(ma, id, spec),
+        let mut module = Self {
+            data: ModuleData::new(ma, id, spec),
             cron_schedule: None,
             timer_handle: Default::default(),
         };
 
         if let Some(schedule_str) = schedule_str {
             if !schedule_str.is_empty() {
-                agent.parse_schedule(&schedule_str)?;
+                module.parse_schedule(&schedule_str)?;
             }
         }
 
-        Ok(agent)
+        Ok(module)
     }
 
-    async fn start(&mut self) -> Result<(), AgentError> {
+    async fn start(&mut self) -> Result<()> {
         if self.cron_schedule.is_some() {
             self.start_timer()?;
         }
         Ok(())
     }
 
-    async fn stop(&mut self) -> Result<(), AgentError> {
+    async fn stop(&mut self) -> Result<()> {
         self.stop_timer()
     }
 
-    fn configs_changed(&mut self) -> Result<(), AgentError> {
+    fn configs_changed(&mut self) -> Result<()> {
         // Check if schedule has changed
         let schedule_str = self.configs()?.get_string(CONFIG_SCHEDULE)?;
         self.parse_schedule(&schedule_str)?;
 
-        if *self.status() == AgentStatus::Start {
+        if *self.status() == ModuleStatus::Start {
             // Restart the timer with the new schedule
             self.stop_timer()?;
             if self.cron_schedule.is_some() {
@@ -399,7 +394,7 @@ impl AsAgent for ScheduleTimerAgent {
     }
 }
 
-// Throttle agent
+// Throttle module
 #[modular_agent(
     title = "Throttle Time",
     category = CATEGORY,
@@ -409,22 +404,22 @@ impl AsAgent for ScheduleTimerAgent {
     integer_config(name = CONFIG_CAPACITY, description = "0: no data, -1: all data"),
     hint(color=2),
 )]
-struct ThrottleTimeAgent {
-    data: AgentData,
+struct ThrottleTimeModule {
+    data: ModuleData,
     timer_handle: Arc<Mutex<Option<JoinHandle<()>>>>,
     interval_ms: u64,
     capacity: i64,
-    waiting_data: Arc<Mutex<Vec<(AgentContext, String, AgentValue)>>>,
+    waiting_data: Arc<Mutex<Vec<(ModuleContext, String, Value)>>>,
 }
 
-impl ThrottleTimeAgent {
-    fn start_timer(&mut self) -> Result<(), AgentError> {
+impl ThrottleTimeModule {
+    fn start_timer(&mut self) -> Result<()> {
         let timer_handle = self.timer_handle.clone();
         let interval_ms = self.interval_ms;
 
         let waiting_data = self.waiting_data.clone();
         let ma = self.ma().clone();
-        let agent_id = self.id().to_string();
+        let module_id = self.id().to_string();
 
         let handle = self.runtime()?.spawn(async move {
             loop {
@@ -442,7 +437,7 @@ impl ThrottleTimeAgent {
                 if wd.len() > 0 {
                     // If there are data waiting, output the first one
                     let (ctx, port, data) = wd.remove(0);
-                    ma.try_send_agent_out(agent_id.clone(), ctx, port, data)
+                    ma.try_send_module_out(module_id.clone(), ctx, port, data)
                         .unwrap_or_else(|e| {
                             log::error!("Failed to send delayed output: {}", e);
                         });
@@ -464,7 +459,7 @@ impl ThrottleTimeAgent {
         Ok(())
     }
 
-    fn stop_timer(&mut self) -> Result<(), AgentError> {
+    fn stop_timer(&mut self) -> Result<()> {
         // Cancel the timer
         if let Ok(mut timer_handle) = self.timer_handle.lock() {
             if let Some(handle) = timer_handle.take() {
@@ -476,23 +471,23 @@ impl ThrottleTimeAgent {
 }
 
 #[async_trait]
-impl AsAgent for ThrottleTimeAgent {
-    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+impl AsModule for ThrottleTimeModule {
+    fn new(ma: ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
         let interval = spec
             .configs
             .as_ref()
-            .ok_or(AgentError::NoConfig)?
+            .ok_or(Error::NoConfig)?
             .get_string_or(CONFIG_INTERVAL, THROTTLE_INTERVAL_DEFAULT);
         let interval_ms = parse_duration_to_ms(&interval)?;
 
         let capacity = spec
             .configs
             .as_ref()
-            .ok_or(AgentError::NoConfig)?
+            .ok_or(Error::NoConfig)?
             .get_integer_or(CONFIG_CAPACITY, 0);
 
         Ok(Self {
-            data: AgentData::new(ma, id, spec),
+            data: ModuleData::new(ma, id, spec),
             timer_handle: Default::default(),
             interval_ms,
             capacity,
@@ -500,11 +495,11 @@ impl AsAgent for ThrottleTimeAgent {
         })
     }
 
-    async fn stop(&mut self) -> Result<(), AgentError> {
+    async fn stop(&mut self) -> Result<()> {
         self.stop_timer()
     }
 
-    fn configs_changed(&mut self) -> Result<(), AgentError> {
+    fn configs_changed(&mut self) -> Result<()> {
         // Check if interval has changed
         let interval = self.configs()?.get_string(CONFIG_INTERVAL)?;
         let new_interval = parse_duration_to_ms(&interval)?;
@@ -526,12 +521,7 @@ impl AsAgent for ThrottleTimeAgent {
         Ok(())
     }
 
-    async fn process(
-        &mut self,
-        ctx: AgentContext,
-        port: String,
-        value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, ctx: ModuleContext, port: String, value: Value) -> Result<()> {
         if self.timer_handle.lock().unwrap().is_some() {
             // If the timer is running, we just add the data to the waiting list
             let mut wd = self.waiting_data.lock().unwrap();
@@ -561,7 +551,7 @@ impl AsAgent for ThrottleTimeAgent {
 }
 
 // Parse time duration strings like "2s", "10m", "200ms"
-pub(crate) fn parse_duration_to_ms(duration_str: &str) -> Result<u64, AgentError> {
+pub(crate) fn parse_duration_to_ms(duration_str: &str) -> Result<u64> {
     const MIN_DURATION: u64 = 10;
 
     // Regular expression to match number followed by optional unit
@@ -569,7 +559,7 @@ pub(crate) fn parse_duration_to_ms(duration_str: &str) -> Result<u64, AgentError
 
     if let Some(captures) = re.captures(duration_str.trim()) {
         let value: u64 = captures.get(1).unwrap().as_str().parse().map_err(|e| {
-            AgentError::InvalidConfig(format!(
+            Error::InvalidConfig(format!(
                 "Invalid number in duration '{}': {}",
                 duration_str, e
             ))
@@ -588,10 +578,7 @@ pub(crate) fn parse_duration_to_ms(duration_str: &str) -> Result<u64, AgentError
             "h" => value * 3600 * 1000,  // hours to milliseconds
             "d" => value * 86400 * 1000, // days to milliseconds
             _ => {
-                return Err(AgentError::InvalidConfig(format!(
-                    "Unknown time unit: {}",
-                    unit
-                )));
+                return Err(Error::InvalidConfig(format!("Unknown time unit: {}", unit)));
             }
         };
 
@@ -601,7 +588,7 @@ pub(crate) fn parse_duration_to_ms(duration_str: &str) -> Result<u64, AgentError
         // If the string doesn't match the pattern, try to parse it as a plain number
         // and assume it's in seconds
         let value: u64 = duration_str.parse().map_err(|e| {
-            AgentError::InvalidConfig(format!("Invalid duration format '{}': {}", duration_str, e))
+            Error::InvalidConfig(format!("Invalid duration format '{}': {}", duration_str, e))
         })?;
         Ok(std::cmp::max(value * 1000, MIN_DURATION)) // Convert to ms
     }

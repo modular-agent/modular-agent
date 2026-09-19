@@ -4,17 +4,17 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use anyhow::{Context as _, Result};
-use modular_agent_core::{AgentValue, EventEnvelope, ModularAgent, ModularAgentEvent};
+use modular_agent_core::{EventEnvelope, ModularAgent, ModularAgentEvent, Value};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 use tokio::sync::broadcast::error::RecvError;
 
 use crate::modular_agent_desktop::app::parent_patch_path;
 
-const EMIT_AGENT_CONFIG_UPDATED: &str = "ma:agent_config_updated";
-const EMIT_AGENT_ERROR: &str = "ma:agent_error";
-const EMIT_AGENT_IN: &str = "ma:agent_in";
-const EMIT_AGENT_SPEC_UPDATED: &str = "ma:agent_spec_updated";
+const EMIT_MODULE_CONFIG_UPDATED: &str = "ma:module_config_updated";
+const EMIT_MODULE_ERROR: &str = "ma:module_error";
+const EMIT_MODULE_IN: &str = "ma:module_in";
+const EMIT_MODULE_SPEC_UPDATED: &str = "ma:module_spec_updated";
 const EMIT_PATCH_STRUCTURE_CHANGED: &str = "ma:patch_structure_changed";
 const EMIT_PATCH_LIST_CHANGED: &str = "ma:patch_list_changed";
 const EMIT_PATCH_REMOVED: &str = "ma:patch_removed";
@@ -24,7 +24,7 @@ const EMIT_PATCH_RUNNING_CHANGED: &str = "ma:patch_running_changed";
 /// Config updates carry their value across the IPC boundary, so a wire
 /// driving a config at high frequency would flood the webview with
 /// serialization work. Relay them with a leading + trailing throttle per
-/// (agent_id, key): an idle key emits immediately, later events within the
+/// (module_id, key): an idle key emits immediately, later events within the
 /// window are coalesced and the latest one is flushed at the window's end.
 /// Best-effort — the broadcast receiver above can still drop events under
 /// extreme lag before the throttle ever sees them.
@@ -36,7 +36,7 @@ struct ConfigThrottleState {
     /// mixed across coalesced events, or the frontend's origin filter could
     /// drop the trailing value (e.g. a wire value flushed under a "desktop"
     /// echo's origin).
-    pending: Option<(Option<String>, AgentValue)>,
+    pending: Option<(Option<String>, Value)>,
     flush_scheduled: bool,
 }
 
@@ -73,17 +73,17 @@ fn handle_event(
     event: ModularAgentEvent,
 ) -> Result<()> {
     match event {
-        ModularAgentEvent::AgentConfigUpdated(agent_id, key, value) => {
-            throttled_agent_config_updated(app, throttle, origin, agent_id, key, value)?;
+        ModularAgentEvent::ModuleConfigUpdated(module_id, key, value) => {
+            throttled_module_config_updated(app, throttle, origin, module_id, key, value)?;
         }
-        ModularAgentEvent::AgentError(agent_id, message) => {
-            emit_agent_error(app, origin, agent_id, message)?;
+        ModularAgentEvent::ModuleError(module_id, message) => {
+            emit_module_error(app, origin, module_id, message)?;
         }
-        ModularAgentEvent::AgentIn(agent_id, connection) => {
-            emit_agent_in(app, origin, agent_id, connection)?;
+        ModularAgentEvent::ModuleIn(module_id, connection) => {
+            emit_module_in(app, origin, module_id, connection)?;
         }
-        ModularAgentEvent::AgentSpecUpdated(agent_id) => {
-            emit_agent_spec_updated(app, origin, agent_id)?;
+        ModularAgentEvent::ModuleSpecUpdated(module_id) => {
+            emit_module_spec_updated(app, origin, module_id)?;
         }
         ModularAgentEvent::PatchStructureChanged { patch_id } => {
             emit_patch_structure_changed(app, origin, patch_id)?;
@@ -95,7 +95,7 @@ fn handle_event(
             emit_patch_list_changed(app, origin, parent_patch_path(&name))?;
         }
         ModularAgentEvent::PatchRemoved { patch_id, name } => {
-            // Drop accumulated throttle state. The observer can't map agent
+            // Drop accumulated throttle state. The observer can't map module
             // ids to patches, so clear everything — losing state only means
             // the next event for a key emits immediately.
             throttle.lock().unwrap().clear();
@@ -132,18 +132,18 @@ fn handle_event(
     Ok(())
 }
 
-fn throttled_agent_config_updated(
+fn throttled_module_config_updated(
     app: &AppHandle,
     throttle: &ConfigThrottleMap,
     origin: Option<String>,
-    agent_id: String,
+    module_id: String,
     key: String,
-    value: AgentValue,
+    value: Value,
 ) -> Result<()> {
     let now = Instant::now();
     let emit_now = {
         let mut map = throttle.lock().unwrap();
-        match map.entry((agent_id.clone(), key.clone())) {
+        match map.entry((module_id.clone(), key.clone())) {
             Entry::Vacant(entry) => {
                 entry.insert(ConfigThrottleState {
                     last_emit: now,
@@ -168,7 +168,7 @@ fn throttled_agent_config_updated(
                         spawn_config_flush(
                             app.clone(),
                             throttle.clone(),
-                            agent_id.clone(),
+                            module_id.clone(),
                             key.clone(),
                             delay,
                         );
@@ -179,7 +179,7 @@ fn throttled_agent_config_updated(
         }
     };
     if let Some((origin, value)) = emit_now {
-        emit_agent_config_updated(app, origin, agent_id, key, value)?;
+        emit_module_config_updated(app, origin, module_id, key, value)?;
     }
     Ok(())
 }
@@ -187,7 +187,7 @@ fn throttled_agent_config_updated(
 fn spawn_config_flush(
     app: AppHandle,
     throttle: ConfigThrottleMap,
-    agent_id: String,
+    module_id: String,
     key: String,
     delay: Duration,
 ) {
@@ -196,7 +196,7 @@ fn spawn_config_flush(
         let pending = {
             let mut map = throttle.lock().unwrap();
             // Entry gone: the map was cleared on patch removal.
-            let Some(state) = map.get_mut(&(agent_id.clone(), key.clone())) else {
+            let Some(state) = map.get_mut(&(module_id.clone(), key.clone())) else {
                 return;
             };
             state.flush_scheduled = false;
@@ -204,104 +204,104 @@ fn spawn_config_flush(
             state.pending.take()
         };
         if let Some((origin, value)) = pending {
-            emit_agent_config_updated(&app, origin, agent_id, key, value).unwrap_or_else(|e| {
+            emit_module_config_updated(&app, origin, module_id, key, value).unwrap_or_else(|e| {
                 log::error!("Failed to emit Tauri event: {}", e);
             });
         }
     });
 }
 
-fn emit_agent_config_updated(
+fn emit_module_config_updated(
     app: &AppHandle,
     origin: Option<String>,
-    agent_id: String,
+    module_id: String,
     key: String,
-    value: AgentValue,
+    value: Value,
 ) -> Result<()> {
     #[derive(Clone, Serialize)]
-    struct AgentConfigUpdatedMessage {
+    struct ModuleConfigUpdatedMessage {
         origin: Option<String>,
-        agent_id: String,
+        module_id: String,
         key: String,
-        value: AgentValue,
+        value: Value,
     }
 
     app.emit(
-        EMIT_AGENT_CONFIG_UPDATED,
-        AgentConfigUpdatedMessage {
+        EMIT_MODULE_CONFIG_UPDATED,
+        ModuleConfigUpdatedMessage {
             origin,
-            agent_id,
+            module_id,
             key,
             value,
         },
     )
-    .context("Failed to emit agent config updated message")
+    .context("Failed to emit module config updated message")
 }
 
-fn emit_agent_error(
+fn emit_module_error(
     app: &AppHandle,
     origin: Option<String>,
-    agent_id: String,
+    module_id: String,
     message: String,
 ) -> Result<()> {
     #[derive(Clone, Serialize)]
-    struct AgentErrorMessage {
+    struct ModuleErrorMessage {
         origin: Option<String>,
-        agent_id: String,
+        module_id: String,
         message: String,
     }
 
     app.emit(
-        EMIT_AGENT_ERROR,
-        AgentErrorMessage {
+        EMIT_MODULE_ERROR,
+        ModuleErrorMessage {
             origin,
-            agent_id,
+            module_id,
             message,
         },
     )
-    .context("Failed to emit agent error message")
+    .context("Failed to emit module error message")
 }
 
-fn emit_agent_in(
+fn emit_module_in(
     app: &AppHandle,
     origin: Option<String>,
-    agent_id: String,
+    module_id: String,
     port: String,
 ) -> Result<()> {
     #[derive(Clone, Serialize)]
-    struct AgentInMessage {
+    struct ModuleInMessage {
         origin: Option<String>,
-        agent_id: String,
+        module_id: String,
         port: String,
     }
 
     app.emit(
-        EMIT_AGENT_IN,
-        AgentInMessage {
+        EMIT_MODULE_IN,
+        ModuleInMessage {
             origin,
-            agent_id,
+            module_id,
             port,
         },
     )
-    .context("Failed to emit agent-in message")
+    .context("Failed to emit module-in message")
 }
 
-fn emit_agent_spec_updated(
+fn emit_module_spec_updated(
     app: &AppHandle,
     origin: Option<String>,
-    agent_id: String,
+    module_id: String,
 ) -> Result<()> {
     #[derive(Clone, Serialize)]
-    struct AgentSpecUpdatedMessage {
+    struct ModuleSpecUpdatedMessage {
         origin: Option<String>,
-        agent_id: String,
+        module_id: String,
     }
 
     app.emit(
-        EMIT_AGENT_SPEC_UPDATED,
-        AgentSpecUpdatedMessage { origin, agent_id },
+        EMIT_MODULE_SPEC_UPDATED,
+        ModuleSpecUpdatedMessage { origin, module_id },
     )
-    .context("Failed to emit agent spec updated message")
+    .context("Failed to emit module spec updated message")
 }
 
 fn emit_patch_structure_changed(

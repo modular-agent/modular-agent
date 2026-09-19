@@ -6,9 +6,9 @@
   import BookOpenIcon from "@lucide/svelte/icons/book-open";
   import XIcon from "@lucide/svelte/icons/x";
 
-  import { KIND_COLOR_DEFAULTS } from "$lib/agent";
   import { ScrollArea } from "$lib/components/ui/scroll-area/index.js";
   import * as Tabs from "$lib/components/ui/tabs/index.js";
+  import { KIND_COLOR_DEFAULTS } from "$lib/module";
 
   import { useEditor } from "./context.svelte";
   import SidebarConfig from "./sidebar-config.svelte";
@@ -33,7 +33,7 @@
   let cardEl: HTMLElement;
   let headerEl: HTMLElement;
   let isDragging = $state(false);
-  const hasDesc = $derived(!!inspector.agentDef?.description?.trim());
+  const hasDesc = $derived(!!inspector.moduleDef?.description?.trim());
   let dragOffsetX = 0;
   let dragOffsetY = 0;
 
@@ -143,10 +143,10 @@
     tabindex="-1"
   >
     {#if inspector.hasSelection}
-      <!-- Agent Info -->
+      <!-- Module Info -->
       <div class="relative flex flex-col gap-1 text-sm">
-        {#if inspector.agentDef?.category}
-          <div class="text-xs text-muted-foreground">{inspector.agentDef.category}</div>
+        {#if inspector.moduleDef?.category}
+          <div class="text-xs text-muted-foreground">{inspector.moduleDef.category}</div>
         {/if}
         <div class="text-lg font-medium">{inspector.displayTitle}</div>
         {#if hasDesc}
@@ -156,7 +156,7 @@
               editor.openRefCard(
                 inspector.defName,
                 inspector.displayTitle,
-                inspector.agentDef?.description ?? "",
+                inspector.moduleDef?.description ?? "",
               )}
           >
             <BookOpenIcon size={12} />
@@ -218,7 +218,7 @@
                     class={SWATCH_CLASS}
                     class:ring-2={inspector.extensions.color === n}
                     class:ring-ring={inspector.extensions.color === n}
-                    style="background-color: var(--color-agent-{n})"
+                    style="background-color: var(--color-module-{n})"
                     onclick={() => inspector.onUpdateExtension?.("color", n)}
                   ></button>
                 {/each}
@@ -238,8 +238,8 @@
                   onclick={() => {
                     const rawColor =
                       inspector.extensions.color ??
-                      inspector.agentDef?.hints?.color ??
-                      KIND_COLOR_DEFAULTS[inspector.agentDef?.kind ?? "default"] ??
+                      inspector.moduleDef?.hints?.color ??
+                      KIND_COLOR_DEFAULTS[inspector.moduleDef?.kind ?? "default"] ??
                       4;
                     const ports = [
                       ...inspector.inputs.filter((p: string) => p !== "err"),
@@ -281,7 +281,7 @@
                     class={SWATCH_CLASS}
                     class:ring-2={inspector.extensions.bg_color === n}
                     class:ring-ring={inspector.extensions.bg_color === n}
-                    style="background-color: var(--color-agent-{n})"
+                    style="background-color: var(--color-module-{n})"
                     onclick={() => inspector.onUpdateExtension?.("bg_color", n)}
                   ></button>
                 {/each}
@@ -318,7 +318,7 @@
                     class={SWATCH_CLASS}
                     class:ring-2={inspector.extensions.fg_color === n}
                     class:ring-ring={inspector.extensions.fg_color === n}
-                    style="background-color: var(--color-agent-{n})"
+                    style="background-color: var(--color-module-{n})"
                     onclick={() => inspector.onUpdateExtension?.("fg_color", n)}
                   ></button>
                 {/each}

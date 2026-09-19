@@ -16,13 +16,13 @@
 
 </div>
 
-ストリームベースのメッセージオーケストレーションによるモジュラーマルチエージェントシステムを構築するための Rust フレームワークです。
+ストリームベースのメッセージオーケストレーションで、モジュールを組み合わせてエージェントを構築するための Rust フレームワークです。
 
 ## 概要
 
-modular-agent-core は [Modular Agent](https://github.com/modular-agent/modular-agent) プロジェクトのオーケストレーションエンジンです。エージェントは **Patch** — JSON で定義される、接続されたエージェントのグラフ — として配線され、値はその中を非同期にストリームします。このクレートはランタイム（エージェントのライフサイクル、メッセージルーティング、パッチのロード）とエージェント定義用の `#[modular_agent]` マクロを提供します。依存関係を意図的に最小限に抑えており、CLI ツール、デスクトップアプリ、サーバーに組み込めます。
+modular-agent-core は [Modular Agent](https://github.com/modular-agent/modular-agent) プロジェクトのオーケストレーションエンジンです。モジュールは **Patch** — JSON で定義される、接続されたモジュールのグラフ — として配線され、値はその中を非同期にストリームします。このクレートはランタイム（モジュールのライフサイクル、メッセージルーティング、パッチのロード）とモジュール定義用の `#[modular_agent]` マクロを提供します。依存関係を意図的に最小限に抑えており、CLI ツール、デスクトップアプリ、サーバーに組み込めます。
 
-エージェントの実装は別クレートにあります: 同一リポジトリ内の [modular-agent-std](https://github.com/modular-agent/modular-agent/tree/main/crates/modular-agent-std)（ユーティリティ）と [modular-agent-llm](https://github.com/modular-agent/modular-agent/tree/main/crates/modular-agent-llm)（LLM 連携）、および各自のリポジトリで増え続ける[エージェントライブラリ](https://github.com/modular-agent/modular-agent/blob/main/README_ja.md#エージェントライブラリ)群です。[Modular Agent デスクトップアプリ](https://github.com/modular-agent/modular-agent/tree/main/apps/desktop)は、このクレートの上に構築されたビジュアルエディタです。
+モジュールの実装は別クレートにあります: 同一リポジトリ内の [modular-agent-std](https://github.com/modular-agent/modular-agent/tree/main/crates/modular-agent-std)（ユーティリティ）と [modular-agent-llm](https://github.com/modular-agent/modular-agent/tree/main/crates/modular-agent-llm)（LLM 連携）、および各自のリポジトリで増え続ける[モジュールライブラリ](https://github.com/modular-agent/modular-agent/blob/main/README_ja.md#モジュールライブラリ)群です。[Modular Agent デスクトップアプリ](https://github.com/modular-agent/modular-agent/tree/main/apps/desktop)は、このクレートの上に構築されたビジュアルエディタです。
 
 ## インストール
 
@@ -43,10 +43,10 @@ modular-agent-core = { version = "0.30", default-features = false, features = ["
 ```rust
 use std::time::Duration;
 
-use modular_agent_core::{AgentError, AgentValue, ModularAgent, ModularAgentEvent};
+use modular_agent_core::{Error, Value, ModularAgent, ModularAgentEvent};
 
 #[tokio::main]
-async fn main() -> Result<(), AgentError> {
+async fn main() -> Result<(), Error> {
     // 1. 初期化
     let ma = ModularAgent::init()?;
     ma.ready().await?;
@@ -64,7 +64,7 @@ async fn main() -> Result<(), AgentError> {
     ma.start_patch(&patch_id).await?;
 
     // 4. 入力を送信・出力を受信
-    ma.write_external_input("input".into(), AgentValue::string("hello")).await?;
+    ma.write_external_input("input".into(), Value::string("hello")).await?;
     if let Some(value) = rx.recv().await {
         println!("Output: {:?}", value);
     }
@@ -79,41 +79,41 @@ async fn main() -> Result<(), AgentError> {
 
 ### ModularAgent
 
-`ModularAgent` はオーケストレータです。`init()` がバイナリに登録されたすべてのエージェント定義を収集し、`ready().await` でランタイムが起動します。パッチは `open_patch_from_file` で読み込み（プログラムからの構築も可能）、`start_patch` / `stop_patch` で制御します。`write_external_input` で値を投入し、`subscribe_to_event` でエンジンが emit するすべてのイベント（外部出力、エージェントエラー、構造変更）を観測し、`shutdown(timeout)` でランタイムを終了します。`shutdown` は実行中のパッチを停止し、タスクの完了を待ち、MCP 接続を閉じ、タイムアウトを超えると `AgentError::ShutdownTimeout` を返します。`quit()` はテストや簡易用途向けに残っています。
+`ModularAgent` はオーケストレータです。`init()` がバイナリに登録されたすべてのモジュール定義を収集し、`ready().await` でランタイムが起動します。パッチは `open_patch_from_file` で読み込み（プログラムからの構築も可能）、`start_patch` / `stop_patch` で制御します。`write_external_input` で値を投入し、`subscribe_to_event` でエンジンが emit するすべてのイベント（外部出力、モジュールエラー、構造変更）を観測し、`shutdown(timeout)` でランタイムを終了します。`shutdown` は実行中のパッチを停止し、タスクの完了を待ち、MCP 接続を閉じ、タイムアウトを超えると `Error::ShutdownTimeout` を返します。`quit()` はテストや簡易用途向けに残っています。
 
 ### 定義（Definition）とスペック（Spec）
 
-**`AgentDefinition`** は `#[modular_agent]` マクロが生成・登録する設計図です: kind、title、description、category、UI ヒント、ポート一覧、config spec（各 config キーの型とデフォルト値）。**`AgentSpec`** はパッチ内の定義のインスタンス 1 つです: id、定義を参照する `def_name`、そのインスタンスのポートと config 値、位置などのエディタメタデータ。
+**`ModuleDefinition`** は `#[modular_agent]` マクロが生成・登録する設計図です: kind、title、description、category、UI ヒント、ポート一覧、config spec（各 config キーの型とデフォルト値）。**`ModuleSpec`** はパッチ内の定義のインスタンス 1 つです: id、定義を参照する `def_name`、そのインスタンスのポートと config 値、位置などのエディタメタデータ。
 
-古い定義に対して書かれたパッチを開くと、`reconcile_spec()` が各 spec を移行します: 欠けている config キーは現在のデフォルト値で埋められ、定義に存在しなくなったキーは `_` 接頭辞にリネームされ（エージェントは `new()` の中で一度だけ読み取れるため lazy migration が可能。その後は取り除かれる）、ポートと config spec は現在の定義で上書きされます。
+古い定義に対して書かれたパッチを開くと、`reconcile_spec()` が各 spec を移行します: 欠けている config キーは現在のデフォルト値で埋められ、定義に存在しなくなったキーは `_` 接頭辞にリネームされ（モジュールは `new()` の中で一度だけ読み取れるため lazy migration が可能。その後は取り除かれる）、ポートと config spec は現在の定義で上書きされます。
 
 ### Patch の JSON 形式
 
-パッチは `agents` と `connections` を持つ JSON ファイルです。以下は外部入力を外部出力へそのまま流す [`examples/patches/echo.json`](https://github.com/modular-agent/modular-agent/blob/main/crates/modular-agent-core/examples/patches/echo.json) です:
+パッチは `modules` と `connections` を持つ JSON ファイルです。以下は外部入力を外部出力へそのまま流す [`examples/patches/echo.json`](https://github.com/modular-agent/modular-agent/blob/main/crates/modular-agent-core/examples/patches/echo.json) です:
 
 ```jsonc
 {
   "id": "echo",
   "name": "Echo",
-  "agents": [
+  "modules": [
     {
-      "id": "in", // パッチ内ローカルなエージェント id。connections から参照される
-      "def_name": "modular_agent_core::external_agent::ExternalInputAgent",
-      "outputs": ["value"], // このエージェントの出力ポート
+      "id": "in", // パッチ内ローカルなモジュール id。connections から参照される
+      "def_name": "modular_agent_core::external_module::ExternalInputModule",
+      "outputs": ["value"], // このモジュールの出力ポート
       "configs": { "name": "input" } // このインスタンスの config 値
     },
     {
       "id": "out",
-      "def_name": "modular_agent_core::external_agent::ExternalOutputAgent",
-      "inputs": ["value"], // このエージェントの入力ポート
+      "def_name": "modular_agent_core::external_module::ExternalOutputModule",
+      "inputs": ["value"], // このモジュールの入力ポート
       "configs": { "name": "output" }
     }
   ],
   "connections": [
     {
-      "source": "in", // 送信元エージェント id
+      "source": "in", // 送信元モジュール id
       "source_handle": "value", // 送信元の出力ポート
-      "target": "out", // 送信先エージェント id
+      "target": "out", // 送信先モジュール id
       "target_handle": "value" // 送信先の入力ポート
     }
   ]
@@ -122,7 +122,7 @@ async fn main() -> Result<(), AgentError> {
 
 ### ポートと `config:` ハンドル
 
-接続は通常入力ポートを指しますが、`target_handle` を `config:<key>` の形にすると、値は送信先の **config** に流し込まれます — config 値を静的に設定する代わりに、グラフが実行時に計算できるということです。たとえば String Join エージェントに区切り文字を与える場合:
+接続は通常入力ポートを指しますが、`target_handle` を `config:<key>` の形にすると、値は送信先の **config** に流し込まれます — config 値を静的に設定する代わりに、グラフが実行時に計算できるということです。たとえば String Join モジュールに区切り文字を与える場合:
 
 ```json
 {
@@ -133,9 +133,9 @@ async fn main() -> Result<(), AgentError> {
 }
 ```
 
-### AgentValue
+### Value
 
-`AgentValue` は接続を流れる値の型です。クローンは軽量です — 大きなペイロードは `Arc` 越しに持ち、コレクションはイミュータブル（`im`）な構造です。
+`Value` は接続を流れる値の型です。クローンは軽量です — 大きなペイロードは `Arc` 越しに持ち、コレクションはイミュータブル（`im`）な構造です。
 
 | 変種 | 内容 |
 | --- | --- |
@@ -149,34 +149,34 @@ async fn main() -> Result<(), AgentError> {
 | `Object` | 文字列キーの値マップ |
 | `Tensor` | `f32` テンソル。埋め込みなどに |
 | `Message` | LLM チャットメッセージ（`llm` feature） |
-| `Error` | 値として運ばれる `AgentError` |
+| `Error` | 値として運ばれる `Error` |
 
-### AgentContext
+### ModuleContext
 
-外部トリガごとに `AgentContext` が 1 つ生成され、そこから生じた値とともに移動して、エージェントをまたぐ 1 つのフローをエンドツーエンドで識別します。パッチスコープの変数、ネストした map 操作の分岐系譜を追跡するフレームスタック（フレームごとに index と length）、長時間処理をキャンセルするための任意の `CancellationToken` を運びます。
+外部トリガごとに `ModuleContext` が 1 つ生成され、そこから生じた値とともに移動して、モジュールをまたぐ 1 つのフローをエンドツーエンドで識別します。パッチスコープの変数、ネストした map 操作の分岐系譜を追跡するフレームスタック（フレームごとに index と length）、長時間処理をキャンセルするための任意の `CancellationToken` を運びます。
 
-### 組み込みの外部 I/O エージェント
+### 組み込みの外部 I/O モジュール
 
-4 つの組み込みエージェントが、エージェントネットワークと外の世界を橋渡しします:
+4 つの組み込みモジュールが、モジュールネットワークと外の世界を橋渡しします:
 
-| エージェント | タイトル | 役割 |
+| モジュール | タイトル | 役割 |
 | --- | --- | --- |
-| `ExternalInputAgent` | `ExtIn->` | 入口: 設定した `name` 宛の `write_external_input()` の値を転送する |
-| `ExternalOutputAgent` | `->ExtOut` | 出口: `ModularAgentEvent::ExternalOutput` を emit する |
-| `LocalInputAgent` | `LocalIn->` | パッチスコープのローカル入力 |
-| `LocalOutputAgent` | `->LocalOut` | パッチスコープのローカル出力 |
+| `ExternalInputModule` | `ExtIn->` | 入口: 設定した `name` 宛の `write_external_input()` の値を転送する |
+| `ExternalOutputModule` | `->ExtOut` | 出口: `ModularAgentEvent::ExternalOutput` を emit する |
+| `LocalInputModule` | `LocalIn->` | パッチスコープのローカル入力 |
+| `LocalOutputModule` | `->LocalOut` | パッチスコープのローカル出力 |
 
 ### 登録の仕組み
 
-`#[modular_agent]` マクロは各定義をリンク時に [inventory](https://crates.io/crates/inventory) クレートへ登録し、`ModularAgent::init()` がそれらをすべて収集します。エージェント crate をリンクするだけで（`use` 1 つで十分）そのエージェントが使えるようになります。ここから 1 つの制約が生じます: **依存グラフの中に modular-agent-core はちょうど 1 コピーだけ**存在しなければなりません。2 コピーあると inventory のレジストリが 2 つに分裂し、片方に登録されたエージェントはもう片方から見えなくなります — エージェント crate は同じ core に依存する必要があります（Modular Agent workspace ではパス依存で実現）。
+`#[modular_agent]` マクロは各定義をリンク時に [inventory](https://crates.io/crates/inventory) クレートへ登録し、`ModularAgent::init()` がそれらをすべて収集します。モジュール crate をリンクするだけで（`use` 1 つで十分）そのモジュールが使えるようになります。ここから 1 つの制約が生じます: **依存グラフの中に modular-agent-core はちょうど 1 コピーだけ**存在しなければなりません。2 コピーあると inventory のレジストリが 2 つに分裂し、片方に登録されたモジュールはもう片方から見えなくなります — モジュール crate は同じ core に依存する必要があります（Modular Agent workspace ではパス依存で実現）。
 
-## エージェントを書く
+## モジュールを書く
 
-`#[modular_agent]` マクロを付けた struct を定義し、`AsAgent` を実装します:
+`#[modular_agent]` マクロを付けた struct を定義し、`AsModule` を実装します:
 
 ```rust
 use modular_agent_core::{
-    AgentContext, AgentData, AgentError, AgentSpec, AgentValue, AsAgent, ModularAgent,
+    ModuleContext, ModuleData, Error, ModuleSpec, Value, AsModule, ModularAgent,
     async_trait, modular_agent,
 };
 
@@ -195,25 +195,25 @@ use modular_agent_core::{
     outputs = ["output"],
     integer_config(name = "count", default = 2),
 )]
-struct RepeatAgent {
-    data: AgentData,
+struct RepeatModule {
+    data: ModuleData,
 }
 
 #[async_trait]
-impl AsAgent for RepeatAgent {
-    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
-        Ok(Self { data: AgentData::new(ma, id, spec) })
+impl AsModule for RepeatModule {
+    fn new(ma: ModularAgent, id: String, spec: ModuleSpec) -> Result<Self, Error> {
+        Ok(Self { data: ModuleData::new(ma, id, spec) })
     }
 
     async fn process(
         &mut self,
-        ctx: AgentContext,
+        ctx: ModuleContext,
         _port: String,
-        value: AgentValue,
-    ) -> Result<(), AgentError> {
+        value: Value,
+    ) -> Result<(), Error> {
         let count = self.configs()?.get_integer_or("count", 2);
         let out = value.as_str().unwrap_or_default().repeat(count as usize);
-        self.output(ctx, "output".into(), AgentValue::string(out)).await
+        self.output(ctx, "output".into(), Value::string(out)).await
     }
 }
 ```
@@ -222,7 +222,7 @@ impl AsAgent for RepeatAgent {
 - config マクロ: `string_config`、`integer_config`、`number_config`、`boolean_config`、`text_config`、`object_config`、`array_config`。
 - 任意のライフサイクルメソッド: `start()`、`stop()`、および実行時の config 変更に反応する `configs_changed()`。
 
-参照実装: in-tree の [modular-agent-std](https://github.com/modular-agent/modular-agent/tree/main/crates/modular-agent-std) と [modular-agent-llm](https://github.com/modular-agent/modular-agent/tree/main/crates/modular-agent-llm)、独立したエージェント crate の例として [SlackPostAgent](https://github.com/modular-agent/modular-agent-slack/blob/main/src/agents.rs)。
+参照実装: in-tree の [modular-agent-std](https://github.com/modular-agent/modular-agent/tree/main/crates/modular-agent-std) と [modular-agent-llm](https://github.com/modular-agent/modular-agent/tree/main/crates/modular-agent-llm)、独立したモジュール crate の例として [SlackPostModule](https://github.com/modular-agent/modular-agent-slack/blob/main/src/modules.rs)。
 
 ## パッチを実行する
 
@@ -252,7 +252,7 @@ echo "Hello" | ma ./patch.json
 
 ## 外部エージェントによる編集（MCP サーバー）
 
-`mcp-server` feature を有効にすると、ホストアプリケーションは実行中の `ModularAgent` を localhost の MCP エンドポイントとして公開でき、Claude Code などの外部 AI エージェントが自然言語からエージェント定義の参照、パッチの構築・編集、実行中フローの動作確認を行えるようになります。
+`mcp-server` feature を有効にすると、ホストアプリケーションは実行中の `ModularAgent` を localhost の MCP エンドポイントとして公開でき、Claude Code などの外部 AI エージェントが自然言語からモジュール定義の参照、パッチの構築・編集、実行中フローの動作確認を行えるようになります。
 
 ```toml
 modular-agent-core = { version = "0.30", features = ["mcp-server"] }
@@ -286,16 +286,16 @@ claude mcp add --transport http modular-agent http://127.0.0.1:8765/mcp \
 
 たとえば次のように依頼します:
 
-> Slack チャンネルを listen して、メッセージを Chat エージェントに送り、返答をチャンネルに投稿するフローを作って
+> Slack チャンネルを listen して、メッセージを Chat モジュールに送り、返答をチャンネルに投稿するフローを作って
 
 サーバーは 17 のツールを公開します:
 
-- **定義参照** — `list_agent_definitions`、`get_agent_definition`
+- **定義参照** — `list_module_definitions`、`get_module_definition`
 - **パッチ CRUD** — `list_patches`、`create_patch`、`get_patch_spec`、`save_patch`
-- **エージェント / 接続編集** — `add_agent`、`update_agent_spec`、`set_agent_configs`、`remove_agent`、`add_connection`、`remove_connection`
-- **実行・検証** — `start_patch`、`stop_patch`、`write_external_input`、`get_agent_errors`、`get_external_outputs`
+- **モジュール / 接続編集** — `add_module`、`update_module_spec`、`set_module_configs`、`remove_module`、`add_connection`、`remove_connection`
+- **実行・検証** — `start_patch`、`stop_patch`、`write_external_input`、`get_module_errors`、`get_external_outputs`
 
-典型的なセッション: `list_agent_definitions` でカタログを取得し、`create_patch` → `add_agent` ×4（Slack Listener / Slack To Message / Chat / Slack Post）→ `add_connection` ×3 → `save_patch`。さらに `start_patch` で実行し、`write_external_input` でテスト値を投入して `get_external_outputs` / `get_agent_errors` をポーリングすれば、フローをエンドツーエンドで動作確認できます。両ポーリングツールは `latest_seq`（そのレスポンスで返した最後のレコードの seq）を返し、次の呼び出しで `since_seq` として渡すと新しいレコードだけを受け取れます。`dropped > 0` はイベントコレクタが broadcast ストリームに追いつけず、一部のイベントをキャプチャできなかったことを示します。なお、キャプチャバッファ自体は種別ごとに最新 200 レコードのみ保持するため、ポーリングが間に合わなかったレコードは `dropped` に反映されずに押し出されることがあります。構造変更は `ModularAgentEvent::PatchStructureChanged` を emit するため、ホスト（modular-agent-desktop など）は UI をライブ更新できます。
+典型的なセッション: `list_module_definitions` でカタログを取得し、`create_patch` → `add_module` ×4（Slack Listener / Slack To Message / Chat / Slack Post）→ `add_connection` ×3 → `save_patch`。さらに `start_patch` で実行し、`write_external_input` でテスト値を投入して `get_external_outputs` / `get_module_errors` をポーリングすれば、フローをエンドツーエンドで動作確認できます。両ポーリングツールは `latest_seq`（そのレスポンスで返した最後のレコードの seq）を返し、次の呼び出しで `since_seq` として渡すと新しいレコードだけを受け取れます。`dropped > 0` はイベントコレクタが broadcast ストリームに追いつけず、一部のイベントをキャプチャできなかったことを示します。なお、キャプチャバッファ自体は種別ごとに最新 200 レコードのみ保持するため、ポーリングが間に合わなかったレコードは `dropped` に反映されずに押し出されることがあります。構造変更は `ModularAgentEvent::PatchStructureChanged` を emit するため、ホスト（modular-agent-desktop など）は UI をライブ更新できます。
 
 サーバーは `127.0.0.1` のみにバインドします。`token` を設定した場合、すべてのリクエストに `Authorization: Bearer <token>` ヘッダーが必須で、ない場合は 401 で拒否されます。トークンなしでは認証がないため、有効化は明示的に行ってください。`modular-agent-desktop` では Settings → Core から（トークンは自動生成）、`modular-agent-cli` では `--mcp-port <PORT>` と `--mcp-token <TOKEN>` フラグで有効化します。
 
@@ -311,12 +311,12 @@ claude mcp add --transport http modular-agent http://127.0.0.1:8765/mcp \
 - [modular-agent-desktop](https://github.com/modular-agent/modular-agent/tree/main/apps/desktop) - ビジュアル Patch エディタ (Tauri 2 + Svelte 5)
 - [modular-agent-cli](https://github.com/modular-agent/modular-agent/tree/main/apps/cli) - `ma` コマンドラインパッチランナー
 
-### In-tree エージェントライブラリ
+### In-tree モジュールライブラリ
 
-- [modular-agent-std](https://github.com/modular-agent/modular-agent/tree/main/crates/modular-agent-std) - 標準ユーティリティエージェント (50+)
+- [modular-agent-std](https://github.com/modular-agent/modular-agent/tree/main/crates/modular-agent-std) - 標準ユーティリティモジュール (50+)
 - [modular-agent-llm](https://github.com/modular-agent/modular-agent/tree/main/crates/modular-agent-llm) - LLM 連携（OpenAI、Claude、Ollama）
 
-さらに多くのエージェントライブラリ — Web、メッセージング、メディア、データベース — が各自のリポジトリにあります。[全一覧](https://github.com/modular-agent/modular-agent/blob/main/README_ja.md#エージェントライブラリ)を参照してください。
+さらに多くのモジュールライブラリ — Web、メッセージング、メディア、データベース — が各自のリポジトリにあります。[全一覧](https://github.com/modular-agent/modular-agent/blob/main/README_ja.md#モジュールライブラリ)を参照してください。
 
 ### プラグイン
 

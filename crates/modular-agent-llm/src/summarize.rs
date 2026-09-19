@@ -1,8 +1,8 @@
-//! Conversation-summarization machinery behind the `Messages` agents'
+//! Conversation-summarization machinery behind the `Messages` modules'
 //! rolling summary of evicted history: the prompt builder, the transcript
 //! renderer, and a provider-routed single-request summarizer.
 
-use modular_agent_core::{AgentContext, AgentError, Message, ModularAgent};
+use modular_agent_core::{Error, Message, ModularAgent, ModuleContext, Result};
 
 use crate::provider::ModelIdentifier;
 use crate::retry::RetryPolicy;
@@ -17,15 +17,15 @@ use crate::ollama_client;
 #[cfg(feature = "openai")]
 use crate::openai_client;
 
-// Summarization is a single request without retries (the Messages agents
+// Summarization is a single request without retries (the Messages modules
 // process inputs serially, so retrying would stall the conversation); the
 // retry machinery still enforces the per-attempt timeout.
 pub(crate) const SUMMARY_RETRY_BASE_DELAY_MS: i64 = 1000;
 pub(crate) const SUMMARY_TIMEOUT_SECS: i64 = 300;
 
-/// The provider client caches an LLM-calling agent holds. Each manager
-/// resolves credentials from the `Chat` agent's global configs (falling back
-/// to environment variables), so any agent embedding this bundle gets
+/// The provider client caches an LLM-calling module holds. Each manager
+/// resolves credentials from the `Chat` module's global configs (falling back
+/// to environment variables), so any module embedding this bundle gets
 /// provider access without registering global configs of its own.
 pub(crate) struct ProviderManagers {
     #[cfg(feature = "claude")]
@@ -60,12 +60,12 @@ impl ProviderManagers {
     pub(crate) async fn summarize(
         &self,
         ma: &ModularAgent,
-        ctx: &AgentContext,
+        ctx: &ModuleContext,
         model_id: &ModelIdentifier,
         prompt: String,
         retry: RetryPolicy,
         max_output_tokens: Option<u32>,
-    ) -> Result<String, AgentError> {
+    ) -> Result<String> {
         // Annotated: with no provider feature enabled only the diverging
         // fallback arm remains, and the binding's type cannot be inferred.
         let message: Message = match model_id.provider {
@@ -87,14 +87,14 @@ impl ProviderManagers {
                 )
                 .await?;
                 let choice = res.choices.first().ok_or_else(|| {
-                    AgentError::IoError("Summarization response has no choices".to_string())
+                    Error::IoError("Summarization response has no choices".to_string())
                 })?;
                 openai_client::message_from_chat_response(&choice.message)
             }
             #[cfg(feature = "claude")]
             crate::provider::ProviderKind::Claude => {
                 let client = self.claude.get_client(ma)?;
-                // Same non-streaming default as ChatAgent: cap at 8192 so a
+                // Same non-streaming default as ChatModule: cap at 8192 so a
                 // runaway generation cannot outlive the per-attempt timeout.
                 let default_cap = crate::capabilities::resolve_entry(model_id)
                     .max_tokens
@@ -105,7 +105,7 @@ impl ProviderManagers {
                     None => default_cap,
                 };
                 let prompt_messages =
-                    im::vector![modular_agent_core::AgentValue::from(Message::user(prompt))];
+                    im::vector![modular_agent_core::Value::from(Message::user(prompt))];
                 let (system, claude_messages) = claude_client::messages_to_claude(&prompt_messages);
                 let request = claude_client::ClaudeRequest {
                     model: model_id.model_name.clone(),
@@ -152,7 +152,7 @@ impl ProviderManagers {
             }
             #[allow(unreachable_patterns)]
             _ => {
-                return Err(AgentError::InvalidConfig(format!(
+                return Err(Error::InvalidConfig(format!(
                     "Provider {:?} not enabled. Enable the corresponding feature.",
                     model_id.provider
                 )));
@@ -161,7 +161,7 @@ impl ProviderManagers {
 
         let summary = message.text().trim().to_string();
         if summary.is_empty() {
-            return Err(AgentError::IoError(
+            return Err(Error::IoError(
                 "Summarization returned an empty response".to_string(),
             ));
         }

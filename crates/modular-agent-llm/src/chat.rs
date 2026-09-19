@@ -1,7 +1,7 @@
 use modular_agent_core::{
-    Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AgentValueMap,
-    AsAgent, Message, MessageEvent, ModularAgent, ToolCall, ToolCallFunction, Usage, async_trait,
-    modular_agent,
+    AsModule, Error, Message, MessageEvent, ModularAgent, Module, ModuleContext, ModuleData,
+    ModuleOutput, ModuleSpec, Result, ToolCall, ToolCallFunction, Usage, Value, ValueMap,
+    async_trait, modular_agent,
 };
 
 use crate::provider::{
@@ -44,7 +44,7 @@ const CONFIG_TOP_P: &str = "top_p";
 
 const DEFAULT_CONFIG_MODEL: &str = "openai/gpt-5-nano";
 
-/// Chat Agent that routes to different LLM providers based on model prefix.
+/// Chat Module that routes to different LLM providers based on model prefix.
 ///
 /// # Model Format
 /// - `openai/gpt-5-mini` - Uses OpenAI API
@@ -117,7 +117,7 @@ const DEFAULT_CONFIG_MODEL: &str = "openai/gpt-5-nano";
 ///   attaches ephemeral cache_control markers ("long" uses a 1h TTL) only when
 ///   tools are configured or the history is multi-turn, so single-shot
 ///   requests avoid the cache-write surcharge. For OpenAI, sends a
-///   `prompt_cache_key` derived from the patch and agent IDs to improve
+///   `prompt_cache_key` derived from the patch and module IDs to improve
 ///   cache routing. No-op for Ollama.
 #[modular_agent(
     title = "Chat",
@@ -137,16 +137,16 @@ const DEFAULT_CONFIG_MODEL: &str = "openai/gpt-5-nano";
     integer_config(name = CONFIG_RETRY_BASE_DELAY_MS, title = "Retry Base Delay (ms)", default = 1000, description = "Base delay for exponential backoff", detail),
     integer_config(name = CONFIG_TIMEOUT_SECS, title = "Timeout (secs)", default = 300, description = "Per-attempt deadline; 0: disabled", detail),
     string_config(name = CONFIG_CACHE_RETENTION, title = "Cache Retention", default = "short", description = "Prompt cache retention: none / short / long", detail),
-    custom_global_config(name = CONFIG_CLAUDE_API_KEY, type_ = "password", default = AgentValue::string(""), title = "Claude API Key"),
+    custom_global_config(name = CONFIG_CLAUDE_API_KEY, type_ = "password", default = Value::string(""), title = "Claude API Key"),
     string_global_config(name = CONFIG_CLAUDE_API_BASE, title = "Claude API Base URL", default = DEFAULT_CLAUDE_API_BASE),
-    custom_global_config(name = CONFIG_OPENAI_API_KEY, type_ = "password", default = AgentValue::string(""), title = "OpenAI API Key"),
+    custom_global_config(name = CONFIG_OPENAI_API_KEY, type_ = "password", default = Value::string(""), title = "OpenAI API Key"),
     string_global_config(name = CONFIG_OPENAI_API_BASE, title = "OpenAI API Base URL", default = DEFAULT_OPENAI_API_BASE),
-    custom_global_config(name = CONFIG_OLLAMA_API_KEY, type_ = "password", default = AgentValue::string(""), title = "Ollama API Key"),
+    custom_global_config(name = CONFIG_OLLAMA_API_KEY, type_ = "password", default = Value::string(""), title = "Ollama API Key"),
     string_global_config(name = CONFIG_OLLAMA_URL, title = "Ollama URL", default = DEFAULT_OLLAMA_URL),
     hint(width = 2, height = 2),
 )]
-pub struct ChatAgent {
-    data: AgentData,
+pub struct ChatModule {
+    data: ModuleData,
     #[cfg(feature = "claude")]
     claude_manager: claude_client::ClaudeManager,
     #[cfg(feature = "openai")]
@@ -156,10 +156,10 @@ pub struct ChatAgent {
 }
 
 #[async_trait]
-impl AsAgent for ChatAgent {
-    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+impl AsModule for ChatModule {
+    fn new(ma: ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
         Ok(Self {
-            data: AgentData::new(ma, id, spec),
+            data: ModuleData::new(ma, id, spec),
             #[cfg(feature = "claude")]
             claude_manager: claude_client::ClaudeManager::new(),
             #[cfg(feature = "openai")]
@@ -176,19 +176,14 @@ impl AsAgent for ChatAgent {
         not(any(feature = "openai", feature = "claude", feature = "ollama")),
         allow(unused_variables)
     )]
-    async fn process(
-        &mut self,
-        ctx: AgentContext,
-        _port: String,
-        value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, ctx: ModuleContext, _port: String, value: Value) -> Result<()> {
         // An aborted flow feeds synthetic "Operation aborted" tool results
-        // back into this agent; without this guard each such trigger would
+        // back into this module; without this guard each such trigger would
         // issue one more full-price LLM request (indefinitely with
         // stream=false, since the non-streaming request has no later
         // cancellation point).
         if ctx.is_cancelled() {
-            return Err(AgentError::Cancelled);
+            return Err(Error::Cancelled);
         }
 
         let config_model = self.configs()?.get_string_or_default(CONFIG_MODEL);
@@ -201,7 +196,7 @@ impl AsAgent for ChatAgent {
 
         // Convert value to messages
         let Some(value) = value.to_message_value() else {
-            return Err(AgentError::InvalidValue(
+            return Err(Error::InvalidValue(
                 "Input value is not a valid message".to_string(),
             ));
         };
@@ -328,7 +323,7 @@ impl AsAgent for ChatAgent {
                 .await
             }
             #[allow(unreachable_patterns)]
-            _ => Err(AgentError::InvalidConfig(format!(
+            _ => Err(Error::InvalidConfig(format!(
                 "Provider {:?} not enabled. Enable the corresponding feature.",
                 model_id.provider
             ))),
@@ -336,15 +331,15 @@ impl AsAgent for ChatAgent {
     }
 }
 
-impl ChatAgent {
+impl ChatModule {
     #[cfg(feature = "openai")]
     #[allow(clippy::too_many_arguments)]
     async fn process_openai(
         &mut self,
-        ctx: AgentContext,
-        messages: im::Vector<AgentValue>,
+        ctx: ModuleContext,
+        messages: im::Vector<Value>,
         model_name: &str,
-        config_options: AgentValueMap<String, AgentValue>,
+        config_options: ValueMap<String, Value>,
         config_tools: String,
         use_stream: bool,
         max_tokens: i64,
@@ -354,11 +349,11 @@ impl ChatAgent {
         thinking: Option<(crate::capabilities::ThinkingLevel, Option<String>)>,
         retry: RetryPolicy,
         cache_retention: CacheRetention,
-    ) -> Result<(), AgentError> {
+    ) -> Result<()> {
         use modular_agent_core::tool::list_tool_infos_patterns;
 
         // Captured before building the request because a stable cache key must
-        // come from the agent's identity, not per-turn state.
+        // come from the module's identity, not per-turn state.
         let prompt_cache_key = (cache_retention != CacheRetention::None)
             .then(|| openai_client::prompt_cache_key(self.patch_id(), self.id()));
 
@@ -369,10 +364,7 @@ impl ChatAgent {
         } else {
             list_tool_infos_patterns(&config_tools)
                 .map_err(|e| {
-                    AgentError::InvalidConfig(format!(
-                        "Invalid regex patterns in tools config: {}",
-                        e
-                    ))
+                    Error::InvalidConfig(format!("Invalid regex patterns in tools config: {}", e))
                 })?
                 .into_iter()
                 .map(openai_client::tool_info_to_chat_tool_json)
@@ -428,7 +420,7 @@ impl ChatAgent {
 
             let mut message = Message::assistant("".to_string());
             message.id = Some(id.clone());
-            // Partial emits carry streaming=true so downstream agents (e.g. tool
+            // Partial emits carry streaming=true so downstream modules (e.g. tool
             // execution) act only on the final message.
             message.streaming = true;
 
@@ -466,7 +458,7 @@ impl ChatAgent {
                 self.emit_event(&ctx, MessageEvent::Done { message })
                     .await?;
 
-                let out_response = AgentValue::from_serialize(&res)?;
+                let out_response = Value::from_serialize(&res)?;
                 self.output(ctx.clone(), PORT_RESPONSE.to_string(), out_response)
                     .await?;
             }
@@ -479,18 +471,14 @@ impl ChatAgent {
     /// `message` port this is never gated by `emit_partial_messages`, so
     /// downstream consumers get the full delta stream.
     #[cfg(any(feature = "openai", feature = "claude", feature = "ollama"))]
-    async fn emit_event(
-        &mut self,
-        ctx: &AgentContext,
-        event: MessageEvent,
-    ) -> Result<(), AgentError> {
+    async fn emit_event(&mut self, ctx: &ModuleContext, event: MessageEvent) -> Result<()> {
         // Events are dropped by routing when nothing is connected, but only
         // after the per-delta serde conversion below has been paid; skip it
         // up front so patches that ignore the event port pay nothing.
         if !self.ma().has_connections(self.id(), PORT_EVENT) {
             return Ok(());
         }
-        let value: AgentValue = event.try_into()?;
+        let value: Value = event.try_into()?;
         self.output(ctx.clone(), PORT_EVENT.to_string(), value)
             .await
     }
@@ -504,9 +492,9 @@ impl ChatAgent {
     #[cfg(any(feature = "openai", feature = "claude", feature = "ollama"))]
     async fn emit_stream_error_message(
         &mut self,
-        ctx: &AgentContext,
+        ctx: &ModuleContext,
         message: Message,
-        error: &AgentError,
+        error: &Error,
     ) {
         let Some(message) = stream_error_final(message, error) else {
             return;
@@ -535,10 +523,10 @@ impl ChatAgent {
     #[cfg(feature = "openai")]
     async fn run_openai_stream(
         &mut self,
-        ctx: &AgentContext,
-        mut stream: impl futures::Stream<Item = Result<Option<String>, AgentError>> + Unpin,
+        ctx: &ModuleContext,
+        mut stream: impl futures::Stream<Item = Result<Option<String>>> + Unpin,
         message: &mut Message,
-    ) -> Result<(), AgentError> {
+    ) -> Result<()> {
         // get_bool_or with an explicit true keeps the fallback aligned with
         // the declared config default when the key is absent (old spec not
         // yet reconciled).
@@ -571,7 +559,7 @@ impl ChatAgent {
                 continue; // [DONE] sentinel
             };
             let chunk: openai_client::ChatStreamChunk = serde_json::from_str(&data)
-                .map_err(|e| AgentError::IoError(format!("OpenAI stream parse error: {}", e)))?;
+                .map_err(|e| Error::IoError(format!("OpenAI stream parse error: {}", e)))?;
 
             for c in &chunk.choices {
                 if let Some(reasoning) = c
@@ -679,7 +667,7 @@ impl ChatAgent {
             }
 
             let out_response: serde_json::Value = serde_json::from_str(&data).unwrap_or_default();
-            let out_response = AgentValue::from_serialize(&out_response)?;
+            let out_response = Value::from_serialize(&out_response)?;
             self.output(ctx.clone(), PORT_RESPONSE.to_string(), out_response)
                 .await?;
         }
@@ -732,10 +720,10 @@ impl ChatAgent {
     #[allow(clippy::too_many_arguments)]
     async fn process_claude(
         &mut self,
-        ctx: AgentContext,
-        messages: im::Vector<AgentValue>,
+        ctx: ModuleContext,
+        messages: im::Vector<Value>,
         model_name: &str,
-        config_options: AgentValueMap<String, AgentValue>,
+        config_options: ValueMap<String, Value>,
         config_tools: String,
         use_stream: bool,
         max_tokens: i64,
@@ -745,7 +733,7 @@ impl ChatAgent {
         thinking: Option<(crate::capabilities::ThinkingLevel, Option<String>)>,
         retry: RetryPolicy,
         cache_retention: CacheRetention,
-    ) -> Result<(), AgentError> {
+    ) -> Result<()> {
         use modular_agent_core::tool::list_tool_infos_patterns;
 
         let client = self.claude_manager.get_client(self.ma())?;
@@ -758,7 +746,7 @@ impl ChatAgent {
             None
         } else {
             let infos = list_tool_infos_patterns(&config_tools).map_err(|e| {
-                AgentError::InvalidConfig(format!("Invalid regex patterns in tools config: {}", e))
+                Error::InvalidConfig(format!("Invalid regex patterns in tools config: {}", e))
             })?;
             Some(
                 infos
@@ -801,10 +789,10 @@ impl ChatAgent {
         // Merge options
         if !config_options.is_empty() {
             let options_json = serde_json::to_value(&config_options)
-                .map_err(|e| AgentError::InvalidValue(format!("Invalid JSON in options: {}", e)))?;
+                .map_err(|e| Error::InvalidValue(format!("Invalid JSON in options: {}", e)))?;
 
             let mut request_json = serde_json::to_value(&request)
-                .map_err(|e| AgentError::InvalidValue(format!("Serialization error: {}", e)))?;
+                .map_err(|e| Error::InvalidValue(format!("Serialization error: {}", e)))?;
 
             if let (Some(request_obj), Some(options_obj)) =
                 (request_json.as_object_mut(), options_json.as_object())
@@ -814,7 +802,7 @@ impl ChatAgent {
                 }
             }
             request = serde_json::from_value::<claude_client::ClaudeRequest>(request_json)
-                .map_err(|e| AgentError::InvalidValue(format!("Deserialization error: {}", e)))?;
+                .map_err(|e| Error::InvalidValue(format!("Deserialization error: {}", e)))?;
         }
 
         // First-class configs override options
@@ -894,7 +882,7 @@ impl ChatAgent {
             self.emit_event(&ctx, MessageEvent::Done { message })
                 .await?;
 
-            let out_response = AgentValue::from_serialize(&response)?;
+            let out_response = Value::from_serialize(&response)?;
             self.output(ctx.clone(), PORT_RESPONSE.to_string(), out_response)
                 .await?;
 
@@ -908,11 +896,10 @@ impl ChatAgent {
     #[cfg(feature = "claude")]
     async fn run_claude_stream(
         &mut self,
-        ctx: &AgentContext,
-        mut stream: impl futures::Stream<Item = Result<claude_client::ClaudeStreamEvent, AgentError>>
-        + Unpin,
+        ctx: &ModuleContext,
+        mut stream: impl futures::Stream<Item = Result<claude_client::ClaudeStreamEvent>> + Unpin,
         message: &mut Message,
-    ) -> Result<(), AgentError> {
+    ) -> Result<()> {
         use modular_agent_core::ContentBlock;
 
         // get_bool_or with an explicit true keeps the fallback aligned with
@@ -1170,7 +1157,7 @@ impl ChatAgent {
                     }
                 }
                 claude_client::ClaudeStreamEvent::Error { error } => {
-                    return Err(AgentError::IoError(format!(
+                    return Err(Error::IoError(format!(
                         "Claude stream error: {}",
                         error.message
                     )));
@@ -1188,10 +1175,10 @@ impl ChatAgent {
     #[allow(clippy::too_many_arguments)]
     async fn process_ollama(
         &mut self,
-        ctx: AgentContext,
-        messages: im::Vector<AgentValue>,
+        ctx: ModuleContext,
+        messages: im::Vector<Value>,
         model_name: &str,
-        config_options: AgentValueMap<String, AgentValue>,
+        config_options: ValueMap<String, Value>,
         config_tools: String,
         use_stream: bool,
         max_tokens: i64,
@@ -1202,7 +1189,7 @@ impl ChatAgent {
         retry: RetryPolicy,
         // Ollama has no prompt cache API; accepted only to keep call sites uniform.
         _cache_retention: CacheRetention,
-    ) -> Result<(), AgentError> {
+    ) -> Result<()> {
         use modular_agent_core::tool::list_tool_infos_patterns;
 
         let client = self.ollama_manager.get_client(self.ma())?;
@@ -1217,10 +1204,7 @@ impl ChatAgent {
         } else {
             list_tool_infos_patterns(&config_tools)
                 .map_err(|e| {
-                    AgentError::InvalidConfig(format!(
-                        "Invalid regex patterns in tools config: {}",
-                        e
-                    ))
+                    Error::InvalidConfig(format!("Invalid regex patterns in tools config: {}", e))
                 })?
                 .into_iter()
                 .map(ollama_client::tool_info_to_ollama)
@@ -1316,7 +1300,7 @@ impl ChatAgent {
             self.emit_event(&ctx, MessageEvent::Done { message })
                 .await?;
 
-            let out_response = AgentValue::from_serialize(&res)?;
+            let out_response = Value::from_serialize(&res)?;
             self.output(ctx.clone(), PORT_RESPONSE.to_string(), out_response)
                 .await?;
 
@@ -1331,12 +1315,12 @@ impl ChatAgent {
     #[cfg(feature = "ollama")]
     async fn run_ollama_stream(
         &mut self,
-        ctx: &AgentContext,
+        ctx: &ModuleContext,
         mut stream: std::pin::Pin<
-            Box<dyn futures::Stream<Item = Result<ollama_client::ChatResponse, AgentError>> + Send>,
+            Box<dyn futures::Stream<Item = Result<ollama_client::ChatResponse>> + Send>,
         >,
         message: &mut Message,
-    ) -> Result<(), AgentError> {
+    ) -> Result<()> {
         // get_bool_or with an explicit true keeps the fallback aligned with
         // the declared config default when the key is absent (old spec not
         // yet reconciled).
@@ -1462,7 +1446,7 @@ impl ChatAgent {
                 .await?;
             }
 
-            let out_response = AgentValue::from_serialize(&res)?;
+            let out_response = Value::from_serialize(&res)?;
             self.output(ctx.clone(), PORT_RESPONSE.to_string(), out_response)
                 .await?;
 
@@ -1571,7 +1555,7 @@ fn apply_ollama_thinking(
 
 /// Await the next item of an established stream, racing it against the
 /// flow's cancellation token. The moment the token fires (e.g. via
-/// `ModularAgent::abort_context`) this returns `Err(AgentError::Cancelled)`
+/// `ModularAgent::abort_context`) this returns `Err(Error::Cancelled)`
 /// so the stream loop bails out and its caller can emit the
 /// `stop_reason = "aborted"` final message. Without a token this is a plain
 /// `stream.next().await`. Biased so a fired token wins even when the next
@@ -1580,7 +1564,7 @@ fn apply_ollama_thinking(
 pub(crate) async fn next_or_cancelled<S>(
     stream: &mut S,
     cancel: Option<&modular_agent_core::CancellationToken>,
-) -> Result<Option<S::Item>, AgentError>
+) -> Result<Option<S::Item>>
 where
     S: futures::Stream + Unpin,
 {
@@ -1588,7 +1572,7 @@ where
     match cancel {
         Some(token) => tokio::select! {
             biased;
-            _ = token.cancelled() => Err(AgentError::Cancelled),
+            _ = token.cancelled() => Err(Error::Cancelled),
             item = stream.next() => Ok(item),
         },
         None => Ok(stream.next().await),
@@ -1603,12 +1587,12 @@ where
 #[cfg(any(feature = "openai", feature = "claude", feature = "ollama"))]
 pub(crate) async fn request_or_cancelled<T>(
     cancel: Option<&modular_agent_core::CancellationToken>,
-    fut: impl std::future::Future<Output = Result<T, AgentError>>,
-) -> Result<T, AgentError> {
+    fut: impl std::future::Future<Output = Result<T>>,
+) -> Result<T> {
     match cancel {
         Some(token) => tokio::select! {
             biased;
-            _ = token.cancelled() => Err(AgentError::Cancelled),
+            _ = token.cancelled() => Err(Error::Cancelled),
             r = fut => r,
         },
         None => fut.await,
@@ -1625,13 +1609,13 @@ pub(crate) async fn request_or_cancelled<T>(
 /// from partial emits are dropped: the model never finished the turn, so
 /// they must not reach the tool executor.
 #[cfg(any(feature = "openai", feature = "claude", feature = "ollama"))]
-pub(crate) fn stream_error_final(mut message: Message, error: &AgentError) -> Option<Message> {
+pub(crate) fn stream_error_final(mut message: Message, error: &Error) -> Option<Message> {
     if !message.streaming {
         return None;
     }
     message.streaming = false;
     message.stop_reason = Some(
-        if matches!(error, AgentError::Cancelled) {
+        if matches!(error, Error::Cancelled) {
             "aborted"
         } else {
             "error"
@@ -1648,23 +1632,23 @@ mod tests {
     use super::*;
 
     use modular_agent_core::ConnectionSpec;
-    use modular_agent_core::test_utils::{ProbeReceiver, TestProbeAgent, probe_receiver};
+    use modular_agent_core::test_utils::{ProbeReceiver, TestProbeModule, probe_receiver};
 
-    /// Build a running patch with a ChatAgent whose `source_port` feeds a
+    /// Build a running patch with a ChatModule whose `source_port` feeds a
     /// probe, so stream-loop emits can be observed end to end.
     async fn setup_chat_probe_on(source_port: &str) -> (ModularAgent, String, ProbeReceiver) {
         let ma = ModularAgent::init().unwrap();
         ma.ready().await.unwrap();
 
         let patch_id = ma.new_patch().unwrap();
-        let chat_def = ma.get_agent_definition(ChatAgent::DEF_NAME).unwrap();
+        let chat_def = ma.get_module_definition(ChatModule::DEF_NAME).unwrap();
         let chat_id = ma
-            .add_agent(patch_id.clone(), chat_def.to_spec())
+            .add_module(patch_id.clone(), chat_def.to_spec())
             .await
             .unwrap();
-        let probe_def = ma.get_agent_definition(TestProbeAgent::DEF_NAME).unwrap();
+        let probe_def = ma.get_module_definition(TestProbeModule::DEF_NAME).unwrap();
         let probe_id = ma
-            .add_agent(patch_id.clone(), probe_def.to_spec())
+            .add_module(patch_id.clone(), probe_def.to_spec())
             .await
             .unwrap();
         ma.add_connection(
@@ -1714,7 +1698,7 @@ mod tests {
     async fn openai_stream_finish_reason_lands_on_final_message() {
         let (ma, chat_id, probe_rx) = setup_chat_with_probe().await;
 
-        let chunks: Vec<Result<Option<String>, AgentError>> = vec![
+        let chunks: Vec<Result<Option<String>>> = vec![
             Ok(Some(
                 r#"{"choices":[{"index":0,"delta":{"content":"Hel"},"finish_reason":null}]}"#
                     .to_string(),
@@ -1733,11 +1717,11 @@ mod tests {
         let mut message = streaming_seed_message("m1");
 
         {
-            let agent = ma.get_agent(&chat_id).unwrap();
-            let mut guard = agent.lock().await;
-            let chat = guard.as_agent_mut::<ChatAgent>().unwrap();
+            let module = ma.get_module(&chat_id).unwrap();
+            let mut guard = module.lock().await;
+            let chat = guard.as_module_mut::<ChatModule>().unwrap();
             chat.run_openai_stream(
-                &AgentContext::new(),
+                &ModuleContext::new(),
                 futures::stream::iter(chunks),
                 &mut message,
             )
@@ -1767,20 +1751,20 @@ mod tests {
     async fn openai_stream_error_emits_same_id_error_final() {
         let (ma, chat_id, probe_rx) = setup_chat_with_probe().await;
 
-        let chunks: Vec<Result<Option<String>, AgentError>> = vec![
+        let chunks: Vec<Result<Option<String>>> = vec![
             Ok(Some(
                 r#"{"choices":[{"index":0,"delta":{"content":"partial"},"finish_reason":null}]}"#
                     .to_string(),
             )),
-            Err(AgentError::IoError("connection reset".into())),
+            Err(Error::IoError("connection reset".into())),
         ];
         let mut message = streaming_seed_message("m1");
 
         {
-            let agent = ma.get_agent(&chat_id).unwrap();
-            let mut guard = agent.lock().await;
-            let chat = guard.as_agent_mut::<ChatAgent>().unwrap();
-            let ctx = AgentContext::new();
+            let module = ma.get_module(&chat_id).unwrap();
+            let mut guard = module.lock().await;
+            let chat = guard.as_module_mut::<ChatModule>().unwrap();
+            let ctx = ModuleContext::new();
             // Same sequence as the process_* call sites: intercept the Err,
             // then emit the error-marked final for the dangling partial.
             let result = chat
@@ -1819,7 +1803,7 @@ mod tests {
         let (ma, chat_id, probe_rx) = setup_chat_with_probe().await;
 
         let token = modular_agent_core::CancellationToken::new();
-        let chunks: Vec<Result<Option<String>, AgentError>> = vec![Ok(Some(
+        let chunks: Vec<Result<Option<String>>> = vec![Ok(Some(
             r#"{"choices":[{"index":0,"delta":{"content":"partial"},"finish_reason":null}]}"#
                 .to_string(),
         ))];
@@ -1827,10 +1811,10 @@ mod tests {
         let mut message = streaming_seed_message("m1");
 
         {
-            let agent = ma.get_agent(&chat_id).unwrap();
-            let mut guard = agent.lock().await;
-            let chat = guard.as_agent_mut::<ChatAgent>().unwrap();
-            let ctx = AgentContext::new().with_cancel_token(token);
+            let module = ma.get_module(&chat_id).unwrap();
+            let mut guard = module.lock().await;
+            let chat = guard.as_module_mut::<ChatModule>().unwrap();
+            let ctx = ModuleContext::new().with_cancel_token(token);
             // Same sequence as the process_* call sites: intercept the
             // Cancelled, then emit the aborted-marked final for the
             // dangling partial.
@@ -1838,7 +1822,7 @@ mod tests {
                 .run_openai_stream(&ctx, stream, &mut message)
                 .await
                 .unwrap_err();
-            assert!(matches!(err, AgentError::Cancelled));
+            assert!(matches!(err, Error::Cancelled));
             chat.emit_stream_error_message(&ctx, message, &err).await;
         }
 
@@ -1856,7 +1840,7 @@ mod tests {
         let (ma, chat_id, probe_rx) = setup_chat_with_probe().await;
 
         let token = modular_agent_core::CancellationToken::new();
-        let events: Vec<Result<claude_client::ClaudeStreamEvent, AgentError>> = [
+        let events: Vec<Result<claude_client::ClaudeStreamEvent>> = [
             r#"{"type":"message_start","message":{"id":"msg_1","usage":{"input_tokens":5,"output_tokens":1}}}"#,
             r#"{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}"#,
             r#"{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"partial"}}"#,
@@ -1868,15 +1852,15 @@ mod tests {
         let mut message = streaming_seed_message("m1");
 
         {
-            let agent = ma.get_agent(&chat_id).unwrap();
-            let mut guard = agent.lock().await;
-            let chat = guard.as_agent_mut::<ChatAgent>().unwrap();
-            let ctx = AgentContext::new().with_cancel_token(token);
+            let module = ma.get_module(&chat_id).unwrap();
+            let mut guard = module.lock().await;
+            let chat = guard.as_module_mut::<ChatModule>().unwrap();
+            let ctx = ModuleContext::new().with_cancel_token(token);
             let err = chat
                 .run_claude_stream(&ctx, stream, &mut message)
                 .await
                 .unwrap_err();
-            assert!(matches!(err, AgentError::Cancelled));
+            assert!(matches!(err, Error::Cancelled));
             chat.emit_stream_error_message(&ctx, message, &err).await;
         }
 
@@ -1894,7 +1878,7 @@ mod tests {
         let (ma, chat_id, probe_rx) = setup_chat_with_probe().await;
 
         let token = modular_agent_core::CancellationToken::new();
-        let chunks: Vec<Result<ollama_client::ChatResponse, AgentError>> = vec![Ok(
+        let chunks: Vec<Result<ollama_client::ChatResponse>> = vec![Ok(
             serde_json::from_str(
                 r#"{"model":"m","created_at":"t","message":{"role":"assistant","content":"partial"},"done":false}"#,
             )
@@ -1904,15 +1888,15 @@ mod tests {
         let mut message = streaming_seed_message("m1");
 
         {
-            let agent = ma.get_agent(&chat_id).unwrap();
-            let mut guard = agent.lock().await;
-            let chat = guard.as_agent_mut::<ChatAgent>().unwrap();
-            let ctx = AgentContext::new().with_cancel_token(token);
+            let module = ma.get_module(&chat_id).unwrap();
+            let mut guard = module.lock().await;
+            let chat = guard.as_module_mut::<ChatModule>().unwrap();
+            let ctx = ModuleContext::new().with_cancel_token(token);
             let err = chat
                 .run_ollama_stream(&ctx, Box::pin(stream), &mut message)
                 .await
                 .unwrap_err();
-            assert!(matches!(err, AgentError::Cancelled));
+            assert!(matches!(err, Error::Cancelled));
             chat.emit_stream_error_message(&ctx, message, &err).await;
         }
 
@@ -1929,7 +1913,7 @@ mod tests {
     async fn claude_stream_stop_reason_lands_on_final_message() {
         let (ma, chat_id, probe_rx) = setup_chat_with_probe().await;
 
-        let events: Vec<Result<claude_client::ClaudeStreamEvent, AgentError>> = [
+        let events: Vec<Result<claude_client::ClaudeStreamEvent>> = [
             // input/cache counts arrive on message_start with a small
             // provisional output_tokens...
             r#"{"type":"message_start","message":{"id":"msg_1","usage":{"input_tokens":25,"output_tokens":1,"cache_creation_input_tokens":3,"cache_read_input_tokens":7}}}"#,
@@ -1945,11 +1929,11 @@ mod tests {
         let mut message = streaming_seed_message("m1");
 
         {
-            let agent = ma.get_agent(&chat_id).unwrap();
-            let mut guard = agent.lock().await;
-            let chat = guard.as_agent_mut::<ChatAgent>().unwrap();
+            let module = ma.get_module(&chat_id).unwrap();
+            let mut guard = module.lock().await;
+            let chat = guard.as_module_mut::<ChatModule>().unwrap();
             chat.run_claude_stream(
-                &AgentContext::new(),
+                &ModuleContext::new(),
                 futures::stream::iter(events),
                 &mut message,
             )
@@ -1979,7 +1963,7 @@ mod tests {
     async fn ollama_stream_done_reason_lands_on_final_message() {
         let (ma, chat_id, probe_rx) = setup_chat_with_probe().await;
 
-        let chunks: Vec<Result<ollama_client::ChatResponse, AgentError>> = [
+        let chunks: Vec<Result<ollama_client::ChatResponse>> = [
             r#"{"model":"m","created_at":"t","message":{"role":"assistant","content":"Hel"},"done":false}"#,
             // Token counts ride only on the final done=true chunk.
             r#"{"model":"m","created_at":"t","message":{"role":"assistant","content":"lo"},"done":true,"done_reason":"stop","prompt_eval_count":26,"eval_count":42}"#,
@@ -1990,11 +1974,11 @@ mod tests {
         let mut message = streaming_seed_message("m1");
 
         {
-            let agent = ma.get_agent(&chat_id).unwrap();
-            let mut guard = agent.lock().await;
-            let chat = guard.as_agent_mut::<ChatAgent>().unwrap();
+            let module = ma.get_module(&chat_id).unwrap();
+            let mut guard = module.lock().await;
+            let chat = guard.as_module_mut::<ChatModule>().unwrap();
             chat.run_ollama_stream(
-                &AgentContext::new(),
+                &ModuleContext::new(),
                 Box::pin(futures::stream::iter(chunks)),
                 &mut message,
             )
@@ -2041,7 +2025,7 @@ mod tests {
     fn stream_error_final_marks_error_and_strips_tool_calls() {
         let message = stream_error_final(
             partial_message_with_tool_calls(),
-            &AgentError::IoError("connection reset".into()),
+            &Error::IoError("connection reset".into()),
         )
         .expect("should emit final");
         assert!(!message.streaming);
@@ -2053,7 +2037,7 @@ mod tests {
 
     #[test]
     fn stream_error_final_marks_cancellation_as_aborted() {
-        let message = stream_error_final(partial_message_with_tool_calls(), &AgentError::Cancelled)
+        let message = stream_error_final(partial_message_with_tool_calls(), &Error::Cancelled)
             .expect("should emit final");
         assert!(!message.streaming);
         assert_eq!(message.stop_reason.as_deref(), Some("aborted"));
@@ -2067,7 +2051,7 @@ mod tests {
         let mut message = partial_message_with_tool_calls();
         message.streaming = false;
         message.stop_reason = Some("stop".to_string());
-        assert!(stream_error_final(message, &AgentError::Cancelled).is_none());
+        assert!(stream_error_final(message, &Error::Cancelled).is_none());
     }
 
     /// Drain event-port emits until a terminal `done`/`error` event,
@@ -2097,7 +2081,7 @@ mod tests {
     async fn openai_stream_emits_typed_event_sequence() {
         let (ma, chat_id, probe_rx) = setup_chat_probe_on(PORT_EVENT).await;
 
-        let chunks: Vec<Result<Option<String>, AgentError>> = vec![
+        let chunks: Vec<Result<Option<String>>> = vec![
             Ok(Some(
                 r#"{"choices":[{"index":0,"delta":{"content":"Hel"},"finish_reason":null}]}"#
                     .to_string(),
@@ -2117,11 +2101,11 @@ mod tests {
         let mut message = streaming_seed_message("m1");
 
         {
-            let agent = ma.get_agent(&chat_id).unwrap();
-            let mut guard = agent.lock().await;
-            let chat = guard.as_agent_mut::<ChatAgent>().unwrap();
+            let module = ma.get_module(&chat_id).unwrap();
+            let mut guard = module.lock().await;
+            let chat = guard.as_module_mut::<ChatModule>().unwrap();
             chat.run_openai_stream(
-                &AgentContext::new(),
+                &ModuleContext::new(),
                 futures::stream::iter(chunks),
                 &mut message,
             )
@@ -2178,7 +2162,7 @@ mod tests {
     async fn openai_stream_suppresses_partials_when_config_disabled() {
         let (ma, chat_id, probe_rx) = setup_chat_with_probe().await;
 
-        let chunks: Vec<Result<Option<String>, AgentError>> = vec![
+        let chunks: Vec<Result<Option<String>>> = vec![
             Ok(Some(
                 r#"{"choices":[{"index":0,"delta":{"content":"Hel"},"finish_reason":null}]}"#
                     .to_string(),
@@ -2192,16 +2176,16 @@ mod tests {
         let mut message = streaming_seed_message("m1");
 
         {
-            let agent = ma.get_agent(&chat_id).unwrap();
-            let mut guard = agent.lock().await;
-            let chat = guard.as_agent_mut::<ChatAgent>().unwrap();
+            let module = ma.get_module(&chat_id).unwrap();
+            let mut guard = module.lock().await;
+            let chat = guard.as_module_mut::<ChatModule>().unwrap();
             chat.set_config(
                 CONFIG_EMIT_PARTIAL_MESSAGES.to_string(),
-                AgentValue::boolean(false),
+                Value::boolean(false),
             )
             .unwrap();
             chat.run_openai_stream(
-                &AgentContext::new(),
+                &ModuleContext::new(),
                 futures::stream::iter(chunks),
                 &mut message,
             )
@@ -2225,7 +2209,7 @@ mod tests {
     async fn claude_stream_emits_typed_event_sequence() {
         let (ma, chat_id, probe_rx) = setup_chat_probe_on(PORT_EVENT).await;
 
-        let events_in: Vec<Result<claude_client::ClaudeStreamEvent, AgentError>> = [
+        let events_in: Vec<Result<claude_client::ClaudeStreamEvent>> = [
             r#"{"type":"message_start","message":{"id":"msg_1","usage":{"input_tokens":5,"output_tokens":1}}}"#,
             r#"{"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":"","signature":""}}"#,
             r#"{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"Let me think"}}"#,
@@ -2247,11 +2231,11 @@ mod tests {
         let mut message = streaming_seed_message("m1");
 
         {
-            let agent = ma.get_agent(&chat_id).unwrap();
-            let mut guard = agent.lock().await;
-            let chat = guard.as_agent_mut::<ChatAgent>().unwrap();
+            let module = ma.get_module(&chat_id).unwrap();
+            let mut guard = module.lock().await;
+            let chat = guard.as_module_mut::<ChatModule>().unwrap();
             chat.run_claude_stream(
-                &AgentContext::new(),
+                &ModuleContext::new(),
                 futures::stream::iter(events_in),
                 &mut message,
             )
@@ -2310,7 +2294,7 @@ mod tests {
     async fn ollama_stream_emits_typed_event_sequence() {
         let (ma, chat_id, probe_rx) = setup_chat_probe_on(PORT_EVENT).await;
 
-        let chunks: Vec<Result<ollama_client::ChatResponse, AgentError>> = [
+        let chunks: Vec<Result<ollama_client::ChatResponse>> = [
             r#"{"model":"m","created_at":"t","message":{"role":"assistant","content":"Hel"},"done":false}"#,
             // Ollama delivers the tool call whole in a single chunk.
             r#"{"model":"m","created_at":"t","message":{"role":"assistant","content":"","tool_calls":[{"function":{"name":"get_weather","arguments":{"city":"Tokyo"}}}]},"done":false}"#,
@@ -2322,11 +2306,11 @@ mod tests {
         let mut message = streaming_seed_message("m1");
 
         {
-            let agent = ma.get_agent(&chat_id).unwrap();
-            let mut guard = agent.lock().await;
-            let chat = guard.as_agent_mut::<ChatAgent>().unwrap();
+            let module = ma.get_module(&chat_id).unwrap();
+            let mut guard = module.lock().await;
+            let chat = guard.as_module_mut::<ChatModule>().unwrap();
             chat.run_ollama_stream(
-                &AgentContext::new(),
+                &ModuleContext::new(),
                 Box::pin(futures::stream::iter(chunks)),
                 &mut message,
             )

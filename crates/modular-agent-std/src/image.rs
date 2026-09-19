@@ -4,8 +4,8 @@ use std::sync::Arc;
 
 use modular_agent_core::photon_rs::{self, PhotonImage};
 use modular_agent_core::{
-    Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
-    ModularAgent, async_trait, modular_agent,
+    AsModule, Error, ModularAgent, Module, ModuleContext, ModuleData, ModuleOutput, ModuleSpec,
+    Result, Value, async_trait, modular_agent,
 };
 
 const CATEGORY: &str = "Std/Image";
@@ -24,7 +24,7 @@ const CONFIG_HEIGHT: &str = "height";
 const CONFIG_WIDTH: &str = "width";
 const CONFIG_THRESHOLD: &str = "threshold";
 
-// IsBlankImageAgent
+// IsBlankImageModule
 #[modular_agent(
     title = "IsBlank",
     category = CATEGORY,
@@ -33,11 +33,11 @@ const CONFIG_THRESHOLD: &str = "threshold";
     integer_config(name = CONFIG_ALMOST_BLACK_THRESHOLD, default = 20),
     integer_config(name = CONFIG_BLANK_THRESHOLD, default = 400)
 )]
-struct IsBlankImageAgent {
-    data: AgentData,
+struct IsBlankImageModule {
+    data: ModuleData,
 }
 
-impl IsBlankImageAgent {
+impl IsBlankImageModule {
     fn is_blank(
         &self,
         image: &PhotonImage,
@@ -58,25 +58,20 @@ impl IsBlankImageAgent {
 }
 
 #[async_trait]
-impl AsAgent for IsBlankImageAgent {
-    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+impl AsModule for IsBlankImageModule {
+    fn new(ma: ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
         Ok(Self {
-            data: AgentData::new(ma, id, spec),
+            data: ModuleData::new(ma, id, spec),
         })
     }
 
-    async fn process(
-        &mut self,
-        ctx: AgentContext,
-        _port: String,
-        value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, ctx: ModuleContext, _port: String, value: Value) -> Result<()> {
         let config = self.configs()?;
 
         if value.is_image() {
             let image = value
                 .as_image()
-                .ok_or_else(|| AgentError::InvalidValue("Expected image value".into()))?;
+                .ok_or_else(|| Error::InvalidValue("Expected image value".into()))?;
 
             let almost_black_threshold =
                 config.get_integer_or_default(CONFIG_ALMOST_BLACK_THRESHOLD) as u8;
@@ -89,14 +84,12 @@ impl AsAgent for IsBlankImageAgent {
                 self.output(ctx, PORT_F, value).await
             }
         } else {
-            Err(AgentError::InvalidValue(
-                "Input value is not an image".into(),
-            ))
+            Err(Error::InvalidValue("Input value is not an image".into()))
         }
     }
 }
 
-// ResampleImageAgent
+// ResampleImageModule
 
 #[modular_agent(
     title = "Resample Image",
@@ -106,37 +99,32 @@ impl AsAgent for IsBlankImageAgent {
     integer_config(name = CONFIG_WIDTH, default = 512),
     integer_config(name = CONFIG_HEIGHT, default = 512)
 )]
-struct ResampleImageAgent {
-    data: AgentData,
+struct ResampleImageModule {
+    data: ModuleData,
 }
 
 #[async_trait]
-impl AsAgent for ResampleImageAgent {
-    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+impl AsModule for ResampleImageModule {
+    fn new(ma: ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
         Ok(Self {
-            data: AgentData::new(ma, id, spec),
+            data: ModuleData::new(ma, id, spec),
         })
     }
 
-    async fn process(
-        &mut self,
-        ctx: AgentContext,
-        _port: String,
-        value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, ctx: ModuleContext, _port: String, value: Value) -> Result<()> {
         let config = self.configs()?;
 
         if value.is_image() {
             let image = value
                 .as_image()
-                .ok_or_else(|| AgentError::InvalidValue("Expected image value".into()))?;
+                .ok_or_else(|| Error::InvalidValue("Expected image value".into()))?;
 
             let width = config.get_integer_or_default(CONFIG_WIDTH) as usize;
             let height = config.get_integer_or_default(CONFIG_HEIGHT) as usize;
 
             let resampled_image = photon_rs::transform::resample(&*image, width, height);
 
-            self.output(ctx, PORT_IMAGE, AgentValue::image(resampled_image))
+            self.output(ctx, PORT_IMAGE, Value::image(resampled_image))
                 .await
         } else {
             // Pass through non-image value
@@ -145,7 +133,7 @@ impl AsAgent for ResampleImageAgent {
     }
 }
 
-// ResizeImageAgent
+// ResizeImageModule
 
 #[modular_agent(
     title = "Resize Image",
@@ -155,30 +143,25 @@ impl AsAgent for ResampleImageAgent {
     integer_config(name = CONFIG_WIDTH, default = 512),
     integer_config(name = CONFIG_HEIGHT, default = 512)
 )]
-struct ResizeImageAgent {
-    data: AgentData,
+struct ResizeImageModule {
+    data: ModuleData,
 }
 
 #[async_trait]
-impl AsAgent for ResizeImageAgent {
-    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+impl AsModule for ResizeImageModule {
+    fn new(ma: ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
         Ok(Self {
-            data: AgentData::new(ma, id, spec),
+            data: ModuleData::new(ma, id, spec),
         })
     }
 
-    async fn process(
-        &mut self,
-        ctx: AgentContext,
-        _port: String,
-        value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, ctx: ModuleContext, _port: String, value: Value) -> Result<()> {
         let config = self.configs()?;
 
         if value.is_image() {
             let image = value
                 .as_image()
-                .ok_or_else(|| AgentError::InvalidValue("Expected image value".into()))?;
+                .ok_or_else(|| Error::InvalidValue("Expected image value".into()))?;
 
             let width = config.get_integer_or_default(CONFIG_WIDTH) as u32;
             let height = config.get_integer_or_default(CONFIG_HEIGHT) as u32;
@@ -190,7 +173,7 @@ impl AsAgent for ResizeImageAgent {
                 photon_rs::transform::SamplingFilter::Nearest,
             );
 
-            self.output(ctx, PORT_IMAGE, AgentValue::image(resized_image))
+            self.output(ctx, PORT_IMAGE, Value::image(resized_image))
                 .await
         } else {
             // Pass through non-image value
@@ -199,7 +182,7 @@ impl AsAgent for ResizeImageAgent {
     }
 }
 
-// ScaleImageAgent
+// ScaleImageModule
 
 #[modular_agent(
     title = "Scale Image",
@@ -208,35 +191,30 @@ impl AsAgent for ResizeImageAgent {
     outputs = [PORT_IMAGE],
     number_config(name = CONFIG_SCALE, default = 1.0)
 )]
-struct ScaleImageAgent {
-    data: AgentData,
+struct ScaleImageModule {
+    data: ModuleData,
 }
 
 #[async_trait]
-impl AsAgent for ScaleImageAgent {
-    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+impl AsModule for ScaleImageModule {
+    fn new(ma: ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
         Ok(Self {
-            data: AgentData::new(ma, id, spec),
+            data: ModuleData::new(ma, id, spec),
         })
     }
 
-    async fn process(
-        &mut self,
-        ctx: AgentContext,
-        _port: String,
-        value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, ctx: ModuleContext, _port: String, value: Value) -> Result<()> {
         let config = self.configs()?;
 
         if value.is_image() {
             let image = value
                 .as_image()
-                .ok_or_else(|| AgentError::InvalidValue("Expected image value".into()))?;
+                .ok_or_else(|| Error::InvalidValue("Expected image value".into()))?;
 
             let scale = config.get_number_or_default(CONFIG_SCALE);
 
             if scale <= 0.0 {
-                return Err(AgentError::InvalidValue(
+                return Err(Error::InvalidValue(
                     "Scale factor must be greater than 0".into(),
                 ));
             }
@@ -256,14 +234,14 @@ impl AsAgent for ScaleImageAgent {
                     height,
                     photon_rs::transform::SamplingFilter::Nearest,
                 );
-                self.output(ctx, PORT_IMAGE, AgentValue::image(resized_image))
+                self.output(ctx, PORT_IMAGE, Value::image(resized_image))
                     .await
             } else {
                 // scale > 1.0
                 let width = ((image.get_width() as f64) * scale) as usize;
                 let height = ((image.get_height() as f64) * scale) as usize;
                 let resampled_image = photon_rs::transform::resample(&*image, width, height);
-                self.output(ctx, PORT_IMAGE, AgentValue::image(resampled_image))
+                self.output(ctx, PORT_IMAGE, Value::image(resampled_image))
                     .await
             }
         } else {
@@ -273,7 +251,7 @@ impl AsAgent for ScaleImageAgent {
     }
 }
 
-// IsChangedImageAgent
+// IsChangedImageModule
 #[modular_agent(
     title = "IsChanged",
     category = CATEGORY,
@@ -281,12 +259,12 @@ impl AsAgent for ScaleImageAgent {
     outputs = [PORT_T, PORT_F],
     number_config(name = CONFIG_THRESHOLD, default = 0.01)
 )]
-struct IsChangedImageAgent {
-    data: AgentData,
+struct IsChangedImageModule {
+    data: ModuleData,
     last_image: Option<Arc<PhotonImage>>,
 }
 
-impl IsChangedImageAgent {
+impl IsChangedImageModule {
     fn images_are_different(&self, img1: &PhotonImage, img2: &PhotonImage, threshold: f32) -> bool {
         let pixels1 = img1.get_raw_pixels();
         let pixels2 = img2.get_raw_pixels();
@@ -311,26 +289,21 @@ impl IsChangedImageAgent {
 }
 
 #[async_trait]
-impl AsAgent for IsChangedImageAgent {
-    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+impl AsModule for IsChangedImageModule {
+    fn new(ma: ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
         Ok(Self {
-            data: AgentData::new(ma, id, spec),
+            data: ModuleData::new(ma, id, spec),
             last_image: None,
         })
     }
 
-    async fn process(
-        &mut self,
-        ctx: AgentContext,
-        _port: String,
-        value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, ctx: ModuleContext, _port: String, value: Value) -> Result<()> {
         let config = self.configs()?;
 
         if value.is_image() {
             let image = value
                 .as_image()
-                .ok_or_else(|| AgentError::InvalidValue("Expected image value".into()))?;
+                .ok_or_else(|| Error::InvalidValue("Expected image value".into()))?;
 
             let threshold = config.get_number_or_default(CONFIG_THRESHOLD) as f32;
 
@@ -347,9 +320,7 @@ impl AsAgent for IsChangedImageAgent {
                 self.output(ctx, PORT_F, value).await
             }
         } else {
-            Err(AgentError::InvalidValue(
-                "Input value is not an image".into(),
-            ))
+            Err(Error::InvalidValue("Input value is not an image".into()))
         }
     }
 }
@@ -362,34 +333,28 @@ impl AsAgent for IsChangedImageAgent {
     inputs = [PORT_PATH],
     outputs = [PORT_IMAGE]
 )]
-struct OpenImageAgent {
-    data: AgentData,
+struct OpenImageModule {
+    data: ModuleData,
 }
 
 #[async_trait]
-impl AsAgent for OpenImageAgent {
-    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+impl AsModule for OpenImageModule {
+    fn new(ma: ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
         Ok(Self {
-            data: AgentData::new(ma, id, spec),
+            data: ModuleData::new(ma, id, spec),
         })
     }
 
-    async fn process(
-        &mut self,
-        ctx: AgentContext,
-        _port: String,
-        value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, ctx: ModuleContext, _port: String, value: Value) -> Result<()> {
         let path = value
             .as_str()
-            .ok_or_else(|| AgentError::InvalidValue("Expected path string".into()))?;
+            .ok_or_else(|| Error::InvalidValue("Expected path string".into()))?;
         let img_path = std::path::Path::new(path);
 
-        let image = photon_rs::native::open_image(img_path).map_err(|e| {
-            AgentError::InvalidValue(format!("Failed to open image {}: {}", path, e))
-        })?;
+        let image = photon_rs::native::open_image(img_path)
+            .map_err(|e| Error::InvalidValue(format!("Failed to open image {}: {}", path, e)))?;
 
-        self.output(ctx, PORT_IMAGE, AgentValue::image(image)).await
+        self.output(ctx, PORT_IMAGE, Value::image(image)).await
     }
 }
 
@@ -399,40 +364,35 @@ impl AsAgent for OpenImageAgent {
     inputs = [PORT_IMAGE_FILENAME],
     outputs = [PORT_RESULT]
 )]
-struct SaveImageAgent {
-    data: AgentData,
+struct SaveImageModule {
+    data: ModuleData,
 }
 
 #[async_trait]
-impl AsAgent for SaveImageAgent {
-    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+impl AsModule for SaveImageModule {
+    fn new(ma: ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
         Ok(Self {
-            data: AgentData::new(ma, id, spec),
+            data: ModuleData::new(ma, id, spec),
         })
     }
 
-    async fn process(
-        &mut self,
-        ctx: AgentContext,
-        _port: String,
-        value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, ctx: ModuleContext, _port: String, value: Value) -> Result<()> {
         let Some(image) = value.get_image("image") else {
-            return Err(AgentError::InvalidValue(
+            return Err(Error::InvalidValue(
                 "Expected image value under 'image' key".into(),
             ));
         };
 
         let Some(filename) = value.get_str("filename") else {
-            return Err(AgentError::InvalidValue(
+            return Err(Error::InvalidValue(
                 "Expected filename string under 'filename' key".into(),
             ));
         };
 
         photon_rs::native::save_image((*image).clone(), std::path::Path::new(filename)).map_err(
-            |e| AgentError::InvalidValue(format!("Failed to save image {}: {}", filename, e)),
+            |e| Error::InvalidValue(format!("Failed to save image {}: {}", filename, e)),
         )?;
 
-        self.output(ctx, PORT_RESULT, AgentValue::unit()).await
+        self.output(ctx, PORT_RESULT, Value::unit()).await
     }
 }

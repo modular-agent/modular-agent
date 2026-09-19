@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 
-import type { AgentConfigs } from "tauri-plugin-modular-agent-api";
+import type { ModuleConfigs } from "tauri-plugin-modular-agent-api";
 
 import type { CoreSettings } from "./types";
 
@@ -24,7 +24,7 @@ export async function setCoreSettings(newSettings: Partial<CoreSettings>): Promi
   await invoke("set_core_settings_cmd", { newSettings });
 }
 
-export async function setGlobalConfigs(defName: string, configs: AgentConfigs): Promise<void> {
+export async function setGlobalConfigs(defName: string, configs: ModuleConfigs): Promise<void> {
   await invoke("set_global_configs_cmd", { defName, configs });
 }
 

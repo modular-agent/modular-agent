@@ -2,27 +2,27 @@ use im::Vector;
 use serde::{Deserialize, Serialize};
 
 use crate::FnvIndexMap;
-use crate::error::AgentError;
-use crate::value::{AgentValue, AgentValueMap};
+use crate::error::{Error, Result};
+use crate::value::{Value, ValueMap};
 
-/// Type alias for a map of agent configurations.
-pub type AgentConfigsMap = FnvIndexMap<String, AgentConfigs>;
+/// Type alias for a map of module configurations.
+pub type ModuleConfigsMap = FnvIndexMap<String, ModuleConfigs>;
 
-/// Configuration container for an agent.
+/// Configuration container for a module.
 ///
 /// Holds configuration values in key-value format and provides type-safe accessor methods.
 /// Configuration parameters defined with `#[modular_agent]` macro are stored in this struct.
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
-pub struct AgentConfigs(FnvIndexMap<String, AgentValue>);
+pub struct ModuleConfigs(FnvIndexMap<String, Value>);
 
-impl AgentConfigs {
+impl ModuleConfigs {
     /// Creates a new empty configuration container.
     pub fn new() -> Self {
         Self(FnvIndexMap::default())
     }
 
     /// Sets a configuration value.
-    pub fn set(&mut self, key: String, value: AgentValue) {
+    pub fn set(&mut self, key: String, value: Value) {
         self.0.insert(key, value);
     }
 
@@ -36,10 +36,10 @@ impl AgentConfigs {
     /// # Errors
     ///
     /// Returns `UnknownConfig` if the key does not exist.
-    pub fn get(&self, key: &str) -> Result<&AgentValue, AgentError> {
+    pub fn get(&self, key: &str) -> Result<&Value> {
         self.0
             .get(key)
-            .ok_or_else(|| AgentError::UnknownConfig(key.to_string()))
+            .ok_or_else(|| Error::UnknownConfig(key.to_string()))
     }
 
     /// Gets a boolean configuration value.
@@ -47,11 +47,11 @@ impl AgentConfigs {
     /// # Errors
     ///
     /// Returns `UnknownConfig` if the key does not exist or cannot be converted to boolean.
-    pub fn get_bool(&self, key: &str) -> Result<bool, AgentError> {
+    pub fn get_bool(&self, key: &str) -> Result<bool> {
         self.0
             .get(key)
             .and_then(|v| v.as_bool())
-            .ok_or_else(|| AgentError::UnknownConfig(key.to_string()))
+            .ok_or_else(|| Error::UnknownConfig(key.to_string()))
     }
 
     /// Gets a boolean configuration value, or the specified default if not found.
@@ -69,11 +69,11 @@ impl AgentConfigs {
     /// # Errors
     ///
     /// Returns `UnknownConfig` if the key does not exist or cannot be converted to integer.
-    pub fn get_integer(&self, key: &str) -> Result<i64, AgentError> {
+    pub fn get_integer(&self, key: &str) -> Result<i64> {
         self.0
             .get(key)
             .and_then(|v| v.as_i64())
-            .ok_or_else(|| AgentError::UnknownConfig(key.to_string()))
+            .ok_or_else(|| Error::UnknownConfig(key.to_string()))
     }
 
     /// Gets an integer configuration value, or the specified default if not found.
@@ -91,11 +91,11 @@ impl AgentConfigs {
     /// # Errors
     ///
     /// Returns `UnknownConfig` if the key does not exist or cannot be converted to number.
-    pub fn get_number(&self, key: &str) -> Result<f64, AgentError> {
+    pub fn get_number(&self, key: &str) -> Result<f64> {
         self.0
             .get(key)
             .and_then(|v| v.as_f64())
-            .ok_or_else(|| AgentError::UnknownConfig(key.to_string()))
+            .ok_or_else(|| Error::UnknownConfig(key.to_string()))
     }
 
     /// Gets a number configuration value, or the specified default if not found.
@@ -113,12 +113,12 @@ impl AgentConfigs {
     /// # Errors
     ///
     /// Returns `UnknownConfig` if the key does not exist or cannot be converted to string.
-    pub fn get_string(&self, key: &str) -> Result<String, AgentError> {
+    pub fn get_string(&self, key: &str) -> Result<String> {
         self.0
             .get(key)
             .and_then(|v| v.as_str())
             .map(|v| v.to_string())
-            .ok_or_else(|| AgentError::UnknownConfig(key.to_string()))
+            .ok_or_else(|| Error::UnknownConfig(key.to_string()))
     }
 
     /// Gets a string configuration value, or the specified default if not found.
@@ -144,19 +144,15 @@ impl AgentConfigs {
     /// # Errors
     ///
     /// Returns `UnknownConfig` if the key does not exist or cannot be converted to array.
-    pub fn get_array(&self, key: &str) -> Result<&Vector<AgentValue>, AgentError> {
+    pub fn get_array(&self, key: &str) -> Result<&Vector<Value>> {
         self.0
             .get(key)
             .and_then(|v| v.as_array())
-            .ok_or_else(|| AgentError::UnknownConfig(key.to_string()))
+            .ok_or_else(|| Error::UnknownConfig(key.to_string()))
     }
 
     /// Gets an array configuration value, or the specified default if not found.
-    pub fn get_array_or<'a>(
-        &'a self,
-        key: &str,
-        default: &'a Vector<AgentValue>,
-    ) -> &'a Vector<AgentValue> {
+    pub fn get_array_or<'a>(&'a self, key: &str, default: &'a Vector<Value>) -> &'a Vector<Value> {
         self.0
             .get(key)
             .and_then(|v| v.as_array())
@@ -164,7 +160,7 @@ impl AgentConfigs {
     }
 
     /// Gets an array configuration value, or an empty array if not found.
-    pub fn get_array_or_default(&self, key: &str) -> Vector<AgentValue> {
+    pub fn get_array_or_default(&self, key: &str) -> Vector<Value> {
         self.0
             .get(key)
             .and_then(|v| v.as_array())
@@ -177,19 +173,19 @@ impl AgentConfigs {
     /// # Errors
     ///
     /// Returns `UnknownConfig` if the key does not exist or cannot be converted to object.
-    pub fn get_object(&self, key: &str) -> Result<&AgentValueMap<String, AgentValue>, AgentError> {
+    pub fn get_object(&self, key: &str) -> Result<&ValueMap<String, Value>> {
         self.0
             .get(key)
             .and_then(|v| v.as_object())
-            .ok_or_else(|| AgentError::UnknownConfig(key.to_string()))
+            .ok_or_else(|| Error::UnknownConfig(key.to_string()))
     }
 
     /// Gets an object configuration value, or the specified default if not found.
     pub fn get_object_or<'a>(
         &'a self,
         key: &str,
-        default: &'a AgentValueMap<String, AgentValue>,
-    ) -> &'a AgentValueMap<String, AgentValue> {
+        default: &'a ValueMap<String, Value>,
+    ) -> &'a ValueMap<String, Value> {
         self.0
             .get(key)
             .and_then(|v| v.as_object())
@@ -197,7 +193,7 @@ impl AgentConfigs {
     }
 
     /// Gets an object configuration value, or an empty object if not found.
-    pub fn get_object_or_default(&self, key: &str) -> AgentValueMap<String, AgentValue> {
+    pub fn get_object_or_default(&self, key: &str) -> ValueMap<String, Value> {
         self.0
             .get(key)
             .and_then(|v| v.as_object())
@@ -206,47 +202,47 @@ impl AgentConfigs {
     }
 
     /// Returns an iterator over the configuration keys.
-    pub fn keys(&self) -> indexmap::map::Keys<'_, String, AgentValue> {
+    pub fn keys(&self) -> indexmap::map::Keys<'_, String, Value> {
         self.0.keys()
     }
 
     /// Removes a configuration value by key, returning the value if it existed.
     ///
     /// Uses `shift_remove` to preserve insertion order.
-    pub fn remove(&mut self, key: &str) -> Option<AgentValue> {
+    pub fn remove(&mut self, key: &str) -> Option<Value> {
         self.0.shift_remove(key)
     }
 
     /// Retains only the configuration entries for which the predicate returns `true`.
     pub fn retain<F>(&mut self, f: F)
     where
-        F: FnMut(&String, &mut AgentValue) -> bool,
+        F: FnMut(&String, &mut Value) -> bool,
     {
         self.0.retain(f);
     }
 }
 
-impl IntoIterator for AgentConfigs {
-    type Item = (String, AgentValue);
-    type IntoIter = indexmap::map::IntoIter<String, AgentValue>;
+impl IntoIterator for ModuleConfigs {
+    type Item = (String, Value);
+    type IntoIter = indexmap::map::IntoIter<String, Value>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.into_iter()
     }
 }
 
-impl<'a> IntoIterator for &'a AgentConfigs {
-    type Item = (&'a String, &'a AgentValue);
-    type IntoIter = indexmap::map::Iter<'a, String, AgentValue>;
+impl<'a> IntoIterator for &'a ModuleConfigs {
+    type Item = (&'a String, &'a Value);
+    type IntoIter = indexmap::map::Iter<'a, String, Value>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.iter()
     }
 }
 
-impl FromIterator<(String, AgentValue)> for AgentConfigs {
-    fn from_iter<T: IntoIterator<Item = (String, AgentValue)>>(iter: T) -> Self {
-        let mut configs = AgentConfigs::new();
+impl FromIterator<(String, Value)> for ModuleConfigs {
+    fn from_iter<T: IntoIterator<Item = (String, Value)>>(iter: T) -> Self {
+        let mut configs = ModuleConfigs::new();
         for (key, value) in iter {
             configs.set(key, value);
         }
@@ -254,9 +250,9 @@ impl FromIterator<(String, AgentValue)> for AgentConfigs {
     }
 }
 
-impl<'a> FromIterator<(&'a String, &'a AgentValue)> for AgentConfigs {
-    fn from_iter<T: IntoIterator<Item = (&'a String, &'a AgentValue)>>(iter: T) -> Self {
-        let mut configs = AgentConfigs::new();
+impl<'a> FromIterator<(&'a String, &'a Value)> for ModuleConfigs {
+    fn from_iter<T: IntoIterator<Item = (&'a String, &'a Value)>>(iter: T) -> Self {
+        let mut configs = ModuleConfigs::new();
         for (key, value) in iter {
             configs.set(key.clone(), value.clone());
         }

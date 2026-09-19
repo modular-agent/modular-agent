@@ -4,13 +4,13 @@
 
 use clap::Parser;
 use modular_agent_core::mcp_server::{McpServerConfig, start_mcp_server};
-use modular_agent_core::{AgentError, AgentValue, ModularAgent, ModularAgentEvent};
+use modular_agent_core::{Error, ModularAgent, ModularAgentEvent, Result, Value};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::select;
 
-mod agents;
+mod modules;
 
 #[derive(Parser)]
 #[command(name = "ma")]
@@ -41,7 +41,7 @@ struct Args {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), AgentError> {
+async fn main() -> Result<()> {
     let args = Args::parse();
 
     // Initialize logging if verbose
@@ -53,7 +53,7 @@ async fn main() -> Result<(), AgentError> {
 
     // Validate patch file exists
     if !Path::new(&args.patch).exists() {
-        return Err(AgentError::IoError(format!(
+        return Err(Error::IoError(format!(
             "Patch file not found: {}",
             args.patch
         )));
@@ -76,7 +76,7 @@ async fn main() -> Result<(), AgentError> {
 
     // Load the patch first so MCP clients can see it as soon as the server
     // is up, but start the MCP server before starting the patch: a bind
-    // failure (e.g. port already in use) must not leave running agents
+    // failure (e.g. port already in use) must not leave running modules
     // behind without their stop() hooks being called.
     let patch_id = ma.open_patch_from_file(&args.patch, None).await?;
 
@@ -133,7 +133,7 @@ async fn main() -> Result<(), AgentError> {
                     Ok(Some(line)) => {
                         ma.write_external_input(
                             args.input.clone(),
-                            AgentValue::string(line)
+                            Value::string(line)
                         ).await?;
                     }
                     Ok(None) => break, // EOF
@@ -154,7 +154,7 @@ async fn main() -> Result<(), AgentError> {
     if let Some(server) = mcp_server {
         server.stop().await;
     }
-    // Stops the patch, waits for agent loops, and reaps MCP child processes.
+    // Stops the patch, waits for module loops, and reaps MCP child processes.
     if let Err(e) = ma.shutdown(Duration::from_secs(5)).await {
         log::error!("Shutdown error: {}", e);
     }
@@ -167,9 +167,9 @@ async fn main() -> Result<(), AgentError> {
     Ok(())
 }
 
-fn format_value(value: &AgentValue) -> String {
+fn format_value(value: &Value) -> String {
     match value {
-        AgentValue::String(s) => s.to_string(),
+        Value::String(s) => s.to_string(),
         _ => serde_json::to_string(value).unwrap_or_else(|_| format!("{:?}", value)),
     }
 }

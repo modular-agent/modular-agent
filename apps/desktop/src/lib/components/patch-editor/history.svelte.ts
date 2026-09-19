@@ -1,27 +1,27 @@
 import { toast } from "svelte-sonner";
 import {
-  addAgent,
-  addAgentsAndConnections,
+  addModule,
+  addModulesAndConnections,
   addConnection,
-  getAgentSpec,
-  newAgentSpec,
-  removeAgent,
+  getModuleSpec,
+  newModuleSpec,
+  removeModule,
   removeConnection,
-  setAgentConfigs,
-  startAgent,
-  stopAgent,
-  updateAgentSpec,
-  type AgentSpec,
+  setModuleConfigs,
+  startModule,
+  stopModule,
+  updateModuleSpec,
+  type ModuleSpec,
 } from "tauri-plugin-modular-agent-api";
 
 import {
-  agentSpecToNode,
+  moduleSpecToNode,
   connectionSpecToEdge,
   defaultNodeSize,
   edgeToConnectionSpec,
   getEdgeColor,
   resolveColorCss,
-} from "$lib/agent";
+} from "$lib/module";
 import type { PatchNode, PatchEdge } from "$lib/types";
 
 import type { EditorState } from "./context.svelte";
@@ -36,15 +36,15 @@ export interface Command {
   /** Remap a node/edge ID when another command's execute/undo re-creates entities with new IDs. */
   remapId?(oldId: string, newId: string): void;
   /**
-   * React to agents/connections removed by an external edit. May trim internal
+   * React to modules/connections removed by an external edit. May trim internal
    * deltas in place. Return false to discard the command from the history.
    */
-  pruneExternalRemovals?(removedAgentIds: Set<string>, removedConnKeys: Set<string>): boolean;
+  pruneExternalRemovals?(removedModuleIds: Set<string>, removedConnKeys: Set<string>): boolean;
 }
 
 // --- Helper ---
 
-export function nodeToAgentSpec(node: PatchNode): AgentSpec {
+export function nodeToModuleSpec(node: PatchNode): ModuleSpec {
   return {
     ...node.data,
     id: node.id,
@@ -199,14 +199,14 @@ export class CommandHistory {
   }
 
   /**
-   * Drop commands that reference agents/connections removed by an external
+   * Drop commands that reference modules/connections removed by an external
    * edit, so undo/redo never tries to touch entities that no longer exist.
    * Commands without pruneExternalRemovals are unaffected.
    */
-  purgeInvalidated(removedAgentIds: Set<string>, removedConnKeys: Set<string>): void {
-    if (removedAgentIds.size === 0 && removedConnKeys.size === 0) return;
+  purgeInvalidated(removedModuleIds: Set<string>, removedConnKeys: Set<string>): void {
+    if (removedModuleIds.size === 0 && removedConnKeys.size === 0) return;
     const keep = (c: Command) =>
-      c.pruneExternalRemovals?.(removedAgentIds, removedConnKeys) ?? true;
+      c.pruneExternalRemovals?.(removedModuleIds, removedConnKeys) ?? true;
     const newUndo = this.undoStack.filter(keep);
     const newRedo = this.redoStack.filter(keep);
     if (newUndo.length !== this.undoStack.length || newRedo.length !== this.redoStack.length) {
@@ -240,39 +240,39 @@ export class CommandHistory {
 
 // --- Command classes ---
 
-// ── AddAgentCommand ──
+// ── AddModuleCommand ──
 
-export class AddAgentCommand implements Command {
-  readonly label = "Add Agent";
+export class AddModuleCommand implements Command {
+  readonly label = "Add Module";
   private node: PatchNode | null = null;
 
   constructor(
     private patchId: string,
-    private agentName: string,
+    private moduleName: string,
     private flowPos: { x: number; y: number },
   ) {}
 
   async execute(editor: EditorState) {
     const prevNodeId = this.node?.id;
-    const spec = await newAgentSpec(this.agentName);
+    const spec = await newModuleSpec(this.moduleName);
     spec.x = this.flowPos.x;
     spec.y = this.flowPos.y;
     if (!spec.width || !spec.height) {
-      const size = defaultNodeSize(this.agentName, editor.snapGridSize);
+      const size = defaultNodeSize(this.moduleName, editor.snapGridSize);
       spec.width = spec.width || size.width;
       spec.height = spec.height || size.height;
     }
-    const id = await addAgent(this.patchId, spec);
+    const id = await addModule(this.patchId, spec);
     spec.id = id;
-    // Re-fetch the constructed spec: the agent's new() may have added dynamic
+    // Re-fetch the constructed spec: the module's new() may have added dynamic
     // configs/ports (e.g. ZipToObject k1..kn) that the local spec lacks.
-    const actual = await getAgentSpec(id).catch(() => null);
-    this.node = agentSpecToNode(actual ?? spec);
+    const actual = await getModuleSpec(id).catch(() => null);
+    this.node = moduleSpecToNode(actual ?? spec);
     editor.nodes = [...editor.nodes, this.node];
     if (editor.running && !this.node.data.disabled) {
-      await startAgent(this.node.id).catch((e) => {
-        console.error("Failed to start agent:", e);
-        toast.error("Agent added but failed to start", { description: String(e) });
+      await startModule(this.node.id).catch((e) => {
+        console.error("Failed to start module:", e);
+        toast.error("Module added but failed to start", { description: String(e) });
       });
     }
     // Report ID remap for redo case (backend assigned a new ID)
@@ -290,7 +290,7 @@ export class AddAgentCommand implements Command {
     for (const e of connectedEdges) {
       await removeConnection(this.patchId, edgeToConnectionSpec(e)).catch(() => {});
     }
-    await removeAgent(this.patchId, this.node.id);
+    await removeModule(this.patchId, this.node.id);
     editor.nodes = editor.nodes.filter((n) => n.id !== this.node!.id);
     editor.edges = editor.edges.filter(
       (e) => e.source !== this.node!.id && e.target !== this.node!.id,
@@ -303,8 +303,8 @@ export class AddAgentCommand implements Command {
     }
   }
 
-  pruneExternalRemovals(removedAgentIds: Set<string>): boolean {
-    return this.node === null || !removedAgentIds.has(this.node.id);
+  pruneExternalRemovals(removedModuleIds: Set<string>): boolean {
+    return this.node === null || !removedModuleIds.has(this.node.id);
   }
 }
 
@@ -337,7 +337,7 @@ export class DeleteCommand implements Command {
       await removeConnection(this.patchId, edgeToConnectionSpec(e)).catch(() => {});
     }
     for (const n of this.deletedNodes) {
-      await removeAgent(this.patchId, n.id).catch(() => {});
+      await removeModule(this.patchId, n.id).catch(() => {});
     }
     const nodeIds = new Set(this.deletedNodes.map((n) => n.id));
     const edgeIds = new Set(this.deletedEdges.map((e) => e.id));
@@ -346,15 +346,19 @@ export class DeleteCommand implements Command {
   }
 
   async undo(editor: EditorState) {
-    const specs = this.deletedNodes.map(nodeToAgentSpec);
+    const specs = this.deletedNodes.map(nodeToModuleSpec);
     const connSpecs = this.deletedEdges.map(edgeToConnectionSpec);
-    const [addedAgents, addedConns] = await addAgentsAndConnections(this.patchId, specs, connSpecs);
+    const [addedModules, addedConns] = await addModulesAndConnections(
+      this.patchId,
+      specs,
+      connSpecs,
+    );
 
     // Build ID mapping (backend preserves array order)
     const oldToNewId = new Map<string, string>();
-    for (let i = 0; i < specs.length && i < addedAgents.length; i++) {
-      if (specs[i].id && addedAgents[i].id) {
-        oldToNewId.set(specs[i].id!, addedAgents[i].id!);
+    for (let i = 0; i < specs.length && i < addedModules.length; i++) {
+      if (specs[i].id && addedModules[i].id) {
+        oldToNewId.set(specs[i].id!, addedModules[i].id!);
       }
     }
 
@@ -366,7 +370,7 @@ export class DeleteCommand implements Command {
     }
 
     // Rebuild nodes/edges from returned specs
-    const newNodes = addedAgents.map(agentSpecToNode);
+    const newNodes = addedModules.map(moduleSpecToNode);
     const allNodes = [...editor.nodes, ...newNodes];
     const nodeDataMap = new Map(allNodes.map((n) => [n.id, n.data]));
     const newEdges = addedConns.map((conn) =>
@@ -384,11 +388,11 @@ export class DeleteCommand implements Command {
     }));
     this.deletedEdges = newEdges.map((e) => ({ ...e }));
 
-    // Start agents if patch is running
+    // Start modules if patch is running
     if (editor.running) {
       for (const n of newNodes) {
         if (!n.data.disabled) {
-          await startAgent(n.id).catch(() => {});
+          await startModule(n.id).catch(() => {});
         }
       }
     }
@@ -415,12 +419,14 @@ export class DeleteCommand implements Command {
     });
   }
 
-  pruneExternalRemovals(removedAgentIds: Set<string>, removedConnKeys: Set<string>): boolean {
+  pruneExternalRemovals(removedModuleIds: Set<string>, removedConnKeys: Set<string>): boolean {
     // Both endpoints of saved edges matter: undo must not re-create an edge
     // pointing at an externally-removed neighbor.
-    if (this.deletedNodes.some((n) => removedAgentIds.has(n.id))) return false;
+    if (this.deletedNodes.some((n) => removedModuleIds.has(n.id))) return false;
     if (
-      this.deletedEdges.some((e) => removedAgentIds.has(e.source) || removedAgentIds.has(e.target))
+      this.deletedEdges.some(
+        (e) => removedModuleIds.has(e.source) || removedModuleIds.has(e.target),
+      )
     )
       return false;
     // Drop saved edges whose connection was removed externally (endpoints
@@ -494,8 +500,8 @@ export class AddConnectionCommand implements Command {
     if (changed) this.edge = updated;
   }
 
-  pruneExternalRemovals(removedAgentIds: Set<string>, removedConnKeys: Set<string>): boolean {
-    if (removedAgentIds.has(this.edge.source) || removedAgentIds.has(this.edge.target))
+  pruneExternalRemovals(removedModuleIds: Set<string>, removedConnKeys: Set<string>): boolean {
+    if (removedModuleIds.has(this.edge.source) || removedModuleIds.has(this.edge.target))
       return false;
     return !removedConnKeys.has(
       connKey(this.edge.source, this.edge.sourceHandle, this.edge.target, this.edge.targetHandle),
@@ -526,7 +532,7 @@ export class MoveNodesCommand implements Command {
       editor.props.svelteFlow.updateNode(d.id, {
         position: { x: d.newPosition.x, y: d.newPosition.y },
       });
-      await updateAgentSpec(d.id, { x: d.newPosition.x, y: d.newPosition.y });
+      await updateModuleSpec(d.id, { x: d.newPosition.x, y: d.newPosition.y });
     }
   }
 
@@ -535,7 +541,7 @@ export class MoveNodesCommand implements Command {
       editor.props.svelteFlow.updateNode(d.id, {
         position: { x: d.oldPosition.x, y: d.oldPosition.y },
       });
-      await updateAgentSpec(d.id, { x: d.oldPosition.x, y: d.oldPosition.y });
+      await updateModuleSpec(d.id, { x: d.oldPosition.x, y: d.oldPosition.y });
     }
   }
 
@@ -543,8 +549,8 @@ export class MoveNodesCommand implements Command {
     this.deltas = this.deltas.map((d) => (d.id === oldId ? { ...d, id: newId } : d));
   }
 
-  pruneExternalRemovals(removedAgentIds: Set<string>): boolean {
-    this.deltas = this.deltas.filter((d) => !removedAgentIds.has(d.id));
+  pruneExternalRemovals(removedModuleIds: Set<string>): boolean {
+    this.deltas = this.deltas.filter((d) => !removedModuleIds.has(d.id));
     return this.deltas.length > 0;
   }
 }
@@ -567,7 +573,7 @@ export class ResizeNodeCommand implements Command {
       width: this.newWidth,
       height: this.newHeight,
     });
-    await updateAgentSpec(this.nodeId, { width: this.newWidth, height: this.newHeight });
+    await updateModuleSpec(this.nodeId, { width: this.newWidth, height: this.newHeight });
   }
 
   async undo(editor: EditorState) {
@@ -575,7 +581,7 @@ export class ResizeNodeCommand implements Command {
       width: this.oldWidth,
       height: this.oldHeight,
     });
-    await updateAgentSpec(this.nodeId, {
+    await updateModuleSpec(this.nodeId, {
       width: this.oldWidth ?? null,
       height: this.oldHeight ?? null,
     });
@@ -585,8 +591,8 @@ export class ResizeNodeCommand implements Command {
     if (this.nodeId === oldId) this.nodeId = newId;
   }
 
-  pruneExternalRemovals(removedAgentIds: Set<string>): boolean {
-    return !removedAgentIds.has(this.nodeId);
+  pruneExternalRemovals(removedModuleIds: Set<string>): boolean {
+    return !removedModuleIds.has(this.nodeId);
   }
 }
 
@@ -599,7 +605,7 @@ export class PasteCommand implements Command {
 
   constructor(
     private patchId: string,
-    private agentSpecs: AgentSpec[],
+    private moduleSpecs: ModuleSpec[],
     private connectionSpecs: {
       source: string;
       source_handle: string | null;
@@ -614,13 +620,13 @@ export class PasteCommand implements Command {
   async execute(editor: EditorState) {
     const prevPastedNodes = this.pastedNodes;
 
-    const [addedAgents, addedConns] = await addAgentsAndConnections(
+    const [addedModules, addedConns] = await addModulesAndConnections(
       this.patchId,
-      this.agentSpecs,
+      this.moduleSpecs,
       this.connectionSpecs,
     );
 
-    if (addedAgents.length === 0 && addedConns.length === 0) return;
+    if (addedModules.length === 0 && addedConns.length === 0) return;
 
     // Deselect existing nodes/edges
     const { updateNode, updateEdge } = editor.props.svelteFlow;
@@ -632,8 +638,8 @@ export class PasteCommand implements Command {
     });
 
     const newNodes: PatchNode[] = [];
-    for (const a of addedAgents) {
-      const node = agentSpecToNode(a);
+    for (const a of addedModules) {
+      const node = moduleSpecToNode(a);
       node.selected = true;
       newNodes.push(node);
     }
@@ -665,14 +671,14 @@ export class PasteCommand implements Command {
     }
 
     // Update specs for next redo (with new IDs)
-    this.agentSpecs = newNodes.map(nodeToAgentSpec);
+    this.moduleSpecs = newNodes.map(nodeToModuleSpec);
     this.connectionSpecs = newEdges.map(edgeToConnectionSpec);
 
     if (editor.running) {
       for (const node of newNodes) {
         if (!node.data.disabled) {
-          await startAgent(node.id).catch((e) => {
-            console.error("Failed to start pasted agent:", e);
+          await startModule(node.id).catch((e) => {
+            console.error("Failed to start pasted module:", e);
           });
         }
       }
@@ -684,7 +690,7 @@ export class PasteCommand implements Command {
       await removeConnection(this.patchId, edgeToConnectionSpec(e)).catch(() => {});
     }
     for (const n of this.pastedNodes) {
-      await removeAgent(this.patchId, n.id).catch(() => {});
+      await removeModule(this.patchId, n.id).catch(() => {});
     }
     const nodeIds = new Set(this.pastedNodes.map((n) => n.id));
     const edgeIds = new Set(this.pastedEdges.map((e) => e.id));
@@ -711,7 +717,7 @@ export class PasteCommand implements Command {
       }
       return changed ? updated : e;
     });
-    this.agentSpecs = this.agentSpecs.map((s) => (s.id === oldId ? { ...s, id: newId } : s));
+    this.moduleSpecs = this.moduleSpecs.map((s) => (s.id === oldId ? { ...s, id: newId } : s));
     this.connectionSpecs = this.connectionSpecs.map((c) => {
       const updated = { ...c };
       let changed = false;
@@ -727,12 +733,12 @@ export class PasteCommand implements Command {
     });
   }
 
-  pruneExternalRemovals(removedAgentIds: Set<string>, removedConnKeys: Set<string>): boolean {
+  pruneExternalRemovals(removedModuleIds: Set<string>, removedConnKeys: Set<string>): boolean {
     // Both endpoints of saved edges matter: undo must not re-create an edge
     // pointing at an externally-removed neighbor.
-    if (this.pastedNodes.some((n) => removedAgentIds.has(n.id))) return false;
+    if (this.pastedNodes.some((n) => removedModuleIds.has(n.id))) return false;
     if (
-      this.pastedEdges.some((e) => removedAgentIds.has(e.source) || removedAgentIds.has(e.target))
+      this.pastedEdges.some((e) => removedModuleIds.has(e.source) || removedModuleIds.has(e.target))
     )
       return false;
     // Drop pasted edges whose connection was removed externally (endpoints
@@ -771,7 +777,7 @@ export class UpdateConfigCommand implements Command {
     }
     // Only the edited key goes to the backend — the full configs snapshot may
     // contain display-only values that must not enter the persisted spec.
-    await setAgentConfigs(this.nodeId, { [this.key]: this.newValue });
+    await setModuleConfigs(this.nodeId, { [this.key]: this.newValue });
   }
 
   async undo(editor: EditorState) {
@@ -782,15 +788,15 @@ export class UpdateConfigCommand implements Command {
         configs: this.oldConfigs,
       });
     }
-    await setAgentConfigs(this.nodeId, { [this.key]: this.oldValue });
+    await setModuleConfigs(this.nodeId, { [this.key]: this.oldValue });
   }
 
   remapId(oldId: string, newId: string) {
     if (this.nodeId === oldId) this.nodeId = newId;
   }
 
-  pruneExternalRemovals(removedAgentIds: Set<string>): boolean {
-    return !removedAgentIds.has(this.nodeId);
+  pruneExternalRemovals(removedModuleIds: Set<string>): boolean {
+    return !removedModuleIds.has(this.nodeId);
   }
 }
 
@@ -817,8 +823,8 @@ export class UpdateTitleCommand implements Command {
     if (this.nodeId === oldId) this.nodeId = newId;
   }
 
-  pruneExternalRemovals(removedAgentIds: Set<string>): boolean {
-    return !removedAgentIds.has(this.nodeId);
+  pruneExternalRemovals(removedModuleIds: Set<string>): boolean {
+    return !removedModuleIds.has(this.nodeId);
   }
 }
 
@@ -836,13 +842,13 @@ export class UpdateExtensionCommand implements Command {
 
   async execute(editor: EditorState) {
     editor.props.svelteFlow.updateNodeData(this.nodeId, { [this.key]: this.newValue ?? undefined });
-    await updateAgentSpec(this.nodeId, { [this.key]: this.newValue ?? null });
+    await updateModuleSpec(this.nodeId, { [this.key]: this.newValue ?? null });
     if (this.key === "port_colors") editor.refreshEdgeColorsForNode(this.nodeId, this.newValue);
   }
 
   async undo(editor: EditorState) {
     editor.props.svelteFlow.updateNodeData(this.nodeId, { [this.key]: this.oldValue ?? undefined });
-    await updateAgentSpec(this.nodeId, { [this.key]: this.oldValue ?? null });
+    await updateModuleSpec(this.nodeId, { [this.key]: this.oldValue ?? null });
     if (this.key === "port_colors") editor.refreshEdgeColorsForNode(this.nodeId, this.oldValue);
   }
 
@@ -850,8 +856,8 @@ export class UpdateExtensionCommand implements Command {
     if (this.nodeId === oldId) this.nodeId = newId;
   }
 
-  pruneExternalRemovals(removedAgentIds: Set<string>): boolean {
-    return !removedAgentIds.has(this.nodeId);
+  pruneExternalRemovals(removedModuleIds: Set<string>): boolean {
+    return !removedModuleIds.has(this.nodeId);
   }
 }
 
@@ -870,7 +876,7 @@ export class BatchUpdateExtensionCommand implements Command {
   async execute(editor: EditorState) {
     for (const d of this.deltas) {
       editor.props.svelteFlow.updateNodeData(d.id, { [this.key]: d.newValue ?? undefined });
-      await updateAgentSpec(d.id, { [this.key]: d.newValue ?? null });
+      await updateModuleSpec(d.id, { [this.key]: d.newValue ?? null });
       if (this.key === "port_colors") editor.refreshEdgeColorsForNode(d.id, d.newValue);
     }
   }
@@ -878,7 +884,7 @@ export class BatchUpdateExtensionCommand implements Command {
   async undo(editor: EditorState) {
     for (const d of this.deltas) {
       editor.props.svelteFlow.updateNodeData(d.id, { [this.key]: d.oldValue ?? undefined });
-      await updateAgentSpec(d.id, { [this.key]: d.oldValue ?? null });
+      await updateModuleSpec(d.id, { [this.key]: d.oldValue ?? null });
       if (this.key === "port_colors") editor.refreshEdgeColorsForNode(d.id, d.oldValue);
     }
   }
@@ -887,8 +893,8 @@ export class BatchUpdateExtensionCommand implements Command {
     this.deltas = this.deltas.map((d) => (d.id === oldId ? { ...d, id: newId } : d));
   }
 
-  pruneExternalRemovals(removedAgentIds: Set<string>): boolean {
-    this.deltas = this.deltas.filter((d) => !removedAgentIds.has(d.id));
+  pruneExternalRemovals(removedModuleIds: Set<string>): boolean {
+    this.deltas = this.deltas.filter((d) => !removedModuleIds.has(d.id));
     return this.deltas.length > 0;
   }
 }
@@ -912,9 +918,9 @@ export class ToggleDisabledCommand implements Command {
       editor.props.svelteFlow.updateNodeData(d.id, { disabled: this.setDisabled });
       if (editor.running) {
         if (this.setDisabled) {
-          await stopAgent(d.id).catch(() => {});
+          await stopModule(d.id).catch(() => {});
         } else {
-          await startAgent(d.id).catch(() => {});
+          await startModule(d.id).catch(() => {});
         }
       }
     }
@@ -925,9 +931,9 @@ export class ToggleDisabledCommand implements Command {
       editor.props.svelteFlow.updateNodeData(d.id, { disabled: d.wasDisabled });
       if (editor.running) {
         if (d.wasDisabled) {
-          await stopAgent(d.id).catch(() => {});
+          await stopModule(d.id).catch(() => {});
         } else {
-          await startAgent(d.id).catch(() => {});
+          await startModule(d.id).catch(() => {});
         }
       }
     }
@@ -937,8 +943,8 @@ export class ToggleDisabledCommand implements Command {
     this.deltas = this.deltas.map((d) => (d.id === oldId ? { ...d, id: newId } : d));
   }
 
-  pruneExternalRemovals(removedAgentIds: Set<string>): boolean {
-    this.deltas = this.deltas.filter((d) => !removedAgentIds.has(d.id));
+  pruneExternalRemovals(removedModuleIds: Set<string>): boolean {
+    this.deltas = this.deltas.filter((d) => !removedModuleIds.has(d.id));
     return this.deltas.length > 0;
   }
 }
@@ -968,8 +974,8 @@ export class ToggleShowErrCommand implements Command {
     this.deltas = this.deltas.map((d) => (d.id === oldId ? { ...d, id: newId } : d));
   }
 
-  pruneExternalRemovals(removedAgentIds: Set<string>): boolean {
-    this.deltas = this.deltas.filter((d) => !removedAgentIds.has(d.id));
+  pruneExternalRemovals(removedModuleIds: Set<string>): boolean {
+    this.deltas = this.deltas.filter((d) => !removedModuleIds.has(d.id));
     return this.deltas.length > 0;
   }
 }

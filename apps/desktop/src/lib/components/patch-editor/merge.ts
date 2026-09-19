@@ -17,8 +17,8 @@ export function connKey(
 export type ReconcileResult = {
   nodes: PatchNode[];
   edges: PatchEdge[];
-  /** Agent ids present in the current flow but absent from the target. */
-  removedAgentIds: Set<string>;
+  /** Module ids present in the current flow but absent from the target. */
+  removedModuleIds: Set<string>;
   /** connKey()s of edges present in the current flow but absent from the target. */
   removedConnKeys: Set<string>;
   /** False when the current flow already matches the target exactly. */
@@ -44,7 +44,7 @@ function dataWithoutGeometry(data: Record<string, unknown>): Record<string, unkn
  * Merge a freshly loaded target flow (from patchToFlow) into the current
  * canvas nodes/edges, preserving object identity wherever nothing changed.
  *
- * Nodes are keyed by agent id: surviving nodes keep their current array order
+ * Nodes are keyed by module id: surviving nodes keep their current array order
  * (SvelteFlow stacking order) and additions are appended. A surviving node is
  * returned as the identical object when its geometry (position/width/height)
  * and data are unchanged; otherwise it is shallow-copied with the target's
@@ -64,13 +64,13 @@ export function reconcileFlow(
   // Nodes
   const targetNodes = new Map(target.nodes.map((n) => [n.id, n]));
   const curNodeIds = new Set(curNodes.map((n) => n.id));
-  const removedAgentIds = new Set<string>();
+  const removedModuleIds = new Set<string>();
   const nodes: PatchNode[] = [];
 
   for (const cur of curNodes) {
     const tgt = targetNodes.get(cur.id);
     if (!tgt) {
-      removedAgentIds.add(cur.id);
+      removedModuleIds.add(cur.id);
       changed = true;
       continue;
     }
@@ -134,7 +134,7 @@ export function reconcileFlow(
   return {
     nodes: changed ? nodes : curNodes,
     edges: changed ? edges : curEdges,
-    removedAgentIds,
+    removedModuleIds,
     removedConnKeys,
     changed,
   };

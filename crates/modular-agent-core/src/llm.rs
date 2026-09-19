@@ -1,4 +1,4 @@
-//! LLM message types for agent-based workflows.
+//! LLM message types for module-based workflows.
 //!
 //! This module provides types for representing chat messages in LLM conversations,
 //! including support for tool calls, streaming responses, and multimodal content.
@@ -10,8 +10,8 @@ use std::{sync::Arc, vec};
 use im::Vector;
 use serde::{Deserialize, Serialize};
 
-use crate::error::AgentError;
-use crate::value::AgentValue;
+use crate::error::{Error, Result};
+use crate::value::Value;
 
 #[cfg(feature = "image")]
 use photon_rs::PhotonImage;
@@ -333,34 +333,34 @@ impl Message {
     /// content flattening, and fields that `Serialize` omits when unset
     /// return `None`. This is what makes key-path lookups (Get Value, If,
     /// Match) agree with what templates see. One deliberate divergence:
-    /// `image` is returned as a live [`AgentValue::Image`] (cheap `Arc`
+    /// `image` is returned as a live [`Value::Image`] (cheap `Arc`
     /// clone) instead of the base64 string serde emits.
-    pub fn get_prop(&self, key: &str) -> Option<AgentValue> {
+    pub fn get_prop(&self, key: &str) -> Option<Value> {
         match key {
-            "id" => self.id.as_ref().map(AgentValue::string),
-            "role" => Some(AgentValue::string(self.role.clone())),
+            "id" => self.id.as_ref().map(Value::string),
+            "role" => Some(Value::string(self.role.clone())),
             "content" => match &self.content {
-                MessageContent::Text(s) => Some(AgentValue::string(s.clone())),
+                MessageContent::Text(s) => Some(Value::string(s.clone())),
                 MessageContent::Blocks(blocks) => Some(match self.content.flat_text() {
-                    Some(s) => AgentValue::string(s),
-                    None => AgentValue::from_serialize(blocks).ok()?,
+                    Some(s) => Value::string(s),
+                    None => Value::from_serialize(blocks).ok()?,
                 }),
             },
-            "tokens" => self.tokens.map(|t| AgentValue::integer(t as i64)),
-            "streaming" => self.streaming.then_some(AgentValue::boolean(true)),
+            "tokens" => self.tokens.map(|t| Value::integer(t as i64)),
+            "streaming" => self.streaming.then_some(Value::boolean(true)),
             "tool_calls" => self
                 .tool_calls
                 .as_ref()
-                .and_then(|tc| AgentValue::from_serialize(tc).ok()),
-            "tool_name" => self.tool_name.as_ref().map(AgentValue::string),
-            "is_error" => self.is_error.map(AgentValue::boolean),
-            "stop_reason" => self.stop_reason.as_ref().map(AgentValue::string),
+                .and_then(|tc| Value::from_serialize(tc).ok()),
+            "tool_name" => self.tool_name.as_ref().map(Value::string),
+            "is_error" => self.is_error.map(Value::boolean),
+            "stop_reason" => self.stop_reason.as_ref().map(Value::string),
             "usage" => self
                 .usage
                 .as_ref()
-                .and_then(|u| AgentValue::from_serialize(u).ok()),
+                .and_then(|u| Value::from_serialize(u).ok()),
             #[cfg(feature = "image")]
-            "image" => self.image.as_ref().map(|i| AgentValue::Image(i.clone())),
+            "image" => self.image.as_ref().map(|i| Value::Image(i.clone())),
             _ => None,
         }
     }
@@ -675,7 +675,7 @@ pub struct ToolCallFunction {
 /// A typed streaming event describing the progress of one assistant [`Message`].
 ///
 /// Providers emit these events while generating a response so downstream
-/// agents can distinguish incremental deltas from the final message instead
+/// modules can distinguish incremental deltas from the final message instead
 /// of relying on repeated partial-`Message` re-sends. Each incremental event
 /// carries both the `delta` (just the new fragment) and the accumulated
 /// `partial` message, so consumers can either append deltas or replace the
@@ -763,53 +763,52 @@ pub enum MessageEvent {
     },
 }
 
-impl TryFrom<MessageEvent> for AgentValue {
-    type Error = AgentError;
+impl TryFrom<MessageEvent> for Value {
+    type Error = Error;
 
-    fn try_from(event: MessageEvent) -> Result<Self, AgentError> {
+    fn try_from(event: MessageEvent) -> Result<Self> {
         // Route through serde_json so the tagged representation on a port
         // matches the serialized form exactly (including the "type" field).
-        let json = serde_json::to_value(&event).map_err(|e| {
-            AgentError::InvalidValue(format!("Failed to serialize MessageEvent: {e}"))
-        })?;
-        AgentValue::from_json(json)
+        let json = serde_json::to_value(&event)
+            .map_err(|e| Error::InvalidValue(format!("Failed to serialize MessageEvent: {e}")))?;
+        Value::from_json(json)
     }
 }
 
-impl TryFrom<AgentValue> for Message {
-    type Error = AgentError;
+impl TryFrom<Value> for Message {
+    type Error = Error;
 
-    fn try_from(value: AgentValue) -> Result<Self, Self::Error> {
+    fn try_from(value: Value) -> Result<Self, Self::Error> {
         match value {
-            AgentValue::Message(msg) => Ok((*msg).clone()),
-            AgentValue::String(s) => Ok(Message::user(s.to_string())),
+            Value::Message(msg) => Ok((*msg).clone()),
+            Value::String(s) => Ok(Message::user(s.to_string())),
 
             #[cfg(feature = "image")]
-            AgentValue::Image(img) => {
+            Value::Image(img) => {
                 let mut message = Message::user("".to_string());
                 message.image = Some(img.clone());
                 Ok(message)
             }
-            AgentValue::Object(obj) => {
+            Value::Object(obj) => {
                 let role = obj
                     .get("role")
                     .and_then(|r| r.as_str())
                     .unwrap_or("user")
                     .to_string();
                 let content_value = obj.get("content").ok_or_else(|| {
-                    AgentError::InvalidValue("Message object missing 'content' field".to_string())
+                    Error::InvalidValue("Message object missing 'content' field".to_string())
                 })?;
                 let content = match content_value {
-                    AgentValue::String(s) => MessageContent::Text(s.to_string()),
-                    AgentValue::Array(_) => {
+                    Value::String(s) => MessageContent::Text(s.to_string()),
+                    Value::Array(_) => {
                         let blocks: Vec<ContentBlock> =
                             serde_json::from_value(content_value.to_json()).map_err(|e| {
-                                AgentError::InvalidValue(format!("Invalid content blocks: {e}"))
+                                Error::InvalidValue(format!("Invalid content blocks: {e}"))
                             })?;
                         MessageContent::Blocks(blocks)
                     }
                     _ => {
-                        return Err(AgentError::InvalidValue(
+                        return Err(Error::InvalidValue(
                             "'content' field must be a string or an array of content blocks"
                                 .to_string(),
                         ));
@@ -856,7 +855,7 @@ impl TryFrom<AgentValue> for Message {
                         tool_name
                             .as_str()
                             .ok_or_else(|| {
-                                AgentError::InvalidValue(
+                                Error::InvalidValue(
                                     "'tool_name' field must be a string".to_string(),
                                 )
                             })?
@@ -867,24 +866,22 @@ impl TryFrom<AgentValue> for Message {
                 if let Some(tool_calls) = obj.get("tool_calls") {
                     let mut calls = vec![];
                     for call_value in tool_calls.as_array().ok_or_else(|| {
-                        AgentError::InvalidValue("'tool_calls' field must be an array".to_string())
+                        Error::InvalidValue("'tool_calls' field must be an array".to_string())
                     })? {
                         let id = call_value
                             .get("id")
                             .and_then(|i| i.as_str())
                             .map(|s| s.to_string());
                         let function = call_value.get("function").ok_or_else(|| {
-                            AgentError::InvalidValue(
-                                "Tool call missing 'function' field".to_string(),
-                            )
+                            Error::InvalidValue("Tool call missing 'function' field".to_string())
                         })?;
                         let tool_name = function.get_str("name").ok_or_else(|| {
-                            AgentError::InvalidValue(
+                            Error::InvalidValue(
                                 "Tool call function missing 'name' field".to_string(),
                             )
                         })?;
                         let parameters = function.get("parameters").ok_or_else(|| {
-                            AgentError::InvalidValue(
+                            Error::InvalidValue(
                                 "Tool call function missing 'parameters' field".to_string(),
                             )
                         })?;
@@ -905,10 +902,10 @@ impl TryFrom<AgentValue> for Message {
                 {
                     if let Some(image_value) = obj.get("image") {
                         match image_value {
-                            AgentValue::String(s) => {
+                            Value::String(s) => {
                                 message.image = Some(Arc::new(crate::value::image_from_base64(s)?));
                             }
-                            AgentValue::Image(img) => {
+                            Value::Image(img) => {
                                 message.image = Some(img.clone());
                             }
                             _ => {}
@@ -918,23 +915,23 @@ impl TryFrom<AgentValue> for Message {
 
                 Ok(message)
             }
-            _ => Err(AgentError::InvalidValue(
-                "Cannot convert AgentValue to Message".to_string(),
+            _ => Err(Error::InvalidValue(
+                "Cannot convert Value to Message".to_string(),
             )),
         }
     }
 }
 
-impl From<Message> for AgentValue {
+impl From<Message> for Value {
     fn from(msg: Message) -> Self {
-        AgentValue::Message(Arc::new(msg))
+        Value::Message(Arc::new(msg))
     }
 }
 
-impl From<Vec<Message>> for AgentValue {
+impl From<Vec<Message>> for Value {
     fn from(msgs: Vec<Message>) -> Self {
-        let agent_msgs: Vector<AgentValue> = msgs.into_iter().map(|m| m.into()).collect();
-        AgentValue::Array(agent_msgs)
+        let module_msgs: Vector<Value> = msgs.into_iter().map(|m| m.into()).collect();
+        Value::Array(module_msgs)
     }
 }
 
@@ -978,10 +975,10 @@ mod tests {
     }
 
     #[test]
-    fn test_message_to_from_agent_value() {
+    fn test_message_to_from_value() {
         let msg = Message::user("What is the weather today?".to_string());
 
-        let value: AgentValue = msg.into();
+        let value: Value = msg.into();
         assert!(value.is_message());
         let msg_ref = value.as_message().unwrap();
         assert_eq!(msg_ref.role, "user");
@@ -995,8 +992,8 @@ mod tests {
     #[test]
     fn test_message_get_prop_basic() {
         let msg = Message::user("hello".to_string());
-        assert_eq!(msg.get_prop("role"), Some(AgentValue::string("user")));
-        assert_eq!(msg.get_prop("content"), Some(AgentValue::string("hello")));
+        assert_eq!(msg.get_prop("role"), Some(Value::string("user")));
+        assert_eq!(msg.get_prop("content"), Some(Value::string("hello")));
 
         // Unset optionals mirror serde's omit-when-unset: absent, not null.
         assert_eq!(msg.get_prop("id"), None);
@@ -1007,10 +1004,7 @@ mod tests {
         assert_eq!(msg.get_prop("streaming"), None);
         let mut streaming = msg.clone();
         streaming.streaming = true;
-        assert_eq!(
-            streaming.get_prop("streaming"),
-            Some(AgentValue::boolean(true))
-        );
+        assert_eq!(streaming.get_prop("streaming"), Some(Value::boolean(true)));
     }
 
     #[test]
@@ -1025,7 +1019,7 @@ mod tests {
                 text: "b".to_string(),
             },
         ]);
-        assert_eq!(msg.get_prop("content"), Some(AgentValue::string("ab")));
+        assert_eq!(msg.get_prop("content"), Some(Value::string("ab")));
     }
 
     #[test]
@@ -1037,11 +1031,8 @@ mod tests {
             ..Default::default()
         });
         let usage = msg.get_prop("usage").unwrap();
-        assert_eq!(usage.get_prop("input_tokens"), Some(AgentValue::integer(5)));
-        assert_eq!(
-            usage.get_prop("output_tokens"),
-            Some(AgentValue::integer(7))
-        );
+        assert_eq!(usage.get_prop("input_tokens"), Some(Value::integer(5)));
+        assert_eq!(usage.get_prop("output_tokens"), Some(Value::integer(7)));
     }
 
     #[test]
@@ -1123,7 +1114,7 @@ mod tests {
     #[test]
     fn test_message_deserialize_invalid_image_is_error() {
         // Malformed image data is an error, not a panic — both through serde
-        // and through TryFrom<AgentValue>.
+        // and through TryFrom<Value>.
         let json = serde_json::json!({
             "role": "user",
             "content": "pic",
@@ -1131,16 +1122,16 @@ mod tests {
         });
         assert!(serde_json::from_value::<Message>(json).is_err());
 
-        let obj = AgentValue::object(hashmap! {
-            "role".to_string() => AgentValue::string("user"),
-            "content".to_string() => AgentValue::string("pic"),
-            "image".to_string() => AgentValue::string("data:image/png;base64,@@not-base64@@"),
+        let obj = Value::object(hashmap! {
+            "role".to_string() => Value::string("user"),
+            "content".to_string() => Value::string("pic"),
+            "image".to_string() => Value::string("data:image/png;base64,@@not-base64@@"),
         });
         assert!(Message::try_from(obj).is_err());
     }
 
     #[test]
-    fn test_message_with_tool_calls_to_from_agent_value() {
+    fn test_message_with_tool_calls_to_from_value() {
         let mut msg = Message::assistant("".to_string());
         msg.tool_calls = Some(vector![ToolCall {
             function: ToolCallFunction {
@@ -1151,7 +1142,7 @@ mod tests {
             },
         }]);
 
-        let value: AgentValue = msg.into();
+        let value: Value = msg.into();
         assert!(value.is_message());
         let msg_ref = value.as_message().unwrap();
         assert_eq!(msg_ref.role, "assistant");
@@ -1176,10 +1167,10 @@ mod tests {
     }
 
     #[test]
-    fn test_tool_message_to_from_agent_value() {
+    fn test_tool_message_to_from_value() {
         let msg = Message::tool("get_time".to_string(), "2025-01-02 03:04:05".to_string());
 
-        let value: AgentValue = msg.clone().into();
+        let value: Value = msg.clone().into();
         let msg_ref = value.as_message().unwrap();
         assert_eq!(msg_ref.role, "tool");
         assert_eq!(msg_ref.tool_name.as_deref().unwrap(), "get_time");
@@ -1193,7 +1184,7 @@ mod tests {
 
     #[test]
     fn test_message_from_string_value() {
-        let value = AgentValue::string("Just a simple message");
+        let value = Value::string("Just a simple message");
         let msg: Message = value.try_into().unwrap();
         assert_eq!(msg.role, "user");
         assert_eq!(msg.text(), "Just a simple message");
@@ -1201,10 +1192,10 @@ mod tests {
 
     #[test]
     fn test_message_from_object_value() {
-        let value = AgentValue::object(hashmap! {
-            "role".into() => AgentValue::string("assistant"),
+        let value = Value::object(hashmap! {
+            "role".into() => Value::string("assistant"),
                 "content".into() =>
-                AgentValue::string("Here is some information."),
+                Value::string("Here is some information."),
         });
         let msg: Message = value.try_into().unwrap();
         assert_eq!(msg.role, "assistant");
@@ -1213,11 +1204,11 @@ mod tests {
 
     #[test]
     fn test_message_from_object_value_reads_is_error() {
-        let value = AgentValue::object(hashmap! {
-            "role".into() => AgentValue::string("tool"),
-            "content".into() => AgentValue::string("boom"),
-            "tool_name".into() => AgentValue::string("failing_tool"),
-            "is_error".into() => AgentValue::boolean(true),
+        let value = Value::object(hashmap! {
+            "role".into() => Value::string("tool"),
+            "content".into() => Value::string("boom"),
+            "tool_name".into() => Value::string("failing_tool"),
+            "is_error".into() => Value::boolean(true),
         });
         let msg: Message = value.try_into().unwrap();
         assert_eq!(msg.is_error, Some(true));
@@ -1225,21 +1216,20 @@ mod tests {
 
     #[test]
     fn test_message_from_invalid_value() {
-        let value = AgentValue::integer(42);
-        let result: Result<Message, AgentError> = value.try_into();
+        let value = Value::integer(42);
+        let result: Result<Message> = value.try_into();
         assert!(result.is_err());
     }
 
     #[test]
     fn test_message_invalid_object() {
-        let value =
-            AgentValue::object(hashmap! {"some_key".into() => AgentValue::string("some_value")});
-        let result: Result<Message, AgentError> = value.try_into();
+        let value = Value::object(hashmap! {"some_key".into() => Value::string("some_value")});
+        let result: Result<Message> = value.try_into();
         assert!(result.is_err());
     }
 
     #[test]
-    fn test_message_to_agent_value_with_tool_calls() {
+    fn test_message_to_value_with_tool_calls() {
         let message = Message {
             role: "assistant".to_string(),
             content: MessageContent::default(),
@@ -1262,7 +1252,7 @@ mod tests {
             image: None,
         };
 
-        let value: AgentValue = message.into();
+        let value: Value = message.into();
         let msg_ref = value.as_message().unwrap();
 
         assert_eq!(msg_ref.role, "assistant");
@@ -1351,10 +1341,10 @@ mod tests {
 
     #[test]
     fn test_message_from_object_value_reads_stop_reason() {
-        let value = AgentValue::object(hashmap! {
-            "role".into() => AgentValue::string("assistant"),
-            "content".into() => AgentValue::string("truncated"),
-            "stop_reason".into() => AgentValue::string("length"),
+        let value = Value::object(hashmap! {
+            "role".into() => Value::string("assistant"),
+            "content".into() => Value::string("truncated"),
+            "stop_reason".into() => Value::string("length"),
         });
         let msg: Message = value.try_into().unwrap();
         assert_eq!(msg.stop_reason.as_deref(), Some("length"));
@@ -1407,12 +1397,12 @@ mod tests {
 
     #[test]
     fn test_message_from_object_value_reads_usage() {
-        let value = AgentValue::object(hashmap! {
-            "role".into() => AgentValue::string("assistant"),
-            "content".into() => AgentValue::string("ok"),
-            "usage".into() => AgentValue::object(hashmap! {
-                "input_tokens".into() => AgentValue::integer(7),
-                "output_tokens".into() => AgentValue::integer(3),
+        let value = Value::object(hashmap! {
+            "role".into() => Value::string("assistant"),
+            "content".into() => Value::string("ok"),
+            "usage".into() => Value::object(hashmap! {
+                "input_tokens".into() => Value::integer(7),
+                "output_tokens".into() => Value::integer(3),
             }),
         });
         let msg: Message = value.try_into().unwrap();
@@ -1568,12 +1558,12 @@ mod tests {
     }
 
     #[test]
-    fn test_message_event_to_agent_value() {
+    fn test_message_event_to_value() {
         let event = MessageEvent::Done {
             message: Message::assistant("Hello".to_string()),
         };
 
-        let value = AgentValue::try_from(event).unwrap();
+        let value = Value::try_from(event).unwrap();
         assert!(value.is_object());
         assert_eq!(value.get_str("type"), Some("done"));
         let message = value.get("message").unwrap();
@@ -1582,13 +1572,13 @@ mod tests {
     }
 
     #[test]
-    fn test_message_event_error_to_agent_value() {
+    fn test_message_event_error_to_value() {
         let event = MessageEvent::Error {
             message: Message::assistant("partial".to_string()),
             error: "connection reset".to_string(),
         };
 
-        let value = AgentValue::try_from(event).unwrap();
+        let value = Value::try_from(event).unwrap();
         assert_eq!(value.get_str("type"), Some("error"));
         assert_eq!(value.get_str("error"), Some("connection reset"));
     }

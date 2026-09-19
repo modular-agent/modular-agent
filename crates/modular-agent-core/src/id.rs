@@ -2,7 +2,7 @@ use std::sync::atomic::AtomicUsize;
 
 use crate::{
     FnvIndexMap,
-    spec::{AgentSpec, ConnectionSpec},
+    spec::{ConnectionSpec, ModuleSpec},
 };
 
 static ID_COUNTER: AtomicUsize = AtomicUsize::new(1);
@@ -14,26 +14,26 @@ pub(crate) fn new_id() -> String {
 }
 
 pub(crate) fn update_ids(
-    agents: &Vec<AgentSpec>,
+    modules: &Vec<ModuleSpec>,
     connections: &Vec<ConnectionSpec>,
-) -> (Vec<AgentSpec>, Vec<ConnectionSpec>) {
-    let mut new_agents = Vec::new();
-    let mut agent_id_map = FnvIndexMap::default();
-    for agent in agents {
+) -> (Vec<ModuleSpec>, Vec<ConnectionSpec>) {
+    let mut new_modules = Vec::new();
+    let mut module_id_map = FnvIndexMap::default();
+    for module in modules {
         let new_id = new_id();
-        agent_id_map.insert(agent.id.clone(), new_id.clone());
-        let mut new_agent = agent.clone();
-        new_agent.id = new_id;
-        new_agents.push(new_agent);
+        module_id_map.insert(module.id.clone(), new_id.clone());
+        let mut new_module = module.clone();
+        new_module.id = new_id;
+        new_modules.push(new_module);
     }
 
     let mut new_connections = Vec::new();
     for connection in connections {
-        let source = agent_id_map
+        let source = module_id_map
             .get(&connection.source)
             .cloned()
             .unwrap_or_else(|| connection.source.clone());
-        let target = agent_id_map
+        let target = module_id_map
             .get(&connection.target)
             .cloned()
             .unwrap_or_else(|| connection.target.clone());
@@ -43,5 +43,5 @@ pub(crate) fn update_ids(
         new_connections.push(new_connection);
     }
 
-    (new_agents, new_connections)
+    (new_modules, new_connections)
 }

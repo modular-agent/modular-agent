@@ -110,7 +110,7 @@
   </div>
 
   <ScrollArea class="flex-1 min-h-0">
-    <div class="px-4 py-2 text-sm agent-desc-md">
+    <div class="px-4 py-2 text-sm module-desc-md">
       {@html renderMarkdown(card.description)}
     </div>
   </ScrollArea>
@@ -121,94 +121,94 @@
     display: none;
   }
 
-  .agent-desc-md {
+  .module-desc-md {
     overflow-wrap: break-word;
   }
-  .agent-desc-md :global(h1),
-  .agent-desc-md :global(h2),
-  .agent-desc-md :global(h3) {
+  .module-desc-md :global(h1),
+  .module-desc-md :global(h2),
+  .module-desc-md :global(h3) {
     font-weight: 600;
     margin-top: 1rem;
     margin-bottom: 0.4rem;
   }
-  .agent-desc-md :global(h1) {
+  .module-desc-md :global(h1) {
     font-size: 1.1em;
   }
-  .agent-desc-md :global(h2) {
+  .module-desc-md :global(h2) {
     font-size: 1.05em;
   }
-  .agent-desc-md :global(h1:first-child),
-  .agent-desc-md :global(h2:first-child),
-  .agent-desc-md :global(h3:first-child) {
+  .module-desc-md :global(h1:first-child),
+  .module-desc-md :global(h2:first-child),
+  .module-desc-md :global(h3:first-child) {
     margin-top: 0;
   }
-  .agent-desc-md :global(p) {
+  .module-desc-md :global(p) {
     margin-bottom: 0.4rem;
   }
-  .agent-desc-md :global(p:last-child) {
+  .module-desc-md :global(p:last-child) {
     margin-bottom: 0;
   }
-  .agent-desc-md :global(code) {
+  .module-desc-md :global(code) {
     background-color: var(--muted);
     padding: 0.1rem 0.3rem;
     border-radius: 0.2rem;
     font-size: 0.85em;
   }
-  .agent-desc-md :global(pre) {
+  .module-desc-md :global(pre) {
     background-color: var(--muted);
     padding: 0.5rem;
     border-radius: 0.3rem;
     overflow-x: auto;
     margin-bottom: 0.4rem;
   }
-  .agent-desc-md :global(pre code) {
+  .module-desc-md :global(pre code) {
     background-color: transparent;
     padding: 0;
   }
-  .agent-desc-md :global(a) {
+  .module-desc-md :global(a) {
     color: var(--link-color);
     text-decoration: underline;
   }
-  .agent-desc-md :global(a:hover) {
+  .module-desc-md :global(a:hover) {
     opacity: 0.8;
   }
-  .agent-desc-md :global(blockquote) {
+  .module-desc-md :global(blockquote) {
     border-left: 3px solid var(--border);
     padding-left: 0.75rem;
     margin-left: 0;
     margin-bottom: 0.4rem;
     color: var(--muted-foreground);
   }
-  .agent-desc-md :global(ul),
-  .agent-desc-md :global(ol) {
+  .module-desc-md :global(ul),
+  .module-desc-md :global(ol) {
     padding-left: 1.5rem;
     margin-bottom: 0.4rem;
   }
-  .agent-desc-md :global(li) {
+  .module-desc-md :global(li) {
     margin-bottom: 0.1rem;
   }
-  .agent-desc-md :global(table) {
+  .module-desc-md :global(table) {
     border-collapse: separate;
     border-spacing: 0;
   }
-  .agent-desc-md :global(th) {
+  .module-desc-md :global(th) {
     text-align: left;
     font-weight: 700;
     border-bottom: 1.5px solid var(--border);
     padding-bottom: 0.35rem;
   }
-  .agent-desc-md :global(td) {
+  .module-desc-md :global(td) {
     text-align: left;
   }
-  .agent-desc-md :global(th),
-  .agent-desc-md :global(td) {
+  .module-desc-md :global(th),
+  .module-desc-md :global(td) {
     padding: 0;
   }
-  .agent-desc-md :global(th:not(:first-child)),
-  .agent-desc-md :global(td:not(:first-child)) {
+  .module-desc-md :global(th:not(:first-child)),
+  .module-desc-md :global(td:not(:first-child)) {
     padding-left: 1rem;
   }
-  .agent-desc-md :global(tbody td) {
+  .module-desc-md :global(tbody td) {
     padding-top: 0.35rem;
   }
 </style>

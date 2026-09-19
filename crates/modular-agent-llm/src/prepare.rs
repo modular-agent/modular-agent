@@ -13,12 +13,12 @@
 use std::collections::{HashMap, HashSet};
 
 use im::Vector;
-use modular_agent_core::{AgentValue, ContentBlock, Message, MessageContent, ToolCall};
+use modular_agent_core::{ContentBlock, Message, MessageContent, ToolCall, Value};
 
 use crate::provider::ProviderKind;
 
 /// Synthetic result content for a tool call that never received one
-/// (mirrors pi-agent's `insertSyntheticToolResults`).
+/// (mirrors pi-module's `insertSyntheticToolResults`).
 const NO_RESULT_CONTENT: &str = "No result provided";
 
 const IMAGE_PLACEHOLDER: &str = "[Image omitted: model does not support image input]";
@@ -126,10 +126,7 @@ fn sanitize_id(target: ProviderKind, id: &str, used: &HashSet<String>) -> String
 /// Final tool_call ids per assistant-message index, in call order. The
 /// result side is rewritten during the pairing pass in [`prepare_messages`],
 /// so no separate old-id → new-id map is needed.
-fn plan_call_ids(
-    messages: &Vector<AgentValue>,
-    target: ProviderKind,
-) -> HashMap<usize, Vec<String>> {
+fn plan_call_ids(messages: &Vector<Value>, target: ProviderKind) -> HashMap<usize, Vec<String>> {
     // Seed `used` with every already-valid id up front so a sanitized id can
     // never collide with a valid one appearing later in the history.
     let mut used: HashSet<String> = HashSet::new();
@@ -184,7 +181,7 @@ fn plan_call_ids(
 
 /// Per-message normalizations that don't involve tool pairing: unknown-role
 /// fallback and image demotion. Returns `None` when the message needs no
-/// change so callers can keep the original `AgentValue` untouched.
+/// change so callers can keep the original `Value` untouched.
 fn normalize_single(msg: &Message, target: ProviderKind, demote_images: bool) -> Option<Message> {
     let role_change = !is_known_role(target, &msg.role);
 
@@ -224,14 +221,9 @@ fn normalize_single(msg: &Message, target: ProviderKind, demote_images: bool) ->
 }
 
 /// Normalize a message outside tool pairing. Returns the original
-/// `AgentValue` (cheap Arc clone) when nothing changes, so clean histories
+/// `Value` (cheap Arc clone) when nothing changes, so clean histories
 /// pass through structurally unchanged.
-fn prepare_plain(
-    value: &AgentValue,
-    msg: &Message,
-    target: ProviderKind,
-    demote_images: bool,
-) -> AgentValue {
+fn prepare_plain(value: &Value, msg: &Message, target: ProviderKind, demote_images: bool) -> Value {
     match normalize_single(msg, target, demote_images) {
         Some(m) => m.into(),
         None => value.clone(),
@@ -273,13 +265,13 @@ fn demote_orphan_tool_result(msg: &Message) -> Message {
 ///    the model lacks vision), image attachments are replaced with a text
 ///    placeholder.
 pub(crate) fn prepare_messages(
-    messages: &Vector<AgentValue>,
+    messages: &Vector<Value>,
     target: ProviderKind,
     demote_images: bool,
-) -> Vector<AgentValue> {
+) -> Vector<Value> {
     let finals_by_msg = plan_call_ids(messages, target);
-    let vals: Vec<&AgentValue> = messages.iter().collect();
-    let mut out: Vec<AgentValue> = Vec::with_capacity(vals.len());
+    let vals: Vec<&Value> = messages.iter().collect();
+    let mut out: Vec<Value> = Vec::with_capacity(vals.len());
 
     let mut i = 0;
     while i < vals.len() {
@@ -428,19 +420,19 @@ mod tests {
         }
     }
 
-    fn assistant_with_calls(content: &str, calls: Vec<ToolCall>) -> AgentValue {
+    fn assistant_with_calls(content: &str, calls: Vec<ToolCall>) -> Value {
         let mut m = Message::assistant(content.to_string());
         m.tool_calls = Some(calls.into());
         m.into()
     }
 
-    fn tool_result(id: Option<&str>, name: &str, content: &str) -> AgentValue {
+    fn tool_result(id: Option<&str>, name: &str, content: &str) -> Value {
         let mut m = Message::tool(name.to_string(), content.to_string());
         m.id = id.map(String::from);
         m.into()
     }
 
-    fn get(out: &Vector<AgentValue>, i: usize) -> &Message {
+    fn get(out: &Vector<Value>, i: usize) -> &Message {
         out[i].as_message().expect("expected a message")
     }
 
@@ -457,7 +449,7 @@ mod tests {
     #[test]
     fn missing_id_assigned_and_result_rewritten() {
         let history = vector![
-            AgentValue::from(Message::user("weather?".to_string())),
+            Value::from(Message::user("weather?".to_string())),
             assistant_with_calls("", vec![call(None, "get_weather")]),
             tool_result(None, "get_weather", "22C"),
         ];
@@ -529,7 +521,7 @@ mod tests {
     #[test]
     fn anthropic_charset_normalized_on_both_sides() {
         let history = vector![
-            AgentValue::from(Message::user("hi".to_string())),
+            Value::from(Message::user("hi".to_string())),
             assistant_with_calls("", vec![call(Some("call:weather!*"), "get_weather")]),
             tool_result(Some("call:weather!*"), "get_weather", "22C"),
         ];
@@ -621,7 +613,7 @@ mod tests {
     #[test]
     fn orphan_call_gets_synthetic_error_result_before_next_turn() {
         let history = vector![
-            AgentValue::from(Message::user("go".to_string())),
+            Value::from(Message::user("go".to_string())),
             assistant_with_calls(
                 "",
                 vec![
@@ -630,7 +622,7 @@ mod tests {
                 ]
             ),
             tool_result(Some("call_a"), "tool_a", "ok"),
-            AgentValue::from(Message::user("next".to_string())),
+            Value::from(Message::user("next".to_string())),
         ];
         let out = prepare_messages(&history, ProviderKind::OpenAI, false);
 
@@ -649,7 +641,7 @@ mod tests {
     #[test]
     fn orphan_call_at_end_of_history_synthesized() {
         let history = vector![
-            AgentValue::from(Message::user("go".to_string())),
+            Value::from(Message::user("go".to_string())),
             assistant_with_calls("", vec![call(Some("call_x"), "tool_x")]),
         ];
         let out = prepare_messages(&history, ProviderKind::OpenAI, false);
@@ -690,13 +682,13 @@ mod tests {
 
     #[test]
     fn leading_orphan_tool_results_demoted_to_user_text() {
-        // Front-trimming of the history (e.g. MessagesForPromptAgent
+        // Front-trimming of the history (e.g. MessagesForPromptModule
         // max_size) removes the assistant call turn but keeps its results at
         // the head of the history.
         let history = vector![
             tool_result(Some("call_gone"), "tool_a", "trimmed result"),
             tool_result(Some("call_gone2"), "tool_b", "trimmed result 2"),
-            AgentValue::from(Message::user("next".to_string())),
+            Value::from(Message::user("next".to_string())),
         ];
         let out = prepare_messages(&history, ProviderKind::Claude, false);
 
@@ -724,8 +716,8 @@ mod tests {
         );
         msg.id = Some("call_gone".to_string());
         let history = vector![
-            AgentValue::from(msg),
-            AgentValue::from(Message::user("next".to_string())),
+            Value::from(msg),
+            Value::from(Message::user("next".to_string())),
         ];
         let out = prepare_messages(&history, ProviderKind::Claude, false);
 
@@ -742,7 +734,7 @@ mod tests {
         // result must not become a second tool result for the same id.
         let history = vector![
             assistant_with_calls("", vec![call(Some("call_a"), "tool_a")]),
-            AgentValue::from(Message::user("mid".to_string())),
+            Value::from(Message::user("mid".to_string())),
             tool_result(Some("call_a"), "tool_a", "real result"),
         ];
         let out = prepare_messages(&history, ProviderKind::OpenAI, false);
@@ -804,7 +796,7 @@ mod tests {
         m.id = Some("uuid_result_side".to_string());
         let history = vector![
             assistant_with_calls("", vec![call(Some("uuid_call_side"), "get_weather")]),
-            AgentValue::from(m),
+            Value::from(m),
         ];
         let out = prepare_messages(&history, ProviderKind::Claude, false);
 
@@ -842,10 +834,10 @@ mod tests {
     #[test]
     fn clean_text_history_passes_through_unchanged() {
         let history = vector![
-            AgentValue::from(Message::system("Be helpful.".to_string())),
-            AgentValue::from(Message::user("Hello".to_string())),
-            AgentValue::from(Message::assistant("Hi!".to_string())),
-            AgentValue::from(Message::user("How are you?".to_string())),
+            Value::from(Message::system("Be helpful.".to_string())),
+            Value::from(Message::user("Hello".to_string())),
+            Value::from(Message::assistant("Hi!".to_string())),
+            Value::from(Message::user("How are you?".to_string())),
         ];
         let out = prepare_messages(&history, ProviderKind::Claude, false);
 
@@ -862,7 +854,7 @@ mod tests {
     #[test]
     fn clean_tool_pair_passes_through_unchanged() {
         let history = vector![
-            AgentValue::from(Message::user("go".to_string())),
+            Value::from(Message::user("go".to_string())),
             assistant_with_calls("calling", vec![call(Some("toolu_ok1"), "t")]),
             tool_result(Some("toolu_ok1"), "t", "done"),
         ];
@@ -878,8 +870,8 @@ mod tests {
     #[test]
     fn non_message_values_pass_through() {
         let history = vector![
-            AgentValue::string("not a message"),
-            AgentValue::from(Message::user("hi".to_string())),
+            Value::string("not a message"),
+            Value::from(Message::user("hi".to_string())),
         ];
         let out = prepare_messages(&history, ProviderKind::OpenAI, false);
         assert_eq!(out.len(), 2);
@@ -893,7 +885,7 @@ mod tests {
         // result, no demotion of the real one).
         let history = vector![
             assistant_with_calls("", vec![call(Some("call_a"), "t")]),
-            AgentValue::string("interleaved"),
+            Value::string("interleaved"),
             tool_result(Some("call_a"), "t", "real"),
         ];
         let out = prepare_messages(&history, ProviderKind::Claude, false);
@@ -909,7 +901,7 @@ mod tests {
 
     #[test]
     fn unknown_role_falls_back_to_user() {
-        let history = vector![AgentValue::from(Message::new(
+        let history = vector![Value::from(Message::new(
             "function".to_string(),
             "legacy".to_string(),
         ))];
@@ -921,10 +913,9 @@ mod tests {
     #[test]
     fn known_roles_are_preserved() {
         for role in ["user", "assistant", "system", "developer"] {
-            let history = vector![AgentValue::from(Message::new(
-                role.to_string(),
-                "c".to_string(),
-            ))];
+            let history = vector![Value::from(
+                Message::new(role.to_string(), "c".to_string(),)
+            )];
             let out = prepare_messages(&history, ProviderKind::OpenAI, false);
             assert_eq!(get(&out, 0).role, role);
         }
@@ -935,7 +926,7 @@ mod tests {
         // Ollama forwards role strings verbatim to chat templates that don't
         // know "developer"; Claude's converter would degrade it anyway.
         for target in [ProviderKind::Ollama, ProviderKind::Claude] {
-            let history = vector![AgentValue::from(Message::new(
+            let history = vector![Value::from(Message::new(
                 "developer".to_string(),
                 "policy".to_string(),
             ))];
@@ -948,7 +939,7 @@ mod tests {
     // -- image demotion --
 
     #[cfg(feature = "image")]
-    fn image_message(content: &str) -> AgentValue {
+    fn image_message(content: &str) -> Value {
         use std::sync::Arc;
         let img = photon_rs::PhotonImage::new(vec![0, 0, 0, 255], 1, 1);
         Message::user(content.to_string())
@@ -991,7 +982,7 @@ mod tests {
                 text: "what is this?".to_string(),
             },
         ]);
-        let history = vector![AgentValue::from(msg)];
+        let history = vector![Value::from(msg)];
         let out = prepare_messages(&history, ProviderKind::OpenAI, true);
 
         let msg = get(&out, 0);
@@ -1008,7 +999,7 @@ mod tests {
             data: "iVBORw0KGgo=".to_string(),
             mime_type: "image/png".to_string(),
         }]);
-        let history = vector![AgentValue::from(msg.clone())];
+        let history = vector![Value::from(msg.clone())];
         let out = prepare_messages(&history, ProviderKind::OpenAI, false);
 
         assert_eq!(get(&out, 0).content, msg.content);

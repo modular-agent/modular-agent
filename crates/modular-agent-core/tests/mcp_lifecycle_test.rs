@@ -13,13 +13,14 @@
 
 extern crate modular_agent_core as ma;
 
+use modular_agent_core::Result;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
 use ma::mcp::{register_tools_from_mcp_json, shutdown_all_mcp_connections};
 use ma::tool::{Tool, get_tool};
-use ma::{AgentContext, AgentError, AgentValue, ModularAgent};
+use ma::{ModularAgent, ModuleContext, Value};
 
 fn main() {
     if std::env::var("MOCK_MCP_SERVER").is_ok() {
@@ -178,16 +179,16 @@ fn write_mcp_json(scratch: &Path, log_path: &Path) -> PathBuf {
     path
 }
 
-async fn call(tool: &Arc<Box<dyn Tool + Send + Sync>>) -> Result<AgentValue, AgentError> {
+async fn call(tool: &Arc<Box<dyn Tool + Send + Sync>>) -> Result<Value> {
     tokio::time::timeout(
         Duration::from_secs(30),
-        tool.call(AgentContext::new(), AgentValue::object_default()),
+        tool.call(ModuleContext::new(), Value::object_default()),
     )
     .await
     .expect("MCP tool call timed out")
 }
 
-fn assert_pong(value: &AgentValue) {
+fn assert_pong(value: &Value) {
     let contents = value.as_array().expect("expected array result");
     assert_eq!(contents.len(), 1);
     assert_eq!(contents[0].as_str(), Some("pong"));
@@ -251,7 +252,7 @@ async fn wait_until_dead(pid: u32) {
 mod mock_server {
     use std::io::{BufRead, Write};
 
-    use serde_json::{Value, json};
+    use serde_json::{Value as JsonValue, json};
 
     pub(crate) fn run() {
         log_start();
@@ -262,14 +263,14 @@ mod mock_server {
             if line.trim().is_empty() {
                 continue;
             }
-            let Ok(msg) = serde_json::from_str::<Value>(&line) else {
+            let Ok(msg) = serde_json::from_str::<JsonValue>(&line) else {
                 continue;
             };
             // Messages without an id are notifications and need no response.
             let Some(id) = msg.get("id").cloned() else {
                 continue;
             };
-            let method = msg.get("method").and_then(Value::as_str).unwrap_or("");
+            let method = msg.get("method").and_then(JsonValue::as_str).unwrap_or("");
             let result = match method {
                 "initialize" => json!({
                     "protocolVersion": msg
@@ -287,7 +288,7 @@ mod mock_server {
                     ],
                 }),
                 "tools/call" => {
-                    match msg.pointer("/params/name").and_then(Value::as_str) {
+                    match msg.pointer("/params/name").and_then(JsonValue::as_str) {
                         Some("ping") => json!({
                             "content": [{"type": "text", "text": "pong"}],
                             "isError": false,

@@ -4,26 +4,26 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use serde::{Deserialize, Serialize};
 use tokio_util::sync::CancellationToken;
 
-use crate::error::AgentError;
-use crate::value::AgentValue;
+use crate::error::{Error, Result};
+use crate::value::Value;
 
-/// Event-scoped context that identifies a single flow across agents and carries auxiliary metadata.
+/// Event-scoped context that identifies a single flow across modules and carries auxiliary metadata.
 ///
 /// A context is created per externally triggered event (user input, timer, webhook, etc.) so that
-/// agents connected through connections can recognize they are handling the same flow. It can carry
+/// modules connected through connections can recognize they are handling the same flow. It can carry
 /// auxiliary metadata useful for processing without altering the primary payload.
 ///
 /// When a single datum fans out into multiple derived items (e.g., a `map` operation), frames track
 /// the branching lineage. Because mapping can nest, frames behave like a stack to preserve ancestry.
 /// Instances are cheap to clone and return new copies instead of mutating in place.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
-pub struct AgentContext {
+pub struct ModuleContext {
     /// Unique identifier assigned when the context is created.
     id: usize,
 
     /// Variables stored in this context.
     #[serde(skip_serializing_if = "Option::is_none")]
-    vars: Option<im::HashMap<String, AgentValue>>,
+    vars: Option<im::HashMap<String, Value>>,
 
     /// Frame stack for tracking branching (e.g., map operations).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -31,8 +31,8 @@ pub struct AgentContext {
 
     /// Cancellation token for aborting processing of this flow.
     ///
-    /// Attached by the agent loop before `process()` is invoked; never
-    /// serialized. Cancellation is cooperative: long-running agents observe
+    /// Attached by the module loop before `process()` is invoked; never
+    /// serialized. Cancellation is cooperative: long-running modules observe
     /// it via [`cancel_token()`](Self::cancel_token) to abort gracefully.
     ///
     /// Arc-wrapped so the orchestrator's context-token registry can hold a
@@ -51,7 +51,7 @@ pub const FRAME_KEY_INDEX: &str = "index";
 /// Key for the length value in map frames.
 pub const FRAME_KEY_LENGTH: &str = "length";
 
-impl AgentContext {
+impl ModuleContext {
     /// Creates a new context with a unique identifier and no state.
     pub fn new() -> Self {
         Self {
@@ -70,12 +70,12 @@ impl AgentContext {
     // Variables
 
     /// Retrieves an immutable reference to a stored variable, if present.
-    pub fn get_var(&self, key: &str) -> Option<&AgentValue> {
+    pub fn get_var(&self, key: &str) -> Option<&Value> {
         self.vars.as_ref().and_then(|vars| vars.get(key))
     }
 
     /// Returns a new context with the provided variable inserted while keeping the current context unchanged.
-    pub fn with_var(&self, key: String, value: AgentValue) -> Self {
+    pub fn with_var(&self, key: String, value: Value) -> Self {
         let mut vars = if let Some(vars) = &self.vars {
             vars.clone()
         } else {
@@ -97,7 +97,7 @@ impl AgentContext {
     /// Long-running `process()` implementations can `select!` on
     /// `token.cancelled()` to abort gracefully when the flow is cancelled
     /// via [`ModularAgent::abort_context`](crate::ModularAgent::abort_context)
-    /// (the token is shared by every agent handling the same flow).
+    /// (the token is shared by every module handling the same flow).
     pub fn cancel_token(&self) -> Option<&CancellationToken> {
         self.cancel.as_deref()
     }
@@ -128,60 +128,54 @@ fn new_id() -> usize {
 
 // Frame stack
 
-/// Describes a single stack frame captured during agent execution.
+/// Describes a single stack frame captured during module execution.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Frame {
     /// The frame type name (e.g., "map").
     pub name: String,
 
     /// Data associated with this frame.
-    pub data: AgentValue,
+    pub data: Value,
 }
 
-fn map_frame_data(index: usize, len: usize) -> AgentValue {
-    let mut data = AgentValue::object_default();
-    let _ = data.set(
-        FRAME_KEY_INDEX.to_string(),
-        AgentValue::integer(index as i64),
-    );
-    let _ = data.set(
-        FRAME_KEY_LENGTH.to_string(),
-        AgentValue::integer(len as i64),
-    );
+fn map_frame_data(index: usize, len: usize) -> Value {
+    let mut data = Value::object_default();
+    let _ = data.set(FRAME_KEY_INDEX.to_string(), Value::integer(index as i64));
+    let _ = data.set(FRAME_KEY_LENGTH.to_string(), Value::integer(len as i64));
     data
 }
 
-fn read_map_frame(frame: &Frame) -> Result<(usize, usize), AgentError> {
+fn read_map_frame(frame: &Frame) -> Result<(usize, usize)> {
     let idx = frame
         .data
         .get(FRAME_KEY_INDEX)
         .and_then(|v| v.as_i64())
-        .ok_or_else(|| AgentError::InvalidValue("map frame missing integer index".into()))?;
+        .ok_or_else(|| Error::InvalidValue("map frame missing integer index".into()))?;
     let len = frame
         .data
         .get(FRAME_KEY_LENGTH)
         .and_then(|v| v.as_i64())
-        .ok_or_else(|| AgentError::InvalidValue("map frame missing integer length".into()))?;
+        .ok_or_else(|| Error::InvalidValue("map frame missing integer length".into()))?;
     if idx < 0 || len < 1 {
-        return Err(AgentError::InvalidValue("Invalid map frame values".into()));
+        return Err(Error::InvalidValue("Invalid map frame values".into()));
     }
     let (idx, len) = (idx as usize, len as usize);
     if idx >= len {
-        return Err(AgentError::InvalidValue(
+        return Err(Error::InvalidValue(
             "map frame index is out of bounds".into(),
         ));
     }
     Ok((idx, len))
 }
 
-impl AgentContext {
+impl ModuleContext {
     /// Returns the current frame stack, if any frames have been pushed.
     pub fn frames(&self) -> Option<&im::Vector<Frame>> {
         self.frames.as_ref()
     }
 
     /// Appends a new frame to the end of the stack and returns the updated context.
-    pub fn push_frame(&self, name: String, data: AgentValue) -> Self {
+    pub fn push_frame(&self, name: String, data: Value) -> Self {
         let mut frames = if let Some(frames) = &self.frames {
             frames.clone()
         } else {
@@ -197,14 +191,14 @@ impl AgentContext {
     }
 
     /// Pushes a map frame with index/length metadata after validating bounds.
-    pub fn push_map_frame(&self, index: usize, len: usize) -> Result<Self, AgentError> {
+    pub fn push_map_frame(&self, index: usize, len: usize) -> Result<Self> {
         if len == 0 {
-            return Err(AgentError::InvalidValue(
+            return Err(Error::InvalidValue(
                 "map frame length must be positive".into(),
             ));
         }
         if index >= len {
-            return Err(AgentError::InvalidValue(
+            return Err(Error::InvalidValue(
                 "map frame index is out of bounds".into(),
             ));
         }
@@ -212,7 +206,7 @@ impl AgentContext {
     }
 
     /// Returns the most recent map frame's (index, length) if present at the top of the stack.
-    pub fn current_map_frame(&self) -> Result<Option<(usize, usize)>, AgentError> {
+    pub fn current_map_frame(&self) -> Result<Option<(usize, usize)>> {
         let frames = match self.frames() {
             Some(frames) => frames,
             None => return Ok(None),
@@ -230,22 +224,20 @@ impl AgentContext {
     }
 
     /// Removes the most recent map frame, erroring if the top frame is missing or not a map frame.
-    pub fn pop_map_frame(&self) -> Result<AgentContext, AgentError> {
+    pub fn pop_map_frame(&self) -> Result<ModuleContext> {
         let (frame, next_ctx) = self.pop_frame();
         match frame {
             Some(f) if f.name == FRAME_MAP => Ok(next_ctx),
-            Some(f) => Err(AgentError::InvalidValue(format!(
+            Some(f) => Err(Error::InvalidValue(format!(
                 "Unexpected frame '{}', expected map",
                 f.name
             ))),
-            None => Err(AgentError::InvalidValue(
-                "Missing map frame in context".into(),
-            )),
+            None => Err(Error::InvalidValue("Missing map frame in context".into())),
         }
     }
 
     /// Collects all map frame (index, length) tuples in order, validating each entry.
-    pub fn map_frame_indices(&self) -> Result<Vec<(usize, usize)>, AgentError> {
+    pub fn map_frame_indices(&self) -> Result<Vec<(usize, usize)>> {
         let mut indices = Vec::new();
         let Some(frames) = self.frames() else {
             return Ok(indices);
@@ -261,7 +253,7 @@ impl AgentContext {
     }
 
     /// Returns a stable key combining the context id with all map frame indices, if present.
-    pub fn ctx_key(&self) -> Result<String, AgentError> {
+    pub fn ctx_key(&self) -> Result<String> {
         let map_frames = self.map_frame_indices()?;
         if map_frames.is_empty() {
             return Ok(self.id().to_string());
@@ -310,8 +302,8 @@ mod tests {
 
     #[test]
     fn new_assigns_unique_ids() {
-        let ctx1 = AgentContext::new();
-        let ctx2 = AgentContext::new();
+        let ctx1 = ModuleContext::new();
+        let ctx2 = ModuleContext::new();
 
         assert_ne!(ctx1.id(), 0);
         assert_ne!(ctx2.id(), 0);
@@ -321,30 +313,30 @@ mod tests {
 
     #[test]
     fn with_var_sets_value_without_mutating_original() {
-        let ctx = AgentContext::new();
+        let ctx = ModuleContext::new();
         assert!(ctx.get_var("answer").is_none());
 
-        let updated = ctx.with_var("answer".into(), AgentValue::integer(42));
+        let updated = ctx.with_var("answer".into(), Value::integer(42));
 
         assert!(ctx.get_var("answer").is_none());
-        assert_eq!(updated.get_var("answer"), Some(&AgentValue::integer(42)));
+        assert_eq!(updated.get_var("answer"), Some(&Value::integer(42)));
         assert_eq!(ctx.id(), updated.id());
     }
 
     #[test]
     fn push_and_pop_frames() {
-        let ctx = AgentContext::new();
+        let ctx = ModuleContext::new();
         assert!(ctx.frames().is_none());
 
         let ctx = ctx
-            .push_frame("first".into(), AgentValue::string("a"))
-            .push_frame("second".into(), AgentValue::integer(2));
+            .push_frame("first".into(), Value::string("a"))
+            .push_frame("second".into(), Value::integer(2));
 
         let frames = ctx.frames().expect("frames should be present");
         assert_eq!(frames.len(), 2);
         assert_eq!(frames[0].name, "first");
         assert_eq!(frames[1].name, "second");
-        assert_eq!(frames[1].data, AgentValue::integer(2));
+        assert_eq!(frames[1].data, Value::integer(2));
 
         let (popped_second, ctx) = ctx.pop_frame();
         let popped_second = popped_second.expect("second frame should exist");
@@ -363,28 +355,28 @@ mod tests {
 
     #[test]
     fn clone_preserves_vars() {
-        let ctx = AgentContext::new().with_var("key".into(), AgentValue::integer(1));
+        let ctx = ModuleContext::new().with_var("key".into(), Value::integer(1));
         let cloned = ctx.clone();
 
-        assert_eq!(cloned.get_var("key"), Some(&AgentValue::integer(1)));
+        assert_eq!(cloned.get_var("key"), Some(&Value::integer(1)));
         assert_eq!(cloned.id(), ctx.id());
     }
 
     #[test]
     fn clone_preserves_frames() {
-        let ctx = AgentContext::new().push_frame("frame".into(), AgentValue::string("data"));
+        let ctx = ModuleContext::new().push_frame("frame".into(), Value::string("data"));
         let cloned = ctx.clone();
 
         let frames = cloned.frames().expect("cloned frames should exist");
         assert_eq!(frames.len(), 1);
         assert_eq!(frames[0].name, "frame");
-        assert_eq!(frames[0].data, AgentValue::string("data"));
+        assert_eq!(frames[0].data, Value::string("data"));
         assert_eq!(cloned.id(), ctx.id());
     }
 
     #[test]
     fn serialization_skips_empty_optional_fields() {
-        let ctx = AgentContext::new();
+        let ctx = ModuleContext::new();
         let json_ctx = serde_json::to_value(&ctx).unwrap();
 
         assert!(json_ctx.get("id").and_then(|v| v.as_u64()).is_some());
@@ -392,8 +384,8 @@ mod tests {
         assert!(json_ctx.get("frames").is_none());
 
         let populated = ctx
-            .with_var("key".into(), AgentValue::string("value"))
-            .push_frame("frame".into(), AgentValue::integer(1));
+            .with_var("key".into(), Value::string("value"))
+            .push_frame("frame".into(), Value::integer(1));
         let json_populated = serde_json::to_value(&populated).unwrap();
 
         assert_eq!(json_populated["vars"]["key"], json!("value"));
@@ -406,8 +398,8 @@ mod tests {
     }
 
     #[test]
-    fn map_frame_helpers_validate_and_track_indices() -> Result<(), AgentError> {
-        let ctx = AgentContext::new();
+    fn map_frame_helpers_validate_and_track_indices() -> Result<()> {
+        let ctx = ModuleContext::new();
         let ctx = ctx.push_map_frame(0, 2)?;
         let ctx = ctx.push_map_frame(1, 3)?;
 
@@ -429,16 +421,16 @@ mod tests {
 
     #[test]
     fn pop_map_frame_errors_when_missing_or_wrong_kind() {
-        let ctx = AgentContext::new();
+        let ctx = ModuleContext::new();
         assert!(ctx.pop_map_frame().is_err());
 
-        let ctx = ctx.push_frame("other".into(), AgentValue::unit());
+        let ctx = ctx.push_frame("other".into(), Value::unit());
         assert!(ctx.pop_map_frame().is_err());
     }
 
     #[test]
     fn push_map_frame_rejects_invalid_bounds() {
-        let ctx = AgentContext::new();
+        let ctx = ModuleContext::new();
         assert!(ctx.push_map_frame(0, 0).is_err());
         assert!(ctx.push_map_frame(2, 1).is_err());
     }

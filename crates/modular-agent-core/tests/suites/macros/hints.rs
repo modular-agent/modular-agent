@@ -1,206 +1,161 @@
 use modular_agent_core::{
-    AgentContext, AgentData, AgentError, AgentSpec, AgentValue, AsAgent, async_trait, modular_agent,
+    AsModule, ModuleContext, ModuleData, ModuleSpec, Result, Value, async_trait, modular_agent,
 };
 
-// --- Agent with integer hints ---
+// --- Module with integer hints ---
 
 #[modular_agent(
     kind = "Test",
-    title = "Hinted Agent",
+    title = "Hinted Module",
     category = "Tests",
     hint(color = 3, width = 2, height = 1)
 )]
-struct HintedAgent {
-    data: AgentData,
+struct HintedModule {
+    data: ModuleData,
 }
 
 #[async_trait]
-impl AsAgent for HintedAgent {
-    fn new(
-        ma: modular_agent_core::ModularAgent,
-        id: String,
-        spec: AgentSpec,
-    ) -> Result<Self, AgentError> {
+impl AsModule for HintedModule {
+    fn new(ma: modular_agent_core::ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
         Ok(Self {
-            data: AgentData::new(ma, id, spec),
+            data: ModuleData::new(ma, id, spec),
         })
     }
 
-    async fn process(
-        &mut self,
-        _ctx: AgentContext,
-        _port: String,
-        _value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, _ctx: ModuleContext, _port: String, _value: Value) -> Result<()> {
         Ok(())
     }
 }
 
 #[test]
 fn hint_integer_entries() {
-    let def = HintedAgent::agent_definition();
+    let def = HintedModule::module_definition();
     assert_eq!(def.hints.len(), 3);
     assert_eq!(def.hints["color"], serde_json::json!(3));
     assert_eq!(def.hints["width"], serde_json::json!(2));
     assert_eq!(def.hints["height"], serde_json::json!(1));
 }
 
-// --- Agent with no hints ---
+// --- Module with no hints ---
 
-#[modular_agent(kind = "Test", title = "No Hints Agent", category = "Tests")]
-struct NoHintsAgent {
-    data: AgentData,
+#[modular_agent(kind = "Test", title = "No Hints Module", category = "Tests")]
+struct NoHintsModule {
+    data: ModuleData,
 }
 
 #[async_trait]
-impl AsAgent for NoHintsAgent {
-    fn new(
-        ma: modular_agent_core::ModularAgent,
-        id: String,
-        spec: AgentSpec,
-    ) -> Result<Self, AgentError> {
+impl AsModule for NoHintsModule {
+    fn new(ma: modular_agent_core::ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
         Ok(Self {
-            data: AgentData::new(ma, id, spec),
+            data: ModuleData::new(ma, id, spec),
         })
     }
 
-    async fn process(
-        &mut self,
-        _ctx: AgentContext,
-        _port: String,
-        _value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, _ctx: ModuleContext, _port: String, _value: Value) -> Result<()> {
         Ok(())
     }
 }
 
 #[test]
 fn no_hints_yields_empty_map() {
-    let def = NoHintsAgent::agent_definition();
+    let def = NoHintsModule::module_definition();
     assert!(def.hints.is_empty());
 }
 
-// --- Agent with string hints ---
+// --- Module with string hints ---
 
 #[modular_agent(
     kind = "Test",
-    title = "String Hint Agent",
+    title = "String Hint Module",
     category = "Tests",
     hint(label = "red", shape = "circle")
 )]
-struct StringHintAgent {
-    data: AgentData,
+struct StringHintModule {
+    data: ModuleData,
 }
 
 #[async_trait]
-impl AsAgent for StringHintAgent {
-    fn new(
-        ma: modular_agent_core::ModularAgent,
-        id: String,
-        spec: AgentSpec,
-    ) -> Result<Self, AgentError> {
+impl AsModule for StringHintModule {
+    fn new(ma: modular_agent_core::ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
         Ok(Self {
-            data: AgentData::new(ma, id, spec),
+            data: ModuleData::new(ma, id, spec),
         })
     }
 
-    async fn process(
-        &mut self,
-        _ctx: AgentContext,
-        _port: String,
-        _value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, _ctx: ModuleContext, _port: String, _value: Value) -> Result<()> {
         Ok(())
     }
 }
 
 #[test]
 fn hint_string_entries() {
-    let def = StringHintAgent::agent_definition();
+    let def = StringHintModule::module_definition();
     assert_eq!(def.hints["label"], serde_json::json!("red"));
     assert_eq!(def.hints["shape"], serde_json::json!("circle"));
 }
 
-// --- Agent with mixed-type hints ---
+// --- Module with mixed-type hints ---
 
 #[modular_agent(
     kind = "Test",
-    title = "Mixed Hint Agent",
+    title = "Mixed Hint Module",
     category = "Tests",
     hint(color = 3, resizable = true, label = "custom")
 )]
-struct MixedHintAgent {
-    data: AgentData,
+struct MixedHintModule {
+    data: ModuleData,
 }
 
 #[async_trait]
-impl AsAgent for MixedHintAgent {
-    fn new(
-        ma: modular_agent_core::ModularAgent,
-        id: String,
-        spec: AgentSpec,
-    ) -> Result<Self, AgentError> {
+impl AsModule for MixedHintModule {
+    fn new(ma: modular_agent_core::ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
         Ok(Self {
-            data: AgentData::new(ma, id, spec),
+            data: ModuleData::new(ma, id, spec),
         })
     }
 
-    async fn process(
-        &mut self,
-        _ctx: AgentContext,
-        _port: String,
-        _value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, _ctx: ModuleContext, _port: String, _value: Value) -> Result<()> {
         Ok(())
     }
 }
 
 #[test]
 fn hint_mixed_type_entries() {
-    let def = MixedHintAgent::agent_definition();
+    let def = MixedHintModule::module_definition();
     assert_eq!(def.hints["color"], serde_json::json!(3));
     assert_eq!(def.hints["resizable"], serde_json::json!(true));
     assert_eq!(def.hints["label"], serde_json::json!("custom"));
 }
 
-// --- Agent with multiple hint() calls (merge) ---
+// --- Module with multiple hint() calls (merge) ---
 
 #[modular_agent(
     kind = "Test",
-    title = "Multi Hint Agent",
+    title = "Multi Hint Module",
     category = "Tests",
     hint(color = 3),
     hint(width = 2, height = 1)
 )]
-struct MultiHintAgent {
-    data: AgentData,
+struct MultiHintModule {
+    data: ModuleData,
 }
 
 #[async_trait]
-impl AsAgent for MultiHintAgent {
-    fn new(
-        ma: modular_agent_core::ModularAgent,
-        id: String,
-        spec: AgentSpec,
-    ) -> Result<Self, AgentError> {
+impl AsModule for MultiHintModule {
+    fn new(ma: modular_agent_core::ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
         Ok(Self {
-            data: AgentData::new(ma, id, spec),
+            data: ModuleData::new(ma, id, spec),
         })
     }
 
-    async fn process(
-        &mut self,
-        _ctx: AgentContext,
-        _port: String,
-        _value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, _ctx: ModuleContext, _port: String, _value: Value) -> Result<()> {
         Ok(())
     }
 }
 
 #[test]
 fn multiple_hint_calls_merge() {
-    let def = MultiHintAgent::agent_definition();
+    let def = MultiHintModule::module_definition();
     assert_eq!(def.hints.len(), 3);
     assert_eq!(def.hints["color"], serde_json::json!(3));
     assert_eq!(def.hints["width"], serde_json::json!(2));

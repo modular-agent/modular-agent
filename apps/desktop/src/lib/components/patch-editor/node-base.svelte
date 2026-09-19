@@ -1,11 +1,11 @@
 <script lang="ts" module>
   const bgColors = [
     "bg-muted dark:bg-muted",
-    "bg-agent-background dark:bg-agent-background",
+    "bg-module-background dark:bg-module-background",
     "bg-destructive dark:bg-destructive",
   ];
 
-  const highlightColor = "var(--color-agent-highlight)";
+  const highlightColor = "var(--color-module-highlight)";
 
   const DEFAULT_HANDLE_STYLE = "width: 12px; height: 12px;";
 
@@ -24,29 +24,29 @@
 
   import { Handle, NodeResizer, Position } from "@xyflow/svelte";
   import type { NodeProps, ResizeDragEvent, ResizeParams } from "@xyflow/svelte";
-  import { type AgentDefinition, type AgentSpec } from "tauri-plugin-modular-agent-api";
+  import { type ModuleDefinition, type ModuleSpec } from "tauri-plugin-modular-agent-api";
 
+  import { ScrollArea } from "$lib/components/ui/scroll-area/index.js";
   import {
     getEdgeColor,
     resolveColorCss,
     resolveNodeBgColor,
     resolveNodeFgColor,
-  } from "$lib/agent";
-  import { ScrollArea } from "$lib/components/ui/scroll-area/index.js";
+  } from "$lib/module";
 
   import { useEditor } from "./context.svelte";
   import { getNodeStyle } from "./custom-ui/registry";
 
   type Props = NodeProps & {
-    data: AgentSpec;
-    agentDef: AgentDefinition | null;
+    data: ModuleSpec;
+    moduleDef: ModuleDefinition | null;
     inputCount: number;
     portColors?: Record<string, number | string> | null;
     title: Snippet;
     contents: Snippet;
   };
 
-  let { data, agentDef, selected, width, height, inputCount, portColors, title, contents }: Props =
+  let { data, moduleDef, selected, width, height, inputCount, portColors, title, contents }: Props =
     $props();
 
   function resolveHandleColor(portName: string): string | null {
@@ -64,13 +64,17 @@
   const outputs = $derived(data.outputs ?? []);
   const showErr = $derived(data.show_err ?? false);
 
-  let hideTitle = $derived(agentDef?.hide_title ?? false);
-  const freeSize = $derived(agentDef?.hints?.free_size === true);
-  const noResize = $derived(agentDef?.hints?.no_resize === true);
-  let bgColor = $derived(bgColors[agentDef ? (data.disabled ? 0 : 1) : 2]);
+  let hideTitle = $derived(moduleDef?.hide_title ?? false);
+  const freeSize = $derived(moduleDef?.hints?.free_size === true);
+  const noResize = $derived(moduleDef?.hints?.no_resize === true);
+  let bgColor = $derived(bgColors[moduleDef ? (data.disabled ? 0 : 1) : 2]);
   // Custom background: disabled (bg-muted) and unknown-def (bg-destructive) keep their class
-  const bgCustom = $derived(agentDef && !data.disabled ? resolveNodeBgColor(data, agentDef) : null);
-  const fgCustom = $derived(agentDef && !data.disabled ? resolveNodeFgColor(data, agentDef) : null);
+  const bgCustom = $derived(
+    moduleDef && !data.disabled ? resolveNodeBgColor(data, moduleDef) : null,
+  );
+  const fgCustom = $derived(
+    moduleDef && !data.disabled ? resolveNodeFgColor(data, moduleDef) : null,
+  );
   const nodeStyle = $derived(getNodeStyle(data.def_name));
 
   let clientHeight = $state(0);

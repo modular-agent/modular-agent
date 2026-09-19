@@ -1,6 +1,6 @@
-import type { AgentConfigSpec, AgentDefinition } from "tauri-plugin-modular-agent-api";
+import type { ModuleConfigSpec, ModuleDefinition } from "tauri-plugin-modular-agent-api";
 
-/** Per-instance visual/metadata attributes stored in AgentSpec extensions. */
+/** Per-instance visual/metadata attributes stored in ModuleSpec extensions. */
 export const EXTENSION_KEYS = ["color", "port_colors", "bg_color", "fg_color"] as const;
 
 export class InspectorState {
@@ -8,11 +8,11 @@ export class InspectorState {
   nodeId = $state<string | null>(null);
   defName = $state("");
   title = $state<string | null>(null);
-  agentDef = $state<AgentDefinition | null>(null);
+  moduleDef = $state<ModuleDefinition | null>(null);
   disabled = $state(false);
   showErr = $state(false);
   configs = $state<Record<string, any>>({});
-  configSpecs = $state<Record<string, AgentConfigSpec>>({});
+  configSpecs = $state<Record<string, ModuleConfigSpec>>({});
   inputs = $state<string[]>([]);
   outputs = $state<string[]>([]);
   selectedCount = $state(0);
@@ -27,6 +27,6 @@ export class InspectorState {
   }
 
   get displayTitle(): string {
-    return this.title ?? this.agentDef?.title ?? this.defName;
+    return this.title ?? this.moduleDef?.title ?? this.defName;
   }
 }

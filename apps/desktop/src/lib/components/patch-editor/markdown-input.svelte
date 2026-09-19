@@ -60,7 +60,7 @@
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
-    class="nodrag nowheel flex-1 border-none shadow-none cursor-pointer agent-config-markdown"
+    class="nodrag nowheel flex-1 border-none shadow-none cursor-pointer module-config-markdown"
     onclick={enterEditMode}
   >
     {@html renderedHtml}
@@ -68,7 +68,7 @@
 {/if}
 
 <style>
-  .agent-config-markdown {
+  .module-config-markdown {
     padding: 0.5rem;
     min-height: 2rem;
     max-height: 400px;
@@ -76,50 +76,50 @@
     border-radius: 0.375rem;
   }
 
-  .agent-config-markdown:hover {
+  .module-config-markdown:hover {
     outline: 1px solid var(--md-border, var(--border));
   }
 
-  .agent-config-markdown :global(h1) {
+  .module-config-markdown :global(h1) {
     font-size: 1.5rem;
     font-weight: 700;
     margin-bottom: 0.5rem;
   }
 
-  .agent-config-markdown :global(h2) {
+  .module-config-markdown :global(h2) {
     font-size: 1.25rem;
     font-weight: 600;
     margin-bottom: 0.4rem;
   }
 
-  .agent-config-markdown :global(h3) {
+  .module-config-markdown :global(h3) {
     font-size: 1.1rem;
     font-weight: 600;
     margin-bottom: 0.3rem;
   }
 
-  .agent-config-markdown :global(p) {
+  .module-config-markdown :global(p) {
     margin-bottom: 0.4rem;
   }
 
-  .agent-config-markdown :global(ul),
-  .agent-config-markdown :global(ol) {
+  .module-config-markdown :global(ul),
+  .module-config-markdown :global(ol) {
     padding-left: 1.5rem;
     margin-bottom: 0.4rem;
   }
 
-  .agent-config-markdown :global(li) {
+  .module-config-markdown :global(li) {
     margin-bottom: 0.1rem;
   }
 
-  .agent-config-markdown :global(code) {
+  .module-config-markdown :global(code) {
     background-color: var(--md-code-bg, var(--muted));
     padding: 0.1rem 0.3rem;
     border-radius: 0.2rem;
     font-size: 0.85em;
   }
 
-  .agent-config-markdown :global(pre) {
+  .module-config-markdown :global(pre) {
     background-color: var(--md-code-bg, var(--muted));
     padding: 0.5rem;
     border-radius: 0.3rem;
@@ -127,12 +127,12 @@
     margin-bottom: 0.4rem;
   }
 
-  .agent-config-markdown :global(pre code) {
+  .module-config-markdown :global(pre code) {
     background-color: transparent;
     padding: 0;
   }
 
-  .agent-config-markdown :global(blockquote) {
+  .module-config-markdown :global(blockquote) {
     border-left: 3px solid var(--md-border, var(--border));
     padding-left: 0.75rem;
     margin-left: 0;
@@ -140,42 +140,42 @@
     color: var(--md-muted-fg, var(--muted-foreground));
   }
 
-  .agent-config-markdown :global(a) {
+  .module-config-markdown :global(a) {
     color: var(--link-color);
     text-decoration: underline;
   }
 
-  .agent-config-markdown :global(table) {
+  .module-config-markdown :global(table) {
     border-collapse: separate;
     border-spacing: 0;
   }
 
-  .agent-config-markdown :global(th) {
+  .module-config-markdown :global(th) {
     text-align: left;
     font-weight: 700;
     border-bottom: 1.5px solid var(--md-border, var(--border));
     padding-bottom: 0.35rem;
   }
 
-  .agent-config-markdown :global(td) {
+  .module-config-markdown :global(td) {
     text-align: left;
   }
 
-  .agent-config-markdown :global(th),
-  .agent-config-markdown :global(td) {
+  .module-config-markdown :global(th),
+  .module-config-markdown :global(td) {
     padding: 0;
   }
 
-  .agent-config-markdown :global(th:not(:first-child)),
-  .agent-config-markdown :global(td:not(:first-child)) {
+  .module-config-markdown :global(th:not(:first-child)),
+  .module-config-markdown :global(td:not(:first-child)) {
     padding-left: 1rem;
   }
 
-  .agent-config-markdown :global(tbody td) {
+  .module-config-markdown :global(tbody td) {
     padding-top: 0.35rem;
   }
 
-  .agent-config-markdown :global(hr) {
+  .module-config-markdown :global(hr) {
     border: none;
     border-top: 1px solid var(--md-border, var(--border));
     margin: 0.5rem 0;

@@ -4,15 +4,15 @@ use console::Style;
 use dialoguer::{Confirm, Input, MultiSelect};
 
 use crate::app::AppKind;
-use crate::config::{AgentEntry, AgentSource, BuildConfig};
-use crate::registry::{self, KnownAgent, Registry};
+use crate::config::{BuildConfig, ModuleEntry, ModuleSource};
+use crate::registry::{self, KnownModule, Registry};
 
 pub fn run_wizard(
     app: AppKind,
     existing_config: Option<&BuildConfig>,
     registry: &Registry,
 ) -> Result<BuildConfig, String> {
-    let known_agents = registry.agents.as_slice();
+    let known_modules = registry.modules.as_slice();
     let bold = Style::new().bold();
 
     println!();
@@ -22,15 +22,15 @@ pub fn run_wizard(
     );
     println!();
 
-    let selected_indices = select_agents(app, existing_config, known_agents)?;
+    let selected_indices = select_modules(app, existing_config, known_modules)?;
 
-    let mut agents = Vec::new();
+    let mut modules = Vec::new();
     for idx in &selected_indices {
-        let known = &known_agents[*idx];
+        let known = &known_modules[*idx];
 
-        // Out-of-tree agents have no source to pick: they resolve to
-        // custom_agents/<name>, and codegen fails if that clone is missing.
-        let source = known.in_tree.then_some(AgentSource::Workspace);
+        // Out-of-tree modules have no source to pick: they resolve to
+        // custom_modules/<name>, and codegen fails if that clone is missing.
+        let source = known.in_tree.then_some(ModuleSource::Workspace);
 
         let crate_features = if known.has_selectable_features() {
             prompt_crate_features(known, existing_config)?
@@ -38,7 +38,7 @@ pub fn run_wizard(
             None
         };
 
-        agents.push(AgentEntry {
+        modules.push(ModuleEntry {
             name: known.name.to_string(),
             source,
             crate_features,
@@ -47,7 +47,7 @@ pub fn run_wizard(
 
     loop {
         let add_custom = Confirm::new()
-            .with_prompt("Add a custom agent crate not in the list above?")
+            .with_prompt("Add a custom module crate not in the list above?")
             .default(false)
             .interact()
             .map_err(|e| e.to_string())?;
@@ -55,10 +55,10 @@ pub fn run_wizard(
         if !add_custom {
             break;
         }
-        agents.push(prompt_custom_agent()?);
+        modules.push(prompt_custom_module()?);
     }
 
-    let config = BuildConfig { agents };
+    let config = BuildConfig { modules };
     print_summary(app, &config);
 
     let confirmed = Confirm::new()
@@ -74,36 +74,36 @@ pub fn run_wizard(
     Ok(config)
 }
 
-fn select_agents(
+fn select_modules(
     app: AppKind,
     existing_config: Option<&BuildConfig>,
-    known_agents: &[KnownAgent],
+    known_modules: &[KnownModule],
 ) -> Result<Vec<usize>, String> {
-    let labels: Vec<String> = known_agents.iter().map(|a| a.display_label()).collect();
+    let labels: Vec<String> = known_modules.iter().map(|a| a.display_label()).collect();
 
-    let defaults: Vec<bool> = known_agents
+    let defaults: Vec<bool> = known_modules
         .iter()
         .map(|a| match existing_config {
-            Some(config) => config.agents.iter().any(|e| e.name == a.name),
+            Some(config) => config.modules.iter().any(|e| e.name == a.name),
             None => a.is_default_for(app),
         })
         .collect();
 
     let selected = MultiSelect::new()
-        .with_prompt("Select agents to include (Space to toggle, Enter to confirm)")
+        .with_prompt("Select modules to include (Space to toggle, Enter to confirm)")
         .items(&labels)
         .defaults(&defaults)
-        .max_length(known_agents.len())
+        .max_length(known_modules.len())
         .interact()
         .map_err(|e| e.to_string())?;
 
     if selected.is_empty() {
-        return Err("No agents selected".to_string());
+        return Err("No modules selected".to_string());
     }
 
     let names: Vec<&str> = selected
         .iter()
-        .map(|&i| known_agents[i].name.as_str())
+        .map(|&i| known_modules[i].name.as_str())
         .collect();
     println!("  Selected: {}", names.join(", "));
 
@@ -111,7 +111,7 @@ fn select_agents(
 }
 
 fn prompt_crate_features(
-    known: &KnownAgent,
+    known: &KnownModule,
     existing_config: Option<&BuildConfig>,
 ) -> Result<Option<Vec<String>>, String> {
     let available = &known.available_features;
@@ -121,7 +121,7 @@ fn prompt_crate_features(
         .iter()
         .map(|feat| match existing_config {
             Some(config) => config
-                .agents
+                .modules
                 .iter()
                 .find(|a| a.name == known.name)
                 .map(|a| match &a.crate_features {
@@ -168,14 +168,14 @@ fn prompt_crate_features(
     }
 }
 
-fn prompt_custom_agent() -> Result<AgentEntry, String> {
+fn prompt_custom_module() -> Result<ModuleEntry, String> {
     let name: String = Input::new()
         .with_prompt("Crate name (e.g., modular-agent-my-custom)")
         .interact_text()
         .map_err(|e| e.to_string())?;
 
     let path: String = Input::new()
-        .with_prompt("Path from the workspace root (e.g. custom_agents/modular-agent-my-custom)")
+        .with_prompt("Path from the workspace root (e.g. custom_modules/modular-agent-my-custom)")
         .interact_text()
         .map_err(|e| e.to_string())?;
 
@@ -198,14 +198,14 @@ fn prompt_custom_agent() -> Result<AgentEntry, String> {
         )
     };
 
-    Ok(AgentEntry {
+    Ok(ModuleEntry {
         name,
-        source: Some(AgentSource::Path { path }),
+        source: Some(ModuleSource::Path { path }),
         crate_features,
     })
 }
 
-/// Warn about conflicting agents across every configured app.
+/// Warn about conflicting modules across every configured app.
 ///
 /// The workspace resolves dependencies once for all members, so two apps that
 /// each pick one half of a `links` conflict break the whole workspace, not just
@@ -217,14 +217,14 @@ pub fn check_conflicts(
 ) -> Result<(), String> {
     let mut selected: BTreeMap<&str, Vec<AppKind>> = BTreeMap::new();
     for (app, config) in configs {
-        for agent in &config.agents {
-            selected.entry(agent.name.as_str()).or_default().push(*app);
+        for module in &config.modules {
+            selected.entry(module.name.as_str()).or_default().push(*app);
         }
     }
 
     let mut reported: Vec<(&str, &str)> = Vec::new();
     for name in selected.keys() {
-        let Some(known) = registry::find_by_name(&registry.agents, name) else {
+        let Some(known) = registry::find_by_name(&registry.modules, name) else {
             continue;
         };
         for conflict in &known.conflicts {
@@ -278,11 +278,11 @@ pub fn check_conflicts(
     Ok(())
 }
 
-fn format_source(agent: &AgentEntry) -> String {
-    match &agent.source {
-        Some(AgentSource::Workspace) => "in-tree (workspace)".to_string(),
-        Some(AgentSource::Path { path }) => format!("path: {path}"),
-        None => format!("path: {}", registry::clone_path(&agent.name)),
+fn format_source(module: &ModuleEntry) -> String {
+    match &module.source {
+        Some(ModuleSource::Workspace) => "in-tree (workspace)".to_string(),
+        Some(ModuleSource::Path { path }) => format!("path: {path}"),
+        None => format!("path: {}", registry::clone_path(&module.name)),
     }
 }
 
@@ -296,17 +296,17 @@ fn print_summary(app: AppKind, config: &BuildConfig) {
         bold.apply_to(format!("=== {} configuration ===", app.title()))
     );
     println!();
-    for agent in &config.agents {
-        let features_str = match &agent.crate_features {
+    for module in &config.modules {
+        let features_str = match &module.crate_features {
             None => String::new(),
             Some(feats) if feats.is_empty() => " [features: none]".to_string(),
             Some(feats) => format!(" [features: {}]", feats.join(", ")),
         };
         println!(
             "  {} {} {}{}",
-            bold.apply_to(&agent.name),
+            bold.apply_to(&module.name),
             dim.apply_to("-"),
-            format_source(agent),
+            format_source(module),
             features_str
         );
     }

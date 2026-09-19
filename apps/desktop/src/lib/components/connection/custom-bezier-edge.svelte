@@ -4,7 +4,7 @@
 
   import { BaseEdge, getBezierEdgeCenter, type EdgeProps } from "@xyflow/svelte";
 
-  import { sharedAgentEvents } from "$lib/shared.svelte";
+  import { sharedModuleEvents } from "$lib/shared.svelte";
 
   import { controlPoint } from "./bezier-utils";
 
@@ -48,8 +48,8 @@
   let flash = new Spring(0, { stiffness: 0.03, damping: 1.0 });
   let lastSeq = 0;
 
-  // Read without getAgent(): creating entries is the agent nodes' job.
-  const targetInput = $derived(sharedAgentEvents.agents[target]?.input);
+  // Read without getModule(): creating entries is the module nodes' job.
+  const targetInput = $derived(sharedModuleEvents.modules[target]?.input);
 
   $effect(() => {
     const input = targetInput;

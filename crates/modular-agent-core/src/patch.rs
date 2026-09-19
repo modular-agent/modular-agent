@@ -1,17 +1,17 @@
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::Value as JsonValue;
 
-use crate::error::AgentError;
+use crate::error::{Error, Result};
 use crate::id::{new_id, update_ids};
 use crate::modular_agent::ModularAgent;
 use crate::spec::PatchSpec;
-use crate::{AgentSpec, ConnectionSpec};
+use crate::{ConnectionSpec, ModuleSpec};
 
 /// A runtime instance of a workflow patch.
 ///
-/// A patch represents a running or runnable workflow, containing agents
+/// A patch represents a running or runnable workflow, containing modules
 /// and their connections. It manages the lifecycle (start/stop) of all
-/// agents within the workflow.
+/// modules within the workflow.
 pub struct Patch {
     /// Unique identifier for this patch instance.
     id: String,
@@ -22,17 +22,17 @@ pub struct Patch {
     /// Whether this patch is currently running.
     running: bool,
 
-    /// The specification containing agents and connections.
+    /// The specification containing modules and connections.
     spec: PatchSpec,
 }
 
 impl Patch {
     /// Creates a new patch with the given specification.
     ///
-    /// All IDs in the spec (agents and connections) are regenerated to ensure uniqueness.
+    /// All IDs in the spec (modules and connections) are regenerated to ensure uniqueness.
     pub fn new(mut spec: PatchSpec) -> Self {
-        let (agents, connections) = update_ids(&spec.agents, &spec.connections);
-        spec.agents = agents;
+        let (modules, connections) = update_ids(&spec.modules, &spec.connections);
+        spec.modules = modules;
         spec.connections = connections;
 
         Self {
@@ -55,16 +55,16 @@ impl Patch {
 
     /// Updates the patch specification from a JSON value.
     ///
-    /// Note: The "agents" and "connections" fields are ignored;
+    /// Note: The "modules" and "connections" fields are ignored;
     /// only extension fields are updated.
-    pub fn update_spec(&mut self, value: &Value) -> Result<(), AgentError> {
+    pub fn update_spec(&mut self, value: &JsonValue) -> Result<()> {
         let update_map = value
             .as_object()
-            .ok_or_else(|| AgentError::SerializationError("Expected JSON object".to_string()))?;
+            .ok_or_else(|| Error::SerializationError("Expected JSON object".to_string()))?;
 
         for (k, v) in update_map {
             match k.as_str() {
-                "agents" => {
+                "modules" => {
                     // just ignore
                 }
                 "connections" => {
@@ -99,26 +99,26 @@ impl Patch {
         self.name = None;
     }
 
-    /// Adds an agent to this patch.
-    pub fn add_agent(&mut self, agent: AgentSpec) {
-        self.spec.add_agent(agent);
+    /// Adds a module to this patch.
+    pub fn add_module(&mut self, module: ModuleSpec) {
+        self.spec.add_module(module);
     }
 
-    /// Removes an agent from this patch by its ID.
-    pub fn remove_agent(&mut self, agent_id: &str) {
-        self.spec.remove_agent(agent_id);
+    /// Removes a module from this patch by its ID.
+    pub fn remove_module(&mut self, module_id: &str) {
+        self.spec.remove_module(module_id);
     }
 
-    /// Applies a JSON patch to the stored spec entry of an agent.
+    /// Applies a JSON patch to the stored spec entry of a module.
     ///
-    /// This is for spec-only agents (whose definition is not registered in
+    /// This is for spec-only modules (whose definition is not registered in
     /// this build), which have no live instance to receive the patch.
-    /// Returns `Ok(false)` when the agent is not part of this patch spec.
-    pub fn update_agent_spec(&mut self, agent_id: &str, value: &Value) -> Result<bool, AgentError> {
-        let Some(agent) = self.spec.agents.iter_mut().find(|a| a.id == agent_id) else {
+    /// Returns `Ok(false)` when the module is not part of this patch spec.
+    pub fn update_module_spec(&mut self, module_id: &str, value: &JsonValue) -> Result<bool> {
+        let Some(module) = self.spec.modules.iter_mut().find(|a| a.id == module_id) else {
             return Ok(false);
         };
-        agent.update(value)?;
+        module.update(value)?;
         Ok(true)
     }
 
@@ -132,11 +132,11 @@ impl Patch {
         self.spec.remove_connection(connection)
     }
 
-    /// Starts all enabled agents in this patch.
+    /// Starts all enabled modules in this patch.
     ///
     /// If the patch is already running, this method returns immediately.
-    /// Disabled agents are skipped.
-    pub async fn start(&mut self, ma: &ModularAgent) -> Result<(), AgentError> {
+    /// Disabled modules are skipped.
+    pub async fn start(&mut self, ma: &ModularAgent) -> Result<()> {
         if self.running {
             // Already running
             return Ok(());
@@ -144,34 +144,34 @@ impl Patch {
         self.running = true;
 
         // A previous stop left the patch's parent cancellation token fired;
-        // install a fresh one before agents derive their child tokens.
+        // install a fresh one before modules derive their child tokens.
         ma.reset_patch_token(&self.id);
 
-        for agent in self.spec.agents.iter() {
-            if agent.disabled {
+        for module in self.spec.modules.iter() {
+            if module.disabled {
                 continue;
             }
-            ma.start_agent(&agent.id).await.unwrap_or_else(|e| {
-                log::error!("Failed to start agent {}: {}", agent.id, e);
+            ma.start_module(&module.id).await.unwrap_or_else(|e| {
+                log::error!("Failed to start module {}: {}", module.id, e);
             });
         }
 
         Ok(())
     }
 
-    /// Stops all agents in this patch.
-    pub async fn stop(&mut self, ma: &ModularAgent) -> Result<(), AgentError> {
-        // Cancel every agent's in-flight process() up front so the
-        // per-agent stops below are not serialized behind long-running work.
+    /// Stops all modules in this patch.
+    pub async fn stop(&mut self, ma: &ModularAgent) -> Result<()> {
+        // Cancel every module's in-flight process() up front so the
+        // per-module stops below are not serialized behind long-running work.
         ma.cancel_patch_token(&self.id);
 
-        for agent in self.spec.agents.iter() {
-            ma.stop_agent(&agent.id).await.unwrap_or_else(|e| {
-                log::error!("Failed to stop agent {}: {}", agent.id, e);
+        for module in self.spec.modules.iter() {
+            ma.stop_module(&module.id).await.unwrap_or_else(|e| {
+                log::error!("Failed to stop module {}: {}", module.id, e);
             });
         }
-        // Every agent has stopped; drop the fired parent token so a later
-        // start_agent derives a live token instead of a born-cancelled child
+        // Every module has stopped; drop the fired parent token so a later
+        // start_module derives a live token instead of a born-cancelled child
         // that would silently skip all inputs.
         ma.remove_patch_token(&self.id);
         self.running = false;

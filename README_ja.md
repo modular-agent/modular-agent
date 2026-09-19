@@ -24,20 +24,20 @@
 
 </div>
 
-モジュラーシンセのように AI ワークフローを組み上げる — 拡張可能なエージェントをビジュアルにパッチングし、リアルタイムに動き続けるパイプラインを構築。LLM、データベース、Web スクレイピング、メッセージングなど。プライバシーファースト、クラウド不要。
+モジュラーシンセのように AI ワークフローを組み上げる — 拡張可能なモジュールをビジュアルにパッチングし、リアルタイムに動き続けるパイプラインを構築。LLM、データベース、Web スクレイピング、メッセージングなど。プライバシーファースト、クラウド不要。
 
 <div align="center">
 <img alt="Workflow Editor" width="800" src="https://raw.githubusercontent.com/modular-agent/modular-agent/main/apps/desktop/doc/images/screenshot_editor.jpg">
 </div>
 
-Modular Agent は、シンセサイザーのモジュールを配線するように AI エージェントを組み合わせてワークフローを作る、デスクトップアプリ + Rust フレームワークです。キャンバスにエージェントを置き、ポート同士を接続して Run スイッチを入れると、値がグラフをリアルタイムにストリームします。パッチは一度きりのスクリプトではなく、動き続けるパイプラインです。すべての処理はローカルマシン上で実行され、LLM エンドポイントやデータベース、メッセージングサービスへは、パッチに組み込んだときだけアクセスします。
+Modular Agent は、シンセサイザーのモジュールを配線するようにモジュールを組み合わせてエージェントを作る、デスクトップアプリ + Rust フレームワークです。キャンバスにモジュールを置き、ポート同士を接続して Run スイッチを入れると、値がグラフをリアルタイムにストリームします。パッチは一度きりのスクリプトではなく、動き続けるパイプラインです。すべての処理はローカルマシン上で実行され、LLM エンドポイントやデータベース、メッセージングサービスへは、パッチに組み込んだときだけアクセスします。
 
 ## 仕組み
 
-- **Patch** — JSON として保存されるワークフロー。エージェントの集合と、それらをつなぐ接続からなる
-- **Agent** — エージェント定義から作られる処理ユニット。名前付きの入出力ポートと config を持つ
-- **Connection** — 出力ポートと入力ポートをつなぐ（docs では「ワイヤー」と表記）。特別なハンドル `config:<key>` を指定すると、値をエージェントの config に流し込める
-- 値（`AgentValue`）はグラフを非同期にストリームし、外部トリガごとに生成される `AgentContext` が、エージェントをまたいで同一フローを識別する
+- **Patch** — JSON として保存されるワークフロー。モジュールの集合と、それらをつなぐ接続からなる
+- **Module** — モジュール定義から作られる処理ユニット。名前付きの入出力ポートと config を持つ
+- **Connection** — 出力ポートと入力ポートをつなぐ（docs では「ワイヤー」と表記）。特別なハンドル `config:<key>` を指定すると、値をモジュールの config に流し込める
+- 値（`Value`）はグラフを非同期にストリームし、外部トリガごとに生成される `ModuleContext` が、モジュールをまたいで同一フローを識別する
 
 実行中のパッチは、内蔵の [MCP サーバー](crates/modular-agent-core/README_ja.md#外部エージェントによる編集mcp-サーバー)を通じて、外部の AI エージェント（Claude Code など）からライブに参照・編集することもできます。
 
@@ -45,7 +45,7 @@ Modular Agent は、シンセサイザーのモジュールを配線するよう
 
 ## クイックインストール
 
-[Tauri の前提条件](https://v2.tauri.app/start/prerequisites/)（Rust、Node.js、プラットフォームのツールチェーン）が揃っていれば、1 コマンドでリポジトリのクローンからソースビルドまで行えます。デスクトップアプリと `ma` CLI のどちらをビルドするか、[推奨エージェントパッケージ](custom_agents/README.md#recommended-agent-repositories)を含めるかは対話で選べます。デスクトップアプリの初回ビルドは 20〜40 分・約 10 GB のディスクを使います:
+[Tauri の前提条件](https://v2.tauri.app/start/prerequisites/)（Rust、Node.js、プラットフォームのツールチェーン）が揃っていれば、1 コマンドでリポジトリのクローンからソースビルドまで行えます。デスクトップアプリと `ma` CLI のどちらをビルドするか、[推奨モジュールパッケージ](custom_modules/README.md#recommended-module-repositories)を含めるかは対話で選べます。デスクトップアプリの初回ビルドは 20〜40 分・約 10 GB のディスクを使います:
 
 ```bash
 # macOS / Linux
@@ -59,18 +59,18 @@ irm https://raw.githubusercontent.com/modular-agent/modular-agent/main/scripts/i
 
 アップデートするには、同じディレクトリで同じコマンドをもう一度実行してください。既存のクローンを pull し、同じ構成でリビルドします。
 
-手動でのビルド手順とエージェント選択の変更は[インストールガイド](https://modular-agent.github.io/docs/ja/getting-started/installation/)を参照してください。
+手動でのビルド手順とモジュール選択の変更は[インストールガイド](https://modular-agent.github.io/docs/ja/getting-started/installation/)を参照してください。
 
 ## ドキュメント
 
 > **Developer Preview** — ビルド済みバイナリはまだ提供されていません。docs ではソースからのビルド手順を案内しています。
 
-- **[ドキュメントサイト](https://modular-agent.github.io/docs/ja/)** — [インストール](https://modular-agent.github.io/docs/ja/getting-started/installation/)、[はじめてのパッチ](https://modular-agent.github.io/docs/ja/getting-started/first-patch/)、[Chat エージェントを使う](https://modular-agent.github.io/docs/ja/getting-started/chat-patch/)
+- **[ドキュメントサイト](https://modular-agent.github.io/docs/ja/)** — [インストール](https://modular-agent.github.io/docs/ja/getting-started/installation/)、[はじめてのパッチ](https://modular-agent.github.io/docs/ja/getting-started/first-patch/)、[Chat モジュールを使う](https://modular-agent.github.io/docs/ja/getting-started/chat-patch/)
 - [デスクトップアプリ](apps/desktop) — ビジュアルパッチエディタ
 - [`ma` CLI](apps/cli) — コマンドラインでパッチを実行
 - [modular-agent-core](crates/modular-agent-core) — 組み込み可能なライブラリとしてのエンジン（[crates.io](https://crates.io/crates/modular-agent-core) / [docs.rs](https://docs.rs/modular-agent-core)）
 - [tauri-plugin-modular-agent](crates/tauri-plugin-modular-agent) — 自作の Tauri アプリにエンジンを組み込む
-- [エージェントライブラリ](#エージェントライブラリ) — パッチに組み込めるものの一覧。ビルド方法は [custom_agents/README.md](custom_agents/README.md)
+- [モジュールライブラリ](#モジュールライブラリ) — パッチに組み込めるものの一覧。ビルド方法は [custom_modules/README.md](custom_modules/README.md)
 - [CONTRIBUTING.md](CONTRIBUTING.md) / [GitHub Discussions](https://github.com/orgs/modular-agent/discussions)
 
 ## 構成
@@ -79,30 +79,30 @@ irm https://raw.githubusercontent.com/modular-agent/modular-agent/main/scripts/i
 |---|---|---|
 | [`apps/desktop`](apps/desktop) | `modular-agent-desktop` | ビジュアルワークフローエディタ（Tauri 2 + Svelte 5） |
 | [`apps/cli`](apps/cli) | `modular-agent-cli` | `ma` コマンドラインパッチランナー |
-| [`crates/modular-agent-core`](crates/modular-agent-core) | `modular-agent-core` | オーケストレーションエンジン、エージェントランタイム、パッチローダ |
+| [`crates/modular-agent-core`](crates/modular-agent-core) | `modular-agent-core` | オーケストレーションエンジン、モジュールランタイム、パッチローダ |
 | [`crates/modular-agent-macros`](crates/modular-agent-macros) | `modular-agent-macros` | `#[modular_agent]` 手続きマクロ |
-| [`crates/modular-agent-std`](crates/modular-agent-std) | `modular-agent-std` | 標準ユーティリティエージェント |
-| [`crates/modular-agent-llm`](crates/modular-agent-llm) | `modular-agent-llm` | OpenAI / Claude / Ollama エージェント |
+| [`crates/modular-agent-std`](crates/modular-agent-std) | `modular-agent-std` | 標準ユーティリティモジュール |
+| [`crates/modular-agent-llm`](crates/modular-agent-llm) | `modular-agent-llm` | OpenAI / Claude / Ollama モジュール |
 | [`crates/tauri-plugin-modular-agent`](crates/tauri-plugin-modular-agent) | `tauri-plugin-modular-agent` | Tauri プラグインブリッジ（Rust + guest-js） |
-| [`tools/ma-config`](tools/ma-config) | `ma-config` | エージェント選択 / ビルド設定 TUI |
+| [`tools/ma-config`](tools/ma-config) | `ma-config` | モジュール選択 / ビルド設定 TUI |
 
-## エージェントライブラリ
+## モジュールライブラリ
 
-エージェントはパッケージ単位で提供されます。`std` と `llm` はこのリポジトリにあり、すべてのビルドに含まれます。それ以外は [github.com/modular-agent](https://github.com/modular-agent) 配下の各リポジトリにあり、使いたいものを `custom_agents/` に clone して ma-config ウィザードで選択します。詳細は [custom_agents/README.md](custom_agents/README.md) を参照してください。
+モジュールはパッケージ単位で提供されます。`std` と `llm` はこのリポジトリにあり、すべてのビルドに含まれます。それ以外は [github.com/modular-agent](https://github.com/modular-agent) 配下の各リポジトリにあり、使いたいものを `custom_modules/` に clone して ma-config ウィザードで選択します。詳細は [custom_modules/README.md](custom_modules/README.md) を参照してください。
 
-| カテゴリ | パッケージ | エージェント |
+| カテゴリ | パッケージ | モジュール |
 |---|---|---|
 | In-tree | [modular-agent-std](crates/modular-agent-std) | 標準ユーティリティ: 配列、文字列、テンプレート、ファイル、タイマー、フィルタ（50+） |
 | In-tree | [modular-agent-llm](crates/modular-agent-llm) | LLM 連携: OpenAI、Claude、Ollama |
 | 汎用 | [modular-agent-web](https://github.com/modular-agent/modular-agent-web) | Web/HTTP、スクレイピング、検索、YouTube |
-| 汎用 | [modular-agent-monty](https://github.com/modular-agent/modular-agent-monty) | Monty スクリプトエージェント |
-| 汎用 | [modular-agent-zapcode](https://github.com/modular-agent/modular-agent-zapcode) | ZapCode TypeScript スクリプトエージェント |
+| 汎用 | [modular-agent-monty](https://github.com/modular-agent/modular-agent-monty) | Monty スクリプトモジュール |
+| 汎用 | [modular-agent-zapcode](https://github.com/modular-agent/modular-agent-zapcode) | ZapCode TypeScript スクリプトモジュール |
 | メッセージング | [modular-agent-slack](https://github.com/modular-agent/modular-agent-slack) | Slack メッセージング |
 | メッセージング | [modular-agent-mattermost](https://github.com/modular-agent/modular-agent-mattermost) | Mattermost メッセージング |
 | データ / メディア | [modular-agent-lifelog](https://github.com/modular-agent/modular-agent-lifelog) | スクリーンキャプチャ、ウィンドウトラッキング |
 | データベース | [modular-agent-sqlx](https://github.com/modular-agent/modular-agent-sqlx) | SQL データベース（PostgreSQL、MySQL、SQLite） |
 
-この organization のものに限らず、エージェント crate を持つリポジトリなら何でも `custom_agents/` に clone すればウィザードが認識します。
+この organization のものに限らず、モジュール crate を持つリポジトリなら何でも `custom_modules/` に clone すればウィザードが認識します。
 
 ## コントリビューション
 

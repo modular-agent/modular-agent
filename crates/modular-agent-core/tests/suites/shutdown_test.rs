@@ -2,21 +2,21 @@ extern crate modular_agent_core as ma;
 
 use std::time::Duration;
 
-use ma::{AgentError, AgentValue, ConnectionSpec, ModularAgent, ModularAgentEvent};
+use ma::{ConnectionSpec, Error, ModularAgent, ModularAgentEvent, Value};
 use tokio::time::timeout;
 
 use crate::common;
-use common::agents::PendingStopAgent;
+use common::modules::PendingStopModule;
 
-const EXT_IN_DEF: &str = "modular_agent_core::external_agent::ExternalInputAgent";
-const EXT_OUT_DEF: &str = "modular_agent_core::external_agent::ExternalOutputAgent";
+const EXT_IN_DEF: &str = "modular_agent_core::external_module::ExternalInputModule";
+const EXT_OUT_DEF: &str = "modular_agent_core::external_module::ExternalOutputModule";
 
-fn ext_agent_spec(ma: &ModularAgent, def_name: &str, channel: &str) -> ma::AgentSpec {
-    let mut spec = ma.new_agent_spec(def_name).unwrap();
+fn ext_module_spec(ma: &ModularAgent, def_name: &str, channel: &str) -> ma::ModuleSpec {
+    let mut spec = ma.new_module_spec(def_name).unwrap();
     spec.configs
         .as_mut()
         .unwrap()
-        .set("name".to_string(), AgentValue::string(channel));
+        .set("name".to_string(), Value::string(channel));
     spec
 }
 
@@ -24,13 +24,16 @@ fn ext_agent_spec(ma: &ModularAgent, def_name: &str, channel: &str) -> ma::Agent
 async fn start_ext_patch(ma: &ModularAgent, channel_in: &str, channel_out: &str) -> String {
     let patch_id = ma.new_patch().unwrap();
     let in_id = ma
-        .add_agent(patch_id.clone(), ext_agent_spec(ma, EXT_IN_DEF, channel_in))
+        .add_module(
+            patch_id.clone(),
+            ext_module_spec(ma, EXT_IN_DEF, channel_in),
+        )
         .await
         .unwrap();
     let out_id = ma
-        .add_agent(
+        .add_module(
             patch_id.clone(),
-            ext_agent_spec(ma, EXT_OUT_DEF, channel_out),
+            ext_module_spec(ma, EXT_OUT_DEF, channel_out),
         )
         .await
         .unwrap();
@@ -90,22 +93,22 @@ async fn shutdown_stops_running_patches_and_ends_subscribers() {
 }
 
 #[tokio::test]
-async fn shutdown_times_out_on_agent_whose_stop_never_returns() {
+async fn shutdown_times_out_on_module_whose_stop_never_returns() {
     let ma = ModularAgent::init().unwrap();
     ma.ready().await.unwrap();
 
     let patch_id = ma.new_patch().unwrap();
-    let spec = ma.new_agent_spec(PendingStopAgent::DEF_NAME).unwrap();
-    ma.add_agent(patch_id.clone(), spec).await.unwrap();
+    let spec = ma.new_module_spec(PendingStopModule::DEF_NAME).unwrap();
+    ma.add_module(patch_id.clone(), spec).await.unwrap();
     ma.start_patch(&patch_id).await.unwrap();
-    // Agent start() runs inside the spawned agent loop; stop() is only
-    // invoked on an agent that has finished starting.
+    // Module start() runs inside the spawned module loop; stop() is only
+    // invoked on a module that has finished starting.
     tokio::time::sleep(Duration::from_millis(100)).await;
 
     let timeout = Duration::from_millis(100);
     let result = ma.shutdown(timeout).await;
     assert!(
-        matches!(result, Err(AgentError::ShutdownTimeout(d)) if d == timeout),
+        matches!(result, Err(Error::ShutdownTimeout(d)) if d == timeout),
         "expected ShutdownTimeout, got {:?}",
         result
     );

@@ -1,4 +1,4 @@
-import { initGlobals } from "$lib/agent";
+import { initGlobals } from "$lib/module";
 
 import type { LayoutLoad } from "./$types";
 

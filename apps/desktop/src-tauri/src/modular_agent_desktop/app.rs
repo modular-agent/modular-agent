@@ -442,7 +442,7 @@ impl ModularAgentApp {
             return Ok(false);
         }
 
-        // Remove from core (stops agents, removes from core's patches map).
+        // Remove from core (stops modules, removes from core's patches map).
         // Ignore "not found" errors — patch may have already been removed.
         if let Err(e) = self.ma.remove_patch(patch_id).await {
             log::warn!("close_patch: remove_patch({}) failed: {}", patch_id, e);

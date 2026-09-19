@@ -1,21 +1,21 @@
 # CLAUDE.md
 
-See root CLAUDE.md for common agent development patterns.
+See root CLAUDE.md for common module development patterns.
 
 ## Overview
 
-CLI runner for Modular Agent patches. Loads a patch JSON file and provides stdin/stdout communication with the agent network.
+CLI runner for Modular Agent patches. Loads a patch JSON file and provides stdin/stdout communication with the module network.
 
 ## Build Commands
 
 ```bash
-# Build (agents are configured by ma-config wizard)
+# Build (modules are configured by ma-config wizard)
 cargo build -p modular-agent-cli
 
 # Run with a patch
 cargo run -p modular-agent-cli -- <patch.json> [-v]
 
-# Configure agents with the ma-config wizard
+# Configure modules with the ma-config wizard
 cargo run --manifest-path ../../tools/ma-config/Cargo.toml -- cli
 ```
 
@@ -34,19 +34,19 @@ ma <patch> [-i <input>] [-o <output>] [--mcp-port <port>] [--mcp-token <token>] 
 | `--mcp-token` | off | Bearer token required for MCP requests (omit to disable auth; requires `--mcp-port`) |
 | `-v, --verbose` | off | Enable logging |
 
-## Agent Selection (ma-config)
+## Module Selection (ma-config)
 
-Agent crates are managed by the `ma-config` TUI wizard at the workspace root (`tools/ma-config/`), shared with the desktop app. Run it as `ma-config cli`. The wizard:
+Module crates are managed by the `ma-config` TUI wizard at the workspace root (`tools/ma-config/`), shared with the desktop app. Run it as `ma-config cli`. The wizard:
 
-1. Selects which agent crates to include
-2. Selects per-crate Cargo features via MultiSelect (agents with `available_features` in their catalog entry)
-3. Generates `Cargo.toml` dependencies and `src/agents.rs`
+1. Selects which module crates to include
+2. Selects per-crate Cargo features via MultiSelect (modules with `available_features` in their catalog entry)
+3. Generates `Cargo.toml` dependencies and `src/modules.rs`
 
-- Out-of-tree crates are linked from `custom_agents/<name>` at the workspace root (gitignored, cloned by hand), and only clones that are present are offered. The wizard fails pointing at `custom_agents/README.md` when a selected clone has gone missing, and with a fix-up message when a clone still depends on `modular-agent-core` from crates.io — a second copy of core means a second `inventory` registry and no visible agents.
+- Out-of-tree crates are linked from `custom_modules/<name>` at the workspace root (gitignored, cloned by hand), and only clones that are present are offered. The wizard fails pointing at `custom_modules/README.md` when a selected clone has gone missing, and with a fix-up message when a clone still depends on `modular-agent-core` from crates.io — a second copy of core means a second `inventory` registry and no visible modules.
 - `modular-agent-core` is in-tree and always linked with the `mcp-server` feature; it is not selectable.
-- In-tree agents (std / llm) are emitted as `{ workspace = true }`; a feature override spells out a path instead, because cargo ignores a member's `default-features = false` when the workspace entry does not set it.
-- The catalog has two halves: `tools/ma-config/registry.yaml` holds the in-tree agents only (std / llm; override the path with `--registry <path>`), and every out-of-tree crate is read from the `ma-registry.yaml` at the root of its own clone under `custom_agents/`. The wizard scans that directory and merges both halves by name.
-- `registry.yaml`'s root is `Registry { agents: [...] }`, a per-repo `ma-registry.yaml` is a single agent at the root; both use `#[serde(deny_unknown_fields)]`. Optional agent fields (`default_for`, `available_features`, `default_features`, `conflicts`) can be omitted, and a per-repo file's `name` must match its directory name. A clone with no `ma-registry.yaml` falls back to `name` / `description` from its `Cargo.toml` `[package]`.
+- In-tree modules (std / llm) are emitted as `{ workspace = true }`; a feature override spells out a path instead, because cargo ignores a member's `default-features = false` when the workspace entry does not set it.
+- The catalog has two halves: `tools/ma-config/registry.yaml` holds the in-tree modules only (std / llm; override the path with `--registry <path>`), and every out-of-tree crate is read from the `ma-registry.yaml` at the root of its own clone under `custom_modules/`. The wizard scans that directory and merges both halves by name.
+- `registry.yaml`'s root is `Registry { modules: [...] }`, a per-repo `ma-registry.yaml` is a single module at the root; both use `#[serde(deny_unknown_fields)]`. Optional module fields (`default_for`, `available_features`, `default_features`, `conflicts`) can be omitted, and a per-repo file's `name` must match its directory name. A clone with no `ma-registry.yaml` falls back to `name` / `description` from its `Cargo.toml` `[package]`.
 
 Configuration is saved to `apps/cli/ma-config.toml` (gitignored), with local paths relative to the workspace root. Configs written before the monorepo are rejected rather than reinterpreted.
 
@@ -60,16 +60,16 @@ Known conflicts, checked against the union of both apps' selections because the 
 
 ## I/O Format
 
-- **Input**: One line per message on stdin, sent as `AgentValue::String`
+- **Input**: One line per message on stdin, sent as `Value::String`
 - **Output**: String values printed as-is; other types as JSON
 
 ## Architecture
 
-The CLI uses the `inventory` crate's compile-time registration. Each agent crate is linked via `use` imports in `src/agents.rs` (auto-generated by ma-config), which causes `#[modular_agent]` registrations to be included in the binary. `ModularAgent::init()` then collects all registered agents.
+The CLI uses the `inventory` crate's compile-time registration. Each module crate is linked via `use` imports in `src/modules.rs` (auto-generated by ma-config), which causes `#[modular_agent]` registrations to be included in the binary. `ModularAgent::init()` then collects all registered modules.
 
 ## Files
 
 - `src/main.rs` - CLI entry point (clap args, stdin/stdout loop, signal handling)
-- `src/agents.rs` - Agent crate imports (auto-generated by ma-config)
+- `src/modules.rs` - Module crate imports (auto-generated by ma-config)
 - `Cargo.toml` - Dependencies (managed by ma-config)
 - `../../tools/ma-config/` - TUI wizard, shared with the desktop app

@@ -1,6 +1,6 @@
 use modular_agent_core::{
-    Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AgentValueMap,
-    AsAgent, Message, ModularAgent, Usage, async_trait, modular_agent,
+    AsModule, Message, ModularAgent, Module, ModuleContext, ModuleData, ModuleOutput, ModuleSpec,
+    Result, Usage, Value, ValueMap, async_trait, modular_agent,
 };
 
 use crate::capabilities::lookup_capabilities;
@@ -16,19 +16,19 @@ const CONFIG_MODEL: &str = "model";
 
 /// Accumulate token usage across assistant messages and report totals.
 ///
-/// Connect the `message` output of a chat agent to `message`: each final
+/// Connect the `message` output of a chat module to `message`: each final
 /// (non-streaming) message carrying [`Usage`] is added to running totals and
 /// the totals object is emitted. Streaming partials and messages without
 /// usage are silently skipped. When a message arrives with the same `id` as
 /// the previous one (a re-emitted final replacing an earlier emission), the
 /// previous usage is subtracted before the new one is added, so retried
-/// turns are not double-counted. Totals are cleared when the agent stops, so
+/// turns are not double-counted. Totals are cleared when the module stops, so
 /// a patch restart does not double-count replayed history.
 ///
 /// When the `model` config names a known model with cost rates, the totals
 /// include `cost_usd`. Cache token rates missing from the registry fall back
 /// to the input rate. For Claude models the built-in cache-write rate assumes
-/// the 5-minute TTL (1.25x input); flows using ChatAgent
+/// the 5-minute TTL (1.25x input); flows using ChatModule
 /// `cache_retention = "long"` (1-hour writes, billed at 2x) understate the
 /// cache-write component unless `cache_write` is overridden via models.json.
 ///
@@ -50,14 +50,14 @@ const CONFIG_MODEL: &str = "model";
     string_config(name = CONFIG_MODEL, default = ""),
     hint(width = 2, height = 1),
 )]
-pub struct UsageAgent {
-    data: AgentData,
+pub struct UsageModule {
+    data: ModuleData,
     totals: Usage,
     last_id: Option<String>,
     last_usage: Usage,
 }
 
-impl UsageAgent {
+impl UsageModule {
     fn clear(&mut self) {
         self.totals = Usage::default();
         self.last_id = None;
@@ -82,7 +82,7 @@ impl UsageAgent {
         )
     }
 
-    async fn emit_totals(&mut self, ctx: AgentContext) -> Result<(), AgentError> {
+    async fn emit_totals(&mut self, ctx: ModuleContext) -> Result<()> {
         let t = self.totals;
         let total_tokens = t
             .input_tokens
@@ -90,7 +90,7 @@ impl UsageAgent {
             .saturating_add(t.cache_read_tokens)
             .saturating_add(t.cache_write_tokens);
 
-        let mut map: AgentValueMap<String, AgentValue> = AgentValueMap::new();
+        let mut map: ValueMap<String, Value> = ValueMap::new();
         map.insert("input_tokens".into(), token_value(t.input_tokens));
         map.insert("output_tokens".into(), token_value(t.output_tokens));
         map.insert("cache_read_tokens".into(), token_value(t.cache_read_tokens));
@@ -102,17 +102,17 @@ impl UsageAgent {
 
         let model = self.configs()?.get_string_or_default(CONFIG_MODEL);
         if let Some(cost) = self.cost_usd(&model) {
-            map.insert("cost_usd".into(), AgentValue::number(cost));
+            map.insert("cost_usd".into(), Value::number(cost));
         }
 
-        self.output(ctx, PORT_USAGE, AgentValue::object(map)).await
+        self.output(ctx, PORT_USAGE, Value::object(map)).await
     }
 }
 
-fn token_value(v: u64) -> AgentValue {
+fn token_value(v: u64) -> Value {
     // Token counts can never realistically exceed i64::MAX; saturate anyway
     // to keep the conversion total.
-    AgentValue::integer(i64::try_from(v).unwrap_or(i64::MAX))
+    Value::integer(i64::try_from(v).unwrap_or(i64::MAX))
 }
 
 fn add_usage(totals: &mut Usage, u: &Usage) {
@@ -134,27 +134,22 @@ fn subtract_usage(totals: &mut Usage, u: &Usage) {
 }
 
 #[async_trait]
-impl AsAgent for UsageAgent {
-    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+impl AsModule for UsageModule {
+    fn new(ma: ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
         Ok(Self {
-            data: AgentData::new(ma, id, spec),
+            data: ModuleData::new(ma, id, spec),
             totals: Usage::default(),
             last_id: None,
             last_usage: Usage::default(),
         })
     }
 
-    async fn stop(&mut self) -> Result<(), AgentError> {
+    async fn stop(&mut self) -> Result<()> {
         self.clear();
         Ok(())
     }
 
-    async fn process(
-        &mut self,
-        ctx: AgentContext,
-        port: String,
-        value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, ctx: ModuleContext, port: String, value: Value) -> Result<()> {
         if port == PORT_RESET {
             self.clear();
             return self.emit_totals(ctx).await;
@@ -187,24 +182,24 @@ mod tests {
     use super::*;
 
     use modular_agent_core::ConnectionSpec;
-    use modular_agent_core::test_utils::{ProbeReceiver, TestProbeAgent, probe_receiver};
+    use modular_agent_core::test_utils::{ProbeReceiver, TestProbeModule, probe_receiver};
 
-    /// Build a running patch with a UsageAgent whose `usage` port feeds a
+    /// Build a running patch with a UsageModule whose `usage` port feeds a
     /// probe, so emitted totals can be observed end to end.
     async fn setup_usage_with_probe(model: &str) -> (ModularAgent, String, ProbeReceiver) {
         let ma = ModularAgent::init().unwrap();
         ma.ready().await.unwrap();
 
         let patch_id = ma.new_patch().unwrap();
-        let usage_def = ma.get_agent_definition(UsageAgent::DEF_NAME).unwrap();
+        let usage_def = ma.get_module_definition(UsageModule::DEF_NAME).unwrap();
         let mut usage_spec = usage_def.to_spec();
         if let Some(configs) = usage_spec.configs.as_mut() {
-            configs.set(CONFIG_MODEL.to_string(), AgentValue::string(model));
+            configs.set(CONFIG_MODEL.to_string(), Value::string(model));
         }
-        let usage_id = ma.add_agent(patch_id.clone(), usage_spec).await.unwrap();
-        let probe_def = ma.get_agent_definition(TestProbeAgent::DEF_NAME).unwrap();
+        let usage_id = ma.add_module(patch_id.clone(), usage_spec).await.unwrap();
+        let probe_def = ma.get_module_definition(TestProbeModule::DEF_NAME).unwrap();
         let probe_id = ma
-            .add_agent(patch_id.clone(), probe_def.to_spec())
+            .add_module(patch_id.clone(), probe_def.to_spec())
             .await
             .unwrap();
         ma.add_connection(
@@ -224,25 +219,25 @@ mod tests {
         (ma, usage_id, probe_rx)
     }
 
-    async fn send(ma: &ModularAgent, usage_id: &str, port: &str, value: AgentValue) {
-        let agent = ma.get_agent(usage_id).unwrap();
-        let mut guard = agent.lock().await;
-        let usage = guard.as_agent_mut::<UsageAgent>().unwrap();
-        AsAgent::process(usage, AgentContext::new(), port.into(), value)
+    async fn send(ma: &ModularAgent, usage_id: &str, port: &str, value: Value) {
+        let module = ma.get_module(usage_id).unwrap();
+        let mut guard = module.lock().await;
+        let usage = guard.as_module_mut::<UsageModule>().unwrap();
+        AsModule::process(usage, ModuleContext::new(), port.into(), value)
             .await
             .unwrap();
     }
 
-    async fn recv_totals(probe_rx: &ProbeReceiver) -> AgentValueMap<String, AgentValue> {
+    async fn recv_totals(probe_rx: &ProbeReceiver) -> ValueMap<String, Value> {
         let (_ctx, value) = probe_rx.recv().await.unwrap();
         value.as_object().unwrap().clone()
     }
 
-    fn tokens(map: &AgentValueMap<String, AgentValue>, key: &str) -> i64 {
+    fn tokens(map: &ValueMap<String, Value>, key: &str) -> i64 {
         map.get(key).unwrap().as_i64().unwrap()
     }
 
-    fn message_with_usage(id: &str, usage: Usage) -> AgentValue {
+    fn message_with_usage(id: &str, usage: Usage) -> Value {
         let mut message = Message::assistant("hi".to_string());
         message.id = Some(id.to_string());
         message.usage = Some(usage);
@@ -378,7 +373,7 @@ mod tests {
         .await;
         let _ = recv_totals(&probe_rx).await;
 
-        send(&ma, &usage_id, PORT_RESET, AgentValue::unit()).await;
+        send(&ma, &usage_id, PORT_RESET, Value::unit()).await;
         let totals = recv_totals(&probe_rx).await;
         assert_eq!(tokens(&totals, "input_tokens"), 0);
         assert_eq!(tokens(&totals, "output_tokens"), 0);

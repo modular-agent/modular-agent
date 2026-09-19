@@ -1,15 +1,15 @@
 <script lang="ts">
   import { onMount } from "svelte";
 
-  import { getAgentDefinitions, getCoreSettings, getGlobalConfigsMap } from "$lib/agent";
   import { ScrollArea } from "$lib/components/ui/scroll-area/index.js";
+  import { getModuleDefinitions, getCoreSettings, getGlobalConfigsMap } from "$lib/module";
   import { titlebarState } from "$lib/titlebar-state.svelte";
 
-  import Agent from "./Agent.svelte";
   import Core from "./Core.svelte";
+  import Module from "./Module.svelte";
 
   const coreSettings = getCoreSettings();
-  const agentDefs = getAgentDefinitions();
+  const moduleDefs = getModuleDefinitions();
   const globalConfigsMap = getGlobalConfigsMap();
 
   onMount(() => {
@@ -27,9 +27,9 @@
       <Core settings={coreSettings} />
 
       <div class="flex flex-col mt-8 gap-6">
-        <div class="flex-none text-xl font-semibold">Agents</div>
-        {#each Object.entries(globalConfigsMap) as [agentName, agentConfigs]}
-          <Agent {agentName} {agentConfigs} agentDef={agentDefs[agentName]} />
+        <div class="flex-none text-xl font-semibold">Modules</div>
+        {#each Object.entries(globalConfigsMap) as [moduleName, moduleConfigs]}
+          <Module {moduleName} {moduleConfigs} moduleDef={moduleDefs[moduleName]} />
         {/each}
       </div>
     </div>

@@ -1,4 +1,5 @@
-use modular_agent_core::AgentError;
+use modular_agent_core::Error;
+use modular_agent_core::Result;
 
 const VALID_JSON_ESCAPES: [char; 9] = ['"', '\\', '/', 'b', 'f', 'n', 'r', 't', 'u'];
 
@@ -79,7 +80,7 @@ fn repair_json(json: &str) -> String {
 /// Unlike pi's parser this never degrades to partial-JSON or an empty object:
 /// it only runs at finalization, where a silent fallback would hide that the
 /// model produced unusable arguments.
-pub(crate) fn parse_json_with_repair(s: &str) -> Result<serde_json::Value, AgentError> {
+pub(crate) fn parse_json_with_repair(s: &str) -> Result<serde_json::Value> {
     match serde_json::from_str(s) {
         Ok(value) => Ok(value),
         Err(e) => {
@@ -89,7 +90,7 @@ pub(crate) fn parse_json_with_repair(s: &str) -> Result<serde_json::Value, Agent
             {
                 return Ok(value);
             }
-            Err(AgentError::InvalidValue(format!("Invalid JSON: {}", e)))
+            Err(Error::InvalidValue(format!("Invalid JSON: {}", e)))
         }
     }
 }

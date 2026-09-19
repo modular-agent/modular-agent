@@ -2,19 +2,19 @@ extern crate modular_agent_core as ma;
 
 use im::vector;
 use ma::test_utils::{self, ProbeReceiver, probe_receiver, recv_probe};
-use ma::{AgentContext, AgentValue, ConnectionSpec, ModularAgent};
+use ma::{ConnectionSpec, ModularAgent, ModuleContext, Value};
 
-const ZIP_TO_ARRAY_DEF: &str = "modular_agent_std::array::ZipToArrayAgent";
-const MAP_DEF: &str = "modular_agent_std::array::MapAgent";
-const COLLECT_DEF: &str = "modular_agent_std::array::CollectAgent";
-const PROBE_DEF: &str = "modular_agent_core::test_utils::TestProbeAgent";
+const ZIP_TO_ARRAY_DEF: &str = "modular_agent_std::array::ZipToArrayModule";
+const MAP_DEF: &str = "modular_agent_std::array::MapModule";
+const COLLECT_DEF: &str = "modular_agent_std::array::CollectModule";
+const PROBE_DEF: &str = "modular_agent_core::test_utils::TestProbeModule";
 
-/// Add a probe agent wired to `source`'s `out_port` and return its receiver
+/// Add a probe module wired to `source`'s `out_port` and return its receiver
 /// factory id (call `probe_receiver` after the patch is started).
 async fn add_probe(ma: &ModularAgent, patch_id: &str, source: &str, out_port: &str) -> String {
-    let probe_def = ma.get_agent_definition(PROBE_DEF).unwrap();
+    let probe_def = ma.get_module_definition(PROBE_DEF).unwrap();
     let probe_id = ma
-        .add_agent(patch_id.to_string(), probe_def.to_spec())
+        .add_module(patch_id.to_string(), probe_def.to_spec())
         .await
         .unwrap();
     ma.add_connection(
@@ -37,9 +37,9 @@ async fn test_map_emits_items_in_order_with_frames() {
 
     let patch_id = ma.new_patch().unwrap();
     let map_id = ma
-        .add_agent(
+        .add_module(
             patch_id.clone(),
-            ma.get_agent_definition(MAP_DEF).unwrap().to_spec(),
+            ma.get_module_definition(MAP_DEF).unwrap().to_spec(),
         )
         .await
         .unwrap();
@@ -47,18 +47,18 @@ async fn test_map_emits_items_in_order_with_frames() {
     ma.start_patch(&patch_id).await.unwrap();
     let probe = probe_receiver(&ma, &probe_id).await.unwrap();
 
-    let ctx = AgentContext::new();
-    let agent = ma.get_agent(&map_id).unwrap();
-    agent
+    let ctx = ModuleContext::new();
+    let module = ma.get_module(&map_id).unwrap();
+    module
         .lock()
         .await
         .process(
             ctx.clone(),
             "array".into(),
-            AgentValue::array(vector![
-                AgentValue::integer(10),
-                AgentValue::integer(20),
-                AgentValue::integer(30),
+            Value::array(vector![
+                Value::integer(10),
+                Value::integer(20),
+                Value::integer(30),
             ]),
         )
         .await
@@ -67,7 +67,7 @@ async fn test_map_emits_items_in_order_with_frames() {
     // One emission per item, in order, each carrying a map frame (index, length)
     for (i, expected) in [10, 20, 30].iter().enumerate() {
         let (out_ctx, value) = recv_probe(&probe).await.unwrap();
-        assert_eq!(value, AgentValue::integer(*expected));
+        assert_eq!(value, Value::integer(*expected));
         assert_eq!(out_ctx.current_map_frame().unwrap(), Some((i, 3)));
         assert_eq!(out_ctx.id(), ctx.id());
     }
@@ -81,16 +81,16 @@ async fn test_map_collect_roundtrip() {
 
     let patch_id = ma.new_patch().unwrap();
     let map_id = ma
-        .add_agent(
+        .add_module(
             patch_id.clone(),
-            ma.get_agent_definition(MAP_DEF).unwrap().to_spec(),
+            ma.get_module_definition(MAP_DEF).unwrap().to_spec(),
         )
         .await
         .unwrap();
     let collect_id = ma
-        .add_agent(
+        .add_module(
             patch_id.clone(),
-            ma.get_agent_definition(COLLECT_DEF).unwrap().to_spec(),
+            ma.get_module_definition(COLLECT_DEF).unwrap().to_spec(),
         )
         .await
         .unwrap();
@@ -109,14 +109,14 @@ async fn test_map_collect_roundtrip() {
     ma.start_patch(&patch_id).await.unwrap();
     let probe = probe_receiver(&ma, &probe_id).await.unwrap();
 
-    let input = AgentValue::array(vector![
-        AgentValue::string("a"),
-        AgentValue::string("b"),
-        AgentValue::string("c"),
+    let input = Value::array(vector![
+        Value::string("a"),
+        Value::string("b"),
+        Value::string("c"),
     ]);
-    let ctx = AgentContext::new();
-    let agent = ma.get_agent(&map_id).unwrap();
-    agent
+    let ctx = ModuleContext::new();
+    let module = ma.get_module(&map_id).unwrap();
+    module
         .lock()
         .await
         .process(ctx.clone(), "array".into(), input.clone())
@@ -138,9 +138,11 @@ async fn test_zip_to_array_fifo_pairs_in_arrival_order() {
 
     let patch_id = ma.new_patch().unwrap();
     let zip_id = ma
-        .add_agent(
+        .add_module(
             patch_id.clone(),
-            ma.get_agent_definition(ZIP_TO_ARRAY_DEF).unwrap().to_spec(),
+            ma.get_module_definition(ZIP_TO_ARRAY_DEF)
+                .unwrap()
+                .to_spec(),
         )
         .await
         .unwrap();
@@ -148,14 +150,14 @@ async fn test_zip_to_array_fifo_pairs_in_arrival_order() {
     ma.start_patch(&patch_id).await.unwrap();
     let probe = probe_receiver(&ma, &probe_id).await.unwrap();
 
-    let ctx = AgentContext::new();
-    let agent = ma.get_agent(&zip_id).unwrap();
+    let ctx = ModuleContext::new();
+    let module = ma.get_module(&zip_id).unwrap();
     {
-        let mut guard = agent.lock().await;
+        let mut guard = module.lock().await;
         // Port 1 values queue up until port 0 arrives, then pair head-first
         for (port, v) in [("1", 10), ("1", 20), ("0", 1), ("0", 2)] {
             guard
-                .process(ctx.clone(), port.into(), AgentValue::integer(v))
+                .process(ctx.clone(), port.into(), Value::integer(v))
                 .await
                 .unwrap();
         }
@@ -164,12 +166,12 @@ async fn test_zip_to_array_fifo_pairs_in_arrival_order() {
     let (_c, value) = recv_probe(&probe).await.unwrap();
     assert_eq!(
         value,
-        AgentValue::array(vector![AgentValue::integer(1), AgentValue::integer(10)])
+        Value::array(vector![Value::integer(1), Value::integer(10)])
     );
     let (_c, value) = recv_probe(&probe).await.unwrap();
     assert_eq!(
         value,
-        AgentValue::array(vector![AgentValue::integer(2), AgentValue::integer(20)])
+        Value::array(vector![Value::integer(2), Value::integer(20)])
     );
 
     ma.quit();
@@ -180,22 +182,25 @@ async fn test_zip_to_array_n3() {
     let ma = test_utils::setup_modular_agent().await;
 
     let patch_id = ma.new_patch().unwrap();
-    let mut zip_spec = ma.get_agent_definition(ZIP_TO_ARRAY_DEF).unwrap().to_spec();
+    let mut zip_spec = ma
+        .get_module_definition(ZIP_TO_ARRAY_DEF)
+        .unwrap()
+        .to_spec();
     if let Some(configs) = zip_spec.configs.as_mut() {
-        configs.set("n".into(), AgentValue::integer(3));
+        configs.set("n".into(), Value::integer(3));
     }
-    let zip_id = ma.add_agent(patch_id.clone(), zip_spec).await.unwrap();
+    let zip_id = ma.add_module(patch_id.clone(), zip_spec).await.unwrap();
     let probe_id = add_probe(&ma, &patch_id, &zip_id, "array").await;
     ma.start_patch(&patch_id).await.unwrap();
     let probe = probe_receiver(&ma, &probe_id).await.unwrap();
 
-    let ctx = AgentContext::new();
-    let agent = ma.get_agent(&zip_id).unwrap();
+    let ctx = ModuleContext::new();
+    let module = ma.get_module(&zip_id).unwrap();
     {
-        let mut guard = agent.lock().await;
+        let mut guard = module.lock().await;
         for (port, v) in [("0", 1), ("1", 2), ("2", 3)] {
             guard
-                .process(ctx.clone(), port.into(), AgentValue::integer(v))
+                .process(ctx.clone(), port.into(), Value::integer(v))
                 .await
                 .unwrap();
         }
@@ -204,10 +209,10 @@ async fn test_zip_to_array_n3() {
     let (_c, value) = recv_probe(&probe).await.unwrap();
     assert_eq!(
         value,
-        AgentValue::array(vector![
-            AgentValue::integer(1),
-            AgentValue::integer(2),
-            AgentValue::integer(3),
+        Value::array(vector![
+            Value::integer(1),
+            Value::integer(2),
+            Value::integer(3),
         ])
     );
 
@@ -218,16 +223,16 @@ async fn test_zip_to_array_n3() {
 async fn setup_ctx_zip_with_probe(ma: &ModularAgent) -> (String, ProbeReceiver) {
     let patch_id = ma.new_patch().unwrap();
 
-    let zip_def = ma.get_agent_definition(ZIP_TO_ARRAY_DEF).unwrap();
+    let zip_def = ma.get_module_definition(ZIP_TO_ARRAY_DEF).unwrap();
     let mut zip_spec = zip_def.to_spec();
     if let Some(configs) = zip_spec.configs.as_mut() {
-        configs.set("use_ctx".into(), AgentValue::boolean(true));
+        configs.set("use_ctx".into(), Value::boolean(true));
     }
-    let zip_id = ma.add_agent(patch_id.clone(), zip_spec).await.unwrap();
+    let zip_id = ma.add_module(patch_id.clone(), zip_spec).await.unwrap();
 
-    let probe_def = ma.get_agent_definition(PROBE_DEF).unwrap();
+    let probe_def = ma.get_module_definition(PROBE_DEF).unwrap();
     let probe_id = ma
-        .add_agent(patch_id.clone(), probe_def.to_spec())
+        .add_module(patch_id.clone(), probe_def.to_spec())
         .await
         .unwrap();
     ma.add_connection(
@@ -255,22 +260,22 @@ async fn test_zip_to_array_context_mode_interleaved() {
     // Two flows interleave: flow B completes first even though flow A started
     // first, so values pair by ctx, not by arrival order (FIFO would pair 1
     // with 4 here)
-    let ctx_a = AgentContext::new();
-    let ctx_b = AgentContext::new();
+    let ctx_a = ModuleContext::new();
+    let ctx_b = ModuleContext::new();
 
-    let agent = ma.get_agent(&zip_id).unwrap();
+    let module = ma.get_module(&zip_id).unwrap();
     {
-        let mut guard = agent.lock().await;
+        let mut guard = module.lock().await;
         guard
-            .process(ctx_a.clone(), "0".into(), AgentValue::integer(1))
+            .process(ctx_a.clone(), "0".into(), Value::integer(1))
             .await
             .unwrap();
         guard
-            .process(ctx_b.clone(), "0".into(), AgentValue::integer(3))
+            .process(ctx_b.clone(), "0".into(), Value::integer(3))
             .await
             .unwrap();
         guard
-            .process(ctx_b.clone(), "1".into(), AgentValue::integer(4))
+            .process(ctx_b.clone(), "1".into(), Value::integer(4))
             .await
             .unwrap();
     }
@@ -278,14 +283,14 @@ async fn test_zip_to_array_context_mode_interleaved() {
     let (out_ctx, value) = recv_probe(&probe).await.unwrap();
     assert_eq!(
         value,
-        AgentValue::array(vector![AgentValue::integer(3), AgentValue::integer(4)])
+        Value::array(vector![Value::integer(3), Value::integer(4)])
     );
     assert_eq!(out_ctx.id(), ctx_b.id());
 
     {
-        let mut guard = agent.lock().await;
+        let mut guard = module.lock().await;
         guard
-            .process(ctx_a.clone(), "1".into(), AgentValue::integer(2))
+            .process(ctx_a.clone(), "1".into(), Value::integer(2))
             .await
             .unwrap();
     }
@@ -293,7 +298,7 @@ async fn test_zip_to_array_context_mode_interleaved() {
     let (out_ctx, value) = recv_probe(&probe).await.unwrap();
     assert_eq!(
         value,
-        AgentValue::array(vector![AgentValue::integer(1), AgentValue::integer(2)])
+        Value::array(vector![Value::integer(1), Value::integer(2)])
     );
     assert_eq!(out_ctx.id(), ctx_a.id());
 

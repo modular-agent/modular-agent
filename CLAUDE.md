@@ -4,38 +4,38 @@ This file provides guidance to Claude Code when working with code in this reposi
 
 ## Project Overview
 
-Modular Agent is a multi-agent orchestration framework for building AI-powered workflows.
-Agents are composed into workflows through JSON patch configurations.
+Modular Agent composes modules into an agent through JSON patches.
+Each module is a processing unit with ports and a config; a patch wires them into a running workflow.
 
-This repository is the monorepo holding the engine, the agent libraries every app needs,
-both applications, and the build configurator. Agent libraries that only some builds
+This repository is the monorepo holding the engine, the module libraries every app needs,
+both applications, and the build configurator. Module libraries that only some builds
 need live in their own repositories under `github.com/modular-agent` and are cloned into
-`custom_agents/` to build.
+`custom_modules/` to build.
 
 ## Repository Structure
 
-Out-of-tree agent packages (separate repositories): sqlx, duckdb, mongodb, surrealdb,
+Out-of-tree module packages (separate repositories): sqlx, duckdb, mongodb, surrealdb,
 cozodb, lancedb, slack, mattermost, lifelog, monty. Also separate:
 `modular-agent-com` (homepage), `modular-agent-chatvrm` (avatar chat),
 `modular-agent-doc` (documentation site), `browsing-recorder` (browser extension).
 
 ## Workspace Layout
 
-- **One workspace, one `Cargo.lock`.** Both apps and every `custom_agents/` clone are
+- **One workspace, one `Cargo.lock`.** Both apps and every `custom_modules/` clone are
   workspace members, so the whole build resolves once.
 - **Versions are per crate.** core and macros are bumped together; std / llm /
   the plugin keep their own semver lines. `[workspace.dependencies]` carries
   `version` + `path` for each in-tree crate, so in-tree builds use the path and a
   published crate records the version.
-- **Out-of-tree agents live in `custom_agents/`** (gitignored, cloned by hand). Cargo
+- **Out-of-tree modules live in `custom_modules/`** (gitignored, cloned by hand). Cargo
   makes a path dependency inside the workspace directory a member automatically, so
   selecting one in ma-config needs no `members` entry and no `[patch]`. Each clone
   depends on core by path (`../../crates/modular-agent-core`), which keeps a single copy
-  of core in the graph — two copies mean two separate `inventory` registries, and agents
+  of core in the graph — two copies mean two separate `inventory` registries, and modules
   registered in one are invisible to the other. ma-config errors out on a missing clone
   or on one still depending on the crates.io core.
 - **`tools/ma-config` is excluded from the workspace** so it still builds when an app
-  manifest points at a `custom_agents/` clone that is missing or broken.
+  manifest points at a `custom_modules/` clone that is missing or broken.
 
 ## Build Commands
 
@@ -56,7 +56,7 @@ cd apps/desktop && npm install && npm run tauri dev
 cargo fmt -p <package>
 cargo clippy -p <package>
 
-# Agent selection wizard (writes apps/<app>/ma-config.toml)
+# Module selection wizard (writes apps/<app>/ma-config.toml)
 cargo run --manifest-path tools/ma-config/Cargo.toml -- desktop
 cargo run --manifest-path tools/ma-config/Cargo.toml -- cli
 
@@ -69,13 +69,13 @@ uv run scripts/text_to_title.py \
     -o ../../<path>/doc/images/modular_agent_title.svg
 ```
 
-## Agent Development
+## Module Development
 
-The `#[modular_agent]` macro pattern, doc-comment rules for agent descriptions, UI
+The `#[modular_agent]` macro pattern, doc-comment rules for module descriptions, UI
 hints, config types, lifecycle methods, error handling, and the DB connection caching
-pattern are documented in the `agent-development` skill
-(`.claude/skills/agent-development/SKILL.md`). Load it before writing or reviewing
-agents.
+pattern are documented in the `module-development` skill
+(`.claude/skills/module-development/SKILL.md`). Load it before writing or reviewing
+modules.
 
 ## Dependencies
 
@@ -117,10 +117,10 @@ lives in its own repository again.
 
 ## See Also
 
-- `.claude/skills/agent-development/SKILL.md` - Agent development patterns
-- `crates/modular-agent-core/CLAUDE.md` - Core engine details, AgentValue types
-- `crates/modular-agent-std/CLAUDE.md` - Standard utility agents
-- `crates/modular-agent-llm/CLAUDE.md` - LLM integration agents
+- `.claude/skills/module-development/SKILL.md` - Module development patterns
+- `crates/modular-agent-core/CLAUDE.md` - Core engine details, Value types
+- `crates/modular-agent-std/CLAUDE.md` - Standard utility modules
+- `crates/modular-agent-llm/CLAUDE.md` - LLM integration modules
 - `apps/desktop/CLAUDE.md` - Desktop app architecture, ma-config
 - `apps/cli/CLAUDE.md` - CLI runner
 - `../modular-agent-com/design-brief.md` - Homepage design brief (Japanese)

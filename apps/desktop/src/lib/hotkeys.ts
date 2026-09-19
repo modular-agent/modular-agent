@@ -9,8 +9,8 @@ export type HotkeyDefinition = {
   label: string;
   group: "Global" | "Editor" | "Quick Add";
   defaultKey: string;
-  /** Quick Add only: default agent def_name */
-  defaultAgent?: string;
+  /** Quick Add only: default module def_name */
+  defaultModule?: string;
 };
 
 export type ResolvedHotkey = {
@@ -38,7 +38,7 @@ export const DEFAULT_HOTKEYS: HotkeyDefinition[] = [
   { id: "editor.copy", label: "Copy", group: "Editor", defaultKey: "mod+c" },
   { id: "editor.paste", label: "Paste", group: "Editor", defaultKey: "mod+v" },
   { id: "editor.select_all", label: "Select All", group: "Editor", defaultKey: "mod+a" },
-  { id: "editor.add_agent", label: "Open Agent List", group: "Editor", defaultKey: "shift+a" },
+  { id: "editor.add_module", label: "Open Module List", group: "Editor", defaultKey: "shift+a" },
   { id: "editor.undo", label: "Undo", group: "Editor", defaultKey: "mod+z" },
   { id: "editor.redo", label: "Redo", group: "Editor", defaultKey: "mod+shift+z" },
   {
@@ -53,41 +53,41 @@ export const DEFAULT_HOTKEYS: HotkeyDefinition[] = [
     label: "Quick Add 1",
     group: "Quick Add",
     defaultKey: "mod+1",
-    defaultAgent: "modular_agent_std::input::UnitInputAgent",
+    defaultModule: "modular_agent_std::input::UnitInputModule",
   },
   {
     id: "quick_add.2",
     label: "Quick Add 2",
     group: "Quick Add",
     defaultKey: "mod+2",
-    defaultAgent: "modular_agent_std::input::TextInputAgent",
+    defaultModule: "modular_agent_std::input::TextInputModule",
   },
   {
     id: "quick_add.3",
     label: "Quick Add 3",
     group: "Quick Add",
     defaultKey: "mod+3",
-    defaultAgent: "modular_agent_std::display::DisplayValueAgent",
+    defaultModule: "modular_agent_std::display::DisplayValueModule",
   },
   {
     id: "quick_add.4",
     label: "Quick Add 4",
     group: "Quick Add",
     defaultKey: "mod+4",
-    defaultAgent: "modular_agent_std::ui::RouterAgent",
+    defaultModule: "modular_agent_std::ui::RouterModule",
   },
   {
     id: "quick_add.5",
     label: "Quick Add 5",
     group: "Quick Add",
     defaultKey: "mod+5",
-    defaultAgent: "modular_agent_std::ui::NoteAgent",
+    defaultModule: "modular_agent_std::ui::NoteModule",
   },
 ];
 
 // ── Resolving ──────────────────────────────────────────────────────
 
-/** Resolve key bindings only (excludes .agent entries) */
+/** Resolve key bindings only (excludes .module entries) */
 export function resolveHotkeys(
   userOverrides: Record<string, string> | null | undefined,
 ): ResolvedHotkeys {
@@ -97,15 +97,15 @@ export function resolveHotkeys(
   }));
 }
 
-/** Resolve Quick Add agent assignments (reads .agent entries from shortcut_keys) */
-export function resolveQuickAddAgents(
+/** Resolve Quick Add module assignments (reads .module entries from shortcut_keys) */
+export function resolveQuickAddModules(
   userOverrides: Record<string, string> | null | undefined,
 ): Map<string, string> {
   const map = new Map<string, string>();
   for (const def of DEFAULT_HOTKEYS) {
-    if (def.defaultAgent) {
-      const override = userOverrides?.[`${def.id}.agent`];
-      map.set(def.id, override ?? def.defaultAgent);
+    if (def.defaultModule) {
+      const override = userOverrides?.[`${def.id}.module`];
+      map.set(def.id, override ?? def.defaultModule);
     }
   }
   return map;

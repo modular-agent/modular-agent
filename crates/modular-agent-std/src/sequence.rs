@@ -3,8 +3,8 @@ use std::time::Duration;
 
 use mini_moka::sync::Cache;
 use modular_agent_core::{
-    AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent, ModularAgent,
-    async_trait, modular_agent,
+    AsModule, Error, ModularAgent, ModuleContext, ModuleData, ModuleOutput, ModuleSpec, Result,
+    Value, async_trait, modular_agent,
 };
 
 const CONFIG_TTL_SEC: &str = "ttl_sec";
@@ -26,13 +26,13 @@ const CONFIG_USE_CTX: &str = "use_ctx";
     integer_config(name = CONFIG_N, default = 2),
     hint(color=2),
 )]
-struct SequenceAgent {
-    data: AgentData,
+struct SequenceModule {
+    data: ModuleData,
     n: usize,
 }
 
-impl SequenceAgent {
-    fn update_spec(spec: &mut AgentSpec) -> Result<usize, AgentError> {
+impl SequenceModule {
+    fn update_spec(spec: &mut ModuleSpec) -> Result<usize> {
         let mut n = spec
             .configs
             .as_ref()
@@ -49,14 +49,14 @@ impl SequenceAgent {
 }
 
 #[async_trait]
-impl AsAgent for SequenceAgent {
-    fn new(ma: ModularAgent, id: String, mut spec: AgentSpec) -> Result<Self, AgentError> {
+impl AsModule for SequenceModule {
+    fn new(ma: ModularAgent, id: String, mut spec: ModuleSpec) -> Result<Self> {
         let n = Self::update_spec(&mut spec)?;
-        let data = AgentData::new(ma, id, spec);
+        let data = ModuleData::new(ma, id, spec);
         Ok(Self { data, n })
     }
 
-    fn configs_changed(&mut self) -> Result<(), AgentError> {
+    fn configs_changed(&mut self) -> Result<()> {
         let n = Self::update_spec(&mut self.data.spec)?;
         let mut changed = false;
         if n != self.n {
@@ -64,17 +64,12 @@ impl AsAgent for SequenceAgent {
             changed = true;
         }
         if changed {
-            self.emit_agent_spec_updated();
+            self.emit_module_spec_updated();
         }
         Ok(())
     }
 
-    async fn process(
-        &mut self,
-        ctx: AgentContext,
-        _port: String,
-        value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, ctx: ModuleContext, _port: String, value: Value) -> Result<()> {
         for i in 0..self.n {
             self.output(ctx.clone(), i.to_string(), value.clone())
                 .await?;
@@ -96,8 +91,8 @@ impl AsAgent for SequenceAgent {
     integer_config(name = CONFIG_CAPACITY, default = 1000),
     hint(color=2),
 )]
-struct SyncAgent {
-    data: AgentData,
+struct SyncModule {
+    data: ModuleData,
     n: usize,
     use_ctx: bool,
     ttl_sec: u64,
@@ -107,7 +102,7 @@ struct SyncAgent {
     output_ports: Vec<String>,
 
     // For simple mode
-    queues: Vec<VecDeque<AgentValue>>,
+    queues: Vec<VecDeque<Value>>,
 
     // For use_ctx mode: Cache with TTL
     ctx_buffers: Cache<String, PendingSync>,
@@ -118,14 +113,12 @@ struct PendingSync {
     // Each slot keeps the ctx its value arrived with: slots grouped by ctx_key can
     // still differ in per-branch state (non-map frames, vars), which must not leak
     // across slots on emit.
-    slots: Vec<Option<(AgentContext, AgentValue)>>,
+    slots: Vec<Option<(ModuleContext, Value)>>,
     count: usize,
 }
 
-impl SyncAgent {
-    fn update_spec(
-        spec: &mut AgentSpec,
-    ) -> Result<(usize, bool, u64, u64, Vec<String>), AgentError> {
+impl SyncModule {
+    fn update_spec(spec: &mut ModuleSpec) -> Result<(usize, bool, u64, u64, Vec<String>)> {
         let n = spec
             .configs
             .as_ref()
@@ -170,8 +163,8 @@ impl SyncAgent {
 }
 
 #[async_trait]
-impl AsAgent for SyncAgent {
-    fn new(ma: ModularAgent, id: String, mut spec: AgentSpec) -> Result<Self, AgentError> {
+impl AsModule for SyncModule {
+    fn new(ma: ModularAgent, id: String, mut spec: ModuleSpec) -> Result<Self> {
         let (n, use_ctx, ttl_sec, capacity, output_ports) = Self::update_spec(&mut spec)?;
 
         let cache = Cache::builder()
@@ -179,7 +172,7 @@ impl AsAgent for SyncAgent {
             .time_to_live(Duration::from_secs(ttl_sec))
             .build();
 
-        let data = AgentData::new(ma, id, spec);
+        let data = ModuleData::new(ma, id, spec);
         Ok(Self {
             data,
             n,
@@ -192,7 +185,7 @@ impl AsAgent for SyncAgent {
         })
     }
 
-    fn configs_changed(&mut self) -> Result<(), AgentError> {
+    fn configs_changed(&mut self) -> Result<()> {
         let (n, use_ctx, ttl_sec, capacity, output_ports) = Self::update_spec(&mut self.data.spec)?;
         let mut changed = false;
         if n != self.n {
@@ -214,29 +207,21 @@ impl AsAgent for SyncAgent {
         if changed {
             self.output_ports = output_ports;
             self.reset_state();
-            self.emit_agent_spec_updated();
+            self.emit_module_spec_updated();
         }
         Ok(())
     }
 
-    async fn stop(&mut self) -> Result<(), AgentError> {
+    async fn stop(&mut self) -> Result<()> {
         // Clear input queues on stop
         self.reset_state();
         Ok(())
     }
 
-    async fn process(
-        &mut self,
-        ctx: AgentContext,
-        port: String,
-        value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, ctx: ModuleContext, port: String, value: Value) -> Result<()> {
         // Parse port number
         let Some(idx) = port.parse::<usize>().ok().filter(|&i| i < self.n) else {
-            return Err(AgentError::InvalidValue(format!(
-                "Invalid input port: {}",
-                port
-            )));
+            return Err(Error::InvalidValue(format!("Invalid input port: {}", port)));
         };
 
         // Context Mode
@@ -280,7 +265,7 @@ impl AsAgent for SyncAgent {
 
         // Check if all queues have data
         if self.queues.iter().all(|q| !q.is_empty()) {
-            let ready_values: Vec<AgentValue> = self
+            let ready_values: Vec<Value> = self
                 .queues
                 .iter_mut()
                 .map(|q| q.pop_front().unwrap())

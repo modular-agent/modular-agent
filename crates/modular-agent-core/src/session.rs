@@ -11,7 +11,7 @@
 //! # Ownership and lifetime
 //!
 //! A `SessionStore` is owned by the component that creates it — typically a
-//! single agent instance — and lives exactly as long as its owner. There is
+//! single module instance — and lives exactly as long as its owner. There is
 //! no global registry and no static state; dropping the owner drops the
 //! store (persisted JSONL files of course remain on disk).
 //!
@@ -38,7 +38,7 @@ use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
 
-use crate::error::AgentError;
+use crate::error::{Error, Result};
 use crate::llm::Message;
 
 fn default_version() -> u32 {
@@ -182,17 +182,17 @@ pub trait SessionStore: Send + Sync {
     /// Creates a new session from its header and returns the session id.
     ///
     /// Errors if a session with `meta.id` already exists.
-    async fn create(&self, meta: SessionMeta) -> Result<String, AgentError>;
+    async fn create(&self, meta: SessionMeta) -> Result<String>;
 
     /// Appends one entry to an existing session.
     ///
     /// Callers must append only finalized messages (`message.streaming ==
     /// false`, invariant 1 of the [module docs](self)); partial streaming
     /// messages belong in the caller's memory, not in the store.
-    async fn append(&self, session_id: &str, entry: SessionEntry) -> Result<(), AgentError>;
+    async fn append(&self, session_id: &str, entry: SessionEntry) -> Result<()>;
 
     /// Loads all entries of a session in append order.
-    async fn load(&self, session_id: &str) -> Result<Vec<SessionEntry>, AgentError>;
+    async fn load(&self, session_id: &str) -> Result<Vec<SessionEntry>>;
 
     /// Removes the entries with the given entry ids from a session.
     ///
@@ -200,18 +200,14 @@ pub trait SessionStore: Send + Sync {
     /// their retention window. Ids that match no entry are ignored, so the
     /// call is idempotent and a retry after a partial failure needs no
     /// bookkeeping.
-    async fn remove_entries(
-        &self,
-        session_id: &str,
-        entry_ids: &[String],
-    ) -> Result<(), AgentError>;
+    async fn remove_entries(&self, session_id: &str, entry_ids: &[String]) -> Result<()>;
 
     /// Lists the headers of all sessions in the store.
-    async fn list(&self) -> Result<Vec<SessionMeta>, AgentError>;
+    async fn list(&self) -> Result<Vec<SessionMeta>>;
 }
 
-fn session_not_found(session_id: &str) -> AgentError {
-    AgentError::Other(format!("Session not found: {session_id}"))
+fn session_not_found(session_id: &str) -> Error {
+    Error::Other(format!("Session not found: {session_id}"))
 }
 
 type SessionMap = BTreeMap<String, (SessionMeta, Vec<SessionEntry>)>;
@@ -234,17 +230,17 @@ impl InMemorySessionStore {
 
 #[async_trait]
 impl SessionStore for InMemorySessionStore {
-    async fn create(&self, meta: SessionMeta) -> Result<String, AgentError> {
+    async fn create(&self, meta: SessionMeta) -> Result<String> {
         let mut sessions = self.sessions.lock();
         let id = meta.id.clone();
         if sessions.contains_key(&id) {
-            return Err(AgentError::DuplicateId(id));
+            return Err(Error::DuplicateId(id));
         }
         sessions.insert(id.clone(), (meta, Vec::new()));
         Ok(id)
     }
 
-    async fn append(&self, session_id: &str, entry: SessionEntry) -> Result<(), AgentError> {
+    async fn append(&self, session_id: &str, entry: SessionEntry) -> Result<()> {
         let mut sessions = self.sessions.lock();
         let (_, entries) = sessions
             .get_mut(session_id)
@@ -253,7 +249,7 @@ impl SessionStore for InMemorySessionStore {
         Ok(())
     }
 
-    async fn load(&self, session_id: &str) -> Result<Vec<SessionEntry>, AgentError> {
+    async fn load(&self, session_id: &str) -> Result<Vec<SessionEntry>> {
         let sessions = self.sessions.lock();
         let (_, entries) = sessions
             .get(session_id)
@@ -261,11 +257,7 @@ impl SessionStore for InMemorySessionStore {
         Ok(entries.clone())
     }
 
-    async fn remove_entries(
-        &self,
-        session_id: &str,
-        entry_ids: &[String],
-    ) -> Result<(), AgentError> {
+    async fn remove_entries(&self, session_id: &str, entry_ids: &[String]) -> Result<()> {
         if entry_ids.is_empty() {
             return Ok(());
         }
@@ -277,7 +269,7 @@ impl SessionStore for InMemorySessionStore {
         Ok(())
     }
 
-    async fn list(&self) -> Result<Vec<SessionMeta>, AgentError> {
+    async fn list(&self) -> Result<Vec<SessionMeta>> {
         let sessions = self.sessions.lock();
         Ok(sessions.values().map(|(meta, _)| meta.clone()).collect())
     }
@@ -314,10 +306,10 @@ impl JsonlSessionStore {
 
 #[async_trait]
 impl SessionStore for JsonlSessionStore {
-    async fn create(&self, meta: SessionMeta) -> Result<String, AgentError> {
+    async fn create(&self, meta: SessionMeta) -> Result<String> {
         tokio::fs::create_dir_all(&self.dir)
             .await
-            .map_err(|e| AgentError::IoError(format!("Failed to create session dir: {e}")))?;
+            .map_err(|e| Error::IoError(format!("Failed to create session dir: {e}")))?;
         let id = meta.id.clone();
         let path = self.session_path(&id);
         // create_new makes the existence check atomic with file creation.
@@ -328,25 +320,24 @@ impl SessionStore for JsonlSessionStore {
             .await
             .map_err(|e| {
                 if e.kind() == std::io::ErrorKind::AlreadyExists {
-                    AgentError::DuplicateId(id.clone())
+                    Error::DuplicateId(id.clone())
                 } else {
-                    AgentError::IoError(format!("Failed to create session file: {e}"))
+                    Error::IoError(format!("Failed to create session file: {e}"))
                 }
             })?;
-        let mut line = serde_json::to_string(&meta).map_err(|e| {
-            AgentError::SerializationError(format!("Failed to serialize meta: {e}"))
-        })?;
+        let mut line = serde_json::to_string(&meta)
+            .map_err(|e| Error::SerializationError(format!("Failed to serialize meta: {e}")))?;
         line.push('\n');
         file.write_all(line.as_bytes())
             .await
-            .map_err(|e| AgentError::IoError(format!("Failed to write session header: {e}")))?;
+            .map_err(|e| Error::IoError(format!("Failed to write session header: {e}")))?;
         file.flush()
             .await
-            .map_err(|e| AgentError::IoError(format!("Failed to flush session file: {e}")))?;
+            .map_err(|e| Error::IoError(format!("Failed to flush session file: {e}")))?;
         Ok(id)
     }
 
-    async fn append(&self, session_id: &str, entry: SessionEntry) -> Result<(), AgentError> {
+    async fn append(&self, session_id: &str, entry: SessionEntry) -> Result<()> {
         let path = self.session_path(session_id);
         let mut file = tokio::fs::OpenOptions::new()
             .append(true)
@@ -356,29 +347,28 @@ impl SessionStore for JsonlSessionStore {
                 if e.kind() == std::io::ErrorKind::NotFound {
                     session_not_found(session_id)
                 } else {
-                    AgentError::IoError(format!("Failed to open session file: {e}"))
+                    Error::IoError(format!("Failed to open session file: {e}"))
                 }
             })?;
-        let mut line = serde_json::to_string(&entry).map_err(|e| {
-            AgentError::SerializationError(format!("Failed to serialize entry: {e}"))
-        })?;
+        let mut line = serde_json::to_string(&entry)
+            .map_err(|e| Error::SerializationError(format!("Failed to serialize entry: {e}")))?;
         line.push('\n');
         file.write_all(line.as_bytes())
             .await
-            .map_err(|e| AgentError::IoError(format!("Failed to append session entry: {e}")))?;
+            .map_err(|e| Error::IoError(format!("Failed to append session entry: {e}")))?;
         file.flush()
             .await
-            .map_err(|e| AgentError::IoError(format!("Failed to flush session file: {e}")))?;
+            .map_err(|e| Error::IoError(format!("Failed to flush session file: {e}")))?;
         Ok(())
     }
 
-    async fn load(&self, session_id: &str) -> Result<Vec<SessionEntry>, AgentError> {
+    async fn load(&self, session_id: &str) -> Result<Vec<SessionEntry>> {
         let path = self.session_path(session_id);
         let content = tokio::fs::read_to_string(&path).await.map_err(|e| {
             if e.kind() == std::io::ErrorKind::NotFound {
                 session_not_found(session_id)
             } else {
-                AgentError::IoError(format!("Failed to read session file: {e}"))
+                Error::IoError(format!("Failed to read session file: {e}"))
             }
         })?;
         // Every successful append ends with a newline, so content after the
@@ -397,25 +387,25 @@ impl SessionStore for JsonlSessionStore {
                 .open(&path)
                 .await
                 .map_err(|e| {
-                    AgentError::IoError(format!("Failed to open session file for repair: {e}"))
+                    Error::IoError(format!("Failed to open session file for repair: {e}"))
                 })?;
-            file.set_len(complete_len as u64).await.map_err(|e| {
-                AgentError::IoError(format!("Failed to truncate session file: {e}"))
-            })?;
+            file.set_len(complete_len as u64)
+                .await
+                .map_err(|e| Error::IoError(format!("Failed to truncate session file: {e}")))?;
         }
         let mut lines = content[..complete_len].lines();
         let Some(header) = lines.next() else {
-            return Err(AgentError::JsonParseError(format!(
+            return Err(Error::JsonParseError(format!(
                 "Session file for {session_id} is empty (missing header line)"
             )));
         };
         serde_json::from_str::<SessionMeta>(header).map_err(|e| {
-            AgentError::JsonParseError(format!("Invalid session header for {session_id}: {e}"))
+            Error::JsonParseError(format!("Invalid session header for {session_id}: {e}"))
         })?;
         let mut entries = Vec::new();
         for (i, line) in lines.enumerate() {
             let entry = serde_json::from_str::<SessionEntry>(line).map_err(|e| {
-                AgentError::JsonParseError(format!(
+                Error::JsonParseError(format!(
                     "Invalid entry at line {} of session {session_id}: {e}",
                     i + 2
                 ))
@@ -425,11 +415,7 @@ impl SessionStore for JsonlSessionStore {
         Ok(entries)
     }
 
-    async fn remove_entries(
-        &self,
-        session_id: &str,
-        entry_ids: &[String],
-    ) -> Result<(), AgentError> {
+    async fn remove_entries(&self, session_id: &str, entry_ids: &[String]) -> Result<()> {
         if entry_ids.is_empty() {
             return Ok(());
         }
@@ -438,7 +424,7 @@ impl SessionStore for JsonlSessionStore {
             if e.kind() == std::io::ErrorKind::NotFound {
                 session_not_found(session_id)
             } else {
-                AgentError::IoError(format!("Failed to read session file: {e}"))
+                Error::IoError(format!("Failed to read session file: {e}"))
             }
         })?;
         // Same crash-truncated-tail handling as load(): the fragment holds
@@ -450,19 +436,19 @@ impl SessionStore for JsonlSessionStore {
         };
         let mut lines = content[..complete_len].lines();
         let Some(header) = lines.next() else {
-            return Err(AgentError::JsonParseError(format!(
+            return Err(Error::JsonParseError(format!(
                 "Session file for {session_id} is empty (missing header line)"
             )));
         };
         serde_json::from_str::<SessionMeta>(header).map_err(|e| {
-            AgentError::JsonParseError(format!("Invalid session header for {session_id}: {e}"))
+            Error::JsonParseError(format!("Invalid session header for {session_id}: {e}"))
         })?;
         let mut out = String::with_capacity(complete_len);
         out.push_str(header);
         out.push('\n');
         for (i, line) in lines.enumerate() {
             let entry = serde_json::from_str::<SessionEntry>(line).map_err(|e| {
-                AgentError::JsonParseError(format!(
+                Error::JsonParseError(format!(
                     "Invalid entry at line {} of session {session_id}: {e}",
                     i + 2
                 ))
@@ -477,22 +463,20 @@ impl SessionStore for JsonlSessionStore {
         let tmp = self.dir.join(format!("{session_id}.jsonl.tmp"));
         tokio::fs::write(&tmp, out)
             .await
-            .map_err(|e| AgentError::IoError(format!("Failed to write session file: {e}")))?;
+            .map_err(|e| Error::IoError(format!("Failed to write session file: {e}")))?;
         tokio::fs::rename(&tmp, &path)
             .await
-            .map_err(|e| AgentError::IoError(format!("Failed to replace session file: {e}")))?;
+            .map_err(|e| Error::IoError(format!("Failed to replace session file: {e}")))?;
         Ok(())
     }
 
-    async fn list(&self) -> Result<Vec<SessionMeta>, AgentError> {
+    async fn list(&self) -> Result<Vec<SessionMeta>> {
         let mut read_dir = match tokio::fs::read_dir(&self.dir).await {
             Ok(rd) => rd,
             // No directory yet simply means no sessions have been created.
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
             Err(e) => {
-                return Err(AgentError::IoError(format!(
-                    "Failed to read session dir: {e}"
-                )));
+                return Err(Error::IoError(format!("Failed to read session dir: {e}")));
             }
         };
         let mut metas = Vec::new();
@@ -501,7 +485,7 @@ impl SessionStore for JsonlSessionStore {
                 Ok(Some(entry)) => entry,
                 Ok(None) => break,
                 Err(e) => {
-                    return Err(AgentError::IoError(format!(
+                    return Err(Error::IoError(format!(
                         "Failed to read session dir entry: {e}"
                     )));
                 }

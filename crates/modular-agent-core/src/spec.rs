@@ -1,45 +1,45 @@
 use std::ops::Not;
 
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::Value as JsonValue;
 
 use crate::FnvIndexMap;
-use crate::config::AgentConfigs;
-use crate::definition::AgentConfigSpecs;
-use crate::error::AgentError;
+use crate::config::ModuleConfigs;
+use crate::definition::ModuleConfigSpecs;
+use crate::error::{Error, Result};
 
 /// A map of patch names to their specifications.
 pub type PatchSpecs = FnvIndexMap<String, PatchSpec>;
 
 /// The serializable specification of a patch (workflow).
 ///
-/// A patch defines a complete workflow configuration including all agents
+/// A patch defines a complete workflow configuration including all modules
 /// and their connections. This struct is designed for JSON serialization
 /// and can be loaded from or saved to patch files.
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct PatchSpec {
-    /// List of agent specifications in this patch.
-    pub agents: Vec<AgentSpec>,
+    /// List of module specifications in this patch.
+    pub modules: Vec<ModuleSpec>,
 
-    /// List of connections between agents.
+    /// List of connections between modules.
     pub connections: Vec<ConnectionSpec>,
 
     /// Extension fields for custom data.
     ///
     /// Any JSON fields not matching defined fields are captured here.
     #[serde(flatten)]
-    pub extensions: FnvIndexMap<String, Value>,
+    pub extensions: FnvIndexMap<String, JsonValue>,
 }
 
 impl PatchSpec {
-    /// Adds an agent to this patch.
-    pub fn add_agent(&mut self, agent: AgentSpec) {
-        self.agents.push(agent);
+    /// Adds a module to this patch.
+    pub fn add_module(&mut self, module: ModuleSpec) {
+        self.modules.push(module);
     }
 
-    /// Removes an agent from this patch by its ID.
-    pub fn remove_agent(&mut self, agent_id: &str) {
-        self.agents.retain(|agent| agent.id != agent_id);
+    /// Removes a module from this patch by its ID.
+    pub fn remove_module(&mut self, module_id: &str) {
+        self.modules.retain(|module| module.id != module_id);
     }
 
     /// Adds a connection to this patch.
@@ -57,31 +57,31 @@ impl PatchSpec {
     }
 
     /// Serializes this patch to a pretty-printed JSON string.
-    pub fn to_json(&self) -> Result<String, AgentError> {
+    pub fn to_json(&self) -> Result<String> {
         let json = serde_json::to_string_pretty(self)
-            .map_err(|e| AgentError::SerializationError(e.to_string()))?;
+            .map_err(|e| Error::SerializationError(e.to_string()))?;
         Ok(json)
     }
 
     /// Deserializes a patch from a JSON string.
-    pub fn from_json(json_str: &str) -> Result<Self, AgentError> {
-        let patch: PatchSpec = serde_json::from_str(json_str)
-            .map_err(|e| AgentError::SerializationError(e.to_string()))?;
+    pub fn from_json(json_str: &str) -> Result<Self> {
+        let patch: PatchSpec =
+            serde_json::from_str(json_str).map_err(|e| Error::SerializationError(e.to_string()))?;
         Ok(patch)
     }
 }
 
-/// The runtime specification of an agent instance.
+/// The runtime specification of a module instance.
 ///
-/// Contains all the information needed to instantiate and configure an agent,
+/// Contains all the information needed to instantiate and configure a module,
 /// including its ID, definition reference, ports, and configuration values.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct AgentSpec {
-    /// Unique identifier for this agent instance.
+pub struct ModuleSpec {
+    /// Unique identifier for this module instance.
     #[serde(skip_serializing_if = "String::is_empty", default)]
     pub id: String,
 
-    /// Name of the AgentDefinition this agent is based on.
+    /// Name of the ModuleDefinition this module is based on.
     #[serde(skip_serializing_if = "String::is_empty", default)]
     pub def_name: String,
 
@@ -93,15 +93,15 @@ pub struct AgentSpec {
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub outputs: Option<Vec<String>>,
 
-    /// Configuration values for this agent instance.
+    /// Configuration values for this module instance.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub configs: Option<AgentConfigs>,
+    pub configs: Option<ModuleConfigs>,
 
     /// Configuration specifications (metadata about configs).
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub config_specs: Option<AgentConfigSpecs>,
+    pub config_specs: Option<ModuleConfigSpecs>,
 
-    /// Whether this agent is disabled (will not be started).
+    /// Whether this module is disabled (will not be started).
     #[serde(default, skip_serializing_if = "<&bool>::not")]
     pub disabled: bool,
 
@@ -110,17 +110,17 @@ pub struct AgentSpec {
     pub extensions: FnvIndexMap<String, serde_json::Value>,
 }
 
-impl AgentSpec {
-    /// Updates this agent spec from a JSON value.
+impl ModuleSpec {
+    /// Updates this module spec from a JSON value.
     ///
     /// Known fields (id, def_name, inputs, outputs, configs, disabled) are parsed
     /// and applied. `configs` is merged key by key into the current values;
     /// the other fields are replaced. Unknown fields are stored in the
     /// extensions map.
-    pub fn update(&mut self, value: &Value) -> Result<(), AgentError> {
+    pub fn update(&mut self, value: &JsonValue) -> Result<()> {
         let update_map = value
             .as_object()
-            .ok_or_else(|| AgentError::SerializationError("Expected JSON object".to_string()))?;
+            .ok_or_else(|| Error::SerializationError("Expected JSON object".to_string()))?;
 
         for (k, v) in update_map {
             match k.as_str() {
@@ -155,11 +155,11 @@ impl AgentSpec {
                     }
                 }
                 "configs" => {
-                    let patch: AgentConfigs = serde_json::from_value(v.clone())
-                        .map_err(|e| AgentError::SerializationError(e.to_string()))?;
+                    let patch: ModuleConfigs = serde_json::from_value(v.clone())
+                        .map_err(|e| Error::SerializationError(e.to_string()))?;
                     // Merge instead of replacing: callers patch single keys,
                     // and replacing would drop the untouched configs - which
-                    // agents that regenerate configs/ports in configs_changed
+                    // modules that regenerate configs/ports in configs_changed
                     // (e.g. from an "n" config) would then rebuild from
                     // defaults, destroying ports that still have connections.
                     match self.configs.as_mut() {
@@ -191,21 +191,21 @@ impl AgentSpec {
     }
 }
 
-/// A connection between two agent ports.
+/// A connection between two module ports.
 ///
-/// Defines a directed edge in the agent graph, connecting an output port
-/// of a source agent to an input port of a target agent.
+/// Defines a directed edge in the module graph, connecting an output port
+/// of a source module to an input port of a target module.
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ConnectionSpec {
-    /// ID of the source agent.
+    /// ID of the source module.
     pub source: String,
 
-    /// Output port name on the source agent.
+    /// Output port name on the source module.
     pub source_handle: String,
 
-    /// ID of the target agent.
+    /// ID of the target module.
     pub target: String,
 
-    /// Input port name on the target agent.
+    /// Input port name on the target module.
     pub target_handle: String,
 }

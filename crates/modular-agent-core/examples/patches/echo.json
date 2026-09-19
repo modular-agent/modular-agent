@@ -1,16 +1,16 @@
 {
   "id": "echo",
   "name": "Echo",
-  "agents": [
+  "modules": [
     {
       "id": "in",
-      "def_name": "modular_agent_core::external_agent::ExternalInputAgent",
+      "def_name": "modular_agent_core::external_module::ExternalInputModule",
       "outputs": ["value"],
       "configs": { "name": "input" }
     },
     {
       "id": "out",
-      "def_name": "modular_agent_core::external_agent::ExternalOutputAgent",
+      "def_name": "modular_agent_core::external_module::ExternalOutputModule",
       "inputs": ["value"],
       "configs": { "name": "output" }
     }

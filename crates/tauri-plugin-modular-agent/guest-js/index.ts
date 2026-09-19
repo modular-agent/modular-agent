@@ -6,9 +6,9 @@ export type PatchInfo = {
   running: boolean;
 };
 
-export type AgentDefinitions = Record<string, AgentDefinition>;
+export type ModuleDefinitions = Record<string, ModuleDefinition>;
 
-export type AgentDefinition = {
+export type ModuleDefinition = {
   kind: string;
   name: string;
   title?: string | null;
@@ -17,16 +17,16 @@ export type AgentDefinition = {
   category?: string | null;
   inputs?: string[] | null;
   outputs?: string[] | null;
-  configs?: AgentConfigSpecs | null;
-  global_configs?: AgentGlobalConfigs | null;
+  configs?: ModuleConfigSpecs | null;
+  global_configs?: ModuleGlobalConfigs | null;
   hints?: Record<string, any>;
 };
 
-export type AgentConfigSpecs = Record<string, AgentConfigSpec>;
+export type ModuleConfigSpecs = Record<string, ModuleConfigSpec>;
 
-export type AgentGlobalConfigs = Record<string, AgentConfigSpec>;
+export type ModuleGlobalConfigs = Record<string, ModuleConfigSpec>;
 
-export type AgentConfigSpec = {
+export type ModuleConfigSpec = {
   value: any;
   type: string | null;
   title?: string | null;
@@ -38,28 +38,28 @@ export type AgentConfigSpec = {
 };
 
 export type PatchSpec = {
-  agents: AgentSpec[];
+  modules: ModuleSpec[];
   connections: ConnectionSpec[];
   viewport: Viewport | null;
 };
 
-export type AgentConfigsMap = Record<string, AgentConfigs>;
+export type ModuleConfigsMap = Record<string, ModuleConfigs>;
 
-export type AgentGlobalConfigsMap = Record<string, AgentConfigs>;
+export type ModuleGlobalConfigsMap = Record<string, ModuleConfigs>;
 
-export type AgentConfigs = Record<string, any>;
+export type ModuleConfigs = Record<string, any>;
 
-export type AgentSpecExtensions = Record<string, any>;
+export type ModuleSpecExtensions = Record<string, any>;
 
-export type AgentSpec = {
+export type ModuleSpec = {
   id?: string | null;
   def_name: string;
   inputs?: string[] | null;
   outputs?: string[] | null;
-  configs?: AgentConfigs | null;
-  config_specs?: AgentConfigSpecs | null;
+  configs?: ModuleConfigs | null;
+  config_specs?: ModuleConfigSpecs | null;
   disabled?: boolean | null;
-} & AgentSpecExtensions;
+} & ModuleSpecExtensions;
 
 export type ConnectionSpec = {
   source: string;
@@ -130,46 +130,49 @@ export async function getPatchInfos(): Promise<PatchInfo[]> {
   return await invoke<any>("plugin:modular-agent|get_patch_infos", {});
 }
 
-// agent
+// module
 
-export async function getAgentDefinition(): Promise<AgentDefinition | null> {
-  return await invoke<any>("plugin:modular-agent|get_agent_definition", {});
+export async function getModuleDefinition(defName: string): Promise<ModuleDefinition | null> {
+  return await invoke<any>("plugin:modular-agent|get_module_definition", { defName });
 }
 
-export async function getAgentDefinitions(): Promise<AgentDefinitions> {
-  return await invoke<any>("plugin:modular-agent|get_agent_definitions", {});
+export async function getModuleDefinitions(): Promise<ModuleDefinitions> {
+  return await invoke<any>("plugin:modular-agent|get_module_definitions", {});
 }
 
-// agent spec
+// module spec
 
-export async function getAgentSpec(agentId: string): Promise<AgentSpec | null> {
-  return await invoke<any>("plugin:modular-agent|get_agent_spec", { agentId });
+export async function getModuleSpec(moduleId: string): Promise<ModuleSpec | null> {
+  return await invoke<any>("plugin:modular-agent|get_module_spec", { moduleId });
 }
 
-export async function updateAgentSpec(agentId: string, value: Partial<AgentSpec>): Promise<void> {
-  await invoke<void>("plugin:modular-agent|update_agent_spec", {
-    agentId,
+export async function updateModuleSpec(
+  moduleId: string,
+  value: Partial<ModuleSpec>,
+): Promise<void> {
+  await invoke<void>("plugin:modular-agent|update_module_spec", {
+    moduleId,
     value,
   });
 }
 
-// agents
+// modules
 
-export async function newAgentSpec(defName: string): Promise<AgentSpec> {
-  return await invoke<any>("plugin:modular-agent|new_agent_spec", { defName });
+export async function newModuleSpec(defName: string): Promise<ModuleSpec> {
+  return await invoke<any>("plugin:modular-agent|new_module_spec", { defName });
 }
 
-export async function addAgent(patchId: string, spec: AgentSpec): Promise<string> {
-  return await invoke<string>("plugin:modular-agent|add_agent", {
+export async function addModule(patchId: string, spec: ModuleSpec): Promise<string> {
+  return await invoke<string>("plugin:modular-agent|add_module", {
     patchId,
     spec,
   });
 }
 
-export async function removeAgent(patchId: string, agentId: string): Promise<void> {
-  await invoke<void>("plugin:modular-agent|remove_agent", {
+export async function removeModule(patchId: string, moduleId: string): Promise<void> {
+  await invoke<void>("plugin:modular-agent|remove_module", {
     patchId,
-    agentId,
+    moduleId,
   });
 }
 
@@ -189,29 +192,29 @@ export async function removeConnection(patchId: string, connection: ConnectionSp
   });
 }
 
-export async function addAgentsAndConnections(
+export async function addModulesAndConnections(
   patchId: string,
-  agents: AgentSpec[],
+  modules: ModuleSpec[],
   connections: ConnectionSpec[],
-): Promise<[AgentSpec[], ConnectionSpec[]]> {
-  return await invoke<[AgentSpec[], ConnectionSpec[]]>(
-    "plugin:modular-agent|add_agents_and_connections",
+): Promise<[ModuleSpec[], ConnectionSpec[]]> {
+  return await invoke<[ModuleSpec[], ConnectionSpec[]]>(
+    "plugin:modular-agent|add_modules_and_connections",
     {
       patchId,
-      agents,
+      modules,
       connections,
     },
   );
 }
 
-// agent
+// module
 
-export async function startAgent(agentId: string): Promise<void> {
-  await invoke<void>("plugin:modular-agent|start_agent", { agentId });
+export async function startModule(moduleId: string): Promise<void> {
+  await invoke<void>("plugin:modular-agent|start_module", { moduleId });
 }
 
-export async function stopAgent(agentId: string): Promise<void> {
-  await invoke<void>("plugin:modular-agent|stop_agent", { agentId });
+export async function stopModule(moduleId: string): Promise<void> {
+  await invoke<void>("plugin:modular-agent|stop_module", { moduleId });
 }
 
 // external input
@@ -225,31 +228,31 @@ export async function writeExternalInput(name: string, message: string): Promise
 
 // configs
 
-export async function setAgentConfigs(agentId: string, configs: AgentConfigs): Promise<void> {
-  await invoke<void>("plugin:modular-agent|set_agent_configs", {
-    agentId,
+export async function setModuleConfigs(moduleId: string, configs: ModuleConfigs): Promise<void> {
+  await invoke<void>("plugin:modular-agent|set_module_configs", {
+    moduleId,
     configs,
   });
 }
 
-export async function getGlobalConfigs(defName: string): Promise<AgentConfigs | null> {
+export async function getGlobalConfigs(defName: string): Promise<ModuleConfigs | null> {
   return await invoke<any>("plugin:modular-agent|get_global_configs", {
     defName,
   });
 }
 
-export async function getGlobalConfigsMap(): Promise<AgentConfigsMap> {
+export async function getGlobalConfigsMap(): Promise<ModuleConfigsMap> {
   return await invoke<any>("plugin:modular-agent|get_global_configs_map", {});
 }
 
-export async function setGlobalConfigs(defName: string, configs: AgentConfigs): Promise<void> {
+export async function setGlobalConfigs(defName: string, configs: ModuleConfigs): Promise<void> {
   await invoke<void>("plugin:modular-agent|set_global_configs", {
     defName,
     configs,
   });
 }
 
-export async function setGlobalConfigsMap(configs: AgentConfigsMap): Promise<void> {
+export async function setGlobalConfigsMap(configs: ModuleConfigsMap): Promise<void> {
   await invoke<void>("plugin:modular-agent|set_global_configs_map", {
     configs,
   });

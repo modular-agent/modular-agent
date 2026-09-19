@@ -1,44 +1,38 @@
 use modular_agent_core::{
-    AgentContext, AgentData, AgentError, AgentSpec, AgentValue, AsAgent, async_trait, modular_agent,
+    AsModule, ModuleContext, ModuleData, ModuleSpec, Result, Value, async_trait, modular_agent,
 };
 
 static CONFIG_KEY: &str = "config_key";
 
 #[modular_agent(kind = "Test", title = "DefaultName", category = "Tests")]
-struct MyAgent {
-    data: AgentData,
+struct MyModule {
+    data: ModuleData,
 }
 
 #[async_trait]
-impl AsAgent for MyAgent {
-    fn new(
-        ma: modular_agent_core::ModularAgent,
-        id: String,
-        spec: AgentSpec,
-    ) -> Result<Self, AgentError> {
+impl AsModule for MyModule {
+    fn new(ma: modular_agent_core::ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
         Ok(Self {
-            data: AgentData::new(ma, id, spec),
+            data: ModuleData::new(ma, id, spec),
         })
     }
 
-    async fn process(
-        &mut self,
-        _ctx: AgentContext,
-        _port: String,
-        _value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, _ctx: ModuleContext, _port: String, _value: Value) -> Result<()> {
         Ok(())
     }
 }
 
 #[test]
 fn default_name_uses_module_path_and_ident() {
-    let def = MyAgent::agent_definition();
-    assert_eq!(def.name, concat!(module_path!(), "::", stringify!(MyAgent)));
+    let def = MyModule::module_definition();
+    assert_eq!(
+        def.name,
+        concat!(module_path!(), "::", stringify!(MyModule))
+    );
 }
 
 #[modular_agent(
-    kind = "CustomAgent",
+    kind = "CustomModule",
     name = "custom_name",
     title = "Custom Title",
     category = "Custom Category",
@@ -51,36 +45,27 @@ fn default_name_uses_module_path_and_ident() {
         description = "Config Description"
     )
 )]
-struct MyAgentExplicit {
-    data: AgentData,
+struct MyModuleExplicit {
+    data: ModuleData,
 }
 
 #[async_trait]
-impl AsAgent for MyAgentExplicit {
-    fn new(
-        ma: modular_agent_core::ModularAgent,
-        id: String,
-        spec: AgentSpec,
-    ) -> Result<Self, AgentError> {
+impl AsModule for MyModuleExplicit {
+    fn new(ma: modular_agent_core::ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
         Ok(Self {
-            data: AgentData::new(ma, id, spec),
+            data: ModuleData::new(ma, id, spec),
         })
     }
 
-    async fn process(
-        &mut self,
-        _ctx: AgentContext,
-        _port: String,
-        _value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, _ctx: ModuleContext, _port: String, _value: Value) -> Result<()> {
         Ok(())
     }
 }
 
 #[test]
 fn explicit_fields_and_configs_are_set() {
-    let def = MyAgentExplicit::agent_definition();
-    assert_eq!(def.kind, "CustomAgent");
+    let def = MyModuleExplicit::module_definition();
+    assert_eq!(def.kind, "CustomModule");
     assert_eq!(def.name, "custom_name");
     assert_eq!(def.title.as_deref(), Some("Custom Title"));
     assert_eq!(def.category.as_deref(), Some("Custom Category"));
@@ -93,7 +78,7 @@ fn explicit_fields_and_configs_are_set() {
     let cfgs = def.configs.expect("default configs exist");
     let (key, entry) = cfgs.first().expect("one config entry");
     assert_eq!(key, CONFIG_KEY);
-    assert_eq!(entry.value, AgentValue::string("default_value"));
+    assert_eq!(entry.value, Value::string("default_value"));
     assert_eq!(entry.title.as_deref(), Some("Config Title"));
     assert_eq!(entry.description.as_deref(), Some("Config Description"));
 }

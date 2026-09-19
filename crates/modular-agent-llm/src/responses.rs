@@ -1,8 +1,8 @@
 use im::vector;
 use modular_agent_core::{
-    Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AgentValueMap,
-    AsAgent, Message, MessageEvent, ModularAgent, ToolCall, ToolCallFunction, Usage, async_trait,
-    modular_agent,
+    AsModule, Error, Message, MessageEvent, ModularAgent, Module, ModuleContext, ModuleData,
+    ModuleOutput, ModuleSpec, Result, ToolCall, ToolCallFunction, Usage, Value, ValueMap,
+    async_trait, modular_agent,
 };
 
 use crate::openai_client;
@@ -31,7 +31,7 @@ const CONFIG_USE_CONVERSATION_STATE: &str = "use_conversation_state";
 
 const DEFAULT_MODEL: &str = "openai/gpt-5-mini";
 
-/// Responses Agent using OpenAI Responses API.
+/// Responses Module using OpenAI Responses API.
 ///
 /// The Responses API is OpenAI's new API primitive that provides:
 /// - Server-side conversation state via `previous_response_id`
@@ -92,38 +92,33 @@ const DEFAULT_MODEL: &str = "openai/gpt-5-mini";
     integer_config(name = CONFIG_TIMEOUT_SECS, title = "Timeout (secs)", default = 300, description = "Per-attempt deadline; 0: disabled", detail),
     hint(width = 2, height = 2),
 )]
-pub struct ResponsesAgent {
-    data: AgentData,
+pub struct ResponsesModule {
+    data: ModuleData,
     openai_manager: openai_client::OpenAIManager,
     last_response_id: Option<String>,
 }
 
 #[async_trait]
-impl AsAgent for ResponsesAgent {
-    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+impl AsModule for ResponsesModule {
+    fn new(ma: ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
         Ok(Self {
-            data: AgentData::new(ma, id, spec),
+            data: ModuleData::new(ma, id, spec),
             openai_manager: openai_client::OpenAIManager::new(),
             last_response_id: None,
         })
     }
 
-    async fn start(&mut self) -> Result<(), AgentError> {
+    async fn start(&mut self) -> Result<()> {
         self.last_response_id = None;
         Ok(())
     }
 
-    async fn stop(&mut self) -> Result<(), AgentError> {
+    async fn stop(&mut self) -> Result<()> {
         self.last_response_id = None;
         Ok(())
     }
 
-    async fn process(
-        &mut self,
-        ctx: AgentContext,
-        port: String,
-        value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, ctx: ModuleContext, port: String, value: Value) -> Result<()> {
         // Handle reset port
         if port == PORT_RESET {
             self.last_response_id = None;
@@ -131,10 +126,10 @@ impl AsAgent for ResponsesAgent {
         }
 
         // An aborted flow feeds synthetic "Operation aborted" tool results
-        // back into this agent; without this guard each such trigger would
+        // back into this module; without this guard each such trigger would
         // issue one more full-price LLM request.
         if ctx.is_cancelled() {
-            return Err(AgentError::Cancelled);
+            return Err(Error::Cancelled);
         }
 
         let config = self.configs()?;
@@ -145,14 +140,14 @@ impl AsAgent for ResponsesAgent {
 
         let model_id = ModelIdentifier::parse(&config_model)?;
         if model_id.provider != ProviderKind::OpenAI {
-            return Err(AgentError::InvalidConfig(
-                "ResponsesAgent only supports OpenAI models".into(),
+            return Err(Error::InvalidConfig(
+                "ResponsesModule only supports OpenAI models".into(),
             ));
         }
 
         // Convert value to messages
         let Some(value) = value.to_message_value() else {
-            return Err(AgentError::InvalidValue(
+            return Err(Error::InvalidValue(
                 "Input value is not a valid message".to_string(),
             ));
         };
@@ -193,7 +188,7 @@ impl AsAgent for ResponsesAgent {
         let caps = crate::capabilities::resolve_entry(&model_id);
         let model_max_tokens = caps.max_tokens;
 
-        // Single cross-provider normalization boundary (P-02); see ChatAgent
+        // Single cross-provider normalization boundary (P-02); see ChatModule
         // for the image-demotion rationale.
         let messages = crate::prepare::prepare_messages(
             &messages,
@@ -219,14 +214,14 @@ impl AsAgent for ResponsesAgent {
     }
 }
 
-impl ResponsesAgent {
+impl ResponsesModule {
     #[allow(clippy::too_many_arguments)]
     async fn process_response(
         &mut self,
-        ctx: AgentContext,
-        messages: im::Vector<AgentValue>,
+        ctx: ModuleContext,
+        messages: im::Vector<Value>,
         model_name: &str,
-        config_options: AgentValueMap<String, AgentValue>,
+        config_options: ValueMap<String, Value>,
         config_tools: String,
         use_stream: bool,
         use_conversation_state: bool,
@@ -235,7 +230,7 @@ impl ResponsesAgent {
         temperature: f64,
         top_p: f64,
         retry: RetryPolicy,
-    ) -> Result<(), AgentError> {
+    ) -> Result<()> {
         use modular_agent_core::tool::list_tool_infos_patterns;
 
         let client = self.openai_manager.get_client(self.ma())?;
@@ -249,10 +244,7 @@ impl ResponsesAgent {
         } else {
             list_tool_infos_patterns(&config_tools)
                 .map_err(|e| {
-                    AgentError::InvalidConfig(format!(
-                        "Invalid regex patterns in tools config: {}",
-                        e
-                    ))
+                    Error::InvalidConfig(format!("Invalid regex patterns in tools config: {}", e))
                 })?
                 .into_iter()
                 .map(|info| {
@@ -311,13 +303,13 @@ impl ResponsesAgent {
 
     async fn process_non_streaming(
         &mut self,
-        ctx: AgentContext,
+        ctx: ModuleContext,
         client: &openai_client::OpenAIClient,
         request: &serde_json::Value,
         id: &str,
         use_conversation_state: bool,
         retry: RetryPolicy,
-    ) -> Result<(), AgentError> {
+    ) -> Result<()> {
         let url = client.responses_url();
         let response: serde_json::Value = crate::chat::request_or_cancelled(
             ctx.cancel_token(),
@@ -342,7 +334,7 @@ impl ResponsesAgent {
         message.stop_reason = stop_reason_from_response(&response, message.tool_calls.is_some());
         message.usage = usage_from_response(&response);
 
-        // Output message before the Done event: ChatAgent's ordering, so a
+        // Output message before the Done event: ChatModule's ordering, so a
         // `done`-triggered consumer always sees the final message routed.
         self.output(
             ctx.clone(),
@@ -357,7 +349,7 @@ impl ResponsesAgent {
             .await?;
 
         // Output raw response
-        let out_response = AgentValue::from_serialize(&response)?;
+        let out_response = Value::from_serialize(&response)?;
         self.output(ctx, PORT_RESPONSE.to_string(), out_response)
             .await?;
 
@@ -366,13 +358,13 @@ impl ResponsesAgent {
 
     async fn process_streaming(
         &mut self,
-        ctx: AgentContext,
+        ctx: ModuleContext,
         client: &openai_client::OpenAIClient,
         request: &serde_json::Value,
         id: &str,
         use_conversation_state: bool,
         retry: RetryPolicy,
-    ) -> Result<(), AgentError> {
+    ) -> Result<()> {
         let url = client.responses_url();
         // Retry covers stream establishment only: once chunks have been
         // emitted downstream they cannot be rolled back, so any failure
@@ -385,7 +377,7 @@ impl ResponsesAgent {
 
         let mut message = Message::assistant(String::new());
         message.id = Some(id.to_string());
-        // Partial emits during streaming must be skipped by CallToolMessageAgent so tools
+        // Partial emits during streaming must be skipped by CallToolMessageModule so tools
         // are executed only once against the final message.
         message.streaming = true;
 
@@ -427,11 +419,11 @@ impl ResponsesAgent {
     /// can intercept a mid-stream Err and emit an error-marked final message.
     async fn run_stream(
         &mut self,
-        ctx: &AgentContext,
-        mut stream: impl futures::Stream<Item = Result<Option<String>, AgentError>> + Unpin,
+        ctx: &ModuleContext,
+        mut stream: impl futures::Stream<Item = Result<Option<String>>> + Unpin,
         message: &mut Message,
         use_conversation_state: bool,
-    ) -> Result<(), AgentError> {
+    ) -> Result<()> {
         // get_bool_or with an explicit true keeps the fallback aligned with
         // the declared config default when the key is absent (old spec not
         // yet reconciled).
@@ -567,7 +559,7 @@ impl ResponsesAgent {
                     message.usage = usage_from_response(&response);
                 }
                 openai_client::ResponseStreamEvent::Completed { response } => {
-                    // Emit the final, non-streaming message so downstream agents act on it once.
+                    // Emit the final, non-streaming message so downstream modules act on it once.
                     message.content = content.clone().into();
                     if !tool_calls.is_empty() {
                         message.tool_calls = Some(tool_calls.clone().into());
@@ -576,7 +568,7 @@ impl ResponsesAgent {
                     message.stop_reason =
                         stop_reason_from_response(&response, !tool_calls.is_empty());
                     message.usage = usage_from_response(&response);
-                    // Final message first, Done after (ChatAgent's ordering),
+                    // Final message first, Done after (ChatModule's ordering),
                     // so a `done`-triggered consumer sees the final routed.
                     self.output(
                         ctx.clone(),
@@ -599,7 +591,7 @@ impl ResponsesAgent {
                         self.last_response_id = Some(resp_id.to_string());
                     }
 
-                    let out_response = AgentValue::from_serialize(&response)?;
+                    let out_response = Value::from_serialize(&response)?;
                     self.output(ctx.clone(), PORT_RESPONSE.to_string(), out_response)
                         .await?;
                 }
@@ -638,18 +630,14 @@ impl ResponsesAgent {
     /// Emit a typed stream event on the `event` port. Unlike message-port
     /// partials, event emission is unconditional: `emit_partial_messages`
     /// only gates the legacy accumulated-Message re-sends.
-    async fn emit_event(
-        &mut self,
-        ctx: &AgentContext,
-        event: MessageEvent,
-    ) -> Result<(), AgentError> {
+    async fn emit_event(&mut self, ctx: &ModuleContext, event: MessageEvent) -> Result<()> {
         // Events are dropped by routing when nothing is connected, but only
         // after the per-delta serde conversion below has been paid; skip it
         // up front so patches that ignore the event port pay nothing.
         if !self.ma().has_connections(self.id(), PORT_EVENT) {
             return Ok(());
         }
-        let value: AgentValue = event.try_into()?;
+        let value: Value = event.try_into()?;
         self.output(ctx.clone(), PORT_EVENT.to_string(), value)
             .await
     }
@@ -722,23 +710,23 @@ mod tests {
     use super::*;
 
     use modular_agent_core::ConnectionSpec;
-    use modular_agent_core::test_utils::{ProbeReceiver, TestProbeAgent, probe_receiver};
+    use modular_agent_core::test_utils::{ProbeReceiver, TestProbeModule, probe_receiver};
 
-    /// Build a running patch with a ResponsesAgent whose `port` output
+    /// Build a running patch with a ResponsesModule whose `port` output
     /// feeds a probe, so stream-loop emits can be observed end to end.
     async fn setup_responses_with_probe(port: &str) -> (ModularAgent, String, ProbeReceiver) {
         let ma = ModularAgent::init().unwrap();
         ma.ready().await.unwrap();
 
         let patch_id = ma.new_patch().unwrap();
-        let responses_def = ma.get_agent_definition(ResponsesAgent::DEF_NAME).unwrap();
+        let responses_def = ma.get_module_definition(ResponsesModule::DEF_NAME).unwrap();
         let responses_id = ma
-            .add_agent(patch_id.clone(), responses_def.to_spec())
+            .add_module(patch_id.clone(), responses_def.to_spec())
             .await
             .unwrap();
-        let probe_def = ma.get_agent_definition(TestProbeAgent::DEF_NAME).unwrap();
+        let probe_def = ma.get_module_definition(TestProbeModule::DEF_NAME).unwrap();
         let probe_id = ma
-            .add_agent(patch_id.clone(), probe_def.to_spec())
+            .add_module(patch_id.clone(), probe_def.to_spec())
             .await
             .unwrap();
         ma.add_connection(
@@ -765,7 +753,7 @@ mod tests {
         // An incomplete turn: text deltas, then response.incomplete instead
         // of response.completed. The trailing guard must still emit exactly
         // one streaming=false final carrying the mapped stop_reason.
-        let chunks: Vec<Result<Option<String>, AgentError>> = vec![
+        let chunks: Vec<Result<Option<String>>> = vec![
             Ok(Some(
                 r#"{"type":"response.output_text.delta","delta":"Hi"}"#.to_string(),
             )),
@@ -780,12 +768,12 @@ mod tests {
         message.streaming = true;
 
         {
-            let agent = ma.get_agent(&responses_id).unwrap();
-            let mut guard = agent.lock().await;
-            let responses = guard.as_agent_mut::<ResponsesAgent>().unwrap();
+            let module = ma.get_module(&responses_id).unwrap();
+            let mut guard = module.lock().await;
+            let responses = guard.as_module_mut::<ResponsesModule>().unwrap();
             responses
                 .run_stream(
-                    &AgentContext::new(),
+                    &ModuleContext::new(),
                     futures::stream::iter(chunks),
                     &mut message,
                     false,
@@ -819,7 +807,7 @@ mod tests {
         // and stays pending — a deterministic mid-stream abort.
         let token = modular_agent_core::CancellationToken::new();
         let fire = token.clone();
-        let chunks: Vec<Result<Option<String>, AgentError>> = vec![Ok(Some(
+        let chunks: Vec<Result<Option<String>>> = vec![Ok(Some(
             r#"{"type":"response.output_text.delta","delta":"partial"}"#.to_string(),
         ))];
         let stream = {
@@ -834,15 +822,15 @@ mod tests {
         message.streaming = true;
 
         {
-            let agent = ma.get_agent(&responses_id).unwrap();
-            let mut guard = agent.lock().await;
-            let responses = guard.as_agent_mut::<ResponsesAgent>().unwrap();
-            let ctx = AgentContext::new().with_cancel_token(token);
+            let module = ma.get_module(&responses_id).unwrap();
+            let mut guard = module.lock().await;
+            let responses = guard.as_module_mut::<ResponsesModule>().unwrap();
+            let ctx = ModuleContext::new().with_cancel_token(token);
             let err = responses
                 .run_stream(&ctx, stream, &mut message, false)
                 .await
                 .unwrap_err();
-            assert!(matches!(err, AgentError::Cancelled));
+            assert!(matches!(err, Error::Cancelled));
 
             // Same sequence as process_streaming: the aborted-marked final
             // replaces the dangling partial in message history.
@@ -875,7 +863,7 @@ mod tests {
     async fn responses_stream_completed_usage_lands_on_final_message() {
         let (ma, responses_id, probe_rx) = setup_responses_with_probe(PORT_MESSAGE).await;
 
-        let chunks: Vec<Result<Option<String>, AgentError>> = vec![
+        let chunks: Vec<Result<Option<String>>> = vec![
             Ok(Some(
                 r#"{"type":"response.output_text.delta","delta":"Hi"}"#.to_string(),
             )),
@@ -890,12 +878,12 @@ mod tests {
         message.streaming = true;
 
         {
-            let agent = ma.get_agent(&responses_id).unwrap();
-            let mut guard = agent.lock().await;
-            let responses = guard.as_agent_mut::<ResponsesAgent>().unwrap();
+            let module = ma.get_module(&responses_id).unwrap();
+            let mut guard = module.lock().await;
+            let responses = guard.as_module_mut::<ResponsesModule>().unwrap();
             responses
                 .run_stream(
-                    &AgentContext::new(),
+                    &ModuleContext::new(),
                     futures::stream::iter(chunks),
                     &mut message,
                     false,
@@ -933,7 +921,7 @@ mod tests {
         // A streamed turn with text and one tool call must produce the full
         // event contract: Start, TextDelta, ToolCallStart, ToolCallDelta,
         // ToolCallEnd, Done — in that order.
-        let chunks: Vec<Result<Option<String>, AgentError>> = vec![
+        let chunks: Vec<Result<Option<String>>> = vec![
             Ok(Some(
                 r#"{"type":"response.output_text.delta","delta":"Hi"}"#.to_string(),
             )),
@@ -959,12 +947,12 @@ mod tests {
         message.streaming = true;
 
         {
-            let agent = ma.get_agent(&responses_id).unwrap();
-            let mut guard = agent.lock().await;
-            let responses = guard.as_agent_mut::<ResponsesAgent>().unwrap();
+            let module = ma.get_module(&responses_id).unwrap();
+            let mut guard = module.lock().await;
+            let responses = guard.as_module_mut::<ResponsesModule>().unwrap();
             responses
                 .run_stream(
-                    &AgentContext::new(),
+                    &ModuleContext::new(),
                     futures::stream::iter(chunks),
                     &mut message,
                     false,
@@ -1027,7 +1015,7 @@ mod tests {
     async fn responses_stream_emit_partial_messages_false_skips_partials() {
         let (ma, responses_id, probe_rx) = setup_responses_with_probe(PORT_MESSAGE).await;
 
-        let chunks: Vec<Result<Option<String>, AgentError>> = vec![
+        let chunks: Vec<Result<Option<String>>> = vec![
             Ok(Some(
                 r#"{"type":"response.output_text.delta","delta":"Hi"}"#.to_string(),
             )),
@@ -1042,18 +1030,18 @@ mod tests {
         message.streaming = true;
 
         {
-            let agent = ma.get_agent(&responses_id).unwrap();
-            let mut guard = agent.lock().await;
+            let module = ma.get_module(&responses_id).unwrap();
+            let mut guard = module.lock().await;
             guard
                 .set_config(
                     CONFIG_EMIT_PARTIAL_MESSAGES.to_string(),
-                    AgentValue::boolean(false),
+                    Value::boolean(false),
                 )
                 .unwrap();
-            let responses = guard.as_agent_mut::<ResponsesAgent>().unwrap();
+            let responses = guard.as_module_mut::<ResponsesModule>().unwrap();
             responses
                 .run_stream(
-                    &AgentContext::new(),
+                    &ModuleContext::new(),
                     futures::stream::iter(chunks),
                     &mut message,
                     false,

@@ -3,41 +3,41 @@ extern crate modular_agent_core as ma;
 use im::{hashmap, vector};
 use ma::llm::Message;
 use ma::test_utils::{probe_receiver, recv_probe};
-use ma::{AgentConfigs, AgentContext, AgentValue, ConnectionSpec, test_utils};
+use ma::{ConnectionSpec, ModuleConfigs, ModuleContext, Value, test_utils};
 
 const PATCH: &str = "tests/patches/Std_Data_test.json";
 
-const ZIP_OBJ_DEF: &str = "modular_agent_std::data::ZipToObjectAgent";
-const SET_VALUE_DEF: &str = "modular_agent_std::data::SetValueAgent";
-const LOCAL_IN_DEF: &str = "modular_agent_core::external_agent::LocalInputAgent";
-const LOCAL_OUT_DEF: &str = "modular_agent_core::external_agent::LocalOutputAgent";
-const PROBE_DEF: &str = "modular_agent_core::test_utils::TestProbeAgent";
+const ZIP_OBJ_DEF: &str = "modular_agent_std::data::ZipToObjectModule";
+const SET_VALUE_DEF: &str = "modular_agent_std::data::SetValueModule";
+const LOCAL_IN_DEF: &str = "modular_agent_core::external_module::LocalInputModule";
+const LOCAL_OUT_DEF: &str = "modular_agent_core::external_module::LocalOutputModule";
+const PROBE_DEF: &str = "modular_agent_core::test_utils::TestProbeModule";
 
-/// Add one agent (configs adjusted by `configure`) wired to a probe, start the
-/// patch, and return the agent id with the probe receiver.
-async fn setup_agent_with_probe(
+/// Add one module (configs adjusted by `configure`) wired to a probe, start the
+/// patch, and return the module id with the probe receiver.
+async fn setup_module_with_probe(
     ma: &ma::ModularAgent,
     def_name: &str,
     out_port: &str,
-    configure: impl FnOnce(&mut AgentConfigs),
+    configure: impl FnOnce(&mut ModuleConfigs),
 ) -> (String, ma::test_utils::ProbeReceiver) {
     let patch_id = ma.new_patch().unwrap();
-    let mut spec = ma.get_agent_definition(def_name).unwrap().to_spec();
+    let mut spec = ma.get_module_definition(def_name).unwrap().to_spec();
     if let Some(configs) = spec.configs.as_mut() {
         configure(configs);
     }
-    let agent_id = ma.add_agent(patch_id.clone(), spec).await.unwrap();
+    let module_id = ma.add_module(patch_id.clone(), spec).await.unwrap();
     let probe_id = ma
-        .add_agent(
+        .add_module(
             patch_id.clone(),
-            ma.get_agent_definition(PROBE_DEF).unwrap().to_spec(),
+            ma.get_module_definition(PROBE_DEF).unwrap().to_spec(),
         )
         .await
         .unwrap();
     ma.add_connection(
         &patch_id,
         ConnectionSpec {
-            source: agent_id.clone(),
+            source: module_id.clone(),
             source_handle: out_port.into(),
             target: probe_id.clone(),
             target_handle: "value".into(),
@@ -47,15 +47,15 @@ async fn setup_agent_with_probe(
     .unwrap();
     ma.start_patch(&patch_id).await.unwrap();
     let probe = probe_receiver(ma, &probe_id).await.unwrap();
-    (agent_id, probe)
+    (module_id, probe)
 }
 
 /// Mattermost Listener shape: `{ message: Message, user, channel }`.
-fn listener_value(text: &str) -> AgentValue {
-    AgentValue::object(hashmap! {
-        "message".to_string() => AgentValue::message(Message::user(text.to_string())),
-        "user".to_string() => AgentValue::string("alice"),
-        "channel".to_string() => AgentValue::string("town-square"),
+fn listener_value(text: &str) -> Value {
+    Value::object(hashmap! {
+        "message".to_string() => Value::message(Message::user(text.to_string())),
+        "user".to_string() => Value::string("alice"),
+        "channel".to_string() => Value::string("town-square"),
     })
 }
 
@@ -69,28 +69,23 @@ async fn test_get_value_message_content() {
     test_utils::write_and_expect_local_value(&ma, &patch_id, "get_in", listener_value("hello"))
         .await
         .unwrap();
-    test_utils::expect_local_value(&patch_id, "get_out", &AgentValue::string("hello"))
+    test_utils::expect_local_value(&patch_id, "get_out", &Value::string("hello"))
         .await
         .unwrap();
 
     // A bare Message input works too
-    test_utils::write_and_expect_local_value(
-        &ma,
-        &patch_id,
-        "get_key",
-        AgentValue::string("content"),
-    )
-    .await
-    .unwrap();
+    test_utils::write_and_expect_local_value(&ma, &patch_id, "get_key", Value::string("content"))
+        .await
+        .unwrap();
     test_utils::write_and_expect_local_value(
         &ma,
         &patch_id,
         "get_in",
-        AgentValue::message(Message::user("direct".to_string())),
+        Value::message(Message::user("direct".to_string())),
     )
     .await
     .unwrap();
-    test_utils::expect_local_value(&patch_id, "get_out", &AgentValue::string("direct"))
+    test_utils::expect_local_value(&patch_id, "get_out", &Value::string("direct"))
         .await
         .unwrap();
 
@@ -99,9 +94,9 @@ async fn test_get_value_message_content() {
         &ma,
         &patch_id,
         "get_in",
-        AgentValue::array(vector![
-            AgentValue::message(Message::user("one".to_string())),
-            AgentValue::message(Message::assistant("two".to_string())),
+        Value::array(vector![
+            Value::message(Message::user("one".to_string())),
+            Value::message(Message::assistant("two".to_string())),
         ]),
     )
     .await
@@ -109,10 +104,7 @@ async fn test_get_value_message_content() {
     test_utils::expect_local_value(
         &patch_id,
         "get_out",
-        &AgentValue::array(vector![
-            AgentValue::string("one"),
-            AgentValue::string("two"),
-        ]),
+        &Value::array(vector![Value::string("one"), Value::string("two"),]),
     )
     .await
     .unwrap();
@@ -123,21 +115,21 @@ async fn test_get_value_message_content() {
 #[tokio::test]
 async fn test_set_value_writes_dot_path() {
     let ma = test_utils::setup_modular_agent().await;
-    let (set_id, probe) = setup_agent_with_probe(&ma, SET_VALUE_DEF, "value", |cfg| {
-        cfg.set("key".into(), AgentValue::string("user.name"));
-        cfg.set("value".into(), AgentValue::string("Alice"));
+    let (set_id, probe) = setup_module_with_probe(&ma, SET_VALUE_DEF, "value", |cfg| {
+        cfg.set("key".into(), Value::string("user.name"));
+        cfg.set("value".into(), Value::string("Alice"));
     })
     .await;
 
-    let agent = ma.get_agent(&set_id).unwrap();
-    agent
+    let module = ma.get_module(&set_id).unwrap();
+    module
         .lock()
         .await
         .process(
-            AgentContext::new(),
+            ModuleContext::new(),
             "value".into(),
-            AgentValue::object(hashmap! {
-                "user".to_string() => AgentValue::object(hashmap! {}),
+            Value::object(hashmap! {
+                "user".to_string() => Value::object(hashmap! {}),
             }),
         )
         .await
@@ -146,9 +138,9 @@ async fn test_set_value_writes_dot_path() {
     let (_ctx, value) = recv_probe(&probe).await.unwrap();
     assert_eq!(
         value,
-        AgentValue::object(hashmap! {
-            "user".to_string() => AgentValue::object(hashmap! {
-                "name".to_string() => AgentValue::string("Alice"),
+        Value::object(hashmap! {
+            "user".to_string() => Value::object(hashmap! {
+                "name".to_string() => Value::string("Alice"),
             }),
         })
     );
@@ -160,15 +152,15 @@ async fn test_set_value_writes_dot_path() {
 async fn test_zip_to_object_fifo() {
     let ma = test_utils::setup_modular_agent().await;
     // Default keys are the port indices "0" / "1"
-    let (zip_id, probe) = setup_agent_with_probe(&ma, ZIP_OBJ_DEF, "object", |_| {}).await;
+    let (zip_id, probe) = setup_module_with_probe(&ma, ZIP_OBJ_DEF, "object", |_| {}).await;
 
-    let ctx = AgentContext::new();
-    let agent = ma.get_agent(&zip_id).unwrap();
+    let ctx = ModuleContext::new();
+    let module = ma.get_module(&zip_id).unwrap();
     {
-        let mut guard = agent.lock().await;
+        let mut guard = module.lock().await;
         for (port, v) in [("0", 1), ("1", 2)] {
             guard
-                .process(ctx.clone(), port.into(), AgentValue::integer(v))
+                .process(ctx.clone(), port.into(), Value::integer(v))
                 .await
                 .unwrap();
         }
@@ -177,9 +169,9 @@ async fn test_zip_to_object_fifo() {
     let (_ctx, value) = recv_probe(&probe).await.unwrap();
     assert_eq!(
         value,
-        AgentValue::object(hashmap! {
-            "0".to_string() => AgentValue::integer(1),
-            "1".to_string() => AgentValue::integer(2),
+        Value::object(hashmap! {
+            "0".to_string() => Value::integer(1),
+            "1".to_string() => Value::integer(2),
         })
     );
 
@@ -191,18 +183,18 @@ async fn test_zip_to_object_restores_parked_keys() {
     let ma = test_utils::setup_modular_agent().await;
 
     let patch_id = ma.new_patch().unwrap();
-    let def = ma.get_agent_definition(ZIP_OBJ_DEF).unwrap();
+    let def = ma.get_module_definition(ZIP_OBJ_DEF).unwrap();
 
     // reconcile_spec parks the undeclared k0/k1 configs under a "_" prefix when a
     // patch is loaded; new() must pick the values back up.
     let mut spec = def.to_spec();
     let mut configs = spec.configs.take().unwrap();
-    configs.set("_k0".into(), AgentValue::string("alpha"));
-    configs.set("_k1".into(), AgentValue::string("beta"));
+    configs.set("_k0".into(), Value::string("alpha"));
+    configs.set("_k1".into(), Value::string("beta"));
     spec.configs = Some(configs);
-    let agent_id = ma.add_agent(patch_id.clone(), spec).await.unwrap();
+    let module_id = ma.add_module(patch_id.clone(), spec).await.unwrap();
 
-    let created = ma.get_agent_spec(&agent_id).await.unwrap();
+    let created = ma.get_module_spec(&module_id).await.unwrap();
     let configs = created.configs.expect("configs must be present");
     assert_eq!(configs.get_string("k0").unwrap(), "alpha");
     assert_eq!(configs.get_string("k1").unwrap(), "beta");
@@ -218,25 +210,25 @@ async fn test_zip_to_object_save_reload_roundtrip() {
     // LocalIn "zip_in0"/"zip_in1" -> ZipToObject(k0=alpha, k1=beta) -> LocalOut "zip_out"
     let patch_id = ma.new_patch().unwrap();
     let zip_id = ma
-        .add_agent(
+        .add_module(
             patch_id.clone(),
-            ma.get_agent_definition(ZIP_OBJ_DEF).unwrap().to_spec(),
+            ma.get_module_definition(ZIP_OBJ_DEF).unwrap().to_spec(),
         )
         .await
         .unwrap();
-    let mut key_configs = AgentConfigs::new();
-    key_configs.set("k0".into(), AgentValue::string("alpha"));
-    key_configs.set("k1".into(), AgentValue::string("beta"));
-    ma.set_agent_configs(zip_id.clone(), key_configs)
+    let mut key_configs = ModuleConfigs::new();
+    key_configs.set("k0".into(), Value::string("alpha"));
+    key_configs.set("k1".into(), Value::string("beta"));
+    ma.set_module_configs(zip_id.clone(), key_configs)
         .await
         .unwrap();
 
     for (i, name) in ["zip_in0", "zip_in1"].iter().enumerate() {
-        let mut spec = ma.get_agent_definition(LOCAL_IN_DEF).unwrap().to_spec();
+        let mut spec = ma.get_module_definition(LOCAL_IN_DEF).unwrap().to_spec();
         if let Some(configs) = spec.configs.as_mut() {
-            configs.set("name".into(), AgentValue::string(*name));
+            configs.set("name".into(), Value::string(*name));
         }
-        let in_id = ma.add_agent(patch_id.clone(), spec).await.unwrap();
+        let in_id = ma.add_module(patch_id.clone(), spec).await.unwrap();
         ma.add_connection(
             &patch_id,
             ConnectionSpec {
@@ -249,11 +241,11 @@ async fn test_zip_to_object_save_reload_roundtrip() {
         .await
         .unwrap();
     }
-    let mut out_spec = ma.get_agent_definition(LOCAL_OUT_DEF).unwrap().to_spec();
+    let mut out_spec = ma.get_module_definition(LOCAL_OUT_DEF).unwrap().to_spec();
     if let Some(configs) = out_spec.configs.as_mut() {
-        configs.set("name".into(), AgentValue::string("zip_out"));
+        configs.set("name".into(), Value::string("zip_out"));
     }
-    let out_id = ma.add_agent(patch_id.clone(), out_spec).await.unwrap();
+    let out_id = ma.add_module(patch_id.clone(), out_spec).await.unwrap();
     ma.add_connection(
         &patch_id,
         ConnectionSpec {
@@ -272,7 +264,7 @@ async fn test_zip_to_object_save_reload_roundtrip() {
     ma.quit();
 
     // Reload in a fresh instance: the saved key names must survive and drive the zip.
-    // Agent ids are reassigned on load, so look the agent up by def_name.
+    // Module ids are reassigned on load, so look the module up by def_name.
     let ma = test_utils::setup_modular_agent().await;
     let patch_id = test_utils::open_and_start_patch(&ma, &path_str)
         .await
@@ -280,26 +272,26 @@ async fn test_zip_to_object_save_reload_roundtrip() {
 
     let patch_spec = ma.get_patch_spec(&patch_id).await.unwrap();
     let zip_spec = patch_spec
-        .agents
+        .modules
         .iter()
         .find(|a| a.def_name == ZIP_OBJ_DEF)
-        .expect("zip agent must be in the reloaded patch");
+        .expect("zip module must be in the reloaded patch");
     let configs = zip_spec.configs.clone().expect("configs must be present");
     assert_eq!(configs.get_string("k0").unwrap(), "alpha");
     assert_eq!(configs.get_string("k1").unwrap(), "beta");
 
-    test_utils::write_and_expect_local_value(&ma, &patch_id, "zip_in0", AgentValue::integer(1))
+    test_utils::write_and_expect_local_value(&ma, &patch_id, "zip_in0", Value::integer(1))
         .await
         .unwrap();
-    test_utils::write_and_expect_local_value(&ma, &patch_id, "zip_in1", AgentValue::integer(2))
+    test_utils::write_and_expect_local_value(&ma, &patch_id, "zip_in1", Value::integer(2))
         .await
         .unwrap();
     test_utils::expect_local_value(
         &patch_id,
         "zip_out",
-        &AgentValue::object(hashmap! {
-            "alpha".to_string() => AgentValue::integer(1),
-            "beta".to_string() => AgentValue::integer(2),
+        &Value::object(hashmap! {
+            "alpha".to_string() => Value::integer(1),
+            "beta".to_string() => Value::integer(2),
         }),
     )
     .await

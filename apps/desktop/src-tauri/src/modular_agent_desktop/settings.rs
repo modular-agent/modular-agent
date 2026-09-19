@@ -1,10 +1,10 @@
 use anyhow::{Context as _, Result};
 use modular_agent_core::mcp_server::{McpServerConfig, McpServerHandle, start_mcp_server};
-use modular_agent_core::{AgentConfigs, AgentValue};
+use modular_agent_core::{ModuleConfigs, Value};
 use parking_lot::Mutex;
 use rand::Rng as _;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::Value as JsonValue;
 use std::{collections::HashMap, ops::Not, sync::LazyLock};
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_modular_agent::ModularAgentExt;
@@ -29,9 +29,9 @@ pub fn save(app: &AppHandle) -> Result<()> {
     }
     store.set("core", settings_json);
 
-    let agent_settings = app.ma().get_global_configs_map();
-    let agent_settings_json = serde_json::to_value(agent_settings)?;
-    store.set("agents", agent_settings_json);
+    let module_settings = app.ma().get_global_configs_map();
+    let module_settings_json = serde_json::to_value(module_settings)?;
+    store.set("modules", module_settings_json);
 
     Ok(())
 }
@@ -144,17 +144,17 @@ fn init_core_settings(app: &AppHandle) -> Result<()> {
     Ok(())
 }
 
-pub fn load_agent_global_configs(app: &AppHandle) -> Result<()> {
+pub fn load_module_global_configs(app: &AppHandle) -> Result<()> {
     let store = app.store(SETTINGS_JSON)?;
 
-    if let Some(store_value) = store.get("agents") {
+    if let Some(store_value) = store.get("modules") {
         let mut global_configs_map = app.ma().get_global_configs_map();
-        for (agent_name, configs) in store_value.as_object().unwrap_or(&Default::default()) {
-            if let Some(agent_configs) = global_configs_map.get_mut(agent_name) {
+        for (module_name, configs) in store_value.as_object().unwrap_or(&Default::default()) {
+            if let Some(module_configs) = global_configs_map.get_mut(module_name) {
                 for (key, value) in configs.as_object().unwrap_or(&Default::default()) {
-                    if agent_configs.contains_key(key) {
-                        if let Ok(value) = AgentValue::from_json(value.clone()) {
-                            agent_configs.set(key.clone(), value);
+                    if module_configs.contains_key(key) {
+                        if let Ok(value) = Value::from_json(value.clone()) {
+                            module_configs.set(key.clone(), value);
                         }
                     }
                 }
@@ -237,14 +237,14 @@ pub async fn apply_mcp_server(app: &AppHandle) -> Result<()> {
     Ok(())
 }
 
-fn json_merge(a: &mut Value, b: Value) {
-    if let Value::Object(a) = a {
-        if let Value::Object(b) = b {
+fn json_merge(a: &mut JsonValue, b: JsonValue) {
+    if let JsonValue::Object(a) = a {
+        if let JsonValue::Object(b) = b {
             for (k, v) in b {
                 if v.is_null() {
                     a.remove(&k);
                 } else {
-                    json_merge(a.entry(k).or_insert(Value::Null), v);
+                    json_merge(a.entry(k).or_insert(JsonValue::Null), v);
                 }
             }
             return;
@@ -254,7 +254,7 @@ fn json_merge(a: &mut Value, b: Value) {
 }
 
 #[tauri::command]
-pub fn get_core_settings_cmd(settings: State<Mutex<CoreSettings>>) -> Result<Value, String> {
+pub fn get_core_settings_cmd(settings: State<Mutex<CoreSettings>>) -> Result<JsonValue, String> {
     let settings = settings.lock();
     let json = serde_json::to_value(&*settings).map_err(|e| e.to_string())?;
     Ok(json)
@@ -264,7 +264,7 @@ pub fn get_core_settings_cmd(settings: State<Mutex<CoreSettings>>) -> Result<Val
 pub async fn set_core_settings_cmd(
     app: AppHandle,
     settings: State<'_, Mutex<CoreSettings>>,
-    mut new_settings: Value,
+    mut new_settings: JsonValue,
 ) -> Result<(), String> {
     if new_settings.is_null() {
         return Ok(());
@@ -352,13 +352,13 @@ pub async fn regenerate_mcp_server_token_cmd(
     Ok(token)
 }
 
-// Global Agent Configs
+// Global Module Configs
 
 #[tauri::command]
 pub(crate) fn set_global_configs_cmd(
     app: AppHandle,
     def_name: String,
-    configs: AgentConfigs,
+    configs: ModuleConfigs,
 ) -> Result<(), String> {
     app.ma().set_global_configs(def_name, configs);
 

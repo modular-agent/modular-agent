@@ -1,8 +1,8 @@
 use std::cmp::Ordering;
 
 use modular_agent_core::{
-    AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent, ModularAgent,
-    async_trait, modular_agent,
+    AsModule, Error, ModularAgent, ModuleContext, ModuleData, ModuleOutput, ModuleSpec, Result,
+    Value, async_trait, modular_agent,
 };
 use regex::Regex;
 
@@ -43,7 +43,7 @@ impl CondOp {
     }
 
     /// Regex searches (`=~`, `!~`) take only a regex literal, matched unanchored like the
-    /// Regex Match agent.
+    /// Regex Match module.
     fn is_match(&self) -> bool {
         matches!(self, CondOp::Match | CondOp::NotMatch)
     }
@@ -93,11 +93,11 @@ struct Cond {
 /// Two-character operators are matched before one-character ones so that `>=` is not
 /// read as `>` followed by the literal `= 10`. `=~` and `!~` also start with an operator
 /// character, so the scan finds them without `~` in its set.
-fn parse_cond(src: &str) -> Result<Cond, AgentError> {
+fn parse_cond(src: &str) -> Result<Cond> {
     let src = src.trim();
 
     let Some(op_at) = src.find(['=', '!', '<', '>']) else {
-        return Err(AgentError::InvalidConfig(format!(
+        return Err(Error::InvalidConfig(format!(
             "Condition must be `[key] <operator> <literal>`, for example `> 10` or `user.age >= 18`: {}",
             src
         )));
@@ -123,7 +123,7 @@ fn parse_cond(src: &str) -> Result<Cond, AgentError> {
     } else if let Some(rest) = op_src.strip_prefix('<') {
         (CondOp::Lt, rest)
     } else {
-        return Err(AgentError::InvalidConfig(format!(
+        return Err(Error::InvalidConfig(format!(
             "Condition must start with one of ==, !=, =~, !~, >, >=, <, <=: {}",
             src
         )));
@@ -131,7 +131,7 @@ fn parse_cond(src: &str) -> Result<Cond, AgentError> {
 
     let rest = rest.trim();
     if rest.is_empty() {
-        return Err(AgentError::InvalidConfig(format!(
+        return Err(Error::InvalidConfig(format!(
             "Condition is missing a literal: {}",
             src
         )));
@@ -145,13 +145,13 @@ fn parse_cond(src: &str) -> Result<Cond, AgentError> {
     let lit = parse_lit_mode(rest, mode)?;
 
     if op.is_order() && matches!(lit, CondLit::Boolean(_) | CondLit::Null | CondLit::Regex(_)) {
-        return Err(AgentError::InvalidConfig(format!(
+        return Err(Error::InvalidConfig(format!(
             "Order comparison is not supported for boolean, null or regex literals: {}",
             src
         )));
     }
     if op.is_match() && !matches!(lit, CondLit::Regex(_)) {
-        return Err(AgentError::InvalidConfig(format!(
+        return Err(Error::InvalidConfig(format!(
             "=~ and !~ take a regex literal such as /err/: {}",
             src
         )));
@@ -162,7 +162,7 @@ fn parse_cond(src: &str) -> Result<Cond, AgentError> {
 
 /// Parses a dot-separated key such as `user.age` into its segments. A blank key yields an
 /// empty vector, which addresses the input value itself.
-fn parse_key(src: &str) -> Result<Vec<String>, AgentError> {
+fn parse_key(src: &str) -> Result<Vec<String>> {
     let src = src.trim();
     if src.is_empty() {
         return Ok(Vec::new());
@@ -172,7 +172,7 @@ fn parse_key(src: &str) -> Result<Vec<String>, AgentError> {
     for segment in src.split('.') {
         let segment = segment.trim();
         if segment.is_empty() {
-            return Err(AgentError::InvalidConfig(format!(
+            return Err(Error::InvalidConfig(format!(
                 "Key has an empty segment: {}",
                 src
             )));
@@ -189,23 +189,23 @@ enum RegexMode {
     /// newlines. Used for `==`, `!=` and Match cases.
     Full,
     /// The bare pattern, searched anywhere in the string - the same semantics as the
-    /// Regex Match agent. Used for `=~` and `!~`.
+    /// Regex Match module. Used for `=~` and `!~`.
     Search,
 }
 
 /// Parses a literal with full-match regex semantics: a regex between slashes, or any
-/// scalar JSON value. This is the Match agent's case syntax; `parse_cond` picks the
+/// scalar JSON value. This is the Match module's case syntax; `parse_cond` picks the
 /// regex mode from the operator via `parse_lit_mode` instead.
-fn parse_lit(src: &str) -> Result<CondLit, AgentError> {
+fn parse_lit(src: &str) -> Result<CondLit> {
     parse_lit_mode(src, RegexMode::Full)
 }
 
 /// Parses a literal: a regex between slashes (compiled per `mode`), or any scalar JSON
 /// value.
-fn parse_lit_mode(src: &str, mode: RegexMode) -> Result<CondLit, AgentError> {
+fn parse_lit_mode(src: &str, mode: RegexMode) -> Result<CondLit> {
     let src = src.trim();
     if src.is_empty() {
-        return Err(AgentError::InvalidConfig("Literal is missing".into()));
+        return Err(Error::InvalidConfig("Literal is missing".into()));
     }
 
     // A regex literal is `/pattern/`. It is handled before JSON parsing so that a leading
@@ -214,7 +214,7 @@ fn parse_lit_mode(src: &str, mode: RegexMode) -> Result<CondLit, AgentError> {
     // inside the pattern needs no escaping (`/a/b/` is the pattern `a/b`).
     let Some(after_open) = src.strip_prefix('/') else {
         let json: serde_json::Value = serde_json::from_str(src)
-            .map_err(|e| AgentError::InvalidConfig(format!("Invalid literal `{}`: {}", src, e)))?;
+            .map_err(|e| Error::InvalidConfig(format!("Invalid literal `{}`: {}", src, e)))?;
 
         return match json {
             serde_json::Value::Null => Ok(CondLit::Null),
@@ -225,14 +225,14 @@ fn parse_lit_mode(src: &str, mode: RegexMode) -> Result<CondLit, AgentError> {
                 } else if let Some(f) = n.as_f64() {
                     Ok(CondLit::Number(f))
                 } else {
-                    Err(AgentError::InvalidConfig(format!(
+                    Err(Error::InvalidConfig(format!(
                         "Literal is not representable as a number: {}",
                         src
                     )))
                 }
             }
             serde_json::Value::String(s) => Ok(CondLit::String(s)),
-            _ => Err(AgentError::InvalidConfig(format!(
+            _ => Err(Error::InvalidConfig(format!(
                 "Array and object literals are not supported: {}",
                 src
             ))),
@@ -240,7 +240,7 @@ fn parse_lit_mode(src: &str, mode: RegexMode) -> Result<CondLit, AgentError> {
     };
 
     let Some(pattern) = after_open.strip_suffix('/') else {
-        return Err(AgentError::InvalidConfig(format!(
+        return Err(Error::InvalidConfig(format!(
             "Regex literal must be closed with a `/`: {}",
             src
         )));
@@ -251,7 +251,7 @@ fn parse_lit_mode(src: &str, mode: RegexMode) -> Result<CondLit, AgentError> {
             // invalid on its own but would merge with the anchoring wrapper below into a
             // valid - and unanchored - regex instead of being reported as an error.
             Regex::new(pattern).map_err(|e| {
-                AgentError::InvalidConfig(format!("Invalid regex literal `/{}/`: {}", pattern, e))
+                Error::InvalidConfig(format!("Invalid regex literal `/{}/`: {}", pattern, e))
             })?;
             // Anchor the whole match. `(?s:...)` groups the pattern so an alternation
             // such as `a|b` is anchored as a whole rather than as `^a` or `b$`, and turns
@@ -260,18 +260,18 @@ fn parse_lit_mode(src: &str, mode: RegexMode) -> Result<CondLit, AgentError> {
             // back off, and the anchors sit outside the group so an inline `(?m)` cannot
             // affect them.
             Regex::new(&format!("^(?s:{pattern})$")).map_err(|e| {
-                AgentError::InvalidConfig(format!("Invalid regex literal `/{}/`: {}", pattern, e))
+                Error::InvalidConfig(format!("Invalid regex literal `/{}/`: {}", pattern, e))
             })?
         }
         RegexMode::Search => Regex::new(pattern).map_err(|e| {
-            AgentError::InvalidConfig(format!("Invalid regex literal `/{}/`: {}", pattern, e))
+            Error::InvalidConfig(format!("Invalid regex literal `/{}/`: {}", pattern, e))
         })?,
     };
     Ok(CondLit::Regex(CondRegex(re)))
 }
 
 /// Parses a condition config value. An empty or blank config yields `None`.
-fn load_cond(src: &str) -> Result<Option<Cond>, AgentError> {
+fn load_cond(src: &str) -> Result<Option<Cond>> {
     if src.trim().is_empty() {
         return Ok(None);
     }
@@ -279,7 +279,7 @@ fn load_cond(src: &str) -> Result<Option<Cond>, AgentError> {
 }
 
 /// Parses a literal config value. An empty or blank config yields `None`.
-fn load_lit(src: &str) -> Result<Option<CondLit>, AgentError> {
+fn load_lit(src: &str) -> Result<Option<CondLit>> {
     if src.trim().is_empty() {
         return Ok(None);
     }
@@ -288,10 +288,10 @@ fn load_lit(src: &str) -> Result<Option<CondLit>, AgentError> {
 
 /// Equality between an input value and a literal. A type mismatch is simply `false`;
 /// no implicit coercion (the string `"10"` does not equal the number `10`).
-fn eq_cond(lit: &CondLit, value: &AgentValue) -> bool {
+fn eq_cond(lit: &CondLit, value: &Value) -> bool {
     match lit {
         CondLit::Integer(i) => match value {
-            AgentValue::Integer(v) => v == i,
+            Value::Integer(v) => v == i,
             _ => value.as_f64() == Some(*i as f64),
         },
         CondLit::Number(n) => value.as_f64() == Some(*n),
@@ -306,10 +306,10 @@ fn eq_cond(lit: &CondLit, value: &AgentValue) -> bool {
 }
 
 /// Orders an input value against a literal, or `None` when they are not comparable.
-fn cmp_cond(lit: &CondLit, value: &AgentValue) -> Option<Ordering> {
+fn cmp_cond(lit: &CondLit, value: &Value) -> Option<Ordering> {
     match lit {
         CondLit::Integer(i) => match value {
-            AgentValue::Integer(v) => Some(v.cmp(i)),
+            Value::Integer(v) => Some(v.cmp(i)),
             _ => value.as_f64().and_then(|v| v.partial_cmp(&(*i as f64))),
         },
         CondLit::Number(n) => value.as_f64().and_then(|v| v.partial_cmp(n)),
@@ -328,11 +328,11 @@ fn cmp_cond(lit: &CondLit, value: &AgentValue) -> Option<Ordering> {
 /// `!=` is the exact negation of `==`, so a value of a different type than the literal
 /// matches. Order comparisons against an incomparable value yield `false` instead of an
 /// error, so that a type mismatch routes the value instead of stopping the flow.
-fn eval_cond(cond: &Cond, value: &AgentValue) -> bool {
+fn eval_cond(cond: &Cond, value: &Value) -> bool {
     let target = if cond.key.is_empty() {
         value.clone()
     } else {
-        get_nested_value(value, &cond.key).unwrap_or(AgentValue::Unit)
+        get_nested_value(value, &cond.key).unwrap_or(Value::Unit)
     };
 
     match cond.op {
@@ -366,7 +366,7 @@ fn eval_cond(cond: &Cond, value: &AgentValue) -> bool {
 /// `"error"` but not `"my error"`. The `s` flag is on, so `.` also matches newlines and a
 /// multi-line string is matched as a whole; write `(?-s)` to turn that off. With `=~` the
 /// pattern is searched anywhere in the string instead - the same semantics as the Regex
-/// Match agent - so `=~ /err/` matches `"my error"`; `!~` is its exact negation. Use the
+/// Match module - so `=~ /err/` matches `"my error"`; `!~` is its exact negation. Use the
 /// inline `(?i)` flag for a case-insensitive match, as in `/(?i)error/`. A non-string
 /// value (a number, an object, or an unresolved key) never matches a regex, so `==` / `=~`
 /// are false and `!=` / `!~` are true for it. A `/` inside the pattern needs no escaping
@@ -407,13 +407,13 @@ fn eval_cond(cond: &Cond, value: &AgentValue) -> bool {
     string_config(name = CONFIG_COND),
     hint(color=5),
 )]
-struct IfAgent {
-    data: AgentData,
+struct IfModule {
+    data: ModuleData,
     cond: Option<Cond>,
 }
 
-impl IfAgent {
-    fn load_cond_config(spec: &AgentSpec) -> Result<Option<Cond>, AgentError> {
+impl IfModule {
+    fn load_cond_config(spec: &ModuleSpec) -> Result<Option<Cond>> {
         let src = spec
             .configs
             .as_ref()
@@ -424,21 +424,21 @@ impl IfAgent {
 }
 
 #[async_trait]
-impl AsAgent for IfAgent {
-    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+impl AsModule for IfModule {
+    fn new(ma: ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
         // Keep an invalid condition from blocking the load of a patch; it is reported
         // on the first process() call instead.
         let cond = Self::load_cond_config(&spec).unwrap_or(None);
         Ok(Self {
-            data: AgentData::new(ma, id, spec),
+            data: ModuleData::new(ma, id, spec),
             cond,
         })
     }
 
-    fn configs_changed(&mut self) -> Result<(), AgentError> {
+    fn configs_changed(&mut self) -> Result<()> {
         // The config value is already committed when this is called, so the previous
         // condition must be dropped even when the new one fails to parse. Otherwise the
-        // agent would keep routing by a condition the config no longer holds.
+        // module would keep routing by a condition the config no longer holds.
         match Self::load_cond_config(&self.data.spec) {
             Ok(cond) => {
                 self.cond = cond;
@@ -451,14 +451,9 @@ impl AsAgent for IfAgent {
         }
     }
 
-    async fn process(
-        &mut self,
-        ctx: AgentContext,
-        _port: String,
-        value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, ctx: ModuleContext, _port: String, value: Value) -> Result<()> {
         let Some(cond) = self.cond.as_ref() else {
-            return Err(AgentError::InvalidConfig(
+            return Err(Error::InvalidConfig(
                 "config cond must be a valid condition".into(),
             ));
         };
@@ -474,8 +469,8 @@ impl AsAgent for IfAgent {
 /// returns the first error alongside the results.
 fn parse_all<T>(
     srcs: &[String],
-    parse: impl Fn(&str) -> Result<Option<T>, AgentError>,
-) -> (Vec<Option<T>>, Option<AgentError>) {
+    parse: impl Fn(&str) -> Result<Option<T>>,
+) -> (Vec<Option<T>>, Option<Error>) {
     let mut first_error = None;
     let mut parsed = Vec::with_capacity(srcs.len());
     for src in srcs {
@@ -499,13 +494,13 @@ fn parse_all<T>(
 /// invalid one - a condition set at runtime is additionally reported as a configuration
 /// error, while an invalid condition loaded from a patch is only kept as never-matching.
 ///
-/// Condition syntax and comparison semantics are the same as the If agent:
+/// Condition syntax and comparison semantics are the same as the If module:
 /// `[key] <operator> <literal>` with `==`, `!=`, `=~`, `!~`, `>`, `>=`, `<`, `<=` and
 /// number, string, boolean, null or regex literals; order operators reject boolean, null
 /// and regex literals, and `=~` / `!~` take only a regex literal. A regex literal such as
 /// `== /err.*/` matches a string value in full (implicitly anchored as `^(?s:...)$`, so
 /// `.` also matches newlines; use `(?i)` for case-insensitivity), while `=~ /err/`
-/// searches the pattern anywhere in the string like the Regex Match agent, and `!~` is
+/// searches the pattern anywhere in the string like the Regex Match module, and `!~` is
 /// its exact negation. A non-string value never matches a regex. Values that cannot be
 /// compared with a literal do not match that condition instead of raising an error, and
 /// an invalid regex is kept as a never-matching condition like any other invalid one.
@@ -535,14 +530,14 @@ fn parse_all<T>(
     inputs = [PORT_VALUE],
     outputs = ["0", "1", PORT_DEFAULT],
     integer_config(name = CONFIG_N, default = 2),
-    // `c0`..`c1` match the default `n`, so a freshly placed agent already exposes them;
+    // `c0`..`c1` match the default `n`, so a freshly placed module already exposes them;
     // `update_numbered_spec` takes over once `n` changes.
     string_config(name = CONFIG_C0),
     string_config(name = CONFIG_C1),
     hint(color=5, height=2),
 )]
-struct SwitchAgent {
-    data: AgentData,
+struct SwitchModule {
+    data: ModuleData,
     n: usize,
 
     // Raw condition strings, kept to detect config changes
@@ -552,7 +547,7 @@ struct SwitchAgent {
     conds: Vec<Option<Cond>>,
 }
 
-impl SwitchAgent {
+impl SwitchModule {
     fn numbered_opts() -> NumberedSpecOptions<'static> {
         NumberedSpecOptions {
             prefix: "c",
@@ -564,12 +559,12 @@ impl SwitchAgent {
 }
 
 #[async_trait]
-impl AsAgent for SwitchAgent {
-    fn new(ma: ModularAgent, id: String, mut spec: AgentSpec) -> Result<Self, AgentError> {
+impl AsModule for SwitchModule {
+    fn new(ma: ModularAgent, id: String, mut spec: ModuleSpec) -> Result<Self> {
         let (n, cond_srcs) = dynamic_spec::update_numbered_spec(&mut spec, &Self::numbered_opts())?;
         // Invalid conditions are kept as never-matching instead of blocking the load.
         let (conds, _) = parse_all(&cond_srcs, load_cond);
-        let data = AgentData::new(ma, id, spec);
+        let data = ModuleData::new(ma, id, spec);
         Ok(Self {
             data,
             n,
@@ -578,7 +573,7 @@ impl AsAgent for SwitchAgent {
         })
     }
 
-    fn configs_changed(&mut self) -> Result<(), AgentError> {
+    fn configs_changed(&mut self) -> Result<()> {
         let (n, cond_srcs) =
             dynamic_spec::update_numbered_spec(&mut self.data.spec, &Self::numbered_opts())?;
         if n == self.n && cond_srcs == self.cond_srcs {
@@ -594,7 +589,7 @@ impl AsAgent for SwitchAgent {
         self.n = n;
         self.cond_srcs = cond_srcs;
         self.conds = conds;
-        self.emit_agent_spec_updated();
+        self.emit_module_spec_updated();
 
         match first_error {
             Some(e) => Err(e),
@@ -602,12 +597,7 @@ impl AsAgent for SwitchAgent {
         }
     }
 
-    async fn process(
-        &mut self,
-        ctx: AgentContext,
-        _port: String,
-        value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, ctx: ModuleContext, _port: String, value: Value) -> Result<()> {
         let matched = self
             .conds
             .iter()
@@ -623,7 +613,7 @@ impl AsAgent for SwitchAgent {
 /// Routes the input value to the first of n case values it is equal to.
 ///
 /// A single `key` selects what to compare, and each `c0`..`c(n-1)` holds one candidate
-/// value; there is no operator, the comparison is always equality. Use the Switch agent
+/// value; there is no operator, the comparison is always equality. Use the Switch module
 /// instead when the branches need different operators or different keys.
 ///
 /// The `n` config controls how many `c0`..`c(n-1)` case values exist, and how many numbered
@@ -639,7 +629,7 @@ impl AsAgent for SwitchAgent {
 /// `true`, `null`) or as `/pattern/`. A regex matches a string value in full (implicitly
 /// anchored as `^(?s:...)$`, so `.` also matches newlines; use `(?i)` for
 /// case-insensitivity), and a non-string value never matches it. To route by a substring
-/// search instead, use the Switch agent's `=~` operator. Comparison is by type as well as
+/// search instead, use the Switch module's `=~` operator. Comparison is by type as well as
 /// value, so the case `10` matches neither the string `"10"` nor `true`, but numbers
 /// compare through their numeric value, so `10` matches both an integer and a float
 /// input.
@@ -672,14 +662,14 @@ impl AsAgent for SwitchAgent {
     outputs = ["0", "1", PORT_DEFAULT],
     string_config(name = CONFIG_KEY),
     integer_config(name = CONFIG_N, default = 2),
-    // `c0`..`c1` match the default `n`, so a freshly placed agent already exposes them;
+    // `c0`..`c1` match the default `n`, so a freshly placed module already exposes them;
     // `update_numbered_spec` takes over once `n` changes.
     string_config(name = CONFIG_C0),
     string_config(name = CONFIG_C1),
     hint(color=5, height=2),
 )]
-struct MatchAgent {
-    data: AgentData,
+struct MatchModule {
+    data: ModuleData,
     n: usize,
 
     // Raw config strings, kept to detect config changes
@@ -692,7 +682,7 @@ struct MatchAgent {
     cases: Vec<Option<CondLit>>,
 }
 
-impl MatchAgent {
+impl MatchModule {
     fn numbered_opts() -> NumberedSpecOptions<'static> {
         NumberedSpecOptions {
             prefix: "c",
@@ -702,7 +692,7 @@ impl MatchAgent {
         }
     }
 
-    fn key_src_from(spec: &AgentSpec) -> String {
+    fn key_src_from(spec: &ModuleSpec) -> String {
         spec.configs
             .as_ref()
             .map(|cfg| cfg.get_string_or_default(CONFIG_KEY))
@@ -711,14 +701,14 @@ impl MatchAgent {
 }
 
 #[async_trait]
-impl AsAgent for MatchAgent {
-    fn new(ma: ModularAgent, id: String, mut spec: AgentSpec) -> Result<Self, AgentError> {
+impl AsModule for MatchModule {
+    fn new(ma: ModularAgent, id: String, mut spec: ModuleSpec) -> Result<Self> {
         let (n, case_srcs) = dynamic_spec::update_numbered_spec(&mut spec, &Self::numbered_opts())?;
         let key_src = Self::key_src_from(&spec);
         // An invalid key or case is kept as never-matching instead of blocking the load.
         let key = parse_key(&key_src).ok();
         let (cases, _) = parse_all(&case_srcs, load_lit);
-        let data = AgentData::new(ma, id, spec);
+        let data = ModuleData::new(ma, id, spec);
         Ok(Self {
             data,
             n,
@@ -729,7 +719,7 @@ impl AsAgent for MatchAgent {
         })
     }
 
-    fn configs_changed(&mut self) -> Result<(), AgentError> {
+    fn configs_changed(&mut self) -> Result<()> {
         let (n, case_srcs) =
             dynamic_spec::update_numbered_spec(&mut self.data.spec, &Self::numbered_opts())?;
         let key_src = Self::key_src_from(&self.data.spec);
@@ -757,7 +747,7 @@ impl AsAgent for MatchAgent {
         self.case_srcs = case_srcs;
         self.key = key;
         self.cases = cases;
-        self.emit_agent_spec_updated();
+        self.emit_module_spec_updated();
 
         match first_error {
             Some(e) => Err(e),
@@ -765,12 +755,7 @@ impl AsAgent for MatchAgent {
         }
     }
 
-    async fn process(
-        &mut self,
-        ctx: AgentContext,
-        _port: String,
-        value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, ctx: ModuleContext, _port: String, value: Value) -> Result<()> {
         let matched = match self.key.as_ref() {
             // An invalid key matches nothing, so everything goes to `_`.
             None => None,
@@ -778,7 +763,7 @@ impl AsAgent for MatchAgent {
                 let target = if key.is_empty() {
                     value.clone()
                 } else {
-                    get_nested_value(&value, key).unwrap_or(AgentValue::Unit)
+                    get_nested_value(&value, key).unwrap_or(Value::Unit)
                 };
                 self.cases
                     .iter()
@@ -955,11 +940,11 @@ mod tests {
 
     #[test]
     fn test_eval_cond_key() {
-        let value = AgentValue::object(im::hashmap! {
-            "user".to_string() => AgentValue::object(im::hashmap! {
-                "age".to_string() => AgentValue::integer(20),
+        let value = Value::object(im::hashmap! {
+            "user".to_string() => Value::object(im::hashmap! {
+                "age".to_string() => Value::integer(20),
             }),
-            "name".to_string() => AgentValue::string("a".to_string()),
+            "name".to_string() => Value::string("a".to_string()),
         });
 
         assert!(eval_cond(
@@ -991,7 +976,7 @@ mod tests {
         ));
 
         // A non-object input with a key evaluates as null
-        let scalar = AgentValue::integer(20);
+        let scalar = Value::integer(20);
         assert!(!eval_cond(
             &parse_cond("user.age > 18").expect("valid"),
             &scalar
@@ -1009,10 +994,10 @@ mod tests {
         use modular_agent_core::llm::Message;
 
         // Mattermost Listener shape: { message: Message, user, ... }
-        let value = AgentValue::object(im::hashmap! {
+        let value = Value::object(im::hashmap! {
             "message".to_string() =>
-                AgentValue::message(Message::user("hello world".to_string())),
-            "user".to_string() => AgentValue::string("alice"),
+                Value::message(Message::user("hello world".to_string())),
+            "user".to_string() => Value::string("alice"),
         });
 
         assert!(eval_cond(
@@ -1038,14 +1023,14 @@ mod tests {
     fn test_match_case_through_message_key() {
         use modular_agent_core::llm::Message;
 
-        // The Match agent compares `get_nested_value(key)` against case
+        // The Match module compares `get_nested_value(key)` against case
         // literals with `eq_cond`; a Message key must select the right case.
-        let value = AgentValue::object(im::hashmap! {
+        let value = Value::object(im::hashmap! {
             "message".to_string() =>
-                AgentValue::message(Message::user("hello world".to_string())),
+                Value::message(Message::user("hello world".to_string())),
         });
 
-        let target = get_nested_value(&value, &["message", "content"]).unwrap_or(AgentValue::Unit);
+        let target = get_nested_value(&value, &["message", "content"]).unwrap_or(Value::Unit);
         assert!(eq_cond(
             &parse_lit("\"hello world\"").expect("valid"),
             &target
@@ -1182,21 +1167,21 @@ mod tests {
     fn test_eval_cond_regex() {
         // Full match: `/err.*/` matches "error" but not the substring in "my error"
         let cond = parse_cond("== /err.*/").expect("valid");
-        assert!(eval_cond(&cond, &AgentValue::string("error")));
-        assert!(!eval_cond(&cond, &AgentValue::string("my error")));
+        assert!(eval_cond(&cond, &Value::string("error")));
+        assert!(!eval_cond(&cond, &Value::string("my error")));
 
         // `!=` is the exact negation
         let ne = parse_cond("!= /err.*/").expect("valid");
-        assert!(!eval_cond(&ne, &AgentValue::string("error")));
-        assert!(eval_cond(&ne, &AgentValue::string("my error")));
+        assert!(!eval_cond(&ne, &Value::string("error")));
+        assert!(eval_cond(&ne, &Value::string("my error")));
 
         // `(?i)` makes the match case-insensitive
         let ci = parse_cond("== /(?i)error/").expect("valid");
-        assert!(eval_cond(&ci, &AgentValue::string("ERROR")));
+        assert!(eval_cond(&ci, &Value::string("ERROR")));
 
         // Key-based match
-        let value = AgentValue::object(im::hashmap! {
-            "status".to_string() => AgentValue::string("error".to_string()),
+        let value = Value::object(im::hashmap! {
+            "status".to_string() => Value::string("error".to_string()),
         });
         assert!(eval_cond(
             &parse_cond("status == /err.*/").expect("valid"),
@@ -1209,17 +1194,17 @@ mod tests {
 
         // The empty pattern `//` matches only the empty string
         let empty = parse_cond("== //").expect("valid");
-        assert!(eval_cond(&empty, &AgentValue::string("")));
-        assert!(!eval_cond(&empty, &AgentValue::string("a")));
+        assert!(eval_cond(&empty, &Value::string("")));
+        assert!(!eval_cond(&empty, &Value::string("a")));
 
         // A non-string target never matches: `==` is false, `!=` is true
-        let num = AgentValue::integer(10);
+        let num = Value::integer(10);
         assert!(!eval_cond(&parse_cond("== /10/").expect("valid"), &num));
         assert!(eval_cond(&parse_cond("!= /10/").expect("valid"), &num));
 
         // An unresolved key is unit, which is not a string either
-        let obj = AgentValue::object(im::hashmap! {
-            "name".to_string() => AgentValue::string("a".to_string()),
+        let obj = Value::object(im::hashmap! {
+            "name".to_string() => Value::string("a".to_string()),
         });
         assert!(!eval_cond(
             &parse_cond("missing == /.*/").expect("valid"),
@@ -1237,42 +1222,39 @@ mod tests {
         let url = parse_cond("== /.*https?:\\/\\/.*/").expect("valid");
         assert!(eval_cond(
             &url,
-            &AgentValue::string("line1\nhttps://example.com\nline3")
+            &Value::string("line1\nhttps://example.com\nline3")
         ));
-        assert!(eval_cond(
-            &url,
-            &AgentValue::string("https://example.com\n")
-        ));
-        assert!(!eval_cond(&url, &AgentValue::string("no url here")));
+        assert!(eval_cond(&url, &Value::string("https://example.com\n")));
+        assert!(!eval_cond(&url, &Value::string("no url here")));
 
         // `(?-s)` turns newline-matching back off inside the pattern
         let strict = parse_cond("== /(?-s).*/").expect("valid");
-        assert!(eval_cond(&strict, &AgentValue::string("ab")));
-        assert!(!eval_cond(&strict, &AgentValue::string("a\nb")));
+        assert!(eval_cond(&strict, &Value::string("ab")));
+        assert!(!eval_cond(&strict, &Value::string("a\nb")));
     }
 
     #[test]
     fn test_eval_cond_match_op() {
         // `=~` searches anywhere, so the substring in "my error" matches
         let cond = parse_cond("=~ /err/").expect("valid");
-        assert!(eval_cond(&cond, &AgentValue::string("error")));
-        assert!(eval_cond(&cond, &AgentValue::string("my error")));
-        assert!(!eval_cond(&cond, &AgentValue::string("ok")));
+        assert!(eval_cond(&cond, &Value::string("error")));
+        assert!(eval_cond(&cond, &Value::string("my error")));
+        assert!(!eval_cond(&cond, &Value::string("ok")));
 
         // `!~` is the exact negation
         let ne = parse_cond("!~ /err/").expect("valid");
-        assert!(!eval_cond(&ne, &AgentValue::string("my error")));
-        assert!(eval_cond(&ne, &AgentValue::string("ok")));
+        assert!(!eval_cond(&ne, &Value::string("my error")));
+        assert!(eval_cond(&ne, &Value::string("ok")));
 
         // A search needs no `.*` around the pattern, and newlines are no obstacle
         assert!(eval_cond(
             &parse_cond("=~ /https?:\\/\\//").expect("valid"),
-            &AgentValue::string("line1\nhttps://example.com\nline3")
+            &Value::string("line1\nhttps://example.com\nline3")
         ));
 
         // Key-based search
-        let value = AgentValue::object(im::hashmap! {
-            "status".to_string() => AgentValue::string("my error".to_string()),
+        let value = Value::object(im::hashmap! {
+            "status".to_string() => Value::string("my error".to_string()),
         });
         assert!(eval_cond(
             &parse_cond("status =~ /err/").expect("valid"),
@@ -1280,7 +1262,7 @@ mod tests {
         ));
 
         // A non-string target never matches: `=~` is false, `!~` is true
-        let num = AgentValue::integer(10);
+        let num = Value::integer(10);
         assert!(!eval_cond(&parse_cond("=~ /10/").expect("valid"), &num));
         assert!(eval_cond(&parse_cond("!~ /10/").expect("valid"), &num));
         // An unresolved key is unit, which is not a string either

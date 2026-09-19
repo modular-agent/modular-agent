@@ -8,7 +8,7 @@ contact_links:
   - name: Ideas, showcases, and announcements
     url: https://github.com/orgs/modular-agent/discussions
     about: Share a workflow you built, float an idea, or catch up on releases.
-  - name: Agent libraries outside this repository
+  - name: Module libraries outside this repository
     url: https://github.com/modular-agent
     about: >-
       Databases, Slack, lifelog, and others ship from their own

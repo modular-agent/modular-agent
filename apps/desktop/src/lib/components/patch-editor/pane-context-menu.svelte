@@ -21,7 +21,7 @@
     onundo,
     onredo,
     onpaste,
-    onaddagent,
+    onaddmodule,
     ontogglesnap,
   }: {
     open: boolean;
@@ -42,7 +42,7 @@
     onundo?: () => void;
     onredo?: () => void;
     onpaste?: () => void;
-    onaddagent?: () => void;
+    onaddmodule?: () => void;
     ontogglesnap?: () => void;
   } = $props();
 
@@ -80,9 +80,9 @@
       </ContextMenu.Item>
     {/if}
     <ContextMenu.Separator />
-    <ContextMenu.Item inset onclick={() => handle(onaddagent)}>
-      Add agent
-      <ContextMenu.Shortcut>{hk("editor.add_agent")}</ContextMenu.Shortcut>
+    <ContextMenu.Item inset onclick={() => handle(onaddmodule)}>
+      Add module
+      <ContextMenu.Shortcut>{hk("editor.add_module")}</ContextMenu.Shortcut>
     </ContextMenu.Item>
     <ContextMenu.Separator />
     <ContextMenu.Item inset disabled={!canUndo} onclick={() => handle(onundo)}>

@@ -1,78 +1,76 @@
-use crate::context::AgentContext;
-use crate::error::AgentError;
+use crate::context::ModuleContext;
+use crate::error::{Error, Result};
 use crate::modular_agent::ModularAgent;
-use crate::value::AgentValue;
+use crate::value::Value;
 
-/// Internal event messages passed through the agent event loop.
+/// Internal event messages passed through the module event loop.
 ///
 /// These messages are used internally by the `ModularAgent` to route values
-/// between agents and to/from external inputs/outputs.
+/// between modules and to/from external inputs/outputs.
 #[derive(Clone, Debug)]
-pub enum AgentEventMessage {
-    /// Output from an agent to be routed to connected agents.
-    AgentOut {
-        /// ID of the source agent.
-        agent: String,
+pub enum ModuleEventMessage {
+    /// Output from a module to be routed to connected modules.
+    ModuleOut {
+        /// ID of the source module.
+        module: String,
         /// Execution context for tracing.
-        ctx: AgentContext,
+        ctx: ModuleContext,
         /// Output port name.
         port: String,
         /// The value being output.
-        value: AgentValue,
+        value: Value,
     },
-    /// Output to an external destination (outside the agent graph).
+    /// Output to an external destination (outside the module graph).
     ExternalOutput {
         /// Name of the external output.
         name: String,
         /// Execution context for tracing.
-        ctx: AgentContext,
+        ctx: ModuleContext,
         /// The value being output.
-        value: AgentValue,
+        value: Value,
     },
 }
 
-/// Sends an agent output message asynchronously.
+/// Sends a module output message asynchronously.
 ///
-/// This function queues an `AgentOut` message to be processed by the event loop,
-/// which will route the value to connected agents.
-pub async fn send_agent_out(
+/// This function queues a `ModuleOut` message to be processed by the event loop,
+/// which will route the value to connected modules.
+pub async fn send_module_out(
     ma: &ModularAgent,
-    agent: String,
-    ctx: AgentContext,
+    module: String,
+    ctx: ModuleContext,
     port: String,
-    value: AgentValue,
-) -> Result<(), AgentError> {
+    value: Value,
+) -> Result<()> {
     ma.tx()?
-        .send(AgentEventMessage::AgentOut {
-            agent,
+        .send(ModuleEventMessage::ModuleOut {
+            module,
             ctx,
             port,
             value,
         })
-        .map_err(|_| AgentError::SendMessageFailed("Failed to send AgentOut message".to_string()))
+        .map_err(|_| Error::SendMessageFailed("Failed to send ModuleOut message".to_string()))
 }
 
-/// Sends an agent output message from a synchronous context.
+/// Sends a module output message from a synchronous context.
 ///
 /// The queue is unbounded, so enqueueing always succeeds immediately;
 /// this fails only when the message loop has shut down.
-pub fn try_send_agent_out(
+pub fn try_send_module_out(
     ma: &ModularAgent,
-    agent: String,
-    ctx: AgentContext,
+    module: String,
+    ctx: ModuleContext,
     port: String,
-    value: AgentValue,
-) -> Result<(), AgentError> {
+    value: Value,
+) -> Result<()> {
     ma.tx()?
-        .send(AgentEventMessage::AgentOut {
-            agent,
+        .send(ModuleEventMessage::ModuleOut {
+            module,
             ctx,
             port,
             value,
         })
-        .map_err(|_| {
-            AgentError::SendMessageFailed("Failed to try_send AgentOut message".to_string())
-        })
+        .map_err(|_| Error::SendMessageFailed("Failed to try_send ModuleOut message".to_string()))
 }
 
 /// Sends an external output message asynchronously.
@@ -82,31 +80,29 @@ pub fn try_send_agent_out(
 pub async fn send_external_output(
     ma: &ModularAgent,
     name: String,
-    ctx: AgentContext,
-    value: AgentValue,
-) -> Result<(), AgentError> {
+    ctx: ModuleContext,
+    value: Value,
+) -> Result<()> {
     ma.tx()?
-        .send(AgentEventMessage::ExternalOutput { name, ctx, value })
-        .map_err(|_| {
-            AgentError::SendMessageFailed("Failed to send ExternalOutput message".to_string())
-        })
+        .send(ModuleEventMessage::ExternalOutput { name, ctx, value })
+        .map_err(|_| Error::SendMessageFailed("Failed to send ExternalOutput message".to_string()))
 }
 
-/// Processes an agent output by routing it to connected agents.
+/// Processes a module output by routing it to connected modules.
 ///
-/// This function looks up all connections from the source agent's output port
-/// and forwards the value to each connected agent's input port.
-pub async fn agent_out(
+/// This function looks up all connections from the source module's output port
+/// and forwards the value to each connected module's input port.
+pub async fn module_out(
     ma: &ModularAgent,
-    source_agent: String,
-    ctx: AgentContext,
+    source_module: String,
+    ctx: ModuleContext,
     port: String,
-    value: AgentValue,
+    value: Value,
 ) {
     let targets;
     {
         let env_edges = ma.connections.lock();
-        targets = env_edges.get(&source_agent).cloned();
+        targets = env_edges.get(&source_module).cloned();
     }
 
     if targets.is_none() {
@@ -114,7 +110,7 @@ pub async fn agent_out(
     }
 
     for target in targets.unwrap() {
-        let (target_agent, source_port, target_port) = target;
+        let (target_module, source_port, target_port) = target;
 
         if source_port != port {
             // Skip if source_handle does not match with the given port.
@@ -122,45 +118,45 @@ pub async fn agent_out(
         }
 
         {
-            let env_agents = ma.agents.lock();
-            if !env_agents.contains_key(&target_agent) {
+            let env_modules = ma.modules.lock();
+            if !env_modules.contains_key(&target_module) {
                 continue;
             }
         }
 
-        ma.agent_input(
-            target_agent.clone(),
+        ma.module_input(
+            target_module.clone(),
             ctx.clone(),
             target_port,
             value.clone(),
         )
         .await
         .unwrap_or_else(|e| {
-            log::error!("Failed to send message to {}: {}", target_agent, e);
+            log::error!("Failed to send message to {}: {}", target_module, e);
         });
     }
 }
 
-/// Processes an external input by routing it to connected agents.
+/// Processes an external input by routing it to connected modules.
 ///
 /// This function:
 /// 1. Stores the value in the external values map for later retrieval
-/// 2. Finds all external input agents registered for this name
-/// 3. Routes the value through their connections to target agents
+/// 2. Finds all external input modules registered for this name
+/// 3. Routes the value through their connections to target modules
 /// 4. Emits the value as an external output event
-pub async fn external_input(ma: &ModularAgent, name: String, ctx: AgentContext, value: AgentValue) {
+pub async fn external_input(ma: &ModularAgent, name: String, ctx: ModuleContext, value: Value) {
     {
         let mut external_values = ma.external_values.lock();
         external_values.insert(name.clone(), value.clone());
     }
     let input_nodes;
     {
-        let env_input_nodes = ma.external_input_agents.lock();
+        let env_input_nodes = ma.external_input_modules.lock();
         input_nodes = env_input_nodes.get(&name).cloned();
     }
     if let Some(input_nodes) = input_nodes {
         for node in input_nodes {
-            // Perhaps we could process this by send_message_to ExternalInputAgent
+            // Perhaps we could process this by send_message_to ExternalInputModule
 
             let edges;
             {
@@ -171,16 +167,16 @@ pub async fn external_input(ma: &ModularAgent, name: String, ctx: AgentContext, 
                 // edges not found
                 continue;
             };
-            for (target_agent, _source_port, target_port) in edges {
-                ma.agent_input(
-                    target_agent.clone(),
+            for (target_module, _source_port, target_port) in edges {
+                ma.module_input(
+                    target_module.clone(),
                     ctx.clone(),
                     target_port,
                     value.clone(),
                 )
                 .await
                 .unwrap_or_else(|e| {
-                    log::error!("Failed to send message to {}: {}", target_agent, e);
+                    log::error!("Failed to send message to {}: {}", target_module, e);
                 });
             }
         }

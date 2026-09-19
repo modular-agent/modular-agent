@@ -1,8 +1,8 @@
-//! Shared helpers for mapping provider HTTP errors to `AgentError` variants.
+//! Shared helpers for mapping provider HTTP errors to `Error` variants.
 
 use std::time::Duration;
 
-use modular_agent_core::AgentError;
+use modular_agent_core::Error;
 
 /// Parse a `Retry-After` header value as integer seconds.
 ///
@@ -19,12 +19,12 @@ pub(crate) fn parse_retry_after(headers: &reqwest::header::HeaderMap) -> Option<
 }
 
 /// Map a transport-level reqwest error, promoting timeouts (connect or read)
-/// to `AgentError::Timeout` so the retry layer classifies them as retryable.
-pub(crate) fn map_reqwest_error(context: &str, e: reqwest::Error) -> AgentError {
+/// to `Error::Timeout` so the retry layer classifies them as retryable.
+pub(crate) fn map_reqwest_error(context: &str, e: reqwest::Error) -> Error {
     if e.is_timeout() {
-        AgentError::Timeout(format!("{}: {}", context, e))
+        Error::Timeout(format!("{}: {}", context, e))
     } else {
-        AgentError::IoError(format!("{}: {}", context, e))
+        Error::IoError(format!("{}: {}", context, e))
     }
 }
 

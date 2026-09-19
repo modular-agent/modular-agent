@@ -1,5 +1,5 @@
 // UI manifest for modular-agent-std. Imported (by absolute path) from the
-// desktop app's virtual:agent-ui module when modular-agent-std is a Path
+// desktop app's virtual:module-ui module when modular-agent-std is a Path
 // source in ma-config.toml.
 
 import type {
@@ -21,13 +21,13 @@ export const ui: {
 } = {
   // Keyed on def_name (macro default: module_path::StructName).
   nodeViews: {
-    "modular_agent_std::example::ChartDemoAgent": ChartNodeView,
-    "modular_agent_std::example::SliderDemoAgent": SliderNodeView,
+    "modular_agent_std::example::ChartDemoModule": ChartNodeView,
+    "modular_agent_std::example::SliderDemoModule": SliderNodeView,
   },
   // Keyed on config type_. Reserved for genuine value types — here "color",
   // a "#rrggbb" string (like the built-in "image" type is a data-URL string).
   // Alternative input methods for built-in types (e.g. a slider for an
-  // integer) must NOT fake a type_: register a NodeView for the agent
+  // integer) must NOT fake a type_: register a NodeView for the module
   // instead (see SliderNodeView).
   configWidgets: {
     color: ColorWidget,
@@ -35,7 +35,7 @@ export const ui: {
   // Keyed on def_name. Frame presentation overrides for the host node.
   nodeStyles: {
     // Sticky-note look: translucent body so the canvas shows through.
-    "modular_agent_std::ui::NoteAgent": {
+    "modular_agent_std::ui::NoteModule": {
       bodyBackground: (color) =>
         `color-mix(in srgb, ${color} 85%, transparent)`,
     },

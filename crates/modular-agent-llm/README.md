@@ -1,15 +1,15 @@
-# LLM Agents for Modular Agent
+# LLM Modules for Modular Agent
 
-LLM integration library providing chat, completion, embeddings, and responses agents for OpenAI, Ollama, and Claude (Anthropic).
+LLM integration library providing chat, completion, embeddings, and responses modules for OpenAI, Ollama, and Claude (Anthropic).
 
 ## Features
 
-- **ChatAgent** - Multi-provider chat with streaming and tool support (OpenAI/Ollama/Claude)
-- **ResponsesAgent** - OpenAI Responses API with server-side conversation state
-- **CompletionAgent** - Text completion (OpenAI/Ollama)
-- **EmbeddingsAgent** - Vector embeddings (OpenAI/Ollama)
-- **Message Agents** - Message accumulation and formatting utilities
-- **Doc Agents** - Text processing (NFKC normalization, chunking)
+- **ChatModule** - Multi-provider chat with streaming and tool support (OpenAI/Ollama/Claude)
+- **ResponsesModule** - OpenAI Responses API with server-side conversation state
+- **CompletionModule** - Text completion (OpenAI/Ollama)
+- **EmbeddingsModule** - Vector embeddings (OpenAI/Ollama)
+- **Message Modules** - Message accumulation and formatting utilities
+- **Doc Modules** - Text processing (NFKC normalization, chunking)
 
 ## Installation
 
@@ -35,9 +35,9 @@ A provider prefix is required.
 - `claude` (default) - Claude (Anthropic) API support
 - `image` (default) - Image support in messages
 
-## ResponsesAgent (Responses API)
+## ResponsesModule (Responses API)
 
-The ResponsesAgent uses OpenAI's new Responses API, which provides:
+The ResponsesModule uses OpenAI's new Responses API, which provides:
 
 - Server-side conversation state via `previous_response_id`
 - Semantic streaming events

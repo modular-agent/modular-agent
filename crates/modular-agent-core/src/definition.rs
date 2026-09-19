@@ -1,31 +1,31 @@
 use std::ops::Not;
 
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::Value as JsonValue;
 
 use crate::FnvIndexMap;
-use crate::agent::Agent;
-use crate::config::AgentConfigs;
-use crate::error::AgentError;
+use crate::config::ModuleConfigs;
+use crate::error::{Error, Result};
 use crate::id::new_id;
 use crate::modular_agent::ModularAgent;
-use crate::spec::AgentSpec;
-use crate::value::AgentValue;
+use crate::module::Module;
+use crate::spec::ModuleSpec;
+use crate::value::Value;
 
-/// A map of agent definition names to their definitions.
-pub type AgentDefinitions = FnvIndexMap<String, AgentDefinition>;
+/// A map of module definition names to their definitions.
+pub type ModuleDefinitions = FnvIndexMap<String, ModuleDefinition>;
 
-/// The definition (blueprint) of an agent type.
+/// The definition (blueprint) of a module type.
 ///
-/// An agent definition describes the metadata and capabilities of an agent type,
+/// A module definition describes the metadata and capabilities of a module type,
 /// including its ports, configuration options, and factory function.
-/// Multiple agent instances can be created from a single definition.
+/// Multiple module instances can be created from a single definition.
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
-pub struct AgentDefinition {
-    /// The kind/category identifier for this agent type (e.g., "Agent", "Board").
+pub struct ModuleDefinition {
+    /// The kind/category identifier for this module type (e.g., "Module", "Board").
     pub kind: String,
 
-    /// Unique name of this agent definition.
+    /// Unique name of this module definition.
     pub name: String,
 
     /// Human-readable title for display in UI.
@@ -36,11 +36,11 @@ pub struct AgentDefinition {
     #[serde(default, skip_serializing_if = "<&bool>::not")]
     pub hide_title: bool,
 
-    /// Description of what this agent does.
+    /// Description of what this module does.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
 
-    /// Category path for organizing agents (e.g., "Flow/Control").
+    /// Category path for organizing modules (e.g., "Flow/Control").
     #[serde(skip_serializing_if = "Option::is_none")]
     pub category: Option<String>,
 
@@ -52,37 +52,37 @@ pub struct AgentDefinition {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub outputs: Option<Vec<String>>,
 
-    /// Configuration specifications for this agent type.
+    /// Configuration specifications for this module type.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub configs: Option<AgentConfigSpecs>,
+    pub configs: Option<ModuleConfigSpecs>,
 
     /// Global configuration specifications (shared across instances).
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub global_configs: Option<AgentGlobalConfigSpecs>,
+    pub global_configs: Option<ModuleGlobalConfigSpecs>,
 
     /// Hint metadata for UI presentation (e.g., color, size).
     #[serde(default, skip_serializing_if = "FnvIndexMap::is_empty")]
-    pub hints: FnvIndexMap<String, Value>,
+    pub hints: FnvIndexMap<String, JsonValue>,
 
-    /// Factory function to create new agent instances.
+    /// Factory function to create new module instances.
     #[serde(skip)]
-    pub new_boxed: Option<AgentNewBoxedFn>,
+    pub new_boxed: Option<ModuleNewBoxedFn>,
 }
 
 /// A map of configuration keys to their specifications.
-pub type AgentConfigSpecs = FnvIndexMap<String, AgentConfigSpec>;
+pub type ModuleConfigSpecs = FnvIndexMap<String, ModuleConfigSpec>;
 
 /// A map of global configuration keys to their specifications.
-pub type AgentGlobalConfigSpecs = FnvIndexMap<String, AgentConfigSpec>;
+pub type ModuleGlobalConfigSpecs = FnvIndexMap<String, ModuleConfigSpec>;
 
 /// Specification for a configuration entry.
 ///
 /// Defines the metadata for a configuration option, including its default value,
 /// type, display properties, and access control.
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
-pub struct AgentConfigSpec {
+pub struct ModuleConfigSpec {
     /// Default value for this configuration.
-    pub value: AgentValue,
+    pub value: Value,
 
     /// Type of this configuration (e.g., "string", "integer", "boolean").
     #[serde(rename = "type")]
@@ -113,25 +113,25 @@ pub struct AgentConfigSpec {
     pub detail: bool,
 }
 
-/// Factory function type for creating new agent instances.
+/// Factory function type for creating new module instances.
 ///
-/// Takes a `ModularAgent` orchestrator, agent ID, and spec, and returns
-/// a boxed `Agent` trait object or an error.
-pub type AgentNewBoxedFn =
-    fn(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Box<dyn Agent>, AgentError>;
+/// Takes a `ModularAgent` orchestrator, module ID, and spec, and returns
+/// a boxed `Module` trait object or an error.
+pub type ModuleNewBoxedFn =
+    fn(ma: ModularAgent, id: String, spec: ModuleSpec) -> Result<Box<dyn Module>>;
 
-impl AgentDefinition {
-    /// Creates a new agent definition.
+impl ModuleDefinition {
+    /// Creates a new module definition.
     ///
     /// # Arguments
     ///
     /// * `kind` - The kind/category identifier (e.g., "std", "llm")
-    /// * `name` - Unique name for this agent definition
-    /// * `new_boxed` - Optional factory function to create agent instances
+    /// * `name` - Unique name for this module definition
+    /// * `new_boxed` - Optional factory function to create module instances
     pub fn new(
         kind: impl Into<String>,
         name: impl Into<String>,
-        new_boxed: Option<AgentNewBoxedFn>,
+        new_boxed: Option<ModuleNewBoxedFn>,
     ) -> Self {
         Self {
             kind: kind.into(),
@@ -180,7 +180,7 @@ impl AgentDefinition {
     // Config Spec
 
     /// Sets all configuration specifications at once.
-    pub fn configs(mut self, configs: Vec<(&str, AgentConfigSpec)>) -> Self {
+    pub fn configs(mut self, configs: Vec<(&str, ModuleConfigSpec)>) -> Self {
         self.configs = Some(configs.into_iter().map(|(k, v)| (k.into(), v)).collect());
         self
     }
@@ -193,7 +193,7 @@ impl AgentDefinition {
     /// Adds a unit configuration with customization callback.
     pub fn unit_config_with<F>(self, key: &str, f: F) -> Self
     where
-        F: FnOnce(AgentConfigSpec) -> AgentConfigSpec,
+        F: FnOnce(ModuleConfigSpec) -> ModuleConfigSpec,
     {
         self.config_type_with(key, (), "unit", f)
     }
@@ -206,7 +206,7 @@ impl AgentDefinition {
     /// Adds a boolean configuration with customization callback.
     pub fn boolean_config_with<F>(self, key: &str, default: bool, f: F) -> Self
     where
-        F: FnOnce(AgentConfigSpec) -> AgentConfigSpec,
+        F: FnOnce(ModuleConfigSpec) -> ModuleConfigSpec,
     {
         self.config_type_with(key, default, "boolean", f)
     }
@@ -224,7 +224,7 @@ impl AgentDefinition {
     /// Adds an integer configuration with customization callback.
     pub fn integer_config_with<F>(self, key: &str, default: i64, f: F) -> Self
     where
-        F: FnOnce(AgentConfigSpec) -> AgentConfigSpec,
+        F: FnOnce(ModuleConfigSpec) -> ModuleConfigSpec,
     {
         self.config_type_with(key, default, "integer", f)
     }
@@ -242,7 +242,7 @@ impl AgentDefinition {
     /// Adds a number configuration with customization callback.
     pub fn number_config_with<F>(self, key: &str, default: f64, f: F) -> Self
     where
-        F: FnOnce(AgentConfigSpec) -> AgentConfigSpec,
+        F: FnOnce(ModuleConfigSpec) -> ModuleConfigSpec,
     {
         self.config_type_with(key, default, "number", f)
     }
@@ -260,10 +260,10 @@ impl AgentDefinition {
     /// Adds a string configuration with customization callback.
     pub fn string_config_with<F>(self, key: &str, default: impl Into<String>, f: F) -> Self
     where
-        F: FnOnce(AgentConfigSpec) -> AgentConfigSpec,
+        F: FnOnce(ModuleConfigSpec) -> ModuleConfigSpec,
     {
         let default = default.into();
-        self.config_type_with(key, AgentValue::string(default), "string", f)
+        self.config_type_with(key, Value::string(default), "string", f)
     }
 
     /// Adds a string configuration with empty default value.
@@ -279,10 +279,10 @@ impl AgentDefinition {
     /// Adds a text configuration with customization callback.
     pub fn text_config_with<F>(self, key: &str, default: impl Into<String>, f: F) -> Self
     where
-        F: FnOnce(AgentConfigSpec) -> AgentConfigSpec,
+        F: FnOnce(ModuleConfigSpec) -> ModuleConfigSpec,
     {
         let default = default.into();
-        self.config_type_with(key, AgentValue::string(default), "text", f)
+        self.config_type_with(key, Value::string(default), "text", f)
     }
 
     /// Adds a text configuration with empty default value.
@@ -291,43 +291,43 @@ impl AgentDefinition {
     }
 
     /// Adds an array configuration with a default value.
-    pub fn array_config(self, key: &str, default: impl Into<AgentValue>) -> Self {
+    pub fn array_config(self, key: &str, default: impl Into<Value>) -> Self {
         self.array_config_with(key, default, |entry| entry)
     }
 
     /// Adds an array configuration with customization callback.
-    pub fn array_config_with<V: Into<AgentValue>, F>(self, key: &str, default: V, f: F) -> Self
+    pub fn array_config_with<V: Into<Value>, F>(self, key: &str, default: V, f: F) -> Self
     where
-        F: FnOnce(AgentConfigSpec) -> AgentConfigSpec,
+        F: FnOnce(ModuleConfigSpec) -> ModuleConfigSpec,
     {
         self.config_type_with(key, default, "array", f)
     }
 
     /// Adds an array configuration with empty default value.
     pub fn array_config_default(self, key: &str) -> Self {
-        self.array_config(key, AgentValue::array_default())
+        self.array_config(key, Value::array_default())
     }
 
     /// Adds an object configuration with a default value.
-    pub fn object_config<V: Into<AgentValue>>(self, key: &str, default: V) -> Self {
+    pub fn object_config<V: Into<Value>>(self, key: &str, default: V) -> Self {
         self.object_config_with(key, default, |entry| entry)
     }
 
     /// Adds an object configuration with customization callback.
-    pub fn object_config_with<V: Into<AgentValue>, F>(self, key: &str, default: V, f: F) -> Self
+    pub fn object_config_with<V: Into<Value>, F>(self, key: &str, default: V, f: F) -> Self
     where
-        F: FnOnce(AgentConfigSpec) -> AgentConfigSpec,
+        F: FnOnce(ModuleConfigSpec) -> ModuleConfigSpec,
     {
         self.config_type_with(key, default, "object", f)
     }
 
     /// Adds an object configuration with empty default value.
     pub fn object_config_default(self, key: &str) -> Self {
-        self.object_config(key, AgentValue::object_default())
+        self.object_config(key, Value::object_default())
     }
 
     /// Adds a custom-typed configuration with customization callback.
-    pub fn custom_config_with<V: Into<AgentValue>, F>(
+    pub fn custom_config_with<V: Into<Value>, F>(
         self,
         key: &str,
         default: V,
@@ -335,13 +335,13 @@ impl AgentDefinition {
         f: F,
     ) -> Self
     where
-        F: FnOnce(AgentConfigSpec) -> AgentConfigSpec,
+        F: FnOnce(ModuleConfigSpec) -> ModuleConfigSpec,
     {
         self.config_type_with(key, default, type_, f)
     }
 
     /// Internal: adds a configuration with specified type.
-    fn config_type_with<V: Into<AgentValue>, F>(
+    fn config_type_with<V: Into<Value>, F>(
         mut self,
         key: &str,
         default: V,
@@ -349,14 +349,14 @@ impl AgentDefinition {
         f: F,
     ) -> Self
     where
-        F: FnOnce(AgentConfigSpec) -> AgentConfigSpec,
+        F: FnOnce(ModuleConfigSpec) -> ModuleConfigSpec,
     {
-        let entry = AgentConfigSpec::new(default, type_);
+        let entry = ModuleConfigSpec::new(default, type_);
         self.insert_config_entry(key.into(), f(entry));
         self
     }
 
-    fn insert_config_entry(&mut self, key: String, entry: AgentConfigSpec) {
+    fn insert_config_entry(&mut self, key: String, entry: ModuleConfigSpec) {
         if let Some(configs) = self.configs.as_mut() {
             configs.insert(key, entry);
         } else {
@@ -368,10 +368,10 @@ impl AgentDefinition {
 
     // Global Configs
     //
-    // Global configurations are shared across all instances of this agent type.
+    // Global configurations are shared across all instances of this module type.
 
     /// Sets all global configuration specifications at once.
-    pub fn global_configs(mut self, configs: Vec<(&str, AgentConfigSpec)>) -> Self {
+    pub fn global_configs(mut self, configs: Vec<(&str, ModuleConfigSpec)>) -> Self {
         self.global_configs = Some(configs.into_iter().map(|(k, v)| (k.into(), v)).collect());
         self
     }
@@ -384,7 +384,7 @@ impl AgentDefinition {
     /// Adds a boolean global configuration with customization callback.
     pub fn boolean_global_config_with<F>(self, key: &str, default: bool, f: F) -> Self
     where
-        F: FnOnce(AgentConfigSpec) -> AgentConfigSpec,
+        F: FnOnce(ModuleConfigSpec) -> ModuleConfigSpec,
     {
         self.global_config_type_with(key, default, "boolean", f)
     }
@@ -397,7 +397,7 @@ impl AgentDefinition {
     /// Adds an integer global configuration with customization callback.
     pub fn integer_global_config_with<F>(self, key: &str, default: i64, f: F) -> Self
     where
-        F: FnOnce(AgentConfigSpec) -> AgentConfigSpec,
+        F: FnOnce(ModuleConfigSpec) -> ModuleConfigSpec,
     {
         self.global_config_type_with(key, default, "integer", f)
     }
@@ -410,7 +410,7 @@ impl AgentDefinition {
     /// Adds a number global configuration with customization callback.
     pub fn number_global_config_with<F>(self, key: &str, default: f64, f: F) -> Self
     where
-        F: FnOnce(AgentConfigSpec) -> AgentConfigSpec,
+        F: FnOnce(ModuleConfigSpec) -> ModuleConfigSpec,
     {
         self.global_config_type_with(key, default, "number", f)
     }
@@ -423,10 +423,10 @@ impl AgentDefinition {
     /// Adds a string global configuration with customization callback.
     pub fn string_global_config_with<F>(self, key: &str, default: impl Into<String>, f: F) -> Self
     where
-        F: FnOnce(AgentConfigSpec) -> AgentConfigSpec,
+        F: FnOnce(ModuleConfigSpec) -> ModuleConfigSpec,
     {
         let default = default.into();
-        self.global_config_type_with(key, AgentValue::string(default), "string", f)
+        self.global_config_type_with(key, Value::string(default), "string", f)
     }
 
     /// Adds a multiline text global configuration.
@@ -437,55 +437,45 @@ impl AgentDefinition {
     /// Adds a text global configuration with customization callback.
     pub fn text_global_config_with<F>(self, key: &str, default: impl Into<String>, f: F) -> Self
     where
-        F: FnOnce(AgentConfigSpec) -> AgentConfigSpec,
+        F: FnOnce(ModuleConfigSpec) -> ModuleConfigSpec,
     {
         let default = default.into();
-        self.global_config_type_with(key, AgentValue::string(default), "text", f)
+        self.global_config_type_with(key, Value::string(default), "text", f)
     }
 
     /// Adds an array global configuration.
-    pub fn array_global_config(self, key: &str, default: impl Into<AgentValue>) -> Self {
+    pub fn array_global_config(self, key: &str, default: impl Into<Value>) -> Self {
         self.array_global_config_with(key, default, |entry| entry)
     }
 
     /// Adds an array global configuration with customization callback.
-    pub fn array_global_config_with<V: Into<AgentValue>, F>(
-        self,
-        key: &str,
-        default: V,
-        f: F,
-    ) -> Self
+    pub fn array_global_config_with<V: Into<Value>, F>(self, key: &str, default: V, f: F) -> Self
     where
-        F: FnOnce(AgentConfigSpec) -> AgentConfigSpec,
+        F: FnOnce(ModuleConfigSpec) -> ModuleConfigSpec,
     {
         self.global_config_type_with(key, default, "array", f)
     }
 
     /// Adds an array global configuration with empty default value.
     pub fn array_global_config_default(self, key: &str) -> Self {
-        self.array_global_config(key, AgentValue::array_default())
+        self.array_global_config(key, Value::array_default())
     }
 
     /// Adds an object global configuration.
-    pub fn object_global_config<V: Into<AgentValue>>(self, key: &str, default: V) -> Self {
+    pub fn object_global_config<V: Into<Value>>(self, key: &str, default: V) -> Self {
         self.object_global_config_with(key, default, |entry| entry)
     }
 
     /// Adds an object global configuration with customization callback.
-    pub fn object_global_config_with<V: Into<AgentValue>, F>(
-        self,
-        key: &str,
-        default: V,
-        f: F,
-    ) -> Self
+    pub fn object_global_config_with<V: Into<Value>, F>(self, key: &str, default: V, f: F) -> Self
     where
-        F: FnOnce(AgentConfigSpec) -> AgentConfigSpec,
+        F: FnOnce(ModuleConfigSpec) -> ModuleConfigSpec,
     {
         self.global_config_type_with(key, default, "object", f)
     }
 
     /// Adds a custom-typed global configuration with customization callback.
-    pub fn custom_global_config_with<V: Into<AgentValue>, F>(
+    pub fn custom_global_config_with<V: Into<Value>, F>(
         self,
         key: &str,
         default: V,
@@ -493,12 +483,12 @@ impl AgentDefinition {
         f: F,
     ) -> Self
     where
-        F: FnOnce(AgentConfigSpec) -> AgentConfigSpec,
+        F: FnOnce(ModuleConfigSpec) -> ModuleConfigSpec,
     {
         self.global_config_type_with(key, default, type_, f)
     }
 
-    fn global_config_type_with<V: Into<AgentValue>, F>(
+    fn global_config_type_with<V: Into<Value>, F>(
         mut self,
         key: &str,
         default: V,
@@ -506,14 +496,14 @@ impl AgentDefinition {
         f: F,
     ) -> Self
     where
-        F: FnOnce(AgentConfigSpec) -> AgentConfigSpec,
+        F: FnOnce(ModuleConfigSpec) -> ModuleConfigSpec,
     {
-        let entry = AgentConfigSpec::new(default, type_);
+        let entry = ModuleConfigSpec::new(default, type_);
         self.insert_global_config_entry(key.into(), f(entry));
         self
     }
 
-    fn insert_global_config_entry(&mut self, key: String, entry: AgentConfigSpec) {
+    fn insert_global_config_entry(&mut self, key: String, entry: ModuleConfigSpec) {
         if let Some(configs) = self.global_configs.as_mut() {
             configs.insert(key, entry);
         } else {
@@ -524,17 +514,17 @@ impl AgentDefinition {
     }
 
     /// Adds a UI hint. Returns self for method chaining.
-    pub fn hint(mut self, key: &str, value: impl Into<Value>) -> Self {
+    pub fn hint(mut self, key: &str, value: impl Into<JsonValue>) -> Self {
         self.hints.insert(key.into(), value.into());
         self
     }
 
-    /// Creates a new agent specification from this definition.
+    /// Creates a new module specification from this definition.
     ///
     /// Generates a unique ID and copies the definition's ports and configs
     /// to create a new instance specification.
-    pub fn to_spec(&self) -> AgentSpec {
-        AgentSpec {
+    pub fn to_spec(&self) -> ModuleSpec {
+        ModuleSpec {
             id: new_id(),
             def_name: self.name.clone(),
             inputs: self.inputs.clone(),
@@ -550,7 +540,7 @@ impl AgentDefinition {
         }
     }
 
-    /// Reconciles an existing `AgentSpec` with this definition for backward compatibility.
+    /// Reconciles an existing `ModuleSpec` with this definition for backward compatibility.
     ///
     /// When loading old JSON patches, the spec may not match the current definition.
     /// This method:
@@ -560,10 +550,10 @@ impl AgentDefinition {
     /// - Overwrites ports with current definition ports
     ///
     /// Keys already starting with `_` are skipped during rename (idempotency).
-    /// `_`-prefixed keys are cleaned up by `AgentData::new()`.
+    /// `_`-prefixed keys are cleaned up by `ModuleData::new()`.
     ///
     /// Config names must not start with `_` (reserved for stale key migration).
-    pub fn reconcile_spec(&self, spec: &mut AgentSpec) {
+    pub fn reconcile_spec(&self, spec: &mut ModuleSpec) {
         // Ports
         if let Some(ref inputs) = self.inputs {
             spec.inputs = Some(inputs.clone());
@@ -619,7 +609,7 @@ impl AgentDefinition {
         if let Some(ref mut spec_configs) = spec.configs
             && let Some(ref def_configs) = self.configs
         {
-            let mut reordered = AgentConfigs::new();
+            let mut reordered = ModuleConfigs::new();
             // First: definition keys in definition order
             for (key, _) in def_configs.iter() {
                 if let Ok(value) = spec_configs.get(key) {
@@ -637,14 +627,14 @@ impl AgentDefinition {
     }
 }
 
-impl AgentConfigSpec {
+impl ModuleConfigSpec {
     /// Creates a new configuration specification.
     ///
     /// # Arguments
     ///
     /// * `value` - Default value for this configuration
     /// * `type_` - Type identifier (e.g., "string", "integer", "boolean")
-    pub fn new<V: Into<AgentValue>>(value: V, type_: &str) -> Self {
+    pub fn new<V: Into<Value>>(value: V, type_: &str) -> Self {
         Self {
             value: value.into(),
             type_: Some(type_.into()),
@@ -694,20 +684,20 @@ mod tests {
     use im::{hashmap, vector};
 
     use super::*;
-    use crate::config::AgentConfigs;
+    use crate::config::ModuleConfigs;
 
     #[test]
-    fn test_agent_definition() {
-        let def = AgentDefinition::default();
+    fn test_module_definition() {
+        let def = ModuleDefinition::default();
         assert_eq!(def.name, "");
     }
 
     #[test]
-    fn test_agent_definition_new_default() {
-        let def = AgentDefinition::new(
+    fn test_module_definition_new_default() {
+        let def = ModuleDefinition::new(
             "test",
             "echo",
-            Some(|_app, _id, _spec| Err(AgentError::NotImplemented("Echo agent".into()))),
+            Some(|_app, _id, _spec| Err(Error::NotImplemented("Echo module".into()))),
         );
 
         assert_eq!(def.kind, "test");
@@ -720,8 +710,8 @@ mod tests {
     }
 
     #[test]
-    fn test_agent_definition_new() {
-        let def = echo_agent_definition();
+    fn test_module_definition_new() {
+        let def = echo_module_definition();
 
         assert_eq!(def.kind, "test");
         assert_eq!(def.name, "echo");
@@ -732,7 +722,7 @@ mod tests {
         let default_configs = def.configs.unwrap();
         assert_eq!(default_configs.len(), 2);
         let entry = default_configs.get("value").unwrap();
-        assert_eq!(entry.value, AgentValue::string("abc"));
+        assert_eq!(entry.value, Value::string("abc"));
         assert_eq!(entry.type_.as_ref().unwrap(), "string");
         assert_eq!(entry.title.as_ref().unwrap(), "display_title");
         assert_eq!(entry.description.as_ref().unwrap(), "display_description");
@@ -740,7 +730,7 @@ mod tests {
         assert!(entry.readonly);
         assert!(entry.detail);
         let entry = default_configs.get("hide_title_value").unwrap();
-        assert_eq!(entry.value, AgentValue::integer(1));
+        assert_eq!(entry.value, Value::integer(1));
         assert_eq!(entry.type_.as_ref().unwrap(), "integer");
         assert_eq!(entry.title, None);
         assert_eq!(entry.description, None);
@@ -750,19 +740,19 @@ mod tests {
     }
 
     #[test]
-    fn test_serialize_agent_definition() {
-        let def = AgentDefinition::new(
+    fn test_serialize_module_definition() {
+        let def = ModuleDefinition::new(
             "test",
             "echo",
-            Some(|_app, _id, _spec| Err(AgentError::NotImplemented("Echo agent".into()))),
+            Some(|_app, _id, _spec| Err(Error::NotImplemented("Echo module".into()))),
         );
         let json = serde_json::to_string(&def).unwrap();
         assert_eq!(json, r#"{"kind":"test","name":"echo"}"#);
     }
 
     #[test]
-    fn test_serialize_echo_agent_definition() {
-        let def = echo_agent_definition();
+    fn test_serialize_echo_module_definition() {
+        let def = echo_module_definition();
         let json = serde_json::to_string(&def).unwrap();
         print!("{}", json);
         assert_eq!(
@@ -772,9 +762,9 @@ mod tests {
     }
 
     #[test]
-    fn test_deserialize_echo_agent_definition() {
+    fn test_deserialize_echo_module_definition() {
         let json = r#"{"kind":"test","name":"echo","title":"Echo","category":"Test","inputs":["in"],"outputs":["out"],"configs":{"value":{"value":"abc","type":"string","title":"display_title","description":"display_description","readonly":true,"detail":true},"hide_title_value":{"value":1,"type":"integer","hide_title":true,"readonly":true}}}"#;
-        let def: AgentDefinition = serde_json::from_str(json).unwrap();
+        let def: ModuleDefinition = serde_json::from_str(json).unwrap();
         assert_eq!(def.kind, "test");
         assert_eq!(def.name, "echo");
         assert_eq!(def.title.unwrap(), "Echo");
@@ -800,12 +790,10 @@ mod tests {
 
     #[test]
     fn test_default_config_helpers() {
-        let custom_object_value =
-            AgentValue::object(hashmap! {"key".into() => AgentValue::string("value")});
-        let custom_array_value =
-            AgentValue::array(vector![AgentValue::integer(1), AgentValue::string("two")]);
+        let custom_object_value = Value::object(hashmap! {"key".into() => Value::string("value")});
+        let custom_array_value = Value::array(vector![Value::integer(1), Value::string("two")]);
 
-        let def = AgentDefinition::new("test", "helpers", None)
+        let def = ModuleDefinition::new("test", "helpers", None)
             .unit_config("unit_value")
             .boolean_config_default("boolean_value")
             .boolean_config("boolean_custom", true)
@@ -828,51 +816,51 @@ mod tests {
 
         let unit_entry = config_map.get("unit_value").unwrap();
         assert_eq!(unit_entry.type_.as_deref(), Some("unit"));
-        assert_eq!(unit_entry.value, AgentValue::unit());
+        assert_eq!(unit_entry.value, Value::unit());
 
         let boolean_entry = config_map.get("boolean_value").unwrap();
         assert_eq!(boolean_entry.type_.as_deref(), Some("boolean"));
-        assert_eq!(boolean_entry.value, AgentValue::boolean(false));
+        assert_eq!(boolean_entry.value, Value::boolean(false));
 
         let boolean_custom_entry = config_map.get("boolean_custom").unwrap();
         assert_eq!(boolean_custom_entry.type_.as_deref(), Some("boolean"));
-        assert_eq!(boolean_custom_entry.value, AgentValue::boolean(true));
+        assert_eq!(boolean_custom_entry.value, Value::boolean(true));
 
         let integer_entry = config_map.get("integer_value").unwrap();
         assert_eq!(integer_entry.type_.as_deref(), Some("integer"));
-        assert_eq!(integer_entry.value, AgentValue::integer(0));
+        assert_eq!(integer_entry.value, Value::integer(0));
 
         let integer_custom_entry = config_map.get("integer_custom").unwrap();
         assert_eq!(integer_custom_entry.type_.as_deref(), Some("integer"));
-        assert_eq!(integer_custom_entry.value, AgentValue::integer(42));
+        assert_eq!(integer_custom_entry.value, Value::integer(42));
 
         let number_entry = config_map.get("number_value").unwrap();
         assert_eq!(number_entry.type_.as_deref(), Some("number"));
-        assert_eq!(number_entry.value, AgentValue::number(0.0));
+        assert_eq!(number_entry.value, Value::number(0.0));
 
         let number_custom_entry = config_map.get("number_custom").unwrap();
         assert_eq!(number_custom_entry.type_.as_deref(), Some("number"));
-        assert_eq!(number_custom_entry.value, AgentValue::number(1.5));
+        assert_eq!(number_custom_entry.value, Value::number(1.5));
 
         let string_default_entry = config_map.get("string_default").unwrap();
         assert_eq!(string_default_entry.type_.as_deref(), Some("string"));
-        assert_eq!(string_default_entry.value, AgentValue::string(""));
+        assert_eq!(string_default_entry.value, Value::string(""));
 
         let string_entry = config_map.get("string_value").unwrap();
         assert_eq!(string_entry.type_.as_deref(), Some("string"));
-        assert_eq!(string_entry.value, AgentValue::string("value"));
+        assert_eq!(string_entry.value, Value::string("value"));
 
         let text_entry = config_map.get("text_value").unwrap();
         assert_eq!(text_entry.type_.as_deref(), Some("text"));
-        assert_eq!(text_entry.value, AgentValue::string(""));
+        assert_eq!(text_entry.value, Value::string(""));
 
         let text_custom_entry = config_map.get("text_custom").unwrap();
         assert_eq!(text_custom_entry.type_.as_deref(), Some("text"));
-        assert_eq!(text_custom_entry.value, AgentValue::string("custom"));
+        assert_eq!(text_custom_entry.value, Value::string("custom"));
 
         let array_entry = config_map.get("array_value").unwrap();
         assert_eq!(array_entry.type_.as_deref(), Some("array"));
-        assert_eq!(array_entry.value, AgentValue::array_default());
+        assert_eq!(array_entry.value, Value::array_default());
 
         let array_custom_entry = config_map.get("array_custom").unwrap();
         assert_eq!(array_custom_entry.type_.as_deref(), Some("array"));
@@ -880,7 +868,7 @@ mod tests {
 
         let object_entry = config_map.get("object_value").unwrap();
         assert_eq!(object_entry.type_.as_deref(), Some("object"));
-        assert_eq!(object_entry.value, AgentValue::object_default());
+        assert_eq!(object_entry.value, Value::object_default());
 
         let object_custom_entry = config_map.get("object_custom").unwrap();
         assert_eq!(object_custom_entry.type_.as_deref(), Some("object"));
@@ -889,12 +877,10 @@ mod tests {
 
     #[test]
     fn test_global_config_helpers() {
-        let custom_object_value =
-            AgentValue::object(hashmap! {"key".into() => AgentValue::string("value")});
-        let custom_array_value =
-            AgentValue::array(vector![AgentValue::integer(1), AgentValue::string("two")]);
+        let custom_object_value = Value::object(hashmap! {"key".into() => Value::string("value")});
+        let custom_array_value = Value::array(vector![Value::integer(1), Value::string("two")]);
 
-        let def = AgentDefinition::new("test", "helpers", None)
+        let def = ModuleDefinition::new("test", "helpers", None)
             .boolean_global_config("global_boolean", true)
             .integer_global_config("global_integer", 42)
             .number_global_config("global_number", 1.5)
@@ -910,27 +896,27 @@ mod tests {
 
         let entry = config_map.get("global_boolean").unwrap();
         assert_eq!(entry.type_.as_deref(), Some("boolean"));
-        assert_eq!(entry.value, AgentValue::boolean(true));
+        assert_eq!(entry.value, Value::boolean(true));
 
         let entry = config_map.get("global_integer").unwrap();
         assert_eq!(entry.type_.as_deref(), Some("integer"));
-        assert_eq!(entry.value, AgentValue::integer(42));
+        assert_eq!(entry.value, Value::integer(42));
 
         let entry = config_map.get("global_number").unwrap();
         assert_eq!(entry.type_.as_deref(), Some("number"));
-        assert_eq!(entry.value, AgentValue::number(1.5));
+        assert_eq!(entry.value, Value::number(1.5));
 
         let entry = config_map.get("global_string").unwrap();
         assert_eq!(entry.type_.as_deref(), Some("string"));
-        assert_eq!(entry.value, AgentValue::string("value"));
+        assert_eq!(entry.value, Value::string("value"));
 
         let entry = config_map.get("global_text").unwrap();
         assert_eq!(entry.type_.as_deref(), Some("text"));
-        assert_eq!(entry.value, AgentValue::string("global"));
+        assert_eq!(entry.value, Value::string("global"));
 
         let entry = config_map.get("global_array").unwrap();
         assert_eq!(entry.type_.as_deref(), Some("array"));
-        assert_eq!(entry.value, AgentValue::array_default());
+        assert_eq!(entry.value, Value::array_default());
 
         let entry = config_map.get("global_array_custom").unwrap();
         assert_eq!(entry.type_.as_deref(), Some("array"));
@@ -943,7 +929,7 @@ mod tests {
 
     #[test]
     fn test_config_helper_customization() {
-        let def = AgentDefinition::new("test", "custom", None)
+        let def = ModuleDefinition::new("test", "custom", None)
             .integer_config_with("custom_default", 1, |entry| entry.title("Custom"))
             .text_global_config_with("custom_global", "value", |entry| {
                 entry.description("Global Desc")
@@ -962,11 +948,11 @@ mod tests {
         assert_eq!(global_entry.description.as_deref(), Some("Global Desc"));
     }
 
-    fn echo_agent_definition() -> AgentDefinition {
-        AgentDefinition::new(
+    fn echo_module_definition() -> ModuleDefinition {
+        ModuleDefinition::new(
             "test",
             "echo",
-            Some(|_app, _id, _spec| Err(AgentError::NotImplemented("Echo agent".into()))),
+            Some(|_app, _id, _spec| Err(Error::NotImplemented("Echo module".into()))),
         )
         .title("Echo")
         .category("Test")
@@ -984,8 +970,8 @@ mod tests {
 
     // --- reconcile_spec tests ---
 
-    fn reconcile_def() -> AgentDefinition {
-        AgentDefinition::new("test", "reconcile", None)
+    fn reconcile_def() -> ModuleDefinition {
+        ModuleDefinition::new("test", "reconcile", None)
             .inputs(vec!["in1", "in2"])
             .outputs(vec!["out"])
             .string_config("name", "default_name")
@@ -996,9 +982,9 @@ mod tests {
     #[test]
     fn test_reconcile_fills_missing_configs() {
         let def = reconcile_def();
-        let mut configs = AgentConfigs::new();
-        configs.set("name".into(), AgentValue::string("hello"));
-        let mut spec = AgentSpec {
+        let mut configs = ModuleConfigs::new();
+        configs.set("name".into(), Value::string("hello"));
+        let mut spec = ModuleSpec {
             configs: Some(configs),
             ..Default::default()
         };
@@ -1013,12 +999,12 @@ mod tests {
 
     #[test]
     fn test_reconcile_renames_stale_keys() {
-        let def = AgentDefinition::new("test", "r", None).string_config("name", "default");
-        let mut configs = AgentConfigs::new();
-        configs.set("name".into(), AgentValue::string("hello"));
-        configs.set("old_key".into(), AgentValue::string("stale_val"));
-        configs.set("removed".into(), AgentValue::integer(42));
-        let mut spec = AgentSpec {
+        let def = ModuleDefinition::new("test", "r", None).string_config("name", "default");
+        let mut configs = ModuleConfigs::new();
+        configs.set("name".into(), Value::string("hello"));
+        configs.set("old_key".into(), Value::string("stale_val"));
+        configs.set("removed".into(), Value::integer(42));
+        let mut spec = ModuleSpec {
             configs: Some(configs),
             ..Default::default()
         };
@@ -1028,18 +1014,18 @@ mod tests {
         let c = spec.configs.as_ref().unwrap();
         assert_eq!(c.get_string_or_default("name"), "hello");
         assert!(c.get("old_key").is_err());
-        assert_eq!(c.get("_old_key").unwrap(), &AgentValue::string("stale_val"));
+        assert_eq!(c.get("_old_key").unwrap(), &Value::string("stale_val"));
         assert!(c.get("removed").is_err());
-        assert_eq!(c.get("_removed").unwrap(), &AgentValue::integer(42));
+        assert_eq!(c.get("_removed").unwrap(), &Value::integer(42));
     }
 
     #[test]
     fn test_reconcile_skips_already_prefixed() {
-        let def = AgentDefinition::new("test", "r", None).string_config("name", "default");
-        let mut configs = AgentConfigs::new();
-        configs.set("name".into(), AgentValue::string("hello"));
-        configs.set("_old".into(), AgentValue::string("from_prev_reconcile"));
-        let mut spec = AgentSpec {
+        let def = ModuleDefinition::new("test", "r", None).string_config("name", "default");
+        let mut configs = ModuleConfigs::new();
+        configs.set("name".into(), Value::string("hello"));
+        configs.set("_old".into(), Value::string("from_prev_reconcile"));
+        let mut spec = ModuleSpec {
             configs: Some(configs),
             ..Default::default()
         };
@@ -1049,7 +1035,7 @@ mod tests {
         let c = spec.configs.as_ref().unwrap();
         assert_eq!(
             c.get("_old").unwrap(),
-            &AgentValue::string("from_prev_reconcile")
+            &Value::string("from_prev_reconcile")
         );
         assert!(c.get("__old").is_err());
     }
@@ -1057,7 +1043,7 @@ mod tests {
     #[test]
     fn test_reconcile_overwrites_config_specs() {
         let def = reconcile_def();
-        let mut spec = AgentSpec {
+        let mut spec = ModuleSpec {
             config_specs: Some(FnvIndexMap::default()),
             ..Default::default()
         };
@@ -1074,7 +1060,7 @@ mod tests {
     #[test]
     fn test_reconcile_overwrites_ports() {
         let def = reconcile_def();
-        let mut spec = AgentSpec {
+        let mut spec = ModuleSpec {
             inputs: Some(vec!["old_in".into()]),
             outputs: Some(vec!["old_out".into()]),
             ..Default::default()
@@ -1091,8 +1077,8 @@ mod tests {
 
     #[test]
     fn test_reconcile_preserves_ports_when_def_none() {
-        let def = AgentDefinition::new("test", "r", None);
-        let mut spec = AgentSpec {
+        let def = ModuleDefinition::new("test", "r", None);
+        let mut spec = ModuleSpec {
             inputs: Some(vec!["custom_in".into()]),
             ..Default::default()
         };
@@ -1108,7 +1094,7 @@ mod tests {
     #[test]
     fn test_reconcile_configs_none_creates_defaults() {
         let def = reconcile_def();
-        let mut spec = AgentSpec::default();
+        let mut spec = ModuleSpec::default();
         assert!(spec.configs.is_none());
 
         def.reconcile_spec(&mut spec);
@@ -1124,11 +1110,11 @@ mod tests {
 
     #[test]
     fn test_reconcile_def_configs_none_marks_all_stale() {
-        let def = AgentDefinition::new("test", "r", None);
-        let mut configs = AgentConfigs::new();
-        configs.set("old_a".into(), AgentValue::string("a"));
-        configs.set("old_b".into(), AgentValue::integer(1));
-        let mut spec = AgentSpec {
+        let def = ModuleDefinition::new("test", "r", None);
+        let mut configs = ModuleConfigs::new();
+        configs.set("old_a".into(), Value::string("a"));
+        configs.set("old_b".into(), Value::integer(1));
+        let mut spec = ModuleSpec {
             configs: Some(configs),
             ..Default::default()
         };
@@ -1138,18 +1124,18 @@ mod tests {
         let c = spec.configs.as_ref().unwrap();
         assert!(c.get("old_a").is_err());
         assert!(c.get("old_b").is_err());
-        assert_eq!(c.get("_old_a").unwrap(), &AgentValue::string("a"));
-        assert_eq!(c.get("_old_b").unwrap(), &AgentValue::integer(1));
+        assert_eq!(c.get("_old_a").unwrap(), &Value::string("a"));
+        assert_eq!(c.get("_old_b").unwrap(), &Value::integer(1));
     }
 
     #[test]
     fn test_reconcile_preserves_user_values() {
         let def = reconcile_def();
-        let mut configs = AgentConfigs::new();
-        configs.set("name".into(), AgentValue::string("custom"));
-        configs.set("count".into(), AgentValue::integer(42));
-        configs.set("enabled".into(), AgentValue::boolean(false));
-        let mut spec = AgentSpec {
+        let mut configs = ModuleConfigs::new();
+        configs.set("name".into(), Value::string("custom"));
+        configs.set("count".into(), Value::integer(42));
+        configs.set("enabled".into(), Value::boolean(false));
+        let mut spec = ModuleSpec {
             configs: Some(configs),
             ..Default::default()
         };
@@ -1165,10 +1151,10 @@ mod tests {
     #[test]
     fn test_reconcile_idempotent() {
         let def = reconcile_def();
-        let mut configs = AgentConfigs::new();
-        configs.set("name".into(), AgentValue::string("hello"));
-        configs.set("old".into(), AgentValue::string("stale"));
-        let mut spec = AgentSpec {
+        let mut configs = ModuleConfigs::new();
+        configs.set("name".into(), Value::string("hello"));
+        configs.set("old".into(), Value::string("stale"));
+        let mut spec = ModuleSpec {
             configs: Some(configs),
             ..Default::default()
         };
@@ -1220,8 +1206,8 @@ mod tests {
     #[test]
     fn test_reconcile_empty_configs() {
         let def = reconcile_def();
-        let mut spec = AgentSpec {
-            configs: Some(AgentConfigs::new()),
+        let mut spec = ModuleSpec {
+            configs: Some(ModuleConfigs::new()),
             ..Default::default()
         };
 
@@ -1235,12 +1221,12 @@ mod tests {
 
     #[test]
     fn test_reconcile_mixed_stale_and_prefixed() {
-        let def = AgentDefinition::new("test", "r", None).string_config("name", "default");
-        let mut configs = AgentConfigs::new();
-        configs.set("name".into(), AgentValue::string("hello"));
-        configs.set("_prev_stale".into(), AgentValue::string("from_prev"));
-        configs.set("removed".into(), AgentValue::integer(99));
-        let mut spec = AgentSpec {
+        let def = ModuleDefinition::new("test", "r", None).string_config("name", "default");
+        let mut configs = ModuleConfigs::new();
+        configs.set("name".into(), Value::string("hello"));
+        configs.set("_prev_stale".into(), Value::string("from_prev"));
+        configs.set("removed".into(), Value::integer(99));
+        let mut spec = ModuleSpec {
             configs: Some(configs),
             ..Default::default()
         };
@@ -1250,25 +1236,22 @@ mod tests {
         let c = spec.configs.as_ref().unwrap();
         assert_eq!(c.get_string_or_default("name"), "hello");
         // _prev_stale is kept as-is (already prefixed)
-        assert_eq!(
-            c.get("_prev_stale").unwrap(),
-            &AgentValue::string("from_prev")
-        );
+        assert_eq!(c.get("_prev_stale").unwrap(), &Value::string("from_prev"));
         assert!(c.get("__prev_stale").is_err());
         // removed is newly prefixed
         assert!(c.get("removed").is_err());
-        assert_eq!(c.get("_removed").unwrap(), &AgentValue::integer(99));
+        assert_eq!(c.get("_removed").unwrap(), &Value::integer(99));
     }
 
     #[test]
     fn test_reconcile_reorders_configs_to_definition_order() {
         let def = reconcile_def(); // defines: name, count, enabled
-        let mut configs = AgentConfigs::new();
+        let mut configs = ModuleConfigs::new();
         // Insert in reverse order
-        configs.set("enabled".into(), AgentValue::boolean(false));
-        configs.set("count".into(), AgentValue::integer(42));
-        configs.set("name".into(), AgentValue::string("custom"));
-        let mut spec = AgentSpec {
+        configs.set("enabled".into(), Value::boolean(false));
+        configs.set("count".into(), Value::integer(42));
+        configs.set("name".into(), Value::string("custom"));
+        let mut spec = ModuleSpec {
             configs: Some(configs),
             ..Default::default()
         };
@@ -1287,11 +1270,11 @@ mod tests {
     #[test]
     fn test_reconcile_reorder_stale_keys_at_end() {
         let def = reconcile_def(); // defines: name, count, enabled
-        let mut configs = AgentConfigs::new();
-        configs.set("old_key".into(), AgentValue::string("stale"));
-        configs.set("enabled".into(), AgentValue::boolean(true));
-        configs.set("name".into(), AgentValue::string("hello"));
-        let mut spec = AgentSpec {
+        let mut configs = ModuleConfigs::new();
+        configs.set("old_key".into(), Value::string("stale"));
+        configs.set("enabled".into(), Value::boolean(true));
+        configs.set("name".into(), Value::string("hello"));
+        let mut spec = ModuleSpec {
             configs: Some(configs),
             ..Default::default()
         };
@@ -1307,11 +1290,11 @@ mod tests {
     #[test]
     fn test_reconcile_reorder_is_idempotent() {
         let def = reconcile_def();
-        let mut configs = AgentConfigs::new();
-        configs.set("enabled".into(), AgentValue::boolean(false));
-        configs.set("name".into(), AgentValue::string("hello"));
-        configs.set("old".into(), AgentValue::string("stale"));
-        let mut spec = AgentSpec {
+        let mut configs = ModuleConfigs::new();
+        configs.set("enabled".into(), Value::boolean(false));
+        configs.set("name".into(), Value::string("hello"));
+        configs.set("old".into(), Value::string("stale"));
+        let mut spec = ModuleSpec {
             configs: Some(configs),
             ..Default::default()
         };
@@ -1329,7 +1312,7 @@ mod tests {
 
     #[test]
     fn test_hint_builder() {
-        let def = AgentDefinition::new("test", "hinted", None)
+        let def = ModuleDefinition::new("test", "hinted", None)
             .hint("color", 3)
             .hint("width", 2)
             .hint("height", 1);
@@ -1341,31 +1324,31 @@ mod tests {
 
     #[test]
     fn test_hint_string_value() {
-        let def = AgentDefinition::new("test", "hinted", None).hint("label", "red");
+        let def = ModuleDefinition::new("test", "hinted", None).hint("label", "red");
         assert_eq!(def.hints["label"], serde_json::json!("red"));
     }
 
     #[test]
     fn test_hint_boolean_value() {
-        let def = AgentDefinition::new("test", "hinted", None).hint("resizable", true);
+        let def = ModuleDefinition::new("test", "hinted", None).hint("resizable", true);
         assert_eq!(def.hints["resizable"], serde_json::json!(true));
     }
 
     #[test]
     fn test_no_hints_serialization() {
-        let def = AgentDefinition::new("test", "empty", None);
+        let def = ModuleDefinition::new("test", "empty", None);
         let json = serde_json::to_string(&def).unwrap();
         assert!(!json.contains("hints"));
     }
 
     #[test]
     fn test_hints_serialization_roundtrip() {
-        let def = AgentDefinition::new("test", "hinted", None)
+        let def = ModuleDefinition::new("test", "hinted", None)
             .hint("color", 3)
             .hint("width", 2);
         let json = serde_json::to_string(&def).unwrap();
         assert!(json.contains(r#""hints""#));
-        let parsed: AgentDefinition = serde_json::from_str(&json).unwrap();
+        let parsed: ModuleDefinition = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed.hints.len(), 2);
         assert_eq!(parsed.hints["color"], serde_json::json!(3));
         assert_eq!(parsed.hints["width"], serde_json::json!(2));
@@ -1374,7 +1357,7 @@ mod tests {
     #[test]
     fn test_hints_deserialization_missing_field() {
         let json = r#"{"kind":"test","name":"no_hints"}"#;
-        let def: AgentDefinition = serde_json::from_str(json).unwrap();
+        let def: ModuleDefinition = serde_json::from_str(json).unwrap();
         assert!(def.hints.is_empty());
     }
 }

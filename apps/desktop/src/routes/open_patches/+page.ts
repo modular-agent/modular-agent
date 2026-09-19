@@ -1,4 +1,4 @@
-import { loadPatchInfos } from "$lib/agent";
+import { loadPatchInfos } from "$lib/module";
 
 import type { PageLoad } from "./$types";
 

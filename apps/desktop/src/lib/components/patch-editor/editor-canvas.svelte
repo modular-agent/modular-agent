@@ -21,10 +21,9 @@
 
   import { goto } from "$app/navigation";
 
-  import { getEdgeColor, resolveColorCss, saveAsPatch } from "$lib/agent";
-  import { AgentList } from "$lib/components/agent-list/index.js";
   import CustomBezierEdge from "$lib/components/connection/custom-bezier-edge.svelte";
   import CustomConnectionLine from "$lib/components/connection/custom-connection-line.svelte";
+  import { ModuleList } from "$lib/components/module-list/index.js";
   import PatchActionDialog from "$lib/components/patch-action-dialog.svelte";
   import { Button } from "$lib/components/ui/button/index.js";
   import * as Dialog from "$lib/components/ui/dialog/index.js";
@@ -39,11 +38,12 @@
     matchFirstChord,
     type ResolvedHotkeys,
   } from "$lib/hotkeys";
+  import { getEdgeColor, resolveColorCss, saveAsPatch } from "$lib/module";
   import { tabStore } from "$lib/tab-store.svelte";
   import type { PatchNode, PatchEdge } from "$lib/types";
 
-  import AgentNode from "./agent-node.svelte";
   import { useEditor } from "./context.svelte";
+  import ModuleNode from "./module-node.svelte";
   import NodeContextMenu from "./node-context-menu.svelte";
   import PaneContextMenu from "./pane-context-menu.svelte";
 
@@ -52,10 +52,10 @@
   // --- Hotkey resolution ---
 
   const hotkeys: ResolvedHotkeys = $derived(coreSettingsStore.hotkeys);
-  const quickAddAgents = $derived(coreSettingsStore.quickAddAgents);
+  const quickAddModules = $derived(coreSettingsStore.quickAddModules);
 
   const nodeTypes: NodeTypes = {
-    agent: AgentNode,
+    module: ModuleNode,
   };
 
   // Stopped draws a blueprint grid; running leaves the board plain.
@@ -192,8 +192,8 @@
       preventDefault: true,
     },
     {
-      id: "editor.add_agent",
-      handler: () => editor.showAgentList(mouseX, mouseY),
+      id: "editor.add_module",
+      handler: () => editor.showModuleList(mouseX, mouseY),
       skipEditable: true,
       preventDefault: true,
     },
@@ -223,7 +223,7 @@
   ];
 
   // Build quick add action entries from resolved hotkeys
-  const quickAddIds = $derived([...quickAddAgents.keys()]);
+  const quickAddIds = $derived([...quickAddModules.keys()]);
 
   function handleKeydown(event: KeyboardEvent) {
     if (!editor.active) return;
@@ -232,8 +232,8 @@
 
     // Escape: close popups (hardcoded)
     if (event.key === "Escape") {
-      if (editor.openAgentList) {
-        editor.hideAgentList();
+      if (editor.openModuleList) {
+        editor.hideModuleList();
         return;
       }
       return;
@@ -361,15 +361,15 @@
   function handleQuickAdd(actionId: string, now: number) {
     if (now - lastQuickAddTime < QUICK_ADD_DEBOUNCE) return;
     lastQuickAddTime = now;
-    const agentName = quickAddAgents.get(actionId);
-    if (agentName) {
-      editor.addAgent(agentName, { x: mouseX, y: mouseY });
+    const moduleName = quickAddModules.get(actionId);
+    if (moduleName) {
+      editor.addModule(moduleName, { x: mouseX, y: mouseY });
     }
   }
 
-  // --- Agent list popup ---
+  // --- Module list popup ---
 
-  let agentListRef: HTMLDivElement | null = $state(null);
+  let moduleListRef: HTMLDivElement | null = $state(null);
 
   function handlePaneDblClick(event: MouseEvent) {
     const target = event.target as HTMLElement;
@@ -380,18 +380,18 @@
       target.closest(".svelte-flow__edge")
     )
       return;
-    editor.showAgentList(event.clientX, event.clientY);
+    editor.showModuleList(event.clientX, event.clientY);
   }
 
-  async function handleAddAgentFromPopup(name: string) {
-    await editor.addAgent(name, { x: editor.agentListOriginX, y: editor.agentListOriginY });
-    editor.hideAgentList();
+  async function handleAddModuleFromPopup(name: string) {
+    await editor.addModule(name, { x: editor.moduleListOriginX, y: editor.moduleListOriginY });
+    editor.hideModuleList();
   }
 
   function handleWindowMouseDown(event: MouseEvent) {
     if (!editor.active) return;
-    if (editor.openAgentList && !agentListRef?.contains(event.target as Node)) {
-      editor.hideAgentList();
+    if (editor.openModuleList && !moduleListRef?.contains(event.target as Node)) {
+      editor.hideModuleList();
     }
   }
 
@@ -441,7 +441,7 @@
 
   function handleNodeClick() {
     editor.hideNodeContextMenu();
-    editor.hideAgentList();
+    editor.hideModuleList();
   }
 
   function handleNodeDragStart({ nodes }: { nodes: PatchNode[] }) {
@@ -477,7 +477,7 @@
   function handlePaneClick() {
     editor.hideNodeContextMenu();
     editor.hidePaneContextMenu();
-    editor.hideAgentList();
+    editor.hideModuleList();
   }
 
   function handlePaneContextMenu({ event }: { event: MouseEvent }) {
@@ -617,19 +617,19 @@
           x: editor.paneContextMenuX,
           y: editor.paneContextMenuY,
         })}
-      onaddagent={() => editor.showAgentList(mouseX, mouseY)}
+      onaddmodule={() => editor.showModuleList(mouseX, mouseY)}
       ontogglesnap={() => editor.toggleSnap()}
     />
   </SvelteFlow>
 </div>
 
 <div
-  bind:this={agentListRef}
+  bind:this={moduleListRef}
   class="fixed z-50 w-64 rounded-md border shadow-lg bg-popover text-popover-foreground"
-  class:hidden={!editor.openAgentList}
-  style="left: {editor.agentListX}px; top: {editor.agentListY}px;"
+  class:hidden={!editor.openModuleList}
+  style="left: {editor.moduleListX}px; top: {editor.moduleListY}px;"
 >
-  <AgentList onAddAgent={handleAddAgentFromPopup} visible={editor.openAgentList} />
+  <ModuleList onAddModule={handleAddModuleFromPopup} visible={editor.openModuleList} />
 </div>
 
 <PatchActionDialog

@@ -1,10 +1,10 @@
 {
   "id": "10",
   "name": "Core/External2",
-  "agents": [
+  "modules": [
     {
       "id": "432",
-      "def_name": "modular_agent_core::external_agent::ExternalOutputAgent",
+      "def_name": "modular_agent_core::external_module::ExternalOutputModule",
       "inputs": [
         "value"
       ],
@@ -22,7 +22,7 @@
     },
     {
       "id": "433",
-      "def_name": "modular_agent_core::external_agent::ExternalInputAgent",
+      "def_name": "modular_agent_core::external_module::ExternalInputModule",
       "outputs": [
         "value"
       ],

@@ -4,7 +4,7 @@ use tauri::{AppHandle, Manager};
 use tauri_plugin_log::{Target, TargetKind};
 use tauri_plugin_window_state::{AppHandleExt, StateFlags};
 
-mod agents;
+mod modules;
 
 mod modular_agent_desktop;
 
@@ -68,12 +68,12 @@ pub fn run() {
                     app_handle.exit(1);
                 });
                 modular_agent_desktop::app::init(&app_handle).unwrap_or_else(|e| {
-                    log::error!("Failed to initialize agent: {}", e);
+                    log::error!("Failed to initialize module: {}", e);
                     app_handle.exit(1);
                 });
-                modular_agent_desktop::settings::load_agent_global_configs(&app_handle)
+                modular_agent_desktop::settings::load_module_global_configs(&app_handle)
                     .unwrap_or_else(|e| {
-                        log::error!("Failed to load agent global configs: {}", e);
+                        log::error!("Failed to load module global configs: {}", e);
                         app_handle.exit(1);
                     });
                 modular_agent_desktop::autostart::init(&app_handle).unwrap_or_else(|e| {
@@ -150,14 +150,14 @@ pub fn run() {
                     modular_agent_desktop::app::ready(app)
                         .await
                         .unwrap_or_else(|e| {
-                            log::error!("Failed to start agents: {}", e);
+                            log::error!("Failed to start modules: {}", e);
                         });
                     modular_agent_desktop::settings::init_mcp_server(app).await;
-                    log::info!("Module Agent Desktop is ready.");
+                    log::info!("Module Module Desktop is ready.");
                 });
             }
             tauri::RunEvent::Exit => {
-                log::info!("Exiting Module Agent Desktop...");
+                log::info!("Exiting Module Module Desktop...");
                 tauri::async_runtime::block_on(async move {
                     modular_agent_desktop::window::hide_main(app).unwrap_or_else(|e| {
                         log::error!("Failed to hide main window: {}", e);

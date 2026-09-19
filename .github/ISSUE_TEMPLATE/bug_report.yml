@@ -53,7 +53,7 @@ body:
       label: To Reproduce
       description: >-
         Steps to reproduce the behavior. If a workflow patch triggers it,
-        attach the patch JSON or the smallest agent graph that still fails.
+        attach the patch JSON or the smallest module graph that still fails.
       placeholder: |
         1. Go to '...'
         2. Click on '....'

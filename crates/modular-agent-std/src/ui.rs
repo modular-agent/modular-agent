@@ -1,5 +1,5 @@
 use modular_agent_core::{
-    AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent, ModularAgent,
+    AsModule, ModularAgent, ModuleContext, ModuleData, ModuleOutput, ModuleSpec, Result, Value,
     async_trait, modular_agent,
 };
 
@@ -15,14 +15,14 @@ const PORT_SP: &str = " ";
     custom_config(name = NOTE, type_="markdown", default="", hide_title),
     hint(color=2, width=240, height=160, free_size=true, background=true, bg_color="#fdf6b2", fg_color="#44403b"),
 )]
-struct NoteAgent {
-    data: AgentData,
+struct NoteModule {
+    data: ModuleData,
 }
 
-impl AsAgent for NoteAgent {
-    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+impl AsModule for NoteModule {
+    fn new(ma: ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
         Ok(Self {
-            data: AgentData::new(ma, id, spec),
+            data: ModuleData::new(ma, id, spec),
         })
     }
 }
@@ -36,24 +36,19 @@ impl AsAgent for NoteAgent {
     outputs=[PORT_SP],
     hint(width=64, height=64, free_size=true, no_resize=true),
 )]
-struct RouterAgent {
-    data: AgentData,
+struct RouterModule {
+    data: ModuleData,
 }
 
 #[async_trait]
-impl AsAgent for RouterAgent {
-    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+impl AsModule for RouterModule {
+    fn new(ma: ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
         Ok(Self {
-            data: AgentData::new(ma, id, spec),
+            data: ModuleData::new(ma, id, spec),
         })
     }
 
-    async fn process(
-        &mut self,
-        ctx: AgentContext,
-        port: String,
-        value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, ctx: ModuleContext, port: String, value: Value) -> Result<()> {
         self.output(ctx, port, value).await
     }
 }

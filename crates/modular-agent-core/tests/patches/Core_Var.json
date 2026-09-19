@@ -1,10 +1,10 @@
 {
   "id": "14",
   "name": "Core/Var",
-  "agents": [
+  "modules": [
     {
       "id": "434",
-      "def_name": "modular_agent_core::external_agent::LocalOutputAgent",
+      "def_name": "modular_agent_core::external_module::LocalOutputModule",
       "inputs": [
         "value"
       ],
@@ -22,7 +22,7 @@
     },
     {
       "id": "435",
-      "def_name": "modular_agent_core::external_agent::LocalInputAgent",
+      "def_name": "modular_agent_core::external_module::LocalInputModule",
       "outputs": [
         "value"
       ],

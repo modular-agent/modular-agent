@@ -9,7 +9,7 @@ use serde::{
     ser::{SerializeMap, SerializeSeq},
 };
 
-use crate::error::AgentError;
+use crate::error::{Error, Result};
 #[cfg(feature = "llm")]
 use crate::llm::Message;
 
@@ -20,7 +20,7 @@ pub(crate) const IMAGE_BASE64_PREFIX: &str = "data:image/png;base64,";
 /// prefix — into a `PhotonImage`. Unlike `PhotonImage::new_from_base64`,
 /// malformed base64 or non-image bytes are an error, not a panic.
 #[cfg(feature = "image")]
-pub(crate) fn image_from_base64(s: &str) -> Result<PhotonImage, AgentError> {
+pub(crate) fn image_from_base64(s: &str) -> Result<PhotonImage> {
     use base64::Engine as _;
     use base64::engine::{DecodePaddingMode, GeneralPurpose, GeneralPurposeConfig};
 
@@ -37,17 +37,17 @@ pub(crate) fn image_from_base64(s: &str) -> Result<PhotonImage, AgentError> {
     };
     let bytes = B64
         .decode(payload.trim())
-        .map_err(|e| AgentError::InvalidValue(format!("Invalid base64 image data: {e}")))?;
+        .map_err(|e| Error::InvalidValue(format!("Invalid base64 image data: {e}")))?;
     photon_rs::native::open_image_from_bytes(&bytes)
-        .map_err(|e| AgentError::InvalidValue(format!("Invalid image data: {e}")))
+        .map_err(|e| Error::InvalidValue(format!("Invalid image data: {e}")))
 }
 
-/// The value type passed between agents.
+/// The value type passed between modules.
 ///
 /// Supports multiple data types with immutable data structures for efficient cloning.
 /// Large data (String, Image, Tensor, etc.) is wrapped in `Arc` for reference-counted sharing.
 #[derive(Debug, Clone, Default)]
-pub enum AgentValue {
+pub enum Value {
     /// Empty value. Used as a trigger signal.
     #[default]
     Unit,
@@ -69,10 +69,10 @@ pub enum AgentValue {
     Image(Arc<PhotonImage>),
 
     /// Ordered array of values.
-    Array(Vector<AgentValue>),
+    Array(Vector<Value>),
 
     /// Key-value map.
-    Object(HashMap<String, AgentValue>),
+    Object(HashMap<String, Value>),
 
     /// Tensor data for embeddings, etc.
     Tensor(Arc<Vec<f32>>),
@@ -82,129 +82,129 @@ pub enum AgentValue {
     Message(Arc<Message>),
 
     /// Error value for propagating errors through the workflow.
-    Error(Arc<AgentError>),
+    Error(Arc<Error>),
 }
 
-/// Type alias for key-value maps used in `AgentValue::Object`.
-pub type AgentValueMap<S, T> = HashMap<S, T>;
+/// Type alias for key-value maps used in `Value::Object`.
+pub type ValueMap<S, T> = HashMap<S, T>;
 
-impl AgentValue {
+impl Value {
     /// Creates a `Unit` value.
     pub fn unit() -> Self {
-        AgentValue::Unit
+        Value::Unit
     }
 
     /// Creates a `Boolean` value.
     pub fn boolean(value: bool) -> Self {
-        AgentValue::Boolean(value)
+        Value::Boolean(value)
     }
 
     /// Creates an `Integer` value.
     pub fn integer(value: i64) -> Self {
-        AgentValue::Integer(value)
+        Value::Integer(value)
     }
 
     /// Creates a `Number` value.
     pub fn number(value: f64) -> Self {
-        AgentValue::Number(value)
+        Value::Number(value)
     }
 
     /// Creates a `String` value.
     pub fn string(value: impl Into<String>) -> Self {
-        AgentValue::String(Arc::new(value.into()))
+        Value::String(Arc::new(value.into()))
     }
 
     /// Creates an `Image` value from a `PhotonImage`.
     #[cfg(feature = "image")]
     pub fn image(value: PhotonImage) -> Self {
-        AgentValue::Image(Arc::new(value))
+        Value::Image(Arc::new(value))
     }
 
     /// Creates an `Image` value from an `Arc<PhotonImage>`.
     #[cfg(feature = "image")]
     pub fn image_arc(value: Arc<PhotonImage>) -> Self {
-        AgentValue::Image(value)
+        Value::Image(value)
     }
 
     /// Creates an `Array` value.
-    pub fn array(value: Vector<AgentValue>) -> Self {
-        AgentValue::Array(value)
+    pub fn array(value: Vector<Value>) -> Self {
+        Value::Array(value)
     }
 
     /// Creates an `Object` value.
-    pub fn object(value: AgentValueMap<String, AgentValue>) -> Self {
-        AgentValue::Object(value)
+    pub fn object(value: ValueMap<String, Value>) -> Self {
+        Value::Object(value)
     }
 
     /// Creates a `Tensor` value from a `Vec<f32>`.
     pub fn tensor(value: Vec<f32>) -> Self {
-        AgentValue::Tensor(Arc::new(value))
+        Value::Tensor(Arc::new(value))
     }
 
     /// Creates a `Message` value.
     #[cfg(feature = "llm")]
     pub fn message(value: Message) -> Self {
-        AgentValue::Message(Arc::new(value))
+        Value::Message(Arc::new(value))
     }
 
     /// Creates a default `Boolean` value (`false`).
     pub fn boolean_default() -> Self {
-        AgentValue::Boolean(false)
+        Value::Boolean(false)
     }
 
     /// Creates a default `Integer` value (`0`).
     pub fn integer_default() -> Self {
-        AgentValue::Integer(0)
+        Value::Integer(0)
     }
 
     /// Creates a default `Number` value (`0.0`).
     pub fn number_default() -> Self {
-        AgentValue::Number(0.0)
+        Value::Number(0.0)
     }
 
     /// Creates a default `String` value (empty string).
     pub fn string_default() -> Self {
-        AgentValue::String(Arc::new(String::new()))
+        Value::String(Arc::new(String::new()))
     }
 
     /// Creates a default `Image` value (1x1 transparent pixel).
     #[cfg(feature = "image")]
     pub fn image_default() -> Self {
-        AgentValue::Image(Arc::new(PhotonImage::new(vec![0u8, 0u8, 0u8, 0u8], 1, 1)))
+        Value::Image(Arc::new(PhotonImage::new(vec![0u8, 0u8, 0u8, 0u8], 1, 1)))
     }
 
     /// Creates a default `Array` value (empty array).
     pub fn array_default() -> Self {
-        AgentValue::Array(Vector::new())
+        Value::Array(Vector::new())
     }
 
     /// Creates a default `Object` value (empty object).
     pub fn object_default() -> Self {
-        AgentValue::Object(HashMap::new())
+        Value::Object(HashMap::new())
     }
 
     /// Creates a default `Tensor` value (empty vector).
     pub fn tensor_default() -> Self {
-        AgentValue::Tensor(Arc::new(Vec::new()))
+        Value::Tensor(Arc::new(Vec::new()))
     }
 
-    /// Creates an `AgentValue` from a `serde_json::Value`.
+    /// Creates a `Value` from a `serde_json::Value`.
     ///
     /// # Errors
     ///
     /// Returns `InvalidValue` if the JSON value cannot be converted.
-    pub fn from_json(value: serde_json::Value) -> Result<Self, AgentError> {
+    pub fn from_json(value: serde_json::Value) -> Result<Self> {
         match value {
-            serde_json::Value::Null => Ok(AgentValue::Unit),
-            serde_json::Value::Bool(b) => Ok(AgentValue::Boolean(b)),
+            serde_json::Value::Null => Ok(Value::Unit),
+            serde_json::Value::Bool(b) => Ok(Value::Boolean(b)),
             serde_json::Value::Number(n) => {
                 if let Some(i) = n.as_i64() {
-                    Ok(AgentValue::Integer(i))
+                    Ok(Value::Integer(i))
                 } else if let Some(f) = n.as_f64() {
-                    Ok(AgentValue::Number(f))
+                    Ok(Value::Number(f))
                 } else {
-                    Err(AgentError::InvalidValue(
-                        "Invalid numeric value for AgentValue".into(),
+                    Err(Error::InvalidValue(
+                        "Invalid numeric value for Value".into(),
                     ))
                 }
             }
@@ -212,26 +212,26 @@ impl AgentValue {
                 #[cfg(feature = "image")]
                 if s.starts_with(IMAGE_BASE64_PREFIX) {
                     let img = image_from_base64(&s)?;
-                    Ok(AgentValue::Image(Arc::new(img)))
+                    Ok(Value::Image(Arc::new(img)))
                 } else {
-                    Ok(AgentValue::String(Arc::new(s)))
+                    Ok(Value::String(Arc::new(s)))
                 }
                 #[cfg(not(feature = "image"))]
-                Ok(AgentValue::String(Arc::new(s)))
+                Ok(Value::String(Arc::new(s)))
             }
             serde_json::Value::Array(arr) => {
-                let agent_arr: Vector<AgentValue> = arr
+                let module_arr: Vector<Value> = arr
                     .into_iter()
-                    .map(AgentValue::from_json)
+                    .map(Value::from_json)
                     .collect::<Result<_, _>>()?;
-                Ok(AgentValue::Array(agent_arr))
+                Ok(Value::Array(module_arr))
             }
             serde_json::Value::Object(obj) => {
-                let map: HashMap<String, AgentValue> = obj
+                let map: HashMap<String, Value> = obj
                     .into_iter()
-                    .map(|(k, v)| Ok((k, AgentValue::from_json(v)?)))
-                    .collect::<Result<_, AgentError>>()?;
-                Ok(AgentValue::Object(map))
+                    .map(|(k, v)| Ok((k, Value::from_json(v)?)))
+                    .collect::<Result<_>>()?;
+                Ok(Value::Object(map))
             }
         }
     }
@@ -239,18 +239,18 @@ impl AgentValue {
     /// Converts to a `serde_json::Value`.
     pub fn to_json(&self) -> serde_json::Value {
         match self {
-            AgentValue::Unit => serde_json::Value::Null,
-            AgentValue::Boolean(b) => (*b).into(),
-            AgentValue::Integer(i) => (*i).into(),
-            AgentValue::Number(n) => (*n).into(),
-            AgentValue::String(s) => s.as_str().into(),
+            Value::Unit => serde_json::Value::Null,
+            Value::Boolean(b) => (*b).into(),
+            Value::Integer(i) => (*i).into(),
+            Value::Number(n) => (*n).into(),
+            Value::String(s) => s.as_str().into(),
             #[cfg(feature = "image")]
-            AgentValue::Image(img) => img.get_base64().into(),
-            AgentValue::Array(a) => {
+            Value::Image(img) => img.get_base64().into(),
+            Value::Array(a) => {
                 let arr: Vec<serde_json::Value> = a.iter().map(|v| v.to_json()).collect();
                 serde_json::Value::Array(arr)
             }
-            AgentValue::Object(o) => {
+            Value::Object(o) => {
                 let mut map = serde_json::Map::new();
                 let mut entries: Vec<_> = o.iter().collect();
                 entries.sort_by(|a, b| a.0.cmp(b.0));
@@ -260,7 +260,7 @@ impl AgentValue {
                 }
                 serde_json::Value::Object(map)
             }
-            AgentValue::Tensor(t) => {
+            Value::Tensor(t) => {
                 let arr: Vec<serde_json::Value> = t
                     .iter()
                     .map(|&v| {
@@ -273,77 +273,77 @@ impl AgentValue {
                 serde_json::Value::Array(arr)
             }
             #[cfg(feature = "llm")]
-            AgentValue::Message(m) => serde_json::to_value(&**m).unwrap_or(serde_json::Value::Null),
-            AgentValue::Error(_) => serde_json::Value::Null, // Errors are not serializable
+            Value::Message(m) => serde_json::to_value(&**m).unwrap_or(serde_json::Value::Null),
+            Value::Error(_) => serde_json::Value::Null, // Errors are not serializable
         }
     }
 
-    /// Create AgentValue from Serialize
-    pub fn from_serialize<T: Serialize>(value: &T) -> Result<Self, AgentError> {
+    /// Create Value from Serialize
+    pub fn from_serialize<T: Serialize>(value: &T) -> Result<Self> {
         let json_value = serde_json::to_value(value)
-            .map_err(|e| AgentError::InvalidValue(format!("Failed to serialize: {}", e)))?;
+            .map_err(|e| Error::InvalidValue(format!("Failed to serialize: {}", e)))?;
         Self::from_json(json_value)
     }
 
-    /// Convert AgentValue to a Deserialize
-    pub fn to_deserialize<T: for<'de> Deserialize<'de>>(&self) -> Result<T, AgentError> {
+    /// Convert Value to a Deserialize
+    pub fn to_deserialize<T: for<'de> Deserialize<'de>>(&self) -> Result<T> {
         let json_value = self.to_json();
         serde_json::from_value(json_value)
-            .map_err(|e| AgentError::InvalidValue(format!("Failed to deserialize: {}", e)))
+            .map_err(|e| Error::InvalidValue(format!("Failed to deserialize: {}", e)))
     }
 
     // Type check helpers
 
     /// Returns `true` if this is a `Unit` value.
     pub fn is_unit(&self) -> bool {
-        matches!(self, AgentValue::Unit)
+        matches!(self, Value::Unit)
     }
 
     /// Returns `true` if this is a `Boolean` value.
     pub fn is_boolean(&self) -> bool {
-        matches!(self, AgentValue::Boolean(_))
+        matches!(self, Value::Boolean(_))
     }
 
     /// Returns `true` if this is an `Integer` value.
     pub fn is_integer(&self) -> bool {
-        matches!(self, AgentValue::Integer(_))
+        matches!(self, Value::Integer(_))
     }
 
     /// Returns `true` if this is a `Number` value.
     pub fn is_number(&self) -> bool {
-        matches!(self, AgentValue::Number(_))
+        matches!(self, Value::Number(_))
     }
 
     /// Returns `true` if this is a `String` value.
     pub fn is_string(&self) -> bool {
-        matches!(self, AgentValue::String(_))
+        matches!(self, Value::String(_))
     }
 
     /// Returns `true` if this is an `Image` value.
     #[cfg(feature = "image")]
     pub fn is_image(&self) -> bool {
-        matches!(self, AgentValue::Image(_))
+        matches!(self, Value::Image(_))
     }
 
     /// Returns `true` if this is an `Array` value.
     pub fn is_array(&self) -> bool {
-        matches!(self, AgentValue::Array(_))
+        matches!(self, Value::Array(_))
     }
 
     /// Returns `true` if this is an `Object` value.
     pub fn is_object(&self) -> bool {
-        matches!(self, AgentValue::Object(_))
+        matches!(self, Value::Object(_))
     }
 
     /// Returns `true` if this is a `Tensor` value.
     pub fn is_tensor(&self) -> bool {
-        matches!(self, AgentValue::Tensor(_))
+        matches!(self, Value::Tensor(_))
     }
 
     /// Returns `true` if this is a `Message` value.
     #[cfg(feature = "llm")]
     pub fn is_message(&self) -> bool {
-        matches!(self, AgentValue::Message(_))
+        matches!(self, Value::Message(_))
     }
 
     // Cast helpers
@@ -351,7 +351,7 @@ impl AgentValue {
     /// Returns the inner boolean value if this is a `Boolean`, otherwise `None`.
     pub fn as_bool(&self) -> Option<bool> {
         match self {
-            AgentValue::Boolean(b) => Some(*b),
+            Value::Boolean(b) => Some(*b),
             _ => None,
         }
     }
@@ -359,8 +359,8 @@ impl AgentValue {
     /// Returns the value as `i64` if this is an `Integer` or `Number`, otherwise `None`.
     pub fn as_i64(&self) -> Option<i64> {
         match self {
-            AgentValue::Integer(i) => Some(*i),
-            AgentValue::Number(n) => Some(*n as i64),
+            Value::Integer(i) => Some(*i),
+            Value::Number(n) => Some(*n as i64),
             _ => None,
         }
     }
@@ -368,8 +368,8 @@ impl AgentValue {
     /// Returns the value as `f64` if this is an `Integer` or `Number`, otherwise `None`.
     pub fn as_f64(&self) -> Option<f64> {
         match self {
-            AgentValue::Integer(i) => Some(*i as f64),
-            AgentValue::Number(n) => Some(*n),
+            Value::Integer(i) => Some(*i as f64),
+            Value::Number(n) => Some(*n),
             _ => None,
         }
     }
@@ -377,7 +377,7 @@ impl AgentValue {
     /// Returns a reference to the inner string if this is a `String`, otherwise `None`.
     pub fn as_str(&self) -> Option<&str> {
         match self {
-            AgentValue::String(s) => Some(s),
+            Value::String(s) => Some(s),
             _ => None,
         }
     }
@@ -386,7 +386,7 @@ impl AgentValue {
     #[cfg(feature = "image")]
     pub fn as_image(&self) -> Option<&PhotonImage> {
         match self {
-            AgentValue::Image(img) => Some(img),
+            Value::Image(img) => Some(img),
             _ => None,
         }
     }
@@ -395,7 +395,7 @@ impl AgentValue {
     #[cfg(feature = "image")]
     pub fn as_image_mut(&mut self) -> Option<&mut PhotonImage> {
         match self {
-            AgentValue::Image(img) => Some(Arc::make_mut(img)),
+            Value::Image(img) => Some(Arc::make_mut(img)),
             _ => None,
         }
     }
@@ -404,7 +404,7 @@ impl AgentValue {
     #[cfg(feature = "image")]
     pub fn into_image(self) -> Option<Arc<PhotonImage>> {
         match self {
-            AgentValue::Image(img) => Some(img),
+            Value::Image(img) => Some(img),
             _ => None,
         }
     }
@@ -413,7 +413,7 @@ impl AgentValue {
     #[cfg(feature = "llm")]
     pub fn as_message(&self) -> Option<&Message> {
         match self {
-            AgentValue::Message(m) => Some(m),
+            Value::Message(m) => Some(m),
             _ => None,
         }
     }
@@ -422,7 +422,7 @@ impl AgentValue {
     #[cfg(feature = "llm")]
     pub fn as_message_mut(&mut self) -> Option<&mut Message> {
         match self {
-            AgentValue::Message(m) => Some(Arc::make_mut(m)),
+            Value::Message(m) => Some(Arc::make_mut(m)),
             _ => None,
         }
     }
@@ -431,7 +431,7 @@ impl AgentValue {
     #[cfg(feature = "llm")]
     pub fn into_message(self) -> Option<Arc<Message>> {
         match self {
-            AgentValue::Message(m) => Some(m),
+            Value::Message(m) => Some(m),
             _ => None,
         }
     }
@@ -445,19 +445,19 @@ impl AgentValue {
     /// - `String`: parses "true"/"false"
     pub fn to_boolean(&self) -> Option<bool> {
         match self {
-            AgentValue::Boolean(b) => Some(*b),
-            AgentValue::Integer(i) => Some(*i != 0),
-            AgentValue::Number(n) => Some(*n != 0.0),
-            AgentValue::String(s) => s.parse().ok(),
+            Value::Boolean(b) => Some(*b),
+            Value::Integer(i) => Some(*i != 0),
+            Value::Number(n) => Some(*n != 0.0),
+            Value::String(s) => s.parse().ok(),
             _ => None,
         }
     }
 
-    /// Converts to `AgentValue::Boolean` or `AgentValue::Array` of booleans.
-    pub fn to_boolean_value(&self) -> Option<AgentValue> {
+    /// Converts to `Value::Boolean` or `Value::Array` of booleans.
+    pub fn to_boolean_value(&self) -> Option<Value> {
         match self {
-            AgentValue::Boolean(_) => Some(self.clone()),
-            AgentValue::Array(arr) => {
+            Value::Boolean(_) => Some(self.clone()),
+            Value::Array(arr) => {
                 if arr.iter().all(|v| v.is_boolean()) {
                     return Some(self.clone());
                 }
@@ -465,28 +465,28 @@ impl AgentValue {
                 for item in arr {
                     new_arr.push_back(item.to_boolean_value()?);
                 }
-                Some(AgentValue::Array(new_arr))
+                Some(Value::Array(new_arr))
             }
-            _ => self.to_boolean().map(AgentValue::boolean),
+            _ => self.to_boolean().map(Value::boolean),
         }
     }
 
     /// Converts to an integer (i64) with type coercion.
     pub fn to_integer(&self) -> Option<i64> {
         match self {
-            AgentValue::Integer(i) => Some(*i),
-            AgentValue::Boolean(b) => Some(if *b { 1 } else { 0 }),
-            AgentValue::Number(n) => Some(*n as i64),
-            AgentValue::String(s) => s.parse().ok(),
+            Value::Integer(i) => Some(*i),
+            Value::Boolean(b) => Some(if *b { 1 } else { 0 }),
+            Value::Number(n) => Some(*n as i64),
+            Value::String(s) => s.parse().ok(),
             _ => None,
         }
     }
 
-    /// Converts to `AgentValue::Integer` or `AgentValue::Array` of integers.
-    pub fn to_integer_value(&self) -> Option<AgentValue> {
+    /// Converts to `Value::Integer` or `Value::Array` of integers.
+    pub fn to_integer_value(&self) -> Option<Value> {
         match self {
-            AgentValue::Integer(_) => Some(self.clone()),
-            AgentValue::Array(arr) => {
+            Value::Integer(_) => Some(self.clone()),
+            Value::Array(arr) => {
                 if arr.iter().all(|v| v.is_integer()) {
                     return Some(self.clone());
                 }
@@ -494,28 +494,28 @@ impl AgentValue {
                 for item in arr {
                     new_arr.push_back(item.to_integer_value()?);
                 }
-                Some(AgentValue::Array(new_arr))
+                Some(Value::Array(new_arr))
             }
-            _ => self.to_integer().map(AgentValue::integer),
+            _ => self.to_integer().map(Value::integer),
         }
     }
 
     /// Converts to a number (f64) with type coercion.
     pub fn to_number(&self) -> Option<f64> {
         match self {
-            AgentValue::Number(n) => Some(*n),
-            AgentValue::Boolean(b) => Some(if *b { 1.0 } else { 0.0 }),
-            AgentValue::Integer(i) => Some(*i as f64),
-            AgentValue::String(s) => s.parse().ok(),
+            Value::Number(n) => Some(*n),
+            Value::Boolean(b) => Some(if *b { 1.0 } else { 0.0 }),
+            Value::Integer(i) => Some(*i as f64),
+            Value::String(s) => s.parse().ok(),
             _ => None,
         }
     }
 
-    /// Converts to `AgentValue::Number` or `AgentValue::Array` of numbers.
-    pub fn to_number_value(&self) -> Option<AgentValue> {
+    /// Converts to `Value::Number` or `Value::Array` of numbers.
+    pub fn to_number_value(&self) -> Option<Value> {
         match self {
-            AgentValue::Number(_) => Some(self.clone()),
-            AgentValue::Array(arr) => {
+            Value::Number(_) => Some(self.clone()),
+            Value::Array(arr) => {
                 if arr.iter().all(|v| v.is_number()) {
                     return Some(self.clone());
                 }
@@ -523,30 +523,30 @@ impl AgentValue {
                 for item in arr {
                     new_arr.push_back(item.to_number_value()?);
                 }
-                Some(AgentValue::Array(new_arr))
+                Some(Value::Array(new_arr))
             }
-            _ => self.to_number().map(AgentValue::number),
+            _ => self.to_number().map(Value::number),
         }
     }
 
     /// Converts to a string with type coercion.
     pub fn to_string(&self) -> Option<String> {
         match self {
-            AgentValue::String(s) => Some(s.as_ref().clone()),
-            AgentValue::Boolean(b) => Some(b.to_string()),
-            AgentValue::Integer(i) => Some(i.to_string()),
-            AgentValue::Number(n) => Some(n.to_string()),
+            Value::String(s) => Some(s.as_ref().clone()),
+            Value::Boolean(b) => Some(b.to_string()),
+            Value::Integer(i) => Some(i.to_string()),
+            Value::Number(n) => Some(n.to_string()),
             #[cfg(feature = "llm")]
-            AgentValue::Message(m) => Some(m.text()),
+            Value::Message(m) => Some(m.text()),
             _ => None,
         }
     }
 
-    /// Converts to `AgentValue::String` or `AgentValue::Array` of strings.
-    pub fn to_string_value(&self) -> Option<AgentValue> {
+    /// Converts to `Value::String` or `Value::Array` of strings.
+    pub fn to_string_value(&self) -> Option<Value> {
         match self {
-            AgentValue::String(_) => Some(self.clone()),
-            AgentValue::Array(arr) => {
+            Value::String(_) => Some(self.clone()),
+            Value::Array(arr) => {
                 if arr.iter().all(|v| v.is_string()) {
                     return Some(self.clone());
                 }
@@ -554,9 +554,9 @@ impl AgentValue {
                 for item in arr {
                     new_arr.push_back(item.to_string_value()?);
                 }
-                Some(AgentValue::Array(new_arr))
+                Some(Value::Array(new_arr))
             }
-            _ => self.to_string().map(AgentValue::string),
+            _ => self.to_string().map(Value::string),
         }
     }
 
@@ -566,14 +566,14 @@ impl AgentValue {
         Message::try_from(self.clone()).ok()
     }
 
-    /// Converts to `AgentValue::Message` or `AgentValue::Array` of messages.
+    /// Converts to `Value::Message` or `Value::Array` of messages.
     ///
     /// If the value is an array, it recursively converts its elements.
     #[cfg(feature = "llm")]
-    pub fn to_message_value(&self) -> Option<AgentValue> {
+    pub fn to_message_value(&self) -> Option<Value> {
         match self {
-            AgentValue::Message(_) => Some(self.clone()),
-            AgentValue::Array(arr) => {
+            Value::Message(_) => Some(self.clone()),
+            Value::Array(arr) => {
                 if arr.iter().all(|v| v.is_message()) {
                     return Some(self.clone());
                 }
@@ -581,58 +581,56 @@ impl AgentValue {
                 for item in arr {
                     new_arr.push_back(item.to_message_value()?);
                 }
-                Some(AgentValue::Array(new_arr))
+                Some(Value::Array(new_arr))
             }
-            _ => Message::try_from(self.clone())
-                .ok()
-                .map(AgentValue::message),
+            _ => Message::try_from(self.clone()).ok().map(Value::message),
         }
     }
 
     /// Returns a reference to the inner object map if this is an `Object`, otherwise `None`.
-    pub fn as_object(&self) -> Option<&AgentValueMap<String, AgentValue>> {
+    pub fn as_object(&self) -> Option<&ValueMap<String, Value>> {
         match self {
-            AgentValue::Object(o) => Some(o),
+            Value::Object(o) => Some(o),
             _ => None,
         }
     }
 
     /// Returns a mutable reference to the inner object map if this is an `Object`, otherwise `None`.
-    pub fn as_object_mut(&mut self) -> Option<&mut AgentValueMap<String, AgentValue>> {
+    pub fn as_object_mut(&mut self) -> Option<&mut ValueMap<String, Value>> {
         match self {
-            AgentValue::Object(o) => Some(o),
+            Value::Object(o) => Some(o),
             _ => None,
         }
     }
 
     /// Extracts the inner `HashMap` if this is an `Object`, consuming self.
-    pub fn into_object(self) -> Option<AgentValueMap<String, AgentValue>> {
+    pub fn into_object(self) -> Option<ValueMap<String, Value>> {
         match self {
-            AgentValue::Object(o) => Some(o),
+            Value::Object(o) => Some(o),
             _ => None,
         }
     }
 
     /// Returns a reference to the inner array if this is an `Array`, otherwise `None`.
-    pub fn as_array(&self) -> Option<&Vector<AgentValue>> {
+    pub fn as_array(&self) -> Option<&Vector<Value>> {
         match self {
-            AgentValue::Array(a) => Some(a),
+            Value::Array(a) => Some(a),
             _ => None,
         }
     }
 
     /// Returns a mutable reference to the inner array if this is an `Array`, otherwise `None`.
-    pub fn as_array_mut(&mut self) -> Option<&mut Vector<AgentValue>> {
+    pub fn as_array_mut(&mut self) -> Option<&mut Vector<Value>> {
         match self {
-            AgentValue::Array(a) => Some(a),
+            Value::Array(a) => Some(a),
             _ => None,
         }
     }
 
     /// Extracts the inner `Vector` if this is an `Array`, consuming self.
-    pub fn into_array(self) -> Option<Vector<AgentValue>> {
+    pub fn into_array(self) -> Option<Vector<Value>> {
         match self {
-            AgentValue::Array(a) => Some(a),
+            Value::Array(a) => Some(a),
             _ => None,
         }
     }
@@ -640,7 +638,7 @@ impl AgentValue {
     /// Returns a reference to the inner tensor if this is a `Tensor`, otherwise `None`.
     pub fn as_tensor(&self) -> Option<&Vec<f32>> {
         match self {
-            AgentValue::Tensor(t) => Some(t),
+            Value::Tensor(t) => Some(t),
             _ => None,
         }
     }
@@ -648,7 +646,7 @@ impl AgentValue {
     /// Returns a mutable reference to the inner tensor if this is a `Tensor`, otherwise `None`.
     pub fn as_tensor_mut(&mut self) -> Option<&mut Vec<f32>> {
         match self {
-            AgentValue::Tensor(t) => Some(Arc::make_mut(t)),
+            Value::Tensor(t) => Some(Arc::make_mut(t)),
             _ => None,
         }
     }
@@ -656,7 +654,7 @@ impl AgentValue {
     /// Extracts the inner `Arc<Vec<f32>>` if this is a `Tensor`, consuming self.
     pub fn into_tensor(self) -> Option<Arc<Vec<f32>>> {
         match self {
-            AgentValue::Tensor(t) => Some(t),
+            Value::Tensor(t) => Some(t),
             _ => None,
         }
     }
@@ -665,7 +663,7 @@ impl AgentValue {
     /// Possibly O(n) copy.
     pub fn into_tensor_vec(self) -> Option<Vec<f32>> {
         match self {
-            AgentValue::Tensor(t) => Some(Arc::unwrap_or_clone(t)),
+            Value::Tensor(t) => Some(Arc::unwrap_or_clone(t)),
             _ => None,
         }
     }
@@ -674,7 +672,7 @@ impl AgentValue {
     // These methods only work on `Object` values.
 
     /// Gets a value by key from an `Object`.
-    pub fn get(&self, key: &str) -> Option<&AgentValue> {
+    pub fn get(&self, key: &str) -> Option<&Value> {
         self.as_object().and_then(|o| o.get(key))
     }
 
@@ -686,16 +684,16 @@ impl AgentValue {
     /// Returns an owned value because non-`Object` variants materialize
     /// their properties on demand; `Object` and `Array` lookups are cheap
     /// `Arc`/`im` clones.
-    pub fn get_prop(&self, key: &str) -> Option<AgentValue> {
+    pub fn get_prop(&self, key: &str) -> Option<Value> {
         match self {
-            AgentValue::Object(o) => o.get(key).cloned(),
-            AgentValue::Array(a) => a.get(parse_index(key)?).cloned(),
+            Value::Object(o) => o.get(key).cloned(),
+            Value::Array(a) => a.get(parse_index(key)?).cloned(),
             #[cfg(feature = "llm")]
-            AgentValue::Message(m) => m.get_prop(key),
+            Value::Message(m) => m.get_prop(key),
             #[cfg(feature = "image")]
-            AgentValue::Image(i) => match key {
-                "width" => Some(AgentValue::integer(i.get_width() as i64)),
-                "height" => Some(AgentValue::integer(i.get_height() as i64)),
+            Value::Image(i) => match key {
+                "width" => Some(Value::integer(i.get_width() as i64)),
+                "height" => Some(Value::integer(i.get_height() as i64)),
                 _ => None,
             },
             _ => None,
@@ -707,37 +705,37 @@ impl AgentValue {
     /// an `Array` replaces the element at an in-range index key (see
     /// [`parse_index`]). A `Message` and an `Image` are read-only through
     /// this surface — their properties resolve via
-    /// [`AgentValue::get_prop`], but writing one is an error. Other
+    /// [`Value::get_prop`], but writing one is an error. Other
     /// variants — and a non-index or out-of-range key on an `Array` — are
     /// an error rather than a silent drop.
-    pub fn set_prop(&mut self, key: &str, value: AgentValue) -> Result<(), AgentError> {
+    pub fn set_prop(&mut self, key: &str, value: Value) -> Result<()> {
         match self {
-            AgentValue::Object(o) => {
+            Value::Object(o) => {
                 o.insert(key.to_string(), value);
                 Ok(())
             }
-            AgentValue::Array(a) => match parse_index(key) {
+            Value::Array(a) => match parse_index(key) {
                 Some(i) if i < a.len() => {
                     a.set(i, value);
                     Ok(())
                 }
-                Some(i) => Err(AgentError::InvalidValue(format!(
+                Some(i) => Err(Error::InvalidValue(format!(
                     "Index {i} is out of range for array of length {}",
                     a.len()
                 ))),
-                None => Err(AgentError::InvalidValue(format!(
+                None => Err(Error::InvalidValue(format!(
                     "Cannot set property `{key}` on an array; expected an index"
                 ))),
             },
             #[cfg(feature = "llm")]
-            AgentValue::Message(_) => Err(AgentError::InvalidValue(format!(
+            Value::Message(_) => Err(Error::InvalidValue(format!(
                 "Cannot set property `{key}` on a Message"
             ))),
             #[cfg(feature = "image")]
-            AgentValue::Image(_) => Err(AgentError::InvalidValue(format!(
+            Value::Image(_) => Err(Error::InvalidValue(format!(
                 "Cannot set property `{key}` on an Image"
             ))),
-            _ => Err(AgentError::InvalidValue(format!(
+            _ => Err(Error::InvalidValue(format!(
                 "Cannot set property `{key}` on this value"
             ))),
         }
@@ -747,18 +745,18 @@ impl AgentValue {
     /// `Message`, `Image`).
     pub fn has_props(&self) -> bool {
         match self {
-            AgentValue::Object(_) => true,
-            AgentValue::Array(_) => true,
+            Value::Object(_) => true,
+            Value::Array(_) => true,
             #[cfg(feature = "llm")]
-            AgentValue::Message(_) => true,
+            Value::Message(_) => true,
             #[cfg(feature = "image")]
-            AgentValue::Image(_) => true,
+            Value::Image(_) => true,
             _ => false,
         }
     }
 
     /// Gets a mutable reference to a value by key from an `Object`.
-    pub fn get_mut(&mut self, key: &str) -> Option<&mut AgentValue> {
+    pub fn get_mut(&mut self, key: &str) -> Option<&mut Value> {
         self.as_object_mut().and_then(|o| o.get_mut(key))
     }
 
@@ -795,22 +793,22 @@ impl AgentValue {
     }
 
     /// Gets an object reference by key from an `Object`.
-    pub fn get_object(&self, key: &str) -> Option<&AgentValueMap<String, AgentValue>> {
+    pub fn get_object(&self, key: &str) -> Option<&ValueMap<String, Value>> {
         self.get(key).and_then(|v| v.as_object())
     }
 
     /// Gets a mutable object reference by key from an `Object`.
-    pub fn get_object_mut(&mut self, key: &str) -> Option<&mut AgentValueMap<String, AgentValue>> {
+    pub fn get_object_mut(&mut self, key: &str) -> Option<&mut ValueMap<String, Value>> {
         self.get_mut(key).and_then(|v| v.as_object_mut())
     }
 
     /// Gets an array reference by key from an `Object`.
-    pub fn get_array(&self, key: &str) -> Option<&Vector<AgentValue>> {
+    pub fn get_array(&self, key: &str) -> Option<&Vector<Value>> {
         self.get(key).and_then(|v| v.as_array())
     }
 
     /// Gets a mutable array reference by key from an `Object`.
-    pub fn get_array_mut(&mut self, key: &str) -> Option<&mut Vector<AgentValue>> {
+    pub fn get_array_mut(&mut self, key: &str) -> Option<&mut Vector<Value>> {
         self.get_mut(key).and_then(|v| v.as_array_mut())
     }
 
@@ -843,13 +841,13 @@ impl AgentValue {
     /// # Errors
     ///
     /// Returns `InvalidValue` if this is not an `Object`.
-    pub fn set(&mut self, key: String, value: AgentValue) -> Result<(), AgentError> {
+    pub fn set(&mut self, key: String, value: Value) -> Result<()> {
         if let Some(obj) = self.as_object_mut() {
             obj.insert(key, value);
             Ok(())
         } else {
-            Err(AgentError::InvalidValue(
-                "set can only be called on Object AgentValue".into(),
+            Err(Error::InvalidValue(
+                "set can only be called on Object Value".into(),
             ))
         }
     }
@@ -870,51 +868,51 @@ pub fn parse_index(key: &str) -> Option<usize> {
     key.parse().ok()
 }
 
-impl PartialEq for AgentValue {
+impl PartialEq for Value {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (AgentValue::Unit, AgentValue::Unit) => true,
-            (AgentValue::Boolean(b1), AgentValue::Boolean(b2)) => b1 == b2,
-            (AgentValue::Integer(i1), AgentValue::Integer(i2)) => i1 == i2,
-            (AgentValue::Number(n1), AgentValue::Number(n2)) => n1 == n2,
-            (AgentValue::String(s1), AgentValue::String(s2)) => s1 == s2,
+            (Value::Unit, Value::Unit) => true,
+            (Value::Boolean(b1), Value::Boolean(b2)) => b1 == b2,
+            (Value::Integer(i1), Value::Integer(i2)) => i1 == i2,
+            (Value::Number(n1), Value::Number(n2)) => n1 == n2,
+            (Value::String(s1), Value::String(s2)) => s1 == s2,
             #[cfg(feature = "image")]
-            (AgentValue::Image(i1), AgentValue::Image(i2)) => {
+            (Value::Image(i1), Value::Image(i2)) => {
                 i1.get_width() == i2.get_width()
                     && i1.get_height() == i2.get_height()
                     && i1.get_raw_pixels() == i2.get_raw_pixels()
             }
-            (AgentValue::Array(a1), AgentValue::Array(a2)) => a1 == a2,
-            (AgentValue::Object(o1), AgentValue::Object(o2)) => o1 == o2,
-            (AgentValue::Tensor(t1), AgentValue::Tensor(t2)) => t1 == t2,
+            (Value::Array(a1), Value::Array(a2)) => a1 == a2,
+            (Value::Object(o1), Value::Object(o2)) => o1 == o2,
+            (Value::Tensor(t1), Value::Tensor(t2)) => t1 == t2,
             #[cfg(feature = "llm")]
-            (AgentValue::Message(m1), AgentValue::Message(m2)) => m1 == m2,
+            (Value::Message(m1), Value::Message(m2)) => m1 == m2,
             _ => false,
         }
     }
 }
 
-impl Serialize for AgentValue {
+impl Serialize for Value {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
         match self {
-            AgentValue::Unit => serializer.serialize_none(),
-            AgentValue::Boolean(b) => serializer.serialize_bool(*b),
-            AgentValue::Integer(i) => serializer.serialize_i64(*i),
-            AgentValue::Number(n) => serializer.serialize_f64(*n),
-            AgentValue::String(s) => serializer.serialize_str(s),
+            Value::Unit => serializer.serialize_none(),
+            Value::Boolean(b) => serializer.serialize_bool(*b),
+            Value::Integer(i) => serializer.serialize_i64(*i),
+            Value::Number(n) => serializer.serialize_f64(*n),
+            Value::String(s) => serializer.serialize_str(s),
             #[cfg(feature = "image")]
-            AgentValue::Image(img) => serializer.serialize_str(&img.get_base64()),
-            AgentValue::Array(a) => {
+            Value::Image(img) => serializer.serialize_str(&img.get_base64()),
+            Value::Array(a) => {
                 let mut seq = serializer.serialize_seq(Some(a.len()))?;
                 for e in a.iter() {
                     seq.serialize_element(e)?;
                 }
                 seq.end()
             }
-            AgentValue::Object(o) => {
+            Value::Object(o) => {
                 let mut map = serializer.serialize_map(Some(o.len()))?;
                 // Sort the entries to ensure stable JSON output.
                 let mut entries: Vec<_> = o.iter().collect();
@@ -925,7 +923,7 @@ impl Serialize for AgentValue {
                 }
                 map.end()
             }
-            AgentValue::Tensor(t) => {
+            Value::Tensor(t) => {
                 let mut seq = serializer.serialize_seq(Some(t.len()))?;
                 for e in t.iter() {
                     seq.serialize_element(e)?;
@@ -933,131 +931,130 @@ impl Serialize for AgentValue {
                 seq.end()
             }
             #[cfg(feature = "llm")]
-            AgentValue::Message(m) => m.serialize(serializer),
-            AgentValue::Error(_) => serializer.serialize_none(), // Errors are not serializable
+            Value::Message(m) => m.serialize(serializer),
+            Value::Error(_) => serializer.serialize_none(), // Errors are not serializable
         }
     }
 }
 
-impl<'de> Deserialize<'de> for AgentValue {
+impl<'de> Deserialize<'de> for Value {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
         let value = serde_json::Value::deserialize(deserializer)?;
-        AgentValue::from_json(value).map_err(|e| {
-            serde::de::Error::custom(format!("Failed to deserialize AgentValue: {}", e))
-        })
+        Value::from_json(value)
+            .map_err(|e| serde::de::Error::custom(format!("Failed to deserialize Value: {}", e)))
     }
 }
 
-impl From<()> for AgentValue {
+impl From<()> for Value {
     fn from(_: ()) -> Self {
-        AgentValue::unit()
+        Value::unit()
     }
 }
 
-impl From<bool> for AgentValue {
+impl From<bool> for Value {
     fn from(value: bool) -> Self {
-        AgentValue::boolean(value)
+        Value::boolean(value)
     }
 }
 
-impl From<i32> for AgentValue {
+impl From<i32> for Value {
     fn from(value: i32) -> Self {
-        AgentValue::integer(value as i64)
+        Value::integer(value as i64)
     }
 }
 
-impl From<i64> for AgentValue {
+impl From<i64> for Value {
     fn from(value: i64) -> Self {
-        AgentValue::integer(value)
+        Value::integer(value)
     }
 }
 
-impl From<usize> for AgentValue {
+impl From<usize> for Value {
     fn from(value: usize) -> Self {
-        AgentValue::Integer(value as i64)
+        Value::Integer(value as i64)
     }
 }
 
-impl From<u64> for AgentValue {
+impl From<u64> for Value {
     fn from(value: u64) -> Self {
-        AgentValue::Integer(value as i64)
+        Value::Integer(value as i64)
     }
 }
 
-impl From<f32> for AgentValue {
+impl From<f32> for Value {
     fn from(value: f32) -> Self {
-        AgentValue::Number(value as f64)
+        Value::Number(value as f64)
     }
 }
 
-impl From<f64> for AgentValue {
+impl From<f64> for Value {
     fn from(value: f64) -> Self {
-        AgentValue::number(value)
+        Value::number(value)
     }
 }
 
-impl From<String> for AgentValue {
+impl From<String> for Value {
     fn from(value: String) -> Self {
-        AgentValue::string(value)
+        Value::string(value)
     }
 }
 
-impl From<&str> for AgentValue {
+impl From<&str> for Value {
     fn from(value: &str) -> Self {
-        AgentValue::string(value)
+        Value::string(value)
     }
 }
 
-impl From<Vector<AgentValue>> for AgentValue {
-    fn from(value: Vector<AgentValue>) -> Self {
-        AgentValue::Array(value)
+impl From<Vector<Value>> for Value {
+    fn from(value: Vector<Value>) -> Self {
+        Value::Array(value)
     }
 }
 
-impl From<HashMap<String, AgentValue>> for AgentValue {
-    fn from(value: HashMap<String, AgentValue>) -> Self {
-        AgentValue::Object(value)
+impl From<HashMap<String, Value>> for Value {
+    fn from(value: HashMap<String, Value>) -> Self {
+        Value::Object(value)
     }
 }
 
 // Tensor support
-impl From<Vec<f32>> for AgentValue {
+impl From<Vec<f32>> for Value {
     fn from(value: Vec<f32>) -> Self {
-        AgentValue::Tensor(Arc::new(value))
+        Value::Tensor(Arc::new(value))
     }
 }
-impl From<Arc<Vec<f32>>> for AgentValue {
+impl From<Arc<Vec<f32>>> for Value {
     fn from(value: Arc<Vec<f32>>) -> Self {
-        AgentValue::Tensor(value)
+        Value::Tensor(value)
     }
 }
 
 // Standard Collections support
-impl From<Vec<AgentValue>> for AgentValue {
-    fn from(value: Vec<AgentValue>) -> Self {
-        AgentValue::Array(Vector::from(value))
+impl From<Vec<Value>> for Value {
+    fn from(value: Vec<Value>) -> Self {
+        Value::Array(Vector::from(value))
     }
 }
-impl From<std::collections::HashMap<String, AgentValue>> for AgentValue {
-    fn from(value: std::collections::HashMap<String, AgentValue>) -> Self {
-        AgentValue::Object(HashMap::from(value))
+impl From<std::collections::HashMap<String, Value>> for Value {
+    fn from(value: std::collections::HashMap<String, Value>) -> Self {
+        Value::Object(HashMap::from(value))
     }
 }
 
 // Error support
-impl From<AgentError> for AgentValue {
-    fn from(value: AgentError) -> Self {
-        AgentValue::Error(Arc::new(value))
+impl From<Error> for Value {
+    fn from(value: Error) -> Self {
+        Value::Error(Arc::new(value))
     }
 }
 
 // Option support
-impl From<Option<AgentValue>> for AgentValue {
-    fn from(value: Option<AgentValue>) -> Self {
-        value.unwrap_or(AgentValue::Unit)
+impl From<Option<Value>> for Value {
+    fn from(value: Option<Value>) -> Self {
+        value.unwrap_or(Value::Unit)
     }
 }
 
@@ -1070,109 +1067,109 @@ mod tests {
     #[test]
     fn test_partial_eq() {
         // Test PartialEq implementation
-        let unit1 = AgentValue::unit();
-        let unit2 = AgentValue::unit();
+        let unit1 = Value::unit();
+        let unit2 = Value::unit();
         assert_eq!(unit1, unit2);
 
-        let boolean1 = AgentValue::boolean(true);
-        let boolean2 = AgentValue::boolean(true);
+        let boolean1 = Value::boolean(true);
+        let boolean2 = Value::boolean(true);
         assert_eq!(boolean1, boolean2);
 
-        let integer1 = AgentValue::integer(42);
-        let integer2 = AgentValue::integer(42);
+        let integer1 = Value::integer(42);
+        let integer2 = Value::integer(42);
         assert_eq!(integer1, integer2);
-        let different = AgentValue::integer(100);
+        let different = Value::integer(100);
         assert_ne!(integer1, different);
 
-        let number1 = AgentValue::number(2.5);
-        let number2 = AgentValue::number(2.5);
+        let number1 = Value::number(2.5);
+        let number2 = Value::number(2.5);
         assert_eq!(number1, number2);
 
-        let string1 = AgentValue::string("hello");
-        let string2 = AgentValue::string("hello");
+        let string1 = Value::string("hello");
+        let string2 = Value::string("hello");
         assert_eq!(string1, string2);
 
         #[cfg(feature = "image")]
         {
-            let image1 = AgentValue::image(PhotonImage::new(vec![0u8; 4], 1, 1));
-            let image2 = AgentValue::image(PhotonImage::new(vec![0u8; 4], 1, 1));
+            let image1 = Value::image(PhotonImage::new(vec![0u8; 4], 1, 1));
+            let image2 = Value::image(PhotonImage::new(vec![0u8; 4], 1, 1));
             assert_eq!(image1, image2);
         }
 
-        let obj1 = AgentValue::object(hashmap! {
-                "key1".into() => AgentValue::string("value1"),
-                "key2".into() => AgentValue::integer(2),
+        let obj1 = Value::object(hashmap! {
+                "key1".into() => Value::string("value1"),
+                "key2".into() => Value::integer(2),
         });
-        let obj2 = AgentValue::object(hashmap! {
-                "key1".to_string() => AgentValue::string("value1"),
-                "key2".to_string() => AgentValue::integer(2),
+        let obj2 = Value::object(hashmap! {
+                "key1".to_string() => Value::string("value1"),
+                "key2".to_string() => Value::integer(2),
         });
         assert_eq!(obj1, obj2);
 
-        let arr1 = AgentValue::array(vector![
-            AgentValue::integer(1),
-            AgentValue::string("two"),
-            AgentValue::boolean(true),
+        let arr1 = Value::array(vector![
+            Value::integer(1),
+            Value::string("two"),
+            Value::boolean(true),
         ]);
-        let arr2 = AgentValue::array(vector![
-            AgentValue::integer(1),
-            AgentValue::string("two"),
-            AgentValue::boolean(true),
+        let arr2 = Value::array(vector![
+            Value::integer(1),
+            Value::string("two"),
+            Value::boolean(true),
         ]);
         assert_eq!(arr1, arr2);
 
-        let mixed_types_1 = AgentValue::boolean(true);
-        let mixed_types_2 = AgentValue::integer(1);
+        let mixed_types_1 = Value::boolean(true);
+        let mixed_types_2 = Value::integer(1);
         assert_ne!(mixed_types_1, mixed_types_2);
 
         #[cfg(feature = "llm")]
         {
-            let msg1 = AgentValue::message(Message::user("hello".to_string()));
-            let msg2 = AgentValue::message(Message::user("hello".to_string()));
+            let msg1 = Value::message(Message::user("hello".to_string()));
+            let msg2 = Value::message(Message::user("hello".to_string()));
             assert_eq!(msg1, msg2);
         }
     }
 
     #[test]
-    fn test_agent_value_constructors() {
-        // Test AgentValue constructors
-        let unit = AgentValue::unit();
-        assert_eq!(unit, AgentValue::Unit);
+    fn test_value_constructors() {
+        // Test Value constructors
+        let unit = Value::unit();
+        assert_eq!(unit, Value::Unit);
 
-        let boolean = AgentValue::boolean(true);
-        assert_eq!(boolean, AgentValue::Boolean(true));
+        let boolean = Value::boolean(true);
+        assert_eq!(boolean, Value::Boolean(true));
 
-        let integer = AgentValue::integer(42);
-        assert_eq!(integer, AgentValue::Integer(42));
+        let integer = Value::integer(42);
+        assert_eq!(integer, Value::Integer(42));
 
-        let number = AgentValue::number(2.5);
-        assert!(matches!(number, AgentValue::Number(_)));
-        if let AgentValue::Number(num) = number {
+        let number = Value::number(2.5);
+        assert!(matches!(number, Value::Number(_)));
+        if let Value::Number(num) = number {
             assert!((num - 2.5).abs() < f64::EPSILON);
         }
 
-        let string = AgentValue::string("hello");
-        assert!(matches!(string, AgentValue::String(_)));
+        let string = Value::string("hello");
+        assert!(matches!(string, Value::String(_)));
         assert_eq!(string.as_str().unwrap(), "hello");
 
-        let text = AgentValue::string("multiline\ntext");
-        assert!(matches!(text, AgentValue::String(_)));
+        let text = Value::string("multiline\ntext");
+        assert!(matches!(text, Value::String(_)));
         assert_eq!(text.as_str().unwrap(), "multiline\ntext");
 
-        let array = AgentValue::array(vector![AgentValue::integer(1), AgentValue::integer(2)]);
-        assert!(matches!(array, AgentValue::Array(_)));
-        if let AgentValue::Array(arr) = array {
+        let array = Value::array(vector![Value::integer(1), Value::integer(2)]);
+        assert!(matches!(array, Value::Array(_)));
+        if let Value::Array(arr) = array {
             assert_eq!(arr.len(), 2);
             assert_eq!(arr[0].as_i64().unwrap(), 1);
             assert_eq!(arr[1].as_i64().unwrap(), 2);
         }
 
-        let obj = AgentValue::object(hashmap! {
-                "key1".to_string() => AgentValue::string("string1"),
-                "key2".to_string() => AgentValue::integer(2),
+        let obj = Value::object(hashmap! {
+                "key1".to_string() => Value::string("string1"),
+                "key2".to_string() => Value::integer(2),
         });
-        assert!(matches!(obj, AgentValue::Object(_)));
-        if let AgentValue::Object(obj) = obj {
+        assert!(matches!(obj, Value::Object(_)));
+        if let Value::Object(obj) = obj {
             assert_eq!(obj.get("key1").and_then(|v| v.as_str()), Some("string1"));
             assert_eq!(obj.get("key2").and_then(|v| v.as_i64()), Some(2));
         } else {
@@ -1181,54 +1178,54 @@ mod tests {
 
         #[cfg(feature = "llm")]
         {
-            let msg = AgentValue::message(Message::user("hello".to_string()));
-            assert!(matches!(msg, AgentValue::Message(_)));
+            let msg = Value::message(Message::user("hello".to_string()));
+            assert!(matches!(msg, Value::Message(_)));
         }
     }
 
     #[test]
-    fn test_agent_value_from_json_value() {
-        // Test converting from JSON value to AgentValue
-        let null = AgentValue::from_json(json!(null)).unwrap();
-        assert_eq!(null, AgentValue::Unit);
+    fn test_value_from_json_value() {
+        // Test converting from JSON value to Value
+        let null = Value::from_json(json!(null)).unwrap();
+        assert_eq!(null, Value::Unit);
 
-        let boolean = AgentValue::from_json(json!(true)).unwrap();
-        assert_eq!(boolean, AgentValue::Boolean(true));
+        let boolean = Value::from_json(json!(true)).unwrap();
+        assert_eq!(boolean, Value::Boolean(true));
 
-        let integer = AgentValue::from_json(json!(42)).unwrap();
-        assert_eq!(integer, AgentValue::Integer(42));
+        let integer = Value::from_json(json!(42)).unwrap();
+        assert_eq!(integer, Value::Integer(42));
 
-        let number = AgentValue::from_json(json!(2.5)).unwrap();
-        assert!(matches!(number, AgentValue::Number(_)));
-        if let AgentValue::Number(num) = number {
+        let number = Value::from_json(json!(2.5)).unwrap();
+        assert!(matches!(number, Value::Number(_)));
+        if let Value::Number(num) = number {
             assert!((num - 2.5).abs() < f64::EPSILON);
         }
 
-        let string = AgentValue::from_json(json!("hello")).unwrap();
-        assert!(matches!(string, AgentValue::String(_)));
-        if let AgentValue::String(s) = string {
+        let string = Value::from_json(json!("hello")).unwrap();
+        assert!(matches!(string, Value::String(_)));
+        if let Value::String(s) = string {
             assert_eq!(*s, "hello");
         } else {
             panic!("Expected string value");
         }
 
-        let array = AgentValue::from_json(json!([1, "test", true])).unwrap();
-        assert!(matches!(array, AgentValue::Array(_)));
-        if let AgentValue::Array(arr) = array {
+        let array = Value::from_json(json!([1, "test", true])).unwrap();
+        assert!(matches!(array, Value::Array(_)));
+        if let Value::Array(arr) = array {
             assert_eq!(arr.len(), 3);
-            assert_eq!(arr[0], AgentValue::Integer(1));
-            assert!(matches!(&arr[1], AgentValue::String(_)));
-            if let AgentValue::String(s) = &arr[1] {
+            assert_eq!(arr[0], Value::Integer(1));
+            assert!(matches!(&arr[1], Value::String(_)));
+            if let Value::String(s) = &arr[1] {
                 assert_eq!(**s, "test");
             } else {
                 panic!("Expected string value");
             }
-            assert_eq!(arr[2], AgentValue::Boolean(true));
+            assert_eq!(arr[2], Value::Boolean(true));
         }
 
-        let object = AgentValue::from_json(json!({"key1": "string1", "key2": 2})).unwrap();
-        assert!(matches!(object, AgentValue::Object(_)));
-        if let AgentValue::Object(obj) = object {
+        let object = Value::from_json(json!({"key1": "string1", "key2": 2})).unwrap();
+        assert!(matches!(object, Value::Object(_)));
+        if let Value::Object(obj) = object {
             assert_eq!(obj.get("key1").and_then(|v| v.as_str()), Some("string1"));
             assert_eq!(obj.get("key2").and_then(|v| v.as_i64()), Some(2));
         } else {
@@ -1245,13 +1242,13 @@ mod tests {
         // A string claiming the PNG data URI prefix with a corrupt payload is
         // an error, not a panic — through from_json and the serde surface.
         let bad = format!("{IMAGE_BASE64_PREFIX}@@not-base64@@");
-        assert!(AgentValue::from_json(serde_json::json!(bad)).is_err());
-        assert!(serde_json::from_str::<AgentValue>(&format!("\"{bad}\"")).is_err());
+        assert!(Value::from_json(serde_json::json!(bad)).is_err());
+        assert!(serde_json::from_str::<Value>(&format!("\"{bad}\"")).is_err());
 
         // Valid data still sniffs into an Image
         let good = format!("{IMAGE_BASE64_PREFIX}{PNG_BASE64}");
         assert!(
-            AgentValue::from_json(serde_json::json!(good))
+            Value::from_json(serde_json::json!(good))
                 .unwrap()
                 .is_image()
         );
@@ -1262,9 +1259,9 @@ mod tests {
     }
 
     #[test]
-    fn test_agent_value_test_methods() {
-        // Test test methods on AgentValue
-        let unit = AgentValue::unit();
+    fn test_value_test_methods() {
+        // Test test methods on Value
+        let unit = Value::unit();
         assert!(unit.is_unit());
         assert!(!unit.is_boolean());
         assert!(!unit.is_integer());
@@ -1275,7 +1272,7 @@ mod tests {
         #[cfg(feature = "image")]
         assert!(!unit.is_image());
 
-        let boolean = AgentValue::boolean(true);
+        let boolean = Value::boolean(true);
         assert!(!boolean.is_unit());
         assert!(boolean.is_boolean());
         assert!(!boolean.is_integer());
@@ -1286,7 +1283,7 @@ mod tests {
         #[cfg(feature = "image")]
         assert!(!boolean.is_image());
 
-        let integer = AgentValue::integer(42);
+        let integer = Value::integer(42);
         assert!(!integer.is_unit());
         assert!(!integer.is_boolean());
         assert!(integer.is_integer());
@@ -1297,7 +1294,7 @@ mod tests {
         #[cfg(feature = "image")]
         assert!(!integer.is_image());
 
-        let number = AgentValue::number(2.5);
+        let number = Value::number(2.5);
         assert!(!number.is_unit());
         assert!(!number.is_boolean());
         assert!(!number.is_integer());
@@ -1308,7 +1305,7 @@ mod tests {
         #[cfg(feature = "image")]
         assert!(!number.is_image());
 
-        let string = AgentValue::string("hello");
+        let string = Value::string("hello");
         assert!(!string.is_unit());
         assert!(!string.is_boolean());
         assert!(!string.is_integer());
@@ -1319,7 +1316,7 @@ mod tests {
         #[cfg(feature = "image")]
         assert!(!string.is_image());
 
-        let array = AgentValue::array(vector![AgentValue::integer(1), AgentValue::integer(2)]);
+        let array = Value::array(vector![Value::integer(1), Value::integer(2)]);
         assert!(!array.is_unit());
         assert!(!array.is_boolean());
         assert!(!array.is_integer());
@@ -1330,9 +1327,9 @@ mod tests {
         #[cfg(feature = "image")]
         assert!(!array.is_image());
 
-        let obj = AgentValue::object(hashmap! {
-                "key1".to_string() => AgentValue::string("string1"),
-                "key2".to_string() => AgentValue::integer(2),
+        let obj = Value::object(hashmap! {
+                "key1".to_string() => Value::string("string1"),
+                "key2".to_string() => Value::integer(2),
         });
         assert!(!obj.is_unit());
         assert!(!obj.is_boolean());
@@ -1346,7 +1343,7 @@ mod tests {
 
         #[cfg(feature = "image")]
         {
-            let img = AgentValue::image(PhotonImage::new(vec![0u8; 4], 1, 1));
+            let img = Value::image(PhotonImage::new(vec![0u8; 4], 1, 1));
             assert!(!img.is_unit());
             assert!(!img.is_boolean());
             assert!(!img.is_integer());
@@ -1359,7 +1356,7 @@ mod tests {
 
         #[cfg(feature = "llm")]
         {
-            let msg = AgentValue::message(Message::user("hello".to_string()));
+            let msg = Value::message(Message::user("hello".to_string()));
             assert!(!msg.is_unit());
             assert!(!msg.is_boolean());
             assert!(!msg.is_integer());
@@ -1374,9 +1371,9 @@ mod tests {
     }
 
     #[test]
-    fn test_agent_value_as_methods() {
-        // Test accessor methods on AgentValue
-        let boolean = AgentValue::boolean(true);
+    fn test_value_as_methods() {
+        // Test accessor methods on Value
+        let boolean = Value::boolean(true);
         assert_eq!(boolean.as_bool(), Some(true));
         assert_eq!(boolean.as_i64(), None);
         assert_eq!(boolean.as_f64(), None);
@@ -1386,7 +1383,7 @@ mod tests {
         #[cfg(feature = "image")]
         assert!(boolean.as_image().is_none());
 
-        let integer = AgentValue::integer(42);
+        let integer = Value::integer(42);
         assert_eq!(integer.as_bool(), None);
         assert_eq!(integer.as_i64(), Some(42));
         assert_eq!(integer.as_f64(), Some(42.0));
@@ -1396,7 +1393,7 @@ mod tests {
         #[cfg(feature = "image")]
         assert!(integer.as_image().is_none());
 
-        let number = AgentValue::number(2.5);
+        let number = Value::number(2.5);
         assert_eq!(number.as_bool(), None);
         assert_eq!(number.as_i64(), Some(2)); // truncated
         assert_eq!(number.as_f64().unwrap(), 2.5);
@@ -1406,7 +1403,7 @@ mod tests {
         #[cfg(feature = "image")]
         assert!(number.as_image().is_none());
 
-        let string = AgentValue::string("hello");
+        let string = Value::string("hello");
         assert_eq!(string.as_bool(), None);
         assert_eq!(string.as_i64(), None);
         assert_eq!(string.as_f64(), None);
@@ -1416,7 +1413,7 @@ mod tests {
         #[cfg(feature = "image")]
         assert!(string.as_image().is_none());
 
-        let array = AgentValue::array(vector![AgentValue::integer(1), AgentValue::integer(2)]);
+        let array = Value::array(vector![Value::integer(1), Value::integer(2)]);
         assert_eq!(array.as_bool(), None);
         assert_eq!(array.as_i64(), None);
         assert_eq!(array.as_f64(), None);
@@ -1431,14 +1428,14 @@ mod tests {
         #[cfg(feature = "image")]
         assert!(array.as_image().is_none());
 
-        let mut array = AgentValue::array(vector![AgentValue::integer(1), AgentValue::integer(2)]);
+        let mut array = Value::array(vector![Value::integer(1), Value::integer(2)]);
         if let Some(arr) = array.as_array_mut() {
-            arr.push_back(AgentValue::integer(3));
+            arr.push_back(Value::integer(3));
         }
 
-        let obj = AgentValue::object(hashmap! {
-                "key1".to_string() => AgentValue::string("string1"),
-                "key2".to_string() => AgentValue::integer(2),
+        let obj = Value::object(hashmap! {
+                "key1".to_string() => Value::string("string1"),
+                "key2".to_string() => Value::integer(2),
         });
         assert_eq!(obj.as_bool(), None);
         assert_eq!(obj.as_i64(), None);
@@ -1453,17 +1450,17 @@ mod tests {
         #[cfg(feature = "image")]
         assert!(obj.as_image().is_none());
 
-        let mut obj = AgentValue::object(hashmap! {
-                "key1".to_string() => AgentValue::string("string1"),
-                "key2".to_string() => AgentValue::integer(2),
+        let mut obj = Value::object(hashmap! {
+                "key1".to_string() => Value::string("string1"),
+                "key2".to_string() => Value::integer(2),
         });
         if let Some(value) = obj.as_object_mut() {
-            value.insert("key3".to_string(), AgentValue::boolean(true));
+            value.insert("key3".to_string(), Value::boolean(true));
         }
 
         #[cfg(feature = "image")]
         {
-            let img = AgentValue::image(PhotonImage::new(vec![0u8; 4], 1, 1));
+            let img = Value::image(PhotonImage::new(vec![0u8; 4], 1, 1));
             assert_eq!(img.as_bool(), None);
             assert_eq!(img.as_i64(), None);
             assert_eq!(img.as_f64(), None);
@@ -1475,7 +1472,7 @@ mod tests {
 
         #[cfg(feature = "llm")]
         {
-            let mut msg = AgentValue::message(Message::user("hello".to_string()));
+            let mut msg = Value::message(Message::user("hello".to_string()));
             assert!(msg.as_message().is_some());
             assert_eq!(msg.as_message().unwrap().text(), "hello");
             assert!(msg.as_message_mut().is_some());
@@ -1488,48 +1485,48 @@ mod tests {
     }
 
     #[test]
-    fn test_agent_value_get_methods() {
-        // Test get methods on AgentValue
+    fn test_value_get_methods() {
+        // Test get methods on Value
         const KEY: &str = "key";
 
-        let boolean = AgentValue::boolean(true);
+        let boolean = Value::boolean(true);
         assert_eq!(boolean.get(KEY), None);
 
-        let integer = AgentValue::integer(42);
+        let integer = Value::integer(42);
         assert_eq!(integer.get(KEY), None);
 
-        let number = AgentValue::number(2.5);
+        let number = Value::number(2.5);
         assert_eq!(number.get(KEY), None);
 
-        let string = AgentValue::string("hello");
+        let string = Value::string("hello");
         assert_eq!(string.get(KEY), None);
 
-        let array = AgentValue::array(vector![AgentValue::integer(1), AgentValue::integer(2)]);
+        let array = Value::array(vector![Value::integer(1), Value::integer(2)]);
         assert_eq!(array.get(KEY), None);
 
-        let mut array = AgentValue::array(vector![AgentValue::integer(1), AgentValue::integer(2)]);
+        let mut array = Value::array(vector![Value::integer(1), Value::integer(2)]);
         assert_eq!(array.get_mut(KEY), None);
 
-        let mut obj = AgentValue::object(hashmap! {
-                "k_boolean".to_string() => AgentValue::boolean(true),
-                "k_integer".to_string() => AgentValue::integer(42),
-                "k_number".to_string() => AgentValue::number(2.5),
-                "k_string".to_string() => AgentValue::string("string1"),
-                "k_array".to_string() => AgentValue::array(vector![AgentValue::integer(1)]),
-                "k_object".to_string() => AgentValue::object(hashmap! {
-                        "inner_key".to_string() => AgentValue::integer(100),
+        let mut obj = Value::object(hashmap! {
+                "k_boolean".to_string() => Value::boolean(true),
+                "k_integer".to_string() => Value::integer(42),
+                "k_number".to_string() => Value::number(2.5),
+                "k_string".to_string() => Value::string("string1"),
+                "k_array".to_string() => Value::array(vector![Value::integer(1)]),
+                "k_object".to_string() => Value::object(hashmap! {
+                        "inner_key".to_string() => Value::integer(100),
                 }),
         });
         #[cfg(feature = "image")]
         obj.set(
             "k_image".to_string(),
-            AgentValue::image(PhotonImage::new(vec![0u8; 4], 1, 1)),
+            Value::image(PhotonImage::new(vec![0u8; 4], 1, 1)),
         )
         .unwrap();
         #[cfg(feature = "llm")]
         obj.set(
             "k_message".to_string(),
-            AgentValue::message(Message::user("hello".to_string())),
+            Value::message(Message::user("hello".to_string())),
         )
         .unwrap();
         assert_eq!(obj.get(KEY), None);
@@ -1550,49 +1547,49 @@ mod tests {
 
         #[cfg(feature = "image")]
         {
-            let img = AgentValue::image(PhotonImage::new(vec![0u8; 4], 1, 1));
+            let img = Value::image(PhotonImage::new(vec![0u8; 4], 1, 1));
             assert_eq!(img.get(KEY), None);
         }
     }
 
     #[test]
-    fn test_agent_value_get_prop() {
+    fn test_value_get_prop() {
         // Object: same lookup as `get`, but owned.
-        let obj = AgentValue::object(hashmap! {
-            "k".to_string() => AgentValue::integer(1),
+        let obj = Value::object(hashmap! {
+            "k".to_string() => Value::integer(1),
         });
-        assert_eq!(obj.get_prop("k"), Some(AgentValue::integer(1)));
+        assert_eq!(obj.get_prop("k"), Some(Value::integer(1)));
         assert_eq!(obj.get_prop("missing"), None);
 
         // Message: fields resolve as they serialize.
         #[cfg(feature = "llm")]
         {
-            let msg = AgentValue::message(Message::user("hello".to_string()));
-            assert_eq!(msg.get_prop("role"), Some(AgentValue::string("user")));
-            assert_eq!(msg.get_prop("content"), Some(AgentValue::string("hello")));
+            let msg = Value::message(Message::user("hello".to_string()));
+            assert_eq!(msg.get_prop("role"), Some(Value::string("user")));
+            assert_eq!(msg.get_prop("content"), Some(Value::string("hello")));
             assert_eq!(msg.get_prop("missing"), None);
         }
 
         // Image: width and height resolve as integers.
         #[cfg(feature = "image")]
         {
-            let img = AgentValue::image(PhotonImage::new(vec![0u8; 8], 2, 1));
-            assert_eq!(img.get_prop("width"), Some(AgentValue::integer(2)));
-            assert_eq!(img.get_prop("height"), Some(AgentValue::integer(1)));
+            let img = Value::image(PhotonImage::new(vec![0u8; 8], 2, 1));
+            assert_eq!(img.get_prop("width"), Some(Value::integer(2)));
+            assert_eq!(img.get_prop("height"), Some(Value::integer(1)));
             assert_eq!(img.get_prop("missing"), None);
         }
 
         // Array: index keys resolve to elements.
-        let arr = AgentValue::array(vector![AgentValue::integer(10), AgentValue::integer(20)]);
-        assert_eq!(arr.get_prop("0"), Some(AgentValue::integer(10)));
-        assert_eq!(arr.get_prop("1"), Some(AgentValue::integer(20)));
+        let arr = Value::array(vector![Value::integer(10), Value::integer(20)]);
+        assert_eq!(arr.get_prop("0"), Some(Value::integer(10)));
+        assert_eq!(arr.get_prop("1"), Some(Value::integer(20)));
         assert_eq!(arr.get_prop("2"), None);
         assert_eq!(arr.get_prop("name"), None);
 
         // Scalars have no properties.
-        assert_eq!(AgentValue::integer(42).get_prop("k"), None);
-        assert_eq!(AgentValue::string("s").get_prop("k"), None);
-        assert_eq!(AgentValue::unit().get_prop("k"), None);
+        assert_eq!(Value::integer(42).get_prop("k"), None);
+        assert_eq!(Value::string("s").get_prop("k"), None);
+        assert_eq!(Value::unit().get_prop("k"), None);
     }
 
     #[test]
@@ -1612,97 +1609,84 @@ mod tests {
     }
 
     #[test]
-    fn test_agent_value_set_prop() {
+    fn test_value_set_prop() {
         // Object: plain insert
-        let mut obj = AgentValue::object_default();
-        obj.set_prop("k", AgentValue::integer(1)).unwrap();
-        assert_eq!(obj.get_prop("k"), Some(AgentValue::integer(1)));
+        let mut obj = Value::object_default();
+        obj.set_prop("k", Value::integer(1)).unwrap();
+        assert_eq!(obj.get_prop("k"), Some(Value::integer(1)));
         assert!(obj.has_props());
 
         // Message: exposes properties (so key-path writes don't clobber it
         // with an empty Object) but rejects writes, leaving it untouched
         #[cfg(feature = "llm")]
         {
-            let mut msg = AgentValue::message(Message::user("hello".to_string()));
+            let mut msg = Value::message(Message::user("hello".to_string()));
             assert!(msg.has_props());
-            assert!(
-                msg.set_prop("content", AgentValue::string("edited"))
-                    .is_err()
-            );
+            assert!(msg.set_prop("content", Value::string("edited")).is_err());
             assert!(msg.is_message());
-            assert_eq!(msg.get_prop("content"), Some(AgentValue::string("hello")));
+            assert_eq!(msg.get_prop("content"), Some(Value::string("hello")));
         }
 
         // Image: same read-only contract as Message
         #[cfg(feature = "image")]
         {
-            let mut img = AgentValue::image(PhotonImage::new(vec![0u8; 4], 1, 1));
+            let mut img = Value::image(PhotonImage::new(vec![0u8; 4], 1, 1));
             assert!(img.has_props());
-            assert!(img.set_prop("width", AgentValue::integer(2)).is_err());
+            assert!(img.set_prop("width", Value::integer(2)).is_err());
             assert!(img.is_image());
-            assert_eq!(img.get_prop("width"), Some(AgentValue::integer(1)));
+            assert_eq!(img.get_prop("width"), Some(Value::integer(1)));
         }
 
         // Array: in-range index replaces the element; a shared clone is
         // untouched (im::Vector copy-on-write). Out-of-range or non-index
         // keys error with the array intact.
-        let mut arr = AgentValue::array(vector![AgentValue::integer(10), AgentValue::integer(20)]);
+        let mut arr = Value::array(vector![Value::integer(10), Value::integer(20)]);
         let shared_arr = arr.clone();
-        arr.set_prop("1", AgentValue::integer(99)).unwrap();
-        assert_eq!(arr.get_prop("1"), Some(AgentValue::integer(99)));
-        assert_eq!(shared_arr.get_prop("1"), Some(AgentValue::integer(20)));
+        arr.set_prop("1", Value::integer(99)).unwrap();
+        assert_eq!(arr.get_prop("1"), Some(Value::integer(99)));
+        assert_eq!(shared_arr.get_prop("1"), Some(Value::integer(20)));
         assert!(arr.has_props());
-        assert!(arr.set_prop("2", AgentValue::integer(1)).is_err());
-        assert!(arr.set_prop("name", AgentValue::integer(1)).is_err());
+        assert!(arr.set_prop("2", Value::integer(1)).is_err());
+        assert!(arr.set_prop("name", Value::integer(1)).is_err());
         assert_eq!(arr.as_array().unwrap().len(), 2);
 
         // Scalars reject property writes
-        let mut scalar = AgentValue::integer(42);
-        assert!(scalar.set_prop("k", AgentValue::integer(1)).is_err());
+        let mut scalar = Value::integer(42);
+        assert!(scalar.set_prop("k", Value::integer(1)).is_err());
         assert!(!scalar.has_props());
-        assert!(!AgentValue::unit().has_props());
+        assert!(!Value::unit().has_props());
     }
 
     #[test]
-    fn test_agent_value_set() {
-        // Test set method on AgentValue
-        let mut obj = AgentValue::object(AgentValueMap::new());
-        assert!(obj.set("key1".to_string(), AgentValue::integer(42)).is_ok());
+    fn test_value_set() {
+        // Test set method on Value
+        let mut obj = Value::object(ValueMap::new());
+        assert!(obj.set("key1".to_string(), Value::integer(42)).is_ok());
         assert_eq!(obj.get_i64("key1"), Some(42));
 
-        let mut not_obj = AgentValue::integer(10);
-        assert!(
-            not_obj
-                .set("key1".to_string(), AgentValue::integer(42))
-                .is_err()
-        );
+        let mut not_obj = Value::integer(10);
+        assert!(not_obj.set("key1".to_string(), Value::integer(42)).is_err());
     }
 
     #[test]
-    fn test_agent_value_default() {
-        assert_eq!(AgentValue::default(), AgentValue::Unit);
+    fn test_value_default() {
+        assert_eq!(Value::default(), Value::Unit);
 
-        assert_eq!(AgentValue::boolean_default(), AgentValue::Boolean(false));
-        assert_eq!(AgentValue::integer_default(), AgentValue::Integer(0));
-        assert_eq!(AgentValue::number_default(), AgentValue::Number(0.0));
+        assert_eq!(Value::boolean_default(), Value::Boolean(false));
+        assert_eq!(Value::integer_default(), Value::Integer(0));
+        assert_eq!(Value::number_default(), Value::Number(0.0));
         assert_eq!(
-            AgentValue::string_default(),
-            AgentValue::String(Arc::new(String::new()))
+            Value::string_default(),
+            Value::String(Arc::new(String::new()))
         );
-        assert_eq!(
-            AgentValue::array_default(),
-            AgentValue::Array(Vector::new())
-        );
-        assert_eq!(
-            AgentValue::object_default(),
-            AgentValue::Object(AgentValueMap::new())
-        );
+        assert_eq!(Value::array_default(), Value::Array(Vector::new()));
+        assert_eq!(Value::object_default(), Value::Object(ValueMap::new()));
 
         #[cfg(feature = "image")]
         {
             assert_eq!(
-                AgentValue::image_default(),
-                AgentValue::image(PhotonImage::new(vec![0u8; 4], 1, 1))
+                Value::image_default(),
+                Value::image(PhotonImage::new(vec![0u8; 4], 1, 1))
             );
         }
     }
@@ -1710,33 +1694,33 @@ mod tests {
     #[test]
     fn test_to_json() {
         // Test to_json
-        let unit = AgentValue::unit();
+        let unit = Value::unit();
         assert_eq!(unit.to_json(), json!(null));
 
-        let boolean = AgentValue::boolean(true);
+        let boolean = Value::boolean(true);
         assert_eq!(boolean.to_json(), json!(true));
 
-        let integer = AgentValue::integer(42);
+        let integer = Value::integer(42);
         assert_eq!(integer.to_json(), json!(42));
 
-        let number = AgentValue::number(2.5);
+        let number = Value::number(2.5);
         assert_eq!(number.to_json(), json!(2.5));
 
-        let string = AgentValue::string("hello");
+        let string = Value::string("hello");
         assert_eq!(string.to_json(), json!("hello"));
 
-        let array = AgentValue::array(vector![AgentValue::integer(1), AgentValue::string("test")]);
+        let array = Value::array(vector![Value::integer(1), Value::string("test")]);
         assert_eq!(array.to_json(), json!([1, "test"]));
 
-        let obj = AgentValue::object(hashmap! {
-                "key1".to_string() => AgentValue::string("string1"),
-                "key2".to_string() => AgentValue::integer(2),
+        let obj = Value::object(hashmap! {
+                "key1".to_string() => Value::string("string1"),
+                "key2".to_string() => Value::integer(2),
         });
         assert_eq!(obj.to_json(), json!({"key1": "string1", "key2": 2}));
 
         #[cfg(feature = "image")]
         {
-            let img = AgentValue::image(PhotonImage::new(vec![0u8; 4], 1, 1));
+            let img = Value::image(PhotonImage::new(vec![0u8; 4], 1, 1));
             assert_eq!(
                 img.to_json(),
                 json!(
@@ -1747,7 +1731,7 @@ mod tests {
 
         #[cfg(feature = "llm")]
         {
-            let msg = AgentValue::message(Message::user("hello".to_string()));
+            let msg = Value::message(Message::user("hello".to_string()));
             assert_eq!(
                 msg.to_json(),
                 json!({
@@ -1759,50 +1743,50 @@ mod tests {
     }
 
     #[test]
-    fn test_agent_value_serialization() {
+    fn test_value_serialization() {
         // Test Null serialization
         {
-            let null = AgentValue::Unit;
+            let null = Value::Unit;
             assert_eq!(serde_json::to_string(&null).unwrap(), "null");
         }
 
         // Test Boolean serialization
         {
-            let boolean_t = AgentValue::boolean(true);
+            let boolean_t = Value::boolean(true);
             assert_eq!(serde_json::to_string(&boolean_t).unwrap(), "true");
 
-            let boolean_f = AgentValue::boolean(false);
+            let boolean_f = Value::boolean(false);
             assert_eq!(serde_json::to_string(&boolean_f).unwrap(), "false");
         }
 
         // Test Integer serialization
         {
-            let integer = AgentValue::integer(42);
+            let integer = Value::integer(42);
             assert_eq!(serde_json::to_string(&integer).unwrap(), "42");
         }
 
         // Test Number serialization
         {
-            let num = AgentValue::number(2.5);
+            let num = Value::number(2.5);
             assert_eq!(serde_json::to_string(&num).unwrap(), "2.5");
 
-            let num = AgentValue::number(3.0);
+            let num = Value::number(3.0);
             assert_eq!(serde_json::to_string(&num).unwrap(), "3.0");
         }
 
         // Test String serialization
         {
-            let s = AgentValue::string("Hello, world!");
+            let s = Value::string("Hello, world!");
             assert_eq!(serde_json::to_string(&s).unwrap(), "\"Hello, world!\"");
 
-            let s = AgentValue::string("hello\nworld\n\n");
+            let s = Value::string("hello\nworld\n\n");
             assert_eq!(serde_json::to_string(&s).unwrap(), r#""hello\nworld\n\n""#);
         }
 
         // Test Image serialization
         #[cfg(feature = "image")]
         {
-            let img = AgentValue::image(PhotonImage::new(vec![0u8; 4], 1, 1));
+            let img = Value::image(PhotonImage::new(vec![0u8; 4], 1, 1));
             assert_eq!(
                 serde_json::to_string(&img).unwrap(),
                 r#""data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAEElEQVR4AQEFAPr/AAAAAAAABQABZHiVOAAAAABJRU5ErkJggg==""#
@@ -1812,7 +1796,7 @@ mod tests {
         // Test Arc Image serialization
         #[cfg(feature = "image")]
         {
-            let img = AgentValue::image_arc(Arc::new(PhotonImage::new(vec![0u8; 4], 1, 1)));
+            let img = Value::image_arc(Arc::new(PhotonImage::new(vec![0u8; 4], 1, 1)));
             assert_eq!(
                 serde_json::to_string(&img).unwrap(),
                 r#""data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAEElEQVR4AQEFAPr/AAAAAAAABQABZHiVOAAAAABJRU5ErkJggg==""#
@@ -1821,12 +1805,12 @@ mod tests {
 
         // Test Array serialization
         {
-            let array = AgentValue::array(vector![
-                AgentValue::integer(1),
-                AgentValue::string("test"),
-                AgentValue::object(hashmap! {
-                        "key1".to_string() => AgentValue::string("test"),
-                        "key2".to_string() => AgentValue::integer(2),
+            let array = Value::array(vector![
+                Value::integer(1),
+                Value::string("test"),
+                Value::object(hashmap! {
+                        "key1".to_string() => Value::string("test"),
+                        "key2".to_string() => Value::integer(2),
                 }),
             ]);
             assert_eq!(
@@ -1837,9 +1821,9 @@ mod tests {
 
         // Test Object serialization
         {
-            let obj = AgentValue::object(hashmap! {
-                    "key1".to_string() => AgentValue::string("test"),
-                    "key2".to_string() => AgentValue::integer(3),
+            let obj = Value::object(hashmap! {
+                    "key1".to_string() => Value::string("test"),
+                    "key2".to_string() => Value::integer(3),
             });
             assert_eq!(
                 serde_json::to_string(&obj).unwrap(),
@@ -1849,70 +1833,70 @@ mod tests {
     }
 
     #[test]
-    fn test_agent_value_deserialization() {
+    fn test_value_deserialization() {
         // Test Null deserialization
         {
-            let deserialized: AgentValue = serde_json::from_str("null").unwrap();
-            assert_eq!(deserialized, AgentValue::Unit);
+            let deserialized: Value = serde_json::from_str("null").unwrap();
+            assert_eq!(deserialized, Value::Unit);
         }
 
         // Test Boolean deserialization
         {
-            let deserialized: AgentValue = serde_json::from_str("false").unwrap();
-            assert_eq!(deserialized, AgentValue::boolean(false));
+            let deserialized: Value = serde_json::from_str("false").unwrap();
+            assert_eq!(deserialized, Value::boolean(false));
 
-            let deserialized: AgentValue = serde_json::from_str("true").unwrap();
-            assert_eq!(deserialized, AgentValue::boolean(true));
+            let deserialized: Value = serde_json::from_str("true").unwrap();
+            assert_eq!(deserialized, Value::boolean(true));
         }
 
         // Test Integer deserialization
         {
-            let deserialized: AgentValue = serde_json::from_str("123").unwrap();
-            assert_eq!(deserialized, AgentValue::integer(123));
+            let deserialized: Value = serde_json::from_str("123").unwrap();
+            assert_eq!(deserialized, Value::integer(123));
         }
 
         // Test Number deserialization
         {
-            let deserialized: AgentValue = serde_json::from_str("2.5").unwrap();
-            assert_eq!(deserialized, AgentValue::number(2.5));
+            let deserialized: Value = serde_json::from_str("2.5").unwrap();
+            assert_eq!(deserialized, Value::number(2.5));
 
-            let deserialized: AgentValue = serde_json::from_str("3.0").unwrap();
-            assert_eq!(deserialized, AgentValue::number(3.0));
+            let deserialized: Value = serde_json::from_str("3.0").unwrap();
+            assert_eq!(deserialized, Value::number(3.0));
         }
 
         // Test String deserialization
         {
-            let deserialized: AgentValue = serde_json::from_str("\"Hello, world!\"").unwrap();
-            assert_eq!(deserialized, AgentValue::string("Hello, world!"));
+            let deserialized: Value = serde_json::from_str("\"Hello, world!\"").unwrap();
+            assert_eq!(deserialized, Value::string("Hello, world!"));
 
-            let deserialized: AgentValue = serde_json::from_str(r#""hello\nworld\n\n""#).unwrap();
-            assert_eq!(deserialized, AgentValue::string("hello\nworld\n\n"));
+            let deserialized: Value = serde_json::from_str(r#""hello\nworld\n\n""#).unwrap();
+            assert_eq!(deserialized, Value::string("hello\nworld\n\n"));
         }
 
         // Test Image deserialization
         #[cfg(feature = "image")]
         {
-            let deserialized: AgentValue = serde_json::from_str(
+            let deserialized: Value = serde_json::from_str(
                 r#""data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAEElEQVR4AQEFAPr/AAAAAAAABQABZHiVOAAAAABJRU5ErkJggg==""#,
             )
             .unwrap();
-            assert!(matches!(deserialized, AgentValue::Image(_)));
+            assert!(matches!(deserialized, Value::Image(_)));
         }
 
         // Test Array deserialization
         {
-            let deserialized: AgentValue =
+            let deserialized: Value =
                 serde_json::from_str(r#"[1,"test",{"key1":"test","key2":2}]"#).unwrap();
-            assert!(matches!(deserialized, AgentValue::Array(_)));
-            if let AgentValue::Array(arr) = deserialized {
+            assert!(matches!(deserialized, Value::Array(_)));
+            if let Value::Array(arr) = deserialized {
                 assert_eq!(arr.len(), 3, "Array length mismatch after serialization");
-                assert_eq!(arr[0], AgentValue::integer(1));
-                assert_eq!(arr[1], AgentValue::string("test"));
+                assert_eq!(arr[0], Value::integer(1));
+                assert_eq!(arr[1], Value::string("test"));
                 assert_eq!(
                     arr[2],
-                    AgentValue::object(hashmap! {
-                            "key1".to_string() => AgentValue::string("test"),
-                            "key2".to_string() => AgentValue::integer(2),
+                    Value::object(hashmap! {
+                            "key1".to_string() => Value::string("test"),
+                            "key2".to_string() => Value::integer(2),
                     })
                 );
             }
@@ -1920,44 +1904,40 @@ mod tests {
 
         // Test Object deserialization
         {
-            let deserialized: AgentValue =
-                serde_json::from_str(r#"{"key1":"test","key2":3}"#).unwrap();
+            let deserialized: Value = serde_json::from_str(r#"{"key1":"test","key2":3}"#).unwrap();
             assert_eq!(
                 deserialized,
-                AgentValue::object(hashmap! {
-                        "key1".to_string() => AgentValue::string("test"),
-                        "key2".to_string() => AgentValue::integer(3),
+                Value::object(hashmap! {
+                        "key1".to_string() => Value::string("test"),
+                        "key2".to_string() => Value::integer(3),
                 })
             );
         }
     }
 
     #[test]
-    fn test_agent_value_into() {
-        // Test From implementations for AgentValue
-        let from_unit: AgentValue = ().into();
-        assert_eq!(from_unit, AgentValue::Unit);
+    fn test_value_into() {
+        // Test From implementations for Value
+        let from_unit: Value = ().into();
+        assert_eq!(from_unit, Value::Unit);
 
-        let from_bool: AgentValue = true.into();
-        assert_eq!(from_bool, AgentValue::Boolean(true));
+        let from_bool: Value = true.into();
+        assert_eq!(from_bool, Value::Boolean(true));
 
-        let from_i32: AgentValue = 42i32.into();
-        assert_eq!(from_i32, AgentValue::Integer(42));
+        let from_i32: Value = 42i32.into();
+        assert_eq!(from_i32, Value::Integer(42));
 
-        let from_i64: AgentValue = 100i64.into();
-        assert_eq!(from_i64, AgentValue::Integer(100));
+        let from_i64: Value = 100i64.into();
+        assert_eq!(from_i64, Value::Integer(100));
 
-        let from_f64: AgentValue = 2.5f64.into();
-        assert_eq!(from_f64, AgentValue::Number(2.5));
+        let from_f64: Value = 2.5f64.into();
+        assert_eq!(from_f64, Value::Number(2.5));
 
-        let from_string: AgentValue = "hello".to_string().into();
-        assert_eq!(
-            from_string,
-            AgentValue::String(Arc::new("hello".to_string()))
-        );
+        let from_string: Value = "hello".to_string().into();
+        assert_eq!(from_string, Value::String(Arc::new("hello".to_string())));
 
-        let from_str: AgentValue = "world".into();
-        assert_eq!(from_str, AgentValue::String(Arc::new("world".to_string())));
+        let from_str: Value = "world".into();
+        assert_eq!(from_str, Value::String(Arc::new("world".to_string())));
     }
 
     #[test]
@@ -1975,13 +1955,13 @@ mod tests {
             active: true,
         };
 
-        // Test AgentData roundtrip
-        let agent_data = AgentValue::from_serialize(&test_data).unwrap();
-        assert_eq!(agent_data.get_str("name"), Some("Alice"));
-        assert_eq!(agent_data.get_i64("age"), Some(30));
-        assert_eq!(agent_data.get_bool("active"), Some(true));
+        // Test ModuleData roundtrip
+        let module_data = Value::from_serialize(&test_data).unwrap();
+        assert_eq!(module_data.get_str("name"), Some("Alice"));
+        assert_eq!(module_data.get_i64("age"), Some(30));
+        assert_eq!(module_data.get_bool("active"), Some(true));
 
-        let restored: TestStruct = agent_data.to_deserialize().unwrap();
+        let restored: TestStruct = module_data.to_deserialize().unwrap();
         assert_eq!(restored, test_data);
     }
 
@@ -2013,98 +1993,92 @@ mod tests {
             tags: vec!["developer".to_string(), "rust".to_string()],
         };
 
-        // Test AgentData roundtrip with nested structures
-        let agent_data = AgentValue::from_serialize(&person).unwrap();
-        assert_eq!(agent_data.get_str("name"), Some("Bob"));
+        // Test ModuleData roundtrip with nested structures
+        let module_data = Value::from_serialize(&person).unwrap();
+        assert_eq!(module_data.get_str("name"), Some("Bob"));
 
-        let address = agent_data.get_object("address").unwrap();
+        let address = module_data.get_object("address").unwrap();
         assert_eq!(
             address.get("city").and_then(|v| v.as_str()),
             Some("Springfield")
         );
 
-        let tags = agent_data.get_array("tags").unwrap();
+        let tags = module_data.get_array("tags").unwrap();
         assert_eq!(tags.len(), 2);
         assert_eq!(tags[0].as_str(), Some("developer"));
 
-        let restored: Person = agent_data.to_deserialize().unwrap();
+        let restored: Person = module_data.to_deserialize().unwrap();
         assert_eq!(restored, person);
     }
 
     #[test]
-    fn test_agent_value_conversions() {
+    fn test_value_conversions() {
         // Boolean
-        assert_eq!(AgentValue::boolean(true).to_boolean(), Some(true));
-        assert_eq!(AgentValue::integer(1).to_boolean(), Some(true));
-        assert_eq!(AgentValue::integer(0).to_boolean(), Some(false));
-        assert_eq!(AgentValue::number(1.0).to_boolean(), Some(true));
-        assert_eq!(AgentValue::number(0.0).to_boolean(), Some(false));
-        assert_eq!(AgentValue::string("true").to_boolean(), Some(true));
-        assert_eq!(AgentValue::string("false").to_boolean(), Some(false));
-        assert_eq!(AgentValue::unit().to_boolean(), None);
+        assert_eq!(Value::boolean(true).to_boolean(), Some(true));
+        assert_eq!(Value::integer(1).to_boolean(), Some(true));
+        assert_eq!(Value::integer(0).to_boolean(), Some(false));
+        assert_eq!(Value::number(1.0).to_boolean(), Some(true));
+        assert_eq!(Value::number(0.0).to_boolean(), Some(false));
+        assert_eq!(Value::string("true").to_boolean(), Some(true));
+        assert_eq!(Value::string("false").to_boolean(), Some(false));
+        assert_eq!(Value::unit().to_boolean(), None);
 
-        let bool_arr = AgentValue::array(vector![AgentValue::integer(1), AgentValue::integer(0)]);
+        let bool_arr = Value::array(vector![Value::integer(1), Value::integer(0)]);
         let converted = bool_arr.to_boolean_value().unwrap();
         assert!(converted.is_array());
         let arr = converted.as_array().unwrap();
-        assert_eq!(arr[0], AgentValue::boolean(true));
-        assert_eq!(arr[1], AgentValue::boolean(false));
+        assert_eq!(arr[0], Value::boolean(true));
+        assert_eq!(arr[1], Value::boolean(false));
 
         // Integer
-        assert_eq!(AgentValue::integer(42).to_integer(), Some(42));
-        assert_eq!(AgentValue::boolean(true).to_integer(), Some(1));
-        assert_eq!(AgentValue::boolean(false).to_integer(), Some(0));
-        assert_eq!(AgentValue::number(42.9).to_integer(), Some(42));
-        assert_eq!(AgentValue::string("42").to_integer(), Some(42));
-        assert_eq!(AgentValue::unit().to_integer(), None);
+        assert_eq!(Value::integer(42).to_integer(), Some(42));
+        assert_eq!(Value::boolean(true).to_integer(), Some(1));
+        assert_eq!(Value::boolean(false).to_integer(), Some(0));
+        assert_eq!(Value::number(42.9).to_integer(), Some(42));
+        assert_eq!(Value::string("42").to_integer(), Some(42));
+        assert_eq!(Value::unit().to_integer(), None);
 
-        let int_arr =
-            AgentValue::array(vector![AgentValue::string("10"), AgentValue::boolean(true)]);
+        let int_arr = Value::array(vector![Value::string("10"), Value::boolean(true)]);
         let converted = int_arr.to_integer_value().unwrap();
         assert!(converted.is_array());
         let arr = converted.as_array().unwrap();
-        assert_eq!(arr[0], AgentValue::integer(10));
-        assert_eq!(arr[1], AgentValue::integer(1));
+        assert_eq!(arr[0], Value::integer(10));
+        assert_eq!(arr[1], Value::integer(1));
 
         // Number
-        assert_eq!(AgentValue::number(2.5).to_number(), Some(2.5));
-        assert_eq!(AgentValue::integer(42).to_number(), Some(42.0));
-        assert_eq!(AgentValue::boolean(true).to_number(), Some(1.0));
-        assert_eq!(AgentValue::string("2.5").to_number(), Some(2.5));
-        assert_eq!(AgentValue::unit().to_number(), None);
+        assert_eq!(Value::number(2.5).to_number(), Some(2.5));
+        assert_eq!(Value::integer(42).to_number(), Some(42.0));
+        assert_eq!(Value::boolean(true).to_number(), Some(1.0));
+        assert_eq!(Value::string("2.5").to_number(), Some(2.5));
+        assert_eq!(Value::unit().to_number(), None);
 
-        let num_arr =
-            AgentValue::array(vector![AgentValue::integer(10), AgentValue::string("0.5")]);
+        let num_arr = Value::array(vector![Value::integer(10), Value::string("0.5")]);
         let converted = num_arr.to_number_value().unwrap();
         assert!(converted.is_array());
         let arr = converted.as_array().unwrap();
-        assert_eq!(arr[0], AgentValue::number(10.0));
-        assert_eq!(arr[1], AgentValue::number(0.5));
+        assert_eq!(arr[0], Value::number(10.0));
+        assert_eq!(arr[1], Value::number(0.5));
 
         // String
         assert_eq!(
-            AgentValue::string("hello").to_string(),
+            Value::string("hello").to_string(),
             Some("hello".to_string())
         );
-        assert_eq!(AgentValue::integer(42).to_string(), Some("42".to_string()));
-        assert_eq!(
-            AgentValue::boolean(true).to_string(),
-            Some("true".to_string())
-        );
-        assert_eq!(AgentValue::number(2.5).to_string(), Some("2.5".to_string()));
+        assert_eq!(Value::integer(42).to_string(), Some("42".to_string()));
+        assert_eq!(Value::boolean(true).to_string(), Some("true".to_string()));
+        assert_eq!(Value::number(2.5).to_string(), Some("2.5".to_string()));
         #[cfg(feature = "llm")]
         assert_eq!(
-            AgentValue::message(Message::user("content".to_string())).to_string(),
+            Value::message(Message::user("content".to_string())).to_string(),
             Some("content".to_string())
         );
-        assert_eq!(AgentValue::unit().to_string(), None);
+        assert_eq!(Value::unit().to_string(), None);
 
-        let str_arr =
-            AgentValue::array(vector![AgentValue::integer(42), AgentValue::boolean(false)]);
+        let str_arr = Value::array(vector![Value::integer(42), Value::boolean(false)]);
         let converted = str_arr.to_string_value().unwrap();
         assert!(converted.is_array());
         let arr = converted.as_array().unwrap();
-        assert_eq!(arr[0], AgentValue::string("42"));
-        assert_eq!(arr[1], AgentValue::string("false"));
+        assert_eq!(arr[0], Value::string("42"));
+        assert_eq!(arr[1], Value::string("false"));
     }
 }

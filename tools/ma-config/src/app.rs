@@ -68,8 +68,8 @@ impl AppKind {
         root.join(self.crate_dir()).join("Cargo.toml")
     }
 
-    pub fn agents_rs_path(self, root: &Path) -> PathBuf {
-        root.join(self.crate_dir()).join("src/agents.rs")
+    pub fn modules_rs_path(self, root: &Path) -> PathBuf {
+        root.join(self.crate_dir()).join("src/modules.rs")
     }
 
     pub fn main_rs_path(self, root: &Path) -> PathBuf {
@@ -88,9 +88,9 @@ impl AppKind {
         matches!(self, AppKind::Desktop)
     }
 
-    /// The CLI declares its generated agent module in main.rs; the desktop app
+    /// The CLI declares its generated module module in main.rs; the desktop app
     /// declares it in lib.rs, which is not generated.
-    pub fn needs_mod_agents(self) -> bool {
+    pub fn needs_mod_modules(self) -> bool {
         matches!(self, AppKind::Cli)
     }
 

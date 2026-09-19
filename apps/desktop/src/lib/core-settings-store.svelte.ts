@@ -1,4 +1,4 @@
-import { resolveHotkeys, resolveQuickAddAgents, type ResolvedHotkeys } from "./hotkeys";
+import { resolveHotkeys, resolveQuickAddModules, type ResolvedHotkeys } from "./hotkeys";
 import type { CoreSettings } from "./types";
 
 export const CORE_DEFAULTS = {
@@ -21,7 +21,7 @@ class CoreSettingsStore {
   snapGridSize = $state<number>(CORE_DEFAULTS.snapGridSize);
 
   hotkeys: ResolvedHotkeys = $derived(resolveHotkeys(this.shortcutKeys));
-  quickAddAgents = $derived(resolveQuickAddAgents(this.shortcutKeys));
+  quickAddModules = $derived(resolveQuickAddModules(this.shortcutKeys));
 
   update(settings: CoreSettings) {
     this.colorMode = settings.color_mode ?? "";

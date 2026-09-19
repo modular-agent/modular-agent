@@ -1,10 +1,10 @@
 extern crate modular_agent_core as ma;
 
 use ma::test_utils::{self, probe_receiver, recv_probe};
-use ma::{AgentContext, AgentValue, ConnectionSpec};
+use ma::{ConnectionSpec, ModuleContext, Value};
 
-const COUNTER_DEF: &str = "modular_agent_std::utils::CounterAgent";
-const PROBE_DEF: &str = "modular_agent_core::test_utils::TestProbeAgent";
+const COUNTER_DEF: &str = "modular_agent_std::utils::CounterModule";
+const PROBE_DEF: &str = "modular_agent_core::test_utils::TestProbeModule";
 
 #[tokio::test]
 async fn test_counter_counts_and_resets() {
@@ -12,16 +12,16 @@ async fn test_counter_counts_and_resets() {
 
     let patch_id = ma.new_patch().unwrap();
     let counter_id = ma
-        .add_agent(
+        .add_module(
             patch_id.clone(),
-            ma.get_agent_definition(COUNTER_DEF).unwrap().to_spec(),
+            ma.get_module_definition(COUNTER_DEF).unwrap().to_spec(),
         )
         .await
         .unwrap();
     let probe_id = ma
-        .add_agent(
+        .add_module(
             patch_id.clone(),
-            ma.get_agent_definition(PROBE_DEF).unwrap().to_spec(),
+            ma.get_module_definition(PROBE_DEF).unwrap().to_spec(),
         )
         .await
         .unwrap();
@@ -39,13 +39,13 @@ async fn test_counter_counts_and_resets() {
     ma.start_patch(&patch_id).await.unwrap();
     let probe = probe_receiver(&ma, &probe_id).await.unwrap();
 
-    let ctx = AgentContext::new();
-    let agent = ma.get_agent(&counter_id).unwrap();
+    let ctx = ModuleContext::new();
+    let module = ma.get_module(&counter_id).unwrap();
     {
-        let mut guard = agent.lock().await;
+        let mut guard = module.lock().await;
         for port in ["value", "value", "reset", "value"] {
             guard
-                .process(ctx.clone(), port.into(), AgentValue::unit())
+                .process(ctx.clone(), port.into(), Value::unit())
                 .await
                 .unwrap();
         }
@@ -54,7 +54,7 @@ async fn test_counter_counts_and_resets() {
     // Every input emits the running count; reset drops it back to 0
     for expected in [1, 2, 0, 1] {
         let (_ctx, value) = recv_probe(&probe).await.unwrap();
-        assert_eq!(value, AgentValue::integer(expected));
+        assert_eq!(value, Value::integer(expected));
     }
 
     ma.quit();

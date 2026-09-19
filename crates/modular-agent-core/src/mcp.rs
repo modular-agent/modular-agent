@@ -36,12 +36,13 @@
 
 #![cfg(feature = "mcp")]
 
+use crate::error::Result;
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, OnceLock};
 
-use modular_agent_core::{AgentContext, AgentError, AgentValue, async_trait};
+use modular_agent_core::{Error, ModuleContext, Value, async_trait};
 use rmcp::{
     model::{CallToolRequestParams, CallToolResult},
     service::ServiceExt,
@@ -105,11 +106,7 @@ impl MCPTool {
     /// Gets or creates a connection from the pool and calls the tool.
     /// A transport-level failure invalidates the pooled connection,
     /// reconnects, and retries the call exactly once.
-    async fn tool_call(
-        &self,
-        _ctx: AgentContext,
-        value: AgentValue,
-    ) -> Result<AgentValue, AgentError> {
+    async fn tool_call(&self, _ctx: ModuleContext, value: Value) -> Result<Value> {
         let arguments = value.as_object().map(|obj| {
             obj.iter()
                 .map(|(k, v)| {
@@ -151,7 +148,7 @@ impl MCPTool {
             }
         };
 
-        call_tool_result_to_agent_value(tool_result)
+        call_tool_result_to_value(tool_result)
     }
 
     /// Performs a single tool call on the given pooled connection.
@@ -163,10 +160,10 @@ impl MCPTool {
         &self,
         entry: &PoolEntry,
         arguments: Option<serde_json::Map<String, serde_json::Value>>,
-    ) -> Result<CallToolResult, AgentError> {
+    ) -> Result<CallToolResult> {
         let connection = entry.conn.lock().await;
         let service = connection.service.as_ref().ok_or_else(|| {
-            AgentError::Other(format!(
+            Error::Other(format!(
                 "MCP service for '{}' is not available (tool '{}')",
                 self.server_name, self.info.name
             ))
@@ -175,9 +172,10 @@ impl MCPTool {
         if let Some(arguments) = arguments {
             params = params.with_arguments(arguments);
         }
-        service.call_tool(params).await.map_err(|e| {
-            AgentError::Other(format!("Failed to call MCP tool '{}': {e}", self.info.name))
-        })
+        service
+            .call_tool(params)
+            .await
+            .map_err(|e| Error::Other(format!("Failed to call MCP tool '{}': {e}", self.info.name)))
     }
 }
 
@@ -187,7 +185,7 @@ impl Tool for MCPTool {
         &self.info
     }
 
-    async fn call(&self, ctx: AgentContext, args: AgentValue) -> Result<AgentValue, AgentError> {
+    async fn call(&self, ctx: ModuleContext, args: Value) -> Result<Value> {
         self.tool_call(ctx, args).await
     }
 }
@@ -306,7 +304,7 @@ impl MCPConnectionPool {
         &mut self,
         server_name: &str,
         config: &MCPServerConfig,
-    ) -> Result<PoolEntry, AgentError> {
+    ) -> Result<PoolEntry> {
         if let Some(entry) = self.connections.get(server_name) {
             // try_lock only: a busy connection has an in-flight call, which
             // implies its service is still present, so treat it as live
@@ -352,7 +350,7 @@ impl MCPConnectionPool {
                 }))
                 .map_err(|e| {
                     log::error!("Failed to start MCP process for '{}': {}", server_name, e);
-                    AgentError::Other(format!(
+                    Error::Other(format!(
                         "Failed to start MCP process for '{}': {e}",
                         server_name
                     ))
@@ -368,13 +366,13 @@ impl MCPConnectionPool {
                     for (name, value) in headers {
                         let header_name =
                             http::HeaderName::from_bytes(name.as_bytes()).map_err(|e| {
-                                AgentError::Other(format!(
+                                Error::Other(format!(
                                     "Invalid header name '{}' for MCP server '{}': {e}",
                                     name, server_name
                                 ))
                             })?;
                         let header_value = http::HeaderValue::from_str(value).map_err(|e| {
-                            AgentError::Other(format!(
+                            Error::Other(format!(
                                 "Invalid value for header '{}' of MCP server '{}': {e}",
                                 name, server_name
                             ))
@@ -388,7 +386,7 @@ impl MCPConnectionPool {
             }
             #[cfg(not(feature = "mcp-http-client"))]
             MCPServerConfig::Http { .. } => {
-                return Err(AgentError::Other(format!(
+                return Err(Error::Other(format!(
                     "MCP server '{}' is configured with a URL, but this build lacks \
                      the mcp-http-client feature",
                     server_name
@@ -397,7 +395,7 @@ impl MCPConnectionPool {
         };
         let service = service.map_err(|e| {
             log::error!("Failed to start MCP service for '{}': {}", server_name, e);
-            AgentError::Other(format!(
+            Error::Other(format!(
                 "Failed to start MCP service for '{}': {e}",
                 server_name
             ))
@@ -492,7 +490,7 @@ fn connection_pool() -> &'static AsyncMutex<MCPConnectionPool> {
 ///     shutdown_all_mcp_connections().await.expect("Failed to shutdown MCP");
 /// }
 /// ```
-pub async fn shutdown_all_mcp_connections() -> Result<(), AgentError> {
+pub async fn shutdown_all_mcp_connections() -> Result<()> {
     log::info!("Shutting down all MCP server connections");
     let entries = { connection_pool().lock().await.take_all() };
     for (name, entry) in entries {
@@ -541,7 +539,7 @@ pub async fn shutdown_all_mcp_connections() -> Result<(), AgentError> {
 async fn register_tools_from_server(
     server_name: String,
     server_config: MCPServerConfig,
-) -> Result<Vec<String>, AgentError> {
+) -> Result<Vec<String>> {
     log::debug!("Registering tools from MCP server '{}'", server_name);
 
     // Get or create connection from pool
@@ -558,14 +556,14 @@ async fn register_tools_from_server(
         let connection = entry.conn.lock().await;
         let service = connection.service.as_ref().ok_or_else(|| {
             log::error!("MCP service for '{}' is not available", server_name);
-            AgentError::Other(format!(
+            Error::Other(format!(
                 "MCP service for '{}' is not available",
                 server_name
             ))
         })?;
         service.list_all_tools().await.map_err(|e| {
             log::error!("Failed to list MCP tools for '{}': {}", server_name, e);
-            AgentError::Other(format!(
+            Error::Other(format!(
                 "Failed to list MCP tools for '{}': {e}",
                 server_name
             ))
@@ -616,22 +614,20 @@ async fn register_tools_from_server(
 ///     Ok(())
 /// }
 /// ```
-pub async fn register_tools_from_mcp_json<P: AsRef<Path>>(
-    json_path: P,
-) -> Result<Vec<String>, AgentError> {
+pub async fn register_tools_from_mcp_json<P: AsRef<Path>>(json_path: P) -> Result<Vec<String>> {
     let path = json_path.as_ref();
     log::info!("Loading MCP configuration from: {}", path.display());
 
     // Read the JSON file
     let json_content = std::fs::read_to_string(path).map_err(|e| {
         log::error!("Failed to read MCP config file '{}': {}", path.display(), e);
-        AgentError::Other(format!("Failed to read MCP config file: {e}"))
+        Error::Other(format!("Failed to read MCP config file: {e}"))
     })?;
 
     // Parse the JSON
     let config: MCPConfig = serde_json::from_str(&json_content).map_err(|e| {
         log::error!("Failed to parse MCP config JSON: {}", e);
-        AgentError::Other(format!("Failed to parse MCP config JSON: {e}"))
+        Error::Other(format!("Failed to parse MCP config JSON: {e}"))
     })?;
 
     log::info!("Found {} MCP servers in config", config.mcp_servers.len());
@@ -652,35 +648,35 @@ pub async fn register_tools_from_mcp_json<P: AsRef<Path>>(
     Ok(registered_tool_names)
 }
 
-/// Converts an MCP tool call result to an AgentValue.
+/// Converts an MCP tool call result to an Value.
 ///
 /// Prefers the structured payload (`structuredContent`) when the server
 /// provides one; otherwise extracts text content from the result and returns
-/// it as an array. If the result indicates an error, returns an AgentError
+/// it as an array. If the result indicates an error, returns an Error
 /// instead, built the same way.
-fn call_tool_result_to_agent_value(result: CallToolResult) -> Result<AgentValue, AgentError> {
+fn call_tool_result_to_value(result: CallToolResult) -> Result<Value> {
     if result.is_error == Some(true) {
         let message = match &result.structured_content {
             Some(v) => v.to_string(),
             None => serde_json::to_string(&text_contents(&result))
-                .map_err(|e| AgentError::InvalidValue(e.to_string()))?,
+                .map_err(|e| Error::InvalidValue(e.to_string()))?,
         };
-        return Err(AgentError::Other(message));
+        return Err(Error::Other(message));
     }
     if let Some(v) = result.structured_content {
-        return AgentValue::from_json(v);
+        return Value::from_json(v);
     }
     Ok(text_contents(&result))
 }
 
-/// Collects the text blocks of a tool result into an AgentValue array.
-fn text_contents(result: &CallToolResult) -> AgentValue {
-    let contents: Vec<AgentValue> = result
+/// Collects the text blocks of a tool result into an Value array.
+fn text_contents(result: &CallToolResult) -> Value {
+    let contents: Vec<Value> = result
         .content
         .iter()
-        .filter_map(|c| c.as_text().map(|t| AgentValue::string(t.text.clone())))
+        .filter_map(|c| c.as_text().map(|t| Value::string(t.text.clone())))
         .collect();
-    AgentValue::array(contents.into())
+    Value::array(contents.into())
 }
 
 #[cfg(test)]
@@ -759,9 +755,9 @@ mod tests {
         // CallToolResult::structured adds a text fallback alongside
         // structuredContent; the structured payload must win over it.
         let result = CallToolResult::structured(json!({"a": 1}));
-        let value = call_tool_result_to_agent_value(result).unwrap();
+        let value = call_tool_result_to_value(result).unwrap();
         let obj = value.as_object().unwrap();
-        assert_eq!(obj.get("a"), Some(&AgentValue::integer(1)));
+        assert_eq!(obj.get("a"), Some(&Value::integer(1)));
     }
 
     #[test]
@@ -770,30 +766,28 @@ mod tests {
             ContentBlock::text("hello"),
             ContentBlock::text("world"),
         ]);
-        let value = call_tool_result_to_agent_value(result).unwrap();
-        let expected = AgentValue::array(
-            vec![AgentValue::string("hello"), AgentValue::string("world")].into(),
-        );
+        let value = call_tool_result_to_value(result).unwrap();
+        let expected = Value::array(vec![Value::string("hello"), Value::string("world")].into());
         assert_eq!(value, expected);
     }
 
     #[test]
     fn call_result_error_prefers_structured_content() {
         let result = CallToolResult::structured_error(json!({"reason": "bad input"}));
-        let err = call_tool_result_to_agent_value(result).unwrap_err();
+        let err = call_tool_result_to_value(result).unwrap_err();
         match err {
-            AgentError::Other(message) => assert_eq!(message, r#"{"reason":"bad input"}"#),
-            other => panic!("expected AgentError::Other, got {:?}", other),
+            Error::Other(message) => assert_eq!(message, r#"{"reason":"bad input"}"#),
+            other => panic!("expected Error::Other, got {:?}", other),
         }
     }
 
     #[test]
     fn call_result_error_without_structured_content_serializes_text() {
         let result = CallToolResult::error(vec![ContentBlock::text("boom")]);
-        let err = call_tool_result_to_agent_value(result).unwrap_err();
+        let err = call_tool_result_to_value(result).unwrap_err();
         match err {
-            AgentError::Other(message) => assert_eq!(message, r#"["boom"]"#),
-            other => panic!("expected AgentError::Other, got {:?}", other),
+            Error::Other(message) => assert_eq!(message, r#"["boom"]"#),
+            other => panic!("expected Error::Other, got {:?}", other),
         }
     }
 

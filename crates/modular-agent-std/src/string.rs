@@ -1,8 +1,8 @@
 use handlebars::Handlebars;
 use im::vector;
 use modular_agent_core::{
-    Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
-    ModularAgent, async_trait, modular_agent,
+    AsModule, Error, ModularAgent, Module, ModuleContext, ModuleData, ModuleOutput, ModuleSpec,
+    Result, Value, async_trait, modular_agent,
 };
 use regex::Regex;
 
@@ -30,24 +30,19 @@ const CONFIG_TEMPLATE: &str = "template";
     outputs = [PORT_T, PORT_F],
     hint(color=5),
 )]
-struct IsStringAgent {
-    data: AgentData,
+struct IsStringModule {
+    data: ModuleData,
 }
 
 #[async_trait]
-impl AsAgent for IsStringAgent {
-    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+impl AsModule for IsStringModule {
+    fn new(ma: ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
         Ok(Self {
-            data: AgentData::new(ma, id, spec),
+            data: ModuleData::new(ma, id, spec),
         })
     }
 
-    async fn process(
-        &mut self,
-        ctx: AgentContext,
-        _port: String,
-        value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, ctx: ModuleContext, _port: String, value: Value) -> Result<()> {
         if value.is_string() {
             self.output(ctx, PORT_T, value).await
         } else {
@@ -64,24 +59,19 @@ impl AsAgent for IsStringAgent {
     outputs = [PORT_T, PORT_F],
     hint(color=5),
 )]
-struct IsEmptyStringAgent {
-    data: AgentData,
+struct IsEmptyStringModule {
+    data: ModuleData,
 }
 
 #[async_trait]
-impl AsAgent for IsEmptyStringAgent {
-    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+impl AsModule for IsEmptyStringModule {
+    fn new(ma: ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
         Ok(Self {
-            data: AgentData::new(ma, id, spec),
+            data: ModuleData::new(ma, id, spec),
         })
     }
 
-    async fn process(
-        &mut self,
-        ctx: AgentContext,
-        _port: String,
-        value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, ctx: ModuleContext, _port: String, value: Value) -> Result<()> {
         let is_empty = if let Some(s) = value.as_str() {
             s.is_empty()
         } else {
@@ -95,7 +85,7 @@ impl AsAgent for IsEmptyStringAgent {
     }
 }
 
-/// The `StringJoinAgent` is responsible for joining an array of strings into a single string
+/// The `StringJoinModule` is responsible for joining an array of strings into a single string
 /// using a specified separator. It processes input value, applies transformations to handle
 /// escape sequences (e.g., `\n`, `\t`), and outputs the resulting string.
 ///
@@ -118,24 +108,19 @@ impl AsAgent for IsEmptyStringAgent {
     string_config(name = CONFIG_SEP, default = "\\n"),
     hint(color=5),
 )]
-struct StringJoinAgent {
-    data: AgentData,
+struct StringJoinModule {
+    data: ModuleData,
 }
 
 #[async_trait]
-impl AsAgent for StringJoinAgent {
-    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+impl AsModule for StringJoinModule {
+    fn new(ma: ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
         Ok(Self {
-            data: AgentData::new(ma, id, spec),
+            data: ModuleData::new(ma, id, spec),
         })
     }
 
-    async fn process(
-        &mut self,
-        ctx: AgentContext,
-        _port: String,
-        value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, ctx: ModuleContext, _port: String, value: Value) -> Result<()> {
         let config = self.configs()?;
 
         let sep = config.get_string_or_default(CONFIG_SEP);
@@ -144,7 +129,7 @@ impl AsAgent for StringJoinAgent {
             let mut out = Vec::new();
             for v in value
                 .as_array()
-                .ok_or_else(|| AgentError::InvalidArrayValue("Expected array".into()))?
+                .ok_or_else(|| Error::InvalidArrayValue("Expected array".into()))?
             {
                 out.push(v.as_str().unwrap_or_default());
             }
@@ -153,7 +138,7 @@ impl AsAgent for StringJoinAgent {
             out = out.replace("\\t", "\t");
             out = out.replace("\\r", "\r");
             out = out.replace("\\\\", "\\");
-            let out_value = AgentValue::string(out);
+            let out_value = Value::string(out);
             self.output(ctx, PORT_STRING, out_value).await
         } else {
             self.output(ctx, PORT_STRING, value).await
@@ -170,44 +155,35 @@ impl AsAgent for StringJoinAgent {
     integer_config(name = CONFIG_OVERLAP, default = 1024),
     hint(color=5),
 )]
-struct StringLengthSplitAgent {
-    data: AgentData,
+struct StringLengthSplitModule {
+    data: ModuleData,
 }
 
 #[async_trait]
-impl AsAgent for StringLengthSplitAgent {
-    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+impl AsModule for StringLengthSplitModule {
+    fn new(ma: ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
         Ok(Self {
-            data: AgentData::new(ma, id, spec),
+            data: ModuleData::new(ma, id, spec),
         })
     }
 
-    async fn process(
-        &mut self,
-        ctx: AgentContext,
-        _port: String,
-        value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, ctx: ModuleContext, _port: String, value: Value) -> Result<()> {
         let config = self.configs()?;
 
         let n = config.get_integer_or_default(CONFIG_LEN);
         if n <= 0 {
-            return Err(AgentError::InvalidConfig(
-                "len must be greater than 0".into(),
-            ));
+            return Err(Error::InvalidConfig("len must be greater than 0".into()));
         }
         let n = n as usize;
 
         let overlap = config.get_integer_or_default(CONFIG_OVERLAP) as usize;
         if overlap >= n {
-            return Err(AgentError::InvalidConfig(
-                "overlap must be less than len".into(),
-            ));
+            return Err(Error::InvalidConfig("overlap must be less than len".into()));
         }
 
         let s = value
             .as_str()
-            .ok_or_else(|| AgentError::InvalidValue("Input value must be a string".into()))?;
+            .ok_or_else(|| Error::InvalidValue("Input value must be a string".into()))?;
 
         let mut out = Vec::new();
         let mut start = 0;
@@ -221,7 +197,7 @@ impl AsAgent for StringLengthSplitAgent {
                 end = start + s[start..].chars().next().map(|c| c.len_utf8()).unwrap_or(1);
             }
 
-            out.push(AgentValue::string(s[start..end].to_string()));
+            out.push(Value::string(s[start..end].to_string()));
 
             if end == len {
                 break;
@@ -233,12 +209,12 @@ impl AsAgent for StringLengthSplitAgent {
             }
             start = next_start;
         }
-        self.output(ctx, PORT_STRINGS, AgentValue::array(out.into()))
+        self.output(ctx, PORT_STRINGS, Value::array(out.into()))
             .await
     }
 }
 
-// Template String Agent
+// Template String Module
 #[modular_agent(
     title = "Template String",
     category = CATEGORY,
@@ -247,29 +223,24 @@ impl AsAgent for StringLengthSplitAgent {
     string_config(name = CONFIG_TEMPLATE, default = "{{value}}"),
     hint(color=5),
 )]
-struct TemplateStringAgent {
-    data: AgentData,
+struct TemplateStringModule {
+    data: ModuleData,
 }
 
 #[async_trait]
-impl AsAgent for TemplateStringAgent {
-    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+impl AsModule for TemplateStringModule {
+    fn new(ma: ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
         Ok(Self {
-            data: AgentData::new(ma, id, spec),
+            data: ModuleData::new(ma, id, spec),
         })
     }
 
-    async fn process(
-        &mut self,
-        ctx: AgentContext,
-        _port: String,
-        value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, ctx: ModuleContext, _port: String, value: Value) -> Result<()> {
         let config = self.configs()?;
 
         let template = config.get_string_or_default(CONFIG_TEMPLATE);
         if template.is_empty() {
-            return Err(AgentError::InvalidConfig("template is not set".into()));
+            return Err(Error::InvalidConfig("template is not set".into()));
         }
 
         let reg = handlebars_new();
@@ -278,28 +249,28 @@ impl AsAgent for TemplateStringAgent {
             let mut out_arr = Vec::new();
             for v in value
                 .as_array()
-                .ok_or_else(|| AgentError::InvalidArrayValue("Expected array".into()))?
+                .ok_or_else(|| Error::InvalidArrayValue("Expected array".into()))?
             {
                 let data = template_data(v);
                 let rendered_string = reg.render_template(&template, &data).map_err(|e| {
-                    AgentError::InvalidValue(format!("Failed to render template: {}", e))
+                    Error::InvalidValue(format!("Failed to render template: {}", e))
                 })?;
                 out_arr.push(rendered_string.into());
             }
-            self.output(ctx, PORT_STRING, AgentValue::array(out_arr.into()))
+            self.output(ctx, PORT_STRING, Value::array(out_arr.into()))
                 .await
         } else {
             let data = template_data(&value);
-            let rendered_string = reg.render_template(&template, &data).map_err(|e| {
-                AgentError::InvalidValue(format!("Failed to render template: {}", e))
-            })?;
-            let out_value = AgentValue::string(rendered_string);
+            let rendered_string = reg
+                .render_template(&template, &data)
+                .map_err(|e| Error::InvalidValue(format!("Failed to render template: {}", e)))?;
+            let out_value = Value::string(rendered_string);
             self.output(ctx, PORT_STRING, out_value).await
         }
     }
 }
 
-// Template Text Agent
+// Template Text Module
 #[modular_agent(
     title = "Template Text",
     category = CATEGORY,
@@ -308,29 +279,24 @@ impl AsAgent for TemplateStringAgent {
     text_config(name = CONFIG_TEMPLATE, default = "{{value}}"),
     hint(color=5),
 )]
-struct TemplateTextAgent {
-    data: AgentData,
+struct TemplateTextModule {
+    data: ModuleData,
 }
 
 #[async_trait]
-impl AsAgent for TemplateTextAgent {
-    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+impl AsModule for TemplateTextModule {
+    fn new(ma: ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
         Ok(Self {
-            data: AgentData::new(ma, id, spec),
+            data: ModuleData::new(ma, id, spec),
         })
     }
 
-    async fn process(
-        &mut self,
-        ctx: AgentContext,
-        _port: String,
-        value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, ctx: ModuleContext, _port: String, value: Value) -> Result<()> {
         let config = self.configs()?;
 
         let template = config.get_string_or_default(CONFIG_TEMPLATE);
         if template.is_empty() {
-            return Err(AgentError::InvalidConfig("template is not set".into()));
+            return Err(Error::InvalidConfig("template is not set".into()));
         }
 
         let reg = handlebars_new();
@@ -339,28 +305,28 @@ impl AsAgent for TemplateTextAgent {
             let mut out_arr = Vec::new();
             for v in value
                 .as_array()
-                .ok_or_else(|| AgentError::InvalidArrayValue("Expected array".into()))?
+                .ok_or_else(|| Error::InvalidArrayValue("Expected array".into()))?
             {
                 let data = template_data(v);
                 let rendered_string = reg.render_template(&template, &data).map_err(|e| {
-                    AgentError::InvalidValue(format!("Failed to render template: {}", e))
+                    Error::InvalidValue(format!("Failed to render template: {}", e))
                 })?;
                 out_arr.push(rendered_string.into());
             }
-            self.output(ctx, PORT_STRING, AgentValue::array(out_arr.into()))
+            self.output(ctx, PORT_STRING, Value::array(out_arr.into()))
                 .await
         } else {
             let data = template_data(&value);
-            let rendered_string = reg.render_template(&template, &data).map_err(|e| {
-                AgentError::InvalidValue(format!("Failed to render template: {}", e))
-            })?;
-            let out_value = AgentValue::string(rendered_string);
+            let rendered_string = reg
+                .render_template(&template, &data)
+                .map_err(|e| Error::InvalidValue(format!("Failed to render template: {}", e)))?;
+            let out_value = Value::string(rendered_string);
             self.output(ctx, PORT_STRING, out_value).await
         }
     }
 }
 
-// Template Array Agent
+// Template Array Module
 #[modular_agent(
     title = "Template Array",
     category = CATEGORY,
@@ -369,45 +335,40 @@ impl AsAgent for TemplateTextAgent {
     text_config(name = CONFIG_TEMPLATE, default = "{{value}}"),
     hint(color=5),
 )]
-struct TemplateArrayAgent {
-    data: AgentData,
+struct TemplateArrayModule {
+    data: ModuleData,
 }
 
 #[async_trait]
-impl AsAgent for TemplateArrayAgent {
-    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+impl AsModule for TemplateArrayModule {
+    fn new(ma: ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
         Ok(Self {
-            data: AgentData::new(ma, id, spec),
+            data: ModuleData::new(ma, id, spec),
         })
     }
 
-    async fn process(
-        &mut self,
-        ctx: AgentContext,
-        _port: String,
-        value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, ctx: ModuleContext, _port: String, value: Value) -> Result<()> {
         let config = self.configs()?;
 
         let template = config.get_string_or_default(CONFIG_TEMPLATE);
         if template.is_empty() {
-            return Err(AgentError::InvalidConfig("template is not set".into()));
+            return Err(Error::InvalidConfig("template is not set".into()));
         }
 
         let reg = handlebars_new();
 
         if value.is_array() {
-            let rendered_string = reg.render_template(&template, &value).map_err(|e| {
-                AgentError::InvalidValue(format!("Failed to render template: {}", e))
-            })?;
-            self.output(ctx, PORT_STRING, AgentValue::string(rendered_string))
+            let rendered_string = reg
+                .render_template(&template, &value)
+                .map_err(|e| Error::InvalidValue(format!("Failed to render template: {}", e)))?;
+            self.output(ctx, PORT_STRING, Value::string(rendered_string))
                 .await
         } else {
-            let d = AgentValue::array(vector![value.clone()]);
-            let rendered_string = reg.render_template(&template, &d).map_err(|e| {
-                AgentError::InvalidValue(format!("Failed to render template: {}", e))
-            })?;
-            let out_value = AgentValue::string(rendered_string);
+            let d = Value::array(vector![value.clone()]);
+            let rendered_string = reg
+                .render_template(&template, &d)
+                .map_err(|e| Error::InvalidValue(format!("Failed to render template: {}", e)))?;
+            let out_value = Value::string(rendered_string);
             self.output(ctx, PORT_STRING, out_value).await
         }
     }
@@ -440,27 +401,27 @@ impl AsAgent for TemplateArrayAgent {
     string_config(name = CONFIG_REGEX),
     hint(color=5),
 )]
-struct RegexMatchAgent {
-    data: AgentData,
+struct RegexMatchModule {
+    data: ModuleData,
     regex: Option<Regex>,
 }
 
 #[async_trait]
-impl AsAgent for RegexMatchAgent {
-    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+impl AsModule for RegexMatchModule {
+    fn new(ma: ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
         // Keep an invalid regex from blocking the load of a patch; it is reported
         // on the first process() call instead.
         let regex = load_regex_config(&spec).unwrap_or(None);
         Ok(Self {
-            data: AgentData::new(ma, id, spec),
+            data: ModuleData::new(ma, id, spec),
             regex,
         })
     }
 
-    fn configs_changed(&mut self) -> Result<(), AgentError> {
+    fn configs_changed(&mut self) -> Result<()> {
         // The config value is already committed when this is called, so the previous
         // regex must be dropped even when the new one fails to compile. Otherwise the
-        // agent would keep matching by a pattern the config no longer holds.
+        // module would keep matching by a pattern the config no longer holds.
         match load_regex_config(&self.data.spec) {
             Ok(regex) => {
                 self.regex = regex;
@@ -473,24 +434,19 @@ impl AsAgent for RegexMatchAgent {
         }
     }
 
-    async fn process(
-        &mut self,
-        ctx: AgentContext,
-        _port: String,
-        value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, ctx: ModuleContext, _port: String, value: Value) -> Result<()> {
         let Some(re) = self.regex.as_ref() else {
-            return Err(AgentError::InvalidConfig(
+            return Err(Error::InvalidConfig(
                 "config regex must be a valid regular expression".into(),
             ));
         };
         let s = value
             .as_str()
-            .ok_or_else(|| AgentError::InvalidValue("Input value must be a string".into()))?;
+            .ok_or_else(|| Error::InvalidValue("Input value must be a string".into()))?;
         let matched = re.find(s).map(|m| m.as_str().to_string());
         match matched {
-            Some(m) => self.output(ctx, PORT_STRING, AgentValue::string(m)).await,
-            None => self.output(ctx, PORT_UNMATCHED, AgentValue::unit()).await,
+            Some(m) => self.output(ctx, PORT_STRING, Value::string(m)).await,
+            None => self.output(ctx, PORT_UNMATCHED, Value::unit()).await,
         }
     }
 }
@@ -522,27 +478,27 @@ impl AsAgent for RegexMatchAgent {
     string_config(name = CONFIG_REGEX),
     hint(color=5),
 )]
-struct RegexMatchAllAgent {
-    data: AgentData,
+struct RegexMatchAllModule {
+    data: ModuleData,
     regex: Option<Regex>,
 }
 
 #[async_trait]
-impl AsAgent for RegexMatchAllAgent {
-    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+impl AsModule for RegexMatchAllModule {
+    fn new(ma: ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
         // Keep an invalid regex from blocking the load of a patch; it is reported
         // on the first process() call instead.
         let regex = load_regex_config(&spec).unwrap_or(None);
         Ok(Self {
-            data: AgentData::new(ma, id, spec),
+            data: ModuleData::new(ma, id, spec),
             regex,
         })
     }
 
-    fn configs_changed(&mut self) -> Result<(), AgentError> {
+    fn configs_changed(&mut self) -> Result<()> {
         // The config value is already committed when this is called, so the previous
         // regex must be dropped even when the new one fails to compile. Otherwise the
-        // agent would keep matching by a pattern the config no longer holds.
+        // module would keep matching by a pattern the config no longer holds.
         match load_regex_config(&self.data.spec) {
             Ok(regex) => {
                 self.regex = regex;
@@ -555,28 +511,23 @@ impl AsAgent for RegexMatchAllAgent {
         }
     }
 
-    async fn process(
-        &mut self,
-        ctx: AgentContext,
-        _port: String,
-        value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, ctx: ModuleContext, _port: String, value: Value) -> Result<()> {
         let Some(re) = self.regex.as_ref() else {
-            return Err(AgentError::InvalidConfig(
+            return Err(Error::InvalidConfig(
                 "config regex must be a valid regular expression".into(),
             ));
         };
         let s = value
             .as_str()
-            .ok_or_else(|| AgentError::InvalidValue("Input value must be a string".into()))?;
-        let matches: Vec<AgentValue> = re
+            .ok_or_else(|| Error::InvalidValue("Input value must be a string".into()))?;
+        let matches: Vec<Value> = re
             .find_iter(s)
-            .map(|m| AgentValue::string(m.as_str().to_string()))
+            .map(|m| Value::string(m.as_str().to_string()))
             .collect();
         if matches.is_empty() {
-            self.output(ctx, PORT_UNMATCHED, AgentValue::unit()).await
+            self.output(ctx, PORT_UNMATCHED, Value::unit()).await
         } else {
-            self.output(ctx, PORT_STRINGS, AgentValue::array(matches.into()))
+            self.output(ctx, PORT_STRINGS, Value::array(matches.into()))
                 .await
         }
     }
@@ -612,27 +563,27 @@ impl AsAgent for RegexMatchAllAgent {
     string_config(name = CONFIG_REPLACEMENT, default = ""),
     hint(color=5),
 )]
-struct RegexReplaceAgent {
-    data: AgentData,
+struct RegexReplaceModule {
+    data: ModuleData,
     regex: Option<Regex>,
 }
 
 #[async_trait]
-impl AsAgent for RegexReplaceAgent {
-    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+impl AsModule for RegexReplaceModule {
+    fn new(ma: ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
         // Keep an invalid regex from blocking the load of a patch; it is reported
         // on the first process() call instead.
         let regex = load_regex_config(&spec).unwrap_or(None);
         Ok(Self {
-            data: AgentData::new(ma, id, spec),
+            data: ModuleData::new(ma, id, spec),
             regex,
         })
     }
 
-    fn configs_changed(&mut self) -> Result<(), AgentError> {
+    fn configs_changed(&mut self) -> Result<()> {
         // The config value is already committed when this is called, so the previous
         // regex must be dropped even when the new one fails to compile. Otherwise the
-        // agent would keep matching by a pattern the config no longer holds.
+        // module would keep matching by a pattern the config no longer holds.
         match load_regex_config(&self.data.spec) {
             Ok(regex) => {
                 self.regex = regex;
@@ -645,23 +596,18 @@ impl AsAgent for RegexReplaceAgent {
         }
     }
 
-    async fn process(
-        &mut self,
-        ctx: AgentContext,
-        _port: String,
-        value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, ctx: ModuleContext, _port: String, value: Value) -> Result<()> {
         let Some(re) = self.regex.as_ref() else {
-            return Err(AgentError::InvalidConfig(
+            return Err(Error::InvalidConfig(
                 "config regex must be a valid regular expression".into(),
             ));
         };
         let replacement = self.configs()?.get_string_or_default(CONFIG_REPLACEMENT);
         let s = value
             .as_str()
-            .ok_or_else(|| AgentError::InvalidValue("Input value must be a string".into()))?;
+            .ok_or_else(|| Error::InvalidValue("Input value must be a string".into()))?;
         let out = re.replace(s, replacement.as_str()).into_owned();
-        self.output(ctx, PORT_STRING, AgentValue::string(out)).await
+        self.output(ctx, PORT_STRING, Value::string(out)).await
     }
 }
 
@@ -693,27 +639,27 @@ impl AsAgent for RegexReplaceAgent {
     string_config(name = CONFIG_REPLACEMENT, default = ""),
     hint(color=5),
 )]
-struct RegexReplaceAllAgent {
-    data: AgentData,
+struct RegexReplaceAllModule {
+    data: ModuleData,
     regex: Option<Regex>,
 }
 
 #[async_trait]
-impl AsAgent for RegexReplaceAllAgent {
-    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+impl AsModule for RegexReplaceAllModule {
+    fn new(ma: ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
         // Keep an invalid regex from blocking the load of a patch; it is reported
         // on the first process() call instead.
         let regex = load_regex_config(&spec).unwrap_or(None);
         Ok(Self {
-            data: AgentData::new(ma, id, spec),
+            data: ModuleData::new(ma, id, spec),
             regex,
         })
     }
 
-    fn configs_changed(&mut self) -> Result<(), AgentError> {
+    fn configs_changed(&mut self) -> Result<()> {
         // The config value is already committed when this is called, so the previous
         // regex must be dropped even when the new one fails to compile. Otherwise the
-        // agent would keep matching by a pattern the config no longer holds.
+        // module would keep matching by a pattern the config no longer holds.
         match load_regex_config(&self.data.spec) {
             Ok(regex) => {
                 self.regex = regex;
@@ -726,27 +672,22 @@ impl AsAgent for RegexReplaceAllAgent {
         }
     }
 
-    async fn process(
-        &mut self,
-        ctx: AgentContext,
-        _port: String,
-        value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, ctx: ModuleContext, _port: String, value: Value) -> Result<()> {
         let Some(re) = self.regex.as_ref() else {
-            return Err(AgentError::InvalidConfig(
+            return Err(Error::InvalidConfig(
                 "config regex must be a valid regular expression".into(),
             ));
         };
         let replacement = self.configs()?.get_string_or_default(CONFIG_REPLACEMENT);
         let s = value
             .as_str()
-            .ok_or_else(|| AgentError::InvalidValue("Input value must be a string".into()))?;
+            .ok_or_else(|| Error::InvalidValue("Input value must be a string".into()))?;
         let out = re.replace_all(s, replacement.as_str()).into_owned();
-        self.output(ctx, PORT_STRING, AgentValue::string(out)).await
+        self.output(ctx, PORT_STRING, Value::string(out)).await
     }
 }
 
-fn load_regex_config(spec: &AgentSpec) -> Result<Option<Regex>, AgentError> {
+fn load_regex_config(spec: &ModuleSpec) -> Result<Option<Regex>> {
     let src = spec
         .configs
         .as_ref()
@@ -756,14 +697,14 @@ fn load_regex_config(spec: &AgentSpec) -> Result<Option<Regex>, AgentError> {
         return Ok(None);
     }
     let re = Regex::new(&src)
-        .map_err(|e| AgentError::InvalidConfig(format!("Invalid regex `{}`: {}", src, e)))?;
+        .map_err(|e| Error::InvalidConfig(format!("Invalid regex `{}`: {}", src, e)))?;
     Ok(Some(re))
 }
 
 /// Build the template root: an object's entries are exposed at the top level so
 /// `{{color}}` works, and `value` always holds the whole input (winning on collision)
 /// so `{{value}}` / `{{value.color}}` keep their meaning.
-fn template_data(value: &AgentValue) -> serde_json::Value {
+fn template_data(value: &Value) -> serde_json::Value {
     let v = serde_json::to_value(value).unwrap_or(serde_json::Value::Null);
     let mut map = match &v {
         serde_json::Value::Object(obj) => obj.clone(),
@@ -825,7 +766,7 @@ mod tests {
 
     #[test]
     fn test_template_data_object_spreads_entries() {
-        let value = AgentValue::from_json(json!({"color": "blue", "count": 3})).unwrap();
+        let value = Value::from_json(json!({"color": "blue", "count": 3})).unwrap();
         let data = template_data(&value);
         assert_eq!(data["color"], json!("blue"));
         assert_eq!(data["count"], json!(3));
@@ -834,7 +775,7 @@ mod tests {
 
     #[test]
     fn test_template_data_value_key_wins_on_collision() {
-        let value = AgentValue::from_json(json!({"value": "inner", "x": 1})).unwrap();
+        let value = Value::from_json(json!({"value": "inner", "x": 1})).unwrap();
         let data = template_data(&value);
         assert_eq!(data["x"], json!(1));
         assert_eq!(data["value"], json!({"value": "inner", "x": 1}));
@@ -842,10 +783,10 @@ mod tests {
 
     #[test]
     fn test_template_data_non_object() {
-        let data = template_data(&AgentValue::string("hello"));
+        let data = template_data(&Value::string("hello"));
         assert_eq!(data, json!({"value": "hello"}));
 
-        let data = template_data(&AgentValue::integer(42));
+        let data = template_data(&Value::integer(42));
         assert_eq!(data, json!({"value": 42}));
     }
 }

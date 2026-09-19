@@ -1,4 +1,5 @@
-use modular_agent_core::AgentError;
+use modular_agent_core::Error;
+use modular_agent_core::Result;
 
 // Global config keys
 pub(crate) const CONFIG_CLAUDE_API_KEY: &str = "claude_api_key";
@@ -56,25 +57,23 @@ impl ModelIdentifier {
     /// - `"ollama/llama3.2:1b"` → (Ollama, "llama3.2:1b")
     /// - `"openai/gpt-5"` → (OpenAI, "gpt-5")
     /// - `"openai/qwen/qwen3-vl-8b"` → (OpenAI, "qwen/qwen3-vl-8b")
-    pub fn parse(model_str: &str) -> Result<Self, AgentError> {
+    pub fn parse(model_str: &str) -> Result<Self> {
         let model_str = model_str.trim();
 
         if model_str.is_empty() {
-            return Err(AgentError::InvalidConfig(
-                "Model name cannot be empty".into(),
-            ));
+            return Err(Error::InvalidConfig("Model name cannot be empty".into()));
         }
 
         // Ollama prefix
         if let Some(model_name) = model_str.strip_prefix("ollama/") {
             if model_name.is_empty() {
-                return Err(AgentError::InvalidConfig(
+                return Err(Error::InvalidConfig(
                     "Model name after 'ollama/' prefix cannot be empty".into(),
                 ));
             }
 
             #[cfg(not(feature = "ollama"))]
-            return Err(AgentError::InvalidConfig(
+            return Err(Error::InvalidConfig(
                 "Ollama provider not available. Enable 'ollama' feature.".into(),
             ));
 
@@ -88,13 +87,13 @@ impl ModelIdentifier {
         // OpenAI prefix
         if let Some(model_name) = model_str.strip_prefix("openai/") {
             if model_name.is_empty() {
-                return Err(AgentError::InvalidConfig(
+                return Err(Error::InvalidConfig(
                     "Model name after 'openai/' prefix cannot be empty".into(),
                 ));
             }
 
             #[cfg(not(feature = "openai"))]
-            return Err(AgentError::InvalidConfig(
+            return Err(Error::InvalidConfig(
                 "OpenAI provider not available. Enable 'openai' feature.".into(),
             ));
 
@@ -108,13 +107,13 @@ impl ModelIdentifier {
         // Claude prefix
         if let Some(model_name) = model_str.strip_prefix("claude/") {
             if model_name.is_empty() {
-                return Err(AgentError::InvalidConfig(
+                return Err(Error::InvalidConfig(
                     "Model name after 'claude/' prefix cannot be empty".into(),
                 ));
             }
 
             #[cfg(not(feature = "claude"))]
-            return Err(AgentError::InvalidConfig(
+            return Err(Error::InvalidConfig(
                 "Claude provider not available. Enable 'claude' feature.".into(),
             ));
 
@@ -128,14 +127,14 @@ impl ModelIdentifier {
         // Unknown provider prefix
         if let Some(slash_pos) = model_str.find('/') {
             let prefix = &model_str[..slash_pos];
-            return Err(AgentError::InvalidConfig(format!(
+            return Err(Error::InvalidConfig(format!(
                 "Unknown provider '{}'. Use 'openai/', 'ollama/', or 'claude/' prefix.",
                 prefix
             )));
         }
 
         // No prefix at all
-        Err(AgentError::InvalidConfig(format!(
+        Err(Error::InvalidConfig(format!(
             "Model '{}' requires a provider prefix. Use 'openai/', 'ollama/', or 'claude/'.",
             model_str
         )))

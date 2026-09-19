@@ -3,14 +3,15 @@
 use std::future::Future;
 use std::time::Duration;
 
-use modular_agent_core::AgentError;
+use modular_agent_core::Error;
+use modular_agent_core::Result;
 
 /// Upper bound for a single backoff sleep so a huge `Retry-After` value cannot
 /// stall a turn indefinitely.
 const MAX_DELAY: Duration = Duration::from_secs(60);
 
 /// Per-turn snapshot of the retry/timeout node configs shared by the LLM
-/// agents. Snapshotting once per `process()` call keeps a mid-turn config
+/// modules. Snapshotting once per `process()` call keeps a mid-turn config
 /// change from altering an in-flight retry loop.
 #[derive(Clone, Copy)]
 pub(crate) struct RetryPolicy {
@@ -39,10 +40,10 @@ impl RetryPolicy {
     /// For streaming calls, wrap only stream establishment with this: once a
     /// chunk has been emitted downstream it cannot be rolled back, so
     /// mid-stream failures must propagate instead of being retried.
-    pub(crate) async fn run<T, F, Fut>(&self, f: F) -> Result<T, AgentError>
+    pub(crate) async fn run<T, F, Fut>(&self, f: F) -> Result<T>
     where
         F: Fn() -> Fut,
-        Fut: Future<Output = Result<T, AgentError>>,
+        Fut: Future<Output = Result<T>>,
     {
         let timeout = self.timeout;
         with_retry(self.max_retries, self.base_delay, || {
@@ -56,21 +57,17 @@ impl RetryPolicy {
 /// `max_retries` retries. A server-provided `Retry-After` takes precedence
 /// over the computed backoff; either delay is clipped at 60s. Returns the
 /// last error when retries are exhausted.
-pub(crate) async fn with_retry<T, F, Fut>(
-    max_retries: u32,
-    base: Duration,
-    f: F,
-) -> Result<T, AgentError>
+pub(crate) async fn with_retry<T, F, Fut>(max_retries: u32, base: Duration, f: F) -> Result<T>
 where
     F: Fn() -> Fut,
-    Fut: Future<Output = Result<T, AgentError>>,
+    Fut: Future<Output = Result<T>>,
 {
     let mut attempt = 0;
     loop {
         match f().await {
             Err(e) if e.is_retryable() && attempt < max_retries => {
                 let delay = match &e {
-                    AgentError::RateLimited {
+                    Error::RateLimited {
                         retry_after: Some(d),
                         ..
                     } => *d,
@@ -85,18 +82,15 @@ where
 }
 
 /// Apply an optional deadline to `fut`, mapping expiry to
-/// `AgentError::Timeout` (retryable, so `with_retry` will retry it).
-pub(crate) async fn with_timeout<T, Fut>(
-    deadline: Option<Duration>,
-    fut: Fut,
-) -> Result<T, AgentError>
+/// `Error::Timeout` (retryable, so `with_retry` will retry it).
+pub(crate) async fn with_timeout<T, Fut>(deadline: Option<Duration>, fut: Fut) -> Result<T>
 where
-    Fut: Future<Output = Result<T, AgentError>>,
+    Fut: Future<Output = Result<T>>,
 {
     match deadline {
         Some(d) => match tokio::time::timeout(d, fut).await {
             Ok(result) => result,
-            Err(_) => Err(AgentError::Timeout(format!(
+            Err(_) => Err(Error::Timeout(format!(
                 "LLM request did not complete within {}s",
                 d.as_secs()
             ))),
@@ -110,8 +104,8 @@ mod tests {
     use super::*;
     use std::sync::atomic::{AtomicU32, Ordering};
 
-    fn rate_limited(retry_after: Option<Duration>) -> AgentError {
-        AgentError::RateLimited {
+    fn rate_limited(retry_after: Option<Duration>) -> Error {
+        Error::RateLimited {
             message: "rate limited".into(),
             retry_after,
         }
@@ -135,7 +129,7 @@ mod tests {
         let attempts = AtomicU32::new(0);
         let result = with_retry(3, Duration::from_millis(1), || async {
             if attempts.fetch_add(1, Ordering::SeqCst) < 2 {
-                Err(AgentError::Overloaded("busy".into()))
+                Err(Error::Overloaded("busy".into()))
             } else {
                 Ok(42)
             }
@@ -166,12 +160,12 @@ mod tests {
     #[tokio::test]
     async fn test_with_retry_exhausts_and_returns_last_error() {
         let attempts = AtomicU32::new(0);
-        let result: Result<(), AgentError> = with_retry(2, Duration::from_millis(1), || async {
+        let result: Result<()> = with_retry(2, Duration::from_millis(1), || async {
             attempts.fetch_add(1, Ordering::SeqCst);
-            Err(AgentError::Timeout("deadline".into()))
+            Err(Error::Timeout("deadline".into()))
         })
         .await;
-        assert!(matches!(result, Err(AgentError::Timeout(_))));
+        assert!(matches!(result, Err(Error::Timeout(_))));
         // Initial attempt + 2 retries.
         assert_eq!(attempts.load(Ordering::SeqCst), 3);
     }
@@ -179,28 +173,28 @@ mod tests {
     #[tokio::test]
     async fn test_with_retry_non_retryable_returns_immediately() {
         let attempts = AtomicU32::new(0);
-        let result: Result<(), AgentError> = with_retry(5, Duration::from_millis(1), || async {
+        let result: Result<()> = with_retry(5, Duration::from_millis(1), || async {
             attempts.fetch_add(1, Ordering::SeqCst);
-            Err(AgentError::InvalidConfig("bad key".into()))
+            Err(Error::InvalidConfig("bad key".into()))
         })
         .await;
-        assert!(matches!(result, Err(AgentError::InvalidConfig(_))));
+        assert!(matches!(result, Err(Error::InvalidConfig(_))));
         assert_eq!(attempts.load(Ordering::SeqCst), 1);
     }
 
     #[tokio::test]
     async fn test_with_timeout_disabled_passes_through() {
-        let result = with_timeout(None, async { Ok::<_, AgentError>(1) }).await;
+        let result = with_timeout(None, async { Ok::<_, Error>(1) }).await;
         assert_eq!(result.unwrap(), 1);
     }
 
     #[tokio::test]
     async fn test_with_timeout_elapsed_maps_to_timeout() {
-        let result: Result<(), AgentError> = with_timeout(Some(Duration::from_millis(5)), async {
+        let result: Result<()> = with_timeout(Some(Duration::from_millis(5)), async {
             tokio::time::sleep(Duration::from_secs(60)).await;
             Ok(())
         })
         .await;
-        assert!(matches!(result, Err(AgentError::Timeout(_))));
+        assert!(matches!(result, Err(Error::Timeout(_))));
     }
 }

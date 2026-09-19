@@ -1,21 +1,21 @@
-# Catalog of the in-tree agent crates the wizard can offer.
+# Catalog of the in-tree module crates the wizard can offer.
 #
 # Only crates that live under crates/ in this workspace belong here; every entry
-# must set in_tree: true. An out-of-tree agent describes itself in a
+# must set in_tree: true. An out-of-tree module describes itself in a
 # ma-registry.yaml at the root of its own repository, which the wizard reads
-# from the clone under custom_agents/ — so only cloned crates are offered, and
-# custom_agents/README.md lists what can be cloned.
+# from the clone under custom_modules/ — so only cloned crates are offered, and
+# custom_modules/README.md lists what can be cloned.
 #
 # - in_tree: true       lives under crates/ in this workspace; always linked as a
 #                       plain workspace dependency, no source to choose.
-# - default_for:        apps that pre-select the agent on a fresh configuration.
+# - default_for:        apps that pre-select the module on a fresh configuration.
 #
 # modular-agent-core and tauri-plugin-modular-agent are in-tree and always
 # linked, so they are not listed here.
 
-agents:
+modules:
   - name: modular-agent-llm
-    description: LLM agents (OpenAI, Anthropic, Google, etc.)
+    description: LLM modules (OpenAI, Anthropic, Google, etc.)
     in_tree: true
     available_features:
       - image
@@ -34,7 +34,7 @@ agents:
     default_for: [desktop, cli]
 
   - name: modular-agent-std
-    description: Standard agents (timer, template, file, etc.)
+    description: Standard modules (timer, template, file, etc.)
     in_tree: true
     available_features:
       - image

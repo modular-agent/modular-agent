@@ -75,8 +75,8 @@
         {#if tab.id in tabStore.runningMap}
           <span
             class="flex-none size-1.5 rounded-full {tabStore.runningMap[tab.id]
-              ? 'bg-[var(--color-agent-2)]'
-              : 'border border-[var(--color-agent-1)]'}"
+              ? 'bg-[var(--color-module-2)]'
+              : 'border border-[var(--color-module-1)]'}"
           ></span>
         {/if}
         <span class="flex-1 truncate text-left"

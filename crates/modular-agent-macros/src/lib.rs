@@ -1,8 +1,8 @@
 #![recursion_limit = "256"]
 //! Procedural macros for modular-agent-core.
 //!
-//! Provides the [`#[modular_agent]`](modular_agent) attribute macro to declare agent metadata
-//! alongside the agent type and generate the registration boilerplate.
+//! Provides the [`#[modular_agent]`](modular_agent) attribute macro to declare module metadata
+//! alongside the module type and generate the registration boilerplate.
 
 use proc_macro::TokenStream;
 use proc_macro2::Span;
@@ -12,16 +12,16 @@ use syn::{
     spanned::Spanned, token::Comma,
 };
 
-/// Declare agent metadata and generate `agent_definition` / `register` helpers.
+/// Declare module metadata and generate `module_definition` / `register` helpers.
 ///
-/// This macro transforms a struct into a modular agent by:
-/// - Implementing `HasAgentData` trait
-/// - Generating `agent_definition()` and `register()` methods
-/// - Registering the agent with the inventory for automatic discovery
+/// This macro turns a struct into a module by:
+/// - Implementing `HasModuleData` trait
+/// - Generating `module_definition()` and `register()` methods
+/// - Registering the module with the inventory for automatic discovery
 ///
 /// # Requirements
 ///
-/// The struct must have a `data: AgentData` field.
+/// The struct must have a `data: ModuleData` field.
 ///
 /// # Attributes
 ///
@@ -34,7 +34,7 @@ use syn::{
 ///
 /// - `name = "..."` - Override the definition name (default: `module::path::StructName`)
 /// - `description = "..."` - Description text
-/// - `kind = "..."` - Agent kind (default: "Agent")
+/// - `kind = "..."` - Module kind (default: "Module")
 /// - `hide_title` - Hide the title in the UI
 /// - `hint(key = value, ...)` - UI hints (e.g., `hint(color = 3, width = 2)`)
 ///
@@ -72,13 +72,13 @@ use syn::{
 /// ## Global Configuration
 ///
 /// Use `*_global_config(...)` variants for configs shared across all instances
-/// of this agent type (e.g., API keys).
+/// of this module type (e.g., API keys).
 ///
 /// # Example
 ///
 /// ```rust,ignore
 /// use modular_agent_core::{
-///     ModularAgent, AgentContext, AgentData, AgentError, AgentSpec, AgentValue, AsAgent,
+///     ModularAgent, ModuleContext, ModuleData, Error, ModuleSpec, Value, AsModule,
 ///     modular_agent, async_trait,
 /// };
 ///
@@ -93,29 +93,29 @@ use syn::{
 ///     outputs = [PORT_OUTPUT],
 ///     integer_config(name = "n", default = 1, title = "Add Value"),
 /// )]
-/// struct AddIntAgent {
-///     data: AgentData,
+/// struct AddIntModule {
+///     data: ModuleData,
 ///     n: i64,
 /// }
 ///
 /// #[async_trait]
-/// impl AsAgent for AddIntAgent {
-///     fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+/// impl AsModule for AddIntModule {
+///     fn new(ma: ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
 ///         let n = spec.configs.as_ref()
 ///             .map(|c| c.get_integer_or_default("n"))
 ///             .unwrap_or(1);
 ///         Ok(Self {
-///             data: AgentData::new(ma, id, spec),
+///             data: ModuleData::new(ma, id, spec),
 ///             n,
 ///         })
 ///     }
 ///
-///     async fn process(&mut self, ctx: AgentContext, port: String, value: AgentValue)
-///         -> Result<(), AgentError>
+///     async fn process(&mut self, ctx: ModuleContext, port: String, value: Value)
+///         -> Result<()>
 ///     {
 ///         if port == PORT_INPUT {
 ///             let result = value.as_integer().unwrap_or(0) + self.n;
-///             self.output(ctx, PORT_OUTPUT.into(), AgentValue::integer(result)).await?;
+///             self.output(ctx, PORT_OUTPUT.into(), Value::integer(result)).await?;
 ///         }
 ///         Ok(())
 ///     }
@@ -125,10 +125,10 @@ use syn::{
 /// # Generated Code
 ///
 /// The macro generates:
-/// - `impl HasAgentData for StructName` - Access to agent data
+/// - `impl HasModuleData for StructName` - Access to module data
 /// - `StructName::DEF_NAME` - The definition name constant
 /// - `StructName::def_name()` - Returns the definition name
-/// - `StructName::agent_definition()` - Returns the [`AgentDefinition`]
+/// - `StructName::module_definition()` - Returns the [`ModuleDefinition`]
 /// - `StructName::register(ma)` - Registers with a [`ModularAgent`]
 /// - Inventory submission for automatic registration
 #[proc_macro_attribute]
@@ -142,7 +142,7 @@ pub fn modular_agent(attr: TokenStream, item: TokenStream) -> TokenStream {
     }
 }
 
-struct AgentArgs {
+struct ModuleArgs {
     kind: Option<Expr>,
     name: Option<Expr>,
     title: Option<Expr>,
@@ -201,7 +201,7 @@ fn expand_modular_agent(
             .path
             .segments
             .last()
-            .map(|seg| seg.ident == "AgentData")
+            .map(|seg| seg.ident == "ModuleData")
             .unwrap_or(false),
         _ => false,
     });
@@ -209,11 +209,11 @@ fn expand_modular_agent(
     if !has_data_field {
         return Err(syn::Error::new(
             item.span(),
-            "#[modular_agent] expects the struct to have a `data: AgentData` field",
+            "#[modular_agent] expects the struct to have a `data: ModuleData` field",
         ));
     }
 
-    let mut parsed = AgentArgs {
+    let mut parsed = ModuleArgs {
         kind: None,
         name: None,
         title: None,
@@ -373,18 +373,18 @@ fn expand_modular_agent(
     let generics = item.generics.clone();
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
     let data_impl = quote! {
-        impl #impl_generics ::modular_agent_core::HasAgentData for #ident #ty_generics #where_clause {
-            fn data(&self) -> &::modular_agent_core::AgentData {
+        impl #impl_generics ::modular_agent_core::HasModuleData for #ident #ty_generics #where_clause {
+            fn data(&self) -> &::modular_agent_core::ModuleData {
                 &self.data
             }
 
-            fn mut_data(&mut self) -> &mut ::modular_agent_core::AgentData {
+            fn mut_data(&mut self) -> &mut ::modular_agent_core::ModuleData {
                 &mut self.data
             }
         }
     };
 
-    let kind = parsed.kind.unwrap_or_else(|| parse_quote! { "Agent" });
+    let kind = parsed.kind.unwrap_or_else(|| parse_quote! { "Module" });
     let name_tokens = parsed.name.map(|n| quote! { #n }).unwrap_or_else(|| {
         quote! { concat!(module_path!(), "::", stringify!(#ident)) }
     });
@@ -678,7 +678,7 @@ fn expand_modular_agent(
                     syn::Error::new(Span::call_site(), "array_config missing `name`")
                 })?;
                 let default = c.default.unwrap_or_else(|| {
-                    parse_quote! { ::modular_agent_core::AgentValue::array_default() }
+                    parse_quote! { ::modular_agent_core::Value::array_default() }
                 });
                 let title = c.title.map(|t| quote! { let entry = entry.title(#t); });
                 let description = c
@@ -722,7 +722,7 @@ fn expand_modular_agent(
                     syn::Error::new(Span::call_site(), "object_config missing `name`")
                 })?;
                 let default = c.default.unwrap_or_else(|| {
-                    parse_quote! { ::modular_agent_core::AgentValue::object_default() }
+                    parse_quote! { ::modular_agent_core::Value::object_default() }
                 });
                 let title = c.title.map(|t| quote! { let entry = entry.title(#t); });
                 let description = c
@@ -1025,7 +1025,7 @@ fn expand_modular_agent(
                     syn::Error::new(Span::call_site(), "array_global_config missing `name`")
                 })?;
                 let default = c.default.unwrap_or_else(|| {
-                    parse_quote! { ::modular_agent_core::AgentValue::array_default() }
+                    parse_quote! { ::modular_agent_core::Value::array_default() }
                 });
                 let title = c.title.map(|t| quote! { let entry = entry.title(#t); });
                 let description = c
@@ -1069,7 +1069,7 @@ fn expand_modular_agent(
                     syn::Error::new(Span::call_site(), "object_global_config missing `name`")
                 })?;
                 let default = c.default.unwrap_or_else(|| {
-                    parse_quote! { ::modular_agent_core::AgentValue::object_default() }
+                    parse_quote! { ::modular_agent_core::Value::object_default() }
                 });
                 let title = c.title.map(|t| quote! { let entry = entry.title(#t); });
                 let description = c
@@ -1121,10 +1121,10 @@ fn expand_modular_agent(
         .collect();
 
     let definition_builder = quote! {
-        ::modular_agent_core::AgentDefinition::new(
+        ::modular_agent_core::ModuleDefinition::new(
             #kind,
             #name_tokens,
-            Some(::modular_agent_core::new_agent_boxed::<#ident>),
+            Some(::modular_agent_core::new_module_boxed::<#ident>),
         )
         #title
         #hide_title
@@ -1147,17 +1147,17 @@ fn expand_modular_agent(
 
             pub fn def_name() -> &'static str { Self::DEF_NAME }
 
-            pub fn agent_definition() -> ::modular_agent_core::AgentDefinition {
+            pub fn module_definition() -> ::modular_agent_core::ModuleDefinition {
                 #definition_builder
             }
 
             pub fn register(ma: &::modular_agent_core::ModularAgent) {
-                ma.register_agent_definiton(Self::agent_definition());
+                ma.register_module_definition(Self::module_definition());
             }
         }
 
         ::modular_agent_core::inventory::submit! {
-            ::modular_agent_core::AgentRegistration {
+            ::modular_agent_core::ModuleRegistration {
                 build: || #definition_builder,
             }
         }

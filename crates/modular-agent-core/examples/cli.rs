@@ -1,5 +1,5 @@
 use clap::Parser;
-use modular_agent_core::{AgentError, AgentValue, ModularAgent, ModularAgentEvent};
+use modular_agent_core::{Error, ModularAgent, ModularAgentEvent, Result, Value};
 use std::path::Path;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::select;
@@ -25,7 +25,7 @@ struct Args {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), AgentError> {
+async fn main() -> Result<()> {
     let args = Args::parse();
 
     // Initialize logging if verbose
@@ -37,7 +37,7 @@ async fn main() -> Result<(), AgentError> {
 
     // Validate patch file exists
     if !Path::new(&args.patch).exists() {
-        return Err(AgentError::IoError(format!(
+        return Err(Error::IoError(format!(
             "Patch file not found: {}",
             args.patch
         )));
@@ -89,7 +89,7 @@ async fn main() -> Result<(), AgentError> {
                     Ok(Some(line)) => {
                         ma.write_external_input(
                             args.input.clone(),
-                            AgentValue::string(line)
+                            Value::string(line)
                         ).await?;
                     }
                     Ok(None) => break, // EOF
@@ -117,9 +117,9 @@ async fn main() -> Result<(), AgentError> {
     Ok(())
 }
 
-fn format_value(value: &AgentValue) -> String {
+fn format_value(value: &Value) -> String {
     match value {
-        AgentValue::String(s) => s.to_string(),
+        Value::String(s) => s.to_string(),
         _ => serde_json::to_string(value).unwrap_or_else(|_| format!("{:?}", value)),
     }
 }

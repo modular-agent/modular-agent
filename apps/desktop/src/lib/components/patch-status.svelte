@@ -18,13 +18,13 @@
 <div class={cn("flex flex-none gap-2", className)}>
   {#if running}
     <Badge variant="outline" class="text-muted-foreground px-1.5">
-      <CirclePlayIcon color="var(--color-agent-2)" />
+      <CirclePlayIcon color="var(--color-module-2)" />
       Running
     </Badge>
   {/if}
   {#if run_on_start}
     <Badge variant="outline" class="text-muted-foreground px-1.5">
-      <CirclePlayIcon color="var(--color-agent-4)" />
+      <CirclePlayIcon color="var(--color-module-4)" />
       on Start
     </Badge>
   {/if}

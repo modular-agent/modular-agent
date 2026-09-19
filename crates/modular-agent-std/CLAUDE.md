@@ -1,14 +1,14 @@
 # CLAUDE.md
 
-See root CLAUDE.md for common agent development patterns.
+See root CLAUDE.md for common module development patterns.
 
 ## Overview
 
-Standard utility agents library with 50+ agents for data manipulation, file I/O, timing, and templating.
+Standard utility modules library with 50+ modules for data manipulation, file I/O, timing, and templating.
 
 ## Categories
 
-| Category | Purpose | Key Agents |
+| Category | Purpose | Key Modules |
 | -------- | ------- | ---------- |
 | Std/Array | Array operations | Map, Collect, ArrayFirst, ArrayLength, ZipToArray |
 | Std/Data | Object operations | Get Value, Set Value, To JSON, From JSON, ZipToObject |
@@ -26,7 +26,7 @@ Standard utility agents library with 50+ agents for data manipulation, file I/O,
 
 ## Features
 
-- `image` (default) - Image processing agents (photon-rs)
+- `image` (default) - Image processing modules (photon-rs)
 - `yaml` (default) - YAML serialization (serde_yaml_ng)
 - `watch` (default) - Directory watching (notify-debouncer-full)
 
@@ -71,14 +71,14 @@ Handlebars templating with built-in helpers:
 
 No-escape mode enabled by default.
 
-## File Agents
+## File Modules
 
-All file agents support dual inputs:
+All file modules support dual inputs:
 
 - Direct value (string, path)
 - Doc object with `path` field override
 
-JSONL agents support streaming append operations.
+JSONL modules support streaming append operations.
 
 ## Time Formats
 

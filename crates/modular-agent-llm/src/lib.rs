@@ -13,14 +13,14 @@ pub mod provider;
 )]
 pub mod capabilities;
 
-// Provider-cross message normalization applied by ChatAgent/ResponsesAgent
+// Provider-cross message normalization applied by ChatModule/ResponsesModule
 // right before provider-specific conversion (P-02).
 pub(crate) mod prepare;
 
 pub mod chat;
 
 // Summarization machinery (prompt builder, provider-routed request) behind
-// the Messages agents' rolling summary. The module is feature-independent so
+// the Messages modules' rolling summary. The module is feature-independent so
 // message.rs compiles unconditionally; without any provider feature the
 // request path degenerates to an error, parts of it go dead, and the code
 // after the always-diverging provider match becomes unreachable.

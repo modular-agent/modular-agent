@@ -1,23 +1,23 @@
-use thiserror::Error;
-
-/// Errors that occur during agent operations.
+/// Errors that occur during module operations.
 ///
 /// Errors are categorized into:
 ///
 /// - **Configuration errors**: `InvalidConfig`, `UnknownConfig`, `NoConfig`
 /// - **Value errors**: `InvalidValue`, `InvalidArrayValue`
-/// - **Agent management errors**: `AgentNotFound`, `AgentAlreadyExists`
+/// - **Module management errors**: `ModuleNotFound`, `ModuleAlreadyExists`
 /// - **Connection errors**: `ConnectionNotFound`, `ConnectionAlreadyExists`
 /// - **I/O errors**: `IoError`, `SerializationError`, `JsonParseError`
 /// - **Retryable / provider errors**: `RateLimited`, `Overloaded`, `Timeout`, `ContextOverflow`, `Cancelled`
-#[derive(Clone, Debug, Error)]
-pub enum AgentError {
+pub type Result<T, E = Error> = std::result::Result<T, E>;
+
+#[derive(Clone, Debug, thiserror::Error)]
+pub enum Error {
     /// Invalid value in an array element.
     #[error("Invalid {0} value in array")]
     InvalidArrayValue(String),
 
-    /// Agent definition is invalid.
-    #[error("{0}: Agent definition \"{1}\" is invalid")]
+    /// Module definition is invalid.
+    #[error("{0}: Module definition \"{1}\" is invalid")]
     InvalidDefinition(String, String),
 
     /// Invalid port name.
@@ -32,41 +32,41 @@ pub enum AgentError {
     #[error("Invalid {0} value")]
     InvalidValue(String),
 
-    /// Agent definition is missing a required field.
-    #[error("{0}: Agent definition \"{1}\" is missing")]
+    /// Module definition is missing a required field.
+    #[error("{0}: Module definition \"{1}\" is missing")]
     MissingDefinition(String, String),
 
     /// Failed to rename a patch.
     #[error("Failed to rename patch: {0}")]
     RenamePatchFailed(String),
 
-    /// Unknown agent definition kind.
-    #[error("Unknown agent def kind: {0}")]
+    /// Unknown module definition kind.
+    #[error("Unknown module def kind: {0}")]
     UnknownDefKind(String),
 
-    /// Unknown agent definition name.
-    #[error("Unknown agent def name: {0}")]
+    /// Unknown module definition name.
+    #[error("Unknown module def name: {0}")]
     UnknownDefName(String),
 
-    /// Agent definition is not implemented.
-    #[error("Agent definition \"{0}\" is not implemented")]
+    /// Module definition is not implemented.
+    #[error("Module definition \"{0}\" is not implemented")]
     NotImplemented(String),
 
-    /// An agent with this ID already exists.
-    #[error("Agent {0} already exists")]
-    AgentAlreadyExists(String),
+    /// A module with this ID already exists.
+    #[error("Module {0} already exists")]
+    ModuleAlreadyExists(String),
 
-    /// Failed to create an agent.
-    #[error("Failed to create agent {0}")]
-    AgentCreationFailed(String),
+    /// Failed to create a module.
+    #[error("Failed to create module {0}")]
+    ModuleCreationFailed(String),
 
-    /// Agent with the specified ID was not found.
-    #[error("Agent {0} not found")]
-    AgentNotFound(String),
+    /// Module with the specified ID was not found.
+    #[error("Module {0} not found")]
+    ModuleNotFound(String),
 
-    /// Source agent in a connection was not found.
-    #[error("Source agent {0} not found")]
-    SourceAgentNotFound(String),
+    /// Source module in a connection was not found.
+    #[error("Source module {0} not found")]
+    SourceModuleNotFound(String),
 
     /// Duplicate ID detected.
     #[error("Duplicate id: {0}")]
@@ -96,15 +96,15 @@ pub enum AgentError {
     #[error("Patch name \"{0}\" already exists")]
     PatchNameExists(String),
 
-    /// Agent definition was not found.
-    #[error("Agent {0} definition not found")]
-    AgentDefinitionNotFound(String),
+    /// Module definition was not found.
+    #[error("Module {0} definition not found")]
+    ModuleDefinitionNotFound(String),
 
-    /// Agent message sender was not found.
-    #[error("Agent tx for {0} not found")]
-    AgentTxNotFound(String),
+    /// Module message sender was not found.
+    #[error("Module tx for {0} not found")]
+    ModuleTxNotFound(String),
 
-    /// Failed to send a message to an agent.
+    /// Failed to send a message to a module.
     #[error("Failed to send message: {0}")]
     SendMessageFailed(String),
 
@@ -140,7 +140,7 @@ pub enum AgentError {
     #[error("Configuration error: {0}")]
     InvalidConfig(String),
 
-    /// No configuration is available for this agent.
+    /// No configuration is available for this module.
     #[error("No configuration available")]
     NoConfig,
 
@@ -187,12 +187,12 @@ pub enum AgentError {
     #[error("Shutdown timed out after {0:?}")]
     ShutdownTimeout(std::time::Duration),
 
-    /// Generic agent error.
-    #[error("Agent error: {0}")]
+    /// Generic module error.
+    #[error("Module error: {0}")]
     Other(String),
 }
 
-impl AgentError {
+impl Error {
     /// Returns `true` for errors that are transient and may succeed on retry.
     pub fn is_retryable(&self) -> bool {
         matches!(
@@ -209,21 +209,21 @@ mod tests {
     #[test]
     fn retryable_variants_are_retryable() {
         assert!(
-            AgentError::RateLimited {
+            Error::RateLimited {
                 message: "slow down".into(),
                 retry_after: None,
             }
             .is_retryable()
         );
-        assert!(AgentError::Overloaded("busy".into()).is_retryable());
-        assert!(AgentError::Timeout("deadline exceeded".into()).is_retryable());
+        assert!(Error::Overloaded("busy".into()).is_retryable());
+        assert!(Error::Timeout("deadline exceeded".into()).is_retryable());
     }
 
     #[test]
     fn non_retryable_variants_are_not_retryable() {
-        assert!(!AgentError::ContextOverflow("too long".into()).is_retryable());
-        assert!(!AgentError::Cancelled.is_retryable());
-        assert!(!AgentError::InvalidValue("bad".into()).is_retryable());
-        assert!(!AgentError::IoError("disk full".into()).is_retryable());
+        assert!(!Error::ContextOverflow("too long".into()).is_retryable());
+        assert!(!Error::Cancelled.is_retryable());
+        assert!(!Error::InvalidValue("bad".into()).is_retryable());
+        assert!(!Error::IoError("disk full".into()).is_retryable());
     }
 }

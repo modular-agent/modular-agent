@@ -8,8 +8,8 @@
   import { toast } from "svelte-sonner";
   import { getPatchInfo, getPatchSpec } from "tauri-plugin-modular-agent-api";
 
-  import { patchToFlow } from "$lib/agent";
   import { closePatch } from "$lib/modular_agent";
+  import { patchToFlow } from "$lib/module";
   import { sharedPatchEvents } from "$lib/shared.svelte";
   import { tabStore } from "$lib/tab-store.svelte";
   import type { PatchFlow, PatchRenamedMessage } from "$lib/types";

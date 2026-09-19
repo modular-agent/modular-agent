@@ -1,9 +1,9 @@
 <!--
-  NodeView for SliderDemoAgent: renders the agent's integer configs as range
+  NodeView for SliderDemoModule: renders the module's integer configs as range
   sliders.
 
   A slider is an alternative input method for an integer — NOT a value type —
-  so it is implemented as a NodeView (per agent type) instead of a
+  so it is implemented as a NodeView (per module type) instead of a
   ConfigWidget keyed on a fake type_. Also demonstrates placing ConfigHandle
   so configs keep accepting edge connections when the default rendering is
   replaced.
@@ -18,7 +18,7 @@
 
   let { configs, configSpecs, updateConfig }: NodeViewProps = $props();
 
-  // AgentConfigSpec carries no min/max/step metadata today; use sensible defaults.
+  // ModuleConfigSpec carries no min/max/step metadata today; use sensible defaults.
   const MIN = 0;
   const MAX = 100;
   const STEP = 1;

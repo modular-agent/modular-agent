@@ -1,7 +1,7 @@
 //! Built-in MCP server exposing flow-editing tools over streamable HTTP.
 //!
 //! External agents (e.g. Claude Code) connect to `http://127.0.0.1:<port>/mcp`
-//! and use fine-grained tools (`add_agent`, `add_connection`, `start_patch`,
+//! and use fine-grained tools (`add_module`, `add_connection`, `start_patch`,
 //! ...) to build and run workflows. All tools are thin wrappers over
 //! [`ModularAgent`] methods plus pre-validation that turns mistakes (wrong
 //! definition names, wrong port names) into self-correctable error messages.
@@ -62,66 +62,66 @@ use rmcp::{
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::Value as JsonValue;
 use tokio::sync::broadcast;
 use tokio_util::sync::CancellationToken;
 
-use crate::config::AgentConfigs;
-use crate::definition::AgentDefinition;
-use crate::error::AgentError;
+use crate::config::ModuleConfigs;
+use crate::definition::ModuleDefinition;
+use crate::error::{Error, Result};
 use crate::modular_agent::{ModularAgent, ModularAgentEvent};
-use crate::spec::{AgentSpec, ConnectionSpec, PatchSpec};
-use crate::value::AgentValue;
+use crate::spec::{ConnectionSpec, ModuleSpec, PatchSpec};
+use crate::value::Value;
 
 const SERVER_INSTRUCTIONS: &str = r#"Modular Agent flow editor.
 
 FLOW MODEL
-- A patch is a workflow graph: agents (nodes) connected by directed edges.
-- Each agent is an instance of an agent definition, identified by def_name
-  (a fully-qualified Rust path, e.g. "modular_agent_llm::chat::ChatAgent").
-- A connection routes values from a source agent's output port to a target
-  agent's input port. Port names must exactly match the definition's ports.
+- A patch is a workflow graph: modules (nodes) connected by directed edges.
+- Each module is an instance of a module definition, identified by def_name
+  (a fully-qualified Rust path, e.g. "modular_agent_llm::chat::ChatModule").
+- A connection routes values from a source module's output port to a target
+  module's input port. Port names must exactly match the definition's ports.
 - Special ports:
-  - Every agent has an implicit "err" output port emitting error messages.
+  - Every module has an implicit "err" output port emitting error messages.
   - A target_handle of the form "config:<key>" writes incoming values into
-    the target agent's config <key> instead of a regular input port.
+    the target module's config <key> instead of a regular input port.
 
 LAYOUT CONVENTION
 - Node position and size are stored as x, y, width, height fields on the
-  agent spec (pixels). The editor grid unit is 240: place nodes at multiples
+  module spec (pixels). The editor grid unit is 240: place nodes at multiples
   of 240 and lay flows out left to right (x grows in the data-flow
   direction). When width/height are omitted, the editor sizes the node from
-  the agent definition's hints (grid-unit multipliers, default 1x1 grid
+  the module definition's hints (grid-unit multipliers, default 1x1 grid
   unit), so omitting them is usually the right choice. Definitions with a
   free_size hint do not follow the 240 grid; their hint sizes are pixels.
-- add_agent accepts x/y/width/height directly; update_agent_spec changes
+- add_module accepts x/y/width/height directly; update_module_spec changes
   them later, e.g. patch {"x": 480, "y": 240}.
 
 DYNAMIC CONFIGS AND PORTS
-- Some agents generate additional configs and ports from a config value
+- Some modules generate additional configs and ports from a config value
   (e.g. Switch's "n" controls the conditions c0..c(n-1) and the numbered
   output ports). The definition only lists the initial ones; the keys valid
-  right now are the "configs" of the live agent spec, as returned by
-  add_agent and get_patch_spec.
+  right now are the "configs" of the live module spec, as returned by
+  add_module and get_patch_spec.
 
 SECRETS AND GLOBAL CONFIGS
 - API keys and tokens (Slack bot/app tokens, LLM API keys, ...) are GLOBAL
-  configurations attached to an agent definition. The user sets them in the
+  configurations attached to a module definition. The user sets them in the
   application settings. They are not settable through this server and must
-  NEVER be written into an agent instance's configs.
+  NEVER be written into a module instance's configs.
 
 TYPICAL WORKFLOW
-1. list_agent_definitions to discover agents (get_agent_definition for
+1. list_module_definitions to discover modules (get_module_definition for
    details on one).
-2. create_patch, then add_agent per node and add_connection per edge.
+2. create_patch, then add_module per node and add_connection per edge.
 3. save_patch to persist, start_patch / stop_patch to run.
 
 VERIFYING A FLOW
 1. start_patch to run the workflow.
 2. write_external_input to feed a test value into an external input channel
-   (an ExternalInputAgent's configured name), or wait for a real event
+   (an ExternalInputModule's configured name), or wait for a real event
    source (e.g. a Slack message).
-3. Poll get_external_outputs and get_agent_errors. Both return latest_seq;
+3. Poll get_external_outputs and get_module_errors. Both return latest_seq;
    pass it back as since_seq on the next call to receive only new records.
    dropped > 0 means the collector fell behind the event stream and some
    records were lost before capture.
@@ -129,10 +129,10 @@ VERIFYING A FLOW
 
 WORKED EXAMPLE - "listen to a Slack channel, send each message to a chat
 LLM, post the reply back to Slack":
-  A: modular_agent_slack::agents::SlackListenerAgent   at x=0,   y=0
-  B: modular_agent_slack::agents::SlackToMessageAgent  at x=240, y=0
-  C: modular_agent_llm::chat::ChatAgent                at x=480, y=0
-  D: modular_agent_slack::agents::SlackPostAgent       at x=720, y=0
+  A: modular_agent_slack::modules::SlackListenerModule   at x=0,   y=0
+  B: modular_agent_slack::modules::SlackToMessageModule  at x=240, y=0
+  C: modular_agent_llm::chat::ChatModule                at x=480, y=0
+  D: modular_agent_slack::modules::SlackPostModule       at x=720, y=0
 Connections:
   A.value   -> B.value
   B.message -> C.message
@@ -177,7 +177,7 @@ impl McpServerHandle {
 pub async fn start_mcp_server(
     ma: ModularAgent,
     config: McpServerConfig,
-) -> Result<McpServerHandle, AgentError> {
+) -> Result<McpServerHandle> {
     // Stamp here so every change made through MCP tools carries the "mcp"
     // origin even if the host passes a plain handle.
     let ma = ma.with_origin("mcp");
@@ -185,7 +185,7 @@ pub async fn start_mcp_server(
     let addr = SocketAddr::from((Ipv4Addr::LOCALHOST, config.port));
     let listener = tokio::net::TcpListener::bind(addr)
         .await
-        .map_err(|e| AgentError::IoError(format!("Failed to bind MCP server to {addr}: {e}")))?;
+        .map_err(|e| Error::IoError(format!("Failed to bind MCP server to {addr}: {e}")))?;
 
     let cancel = CancellationToken::new();
 
@@ -278,7 +278,7 @@ async fn require_bearer(expected: Arc<str>, req: Request, next: Next) -> Respons
 const RING_CAPACITY: usize = 200;
 const DEFAULT_POLL_LIMIT: usize = 50;
 
-/// Upper bound on waiting for an agent's mutex when resolving the patch id
+/// Upper bound on waiting for a module's mutex when resolving the patch id
 /// of a captured error; see [`run_event_collector`].
 const PATCH_ID_RESOLVE_TIMEOUT: std::time::Duration = std::time::Duration::from_millis(100);
 
@@ -288,7 +288,7 @@ struct ErrorRecord {
     seq: u64,
     time_ms: u64,
     patch_id: Option<String>,
-    agent_id: String,
+    module_id: String,
     message: String,
 }
 
@@ -297,7 +297,7 @@ struct OutputRecord {
     seq: u64,
     time_ms: u64,
     channel: String,
-    value: AgentValue,
+    value: Value,
 }
 
 /// Bounded capture of runtime events for polling tools. `seq` is a single
@@ -337,7 +337,7 @@ impl EventRing {
         &self,
         time_ms: u64,
         patch_id: Option<String>,
-        agent_id: String,
+        module_id: String,
         message: String,
     ) {
         let mut errors = self.errors.lock();
@@ -348,12 +348,12 @@ impl EventRing {
             seq: self.next_seq(),
             time_ms,
             patch_id,
-            agent_id,
+            module_id,
             message,
         });
     }
 
-    fn push_output(&self, time_ms: u64, channel: String, value: AgentValue) {
+    fn push_output(&self, time_ms: u64, channel: String, value: Value) {
         let mut outputs = self.outputs.lock();
         if outputs.len() >= RING_CAPACITY {
             outputs.pop_front();
@@ -426,26 +426,26 @@ async fn run_event_collector(ma: ModularAgent, ring: Arc<EventRing>, cancel: Can
             },
         };
         match envelope.event {
-            ModularAgentEvent::AgentError(agent_id, message) => {
-                // Resolve the patch at capture time: once the agent is
-                // gone the mapping is unrecoverable. The agent mutex is
+            ModularAgentEvent::ModuleError(module_id, message) => {
+                // Resolve the patch at capture time: once the module is
+                // gone the mapping is unrecoverable. The module mutex is
                 // held for the whole duration of process() and errors are
                 // emitted while it is still held, so an unbounded lock
-                // here could stall capture behind a long-running agent
+                // here could stall capture behind a long-running module
                 // until broadcast events are dropped as Lagged. A short
-                // bounded wait resolves the common case (the agent loop
+                // bounded wait resolves the common case (the module loop
                 // releases the lock right after emitting) and otherwise
                 // records the error without a patch id.
-                let patch_id = match ma.get_agent(&agent_id) {
-                    Some(agent) => {
-                        match tokio::time::timeout(PATCH_ID_RESOLVE_TIMEOUT, agent.lock()).await {
-                            Ok(agent) => Some(agent.patch_id().to_string()),
+                let patch_id = match ma.get_module(&module_id) {
+                    Some(module) => {
+                        match tokio::time::timeout(PATCH_ID_RESOLVE_TIMEOUT, module.lock()).await {
+                            Ok(module) => Some(module.patch_id().to_string()),
                             Err(_) => None,
                         }
                     }
                     None => None,
                 };
-                ring.push_error(now_ms(), patch_id, agent_id, message);
+                ring.push_error(now_ms(), patch_id, module_id, message);
             }
             ModularAgentEvent::ExternalOutput(channel, value) => {
                 ring.push_output(now_ms(), channel, value);
@@ -492,34 +492,34 @@ fn err(text: impl Into<String>) -> CallToolResult {
 
 fn ok_json(value: &impl serde::Serialize) -> Result<Json<JsonObject>, CallToolResult> {
     match serde_json::to_value(value) {
-        Ok(Value::Object(map)) => Ok(Json(map)),
+        Ok(JsonValue::Object(map)) => Ok(Json(map)),
         Ok(other) => Err(err(format!("Result is not a JSON object: {other}"))),
         Err(e) => Err(err(format!("Failed to serialize result: {e}"))),
     }
 }
 
-/// Error text for an agent id that has no live instance.
+/// Error text for a module id that has no live instance.
 ///
-/// A spec-only agent (its definition is not registered in this build) is
+/// A spec-only module (its definition is not registered in this build) is
 /// still listed by get_patch_spec, so pointing the caller there would send
 /// it in circles; name the unregistered definition instead. Only a truly
 /// absent id gets the get_patch_spec hint. `role` is the label used for the
-/// agent in the message ("Agent", "Source agent", ...).
-async fn missing_agent_text(ma: &ModularAgent, role: &str, agent_id: &str) -> String {
-    match ma.find_stored_agent_spec(agent_id).await {
+/// module in the message ("Module", "Source module", ...).
+async fn missing_module_text(ma: &ModularAgent, role: &str, module_id: &str) -> String {
+    match ma.find_stored_module_spec(module_id).await {
         Some(spec) => format!(
-            "{role} \"{agent_id}\" exists in the patch, but its definition \"{}\" is not \
+            "{role} \"{module_id}\" exists in the patch, but its definition \"{}\" is not \
              registered in this build, so this tool cannot operate on it.",
             spec.def_name
         ),
-        None => format!("{role} \"{agent_id}\" not found. Use get_patch_spec to list agent ids."),
+        None => format!("{role} \"{module_id}\" not found. Use get_patch_spec to list module ids."),
     }
 }
 
-/// Maps a patch-name error to guidance the calling agent can act on.
-fn patch_error_text(e: AgentError) -> String {
+/// Maps a patch-name error to guidance the calling module can act on.
+fn patch_error_text(e: Error) -> String {
     match e {
-        AgentError::PatchNameExists(name) => format!(
+        Error::PatchNameExists(name) => format!(
             "Patch name \"{name}\" already exists. Use list_patches to see open patches \
              (and their ids), then pick a different name or work with the existing patch."
         ),
@@ -527,9 +527,9 @@ fn patch_error_text(e: AgentError) -> String {
     }
 }
 
-/// Strips `config_specs` (per-config UI metadata) from serialized agent
-/// specs: it is bulky and irrelevant for external editing agents.
-fn strip_config_specs(value: &mut Value) {
+/// Strips `config_specs` (per-config UI metadata) from serialized module
+/// specs: it is bulky and irrelevant for external editing modules.
+fn strip_config_specs(value: &mut JsonValue) {
     if let Some(obj) = value.as_object_mut() {
         obj.remove("config_specs");
     }
@@ -537,16 +537,16 @@ fn strip_config_specs(value: &mut Value) {
 
 fn patch_spec_result(spec: &PatchSpec) -> Result<Json<JsonObject>, CallToolResult> {
     let Json(mut map) = ok_json(spec)?;
-    if let Some(agents) = map.get_mut("agents").and_then(|a| a.as_array_mut()) {
-        for agent in agents {
-            strip_config_specs(agent);
+    if let Some(modules) = map.get_mut("modules").and_then(|a| a.as_array_mut()) {
+        for module in modules {
+            strip_config_specs(module);
         }
     }
     Ok(Json(map))
 }
 
 /// Truncates long default values so the definition listing stays compact.
-fn compact_default(value: &AgentValue) -> String {
+fn compact_default(value: &Value) -> String {
     let mut s = serde_json::to_string(value).unwrap_or_else(|_| "?".into());
     if s.chars().count() > 40 {
         s = format!("{}\u{2026}", s.chars().take(40).collect::<String>());
@@ -554,7 +554,7 @@ fn compact_default(value: &AgentValue) -> String {
     s
 }
 
-fn definition_line(def: &AgentDefinition) -> String {
+fn definition_line(def: &ModuleDefinition) -> String {
     let title = def.title.as_deref().unwrap_or("-");
     let category = def.category.as_deref().unwrap_or("-");
     let description = def
@@ -615,10 +615,10 @@ fn validate_patch_name(name: &str) -> Result<(), String> {
 }
 
 /// Rejects global config keys: secrets live in the application settings and
-/// must never be written onto an agent instance. Global configs belong to the
+/// must never be written onto a module instance. Global configs belong to the
 /// definition, so this check never needs a live spec.
 fn reject_global_config_keys<'a>(
-    def: &AgentDefinition,
+    def: &ModuleDefinition,
     keys: impl Iterator<Item = &'a String>,
 ) -> Result<(), String> {
     for key in keys {
@@ -629,7 +629,7 @@ fn reject_global_config_keys<'a>(
         {
             return Err(format!(
                 "\"{key}\" is a GLOBAL configuration of {}. Global configs (API keys, tokens, secrets) \
-                 are set by the user in the application settings and must never be set on an agent instance.",
+                 are set by the user in the application settings and must never be set on a module instance.",
                 def.name
             ));
         }
@@ -637,17 +637,17 @@ fn reject_global_config_keys<'a>(
     Ok(())
 }
 
-/// Checks candidate config keys against an agent definition and, when the
+/// Checks candidate config keys against a module definition and, when the
 /// instance already exists, against its live spec.
 ///
-/// Agents such as Switch generate `c0`..`c(n-1)` from their `n` config in
+/// Modules such as Switch generate `c0`..`c(n-1)` from their `n` config in
 /// `new()` / `configs_changed()`, so the definition alone does not know which
 /// keys an instance accepts; `live` is the authority whenever it is
 /// available. Keys starting with `_` are the stale keys parked by
-/// [`AgentDefinition::reconcile_spec`] and are never settable.
+/// [`ModuleDefinition::reconcile_spec`] and are never settable.
 fn validate_config_keys<'a>(
-    def: &AgentDefinition,
-    live: Option<&AgentSpec>,
+    def: &ModuleDefinition,
+    live: Option<&ModuleSpec>,
     keys: impl Iterator<Item = &'a String>,
 ) -> Result<(), String> {
     let keys: Vec<&String> = keys.collect();
@@ -713,15 +713,15 @@ fn validate_config_keys<'a>(
     Ok(())
 }
 
-fn json_to_agent_value(key: &str, value: Value) -> Result<AgentValue, String> {
+fn json_to_value(key: &str, value: JsonValue) -> Result<Value, String> {
     serde_json::from_value(value).map_err(|e| format!("Invalid value for config \"{key}\": {e}"))
 }
 
 // --- Tool parameter types ---
 
 #[derive(Deserialize, JsonSchema)]
-struct GetAgentDefinitionParams {
-    /// Fully-qualified agent definition name (as listed by list_agent_definitions).
+struct GetModuleDefinitionParams {
+    /// Fully-qualified module definition name (as listed by list_module_definitions).
     def_name: String,
 }
 
@@ -738,17 +738,17 @@ struct PatchIdParams {
 }
 
 #[derive(Deserialize, JsonSchema)]
-struct AddAgentParams {
-    /// Patch id to add the agent to.
+struct AddModuleParams {
+    /// Patch id to add the module to.
     patch_id: String,
-    /// Fully-qualified agent definition name.
+    /// Fully-qualified module definition name.
     def_name: String,
     /// Initial config values (key -> value). Only per-instance configs
     /// declared by the definition are allowed; never pass secrets here.
-    /// Some agents derive further configs and ports from a config such as
+    /// Some modules derive further configs and ports from a config such as
     /// "n" (e.g. Switch); pass that config here and the keys it generates
     /// become settable - the returned spec lists them.
-    configs: Option<serde_json::Map<String, Value>>,
+    configs: Option<serde_json::Map<String, JsonValue>>,
     /// Node x position in pixels (grid unit 240).
     x: Option<f64>,
     /// Node y position in pixels (grid unit 240).
@@ -764,43 +764,43 @@ struct AddAgentParams {
 }
 
 #[derive(Deserialize, JsonSchema)]
-struct UpdateAgentSpecParams {
-    /// Agent id (as shown in get_patch_spec).
-    agent_id: String,
+struct UpdateModuleSpecParams {
+    /// Module id (as shown in get_patch_spec).
+    module_id: String,
     /// Partial spec patch. Recognized keys: "configs" (object, merged into
     /// current configs), "disabled" (bool), and layout/extension fields such
     /// as "x", "y", "width", "height", "title". A null extension value
     /// removes that field. "id" and "def_name" cannot be changed.
-    patch: serde_json::Map<String, Value>,
+    patch: serde_json::Map<String, JsonValue>,
 }
 
 #[derive(Deserialize, JsonSchema)]
-struct SetAgentConfigsParams {
-    /// Agent id (as shown in get_patch_spec).
-    agent_id: String,
+struct SetModuleConfigsParams {
+    /// Module id (as shown in get_patch_spec).
+    module_id: String,
     /// Config values to set (key -> value); merged into current configs.
-    configs: serde_json::Map<String, Value>,
+    configs: serde_json::Map<String, JsonValue>,
 }
 
 #[derive(Deserialize, JsonSchema)]
-struct RemoveAgentParams {
-    /// Patch id containing the agent.
+struct RemoveModuleParams {
+    /// Patch id containing the module.
     patch_id: String,
-    /// Agent id to remove.
-    agent_id: String,
+    /// Module id to remove.
+    module_id: String,
 }
 
 #[derive(Deserialize, JsonSchema)]
 struct ConnectionParams {
-    /// Patch id containing both agents.
+    /// Patch id containing both modules.
     patch_id: String,
-    /// Source agent id.
+    /// Source module id.
     source: String,
-    /// Output port name on the source agent (or "err").
+    /// Output port name on the source module (or "err").
     source_handle: String,
-    /// Target agent id.
+    /// Target module id.
     target: String,
-    /// Input port name on the target agent, or "config:<key>".
+    /// Input port name on the target module, or "config:<key>".
     target_handle: String,
 }
 
@@ -816,14 +816,14 @@ struct SavePatchParams {
 #[derive(Deserialize, JsonSchema)]
 struct WriteExternalInputParams {
     /// External input channel name (the name configured on an
-    /// ExternalInputAgent in a running patch).
+    /// ExternalInputModule in a running patch).
     channel: String,
     /// JSON value to send into the channel.
-    value: Value,
+    value: JsonValue,
 }
 
 #[derive(Deserialize, JsonSchema)]
-struct GetAgentErrorsParams {
+struct GetModuleErrorsParams {
     /// Only return errors from this patch.
     patch_id: Option<String>,
     /// Poll cursor: only return records with seq greater than this. Use the
@@ -851,7 +851,7 @@ struct GetExternalOutputsParams {
 // Fixed-shape responses get local structs so the derived output_schema is
 // meaningful. Dynamic payloads (definitions, specs) use Json<JsonObject>:
 // their shape follows core types that intentionally do not derive JsonSchema,
-// while JsonObject still derives `{"type": "object"}`. Json<Value> would
+// while JsonObject still derives `{"type": "object"}`. Json<JsonValue> would
 // derive the unconstrained schema (no "type"), which strict clients such as
 // Claude Code reject — failing the whole listTools call. For the same reason
 // every structured payload must be a JSON object at the top level, never an
@@ -860,7 +860,7 @@ struct GetExternalOutputsParams {
 #[derive(Serialize, JsonSchema)]
 struct ListPatchesResponse {
     /// Open patches; each entry carries id, name and running state.
-    patches: Vec<Value>,
+    patches: Vec<JsonValue>,
 }
 
 #[derive(Serialize, JsonSchema)]
@@ -870,14 +870,14 @@ struct CreatePatchResponse {
 }
 
 #[derive(Serialize, JsonSchema)]
-struct GetAgentErrorsResponse {
+struct GetModuleErrorsResponse {
     /// Seq of the last record returned; pass it back as since_seq on the
     /// next call to receive only newer records.
     latest_seq: u64,
     /// Number of events lost because the collector fell behind the event
     /// stream.
     dropped: u64,
-    /// Captured agent errors, oldest first.
+    /// Captured module errors, oldest first.
     errors: Vec<ErrorRecord>,
 }
 
@@ -891,18 +891,18 @@ struct GetExternalOutputsResponse {
     dropped: u64,
     /// Captured external outputs, oldest first. Each record carries seq,
     /// time_ms, channel and value fields.
-    outputs: Vec<Value>,
+    outputs: Vec<JsonValue>,
 }
 
 // --- Tools ---
 
 #[tool_router]
 impl McpServer {
-    /// List all available agent definitions in a compact one-line-per-agent
+    /// List all available module definitions in a compact one-line-per-module
     /// format. Hidden/readonly configs and global configs are omitted.
     #[tool]
-    async fn list_agent_definitions(&self) -> Result<CallToolResult, McpError> {
-        let defs = self.ma.get_agent_definitions();
+    async fn list_module_definitions(&self) -> Result<CallToolResult, McpError> {
+        let defs = self.ma.get_module_definitions();
         let mut lines = vec![
             "Format: def_name | Title (Category) | description | in: input_ports | out: output_ports | configs: key:type=default, ...".to_string(),
             String::new(),
@@ -911,17 +911,17 @@ impl McpServer {
         ok_text(lines.join("\n"))
     }
 
-    /// Get the full JSON definition of a single agent (ports, configs with
+    /// Get the full JSON definition of a single module (ports, configs with
     /// types/defaults/descriptions, UI hints).
     #[tool]
-    async fn get_agent_definition(
+    async fn get_module_definition(
         &self,
-        Parameters(p): Parameters<GetAgentDefinitionParams>,
+        Parameters(p): Parameters<GetModuleDefinitionParams>,
     ) -> Result<Json<JsonObject>, CallToolResult> {
-        match self.ma.get_agent_definition(&p.def_name) {
+        match self.ma.get_module_definition(&p.def_name) {
             Some(def) => ok_json(&def),
             None => Err(err(format!(
-                "Unknown agent definition \"{}\". Use list_agent_definitions to see available definitions.",
+                "Unknown module definition \"{}\". Use list_module_definitions to see available definitions.",
                 p.def_name
             ))),
         }
@@ -957,7 +957,7 @@ impl McpServer {
         }
     }
 
-    /// Get the live spec of a patch: all agents (with ids, configs, layout)
+    /// Get the live spec of a patch: all modules (with ids, configs, layout)
     /// and connections. This is the current editor canvas state.
     #[tool]
     async fn get_patch_spec(
@@ -973,16 +973,16 @@ impl McpServer {
         }
     }
 
-    /// Add an agent to a patch. Returns the created agent spec including
+    /// Add a module to a patch. Returns the created module spec including
     /// its assigned id (needed for add_connection).
     #[tool]
-    async fn add_agent(
+    async fn add_module(
         &self,
-        Parameters(p): Parameters<AddAgentParams>,
+        Parameters(p): Parameters<AddModuleParams>,
     ) -> Result<Json<JsonObject>, CallToolResult> {
-        let Some(def) = self.ma.get_agent_definition(&p.def_name) else {
+        let Some(def) = self.ma.get_module_definition(&p.def_name) else {
             return Err(err(format!(
-                "Unknown agent definition \"{}\". Use list_agent_definitions to see available definitions.",
+                "Unknown module definition \"{}\". Use list_module_definitions to see available definitions.",
                 p.def_name
             )));
         };
@@ -992,24 +992,24 @@ impl McpServer {
             return Err(err(e));
         }
 
-        // Configs the definition declares go into the spec the agent is built
-        // from. The rest may still be valid - agents like Switch generate
+        // Configs the definition declares go into the spec the module is built
+        // from. The rest may still be valid - modules like Switch generate
         // configs from `n` in new() - so they are applied and validated once
         // the instance exists. Values are converted up front either way, so a
         // type error fails before anything is created.
         let mut spec = def.to_spec();
-        let mut deferred: Vec<(String, AgentValue)> = Vec::new();
+        let mut deferred: Vec<(String, Value)> = Vec::new();
         if let Some(configs) = p.configs {
             for (key, value) in configs {
-                let agent_value = match json_to_agent_value(&key, value) {
+                let value = match json_to_value(&key, value) {
                     Ok(v) => v,
                     Err(e) => return Err(err(e)),
                 };
                 match spec.configs.as_mut() {
                     Some(spec_configs) if spec_configs.contains_key(&key) => {
-                        spec_configs.set(key, agent_value);
+                        spec_configs.set(key, value);
                     }
-                    _ => deferred.push((key, agent_value)),
+                    _ => deferred.push((key, value)),
                 }
             }
         }
@@ -1025,14 +1025,14 @@ impl McpServer {
         }
 
         let patch_id = p.patch_id.clone();
-        let agent_id = match self.ma.add_agent(p.patch_id, spec).await {
+        let module_id = match self.ma.add_module(p.patch_id, spec).await {
             Ok(id) => id,
             Err(e) => return Err(err(e.to_string())),
         };
 
         let mut warning = None;
         if !deferred.is_empty() {
-            let constructed = self.ma.get_agent_spec(&agent_id).await;
+            let constructed = self.ma.get_module_spec(&module_id).await;
             let validated = match &constructed {
                 Some(constructed) => validate_config_keys(
                     &def,
@@ -1040,77 +1040,79 @@ impl McpServer {
                     deferred.iter().map(|(key, _)| key),
                 ),
                 None => Err(format!(
-                    "Agent \"{agent_id}\" vanished right after it was added"
+                    "Module \"{module_id}\" vanished right after it was added"
                 )),
             };
             if let Err(e) = validated {
                 let mut message = format!(
-                    "{e}\nSome agents derive extra configs and ports from another config (e.g. \"n\"). \
-                     Set that config when adding the agent, then read the returned spec for the keys \
+                    "{e}\nSome modules derive extra configs and ports from another config (e.g. \"n\"). \
+                     Set that config when adding the module, then read the returned spec for the keys \
                      it generated."
                 );
-                if let Err(rollback) = self.ma.remove_agent(&patch_id, &agent_id).await {
-                    log::warn!("Failed to roll back agent {agent_id}: {rollback}");
+                if let Err(rollback) = self.ma.remove_module(&patch_id, &module_id).await {
+                    log::warn!("Failed to roll back module {module_id}: {rollback}");
                     message.push_str(&format!(
-                        "\nRolling the agent back failed, so it remains in the patch as \"{agent_id}\": {rollback}"
+                        "\nRolling the module back failed, so it remains in the patch as \"{module_id}\": {rollback}"
                     ));
                 }
                 return Err(err(message));
             }
 
-            let mut merged: AgentConfigs = constructed
+            let mut merged: ModuleConfigs = constructed
                 .and_then(|spec| spec.configs)
                 .unwrap_or_default();
             for (key, value) in deferred {
                 merged.set(key, value);
             }
-            // A config error here is reported by an agent that has already
+            // A config error here is reported by a module that has already
             // committed the new values (an unparsable Switch condition is kept
-            // as never-matching), so the agent stays and the error is a
+            // as never-matching), so the module stays and the error is a
             // warning on the created spec.
-            if let Err(e) = self.ma.set_agent_configs(agent_id.clone(), merged).await {
-                warning = Some(format!("Agent created, but applying configs reported: {e}"));
+            if let Err(e) = self.ma.set_module_configs(module_id.clone(), merged).await {
+                warning = Some(format!(
+                    "Module created, but applying configs reported: {e}"
+                ));
             }
         }
 
-        match self.ma.get_agent_spec(&agent_id).await {
+        match self.ma.get_module_spec(&module_id).await {
             Some(created) => {
                 let mut value = match serde_json::to_value(&created) {
                     Ok(v) => v,
-                    Err(e) => return Err(err(format!("Failed to serialize agent spec: {e}"))),
+                    Err(e) => return Err(err(format!("Failed to serialize module spec: {e}"))),
                 };
                 strip_config_specs(&mut value);
                 if let Some(warning) = warning
                     && let Some(object) = value.as_object_mut()
                 {
-                    object.insert("warning".into(), Value::String(warning));
+                    object.insert("warning".into(), JsonValue::String(warning));
                 }
                 ok_json(&value)
             }
-            None => ok_json(&serde_json::json!({ "agent_id": agent_id })),
+            None => ok_json(&serde_json::json!({ "module_id": module_id })),
         }
     }
 
-    /// Update an agent's spec: configs (merged), disabled flag, or layout /
+    /// Update a module's spec: configs (merged), disabled flag, or layout /
     /// extension fields (x, y, width, height, title, ...).
     #[tool]
-    async fn update_agent_spec(
+    async fn update_module_spec(
         &self,
-        Parameters(p): Parameters<UpdateAgentSpecParams>,
+        Parameters(p): Parameters<UpdateModuleSpecParams>,
     ) -> Result<CallToolResult, McpError> {
         let patch = p.patch;
         if patch.contains_key("id") || patch.contains_key("def_name") {
             return err_text("\"id\" and \"def_name\" cannot be changed");
         }
 
-        let Some(current) = self.ma.get_agent_spec(&p.agent_id).await else {
-            return err_text(missing_agent_text(&self.ma, "Agent", &p.agent_id).await);
+        let Some(current) = self.ma.get_module_spec(&p.module_id).await else {
+            return err_text(missing_module_text(&self.ma, "Module", &p.module_id).await);
         };
         if let Some(configs_patch) = patch.get("configs") {
-            let Value::Object(configs_patch) = configs_patch else {
+            let JsonValue::Object(configs_patch) = configs_patch else {
                 return err_text("\"configs\" must be a JSON object");
             };
-            if let Some(def) = self.ma.get_agent_definition(&current.def_name)
+            if let Some(def) = self.ma.get_module_definition(&current.def_name)
                 && let Err(e) = validate_config_keys(&def, Some(&current), configs_patch.keys())
             {
                 return err_text(e);
@@ -1119,74 +1121,74 @@ impl McpServer {
 
         match self
             .ma
-            .update_agent_spec(&p.agent_id, &Value::Object(patch))
+            .update_module_spec(&p.module_id, &JsonValue::Object(patch))
             .await
         {
-            Ok(()) => ok_text("Agent spec updated"),
+            Ok(()) => ok_text("Module spec updated"),
             Err(e) => err_text(e.to_string()),
         }
     }
 
-    /// Set config values on an agent (merged into its current configs).
+    /// Set config values on a module (merged into its current configs).
     #[tool]
-    async fn set_agent_configs(
+    async fn set_module_configs(
         &self,
-        Parameters(p): Parameters<SetAgentConfigsParams>,
+        Parameters(p): Parameters<SetModuleConfigsParams>,
     ) -> Result<CallToolResult, McpError> {
-        let Some(current) = self.ma.get_agent_spec(&p.agent_id).await else {
-            return err_text(missing_agent_text(&self.ma, "Agent", &p.agent_id).await);
+        let Some(current) = self.ma.get_module_spec(&p.module_id).await else {
+            return err_text(missing_module_text(&self.ma, "Module", &p.module_id).await);
         };
-        if let Some(def) = self.ma.get_agent_definition(&current.def_name)
+        if let Some(def) = self.ma.get_module_definition(&current.def_name)
             && let Err(e) = validate_config_keys(&def, Some(&current), p.configs.keys())
         {
             return err_text(e);
         }
 
-        let mut merged: AgentConfigs = current.configs.unwrap_or_default();
+        let mut merged: ModuleConfigs = current.configs.unwrap_or_default();
         for (key, value) in p.configs {
-            let agent_value = match json_to_agent_value(&key, value) {
+            let value = match json_to_value(&key, value) {
                 Ok(v) => v,
                 Err(e) => return err_text(e),
             };
-            merged.set(key, agent_value);
+            merged.set(key, value);
         }
 
-        match self.ma.set_agent_configs(p.agent_id, merged).await {
-            Ok(()) => ok_text("Agent configs updated"),
+        match self.ma.set_module_configs(p.module_id, merged).await {
+            Ok(()) => ok_text("Module configs updated"),
             Err(e) => err_text(e.to_string()),
         }
     }
 
-    /// Remove an agent (and all its connections) from a patch.
+    /// Remove a module (and all its connections) from a patch.
     #[tool]
-    async fn remove_agent(
+    async fn remove_module(
         &self,
-        Parameters(p): Parameters<RemoveAgentParams>,
+        Parameters(p): Parameters<RemoveModuleParams>,
     ) -> Result<CallToolResult, McpError> {
-        match self.ma.remove_agent(&p.patch_id, &p.agent_id).await {
-            Ok(()) => ok_text("Agent removed"),
+        match self.ma.remove_module(&p.patch_id, &p.module_id).await {
+            Ok(()) => ok_text("Module removed"),
             Err(e) => err_text(e.to_string()),
         }
     }
 
-    /// Connect a source agent's output port to a target agent's input port
+    /// Connect a source module's output port to a target module's input port
     /// (or "config:<key>" to drive a config value).
     #[tool]
     async fn add_connection(
         &self,
         Parameters(p): Parameters<ConnectionParams>,
     ) -> Result<CallToolResult, McpError> {
-        let Some(source_spec) = self.ma.get_agent_spec(&p.source).await else {
-            return err_text(missing_agent_text(&self.ma, "Source agent", &p.source).await);
+        let Some(source_spec) = self.ma.get_module_spec(&p.source).await else {
+            return err_text(missing_module_text(&self.ma, "Source module", &p.source).await);
         };
-        let Some(target_spec) = self.ma.get_agent_spec(&p.target).await else {
-            return err_text(missing_agent_text(&self.ma, "Target agent", &p.target).await);
+        let Some(target_spec) = self.ma.get_module_spec(&p.target).await else {
+            return err_text(missing_module_text(&self.ma, "Target module", &p.target).await);
         };
 
         let outputs = source_spec.outputs.unwrap_or_default();
         if p.source_handle != "err" && !outputs.contains(&p.source_handle) {
             return err_text(format!(
-                "Invalid source_handle \"{}\" for agent {} ({}). Valid source handles: [{}] or \"err\".",
+                "Invalid source_handle \"{}\" for module {} ({}). Valid source handles: [{}] or \"err\".",
                 p.source_handle,
                 p.source,
                 source_spec.def_name,
@@ -1211,7 +1213,7 @@ impl McpServer {
                 .collect::<Vec<_>>()
                 .join(", ");
             return err_text(format!(
-                "Invalid target_handle \"{}\" for agent {} ({}). Valid target handles: [{}] or [{}].",
+                "Invalid target_handle \"{}\" for module {} ({}). Valid target handles: [{}] or [{}].",
                 p.target_handle,
                 p.target,
                 target_spec.def_name,
@@ -1312,7 +1314,7 @@ impl McpServer {
         }
     }
 
-    /// Start all agents in a patch (run the workflow).
+    /// Start all modules in a patch (run the workflow).
     #[tool]
     async fn start_patch(
         &self,
@@ -1324,7 +1326,7 @@ impl McpServer {
         }
     }
 
-    /// Stop all agents in a patch.
+    /// Stop all modules in a patch.
     #[tool]
     async fn stop_patch(
         &self,
@@ -1337,14 +1339,14 @@ impl McpServer {
     }
 
     /// Write a test value into an external input channel of a running
-    /// patch. Use get_external_outputs / get_agent_errors afterwards to
+    /// patch. Use get_external_outputs / get_module_errors afterwards to
     /// observe the result.
     #[tool]
     async fn write_external_input(
         &self,
         Parameters(p): Parameters<WriteExternalInputParams>,
     ) -> Result<CallToolResult, McpError> {
-        let value: AgentValue = match serde_json::from_value(p.value) {
+        let value: Value = match serde_json::from_value(p.value) {
             Ok(v) => v,
             Err(e) => return err_text(format!("Invalid value: {e}")),
         };
@@ -1354,14 +1356,14 @@ impl McpServer {
         }
     }
 
-    /// Get recent agent errors (from running patches). Poll with since_seq
+    /// Get recent module errors (from running patches). Poll with since_seq
     /// set to the previous latest_seq to receive only new records; dropped
     /// counts events lost when the collector fell behind the event stream.
     #[tool]
-    async fn get_agent_errors(
+    async fn get_module_errors(
         &self,
-        Parameters(p): Parameters<GetAgentErrorsParams>,
-    ) -> Result<Json<GetAgentErrorsResponse>, CallToolResult> {
+        Parameters(p): Parameters<GetModuleErrorsParams>,
+    ) -> Result<Json<GetModuleErrorsResponse>, CallToolResult> {
         let since_seq = p.since_seq.unwrap_or(0);
         let errors = self.ring.collect_errors(
             p.patch_id.as_deref(),
@@ -1373,7 +1375,7 @@ impl McpServer {
         // but not yet pushed would otherwise be skipped forever by the
         // next poll.
         let latest_seq = errors.last().map_or(since_seq, |r| r.seq);
-        Ok(Json(GetAgentErrorsResponse {
+        Ok(Json(GetModuleErrorsResponse {
             latest_seq,
             dropped: self.ring.dropped(),
             errors,
@@ -1396,7 +1398,7 @@ impl McpServer {
             p.limit.unwrap_or(DEFAULT_POLL_LIMIT),
         );
         let latest_seq = outputs.last().map_or(since_seq, |r| r.seq);
-        // OutputRecord carries an AgentValue, which has no JsonSchema, so
+        // OutputRecord carries an Value, which has no JsonSchema, so
         // records are pre-serialized and typed as plain JSON in the schema.
         let outputs = outputs
             .iter()
@@ -1440,7 +1442,7 @@ mod tests {
 
     #[test]
     fn config_key_validation_rejects_global_and_unknown_keys() {
-        let def = AgentDefinition::new("test", "t", None)
+        let def = ModuleDefinition::new("test", "t", None)
             .string_config("channel", "")
             .string_global_config("slack_bot_token", "");
 
@@ -1455,13 +1457,13 @@ mod tests {
         assert!(err.contains("channel"));
     }
 
-    /// A definition of a Switch-like agent plus the spec of an instance that
+    /// A definition of a Switch-like module plus the spec of an instance that
     /// generated `c2` (value only), `c3` (spec only) and parked a stale
     /// `_c9`.
-    fn numbered_def_and_live_spec() -> (AgentDefinition, AgentSpec) {
-        use crate::definition::AgentConfigSpec;
+    fn numbered_def_and_live_spec() -> (ModuleDefinition, ModuleSpec) {
+        use crate::definition::ModuleConfigSpec;
 
-        let def = AgentDefinition::new("test", "t", None)
+        let def = ModuleDefinition::new("test", "t", None)
             .integer_config("n", 2)
             .string_config("c0", "")
             .string_config("c1", "")
@@ -1469,11 +1471,11 @@ mod tests {
 
         let mut live = def.to_spec();
         let mut configs = live.configs.take().unwrap_or_default();
-        configs.set("c2".into(), AgentValue::string(""));
-        configs.set("_c9".into(), AgentValue::string("stale"));
+        configs.set("c2".into(), Value::string(""));
+        configs.set("_c9".into(), Value::string("stale"));
         live.configs = Some(configs);
         let mut config_specs = live.config_specs.take().unwrap_or_default();
-        config_specs.insert("c3".into(), AgentConfigSpec::default());
+        config_specs.insert("c3".into(), ModuleConfigSpec::default());
         live.config_specs = Some(config_specs);
 
         (def, live)
@@ -1528,7 +1530,7 @@ mod tests {
         assert!(err.contains("c0, c1"), "{err}");
 
         // A spec carrying neither configs nor config_specs falls back too.
-        let empty = AgentSpec {
+        let empty = ModuleSpec {
             def_name: live.def_name.clone(),
             ..Default::default()
         };
@@ -1664,7 +1666,7 @@ mod tests {
         assert!(ring.collect_errors(Some("other"), 0, 10).is_empty());
     }
 
-    /// Drives the tool handlers directly against a Switch-like agent whose
+    /// Drives the tool handlers directly against a Switch-like module whose
     /// live spec - not its definition - knows the generated config keys.
     mod tool_tests {
         use async_trait::async_trait;
@@ -1673,9 +1675,9 @@ mod tests {
         use rmcp::model::CallToolResponse;
 
         use super::*;
-        use crate::agent::{AgentData, AsAgent};
-        use crate::definition::{AgentConfigSpec, AgentConfigSpecs};
-        use crate::output::AgentOutput;
+        use crate::definition::{ModuleConfigSpec, ModuleConfigSpecs};
+        use crate::module::{AsModule, ModuleData};
+        use crate::output::ModuleOutput;
 
         /// A condition value the double rejects AFTER committing it, the way
         /// Switch keeps an unparsable condition as never-matching.
@@ -1692,11 +1694,11 @@ mod tests {
             string_config(name = "c0"),
             string_config(name = "c1"),
         )]
-        struct McpNumberedAgent {
-            data: AgentData,
+        struct McpNumberedModule {
+            data: ModuleData,
         }
 
-        fn rebuild_numbered(spec: &mut AgentSpec) -> Result<(), AgentError> {
+        fn rebuild_numbered(spec: &mut ModuleSpec) -> Result<()> {
             let n = spec
                 .configs
                 .as_ref()
@@ -1704,9 +1706,9 @@ mod tests {
                 .unwrap_or(2)
                 .clamp(1, 16) as usize;
 
-            let mut configs = AgentConfigs::new();
-            let mut config_specs = AgentConfigSpecs::default();
-            configs.set("n".to_string(), AgentValue::integer(n as i64));
+            let mut configs = ModuleConfigs::new();
+            let mut config_specs = ModuleConfigSpecs::default();
+            configs.set("n".to_string(), Value::integer(n as i64));
             if let Some(n_spec) = spec
                 .config_specs
                 .as_ref()
@@ -1722,11 +1724,11 @@ mod tests {
                     .as_ref()
                     .map(|cfg| cfg.get_string_or(&name, ""))
                     .unwrap_or_default();
-                configs.set(name.clone(), AgentValue::string(value));
+                configs.set(name.clone(), Value::string(value));
                 config_specs.insert(
                     name,
-                    AgentConfigSpec {
-                        value: AgentValue::string_default(),
+                    ModuleConfigSpec {
+                        value: Value::string_default(),
                         type_: Some("string".to_string()),
                         ..Default::default()
                     },
@@ -1741,7 +1743,7 @@ mod tests {
             if let Some(configs) = &spec.configs {
                 for i in 0..n {
                     if configs.get_string_or(&format!("c{}", i), "") == INVALID_CONDITION {
-                        return Err(AgentError::InvalidConfig(format!(
+                        return Err(Error::InvalidConfig(format!(
                             "condition c{} is not parsable",
                             i
                         )));
@@ -1752,17 +1754,17 @@ mod tests {
         }
 
         #[async_trait]
-        impl AsAgent for McpNumberedAgent {
-            fn new(ma: ModularAgent, id: String, mut spec: AgentSpec) -> Result<Self, AgentError> {
+        impl AsModule for McpNumberedModule {
+            fn new(ma: ModularAgent, id: String, mut spec: ModuleSpec) -> Result<Self> {
                 rebuild_numbered(&mut spec)?;
                 Ok(Self {
-                    data: AgentData::new(ma, id, spec),
+                    data: ModuleData::new(ma, id, spec),
                 })
             }
 
-            fn configs_changed(&mut self) -> Result<(), AgentError> {
+            fn configs_changed(&mut self) -> Result<()> {
                 rebuild_numbered(&mut self.data.spec)?;
-                self.emit_agent_spec_updated();
+                self.emit_module_spec_updated();
                 Ok(())
             }
         }
@@ -1792,7 +1794,7 @@ mod tests {
             }
         }
 
-        fn result_json(result: &CallToolResult) -> Value {
+        fn result_json(result: &CallToolResult) -> JsonValue {
             serde_json::from_str(result_text(result)).expect("tool result must be JSON")
         }
 
@@ -1803,13 +1805,13 @@ mod tests {
         async fn add_numbered(
             server: &McpServer,
             patch_id: &str,
-            configs: serde_json::Map<String, Value>,
+            configs: serde_json::Map<String, JsonValue>,
         ) -> CallToolResult {
             complete(
                 server
-                    .add_agent(Parameters(AddAgentParams {
+                    .add_module(Parameters(AddModuleParams {
                         patch_id: patch_id.to_string(),
-                        def_name: McpNumberedAgent::DEF_NAME.to_string(),
+                        def_name: McpNumberedModule::DEF_NAME.to_string(),
                         configs: Some(configs),
                         x: None,
                         y: None,
@@ -1820,15 +1822,15 @@ mod tests {
             )
         }
 
-        fn json_map(value: Value) -> serde_json::Map<String, Value> {
+        fn json_map(value: JsonValue) -> serde_json::Map<String, JsonValue> {
             match value {
-                Value::Object(map) => map,
+                JsonValue::Object(map) => map,
                 _ => unreachable!(),
             }
         }
 
         #[tokio::test]
-        async fn add_agent_applies_deferred_generated_configs() {
+        async fn add_module_applies_deferred_generated_configs() {
             let (ma, server, patch_id) = setup().await;
 
             let result = add_numbered(
@@ -1844,14 +1846,14 @@ mod tests {
             let created = result_json(&result);
             assert_eq!(created["configs"]["c2"], "hello");
             let outputs = created["outputs"].as_array().unwrap();
-            assert!(outputs.contains(&Value::String("2".into())));
+            assert!(outputs.contains(&JsonValue::String("2".into())));
             assert!(created.get("warning").is_none());
 
             ma.quit();
         }
 
         #[tokio::test]
-        async fn add_agent_rolls_back_when_deferred_key_is_invalid() {
+        async fn add_module_rolls_back_when_deferred_key_is_invalid() {
             let (ma, server, patch_id) = setup().await;
 
             let result = add_numbered(
@@ -1865,15 +1867,15 @@ mod tests {
             assert!(text.contains("c9"), "{text}");
             assert!(text.contains("c2"), "valid keys must be listed: {text}");
 
-            // The half-created agent must not survive the failure.
+            // The half-created module must not survive the failure.
             let spec = ma.get_patch_spec(&patch_id).await.unwrap();
-            assert!(spec.agents.is_empty(), "rollback must remove the agent");
+            assert!(spec.modules.is_empty(), "rollback must remove the module");
 
             ma.quit();
         }
 
         #[tokio::test]
-        async fn add_agent_keeps_agent_and_warns_when_configs_error_after_commit() {
+        async fn add_module_keeps_module_and_warns_when_configs_error_after_commit() {
             let (ma, server, patch_id) = setup().await;
 
             let result = add_numbered(
@@ -1884,7 +1886,7 @@ mod tests {
             .await;
             assert!(!is_error(&result), "{}", result_text(&result));
 
-            // The agent committed the condition before reporting it, so it
+            // The module committed the condition before reporting it, so it
             // stays, the value is kept and the error surfaces as a warning.
             let created = result_json(&result);
             assert_eq!(created["configs"]["c2"], INVALID_CONDITION);
@@ -1895,22 +1897,22 @@ mod tests {
         }
 
         #[tokio::test]
-        async fn set_agent_configs_tool_accepts_generated_key() {
+        async fn set_module_configs_tool_accepts_generated_key() {
             let (ma, server, patch_id) = setup().await;
 
             let result =
                 add_numbered(&server, &patch_id, json_map(serde_json::json!({ "n": 3 }))).await;
-            let agent_id = result_json(&result)["id"].as_str().unwrap().to_string();
+            let module_id = result_json(&result)["id"].as_str().unwrap().to_string();
 
             let result = server
-                .set_agent_configs(Parameters(SetAgentConfigsParams {
-                    agent_id: agent_id.clone(),
+                .set_module_configs(Parameters(SetModuleConfigsParams {
+                    module_id: module_id.clone(),
                     configs: json_map(serde_json::json!({ "c2": "hello" })),
                 }))
                 .await
                 .unwrap();
             assert!(!is_error(&result), "{}", result_text(&result));
-            let spec = ma.get_agent_spec(&agent_id).await.unwrap();
+            let spec = ma.get_module_spec(&module_id).await.unwrap();
             assert_eq!(
                 spec.configs.unwrap().get_string_or("c2", ""),
                 "hello",
@@ -1918,8 +1920,8 @@ mod tests {
             );
 
             let result = server
-                .set_agent_configs(Parameters(SetAgentConfigsParams {
-                    agent_id,
+                .set_module_configs(Parameters(SetModuleConfigsParams {
+                    module_id,
                     configs: json_map(serde_json::json!({ "c9": "x" })),
                 }))
                 .await
@@ -1931,16 +1933,16 @@ mod tests {
         }
 
         #[tokio::test]
-        async fn update_agent_spec_tool_accepts_generated_key() {
+        async fn update_module_spec_tool_accepts_generated_key() {
             let (ma, server, patch_id) = setup().await;
 
             let result =
                 add_numbered(&server, &patch_id, json_map(serde_json::json!({ "n": 3 }))).await;
-            let agent_id = result_json(&result)["id"].as_str().unwrap().to_string();
+            let module_id = result_json(&result)["id"].as_str().unwrap().to_string();
 
             let result = server
-                .update_agent_spec(Parameters(UpdateAgentSpecParams {
-                    agent_id: agent_id.clone(),
+                .update_module_spec(Parameters(UpdateModuleSpecParams {
+                    module_id: module_id.clone(),
                     patch: json_map(serde_json::json!({ "configs": { "c2": "v" } })),
                 }))
                 .await
@@ -1949,7 +1951,7 @@ mod tests {
 
             // The partial patch must merge: n and the other conditions
             // survive, so configs_changed keeps all three ports.
-            let spec = ma.get_agent_spec(&agent_id).await.unwrap();
+            let spec = ma.get_module_spec(&module_id).await.unwrap();
             let configs = spec.configs.unwrap();
             assert_eq!(configs.get_string_or("c2", ""), "v");
             assert_eq!(configs.get_integer_or("n", 0), 3);
@@ -1959,25 +1961,25 @@ mod tests {
         }
 
         #[tokio::test]
-        async fn update_agent_spec_tool_reports_committed_config_error() {
+        async fn update_module_spec_tool_reports_committed_config_error() {
             let (ma, server, patch_id) = setup().await;
 
             let result =
                 add_numbered(&server, &patch_id, json_map(serde_json::json!({ "n": 3 }))).await;
-            let agent_id = result_json(&result)["id"].as_str().unwrap().to_string();
+            let module_id = result_json(&result)["id"].as_str().unwrap().to_string();
 
             let result = server
-                .update_agent_spec(Parameters(UpdateAgentSpecParams {
-                    agent_id: agent_id.clone(),
+                .update_module_spec(Parameters(UpdateModuleSpecParams {
+                    module_id: module_id.clone(),
                     patch: json_map(serde_json::json!({ "configs": { "c2": INVALID_CONDITION } })),
                 }))
                 .await
                 .unwrap();
 
             // configs_changed rejected the committed value: the error must
-            // reach the caller while the spec keeps what the agent stored.
+            // reach the caller while the spec keeps what the module stored.
             assert!(is_error(&result));
-            let spec = ma.get_agent_spec(&agent_id).await.unwrap();
+            let spec = ma.get_module_spec(&module_id).await.unwrap();
             assert_eq!(
                 spec.configs.unwrap().get_string_or("c2", ""),
                 INVALID_CONDITION
@@ -2042,12 +2044,12 @@ mod tests {
                     .unwrap_or_else(|| panic!("tool {name} not found"))
             };
             for name in [
-                "get_agent_definition",
+                "get_module_definition",
                 "list_patches",
                 "create_patch",
                 "get_patch_spec",
-                "add_agent",
-                "get_agent_errors",
+                "add_module",
+                "get_module_errors",
                 "get_external_outputs",
             ] {
                 let schema = tool(name)
@@ -2063,7 +2065,7 @@ mod tests {
             let schema = tool("create_patch").output_schema.clone().unwrap();
             assert!(schema["properties"]["patch_id"].is_object(), "{schema:?}");
             // Text-ack tools stay schema-less.
-            assert!(tool("list_agent_definitions").output_schema.is_none());
+            assert!(tool("list_module_definitions").output_schema.is_none());
             assert!(tool("start_patch").output_schema.is_none());
         }
     }

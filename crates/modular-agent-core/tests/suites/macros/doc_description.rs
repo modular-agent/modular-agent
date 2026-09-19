@@ -1,40 +1,31 @@
 use modular_agent_core::{
-    AgentContext, AgentData, AgentError, AgentSpec, AgentValue, AsAgent, async_trait, modular_agent,
+    AsModule, ModuleContext, ModuleData, ModuleSpec, Result, Value, async_trait, modular_agent,
 };
 
 // --- Single-line doc comment ---
 
 /// Echoes input to output.
 #[modular_agent(kind = "Test", title = "DocSingle", category = "Tests")]
-struct DocSingleAgent {
-    data: AgentData,
+struct DocSingleModule {
+    data: ModuleData,
 }
 
 #[async_trait]
-impl AsAgent for DocSingleAgent {
-    fn new(
-        ma: modular_agent_core::ModularAgent,
-        id: String,
-        spec: AgentSpec,
-    ) -> Result<Self, AgentError> {
+impl AsModule for DocSingleModule {
+    fn new(ma: modular_agent_core::ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
         Ok(Self {
-            data: AgentData::new(ma, id, spec),
+            data: ModuleData::new(ma, id, spec),
         })
     }
 
-    async fn process(
-        &mut self,
-        _ctx: AgentContext,
-        _port: String,
-        _value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, _ctx: ModuleContext, _port: String, _value: Value) -> Result<()> {
         Ok(())
     }
 }
 
 #[test]
 fn single_line_doc_becomes_description() {
-    let def = DocSingleAgent::agent_definition();
+    let def = DocSingleModule::module_definition();
     assert_eq!(def.description.as_deref(), Some("Echoes input to output."));
 }
 
@@ -43,35 +34,26 @@ fn single_line_doc_becomes_description() {
 /// Adds a constant integer
 /// to the input value.
 #[modular_agent(kind = "Test", title = "DocMulti", category = "Tests")]
-struct DocMultiAgent {
-    data: AgentData,
+struct DocMultiModule {
+    data: ModuleData,
 }
 
 #[async_trait]
-impl AsAgent for DocMultiAgent {
-    fn new(
-        ma: modular_agent_core::ModularAgent,
-        id: String,
-        spec: AgentSpec,
-    ) -> Result<Self, AgentError> {
+impl AsModule for DocMultiModule {
+    fn new(ma: modular_agent_core::ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
         Ok(Self {
-            data: AgentData::new(ma, id, spec),
+            data: ModuleData::new(ma, id, spec),
         })
     }
 
-    async fn process(
-        &mut self,
-        _ctx: AgentContext,
-        _port: String,
-        _value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, _ctx: ModuleContext, _port: String, _value: Value) -> Result<()> {
         Ok(())
     }
 }
 
 #[test]
 fn multi_line_doc_joined_with_newline() {
-    let def = DocMultiAgent::agent_definition();
+    let def = DocMultiModule::module_definition();
     assert_eq!(
         def.description.as_deref(),
         Some("Adds a constant integer\nto the input value.")
@@ -84,35 +66,26 @@ fn multi_line_doc_joined_with_newline() {
 ///
 /// Second paragraph.
 #[modular_agent(kind = "Test", title = "DocParagraph", category = "Tests")]
-struct DocParagraphAgent {
-    data: AgentData,
+struct DocParagraphModule {
+    data: ModuleData,
 }
 
 #[async_trait]
-impl AsAgent for DocParagraphAgent {
-    fn new(
-        ma: modular_agent_core::ModularAgent,
-        id: String,
-        spec: AgentSpec,
-    ) -> Result<Self, AgentError> {
+impl AsModule for DocParagraphModule {
+    fn new(ma: modular_agent_core::ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
         Ok(Self {
-            data: AgentData::new(ma, id, spec),
+            data: ModuleData::new(ma, id, spec),
         })
     }
 
-    async fn process(
-        &mut self,
-        _ctx: AgentContext,
-        _port: String,
-        _value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, _ctx: ModuleContext, _port: String, _value: Value) -> Result<()> {
         Ok(())
     }
 }
 
 #[test]
 fn blank_line_doc_produces_paragraph_break() {
-    let def = DocParagraphAgent::agent_definition();
+    let def = DocParagraphModule::module_definition();
     assert_eq!(
         def.description.as_deref(),
         Some("First paragraph.\n\nSecond paragraph.")
@@ -128,69 +101,51 @@ fn blank_line_doc_produces_paragraph_break() {
     category = "Tests",
     description = "Explicit wins"
 )]
-struct DocExplicitAgent {
-    data: AgentData,
+struct DocExplicitModule {
+    data: ModuleData,
 }
 
 #[async_trait]
-impl AsAgent for DocExplicitAgent {
-    fn new(
-        ma: modular_agent_core::ModularAgent,
-        id: String,
-        spec: AgentSpec,
-    ) -> Result<Self, AgentError> {
+impl AsModule for DocExplicitModule {
+    fn new(ma: modular_agent_core::ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
         Ok(Self {
-            data: AgentData::new(ma, id, spec),
+            data: ModuleData::new(ma, id, spec),
         })
     }
 
-    async fn process(
-        &mut self,
-        _ctx: AgentContext,
-        _port: String,
-        _value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, _ctx: ModuleContext, _port: String, _value: Value) -> Result<()> {
         Ok(())
     }
 }
 
 #[test]
 fn explicit_description_overrides_doc_comment() {
-    let def = DocExplicitAgent::agent_definition();
+    let def = DocExplicitModule::module_definition();
     assert_eq!(def.description.as_deref(), Some("Explicit wins"));
 }
 
 // --- No doc comment and no description ---
 
 #[modular_agent(kind = "Test", title = "NoDoc", category = "Tests")]
-struct NoDocAgent {
-    data: AgentData,
+struct NoDocModule {
+    data: ModuleData,
 }
 
 #[async_trait]
-impl AsAgent for NoDocAgent {
-    fn new(
-        ma: modular_agent_core::ModularAgent,
-        id: String,
-        spec: AgentSpec,
-    ) -> Result<Self, AgentError> {
+impl AsModule for NoDocModule {
+    fn new(ma: modular_agent_core::ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
         Ok(Self {
-            data: AgentData::new(ma, id, spec),
+            data: ModuleData::new(ma, id, spec),
         })
     }
 
-    async fn process(
-        &mut self,
-        _ctx: AgentContext,
-        _port: String,
-        _value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, _ctx: ModuleContext, _port: String, _value: Value) -> Result<()> {
         Ok(())
     }
 }
 
 #[test]
 fn no_doc_no_description_is_none() {
-    let def = NoDocAgent::agent_definition();
+    let def = NoDocModule::module_definition();
     assert!(def.description.is_none());
 }

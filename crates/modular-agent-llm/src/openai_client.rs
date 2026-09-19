@@ -2,11 +2,11 @@ use std::sync::{Arc, Mutex};
 
 use modular_agent_core::tool;
 use modular_agent_core::{
-    AgentError, AgentValue, AgentValueMap, ContentBlock, Message, MessageContent, ModularAgent,
-    ToolCall, ToolCallFunction, Usage,
+    ContentBlock, Error, Message, MessageContent, ModularAgent, Result, ToolCall, ToolCallFunction,
+    Usage, Value, ValueMap,
 };
 
-use crate::chat::ChatAgent;
+use crate::chat::ChatModule;
 use crate::provider::{CONFIG_OPENAI_API_BASE, CONFIG_OPENAI_API_KEY, DEFAULT_OPENAI_API_BASE};
 
 // ============================================================================
@@ -31,7 +31,7 @@ impl OpenAIManager {
         }
     }
 
-    pub fn get_client(&self, ma: &ModularAgent) -> Result<OpenAIClient, AgentError> {
+    pub fn get_client(&self, ma: &ModularAgent) -> Result<OpenAIClient> {
         let mut client_guard = self.client.lock().unwrap();
 
         if let Some(client) = client_guard.as_ref() {
@@ -40,7 +40,7 @@ impl OpenAIManager {
 
         // API key: config → OPENAI_API_KEY env var → empty
         let api_key = ma
-            .get_global_configs(ChatAgent::DEF_NAME)
+            .get_global_configs(ChatModule::DEF_NAME)
             .and_then(|cfg| cfg.get_string(CONFIG_OPENAI_API_KEY).ok())
             .filter(|key| !key.is_empty())
             .or_else(|| {
@@ -52,7 +52,7 @@ impl OpenAIManager {
 
         // API base: config → OPENAI_API_BASE env var → default
         let api_base = ma
-            .get_global_configs(ChatAgent::DEF_NAME)
+            .get_global_configs(ChatModule::DEF_NAME)
             .and_then(|cfg| cfg.get_string(CONFIG_OPENAI_API_BASE).ok())
             .filter(|url| !url.is_empty())
             .or_else(|| {
@@ -68,7 +68,7 @@ impl OpenAIManager {
             .connect_timeout(std::time::Duration::from_secs(10))
             .read_timeout(std::time::Duration::from_secs(120))
             .build()
-            .map_err(|e| AgentError::IoError(format!("OpenAI client build error: {}", e)))?;
+            .map_err(|e| Error::IoError(format!("OpenAI client build error: {}", e)))?;
         let new_client = OpenAIClient {
             http,
             api_key,
@@ -112,7 +112,7 @@ impl OpenAIClient {
         &self,
         url: &str,
         body: &serde_json::Value,
-    ) -> Result<T, AgentError> {
+    ) -> Result<T> {
         let resp = self
             .http
             .post(url)
@@ -143,8 +143,7 @@ impl OpenAIClient {
         &self,
         url: &str,
         body: &serde_json::Value,
-    ) -> Result<impl futures::Stream<Item = Result<Option<String>, AgentError>> + use<>, AgentError>
-    {
+    ) -> Result<impl futures::Stream<Item = Result<Option<String>>> + use<>> {
         use eventsource_stream::Eventsource;
         use futures::StreamExt;
 
@@ -176,34 +175,34 @@ impl OpenAIClient {
                         Ok(Some(event.data))
                     }
                 }
-                Err(e) => Err(AgentError::IoError(format!("OpenAI stream error: {}", e))),
+                Err(e) => Err(Error::IoError(format!("OpenAI stream error: {}", e))),
             });
 
         Ok(stream)
     }
 }
 
-fn map_http_error(status: u16, body: &str, retry_after: Option<std::time::Duration>) -> AgentError {
+fn map_http_error(status: u16, body: &str, retry_after: Option<std::time::Duration>) -> Error {
     // 429 takes precedence over overflow detection so throttling responses
     // whose body happens to mention context size stay retryable.
     if status == 429 {
         let lower = body.to_lowercase();
         if crate::http_error::mentions_quota_exhausted(&lower) {
-            return AgentError::InvalidConfig(format!("OpenAI quota exhausted: {}", body));
+            return Error::InvalidConfig(format!("OpenAI quota exhausted: {}", body));
         }
-        return AgentError::RateLimited {
+        return Error::RateLimited {
             message: format!("OpenAI rate limited: {}", body),
             retry_after,
         };
     }
     if is_context_overflow(body) {
-        return AgentError::ContextOverflow(format!("OpenAI context overflow: {}", body));
+        return Error::ContextOverflow(format!("OpenAI context overflow: {}", body));
     }
     match status {
-        401 => AgentError::InvalidConfig(format!("Invalid OpenAI API key: {}", body)),
-        400 => AgentError::InvalidValue(format!("OpenAI Bad Request: {}", body)),
-        500..=599 => AgentError::Overloaded(format!("OpenAI API Error ({}): {}", status, body)),
-        _ => AgentError::IoError(format!("OpenAI API Error ({}): {}", status, body)),
+        401 => Error::InvalidConfig(format!("Invalid OpenAI API key: {}", body)),
+        400 => Error::InvalidValue(format!("OpenAI Bad Request: {}", body)),
+        500..=599 => Error::Overloaded(format!("OpenAI API Error ({}): {}", status, body)),
+        _ => Error::IoError(format!("OpenAI API Error ({}): {}", status, body)),
     }
 }
 
@@ -407,8 +406,8 @@ pub async fn generate_embeddings(
     client: &OpenAIClient,
     texts: Vec<String>,
     model_name: &str,
-    config_options: &AgentValueMap<String, AgentValue>,
-) -> Result<Vec<Vec<f32>>, AgentError> {
+    config_options: &ValueMap<String, Value>,
+) -> Result<Vec<Vec<f32>>> {
     let mut request = serde_json::json!({
         "model": model_name,
         "input": texts,
@@ -685,9 +684,7 @@ pub(crate) fn finalize_pending_tool_calls(
 /// - Assistant messages with tool_calls → FunctionCall items
 /// - Tool result messages → FunctionCallOutput items
 /// - Other messages → Message items (via serde_json)
-pub fn messages_to_response_input(
-    messages: &im::Vector<AgentValue>,
-) -> Result<Vec<serde_json::Value>, AgentError> {
+pub fn messages_to_response_input(messages: &im::Vector<Value>) -> Result<Vec<serde_json::Value>> {
     let mut input_items = Vec::new();
 
     for msg_value in messages.iter() {
@@ -749,7 +746,7 @@ fn build_response_message_item(
     input_items: &mut Vec<serde_json::Value>,
     role_str: &str,
     msg: &Message,
-) -> Result<(), AgentError> {
+) -> Result<()> {
     #[cfg(feature = "image")]
     if let Some(image) = &msg.image {
         input_items.push(serde_json::json!({
@@ -801,7 +798,7 @@ fn build_response_message_item(
 }
 
 /// Convert Responses API output items to internal Message.
-pub fn response_output_to_message(output: &[serde_json::Value]) -> Result<Message, AgentError> {
+pub fn response_output_to_message(output: &[serde_json::Value]) -> Result<Message> {
     let mut content = String::new();
     let mut tool_calls: Vec<ToolCall> = Vec::new();
 
@@ -870,17 +867,17 @@ pub fn response_output_to_message(output: &[serde_json::Value]) -> Result<Messag
 // Helpers
 // ============================================================================
 
-/// Derive a stable prompt cache key from the agent's patch and instance ids.
+/// Derive a stable prompt cache key from the module's patch and instance ids.
 ///
 /// OpenAI caps `prompt_cache_key` at 64 chars; longer keys are rejected. The
-/// key must be deterministic across calls of the same agent instance so that
+/// key must be deterministic across calls of the same module instance so that
 /// repeated requests route to the same cache, so it is derived purely from
 /// stable identifiers (no timestamps or random data).
-pub(crate) fn prompt_cache_key(patch_id: &str, agent_id: &str) -> String {
+pub(crate) fn prompt_cache_key(patch_id: &str, module_id: &str) -> String {
     let key = if patch_id.is_empty() {
-        agent_id.to_string()
+        module_id.to_string()
     } else {
-        format!("{}:{}", patch_id, agent_id)
+        format!("{}:{}", patch_id, module_id)
     };
     // Clamp on a char boundary so a multi-byte id near the limit stays valid.
     if key.len() <= 64 {
@@ -902,13 +899,13 @@ pub(crate) fn prompt_cache_key(patch_id: &str, agent_id: &str) -> String {
 /// that reject the parameter regardless of its value.
 pub(crate) fn merge_options(
     request: &mut serde_json::Value,
-    config_options: &AgentValueMap<String, AgentValue>,
-) -> Result<(), AgentError> {
+    config_options: &ValueMap<String, Value>,
+) -> Result<()> {
     if config_options.is_empty() {
         return Ok(());
     }
     let options_json = serde_json::to_value(config_options)
-        .map_err(|e| AgentError::InvalidValue(format!("Invalid JSON in options: {}", e)))?;
+        .map_err(|e| Error::InvalidValue(format!("Invalid JSON in options: {}", e)))?;
     if let (Some(req_obj), Some(opt_obj)) = (request.as_object_mut(), options_json.as_object()) {
         for (key, value) in opt_obj {
             if value.is_null() {
@@ -1511,7 +1508,7 @@ mod tests {
     }
 
     #[test]
-    fn test_prompt_cache_key_empty_patch_uses_agent_id() {
+    fn test_prompt_cache_key_empty_patch_uses_module_id() {
         assert_eq!(prompt_cache_key("", "agent1"), "agent1");
     }
 
@@ -1527,8 +1524,8 @@ mod tests {
     #[test]
     fn test_prompt_cache_key_clamped_to_64_chars() {
         let patch = "p".repeat(50);
-        let agent = "a".repeat(50);
-        let key = prompt_cache_key(&patch, &agent);
+        let module = "a".repeat(50);
+        let key = prompt_cache_key(&patch, &module);
         assert!(key.len() <= 64, "key len was {}", key.len());
     }
 
@@ -1536,7 +1533,7 @@ mod tests {
     fn test_prompt_cache_key_clamps_on_char_boundary() {
         // A multi-byte char straddling the 64-byte limit must not be split.
         let patch = "あ".repeat(30); // 90 bytes
-        let key = prompt_cache_key(&patch, "agent");
+        let key = prompt_cache_key(&patch, "module");
         assert!(key.len() <= 64, "key len was {}", key.len());
         // Round-trips as valid UTF-8 (would panic on a bad boundary slice).
         assert!(!key.is_empty());
@@ -1546,15 +1543,15 @@ mod tests {
     fn test_map_http_error() {
         assert!(matches!(
             map_http_error(401, "Unauthorized", None),
-            AgentError::InvalidConfig(_)
+            Error::InvalidConfig(_)
         ));
         assert!(matches!(
             map_http_error(400, "Bad request", None),
-            AgentError::InvalidValue(_)
+            Error::InvalidValue(_)
         ));
         assert!(matches!(
             map_http_error(418, "I'm a teapot", None),
-            AgentError::IoError(_)
+            Error::IoError(_)
         ));
     }
 
@@ -1563,7 +1560,7 @@ mod tests {
         let err = map_http_error(429, "Rate limited", None);
         assert!(matches!(
             err,
-            AgentError::RateLimited {
+            Error::RateLimited {
                 retry_after: None,
                 ..
             }
@@ -1572,7 +1569,7 @@ mod tests {
         let retry_after = Some(std::time::Duration::from_secs(30));
         let err = map_http_error(429, "Rate limited", retry_after);
         assert!(
-            matches!(err, AgentError::RateLimited { retry_after: Some(d), .. } if d.as_secs() == 30)
+            matches!(err, Error::RateLimited { retry_after: Some(d), .. } if d.as_secs() == 30)
         );
     }
 
@@ -1583,7 +1580,7 @@ mod tests {
             "You exceeded your current quota, please check your plan and billing details.",
             None,
         );
-        assert!(matches!(err, AgentError::InvalidConfig(_)));
+        assert!(matches!(err, Error::InvalidConfig(_)));
         assert!(!err.is_retryable());
     }
 
@@ -1591,14 +1588,14 @@ mod tests {
     fn test_map_http_error_overloaded() {
         assert!(matches!(
             map_http_error(500, "Server error", None),
-            AgentError::Overloaded(_)
+            Error::Overloaded(_)
         ));
         assert!(matches!(
             map_http_error(503, "Service unavailable", None),
-            AgentError::Overloaded(_)
+            Error::Overloaded(_)
         ));
         let err = map_http_error(500, "Server error", None);
-        if let AgentError::Overloaded(msg) = err {
+        if let Error::Overloaded(msg) = err {
             assert!(msg.contains("500"), "msg was: {msg}");
             assert!(msg.contains("OpenAI"), "msg was: {msg}");
         } else {
@@ -1614,7 +1611,7 @@ mod tests {
                 "This model's maximum context length is 128000 tokens",
                 None
             ),
-            AgentError::ContextOverflow(_)
+            Error::ContextOverflow(_)
         ));
         assert!(matches!(
             map_http_error(
@@ -1622,7 +1619,7 @@ mod tests {
                 "Your input exceeds the context window of this model",
                 None
             ),
-            AgentError::ContextOverflow(_)
+            Error::ContextOverflow(_)
         ));
     }
 
@@ -1631,12 +1628,12 @@ mod tests {
         // A 429 whose body mentions context size must stay RateLimited
         assert!(matches!(
             map_http_error(429, "maximum context length rate limit reached", None),
-            AgentError::RateLimited { .. }
+            Error::RateLimited { .. }
         ));
         // A 400 mentioning both overflow and rate limit wording is not overflow
         assert!(matches!(
             map_http_error(400, "maximum context length; rate limit applies", None),
-            AgentError::InvalidValue(_)
+            Error::InvalidValue(_)
         ));
     }
 
@@ -1646,7 +1643,7 @@ mod tests {
 
     #[test]
     fn test_response_input_user_message() {
-        let messages = vector![AgentValue::from(Message::user("Hello".to_string()))];
+        let messages = vector![Value::from(Message::user("Hello".to_string()))];
         let items = messages_to_response_input(&messages).unwrap();
 
         assert_eq!(items.len(), 1);
@@ -1666,7 +1663,7 @@ mod tests {
                 text: "what is this?".to_string(),
             },
         ]);
-        let messages = vector![AgentValue::from(msg)];
+        let messages = vector![Value::from(msg)];
         let items = messages_to_response_input(&messages).unwrap();
 
         assert_eq!(items.len(), 1);
@@ -1745,14 +1742,14 @@ mod tests {
         );
         msg.id = Some("call_img".to_string());
 
-        let items = messages_to_response_input(&vector![AgentValue::from(msg)]).unwrap();
+        let items = messages_to_response_input(&vector![Value::from(msg)]).unwrap();
         assert_eq!(items[0]["type"], "function_call_output");
         assert_eq!(items[0]["output"], "[image: image/png]");
     }
 
     #[test]
     fn test_response_input_assistant_without_tool_calls() {
-        let messages = vector![AgentValue::from(Message::assistant("Hi there".to_string()))];
+        let messages = vector![Value::from(Message::assistant("Hi there".to_string()))];
         let items = messages_to_response_input(&messages).unwrap();
 
         assert_eq!(items.len(), 1);
@@ -1768,7 +1765,7 @@ mod tests {
             "get_weather",
             serde_json::json!({"city": "NY"})
         )]);
-        let messages = vector![AgentValue::from(msg)];
+        let messages = vector![Value::from(msg)];
         let items = messages_to_response_input(&messages).unwrap();
 
         // Should have: 1 message item (text) + 1 function_call item
@@ -1790,7 +1787,7 @@ mod tests {
             "search",
             serde_json::json!({"q": "test"})
         )]);
-        let messages = vector![AgentValue::from(msg)];
+        let messages = vector![Value::from(msg)];
         let items = messages_to_response_input(&messages).unwrap();
 
         // No text content → only function_call item, no message item
@@ -1803,7 +1800,7 @@ mod tests {
     fn test_response_input_tool_result() {
         let mut msg = Message::tool("get_weather".to_string(), "22°C".to_string());
         msg.id = Some("call_456".to_string());
-        let messages = vector![AgentValue::from(msg)];
+        let messages = vector![Value::from(msg)];
         let items = messages_to_response_input(&messages).unwrap();
 
         assert_eq!(items.len(), 1);
@@ -1815,7 +1812,7 @@ mod tests {
     #[test]
     fn test_response_input_tool_result_no_id() {
         let msg = Message::tool("my_tool".to_string(), "result".to_string());
-        let messages = vector![AgentValue::from(msg)];
+        let messages = vector![Value::from(msg)];
         let items = messages_to_response_input(&messages).unwrap();
 
         assert_eq!(items[0]["type"], "function_call_output");
@@ -1839,9 +1836,9 @@ mod tests {
         tool_msg.id = Some("call_abc".to_string());
 
         let messages = vector![
-            AgentValue::from(Message::user("What's my horoscope?".to_string())),
-            AgentValue::from(assistant_msg),
-            AgentValue::from(tool_msg),
+            Value::from(Message::user("What's my horoscope?".to_string())),
+            Value::from(assistant_msg),
+            Value::from(tool_msg),
         ];
 
         let items = messages_to_response_input(&messages).unwrap();
@@ -1861,9 +1858,7 @@ mod tests {
 
     #[test]
     fn test_response_input_system_message() {
-        let messages = vector![AgentValue::from(Message::system(
-            "You are helpful.".to_string()
-        ))];
+        let messages = vector![Value::from(Message::system("You are helpful.".to_string()))];
         let items = messages_to_response_input(&messages).unwrap();
 
         assert_eq!(items[0]["role"], "developer");
@@ -1933,9 +1928,9 @@ mod tests {
             "model": "gpt-5-nano",
             "stream_options": { "include_usage": true },
         });
-        let mut options: AgentValueMap<String, AgentValue> = AgentValueMap::new();
-        options.insert("stream_options".into(), AgentValue::unit());
-        options.insert("seed".into(), AgentValue::integer(42));
+        let mut options: ValueMap<String, Value> = ValueMap::new();
+        options.insert("stream_options".into(), Value::unit());
+        options.insert("seed".into(), Value::integer(42));
         merge_options(&mut request, &options).unwrap();
         assert!(request.get("stream_options").is_none());
         assert_eq!(request["seed"], 42);

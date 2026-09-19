@@ -1,8 +1,8 @@
 use std::vec;
 
 use modular_agent_core::{
-    Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentStatus, AgentValue,
-    AsAgent, ModularAgent, async_trait, modular_agent,
+    AsModule, ModularAgent, Module, ModuleContext, ModuleData, ModuleOutput, ModuleSpec,
+    ModuleStatus, Result, Value, async_trait, modular_agent,
 };
 
 const CATEGORY: &str = "Std/Input";
@@ -25,22 +25,22 @@ const OBJECT: &str = "object";
     unit_config(name = UNIT, hide_title),
     hint(color=2),
 )]
-struct UnitInputAgent {
-    data: AgentData,
+struct UnitInputModule {
+    data: ModuleData,
 }
 
-impl AsAgent for UnitInputAgent {
-    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+impl AsModule for UnitInputModule {
+    fn new(ma: ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
         Ok(Self {
-            data: AgentData::new(ma, id, spec),
+            data: ModuleData::new(ma, id, spec),
         })
     }
 
-    fn configs_changed(&mut self) -> Result<(), AgentError> {
-        // Since set_config is called even when the agent is not running,
+    fn configs_changed(&mut self) -> Result<()> {
+        // Since set_config is called even when the module is not running,
         // we need to check the status before outputting the value.
-        if *self.status() == AgentStatus::Start {
-            self.try_output(AgentContext::new(), UNIT, AgentValue::unit())?;
+        if *self.status() == ModuleStatus::Start {
+            self.try_output(ModuleContext::new(), UNIT, Value::unit())?;
         }
 
         Ok(())
@@ -57,32 +57,27 @@ impl AsAgent for UnitInputAgent {
     boolean_config(name = BOOLEAN, hide_title),
     hint(color=3),
 )]
-struct BooleanInputAgent {
-    data: AgentData,
+struct BooleanInputModule {
+    data: ModuleData,
 }
 
 #[async_trait]
-impl AsAgent for BooleanInputAgent {
-    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+impl AsModule for BooleanInputModule {
+    fn new(ma: ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
         Ok(Self {
-            data: AgentData::new(ma, id, spec),
+            data: ModuleData::new(ma, id, spec),
         })
     }
 
-    fn configs_changed(&mut self) -> Result<(), AgentError> {
-        if *self.status() == AgentStatus::Start {
+    fn configs_changed(&mut self) -> Result<()> {
+        if *self.status() == ModuleStatus::Start {
             let value = self.configs()?.get(BOOLEAN)?;
-            self.try_output(AgentContext::new(), BOOLEAN, value.clone())?;
+            self.try_output(ModuleContext::new(), BOOLEAN, value.clone())?;
         }
         Ok(())
     }
 
-    async fn process(
-        &mut self,
-        ctx: AgentContext,
-        _port: String,
-        _value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, ctx: ModuleContext, _port: String, _value: Value) -> Result<()> {
         let value = self.configs()?.get(BOOLEAN)?;
         self.output(ctx, BOOLEAN, value.clone()).await
     }
@@ -98,32 +93,27 @@ impl AsAgent for BooleanInputAgent {
     integer_config(name = INTEGER, hide_title),
     hint(color=6),
 )]
-struct IntegerInputAgent {
-    data: AgentData,
+struct IntegerInputModule {
+    data: ModuleData,
 }
 
 #[async_trait]
-impl AsAgent for IntegerInputAgent {
-    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+impl AsModule for IntegerInputModule {
+    fn new(ma: ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
         Ok(Self {
-            data: AgentData::new(ma, id, spec),
+            data: ModuleData::new(ma, id, spec),
         })
     }
 
-    fn configs_changed(&mut self) -> Result<(), AgentError> {
-        if *self.status() == AgentStatus::Start {
+    fn configs_changed(&mut self) -> Result<()> {
+        if *self.status() == ModuleStatus::Start {
             let value = self.configs()?.get(INTEGER)?;
-            self.try_output(AgentContext::new(), INTEGER, value.clone())?;
+            self.try_output(ModuleContext::new(), INTEGER, value.clone())?;
         }
         Ok(())
     }
 
-    async fn process(
-        &mut self,
-        ctx: AgentContext,
-        _port: String,
-        _value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, ctx: ModuleContext, _port: String, _value: Value) -> Result<()> {
         let value = self.configs()?.get(INTEGER)?;
         self.output(ctx, INTEGER, value.clone()).await
     }
@@ -139,34 +129,29 @@ impl AsAgent for IntegerInputAgent {
     number_config(name = NUMBER, hide_title),
     hint(color=6),
 )]
-struct NumberInputAgent {
-    data: AgentData,
+struct NumberInputModule {
+    data: ModuleData,
 }
 
 #[async_trait]
-impl AsAgent for NumberInputAgent {
-    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+impl AsModule for NumberInputModule {
+    fn new(ma: ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
         Ok(Self {
-            data: AgentData::new(ma, id, spec),
+            data: ModuleData::new(ma, id, spec),
         })
     }
 
-    fn configs_changed(&mut self) -> Result<(), AgentError> {
-        if *self.status() == AgentStatus::Start {
+    fn configs_changed(&mut self) -> Result<()> {
+        if *self.status() == ModuleStatus::Start {
             let value = self.configs()?.get_number(NUMBER)?; // Should we use to_number here?
-            self.try_output(AgentContext::new(), NUMBER, AgentValue::number(value))?;
+            self.try_output(ModuleContext::new(), NUMBER, Value::number(value))?;
         }
         Ok(())
     }
 
-    async fn process(
-        &mut self,
-        ctx: AgentContext,
-        _port: String,
-        _value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, ctx: ModuleContext, _port: String, _value: Value) -> Result<()> {
         let value = self.configs()?.get_number(NUMBER)?;
-        self.output(ctx, NUMBER, AgentValue::number(value)).await
+        self.output(ctx, NUMBER, Value::number(value)).await
     }
 }
 
@@ -180,32 +165,27 @@ impl AsAgent for NumberInputAgent {
     string_config(name = STRING, hide_title),
     hint(color=5),
 )]
-struct StringInputAgent {
-    data: AgentData,
+struct StringInputModule {
+    data: ModuleData,
 }
 
 #[async_trait]
-impl AsAgent for StringInputAgent {
-    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+impl AsModule for StringInputModule {
+    fn new(ma: ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
         Ok(Self {
-            data: AgentData::new(ma, id, spec),
+            data: ModuleData::new(ma, id, spec),
         })
     }
 
-    fn configs_changed(&mut self) -> Result<(), AgentError> {
-        if *self.status() == AgentStatus::Start {
+    fn configs_changed(&mut self) -> Result<()> {
+        if *self.status() == ModuleStatus::Start {
             let value = self.configs()?.get(STRING)?;
-            self.try_output(AgentContext::new(), STRING, value.clone())?;
+            self.try_output(ModuleContext::new(), STRING, value.clone())?;
         }
         Ok(())
     }
 
-    async fn process(
-        &mut self,
-        ctx: AgentContext,
-        _port: String,
-        _value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, ctx: ModuleContext, _port: String, _value: Value) -> Result<()> {
         let value = self.configs()?.get(STRING)?;
         self.output(ctx, STRING, value.clone()).await
     }
@@ -221,32 +201,27 @@ impl AsAgent for StringInputAgent {
     text_config(name = TEXT, hide_title),
     hint(color=5),
 )]
-struct TextInputAgent {
-    data: AgentData,
+struct TextInputModule {
+    data: ModuleData,
 }
 
 #[async_trait]
-impl AsAgent for TextInputAgent {
-    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+impl AsModule for TextInputModule {
+    fn new(ma: ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
         Ok(Self {
-            data: AgentData::new(ma, id, spec),
+            data: ModuleData::new(ma, id, spec),
         })
     }
 
-    fn configs_changed(&mut self) -> Result<(), AgentError> {
-        if *self.status() == AgentStatus::Start {
+    fn configs_changed(&mut self) -> Result<()> {
+        if *self.status() == ModuleStatus::Start {
             let value = self.configs()?.get(TEXT)?;
-            self.try_output(AgentContext::new(), TEXT, value.clone())?;
+            self.try_output(ModuleContext::new(), TEXT, value.clone())?;
         }
         Ok(())
     }
 
-    async fn process(
-        &mut self,
-        ctx: AgentContext,
-        _port: String,
-        _value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, ctx: ModuleContext, _port: String, _value: Value) -> Result<()> {
         let value = self.configs()?.get(TEXT)?;
         self.output(ctx, TEXT, value.clone()).await
     }
@@ -262,32 +237,27 @@ impl AsAgent for TextInputAgent {
     object_config(name = OBJECT, hide_title),
     hint(color=4),
 )]
-struct ObjectInputAgent {
-    data: AgentData,
+struct ObjectInputModule {
+    data: ModuleData,
 }
 
 #[async_trait]
-impl AsAgent for ObjectInputAgent {
-    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+impl AsModule for ObjectInputModule {
+    fn new(ma: ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
         Ok(Self {
-            data: AgentData::new(ma, id, spec),
+            data: ModuleData::new(ma, id, spec),
         })
     }
 
-    fn configs_changed(&mut self) -> Result<(), AgentError> {
-        if *self.status() == AgentStatus::Start {
+    fn configs_changed(&mut self) -> Result<()> {
+        if *self.status() == ModuleStatus::Start {
             let value = self.configs()?.get(OBJECT)?;
-            self.try_output(AgentContext::new(), OBJECT, value.clone())?;
+            self.try_output(ModuleContext::new(), OBJECT, value.clone())?;
         }
         Ok(())
     }
 
-    async fn process(
-        &mut self,
-        ctx: AgentContext,
-        _port: String,
-        _value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, ctx: ModuleContext, _port: String, _value: Value) -> Result<()> {
         let value = self.configs()?.get(OBJECT)?;
         self.output(ctx, OBJECT, value.clone()).await
     }

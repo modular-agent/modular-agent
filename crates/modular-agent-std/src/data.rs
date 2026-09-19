@@ -4,8 +4,8 @@ use std::{collections::VecDeque, vec};
 use im::{HashMap, Vector};
 use mini_moka::sync::Cache;
 use modular_agent_core::{
-    AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent, ModularAgent,
-    async_trait, modular_agent, parse_index,
+    AsModule, Error, ModularAgent, ModuleContext, ModuleData, ModuleOutput, ModuleSpec, Result,
+    Value, async_trait, modular_agent, parse_index,
 };
 
 use crate::dynamic_spec::{self, NumberedPorts, NumberedSpecOptions};
@@ -31,13 +31,13 @@ const CONFIG_CAPACITY: &str = "capacity";
     outputs = [PORT_VALUE],
     string_config(name = CONFIG_KEY)
 )]
-struct GetValueAgent {
-    data: AgentData,
+struct GetValueModule {
+    data: ModuleData,
     target_keys: Vec<String>,
 }
 
-impl GetValueAgent {
-    fn update_spec(spec: &mut AgentSpec) -> Result<Vec<String>, AgentError> {
+impl GetValueModule {
+    fn update_spec(spec: &mut ModuleSpec) -> Result<Vec<String>> {
         let key_str = spec
             .configs
             .as_ref()
@@ -50,45 +50,40 @@ impl GetValueAgent {
         Ok(target_keys)
     }
 
-    fn extract(value: AgentValue, target_keys: &[String]) -> AgentValue {
+    fn extract(value: Value, target_keys: &[String]) -> Value {
         match value {
             // A root array broadcasts the key path over its elements — unless
             // the path starts with an index, which addresses the array itself.
-            AgentValue::Array(arr) if parse_index(&target_keys[0]).is_none() => {
-                let extracted: Vector<AgentValue> = arr
+            Value::Array(arr) if parse_index(&target_keys[0]).is_none() => {
+                let extracted: Vector<Value> = arr
                     .iter()
-                    .map(|item| get_nested_value(item, target_keys).unwrap_or(AgentValue::Unit))
+                    .map(|item| get_nested_value(item, target_keys).unwrap_or(Value::Unit))
                     .collect();
-                AgentValue::Array(extracted)
+                Value::Array(extracted)
             }
 
-            other => get_nested_value(&other, target_keys).unwrap_or(AgentValue::Unit),
+            other => get_nested_value(&other, target_keys).unwrap_or(Value::Unit),
         }
     }
 }
 
 #[async_trait]
-impl AsAgent for GetValueAgent {
-    fn new(ma: ModularAgent, id: String, mut spec: AgentSpec) -> Result<Self, AgentError> {
+impl AsModule for GetValueModule {
+    fn new(ma: ModularAgent, id: String, mut spec: ModuleSpec) -> Result<Self> {
         let target_keys = Self::update_spec(&mut spec)?;
         Ok(Self {
-            data: AgentData::new(ma, id, spec),
+            data: ModuleData::new(ma, id, spec),
             target_keys,
         })
     }
 
-    fn configs_changed(&mut self) -> Result<(), AgentError> {
+    fn configs_changed(&mut self) -> Result<()> {
         let target_keys = Self::update_spec(&mut self.data.spec)?;
         self.target_keys = target_keys;
         Ok(())
     }
 
-    async fn process(
-        &mut self,
-        ctx: AgentContext,
-        _port: String,
-        value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, ctx: ModuleContext, _port: String, value: Value) -> Result<()> {
         if self.target_keys.is_empty() {
             return Ok(());
         }
@@ -107,14 +102,14 @@ impl AsAgent for GetValueAgent {
     string_config(name = CONFIG_KEY),
     object_config(name = CONFIG_VALUE),
 )]
-struct SetValueAgent {
-    data: AgentData,
+struct SetValueModule {
+    data: ModuleData,
     target_keys: Vec<String>,
-    target_value: AgentValue,
+    target_value: Value,
 }
 
-impl SetValueAgent {
-    fn update_spec(spec: &mut AgentSpec) -> Result<(Vec<String>, AgentValue), AgentError> {
+impl SetValueModule {
+    fn update_spec(spec: &mut ModuleSpec) -> Result<(Vec<String>, Value)> {
         let key_str = spec
             .configs
             .as_ref()
@@ -128,36 +123,31 @@ impl SetValueAgent {
         let target_value = spec
             .configs
             .as_ref()
-            .map(|cfg| cfg.get(CONFIG_VALUE).cloned().unwrap_or(AgentValue::Unit))
-            .unwrap_or(AgentValue::Unit);
+            .map(|cfg| cfg.get(CONFIG_VALUE).cloned().unwrap_or(Value::Unit))
+            .unwrap_or(Value::Unit);
         Ok((target_keys, target_value))
     }
 }
 
 #[async_trait]
-impl AsAgent for SetValueAgent {
-    fn new(ma: ModularAgent, id: String, mut spec: AgentSpec) -> Result<Self, AgentError> {
+impl AsModule for SetValueModule {
+    fn new(ma: ModularAgent, id: String, mut spec: ModuleSpec) -> Result<Self> {
         let (target_keys, target_value) = Self::update_spec(&mut spec)?;
         Ok(Self {
-            data: AgentData::new(ma, id, spec),
+            data: ModuleData::new(ma, id, spec),
             target_keys,
             target_value,
         })
     }
 
-    fn configs_changed(&mut self) -> Result<(), AgentError> {
+    fn configs_changed(&mut self) -> Result<()> {
         let (target_keys, target_value) = Self::update_spec(&mut self.data.spec)?;
         self.target_keys = target_keys;
         self.target_value = target_value;
         Ok(())
     }
 
-    async fn process(
-        &mut self,
-        ctx: AgentContext,
-        _port: String,
-        mut value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, ctx: ModuleContext, _port: String, mut value: Value) -> Result<()> {
         if self.target_keys.is_empty() {
             return Ok(());
         }
@@ -175,13 +165,13 @@ impl AsAgent for SetValueAgent {
     outputs = [PORT_VALUE],
     string_config(name = CONFIG_KEY)
 )]
-struct ToObjectAgent {
-    data: AgentData,
+struct ToObjectModule {
+    data: ModuleData,
     target_keys: Vec<String>,
 }
 
-impl ToObjectAgent {
-    fn update_spec(spec: &mut AgentSpec) -> Result<Vec<String>, AgentError> {
+impl ToObjectModule {
+    fn update_spec(spec: &mut ModuleSpec) -> Result<Vec<String>> {
         let key_str = spec
             .configs
             .as_ref()
@@ -196,32 +186,27 @@ impl ToObjectAgent {
 }
 
 #[async_trait]
-impl AsAgent for ToObjectAgent {
-    fn new(ma: ModularAgent, id: String, mut spec: AgentSpec) -> Result<Self, AgentError> {
+impl AsModule for ToObjectModule {
+    fn new(ma: ModularAgent, id: String, mut spec: ModuleSpec) -> Result<Self> {
         let target_keys = Self::update_spec(&mut spec)?;
         Ok(Self {
-            data: AgentData::new(ma, id, spec),
+            data: ModuleData::new(ma, id, spec),
             target_keys,
         })
     }
 
-    fn configs_changed(&mut self) -> Result<(), AgentError> {
+    fn configs_changed(&mut self) -> Result<()> {
         let target_keys = Self::update_spec(&mut self.data.spec)?;
         self.target_keys = target_keys;
         Ok(())
     }
 
-    async fn process(
-        &mut self,
-        ctx: AgentContext,
-        _port: String,
-        value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, ctx: ModuleContext, _port: String, value: Value) -> Result<()> {
         if self.target_keys.is_empty() {
             return Ok(());
         }
 
-        let mut new_value = AgentValue::object_default();
+        let mut new_value = Value::object_default();
         set_nested_value(&mut new_value, &self.target_keys, value)?;
 
         self.output(ctx, PORT_VALUE, new_value).await
@@ -235,28 +220,22 @@ impl AsAgent for ToObjectAgent {
     inputs = [PORT_VALUE],
     outputs = [PORT_JSON]
 )]
-struct ToJsonAgent {
-    data: AgentData,
+struct ToJsonModule {
+    data: ModuleData,
 }
 
 #[async_trait]
-impl AsAgent for ToJsonAgent {
-    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+impl AsModule for ToJsonModule {
+    fn new(ma: ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
         Ok(Self {
-            data: AgentData::new(ma, id, spec),
+            data: ModuleData::new(ma, id, spec),
         })
     }
 
-    async fn process(
-        &mut self,
-        ctx: AgentContext,
-        _port: String,
-        value: AgentValue,
-    ) -> Result<(), AgentError> {
-        let json = serde_json::to_string_pretty(&value)
-            .map_err(|e| AgentError::InvalidValue(e.to_string()))?;
-        self.output(ctx, PORT_JSON, AgentValue::string(json))
-            .await?;
+    async fn process(&mut self, ctx: ModuleContext, _port: String, value: Value) -> Result<()> {
+        let json =
+            serde_json::to_string_pretty(&value).map_err(|e| Error::InvalidValue(e.to_string()))?;
+        self.output(ctx, PORT_JSON, Value::string(json)).await?;
         Ok(())
     }
 }
@@ -268,39 +247,31 @@ impl AsAgent for ToJsonAgent {
     inputs = [PORT_JSON],
     outputs = [PORT_VALUE]
 )]
-struct FromJsonAgent {
-    data: AgentData,
+struct FromJsonModule {
+    data: ModuleData,
 }
 
 #[async_trait]
-impl AsAgent for FromJsonAgent {
-    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+impl AsModule for FromJsonModule {
+    fn new(ma: ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
         Ok(Self {
-            data: AgentData::new(ma, id, spec),
+            data: ModuleData::new(ma, id, spec),
         })
     }
 
-    async fn process(
-        &mut self,
-        ctx: AgentContext,
-        _port: String,
-        value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, ctx: ModuleContext, _port: String, value: Value) -> Result<()> {
         let s = value
             .as_str()
-            .ok_or_else(|| AgentError::InvalidValue("not a string".to_string()))?;
+            .ok_or_else(|| Error::InvalidValue("not a string".to_string()))?;
         let json_value: serde_json::Value =
-            serde_json::from_str(s).map_err(|e| AgentError::InvalidValue(e.to_string()))?;
-        let value = AgentValue::from_json(json_value)?;
+            serde_json::from_str(s).map_err(|e| Error::InvalidValue(e.to_string()))?;
+        let value = Value::from_json(json_value)?;
         self.output(ctx, PORT_VALUE, value).await?;
         Ok(())
     }
 }
 
-pub(crate) fn get_nested_value<K: AsRef<str>>(
-    value: &AgentValue,
-    keys: &[K],
-) -> Option<AgentValue> {
+pub(crate) fn get_nested_value<K: AsRef<str>>(value: &Value, keys: &[K]) -> Option<Value> {
     let mut current = value.clone(); // cheap: Arc/im structures
     for key in keys {
         current = current.get_prop(key.as_ref())?;
@@ -308,11 +279,7 @@ pub(crate) fn get_nested_value<K: AsRef<str>>(
     Some(current)
 }
 
-fn set_nested_value<K: AsRef<str>>(
-    root: &mut AgentValue,
-    keys: &[K],
-    new_value: AgentValue,
-) -> Result<(), AgentError> {
+fn set_nested_value<K: AsRef<str>>(root: &mut Value, keys: &[K], new_value: Value) -> Result<()> {
     let Some((first, rest)) = keys.split_first() else {
         return Ok(());
     };
@@ -320,7 +287,7 @@ fn set_nested_value<K: AsRef<str>>(
 
     // A value without properties is overwritten with an empty Object, as before.
     if !root.has_props() {
-        *root = AgentValue::object_default();
+        *root = Value::object_default();
     }
 
     if rest.is_empty() {
@@ -328,7 +295,7 @@ fn set_nested_value<K: AsRef<str>>(
     } else if let Some(obj) = root.as_object_mut() {
         let sub = obj
             .entry(key.to_string())
-            .or_insert_with(AgentValue::object_default);
+            .or_insert_with(Value::object_default);
         set_nested_value(sub, rest, new_value)
     } else {
         // Array: read-modify-write the materialized element, then store it
@@ -336,9 +303,7 @@ fn set_nested_value<K: AsRef<str>>(
         // untouched. A Message or an Image also lands here (their properties
         // materialize via get_prop) but their set_prop is always an error —
         // both are read-only through key paths.
-        let mut sub = root
-            .get_prop(key)
-            .unwrap_or_else(AgentValue::object_default);
+        let mut sub = root.get_prop(key).unwrap_or_else(Value::object_default);
         set_nested_value(&mut sub, rest, new_value)?;
         root.set_prop(key, sub)
     }
@@ -367,8 +332,8 @@ fn set_nested_value<K: AsRef<str>>(
     integer_config(name = CONFIG_TTL_SEC, default = 60),
     integer_config(name = CONFIG_CAPACITY, default = 1000),
 )]
-struct ZipToObjectAgent {
-    data: AgentData,
+struct ZipToObjectModule {
+    data: ModuleData,
     n: usize,
     use_ctx: bool,
     ttl_sec: u64,
@@ -378,7 +343,7 @@ struct ZipToObjectAgent {
     keys: Vec<String>,
 
     // For simple mode: FIFO queues
-    queues: Vec<VecDeque<AgentValue>>,
+    queues: Vec<VecDeque<Value>>,
 
     // For use_ctx mode: Cache with TTL
     ctx_buffers: Cache<String, PendingZip>,
@@ -386,11 +351,11 @@ struct ZipToObjectAgent {
 
 #[derive(Clone)]
 struct PendingZip {
-    values: Vec<Option<AgentValue>>,
+    values: Vec<Option<Value>>,
     count: usize,
 }
 
-impl ZipToObjectAgent {
+impl ZipToObjectModule {
     fn numbered_opts() -> NumberedSpecOptions<'static> {
         NumberedSpecOptions {
             prefix: "k",
@@ -400,9 +365,7 @@ impl ZipToObjectAgent {
         }
     }
 
-    fn update_spec(
-        spec: &mut AgentSpec,
-    ) -> Result<(usize, bool, u64, u64, Vec<String>), AgentError> {
+    fn update_spec(spec: &mut ModuleSpec) -> Result<(usize, bool, u64, u64, Vec<String>)> {
         let (n, keys) = dynamic_spec::update_numbered_spec(spec, &Self::numbered_opts())?;
         let (use_ctx, ttl_sec, capacity) = match spec.configs.as_ref() {
             Some(cfg) => (
@@ -427,14 +390,14 @@ impl ZipToObjectAgent {
 }
 
 #[async_trait]
-impl AsAgent for ZipToObjectAgent {
-    fn new(ma: ModularAgent, id: String, mut spec: AgentSpec) -> Result<Self, AgentError> {
+impl AsModule for ZipToObjectModule {
+    fn new(ma: ModularAgent, id: String, mut spec: ModuleSpec) -> Result<Self> {
         let (n, use_ctx, ttl_sec, capacity, keys) = Self::update_spec(&mut spec)?;
         let cache = Cache::builder()
             .max_capacity(capacity)
             .time_to_live(Duration::from_secs(ttl_sec))
             .build();
-        let data = AgentData::new(ma, id, spec);
+        let data = ModuleData::new(ma, id, spec);
         Ok(Self {
             data,
             n,
@@ -447,7 +410,7 @@ impl AsAgent for ZipToObjectAgent {
         })
     }
 
-    fn configs_changed(&mut self) -> Result<(), AgentError> {
+    fn configs_changed(&mut self) -> Result<()> {
         let (n, use_ctx, ttl_sec, capacity, keys) = Self::update_spec(&mut self.data.spec)?;
         let mut changed = false;
         if n != self.n {
@@ -472,28 +435,20 @@ impl AsAgent for ZipToObjectAgent {
         }
         if changed {
             self.reset_state();
-            self.emit_agent_spec_updated();
+            self.emit_module_spec_updated();
         }
         Ok(())
     }
 
-    async fn stop(&mut self) -> Result<(), AgentError> {
+    async fn stop(&mut self) -> Result<()> {
         self.reset_state();
         Ok(())
     }
 
-    async fn process(
-        &mut self,
-        ctx: AgentContext,
-        port: String,
-        value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, ctx: ModuleContext, port: String, value: Value) -> Result<()> {
         // Parse port number
         let Some(idx) = port.parse::<usize>().ok().filter(|&i| i < self.n) else {
-            return Err(AgentError::InvalidValue(format!(
-                "Invalid input port: {}",
-                port
-            )));
+            return Err(Error::InvalidValue(format!("Invalid input port: {}", port)));
         };
 
         // Context Mode
@@ -517,14 +472,14 @@ impl AsAgent for ZipToObjectAgent {
                 self.ctx_buffers.invalidate(&ctx_key);
 
                 // Zip keys and values, then collect
-                let map: HashMap<String, AgentValue> = self
+                let map: HashMap<String, Value> = self
                     .keys
                     .iter()
                     .zip(entry.values.into_iter().map(|v| v.unwrap()))
                     .map(|(k, v)| (k.clone(), v))
                     .collect();
 
-                return self.output(ctx, PORT_OBJECT, AgentValue::Object(map)).await;
+                return self.output(ctx, PORT_OBJECT, Value::Object(map)).await;
             } else {
                 self.ctx_buffers.insert(ctx_key, entry);
             }
@@ -536,14 +491,14 @@ impl AsAgent for ZipToObjectAgent {
 
         if self.queues.iter().all(|q| !q.is_empty()) {
             // Take from head and combine with keys to create Map
-            let map: HashMap<String, AgentValue> = self
+            let map: HashMap<String, Value> = self
                 .keys
                 .iter()
                 .zip(self.queues.iter_mut())
                 .map(|(k, q)| (k.clone(), q.pop_front().unwrap()))
                 .collect();
 
-            self.output(ctx, PORT_OBJECT, AgentValue::Object(map)).await
+            self.output(ctx, PORT_OBJECT, Value::Object(map)).await
         } else {
             Ok(())
         }
@@ -553,19 +508,19 @@ impl AsAgent for ZipToObjectAgent {
 #[cfg(test)]
 mod tests {
     use im::{hashmap, vector};
-    use modular_agent_core::{AgentConfigSpec, AgentConfigSpecs, AgentConfigs};
+    use modular_agent_core::{ModuleConfigSpec, ModuleConfigSpecs, ModuleConfigs};
 
     use super::*;
 
     #[test]
     fn test_get_nested_value() {
         // Setup data: { "users": { "admin": { "name": "Alice" } } }
-        let mut root = AgentValue::object_default();
-        let mut users = AgentValue::object_default();
-        let mut admin = AgentValue::object_default();
+        let mut root = Value::object_default();
+        let mut users = Value::object_default();
+        let mut admin = Value::object_default();
 
         admin
-            .set("name".to_string(), AgentValue::string("Alice"))
+            .set("name".to_string(), Value::string("Alice"))
             .unwrap();
         users.set("admin".to_string(), admin).unwrap();
         root.set("users".to_string(), users).unwrap();
@@ -573,7 +528,7 @@ mod tests {
         // Case 1: Successfully retrieve an existing value
         let keys = vec!["users", "admin", "name"];
         let result = get_nested_value(&root, &keys);
-        assert_eq!(result, Some(AgentValue::string("Alice")));
+        assert_eq!(result, Some(Value::string("Alice")));
 
         // Case 2: Intermediate key does not exist (users -> guest)
         let keys_missing = vec!["users", "guest", "name"];
@@ -602,28 +557,28 @@ mod tests {
             input_tokens: 3,
             ..Default::default()
         });
-        let root = AgentValue::object(hashmap! {
-            "message".to_string() => AgentValue::message(message),
-            "user".to_string() => AgentValue::string("alice"),
-            "channel".to_string() => AgentValue::string("town-square"),
+        let root = Value::object(hashmap! {
+            "message".to_string() => Value::message(message),
+            "user".to_string() => Value::string("alice"),
+            "channel".to_string() => Value::string("town-square"),
         });
 
         // Message at leaf
         let result = get_nested_value(&root, &["message"]);
-        assert!(matches!(result, Some(AgentValue::Message(_))));
+        assert!(matches!(result, Some(Value::Message(_))));
 
         // Properties through the Message
         assert_eq!(
             get_nested_value(&root, &["message", "content"]),
-            Some(AgentValue::string("hello world"))
+            Some(Value::string("hello world"))
         );
         assert_eq!(
             get_nested_value(&root, &["message", "role"]),
-            Some(AgentValue::string("user"))
+            Some(Value::string("user"))
         );
         assert_eq!(
             get_nested_value(&root, &["message", "usage", "input_tokens"]),
-            Some(AgentValue::integer(3))
+            Some(Value::integer(3))
         );
 
         // Missing property on the Message
@@ -639,35 +594,32 @@ mod tests {
 
         let mut message = Message::user("pic".to_string());
         message.image = Some(Arc::new(PhotonImage::new(vec![0u8; 8], 2, 1)));
-        let root = AgentValue::object(hashmap! {
-            "message".to_string() => AgentValue::message(message),
+        let root = Value::object(hashmap! {
+            "message".to_string() => Value::message(message),
         });
 
         // Dimensions through a Message-held Image
         assert_eq!(
             get_nested_value(&root, &["message", "image", "width"]),
-            Some(AgentValue::integer(2))
+            Some(Value::integer(2))
         );
         assert_eq!(
             get_nested_value(&root, &["message", "image", "height"]),
-            Some(AgentValue::integer(1))
+            Some(Value::integer(1))
         );
         assert_eq!(get_nested_value(&root, &["message", "image", "nope"]), None);
 
         // Bare Image root
-        let img = AgentValue::image(PhotonImage::new(vec![0u8; 8], 2, 1));
-        assert_eq!(
-            get_nested_value(&img, &["width"]),
-            Some(AgentValue::integer(2))
-        );
+        let img = Value::image(PhotonImage::new(vec![0u8; 8], 2, 1));
+        assert_eq!(get_nested_value(&img, &["width"]), Some(Value::integer(2)));
     }
 
     /// Verify if a deeply nested structure (a.b.c) can be auto-generated from an empty state.
     #[test]
     fn test_create_deeply_nested_structure() {
-        let mut root = AgentValue::object_default();
+        let mut root = Value::object_default();
         let keys = vec!["users", "admin", "name"];
-        let value = AgentValue::string("Alice");
+        let value = Value::string("Alice");
 
         set_nested_value(&mut root, &keys, value).unwrap();
 
@@ -675,7 +627,7 @@ mod tests {
         if let Some(users) = root.get_mut("users") {
             if let Some(admin) = users.get_mut("admin") {
                 if let Some(name) = admin.get_mut("name") {
-                    assert_eq!(*name, AgentValue::string("Alice"));
+                    assert_eq!(*name, Value::string("Alice"));
                     return;
                 }
             }
@@ -686,63 +638,62 @@ mod tests {
     /// Verify if a new key can be added without breaking existing structures.
     #[test]
     fn test_add_to_existing_structure() {
-        let mut root = AgentValue::object_default();
+        let mut root = Value::object_default();
         // Pre-create { "config": {} }
-        root.set("config".to_string(), AgentValue::object_default())
+        root.set("config".to_string(), Value::object_default())
             .unwrap();
 
         let keys = vec!["config", "timeout"];
-        let value = AgentValue::string("30s");
+        let value = Value::string("30s");
 
         set_nested_value(&mut root, &keys, value).unwrap();
 
         // Verify
         let config = root.get_mut("config").unwrap();
         let timeout = config.get_mut("timeout").unwrap();
-        assert_eq!(*timeout, AgentValue::string("30s"));
+        assert_eq!(*timeout, Value::string("30s"));
     }
 
     /// Verify if an existing value can be overwritten.
     #[test]
     fn test_overwrite_existing_value() {
-        let mut root = AgentValue::object_default();
+        let mut root = Value::object_default();
         // Pre-create { "app": { "version": "v1" } }
-        let mut app = AgentValue::object_default();
-        app.set("version".to_string(), AgentValue::string("v1"))
-            .unwrap();
+        let mut app = Value::object_default();
+        app.set("version".to_string(), Value::string("v1")).unwrap();
         root.set("app".to_string(), app).unwrap();
 
         // Execute overwrite
         let keys = vec!["app", "version"];
-        let new_val = AgentValue::string("v2");
+        let new_val = Value::string("v2");
         set_nested_value(&mut root, &keys, new_val).unwrap();
 
         // Verify
         let app = root.get_mut("app").unwrap();
         let version = app.get_mut("version").unwrap();
-        assert_eq!(*version, AgentValue::string("v2"));
+        assert_eq!(*version, Value::string("v2"));
     }
 
     /// Regression test: update_spec must read ttl_sec/capacity by their config
     /// names and keep use_ctx/ttl_sec/capacity in the regenerated configs.
     #[test]
     fn test_zip_to_object_update_spec_preserves_configs() {
-        let mut configs = AgentConfigs::new();
-        configs.set(CONFIG_N.to_string(), AgentValue::integer(2));
-        configs.set(CONFIG_USE_CTX.to_string(), AgentValue::boolean(true));
-        configs.set(CONFIG_TTL_SEC.to_string(), AgentValue::integer(120));
-        configs.set(CONFIG_CAPACITY.to_string(), AgentValue::integer(5));
+        let mut configs = ModuleConfigs::new();
+        configs.set(CONFIG_N.to_string(), Value::integer(2));
+        configs.set(CONFIG_USE_CTX.to_string(), Value::boolean(true));
+        configs.set(CONFIG_TTL_SEC.to_string(), Value::integer(120));
+        configs.set(CONFIG_CAPACITY.to_string(), Value::integer(5));
 
-        let mut config_specs = AgentConfigSpecs::default();
+        let mut config_specs = ModuleConfigSpecs::default();
         for (key, type_, value) in [
-            (CONFIG_N, "integer", AgentValue::integer(2)),
-            (CONFIG_USE_CTX, "boolean", AgentValue::boolean(false)),
-            (CONFIG_TTL_SEC, "integer", AgentValue::integer(60)),
-            (CONFIG_CAPACITY, "integer", AgentValue::integer(1000)),
+            (CONFIG_N, "integer", Value::integer(2)),
+            (CONFIG_USE_CTX, "boolean", Value::boolean(false)),
+            (CONFIG_TTL_SEC, "integer", Value::integer(60)),
+            (CONFIG_CAPACITY, "integer", Value::integer(1000)),
         ] {
             config_specs.insert(
                 key.to_string(),
-                AgentConfigSpec {
+                ModuleConfigSpec {
                     value,
                     type_: Some(type_.to_string()),
                     ..Default::default()
@@ -750,14 +701,14 @@ mod tests {
             );
         }
 
-        let mut spec = AgentSpec {
+        let mut spec = ModuleSpec {
             configs: Some(configs),
             config_specs: Some(config_specs),
             ..Default::default()
         };
 
         let (n, use_ctx, ttl_sec, capacity, keys) =
-            ZipToObjectAgent::update_spec(&mut spec).unwrap();
+            ZipToObjectModule::update_spec(&mut spec).unwrap();
         assert_eq!(n, 2);
         assert!(use_ctx);
         assert_eq!(ttl_sec, 120);
@@ -779,13 +730,13 @@ mod tests {
     /// Example: Try setting ["tags", "new_key"] against { "tags": "immutable_string" }
     #[test]
     fn test_overwrite_if_path_is_not_object() {
-        let mut root = AgentValue::object_default();
+        let mut root = Value::object_default();
         // "tags" is a string, not an object
-        root.set("tags".to_string(), AgentValue::string("some_string"))
+        root.set("tags".to_string(), Value::string("some_string"))
             .unwrap();
 
         let keys = vec!["tags", "new_key"];
-        let value = AgentValue::string("value");
+        let value = Value::string("value");
 
         // Ensure it returns without crashing
         set_nested_value(&mut root, &keys, value).unwrap();
@@ -794,8 +745,8 @@ mod tests {
         let tags = root.get_mut("tags").unwrap();
         assert_eq!(
             *tags,
-            AgentValue::object(hashmap! {
-                "new_key".to_string() => AgentValue::string("value")
+            Value::object(hashmap! {
+                "new_key".to_string() => Value::string("value")
             })
         );
     }
@@ -813,30 +764,25 @@ mod tests {
             output_tokens: 7,
             ..Default::default()
         });
-        let mut root = AgentValue::object(hashmap! {
-            "message".to_string() => AgentValue::message(message),
+        let mut root = Value::object(hashmap! {
+            "message".to_string() => Value::message(message),
         });
 
         assert!(
-            set_nested_value(
-                &mut root,
-                &["message", "content"],
-                AgentValue::string("edited"),
-            )
-            .is_err()
+            set_nested_value(&mut root, &["message", "content"], Value::string("edited"),).is_err()
         );
         assert!(
             set_nested_value(
                 &mut root,
                 &["message", "usage", "input_tokens"],
-                AgentValue::integer(99),
+                Value::integer(99),
             )
             .is_err()
         );
 
         // A bare Message root rejects writes too, and stays intact
-        let mut bare = AgentValue::message(Message::user("hello".to_string()));
-        assert!(set_nested_value(&mut bare, &["content"], AgentValue::string("edited")).is_err());
+        let mut bare = Value::message(Message::user("hello".to_string()));
+        assert!(set_nested_value(&mut bare, &["content"], Value::string("edited")).is_err());
         assert_eq!(bare.as_message().unwrap().text(), "hello");
 
         // The Message survives the failed writes intact
@@ -851,7 +797,7 @@ mod tests {
         set_nested_value(
             &mut root,
             &["reply"],
-            AgentValue::message(Message::assistant("hi".to_string())),
+            Value::message(Message::assistant("hi".to_string())),
         )
         .unwrap();
         assert!(root.get("reply").unwrap().is_message());
@@ -864,20 +810,20 @@ mod tests {
     fn test_set_nested_value_image_is_read_only() {
         use modular_agent_core::PhotonImage;
 
-        let mut root = AgentValue::object(hashmap! {
-            "image".to_string() => AgentValue::image(PhotonImage::new(vec![0u8; 8], 2, 1)),
+        let mut root = Value::object(hashmap! {
+            "image".to_string() => Value::image(PhotonImage::new(vec![0u8; 8], 2, 1)),
         });
 
-        assert!(set_nested_value(&mut root, &["image", "width"], AgentValue::integer(9)).is_err());
+        assert!(set_nested_value(&mut root, &["image", "width"], Value::integer(9)).is_err());
 
         let img = root.get("image").unwrap();
         assert!(img.is_image());
-        assert_eq!(img.get_prop("width"), Some(AgentValue::integer(2)));
-        assert_eq!(img.get_prop("height"), Some(AgentValue::integer(1)));
+        assert_eq!(img.get_prop("width"), Some(Value::integer(2)));
+        assert_eq!(img.get_prop("height"), Some(Value::integer(1)));
 
         // A bare Image root rejects writes too, and stays intact
-        let mut bare = AgentValue::image(PhotonImage::new(vec![0u8; 4], 1, 1));
-        assert!(set_nested_value(&mut bare, &["width"], AgentValue::integer(9)).is_err());
+        let mut bare = Value::image(PhotonImage::new(vec![0u8; 4], 1, 1));
+        assert!(set_nested_value(&mut bare, &["width"], Value::integer(9)).is_err());
         assert!(bare.is_image());
     }
 
@@ -885,24 +831,24 @@ mod tests {
     #[test]
     fn test_get_nested_value_through_array() {
         // { "items": [ { "name": "a" }, { "name": "b" } ] }
-        let root = AgentValue::object(hashmap! {
-            "items".to_string() => AgentValue::array(vector![
-                AgentValue::object(hashmap! {
-                    "name".to_string() => AgentValue::string("a"),
+        let root = Value::object(hashmap! {
+            "items".to_string() => Value::array(vector![
+                Value::object(hashmap! {
+                    "name".to_string() => Value::string("a"),
                 }),
-                AgentValue::object(hashmap! {
-                    "name".to_string() => AgentValue::string("b"),
+                Value::object(hashmap! {
+                    "name".to_string() => Value::string("b"),
                 }),
             ]),
         });
 
         assert_eq!(
             get_nested_value(&root, &["items", "0", "name"]),
-            Some(AgentValue::string("a"))
+            Some(Value::string("a"))
         );
         assert_eq!(
             get_nested_value(&root, &["items", "1", "name"]),
-            Some(AgentValue::string("b"))
+            Some(Value::string("b"))
         );
 
         // Out-of-range index and non-index key on the array
@@ -910,107 +856,97 @@ mod tests {
         assert_eq!(get_nested_value(&root, &["items", "name"]), None);
 
         // Index on a root array
-        let arr = AgentValue::array(vector![AgentValue::string("x"), AgentValue::string("y"),]);
-        assert_eq!(
-            get_nested_value(&arr, &["1"]),
-            Some(AgentValue::string("y"))
-        );
+        let arr = Value::array(vector![Value::string("x"), Value::string("y"),]);
+        assert_eq!(get_nested_value(&arr, &["1"]), Some(Value::string("y")));
     }
 
     /// Writing through an index segment updates the element in place instead
     /// of destroying the array.
     #[test]
     fn test_set_nested_value_through_array() {
-        let mut root = AgentValue::object(hashmap! {
-            "items".to_string() => AgentValue::array(vector![
-                AgentValue::object(hashmap! {
-                    "name".to_string() => AgentValue::string("a"),
+        let mut root = Value::object(hashmap! {
+            "items".to_string() => Value::array(vector![
+                Value::object(hashmap! {
+                    "name".to_string() => Value::string("a"),
                 }),
-                AgentValue::object(hashmap! {
-                    "name".to_string() => AgentValue::string("b"),
+                Value::object(hashmap! {
+                    "name".to_string() => Value::string("b"),
                 }),
             ]),
         });
 
         // Field inside an element
-        set_nested_value(
-            &mut root,
-            &["items", "0", "name"],
-            AgentValue::string("edited"),
-        )
-        .unwrap();
+        set_nested_value(&mut root, &["items", "0", "name"], Value::string("edited")).unwrap();
         let items = root.get("items").unwrap().as_array().unwrap();
         assert_eq!(items.len(), 2);
         assert_eq!(items[0].get_str("name"), Some("edited"));
         assert_eq!(items[1].get_str("name"), Some("b"));
 
         // Direct element replacement
-        set_nested_value(&mut root, &["items", "1"], AgentValue::integer(42)).unwrap();
+        set_nested_value(&mut root, &["items", "1"], Value::integer(42)).unwrap();
         let items = root.get("items").unwrap().as_array().unwrap();
-        assert_eq!(items[1], AgentValue::integer(42));
+        assert_eq!(items[1], Value::integer(42));
     }
 
     /// An out-of-range index or a non-index key on an array is an error
     /// instead of silently destroying the array.
     #[test]
     fn test_set_nested_value_array_errors() {
-        let mut root = AgentValue::object(hashmap! {
-            "items".to_string() => AgentValue::array(vector![AgentValue::string("a")]),
+        let mut root = Value::object(hashmap! {
+            "items".to_string() => Value::array(vector![Value::string("a")]),
         });
 
-        assert!(set_nested_value(&mut root, &["items", "5"], AgentValue::integer(1)).is_err());
-        assert!(
-            set_nested_value(&mut root, &["items", "5", "name"], AgentValue::integer(1)).is_err()
-        );
-        assert!(set_nested_value(&mut root, &["items", "foo"], AgentValue::integer(1)).is_err());
+        assert!(set_nested_value(&mut root, &["items", "5"], Value::integer(1)).is_err());
+        assert!(set_nested_value(&mut root, &["items", "5", "name"], Value::integer(1)).is_err());
+        assert!(set_nested_value(&mut root, &["items", "foo"], Value::integer(1)).is_err());
 
         // The array survives the failed writes
         let items = root.get("items").unwrap().as_array().unwrap();
         assert_eq!(items.len(), 1);
-        assert_eq!(items[0], AgentValue::string("a"));
+        assert_eq!(items[0], Value::string("a"));
     }
 
     /// A root array broadcasts non-index key paths over its elements, but an
     /// index-first path addresses the array itself.
     #[test]
     fn test_get_value_extract_root_array() {
-        let arr = AgentValue::array(vector![
-            AgentValue::object(hashmap! {
-                "name".to_string() => AgentValue::string("a"),
+        let arr = Value::array(vector![
+            Value::object(hashmap! {
+                "name".to_string() => Value::string("a"),
             }),
-            AgentValue::object(hashmap! {
-                "name".to_string() => AgentValue::string("b"),
+            Value::object(hashmap! {
+                "name".to_string() => Value::string("b"),
             }),
         ]);
 
         // Broadcast: "name" applies to each element
         assert_eq!(
-            GetValueAgent::extract(arr.clone(), &["name".to_string()]),
-            AgentValue::array(vector![AgentValue::string("a"), AgentValue::string("b")]),
+            GetValueModule::extract(arr.clone(), &["name".to_string()]),
+            Value::array(vector![Value::string("a"), Value::string("b")]),
         );
 
         // Index-first: "1.name" addresses the array
         assert_eq!(
-            GetValueAgent::extract(arr, &["1".to_string(), "name".to_string()]),
-            AgentValue::string("b"),
+            GetValueModule::extract(arr, &["1".to_string(), "name".to_string()]),
+            Value::string("b"),
         );
 
         // Deliberate precedence: even when the elements themselves carry a
         // numeric string key, an index-first path addresses the array — the
         // key "0" returns the first element, not a broadcast of each
         // element's "0" property.
-        let numeric_keyed = AgentValue::array(vector![
-            AgentValue::object(hashmap! {
-                "0".to_string() => AgentValue::string("a"),
+        let numeric_keyed = Value::array(vector![
+            Value::object(hashmap! {
+                "0".to_string() => Value::string("a"),
             }),
-            AgentValue::object(hashmap! {
-                "0".to_string() => AgentValue::string("b"),
+            Value::object(hashmap! {
+                "0".to_string() => Value::string("b"),
             }),
         ]);
         assert_eq!(
-            GetValueAgent::extract(numeric_keyed, &["0".to_string()]),
-            AgentValue::object(hashmap! {
-                "0".to_string() => AgentValue::string("a"),
+            GetValueModule::extract(numeric_keyed, &["0".to_string()]),
+            Value::object(hashmap! {
+                "0".to_string() => Value::string("a"),
             }),
         );
     }
@@ -1018,9 +954,9 @@ mod tests {
     /// An empty key config is a no-op selection, like Get Value / To Object.
     #[test]
     fn test_set_value_update_spec_empty_key() {
-        let mut spec = AgentSpec::default();
-        let (target_keys, target_value) = SetValueAgent::update_spec(&mut spec).unwrap();
+        let mut spec = ModuleSpec::default();
+        let (target_keys, target_value) = SetValueModule::update_spec(&mut spec).unwrap();
         assert!(target_keys.is_empty());
-        assert_eq!(target_value, AgentValue::Unit);
+        assert_eq!(target_value, Value::Unit);
     }
 }

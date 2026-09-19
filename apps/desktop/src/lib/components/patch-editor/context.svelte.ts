@@ -6,23 +6,24 @@ import { getContext, setContext, untrack } from "svelte";
 import type { useSvelteFlow } from "@xyflow/svelte";
 import { toast } from "svelte-sonner";
 import {
-  getAgentSpec,
+  getModuleSpec,
   getPatchInfo,
   getPatchSpec,
-  setAgentConfigs,
+  setModuleConfigs,
   startPatch as startPatchAPI,
   stopPatch as stopPatchAPI,
-  updateAgentSpec,
+  updateModuleSpec,
   updatePatchSpec,
-  type AgentSpec,
+  type ModuleSpec,
   type ConnectionSpec,
 } from "tauri-plugin-modular-agent-api";
 
 import { goto } from "$app/navigation";
 
+import { coreSettingsStore } from "$lib/core-settings-store.svelte";
 import {
   edgeToConnectionSpec,
-  getAgentDefinitions,
+  getModuleDefinitions,
   getEdgeColor,
   getCoreSettings,
   setCoreSettings,
@@ -32,15 +33,14 @@ import {
   patchToFlow,
   resolveColorCss,
   KIND_COLOR_DEFAULTS,
-} from "$lib/agent";
-import { coreSettingsStore } from "$lib/core-settings-store.svelte";
+} from "$lib/module";
 import { sharedPatchEvents } from "$lib/shared.svelte";
 import { tabStore } from "$lib/tab-store.svelte";
 import { titlebarState } from "$lib/titlebar-state.svelte";
 import type { PatchFlow, PatchNode, PatchEdge } from "$lib/types";
 
 import {
-  AddAgentCommand,
+  AddModuleCommand,
   DeleteCommand,
   CutCommand,
   AddConnectionCommand,
@@ -91,7 +91,7 @@ export type EditorStateProps = {
   svelteFlow: ReturnType<typeof useSvelteFlow>;
 };
 
-/** Floating agent-reference card (one per agent definition). */
+/** Floating module-reference card (one per module definition). */
 export type RefCard = {
   defName: string;
   title: string;
@@ -125,11 +125,11 @@ export class EditorState {
   openPaneContextMenu = $state(false);
   paneContextMenuX = $state(0);
   paneContextMenuY = $state(0);
-  openAgentList = $state(false);
-  agentListX = $state(0);
-  agentListY = $state(0);
-  agentListOriginX = $state(0);
-  agentListOriginY = $state(0);
+  openModuleList = $state(false);
+  moduleListX = $state(0);
+  moduleListY = $state(0);
+  moduleListOriginX = $state(0);
+  moduleListOriginY = $state(0);
 
   // Grid/Snap state
   snapEnabled = $state(coreSettingsStore.snapEnabled);
@@ -160,7 +160,7 @@ export class EditorState {
   inspectorHeight = $state<number | null>(null);
   inspector = new InspectorState();
 
-  // Floating reference cards (agent descriptions), rendered last-on-top
+  // Floating reference cards (module descriptions), rendered last-on-top
   refCards = $state<RefCard[]>([]);
 
   // Dialog state (shared between menubar and pane context menu)
@@ -368,7 +368,7 @@ export class EditorState {
         this.inspector.configSpecs = data.config_specs ?? {};
         this.inspector.inputs = data.inputs ?? [];
         this.inspector.outputs = data.outputs ?? [];
-        this.inspector.agentDef = getAgentDefinitions()[data.def_name] ?? null;
+        this.inspector.moduleDef = getModuleDefinitions()[data.def_name] ?? null;
 
         // Sync extension attributes
         const ext: Record<string, any> = {};
@@ -521,7 +521,7 @@ export class EditorState {
 
   // --- Node/Edge operations ---
 
-  async addAgent(agentName: string, position?: { x: number; y: number }) {
+  async addModule(moduleName: string, position?: { x: number; y: number }) {
     const flowPos =
       position !== undefined
         ? this.svelteFlow.screenToFlowPosition(position)
@@ -529,8 +529,8 @@ export class EditorState {
             x: window.innerWidth * 0.45,
             y: window.innerHeight * 0.3,
           });
-    const cmd = new AddAgentCommand(this.patch_id, agentName, flowPos);
-    await withErrorToast(() => this.history.executeAndPush(this, cmd), "Failed to add agent");
+    const cmd = new AddModuleCommand(this.patch_id, moduleName, flowPos);
+    await withErrorToast(() => this.history.executeAndPush(this, cmd), "Failed to add module");
   }
 
   async handleOnDelete({
@@ -593,7 +593,7 @@ export class EditorState {
   }
 
   private async collectSelectedData(): Promise<{
-    agents: AgentSpec[];
+    modules: ModuleSpec[];
     connections: ConnectionSpec[];
   }> {
     const [selectedNodes] = this.selectedNodesAndEdges();
@@ -603,12 +603,12 @@ export class EditorState {
       (e) => nodeIds.has(e.source) && nodeIds.has(e.target),
     );
 
-    const agents = (
-      await Promise.all(selectedNodes.map(async (node) => await getAgentSpec(node.id)))
+    const modules = (
+      await Promise.all(selectedNodes.map(async (node) => await getModuleSpec(node.id)))
     ).filter((spec) => spec !== null);
     const connections = edgesBetweenSelected.map((edge) => edgeToConnectionSpec(edge));
 
-    return { agents, connections };
+    return { modules, connections };
   }
 
   // --- Clipboard operations ---
@@ -618,14 +618,14 @@ export class EditorState {
     await writeText(JSON.stringify(data));
   }
 
-  private async readCopied(): Promise<[AgentSpec[], ConnectionSpec[], string]> {
+  private async readCopied(): Promise<[ModuleSpec[], ConnectionSpec[], string]> {
     const text = await readText();
     if (!text) {
       return [[], [], ""];
     }
     try {
       const clipboardData = JSON.parse(text);
-      return [clipboardData.agents || [], clipboardData.connections || [], text];
+      return [clipboardData.modules || [], clipboardData.connections || [], text];
     } catch {
       return [[], [], ""];
     }
@@ -683,7 +683,7 @@ export class EditorState {
   }
 
   /**
-   * Paste clipboard agents into this patch.
+   * Paste clipboard modules into this patch.
    *
    * @param canvasRect Bounding rect of the canvas container, used to decide
    *   whether the pasted content would land off-screen.
@@ -692,17 +692,17 @@ export class EditorState {
    *   the original position and falls back to the viewport center.
    */
   async pasteNodesAndEdges(canvasRect: DOMRect, screenPos?: { x: number; y: number }) {
-    const [copiedAgents, copiedConnections, text] = await this.readCopied();
-    if (copiedAgents.length === 0) {
+    const [copiedModules, copiedConnections, text] = await this.readCopied();
+    if (copiedModules.length === 0) {
       return;
     }
 
-    const delta = this.computePasteDelta(copiedAgents, canvasRect, screenPos, text);
+    const delta = this.computePasteDelta(copiedModules, canvasRect, screenPos, text);
     this.lastPasteText = text;
     this.lastPasteDelta = delta;
 
     // Offset before the backend call so the stored spec matches the canvas.
-    const positioned = copiedAgents.map((spec) => ({
+    const positioned = copiedModules.map((spec) => ({
       ...spec,
       x: (spec.x ?? 0) + delta.x,
       y: (spec.y ?? 0) + delta.y,
@@ -713,7 +713,7 @@ export class EditorState {
   }
 
   /** Bounding box of copied specs in flow coordinates. */
-  private pasteBoundingBox(specs: AgentSpec[]) {
+  private pasteBoundingBox(specs: ModuleSpec[]) {
     let minX = Infinity;
     let minY = Infinity;
     let maxX = -Infinity;
@@ -731,7 +731,7 @@ export class EditorState {
 
   /** Delta added to every copied spec, keeping their relative layout intact. */
   private computePasteDelta(
-    specs: AgentSpec[],
+    specs: ModuleSpec[],
     canvasRect: DOMRect,
     screenPos: { x: number; y: number } | undefined,
     text: string,
@@ -787,7 +787,10 @@ export class EditorState {
 
     const deltas = targets.map((n) => ({ id: n.id, wasDisabled: true }));
     const cmd = new ToggleDisabledCommand(deltas, false);
-    await withErrorToast(() => this.history.executeAndPush(this, cmd), "Failed to enable agent(s)");
+    await withErrorToast(
+      () => this.history.executeAndPush(this, cmd),
+      "Failed to enable module(s)",
+    );
   }
 
   async disable() {
@@ -799,7 +802,7 @@ export class EditorState {
     const cmd = new ToggleDisabledCommand(deltas, true);
     await withErrorToast(
       () => this.history.executeAndPush(this, cmd),
-      "Failed to disable agent(s)",
+      "Failed to disable module(s)",
     );
   }
 
@@ -837,10 +840,10 @@ export class EditorState {
   async applyColorToPorts() {
     const [selectedNodes] = this.selectedNodesAndEdges();
     if (selectedNodes.length === 0) return;
-    const agentDefs = getAgentDefinitions();
+    const moduleDefs = getModuleDefinitions();
     const deltas = selectedNodes
       .map((n) => {
-        const def = agentDefs[n.data.def_name];
+        const def = moduleDefs[n.data.def_name];
         const rawColor =
           n.data.color ?? def?.hints?.color ?? KIND_COLOR_DEFAULTS[def?.kind ?? "default"] ?? 4;
         const ports = [
@@ -883,7 +886,7 @@ export class EditorState {
   handleNodeDragStart(nodes: PatchNode[]) {
     // free_size nodes are not tied to the grid: suspend the canvas-wide snapGrid
     // while every dragged node is free_size (xyflow has no per-node opt-out).
-    const defs = getAgentDefinitions();
+    const defs = getModuleDefinitions();
     this.draggingFreeSize =
       nodes.length > 0 && nodes.every((n) => defs[n.data.def_name]?.hints?.free_size === true);
     this.dragStartPositions = new Map(
@@ -915,7 +918,7 @@ export class EditorState {
 
     // Persist to backend
     await withErrorLog(
-      () => updateAgentSpec(targetNode.id, { x: targetNode.position.x, y: targetNode.position.y }),
+      () => updateModuleSpec(targetNode.id, { x: targetNode.position.x, y: targetNode.position.y }),
       "Failed to update node position",
     );
 
@@ -941,7 +944,7 @@ export class EditorState {
         });
       }
       try {
-        await updateAgentSpec(node.id, { x: node.position.x, y: node.position.y });
+        await updateModuleSpec(node.id, { x: node.position.x, y: node.position.y });
       } catch (e) {
         console.error("Failed to update node position:", node.id, e);
       }
@@ -971,7 +974,7 @@ export class EditorState {
     const cmd = new ResizeNodeCommand(nodeId, oldWidth, oldHeight, newWidth, newHeight);
     // SvelteFlow already resized the node. Backend persist + push.
     await withErrorLog(
-      () => updateAgentSpec(nodeId, { width: newWidth, height: newHeight }),
+      () => updateModuleSpec(nodeId, { width: newWidth, height: newHeight }),
       "Failed to update node size",
     );
     this.history.push(cmd);
@@ -987,11 +990,11 @@ export class EditorState {
     const newConfigs = { ...oldConfigs, [key]: newValue };
 
     this.svelteFlow.updateNodeData(nodeId, { ...node.data, configs: newConfigs });
-    // Send only the edited key. `data.configs` also holds values agents merely
+    // Send only the edited key. `data.configs` also holds values modules merely
     // emitted for display (configUpdated events); pushing the whole object
     // would write those back into the backend spec and leak them into the
     // saved patch.
-    await setAgentConfigs(nodeId, { [key]: newValue });
+    await setModuleConfigs(nodeId, { [key]: newValue });
 
     const cmd = new UpdateConfigCommand(nodeId, key, oldValue, newValue, oldConfigs, newConfigs);
     this.history.pushCoalescing(cmd);
@@ -1007,7 +1010,7 @@ export class EditorState {
     this.svelteFlow.updateNodeData(nodeId, { [key]: newValue ?? undefined });
     if (key === "port_colors") this.refreshEdgeColorsForNode(nodeId, newValue);
     await withErrorLog(
-      () => updateAgentSpec(nodeId, { [key]: newValue ?? null }),
+      () => updateModuleSpec(nodeId, { [key]: newValue ?? null }),
       "Failed to update node extension",
     );
     const cmd = new UpdateExtensionCommand(nodeId, key, oldValue, newValue);
@@ -1094,7 +1097,7 @@ export class EditorState {
       if (result.changed) {
         this.nodes = result.nodes;
         this.edges = result.edges;
-        this.history.purgeInvalidated(result.removedAgentIds, result.removedConnKeys);
+        this.history.purgeInvalidated(result.removedModuleIds, result.removedConnKeys);
         // Backend content diverged from the last save
         this.history.savedIndex = -1;
       }
@@ -1131,7 +1134,7 @@ export class EditorState {
 
   showNodeContextMenu(x: number, y: number) {
     this.openPaneContextMenu = false;
-    this.openAgentList = false;
+    this.openModuleList = false;
     this.nodeContextMenuX = x;
     this.nodeContextMenuY = y;
     this.openNodeContextMenu = true;
@@ -1143,7 +1146,7 @@ export class EditorState {
 
   showPaneContextMenu(x: number, y: number) {
     this.openNodeContextMenu = false;
-    this.openAgentList = false;
+    this.openModuleList = false;
     this.paneContextMenuX = x;
     this.paneContextMenuY = y;
     this.openPaneContextMenu = true;
@@ -1153,23 +1156,23 @@ export class EditorState {
     this.openPaneContextMenu = false;
   }
 
-  showAgentList(x: number, y: number) {
+  showModuleList(x: number, y: number) {
     this.hideNodeContextMenu();
     this.hidePaneContextMenu();
-    this.agentListOriginX = x;
-    this.agentListOriginY = y;
+    this.moduleListOriginX = x;
+    this.moduleListOriginY = y;
     const POPUP_W = 256;
     const POPUP_H = 320;
     const HEADER_H = 40;
     const cx = x - POPUP_W / 2;
     const cy = y - HEADER_H / 2;
-    this.agentListX = Math.max(0, Math.min(cx, window.innerWidth - POPUP_W));
-    this.agentListY = Math.max(0, Math.min(cy, window.innerHeight - POPUP_H));
-    this.openAgentList = true;
+    this.moduleListX = Math.max(0, Math.min(cx, window.innerWidth - POPUP_W));
+    this.moduleListY = Math.max(0, Math.min(cy, window.innerHeight - POPUP_H));
+    this.openModuleList = true;
   }
 
-  hideAgentList() {
-    this.openAgentList = false;
+  hideModuleList() {
+    this.openModuleList = false;
   }
 
   // --- Dialogs ---

@@ -33,7 +33,8 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::{LazyLock, Mutex, OnceLock};
 
-use modular_agent_core::AgentError;
+use modular_agent_core::Error;
+use modular_agent_core::Result;
 use serde::{Deserialize, Serialize};
 
 use crate::provider::{ModelIdentifier, ProviderKind};
@@ -43,7 +44,7 @@ use crate::provider::{ModelIdentifier, ProviderKind};
 /// "off" is represented as the *absence* of a level (`Option<ThinkingLevel>`
 /// on the consumer side), not as a variant, so that
 /// [`ModelCapabilities::thinking_levels`] only lists levels a model supports.
-/// Consumed by the `thinking_level` agent configuration.
+/// Consumed by the `thinking_level` module configuration.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ThinkingLevel {
@@ -281,7 +282,7 @@ fn builtin(
 /// Anthropic's published cache multipliers apply uniformly across current
 /// Claude models: reads are 0.1x input, 5-minute cache writes are 1.25x.
 ///
-/// The write rate assumes the 5-minute TTL. 1-hour cache writes (ChatAgent
+/// The write rate assumes the 5-minute TTL. 1-hour cache writes (ChatModule
 /// `cache_retention = "long"`) are billed at 2x, but Anthropic reports one
 /// combined cache-write token count, so the rate cannot be picked per write;
 /// users on 1h retention can override `cache_write` via models.json.
@@ -612,10 +613,10 @@ pub(crate) fn clamp_max_tokens(configured: i64, limit: Option<u32>) -> Option<u3
 /// *replaces* the previous user table entirely (no merge) so reloads are
 /// idempotent — e.g. removing an entry from the file actually removes it.
 /// Unlike the MCP loader this is synchronous: it only reads one file.
-pub fn load_model_capabilities_json(path: impl AsRef<Path>) -> Result<(), AgentError> {
+pub fn load_model_capabilities_json(path: impl AsRef<Path>) -> Result<()> {
     let path = path.as_ref();
     let s = std::fs::read_to_string(path).map_err(|e| {
-        AgentError::IoError(format!(
+        Error::IoError(format!(
             "Failed to read model capabilities file '{}': {}",
             path.display(),
             e
@@ -634,11 +635,9 @@ pub fn load_model_capabilities_json(path: impl AsRef<Path>) -> Result<(), AgentE
 
 /// Pure parser, unit-testable without touching global state.
 /// `deny_unknown_fields` on the entry type surfaces key typos as load errors.
-fn parse_model_capabilities_json(
-    s: &str,
-) -> Result<HashMap<String, ModelCapabilitiesEntry>, AgentError> {
+fn parse_model_capabilities_json(s: &str) -> Result<HashMap<String, ModelCapabilitiesEntry>> {
     serde_json::from_str(s)
-        .map_err(|e| AgentError::InvalidConfig(format!("Invalid model capabilities JSON: {}", e)))
+        .map_err(|e| Error::InvalidConfig(format!("Invalid model capabilities JSON: {}", e)))
 }
 
 // ============================================================================
@@ -1270,14 +1269,14 @@ mod tests {
     #[test]
     fn parse_invalid_json_is_error() {
         let err = parse_model_capabilities_json("{ not json").expect_err("must fail");
-        assert!(matches!(err, AgentError::InvalidConfig(_)));
+        assert!(matches!(err, Error::InvalidConfig(_)));
     }
 
     #[test]
     fn parse_unknown_field_is_error() {
         let err = parse_model_capabilities_json(r#"{ "m": { "context_windw": 1 } }"#)
             .expect_err("typo must be rejected");
-        assert!(matches!(err, AgentError::InvalidConfig(_)));
+        assert!(matches!(err, Error::InvalidConfig(_)));
     }
 
     #[test]
@@ -1313,7 +1312,7 @@ mod tests {
     fn load_missing_file_is_io_error() {
         let err =
             load_model_capabilities_json("Z:/does-not-exist/models.json").expect_err("must fail");
-        assert!(matches!(err, AgentError::IoError(_)));
+        assert!(matches!(err, Error::IoError(_)));
     }
 
     // -- serde --

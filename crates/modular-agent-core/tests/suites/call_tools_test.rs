@@ -1,5 +1,6 @@
 extern crate modular_agent_core as ma;
 
+use modular_agent_core::Result;
 use std::sync::{
     Arc, Mutex,
     atomic::{AtomicUsize, Ordering},
@@ -7,7 +8,7 @@ use std::sync::{
 use std::time::Duration;
 
 use ma::tool::{ExecutionMode, Tool, ToolInfo, call_tools, register_tool, unregister_tool};
-use ma::{AgentContext, AgentError, AgentValue, Message, ToolCall, ToolCallFunction, async_trait};
+use ma::{Error, Message, ModuleContext, ToolCall, ToolCallFunction, Value, async_trait};
 use tokio::sync::{Barrier, Notify};
 
 /// Test tool that always fails.
@@ -21,8 +22,8 @@ impl Tool for FailingTool {
         &self.info
     }
 
-    async fn call(&self, _ctx: AgentContext, _args: AgentValue) -> Result<AgentValue, AgentError> {
-        Err(AgentError::Other("intentional failure".to_string()))
+    async fn call(&self, _ctx: ModuleContext, _args: Value) -> Result<Value> {
+        Err(Error::Other("intentional failure".to_string()))
     }
 }
 
@@ -37,8 +38,8 @@ impl Tool for SucceedingTool {
         &self.info
     }
 
-    async fn call(&self, _ctx: AgentContext, _args: AgentValue) -> Result<AgentValue, AgentError> {
-        Ok(AgentValue::string("ok"))
+    async fn call(&self, _ctx: ModuleContext, _args: Value) -> Result<Value> {
+        Ok(Value::string("ok"))
     }
 }
 
@@ -76,7 +77,7 @@ async fn failing_tool_yields_error_result_without_aborting_others() {
         info: tool_info(succeeding),
     });
 
-    let ctx = AgentContext::new();
+    let ctx = ModuleContext::new();
     let calls = im::vector![
         tool_call(failing, "call1", serde_json::json!({})),
         tool_call(succeeding, "call2", serde_json::json!({})),
@@ -105,7 +106,7 @@ async fn parse_error_call_yields_error_result_without_executing() {
     let mut call = tool_call(succeeding, "call1", serde_json::json!({}));
     call.function.parse_error = Some("expected value at line 1 column 1".to_string());
 
-    let ctx = AgentContext::new();
+    let ctx = ModuleContext::new();
     let calls = im::vector![call];
     let messages = call_tools(&ctx, &calls, 8).await.unwrap();
 
@@ -119,7 +120,7 @@ async fn parse_error_call_yields_error_result_without_executing() {
 
 #[tokio::test]
 async fn unknown_tool_yields_error_result() {
-    let ctx = AgentContext::new();
+    let ctx = ModuleContext::new();
     let calls = im::vector![tool_call(
         "call_tools_test_not_registered",
         "call1",
@@ -148,9 +149,9 @@ impl Tool for BarrierTool {
         &self.info
     }
 
-    async fn call(&self, _ctx: AgentContext, _args: AgentValue) -> Result<AgentValue, AgentError> {
+    async fn call(&self, _ctx: ModuleContext, _args: Value) -> Result<Value> {
         self.barrier.wait().await;
-        Ok(AgentValue::string("ok"))
+        Ok(Value::string("ok"))
     }
 }
 
@@ -166,9 +167,9 @@ impl Tool for WaitNotifyTool {
         &self.info
     }
 
-    async fn call(&self, _ctx: AgentContext, _args: AgentValue) -> Result<AgentValue, AgentError> {
+    async fn call(&self, _ctx: ModuleContext, _args: Value) -> Result<Value> {
         self.notify.notified().await;
-        Ok(AgentValue::string("slow"))
+        Ok(Value::string("slow"))
     }
 }
 
@@ -184,9 +185,9 @@ impl Tool for TriggerNotifyTool {
         &self.info
     }
 
-    async fn call(&self, _ctx: AgentContext, _args: AgentValue) -> Result<AgentValue, AgentError> {
+    async fn call(&self, _ctx: ModuleContext, _args: Value) -> Result<Value> {
         self.notify.notify_one();
-        Ok(AgentValue::string("fast"))
+        Ok(Value::string("fast"))
     }
 }
 
@@ -204,7 +205,7 @@ impl Tool for LoggingTool {
         &self.info
     }
 
-    async fn call(&self, _ctx: AgentContext, _args: AgentValue) -> Result<AgentValue, AgentError> {
+    async fn call(&self, _ctx: ModuleContext, _args: Value) -> Result<Value> {
         self.log
             .lock()
             .unwrap()
@@ -213,7 +214,7 @@ impl Tool for LoggingTool {
             tokio::task::yield_now().await;
         }
         self.log.lock().unwrap().push(format!("end:{}", self.label));
-        Ok(AgentValue::string("ok"))
+        Ok(Value::string("ok"))
     }
 }
 
@@ -231,14 +232,14 @@ impl Tool for CountingTool {
         &self.info
     }
 
-    async fn call(&self, _ctx: AgentContext, _args: AgentValue) -> Result<AgentValue, AgentError> {
+    async fn call(&self, _ctx: ModuleContext, _args: Value) -> Result<Value> {
         let current = self.in_flight.fetch_add(1, Ordering::SeqCst) + 1;
         self.max_in_flight.fetch_max(current, Ordering::SeqCst);
         for _ in 0..3 {
             tokio::task::yield_now().await;
         }
         self.in_flight.fetch_sub(1, Ordering::SeqCst);
-        Ok(AgentValue::string("ok"))
+        Ok(Value::string("ok"))
     }
 }
 
@@ -253,7 +254,7 @@ async fn parallel_tools_genuinely_overlap() {
         });
     }
 
-    let ctx = AgentContext::new();
+    let ctx = ModuleContext::new();
     let calls = im::vector![
         tool_call(names[0], "c1", serde_json::json!({})),
         tool_call(names[1], "c2", serde_json::json!({})),
@@ -289,7 +290,7 @@ async fn parallel_results_keep_input_order() {
         notify: notify.clone(),
     });
 
-    let ctx = AgentContext::new();
+    let ctx = ModuleContext::new();
     // The first call cannot finish until the second one has already
     // completed, so completion order is the reverse of input order.
     let calls = im::vector![
@@ -336,7 +337,7 @@ async fn sequential_call_is_barrier_in_mixed_batch() {
         });
     }
 
-    let ctx = AgentContext::new();
+    let ctx = ModuleContext::new();
     let calls = im::vector![
         tool_call(p1, "c1", serde_json::json!({})),
         tool_call(p2, "c2", serde_json::json!({})),
@@ -394,7 +395,7 @@ async fn sequential_tools_never_overlap() {
         });
     }
 
-    let ctx = AgentContext::new();
+    let ctx = ModuleContext::new();
     let calls = im::vector![
         tool_call(names[0], "c1", serde_json::json!({})),
         tool_call(names[1], "c2", serde_json::json!({})),
@@ -419,7 +420,7 @@ async fn failing_parallel_call_yields_error_without_affecting_others() {
         info: parallel_info(succeeding),
     });
 
-    let ctx = AgentContext::new();
+    let ctx = ModuleContext::new();
     let calls = im::vector![
         tool_call(failing, "c1", serde_json::json!({})),
         tool_call(succeeding, "c2", serde_json::json!({})),
@@ -453,7 +454,7 @@ async fn max_concurrency_caps_in_flight_calls() {
         });
     }
 
-    let ctx = AgentContext::new();
+    let ctx = ModuleContext::new();
     let calls = names
         .into_iter()
         .enumerate()
@@ -479,7 +480,7 @@ async fn error_results_survive_message_serde() {
         info: tool_info(failing),
     });
 
-    let ctx = AgentContext::new();
+    let ctx = ModuleContext::new();
     let calls = im::vector![tool_call(failing, "call1", serde_json::json!({}))];
     let messages = call_tools(&ctx, &calls, 8).await.unwrap();
     assert_eq!(messages.len(), 1);

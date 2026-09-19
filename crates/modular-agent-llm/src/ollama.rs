@@ -1,6 +1,6 @@
 use modular_agent_core::{
-    Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
-    ModularAgent, async_trait, modular_agent,
+    AsModule, ModularAgent, Module, ModuleContext, ModuleData, ModuleOutput, ModuleSpec, Result,
+    Value, async_trait, modular_agent,
 };
 
 use crate::ollama_client::OllamaManager;
@@ -20,29 +20,24 @@ const PORT_UNIT: &str = "unit";
     outputs=[PORT_MODEL_LIST],
     hint(width = 2, height = 1),
 )]
-pub struct OllamaListLocalModelsAgent {
-    data: AgentData,
+pub struct OllamaListLocalModelsModule {
+    data: ModuleData,
     manager: OllamaManager,
 }
 
 #[async_trait]
-impl AsAgent for OllamaListLocalModelsAgent {
-    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+impl AsModule for OllamaListLocalModelsModule {
+    fn new(ma: ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
         Ok(Self {
-            data: AgentData::new(ma, id, spec),
+            data: ModuleData::new(ma, id, spec),
             manager: OllamaManager::new(),
         })
     }
 
-    async fn process(
-        &mut self,
-        ctx: AgentContext,
-        _port: String,
-        _value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, ctx: ModuleContext, _port: String, _value: Value) -> Result<()> {
         let client = self.manager.get_client(self.ma())?;
         let model_list = client.list_local_models().await?;
-        let model_list = AgentValue::from_serialize(&model_list)?;
+        let model_list = Value::from_serialize(&model_list)?;
 
         self.output(ctx.clone(), PORT_MODEL_LIST, model_list)
             .await?;
@@ -58,26 +53,21 @@ impl AsAgent for OllamaListLocalModelsAgent {
     outputs=[PORT_MODEL_INFO],
     hint(width = 2, height = 1),
 )]
-pub struct OllamaShowModelInfoAgent {
-    data: AgentData,
+pub struct OllamaShowModelInfoModule {
+    data: ModuleData,
     manager: OllamaManager,
 }
 
 #[async_trait]
-impl AsAgent for OllamaShowModelInfoAgent {
-    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+impl AsModule for OllamaShowModelInfoModule {
+    fn new(ma: ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
         Ok(Self {
-            data: AgentData::new(ma, id, spec),
+            data: ModuleData::new(ma, id, spec),
             manager: OllamaManager::new(),
         })
     }
 
-    async fn process(
-        &mut self,
-        ctx: AgentContext,
-        _port: String,
-        value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, ctx: ModuleContext, _port: String, value: Value) -> Result<()> {
         let model_name = value.as_str().unwrap_or("");
         if model_name.is_empty() {
             return Ok(());
@@ -85,7 +75,7 @@ impl AsAgent for OllamaShowModelInfoAgent {
 
         let client = self.manager.get_client(self.ma())?;
         let model_info = client.show_model_info(model_name).await?;
-        let model_info = AgentValue::from_serialize(&model_info)?;
+        let model_info = Value::from_serialize(&model_info)?;
 
         self.output(ctx.clone(), PORT_MODEL_INFO, model_info)
             .await?;

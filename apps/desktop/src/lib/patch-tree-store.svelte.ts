@@ -70,7 +70,7 @@ class PatchTreeStore {
 
 export const patchTreeStore = new PatchTreeStore();
 
-// App-lifetime Tauri event listener (component-independent, like SharedAgentEvents)
+// App-lifetime Tauri event listener (component-independent, like SharedModuleEvents)
 $effect.root(() => {
   listen<{ path: string }>("ma:patch_list_changed", (event) => {
     patchTreeStore.refresh(event.payload.path);

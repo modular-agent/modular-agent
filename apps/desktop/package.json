@@ -32,7 +32,7 @@
     "mode-watcher": "^1.1.0",
     "nanoid": "^5.1.16",
     "svelte-sonner": "^1.1.1",
-    "tauri-plugin-modular-agent-api": "^0.20.0"
+    "tauri-plugin-modular-agent-api": "file:../../crates/tauri-plugin-modular-agent"
   },
   "devDependencies": {
     "@internationalized/date": "^3.12.2",

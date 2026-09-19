@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-get-module-definitions"
+description = "Enables the get_module_definitions command without any pre-configured scope."
+commands.allow = ["get_module_definitions"]
+
+[[permission]]
+identifier = "deny-get-module-definitions"
+description = "Denies the get_module_definitions command without any pre-configured scope."
+commands.deny = ["get_module_definitions"]

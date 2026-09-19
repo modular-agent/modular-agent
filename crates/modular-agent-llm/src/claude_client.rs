@@ -2,11 +2,11 @@ use std::sync::{Arc, Mutex};
 
 use modular_agent_core::tool;
 use modular_agent_core::{
-    AgentError, AgentValue, ContentBlock, Message, MessageContent, ModularAgent, ToolCall,
-    ToolCallFunction, Usage,
+    ContentBlock, Error, Message, MessageContent, ModularAgent, Result, ToolCall, ToolCallFunction,
+    Usage, Value,
 };
 
-use crate::chat::ChatAgent;
+use crate::chat::ChatModule;
 use crate::provider::{
     CONFIG_CLAUDE_API_BASE, CONFIG_CLAUDE_API_KEY, CacheRetention, DEFAULT_CLAUDE_API_BASE,
 };
@@ -34,7 +34,7 @@ impl ClaudeManager {
         }
     }
 
-    pub(crate) fn get_client(&self, ma: &ModularAgent) -> Result<ClaudeClient, AgentError> {
+    pub(crate) fn get_client(&self, ma: &ModularAgent) -> Result<ClaudeClient> {
         let mut client_guard = self.client.lock().unwrap();
 
         if let Some(client) = client_guard.as_ref() {
@@ -43,7 +43,7 @@ impl ClaudeManager {
 
         // Resolve API key: config → CLAUDE_API_KEY → ANTHROPIC_API_KEY
         let api_key = ma
-            .get_global_configs(ChatAgent::DEF_NAME)
+            .get_global_configs(ChatModule::DEF_NAME)
             .and_then(|cfg| cfg.get_string(CONFIG_CLAUDE_API_KEY).ok())
             .filter(|key| !key.is_empty())
             .or_else(|| {
@@ -60,7 +60,7 @@ impl ClaudeManager {
 
         // Resolve API base: config → CLAUDE_API_BASE → ANTHROPIC_API_BASE → default
         let api_base = ma
-            .get_global_configs(ChatAgent::DEF_NAME)
+            .get_global_configs(ChatModule::DEF_NAME)
             .and_then(|cfg| cfg.get_string(CONFIG_CLAUDE_API_BASE).ok())
             .filter(|url| !url.is_empty())
             .or_else(|| {
@@ -81,7 +81,7 @@ impl ClaudeManager {
             .connect_timeout(std::time::Duration::from_secs(10))
             .read_timeout(std::time::Duration::from_secs(120))
             .build()
-            .map_err(|e| AgentError::IoError(format!("Claude client build error: {}", e)))?;
+            .map_err(|e| Error::IoError(format!("Claude client build error: {}", e)))?;
         let new_client = ClaudeClient {
             http,
             api_key,
@@ -108,10 +108,7 @@ impl ClaudeClient {
         format!("{}/v1/messages", self.api_base.trim_end_matches('/'))
     }
 
-    pub(crate) async fn create_message(
-        &self,
-        request: &ClaudeRequest,
-    ) -> Result<ClaudeResponse, AgentError> {
+    pub(crate) async fn create_message(&self, request: &ClaudeRequest) -> Result<ClaudeResponse> {
         let resp = self
             .http
             .post(self.messages_url())
@@ -141,8 +138,7 @@ impl ClaudeClient {
     pub(crate) async fn create_message_stream(
         &self,
         request: &ClaudeRequest,
-    ) -> Result<impl futures::Stream<Item = Result<ClaudeStreamEvent, AgentError>>, AgentError>
-    {
+    ) -> Result<impl futures::Stream<Item = Result<ClaudeStreamEvent>>> {
         use eventsource_stream::Eventsource;
         use futures::StreamExt;
 
@@ -172,38 +168,37 @@ impl ClaudeClient {
                     if event.data == "[DONE]" {
                         return Ok(ClaudeStreamEvent::MessageStop {});
                     }
-                    serde_json::from_str::<ClaudeStreamEvent>(&event.data).map_err(|e| {
-                        AgentError::IoError(format!("Claude stream parse error: {}", e))
-                    })
+                    serde_json::from_str::<ClaudeStreamEvent>(&event.data)
+                        .map_err(|e| Error::IoError(format!("Claude stream parse error: {}", e)))
                 }
-                Err(e) => Err(AgentError::IoError(format!("Claude stream error: {}", e))),
+                Err(e) => Err(Error::IoError(format!("Claude stream error: {}", e))),
             });
 
         Ok(stream)
     }
 }
 
-fn map_http_error(status: u16, body: &str, retry_after: Option<std::time::Duration>) -> AgentError {
+fn map_http_error(status: u16, body: &str, retry_after: Option<std::time::Duration>) -> Error {
     // 429 takes precedence over overflow detection so throttling responses
     // whose body happens to mention prompt size stay retryable.
     if status == 429 {
         let lower = body.to_lowercase();
         if crate::http_error::mentions_quota_exhausted(&lower) {
-            return AgentError::InvalidConfig(format!("Claude quota exhausted: {}", body));
+            return Error::InvalidConfig(format!("Claude quota exhausted: {}", body));
         }
-        return AgentError::RateLimited {
+        return Error::RateLimited {
             message: format!("Claude rate limited: {}", body),
             retry_after,
         };
     }
     if is_context_overflow(status, body) {
-        return AgentError::ContextOverflow(format!("Claude context overflow: {}", body));
+        return Error::ContextOverflow(format!("Claude context overflow: {}", body));
     }
     match status {
-        401 => AgentError::InvalidConfig(format!("Invalid Claude API key: {}", body)),
-        400 => AgentError::InvalidValue(format!("Claude Bad Request: {}", body)),
-        500..=599 => AgentError::Overloaded(format!("Claude API Error ({}): {}", status, body)),
-        _ => AgentError::IoError(format!("Claude API Error ({}): {}", status, body)),
+        401 => Error::InvalidConfig(format!("Invalid Claude API key: {}", body)),
+        400 => Error::InvalidValue(format!("Claude Bad Request: {}", body)),
+        500..=599 => Error::Overloaded(format!("Claude API Error ({}): {}", status, body)),
+        _ => Error::IoError(format!("Claude API Error ({}): {}", status, body)),
     }
 }
 
@@ -353,7 +348,7 @@ pub(crate) struct ClaudeOutputConfig {
 pub(crate) const MIN_THINKING_BUDGET_TOKENS: u32 = 1024;
 
 /// Thinking token budget per level for Claude models on the `budget_tokens`
-/// mechanism. Values follow pi-agent's per-level budgets; the API
+/// mechanism. Values follow pi-module's per-level budgets; the API
 /// minimum is 1024.
 pub(crate) fn thinking_budget_tokens(level: crate::capabilities::ThinkingLevel) -> u32 {
     use crate::capabilities::ThinkingLevel::*;
@@ -482,7 +477,7 @@ pub(crate) struct ClaudeApiError {
 /// Returns (system_prompt, messages) where system messages are extracted
 /// as a separate top-level field (Claude API requirement).
 pub(crate) fn messages_to_claude(
-    messages: &im::Vector<AgentValue>,
+    messages: &im::Vector<Value>,
 ) -> (Option<String>, Vec<ClaudeMessage>) {
     let mut system_parts: Vec<String> = Vec::new();
     let mut claude_messages: Vec<ClaudeMessage> = Vec::new();
@@ -943,8 +938,8 @@ mod tests {
     #[test]
     fn test_messages_to_claude_system_separation() {
         let messages = vector![
-            AgentValue::from(Message::system("You are helpful.".to_string())),
-            AgentValue::from(Message::user("Hello".to_string())),
+            Value::from(Message::system("You are helpful.".to_string())),
+            Value::from(Message::user("Hello".to_string())),
         ];
 
         let (system, msgs) = messages_to_claude(&messages);
@@ -956,9 +951,9 @@ mod tests {
     #[test]
     fn test_messages_to_claude_multiple_system() {
         let messages = vector![
-            AgentValue::from(Message::system("System 1".to_string())),
-            AgentValue::from(Message::system("System 2".to_string())),
-            AgentValue::from(Message::user("Hello".to_string())),
+            Value::from(Message::system("System 1".to_string())),
+            Value::from(Message::system("System 2".to_string())),
+            Value::from(Message::user("Hello".to_string())),
         ];
 
         let (system, msgs) = messages_to_claude(&messages);
@@ -968,7 +963,7 @@ mod tests {
 
     #[test]
     fn test_messages_to_claude_no_system() {
-        let messages = vector![AgentValue::from(Message::user("Hello".to_string())),];
+        let messages = vector![Value::from(Message::user("Hello".to_string())),];
 
         let (system, msgs) = messages_to_claude(&messages);
         assert!(system.is_none());
@@ -980,7 +975,7 @@ mod tests {
         let mut tool_msg = Message::tool("my_tool".to_string(), r#"{"result": "ok"}"#.to_string());
         tool_msg.id = Some("toolu_123".to_string());
 
-        let messages = vector![AgentValue::from(tool_msg),];
+        let messages = vector![Value::from(tool_msg),];
 
         let (_, msgs) = messages_to_claude(&messages);
         assert_eq!(msgs.len(), 1);
@@ -1011,7 +1006,7 @@ mod tests {
     fn test_messages_to_claude_tool_result_no_id() {
         let tool_msg = Message::tool("my_tool".to_string(), "result".to_string());
 
-        let messages = vector![AgentValue::from(tool_msg),];
+        let messages = vector![Value::from(tool_msg),];
 
         let (_, msgs) = messages_to_claude(&messages);
         if let ClaudeContent::Blocks(blocks) = &msgs[0].content {
@@ -1042,7 +1037,7 @@ mod tests {
         );
         tool_msg.id = Some("toolu_img".to_string());
 
-        let messages = vector![AgentValue::from(tool_msg)];
+        let messages = vector![Value::from(tool_msg)];
         let (_, msgs) = messages_to_claude(&messages);
 
         let json = serde_json::to_value(&msgs[0]).unwrap();
@@ -1062,7 +1057,7 @@ mod tests {
         let mut tool_msg = Message::tool("my_tool".to_string(), "plain result".to_string());
         tool_msg.id = Some("toolu_txt".to_string());
 
-        let messages = vector![AgentValue::from(tool_msg)];
+        let messages = vector![Value::from(tool_msg)];
         let (_, msgs) = messages_to_claude(&messages);
 
         // Lock the wire format: text-only results keep the plain-string form.
@@ -1076,7 +1071,7 @@ mod tests {
         tool_msg.id = Some("toolu_err".to_string());
         tool_msg.is_error = Some(true);
 
-        let messages = vector![AgentValue::from(tool_msg)];
+        let messages = vector![Value::from(tool_msg)];
         let (_, msgs) = messages_to_claude(&messages);
 
         let json = serde_json::to_string(&msgs[0]).unwrap();
@@ -1088,7 +1083,7 @@ mod tests {
         let mut tool_msg = Message::tool("my_tool".to_string(), "ok".to_string());
         tool_msg.id = Some("toolu_ok".to_string());
 
-        let messages = vector![AgentValue::from(tool_msg)];
+        let messages = vector![Value::from(tool_msg)];
         let (_, msgs) = messages_to_claude(&messages);
 
         let json = serde_json::to_string(&msgs[0]).unwrap();
@@ -1110,7 +1105,7 @@ mod tests {
             .into(),
         );
 
-        let messages = vector![AgentValue::from(assistant_msg),];
+        let messages = vector![Value::from(assistant_msg),];
 
         let (_, msgs) = messages_to_claude(&messages);
         assert_eq!(msgs[0].role, "assistant");
@@ -1733,15 +1728,15 @@ mod tests {
     fn test_map_http_error() {
         assert!(matches!(
             map_http_error(401, "Unauthorized", None),
-            AgentError::InvalidConfig(_)
+            Error::InvalidConfig(_)
         ));
         assert!(matches!(
             map_http_error(400, "Bad request", None),
-            AgentError::InvalidValue(_)
+            Error::InvalidValue(_)
         ));
         assert!(matches!(
             map_http_error(418, "I'm a teapot", None),
-            AgentError::IoError(_)
+            Error::IoError(_)
         ));
     }
 
@@ -1750,7 +1745,7 @@ mod tests {
         let err = map_http_error(429, "Rate limited", None);
         assert!(matches!(
             err,
-            AgentError::RateLimited {
+            Error::RateLimited {
                 retry_after: None,
                 ..
             }
@@ -1759,7 +1754,7 @@ mod tests {
         let retry_after = Some(std::time::Duration::from_secs(10));
         let err = map_http_error(429, "Rate limited", retry_after);
         assert!(
-            matches!(err, AgentError::RateLimited { retry_after: Some(d), .. } if d.as_secs() == 10)
+            matches!(err, Error::RateLimited { retry_after: Some(d), .. } if d.as_secs() == 10)
         );
     }
 
@@ -1770,7 +1765,7 @@ mod tests {
             "You exceeded your current quota, please check your plan and billing details.",
             None,
         );
-        assert!(matches!(err, AgentError::InvalidConfig(_)));
+        assert!(matches!(err, Error::InvalidConfig(_)));
         assert!(!err.is_retryable());
     }
 
@@ -1778,14 +1773,14 @@ mod tests {
     fn test_map_http_error_overloaded() {
         assert!(matches!(
             map_http_error(529, "Overloaded", None),
-            AgentError::Overloaded(_)
+            Error::Overloaded(_)
         ));
         assert!(matches!(
             map_http_error(500, "Server error", None),
-            AgentError::Overloaded(_)
+            Error::Overloaded(_)
         ));
         let err = map_http_error(529, "Overloaded", None);
-        if let AgentError::Overloaded(msg) = err {
+        if let Error::Overloaded(msg) = err {
             assert!(msg.contains("529"), "msg was: {msg}");
             assert!(msg.contains("Claude"), "msg was: {msg}");
         } else {
@@ -1801,16 +1796,16 @@ mod tests {
                 "prompt is too long: 250000 tokens > 200000 maximum",
                 None
             ),
-            AgentError::ContextOverflow(_)
+            Error::ContextOverflow(_)
         ));
         assert!(matches!(
             map_http_error(400, r#"{"error":{"type":"request_too_large"}}"#, None),
-            AgentError::ContextOverflow(_)
+            Error::ContextOverflow(_)
         ));
         // 413 is overflow by status alone
         assert!(matches!(
             map_http_error(413, "Payload Too Large", None),
-            AgentError::ContextOverflow(_)
+            Error::ContextOverflow(_)
         ));
     }
 
@@ -2023,12 +2018,12 @@ mod tests {
         // A 429 whose body mentions prompt size must stay RateLimited
         assert!(matches!(
             map_http_error(429, "prompt is too long, rate limit", None),
-            AgentError::RateLimited { .. }
+            Error::RateLimited { .. }
         ));
         // A 400 mentioning both overflow and rate limit wording is not overflow
         assert!(matches!(
             map_http_error(400, "prompt is too long; rate_limit_error", None),
-            AgentError::InvalidValue(_)
+            Error::InvalidValue(_)
         ));
     }
 }

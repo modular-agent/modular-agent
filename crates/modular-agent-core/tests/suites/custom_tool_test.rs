@@ -1,9 +1,9 @@
 extern crate modular_agent_core as ma;
 
 use ma::tool::get_tool;
-use ma::{AgentValue, ModularAgent};
+use ma::{ModularAgent, Value};
 
-const CUSTOM_TOOL_DEF: &str = "modular_agent_core::tool::CustomToolAgent";
+const CUSTOM_TOOL_DEF: &str = "modular_agent_core::tool::CustomToolModule";
 
 #[tokio::test]
 async fn configs_changed_reregisters_running_tool() {
@@ -16,27 +16,27 @@ async fn configs_changed_reregisters_running_tool() {
     ma.ready().await.unwrap();
 
     let patch_id = ma.new_patch().unwrap();
-    let def = ma.get_agent_definition(CUSTOM_TOOL_DEF).unwrap();
+    let def = ma.get_module_definition(CUSTOM_TOOL_DEF).unwrap();
     let spec = def.to_spec();
-    let agent_id = ma.add_agent(patch_id.clone(), spec).await.unwrap();
+    let module_id = ma.add_module(patch_id.clone(), spec).await.unwrap();
 
-    // Drive the agent lifecycle directly through its handle so each step is
-    // observable synchronously (start_agent spawns the start asynchronously).
-    let agent = ma.get_agent(&agent_id).unwrap();
+    // Drive the module lifecycle directly through its handle so each step is
+    // observable synchronously (start_module spawns the start asynchronously).
+    let module = ma.get_module(&module_id).unwrap();
 
     {
-        let mut guard = agent.lock().await;
+        let mut guard = module.lock().await;
         guard
-            .set_config("name".into(), AgentValue::string(old_name))
+            .set_config("name".into(), Value::string(old_name))
             .unwrap();
         guard
-            .set_config("description".into(), AgentValue::string("old description"))
+            .set_config("description".into(), Value::string("old description"))
             .unwrap();
     }
     // Config changes before start must not register anything.
     assert!(get_tool(old_name).is_none());
 
-    agent.lock().await.start().await.unwrap();
+    module.lock().await.start().await.unwrap();
     assert!(get_tool(old_name).is_some());
 
     let parameters = serde_json::json!({
@@ -44,18 +44,18 @@ async fn configs_changed_reregisters_running_tool() {
         "properties": { "q": { "type": "string" } },
     });
     {
-        let mut guard = agent.lock().await;
+        let mut guard = module.lock().await;
         guard
-            .set_config("description".into(), AgentValue::string("new description"))
+            .set_config("description".into(), Value::string("new description"))
             .unwrap();
         guard
             .set_config(
                 "parameters".into(),
-                AgentValue::from_json(parameters.clone()).unwrap(),
+                Value::from_json(parameters.clone()).unwrap(),
             )
             .unwrap();
         guard
-            .set_config("name".into(), AgentValue::string(new_name))
+            .set_config("name".into(), Value::string(new_name))
             .unwrap();
     }
 
@@ -66,7 +66,7 @@ async fn configs_changed_reregisters_running_tool() {
     assert_eq!(tool.info().description, "new description");
     assert_eq!(tool.info().parameters, parameters);
 
-    agent.lock().await.stop().await.unwrap();
+    module.lock().await.stop().await.unwrap();
     assert!(get_tool(new_name).is_none());
 
     ma.quit();

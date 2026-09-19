@@ -2,7 +2,7 @@
 # Modular Agent one-command installer for macOS / Linux.
 #
 # Clones the repository and builds the desktop app or the `ma` CLI from
-# source, with the recommended agent packages unless a minimal build is
+# source, with the recommended module packages unless a minimal build is
 # chosen. What to build is asked interactively; passing any option skips
 # the questions. Assumes the Tauri prerequisites (git, Rust, Node.js, the
 # platform toolchain) are installed: https://v2.tauri.app/start/prerequisites/
@@ -12,8 +12,8 @@
 #
 # Options (any option skips the questions):
 #   --cli        Install the `ma` command-line runner instead of the desktop app
-#   --minimal    Build with only the in-tree agent packages (std, llm); skip
-#                cloning the recommended agent packages
+#   --minimal    Build with only the in-tree module packages (std, llm); skip
+#                cloning the recommended module packages
 #   --dir <dir>  Clone destination (default: ./modular-agent)
 #   --help, -h   Show this help
 
@@ -23,8 +23,8 @@ REPO_URL="https://github.com/modular-agent/modular-agent.git"
 DOCS_URL="https://modular-agent.github.io/docs/getting-started"
 OS=$(uname -s 2>/dev/null || echo unknown)
 
-# The recommended starting set from custom_agents/README.md.
-RECOMMENDED_AGENTS="modular-agent-lifelog modular-agent-mattermost modular-agent-monty
+# The recommended starting set from custom_modules/README.md.
+RECOMMENDED_MODULES="modular-agent-lifelog modular-agent-mattermost modular-agent-monty
 modular-agent-slack modular-agent-sqlx modular-agent-web modular-agent-zapcode"
 
 TARGET=desktop
@@ -45,7 +45,7 @@ Usage: install.sh [options]
 Run without options to be asked what to build. Any option skips the questions:
 
   --cli        Install the `ma` command-line runner instead of the desktop app
-  --minimal    Build with only the in-tree agent packages (std, llm)
+  --minimal    Build with only the in-tree module packages (std, llm)
   --dir <dir>  Clone destination (default: ./modular-agent)
   --help, -h   Show this help
 EOF
@@ -87,7 +87,7 @@ if [ "$WIZARD" = 1 ] && [ -r /dev/tty ]; then
     read -r ans </dev/tty || ans=
     case "$ans" in c* | C*) TARGET=cli ;; esac
 
-    printf 'Include the recommended agent packages (web, scripting, messaging,\ndatabases)? [Y/n] (Y): ' >/dev/tty
+    printf 'Include the recommended module packages (web, scripting, messaging,\ndatabases)? [Y/n] (Y): ' >/dev/tty
     read -r ans </dev/tty || ans=
     case "$ans" in n* | N*) MINIMAL=1 ;; esac
 fi
@@ -102,24 +102,24 @@ else
     git clone "$REPO_URL" "$DIR"
 fi
 
-# --- Agent packages ----------------------------------------------------------
+# --- Module packages ----------------------------------------------------------
 
 if [ "$MINIMAL" = 0 ]; then
-    info "Cloning the recommended agent packages"
-    for name in $RECOMMENDED_AGENTS; do
-        if [ -d "$DIR/custom_agents/$name/.git" ]; then
+    info "Cloning the recommended module packages"
+    for name in $RECOMMENDED_MODULES; do
+        if [ -d "$DIR/custom_modules/$name/.git" ]; then
             printf '  %s: updating existing clone\n' "$name"
-            git -C "$DIR/custom_agents/$name" pull --ff-only
+            git -C "$DIR/custom_modules/$name" pull --ff-only
         else
-            git clone "https://github.com/modular-agent/$name.git" "$DIR/custom_agents/$name"
+            git clone "https://github.com/modular-agent/$name.git" "$DIR/custom_modules/$name"
         fi
     done
 
     if [ -f "$DIR/apps/$TARGET/ma-config.toml" ]; then
-        info "Building the configurator and applying the existing agent selection"
+        info "Building the configurator and applying the existing module selection"
         MA_CONFIG_FLAG=--apply
     else
-        info "Building the configurator and selecting the default agent set (first compile, a few minutes)"
+        info "Building the configurator and selecting the default module set (first compile, a few minutes)"
         MA_CONFIG_FLAG=--defaults
     fi
     (cd "$DIR" && cargo run --manifest-path tools/ma-config/Cargo.toml -- "$TARGET" "$MA_CONFIG_FLAG")
@@ -149,5 +149,5 @@ fi
 
 printf '\nNext: build your first patch: %s/first-patch/\n' "$DOCS_URL"
 if [ "$MINIMAL" = 0 ]; then
-    printf 'To change the agent package selection: %s/installation/#adding-agent-packages\n' "$DOCS_URL"
+    printf 'To change the module package selection: %s/installation/#adding-module-packages\n' "$DOCS_URL"
 fi

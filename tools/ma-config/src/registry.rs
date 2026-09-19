@@ -1,9 +1,9 @@
-//! Known agent crate catalog for the TUI wizard.
+//! Known module crate catalog for the TUI wizard.
 //!
 //! The catalog comes from two places: the central `registry.yaml` next to this
 //! tool, which lists the in-tree crates, and one `ma-registry.yaml` per
-//! out-of-tree agent repository, read from its clone under `custom_agents/`.
-//! An agent crate therefore describes itself in its own repository, and only
+//! out-of-tree module repository, read from its clone under `custom_modules/`.
+//! A module crate therefore describes itself in its own repository, and only
 //! clones that are actually present are offered.
 
 use std::path::Path;
@@ -17,12 +17,12 @@ const REPO_FILE: &str = "ma-registry.yaml";
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Registry {
-    pub agents: Vec<KnownAgent>,
+    pub modules: Vec<KnownModule>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct KnownAgent {
+pub struct KnownModule {
     pub name: String,
     pub description: String,
     /// Lives in this workspace under `crates/`, so it is always a plain
@@ -35,7 +35,7 @@ pub struct KnownAgent {
     pub default_features: Vec<String>,
     #[serde(default)]
     pub conflicts: Vec<Conflict>,
-    /// Apps that pre-select this agent on a fresh configuration.
+    /// Apps that pre-select this module on a fresh configuration.
     #[serde(default)]
     pub default_for: Vec<String>,
 }
@@ -48,7 +48,7 @@ pub struct Conflict {
     pub platform: Option<String>,
 }
 
-/// The `ma-registry.yaml` an out-of-tree agent repository carries at its root.
+/// The `ma-registry.yaml` an out-of-tree module repository carries at its root.
 ///
 /// It describes a single crate, so there is no `in_tree` flag and no source:
 /// the file is only ever read from the crate's own clone.
@@ -68,8 +68,8 @@ struct RepoEntry {
 }
 
 impl RepoEntry {
-    fn into_known_agent(self) -> KnownAgent {
-        KnownAgent {
+    fn into_known_module(self) -> KnownModule {
+        KnownModule {
             name: self.name,
             description: self.description,
             in_tree: false,
@@ -81,12 +81,12 @@ impl RepoEntry {
     }
 }
 
-/// The full catalog: the in-tree crates plus every cloned out-of-tree agent.
+/// The full catalog: the in-tree crates plus every cloned out-of-tree module.
 pub fn load_all(central_path: &Path, root: &Path) -> Result<Registry, String> {
-    let mut agents = load(central_path)?.agents;
-    agents.extend(scan_custom_agents(root)?);
-    agents.sort_by(|a, b| a.name.cmp(&b.name));
-    Ok(Registry { agents })
+    let mut modules = load(central_path)?.modules;
+    modules.extend(scan_custom_modules(root)?);
+    modules.sort_by(|a, b| a.name.cmp(&b.name));
+    Ok(Registry { modules })
 }
 
 /// Read the central catalog, which only covers the crates in this workspace.
@@ -96,31 +96,31 @@ pub fn load(path: &Path) -> Result<Registry, String> {
     let registry: Registry = serde_yaml::from_str(&content)
         .map_err(|e| format!("Failed to parse registry file {}: {}", path.display(), e))?;
 
-    for agent in &registry.agents {
-        if !agent.in_tree {
+    for module in &registry.modules {
+        if !module.in_tree {
             return Err(format!(
                 "{}: {} only lists in-tree crates. Describe this crate in a {REPO_FILE} at the \
-                 root of the {} repository instead — see custom_agents/README.md.",
-                agent.name,
+                 root of the {} repository instead — see custom_modules/README.md.",
+                module.name,
                 path.display(),
-                agent.name
+                module.name
             ));
         }
     }
     Ok(registry)
 }
 
-/// Read one catalog entry per crate cloned under `custom_agents/`.
+/// Read one catalog entry per crate cloned under `custom_modules/`.
 ///
 /// A clone without a `ma-registry.yaml` still shows up in the wizard, described
 /// by its `Cargo.toml`: it just offers no features and declares no conflicts.
-pub fn scan_custom_agents(root: &Path) -> Result<Vec<KnownAgent>, String> {
-    let dir = root.join("custom_agents");
+pub fn scan_custom_modules(root: &Path) -> Result<Vec<KnownModule>, String> {
+    let dir = root.join("custom_modules");
     let Ok(entries) = std::fs::read_dir(&dir) else {
         return Ok(Vec::new());
     };
 
-    let mut agents = Vec::new();
+    let mut modules = Vec::new();
     for entry in entries {
         let entry = entry.map_err(|e| format!("Failed to read {}: {e}", dir.display()))?;
         let clone_dir = entry.path();
@@ -131,25 +131,25 @@ pub fn scan_custom_agents(root: &Path) -> Result<Vec<KnownAgent>, String> {
         let dir_name = entry.file_name().to_string_lossy().into_owned();
 
         let repo_file = clone_dir.join(REPO_FILE);
-        let agent = if repo_file.is_file() {
+        let module = if repo_file.is_file() {
             let content = std::fs::read_to_string(&repo_file)
                 .map_err(|e| format!("Failed to read {}: {e}", repo_file.display()))?;
             let entry: RepoEntry = serde_yaml::from_str(&content)
                 .map_err(|e| format!("Failed to parse {}: {e}", repo_file.display()))?;
             check_name(&entry.name, &dir_name, &repo_file)?;
-            entry.into_known_agent()
+            entry.into_known_module()
         } else {
             from_manifest(&manifest, &dir_name)?
         };
-        agents.push(agent);
+        modules.push(module);
     }
 
-    agents.sort_by(|a, b| a.name.cmp(&b.name));
-    Ok(agents)
+    modules.sort_by(|a, b| a.name.cmp(&b.name));
+    Ok(modules)
 }
 
 /// Minimal entry for a clone that carries no `ma-registry.yaml`.
-fn from_manifest(manifest_path: &Path, dir_name: &str) -> Result<KnownAgent, String> {
+fn from_manifest(manifest_path: &Path, dir_name: &str) -> Result<KnownModule, String> {
     let content = std::fs::read_to_string(manifest_path)
         .map_err(|e| format!("Failed to read {}: {e}", manifest_path.display()))?;
     let manifest: toml::Table = content
@@ -174,7 +174,7 @@ fn from_manifest(manifest_path: &Path, dir_name: &str) -> Result<KnownAgent, Str
         .and_then(toml::Value::as_str)
         .unwrap_or("(no description)");
 
-    Ok(KnownAgent {
+    Ok(KnownModule {
         name: name.to_string(),
         description: description.to_string(),
         in_tree: false,
@@ -185,7 +185,7 @@ fn from_manifest(manifest_path: &Path, dir_name: &str) -> Result<KnownAgent, Str
     })
 }
 
-/// The crate is linked as a path dependency on `custom_agents/<name>`, so a
+/// The crate is linked as a path dependency on `custom_modules/<name>`, so a
 /// clone whose directory does not carry the crate's name cannot be linked at
 /// all — usually a copy-paste slip in a freshly added `ma-registry.yaml`.
 fn check_name(name: &str, dir_name: &str, source: &Path) -> Result<(), String> {
@@ -193,13 +193,13 @@ fn check_name(name: &str, dir_name: &str, source: &Path) -> Result<(), String> {
         return Ok(());
     }
     Err(format!(
-        "{}: name '{name}' does not match the directory it was found in, custom_agents/{dir_name}. \
-         Clone the repository into custom_agents/{name}.",
+        "{}: name '{name}' does not match the directory it was found in, custom_modules/{dir_name}. \
+         Clone the repository into custom_modules/{name}.",
         source.display()
     ))
 }
 
-impl KnownAgent {
+impl KnownModule {
     /// Path to an in-tree crate, relative to the workspace root.
     pub fn in_tree_path(&self) -> String {
         format!("crates/{}", self.name)
@@ -226,13 +226,13 @@ impl KnownAgent {
     }
 }
 
-pub fn find_by_name<'a>(known_agents: &'a [KnownAgent], name: &str) -> Option<&'a KnownAgent> {
-    known_agents.iter().find(|a| a.name == name)
+pub fn find_by_name<'a>(known_modules: &'a [KnownModule], name: &str) -> Option<&'a KnownModule> {
+    known_modules.iter().find(|a| a.name == name)
 }
 
-/// Where an out-of-tree agent is cloned, relative to the workspace root.
+/// Where an out-of-tree module is cloned, relative to the workspace root.
 pub fn clone_path(name: &str) -> String {
-    format!("custom_agents/{name}")
+    format!("custom_modules/{name}")
 }
 
 #[cfg(test)]
@@ -246,34 +246,34 @@ mod tests {
         dir
     }
 
-    /// Lay out one clone under `custom_agents/` and scan the result.
+    /// Lay out one clone under `custom_modules/` and scan the result.
     fn scan_one(
         label: &str,
         dir_name: &str,
         manifest: &str,
         repo_file: Option<&str>,
-    ) -> Result<Vec<KnownAgent>, String> {
+    ) -> Result<Vec<KnownModule>, String> {
         let root = scratch(label);
-        let clone_dir = root.join("custom_agents").join(dir_name);
+        let clone_dir = root.join("custom_modules").join(dir_name);
         std::fs::create_dir_all(&clone_dir).unwrap();
         std::fs::write(clone_dir.join("Cargo.toml"), manifest).unwrap();
         if let Some(content) = repo_file {
             std::fs::write(clone_dir.join(REPO_FILE), content).unwrap();
         }
-        let result = scan_custom_agents(&root);
+        let result = scan_custom_modules(&root);
         let _ = std::fs::remove_dir_all(&root);
         result
     }
 
     #[test]
     fn a_repo_file_describes_the_cloned_crate() {
-        let agents = scan_one(
+        let modules = scan_one(
             "repo-file",
             "modular-agent-example",
             "[package]\nname = \"modular-agent-example\"\n",
             Some(
                 "name: modular-agent-example\n\
-                 description: Example agents\n\
+                 description: Example modules\n\
                  available_features:\n  - basic\n  - extra\n\
                  default_features:\n  - extra\n\
                  conflicts:\n  - with: modular-agent-sqlx\n    reason: made up\n    platform: windows\n\
@@ -282,10 +282,10 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(agents.len(), 1);
-        let example = &agents[0];
+        assert_eq!(modules.len(), 1);
+        let example = &modules[0];
         assert_eq!(example.name, "modular-agent-example");
-        assert_eq!(example.description, "Example agents");
+        assert_eq!(example.description, "Example modules");
         assert!(!example.in_tree);
         assert_eq!(example.available_features, ["basic", "extra"]);
         assert_eq!(example.default_features, ["extra"]);
@@ -301,31 +301,31 @@ mod tests {
             "name-mismatch",
             "modular-agent-example",
             "[package]\nname = \"modular-agent-example\"\n",
-            Some("name: modular-agent-lifelog\ndescription: Lifelog agents\n"),
+            Some("name: modular-agent-lifelog\ndescription: Lifelog modules\n"),
         )
         .unwrap_err();
 
         assert!(err.contains("modular-agent-lifelog"));
-        assert!(err.contains("custom_agents/modular-agent-example"));
+        assert!(err.contains("custom_modules/modular-agent-example"));
     }
 
     #[test]
     fn a_clone_without_a_repo_file_falls_back_to_its_manifest() {
-        let agents = scan_one(
+        let modules = scan_one(
             "manifest-fallback",
             "modular-agent-custom",
             "[package]\n\
              name = \"modular-agent-custom\"\n\
-             description = \"Custom experiment agents\"\n\
+             description = \"Custom experiment modules\"\n\
              [features]\nextra = []\n",
             None,
         )
         .unwrap();
 
-        assert_eq!(agents.len(), 1);
-        let custom = &agents[0];
+        assert_eq!(modules.len(), 1);
+        let custom = &modules[0];
         assert_eq!(custom.name, "modular-agent-custom");
-        assert_eq!(custom.description, "Custom experiment agents");
+        assert_eq!(custom.description, "Custom experiment modules");
         assert!(!custom.in_tree);
         // Features are only selectable when a repo file declares them.
         assert!(!custom.has_selectable_features());
@@ -339,9 +339,9 @@ mod tests {
         let path = dir.join("registry.yaml");
         std::fs::write(
             &path,
-            "agents:\n\
-             \x20 - name: modular-agent-std\n    description: Standard agents\n    in_tree: true\n\
-             \x20 - name: modular-agent-lifelog\n    description: Lifelog agents\n",
+            "modules:\n\
+             \x20 - name: modular-agent-std\n    description: Standard modules\n    in_tree: true\n\
+             \x20 - name: modular-agent-lifelog\n    description: Lifelog modules\n",
         )
         .unwrap();
 

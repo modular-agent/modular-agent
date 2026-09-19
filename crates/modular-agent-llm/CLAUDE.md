@@ -1,10 +1,10 @@
 # CLAUDE.md
 
-See root CLAUDE.md for common agent development patterns.
+See root CLAUDE.md for common module development patterns.
 
 ## Overview
 
-LLM integration library providing completion, chat, and embeddings agents for OpenAI, Ollama, and Claude (Anthropic).
+LLM integration library providing completion, chat, and embeddings modules for OpenAI, Ollama, and Claude (Anthropic).
 
 ## Modules
 
@@ -13,50 +13,50 @@ LLM integration library providing completion, chat, and embeddings agents for Op
 | doc.rs | Text processing (NFKC normalization, chunking by chars/tokens) |
 | message.rs | Message accumulation and formatting |
 | capabilities.rs | Model capability registry (context window / max tokens / cost; built-in table + models.json overlay) |
-| chat.rs | Chat agents (OpenAI, Ollama, Claude) |
+| chat.rs | Chat modules (OpenAI, Ollama, Claude) |
 | claude_client.rs | Claude (Anthropic) Messages API client |
-| completion.rs | Text completion agents |
-| embeddings.rs | Embeddings agents |
+| completion.rs | Text completion modules |
+| embeddings.rs | Embeddings modules |
 | responses.rs | OpenAI Responses API integration |
 | provider.rs | Model prefix routing (`openai/`, `ollama/`, `claude/`) |
 | openai_client.rs | OpenAI API client wrapper |
 | ollama_client.rs | Ollama API client (direct HTTP/NDJSON) |
-| ollama.rs | Ollama-specific agents (list models, show info) |
+| ollama.rs | Ollama-specific modules (list models, show info) |
 
 ## Features
 
 - `image` (default) - Image support in messages
-- `ollama` (default) - Ollama agents
-- `openai` (default) - OpenAI agents
-- `claude` (default) - Claude (Anthropic) agents
+- `ollama` (default) - Ollama modules
+- `openai` (default) - OpenAI modules
+- `claude` (default) - Claude (Anthropic) modules
 
-## Agents
+## Modules
 
-| Agent | Category | Purpose |
+| Module | Category | Purpose |
 | ----- | -------- | ------- |
-| ChatAgent | LLM | Chat with streaming, tools (OpenAI/Ollama/Claude) |
-| ResponsesAgent | LLM | OpenAI Responses API with conversation state |
-| CompletionAgent | LLM | Text completion (OpenAI/Ollama) |
-| EmbeddingsAgent | LLM | Vector embeddings (OpenAI/Ollama) |
-| OllamaListLocalModelsAgent | LLM/Ollama | List available models |
-| OllamaShowModelInfoAgent | LLM/Ollama | Show model details |
-| NFKCAgent | LLM/Doc | Unicode normalization |
-| SplitTextAgent | LLM/Doc | Character-based chunking |
-| SplitTextByTokensAgent | LLM/Doc | Token-based chunking |
-| UserMessageAgent | LLM/Message | Append user message |
-| AssistantMessageAgent | LLM/Message | Append assistant message |
-| SystemMessageAgent | LLM/Message | Prepend system message |
-| PreambleAgent | LLM/Message | Add preamble once |
-| MessagesAgent | LLM/Message | In-memory message history; emits a prompt-ready window on user/tool arrivals, bounded by `max_context_tokens`/`max_messages`/`max_message_tokens`; `summarize_model` folds evicted history into a rolling LLM summary instead of deleting it |
-| FileMessagesAgent | LLM/Message | Same, persisted as JSONL session files (`session_dir`); `prune_file` controls whether trimmed history is also deleted from the file |
-| MessagesForPromptAgent | LLM/Message | Trim a session-less message stream to a max_tokens/max_size budget |
+| ChatModule | LLM | Chat with streaming, tools (OpenAI/Ollama/Claude) |
+| ResponsesModule | LLM | OpenAI Responses API with conversation state |
+| CompletionModule | LLM | Text completion (OpenAI/Ollama) |
+| EmbeddingsModule | LLM | Vector embeddings (OpenAI/Ollama) |
+| OllamaListLocalModelsModule | LLM/Ollama | List available models |
+| OllamaShowModelInfoModule | LLM/Ollama | Show model details |
+| NFKCModule | LLM/Doc | Unicode normalization |
+| SplitTextModule | LLM/Doc | Character-based chunking |
+| SplitTextByTokensModule | LLM/Doc | Token-based chunking |
+| UserMessageModule | LLM/Message | Append user message |
+| AssistantMessageModule | LLM/Message | Append assistant message |
+| SystemMessageModule | LLM/Message | Prepend system message |
+| PreambleModule | LLM/Message | Add preamble once |
+| MessagesModule | LLM/Message | In-memory message history; emits a prompt-ready window on user/tool arrivals, bounded by `max_context_tokens`/`max_messages`/`max_message_tokens`; `summarize_model` folds evicted history into a rolling LLM summary instead of deleting it |
+| FileMessagesModule | LLM/Message | Same, persisted as JSONL session files (`session_dir`); `prune_file` controls whether trimmed history is also deleted from the file |
+| MessagesForPromptModule | LLM/Message | Trim a session-less message stream to a max_tokens/max_size budget |
 
 ## Model Capabilities
 
 `capabilities.rs` resolves per-model metadata (context window, max output
 tokens, cost, reasoning) from four layers: `models.json` > built-in static
 table > measured Ollama `/api/show` > conservative defaults (8192). The chat /
-responses / completion agents use it to pick each model's `max_tokens` default
+responses / completion modules use it to pick each model's `max_tokens` default
 and to clamp user-configured values to the model limit — this is why Claude's
 output is no longer capped at a hardcoded 8192. Loading `models.json` is the
 caller's responsibility: CLI and desktop call `load_model_capabilities_json`
@@ -104,9 +104,9 @@ Message {
 }
 ```
 
-## ResponsesAgent (Responses API)
+## ResponsesModule (Responses API)
 
-OpenAI Responses API を使用するAgent。Chat Completions APIとの違い:
+OpenAI Responses API を使用するModule。Chat Completions APIとの違い:
 - サーバーサイド会話状態管理 (`previous_response_id`)
 - セマンティックなストリーミングイベント
 - 推論モデル(GPT-5等)でのパフォーマンス向上
@@ -148,7 +148,7 @@ OpenAI Responses API を使用するAgent。Chat Completions APIとの違い:
 
 ## Model Prefix Format
 
-All LLM agents use a `provider/model-name` prefix to route to the correct provider:
+All LLM modules use a `provider/model-name` prefix to route to the correct provider:
 
 | Prefix | Provider | Example |
 | ------ | -------- | ------- |
@@ -160,7 +160,7 @@ Provider prefix is mandatory. Model names without a prefix will produce an error
 
 ## Common LLM Configs (detail)
 
-ChatAgent, CompletionAgent, ResponsesAgent share these configs (`detail = true`, sidebar only):
+ChatModule, CompletionModule, ResponsesModule share these configs (`detail = true`, sidebar only):
 
 | Config | Type | Default | Description |
 | ------ | ---- | ------- | ----------- |
@@ -172,14 +172,14 @@ Priority: These configs override values set in `options` JSON. Sentinel values (
 
 ## Claude Integration
 
-ChatAgent supports Claude (Anthropic) Messages API via the `claude` feature flag.
+ChatModule supports Claude (Anthropic) Messages API via the `claude` feature flag.
 
 - Uses `reqwest` + `eventsource-stream` for direct HTTP/SSE communication
 - Supports streaming and non-streaming modes
 - Supports tool use (function calling)
 - Supports extended thinking via options: `{"thinking": {"type": "enabled", "budget_tokens": 10000}}`
 - Default `max_tokens`: registry-resolved model cap for streaming requests; 8192 for non-streaming requests and registry-unknown models (overridable via `max_tokens` config — clamped to the known model limit — or options)
-- CompletionAgent and EmbeddingsAgent return errors for Claude (unsupported by Anthropic API)
+- CompletionModule and EmbeddingsModule return errors for Claude (unsupported by Anthropic API)
 
 ### Global Configs (Claude)
 

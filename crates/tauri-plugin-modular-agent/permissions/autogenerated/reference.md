@@ -16,19 +16,19 @@ Default permissions for the plugin
 - `allow-update-patch-spec`
 - `allow-get-patch-info`
 - `allow-get-patch-infos`
-- `allow-get-agent-definition`
-- `allow-get-agent-definitions`
-- `allow-get-agent-spec`
-- `allow-update-agent-spec`
-- `allow-new-agent-spec`
-- `allow-add-agent`
-- `allow-remove-agent`
+- `allow-get-module-definition`
+- `allow-get-module-definitions`
+- `allow-get-module-spec`
+- `allow-update-module-spec`
+- `allow-new-module-spec`
+- `allow-add-module`
+- `allow-remove-module`
 - `allow-add-connection`
 - `allow-remove-connection`
-- `allow-add-agents-and-connections`
-- `allow-start-agent`
-- `allow-stop-agent`
-- `allow-set-agent-configs`
+- `allow-add-modules-and-connections`
+- `allow-start-module`
+- `allow-stop-module`
+- `allow-set-module-configs`
 - `allow-get-global-configs`
 - `allow-get-global-configs-map`
 - `allow-set-global-configs`
@@ -43,58 +43,6 @@ Default permissions for the plugin
 <th>Description</th>
 </tr>
 
-
-<tr>
-<td>
-
-`modular-agent:allow-add-agent`
-
-</td>
-<td>
-
-Enables the add_agent command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`modular-agent:deny-add-agent`
-
-</td>
-<td>
-
-Denies the add_agent command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`modular-agent:allow-add-agents-and-connections`
-
-</td>
-<td>
-
-Enables the add_agents_and_connections command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`modular-agent:deny-add-agents-and-connections`
-
-</td>
-<td>
-
-Denies the add_agents_and_connections command without any pre-configured scope.
-
-</td>
-</tr>
 
 <tr>
 <td>
@@ -118,6 +66,58 @@ Enables the add_connection command without any pre-configured scope.
 <td>
 
 Denies the add_connection command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`modular-agent:allow-add-module`
+
+</td>
+<td>
+
+Enables the add_module command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`modular-agent:deny-add-module`
+
+</td>
+<td>
+
+Denies the add_module command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`modular-agent:allow-add-modules-and-connections`
+
+</td>
+<td>
+
+Enables the add_modules_and_connections command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`modular-agent:deny-add-modules-and-connections`
+
+</td>
+<td>
+
+Denies the add_modules_and_connections command without any pre-configured scope.
 
 </td>
 </tr>
@@ -177,84 +177,6 @@ Denies the add_patch_with_name command without any pre-configured scope.
 <tr>
 <td>
 
-`modular-agent:allow-get-agent-definition`
-
-</td>
-<td>
-
-Enables the get_agent_definition command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`modular-agent:deny-get-agent-definition`
-
-</td>
-<td>
-
-Denies the get_agent_definition command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`modular-agent:allow-get-agent-definitions`
-
-</td>
-<td>
-
-Enables the get_agent_definitions command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`modular-agent:deny-get-agent-definitions`
-
-</td>
-<td>
-
-Denies the get_agent_definitions command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`modular-agent:allow-get-agent-spec`
-
-</td>
-<td>
-
-Enables the get_agent_spec command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`modular-agent:deny-get-agent-spec`
-
-</td>
-<td>
-
-Denies the get_agent_spec command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
 `modular-agent:allow-get-global-configs`
 
 </td>
@@ -300,6 +222,84 @@ Enables the get_global_configs_map command without any pre-configured scope.
 <td>
 
 Denies the get_global_configs_map command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`modular-agent:allow-get-module-definition`
+
+</td>
+<td>
+
+Enables the get_module_definition command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`modular-agent:deny-get-module-definition`
+
+</td>
+<td>
+
+Denies the get_module_definition command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`modular-agent:allow-get-module-definitions`
+
+</td>
+<td>
+
+Enables the get_module_definitions command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`modular-agent:deny-get-module-definitions`
+
+</td>
+<td>
+
+Denies the get_module_definitions command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`modular-agent:allow-get-module-spec`
+
+</td>
+<td>
+
+Enables the get_module_spec command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`modular-agent:deny-get-module-spec`
+
+</td>
+<td>
+
+Denies the get_module_spec command without any pre-configured scope.
 
 </td>
 </tr>
@@ -385,12 +385,12 @@ Denies the get_patch_spec command without any pre-configured scope.
 <tr>
 <td>
 
-`modular-agent:allow-new-agent-spec`
+`modular-agent:allow-new-module-spec`
 
 </td>
 <td>
 
-Enables the new_agent_spec command without any pre-configured scope.
+Enables the new_module_spec command without any pre-configured scope.
 
 </td>
 </tr>
@@ -398,12 +398,12 @@ Enables the new_agent_spec command without any pre-configured scope.
 <tr>
 <td>
 
-`modular-agent:deny-new-agent-spec`
+`modular-agent:deny-new-module-spec`
 
 </td>
 <td>
 
-Denies the new_agent_spec command without any pre-configured scope.
+Denies the new_module_spec command without any pre-configured scope.
 
 </td>
 </tr>
@@ -463,32 +463,6 @@ Denies the open_patch_from_file command without any pre-configured scope.
 <tr>
 <td>
 
-`modular-agent:allow-remove-agent`
-
-</td>
-<td>
-
-Enables the remove_agent command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`modular-agent:deny-remove-agent`
-
-</td>
-<td>
-
-Denies the remove_agent command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
 `modular-agent:allow-remove-connection`
 
 </td>
@@ -508,6 +482,32 @@ Enables the remove_connection command without any pre-configured scope.
 <td>
 
 Denies the remove_connection command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`modular-agent:allow-remove-module`
+
+</td>
+<td>
+
+Enables the remove_module command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`modular-agent:deny-remove-module`
+
+</td>
+<td>
+
+Denies the remove_module command without any pre-configured scope.
 
 </td>
 </tr>
@@ -567,32 +567,6 @@ Denies the save_patch command without any pre-configured scope.
 <tr>
 <td>
 
-`modular-agent:allow-set-agent-configs`
-
-</td>
-<td>
-
-Enables the set_agent_configs command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`modular-agent:deny-set-agent-configs`
-
-</td>
-<td>
-
-Denies the set_agent_configs command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
 `modular-agent:allow-set-global-configs`
 
 </td>
@@ -645,12 +619,12 @@ Denies the set_global_configs_map command without any pre-configured scope.
 <tr>
 <td>
 
-`modular-agent:allow-start-agent`
+`modular-agent:allow-set-module-configs`
 
 </td>
 <td>
 
-Enables the start_agent command without any pre-configured scope.
+Enables the set_module_configs command without any pre-configured scope.
 
 </td>
 </tr>
@@ -658,12 +632,38 @@ Enables the start_agent command without any pre-configured scope.
 <tr>
 <td>
 
-`modular-agent:deny-start-agent`
+`modular-agent:deny-set-module-configs`
 
 </td>
 <td>
 
-Denies the start_agent command without any pre-configured scope.
+Denies the set_module_configs command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`modular-agent:allow-start-module`
+
+</td>
+<td>
+
+Enables the start_module command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`modular-agent:deny-start-module`
+
+</td>
+<td>
+
+Denies the start_module command without any pre-configured scope.
 
 </td>
 </tr>
@@ -697,12 +697,12 @@ Denies the start_patch command without any pre-configured scope.
 <tr>
 <td>
 
-`modular-agent:allow-stop-agent`
+`modular-agent:allow-stop-module`
 
 </td>
 <td>
 
-Enables the stop_agent command without any pre-configured scope.
+Enables the stop_module command without any pre-configured scope.
 
 </td>
 </tr>
@@ -710,12 +710,12 @@ Enables the stop_agent command without any pre-configured scope.
 <tr>
 <td>
 
-`modular-agent:deny-stop-agent`
+`modular-agent:deny-stop-module`
 
 </td>
 <td>
 
-Denies the stop_agent command without any pre-configured scope.
+Denies the stop_module command without any pre-configured scope.
 
 </td>
 </tr>
@@ -749,12 +749,12 @@ Denies the stop_patch command without any pre-configured scope.
 <tr>
 <td>
 
-`modular-agent:allow-update-agent-spec`
+`modular-agent:allow-update-module-spec`
 
 </td>
 <td>
 
-Enables the update_agent_spec command without any pre-configured scope.
+Enables the update_module_spec command without any pre-configured scope.
 
 </td>
 </tr>
@@ -762,12 +762,12 @@ Enables the update_agent_spec command without any pre-configured scope.
 <tr>
 <td>
 
-`modular-agent:deny-update-agent-spec`
+`modular-agent:deny-update-module-spec`
 
 </td>
 <td>
 
-Denies the update_agent_spec command without any pre-configured scope.
+Denies the update_module_spec command without any pre-configured scope.
 
 </td>
 </tr>

@@ -1,6 +1,6 @@
 extern crate modular_agent_core as ma;
 
-use ma::{AgentValue, test_utils};
+use ma::{Value, test_utils};
 use serial_test::serial;
 
 #[serial(external_group)]
@@ -16,19 +16,19 @@ async fn test_external_routing() {
         .await
         .unwrap();
 
-    ma.write_external_input("channel1".to_string(), AgentValue::string("hello"))
+    ma.write_external_input("channel1".to_string(), Value::string("hello"))
         .await
         .unwrap();
 
-    test_utils::expect_external_output("channel1", &AgentValue::string("hello"))
+    test_utils::expect_external_output("channel1", &Value::string("hello"))
         .await
         .unwrap();
 
-    test_utils::expect_external_output("channel2", &AgentValue::string("hello"))
+    test_utils::expect_external_output("channel2", &Value::string("hello"))
         .await
         .unwrap();
 
-    test_utils::expect_external_output("out", &AgentValue::string("hello"))
+    test_utils::expect_external_output("out", &Value::string("hello"))
         .await
         .unwrap();
 

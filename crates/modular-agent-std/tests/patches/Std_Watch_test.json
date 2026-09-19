@@ -1,8 +1,8 @@
 {
-  "agents": [
+  "modules": [
     {
       "id": "301",
-      "def_name": "modular_agent_std::watch::WatchDirectoryAgent",
+      "def_name": "modular_agent_std::watch::WatchDirectoryModule",
       "outputs": [
         "event"
       ],
@@ -30,7 +30,7 @@
     },
     {
       "id": "302",
-      "def_name": "modular_agent_core::external_agent::LocalInputAgent",
+      "def_name": "modular_agent_core::external_module::LocalInputModule",
       "outputs": [
         "value"
       ],
@@ -48,7 +48,7 @@
     },
     {
       "id": "303",
-      "def_name": "modular_agent_core::external_agent::LocalOutputAgent",
+      "def_name": "modular_agent_core::external_module::LocalOutputModule",
       "inputs": [
         "value"
       ],

@@ -1,6 +1,6 @@
 use modular_agent_core::{
-    Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AgentValueMap,
-    AsAgent, Message, ModularAgent, async_trait, modular_agent,
+    AsModule, Error, Message, ModularAgent, Module, ModuleContext, ModuleData, ModuleOutput,
+    ModuleSpec, Result, Value, ValueMap, async_trait, modular_agent,
 };
 
 use crate::provider::{ModelIdentifier, ProviderKind};
@@ -32,7 +32,7 @@ const CONFIG_USE_CONTEXT: &str = "use_context";
 
 const DEFAULT_CONFIG_MODEL: &str = "openai/gpt-3.5-turbo-instruct";
 
-/// Completion Agent that routes to different LLM providers based on model prefix.
+/// Completion Module that routes to different LLM providers based on model prefix.
 ///
 /// # Model Format
 /// - `openai/gpt-3.5-turbo-instruct` - Uses OpenAI API
@@ -74,8 +74,8 @@ const DEFAULT_CONFIG_MODEL: &str = "openai/gpt-3.5-turbo-instruct";
     integer_config(name = CONFIG_TIMEOUT_SECS, title = "Timeout (secs)", default = 300, description = "Per-attempt deadline; 0: disabled", detail),
     hint(width = 2, height = 2),
 )]
-pub struct CompletionAgent {
-    data: AgentData,
+pub struct CompletionModule {
+    data: ModuleData,
     #[cfg(feature = "openai")]
     openai_manager: openai_client::OpenAIManager,
     #[cfg(feature = "ollama")]
@@ -85,10 +85,10 @@ pub struct CompletionAgent {
 }
 
 #[async_trait]
-impl AsAgent for CompletionAgent {
-    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+impl AsModule for CompletionModule {
+    fn new(ma: ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
         Ok(Self {
-            data: AgentData::new(ma, id, spec),
+            data: ModuleData::new(ma, id, spec),
             #[cfg(feature = "openai")]
             openai_manager: openai_client::OpenAIManager::new(),
             #[cfg(feature = "ollama")]
@@ -98,7 +98,7 @@ impl AsAgent for CompletionAgent {
         })
     }
 
-    async fn stop(&mut self) -> Result<(), AgentError> {
+    async fn stop(&mut self) -> Result<()> {
         #[cfg(feature = "ollama")]
         {
             self.context = None;
@@ -106,19 +106,14 @@ impl AsAgent for CompletionAgent {
         Ok(())
     }
 
-    // Unlike ChatAgent, the Claude arm is a plain Err that consumes none of the
+    // Unlike ChatModule, the Claude arm is a plain Err that consumes none of the
     // per-turn config snapshot, so the snapshot goes unused unless openai or
     // ollama is enabled (claude-only builds included).
     #[cfg_attr(
         not(any(feature = "openai", feature = "ollama")),
         allow(unused_variables)
     )]
-    async fn process(
-        &mut self,
-        ctx: AgentContext,
-        port: String,
-        value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, ctx: ModuleContext, port: String, value: Value) -> Result<()> {
         // Handle reset port
         if port == PORT_RESET {
             #[cfg(feature = "ollama")]
@@ -165,8 +160,8 @@ impl AsAgent for CompletionAgent {
         // Route to appropriate provider
         match model_id.provider {
             #[cfg(feature = "claude")]
-            ProviderKind::Claude => Err(AgentError::InvalidConfig(
-                "Claude does not support text completions. Use ChatAgent instead.".into(),
+            ProviderKind::Claude => Err(Error::InvalidConfig(
+                "Claude does not support text completions. Use ChatModule instead.".into(),
             )),
             #[cfg(feature = "openai")]
             ProviderKind::OpenAI => {
@@ -201,7 +196,7 @@ impl AsAgent for CompletionAgent {
                 .await
             }
             #[allow(unreachable_patterns)]
-            _ => Err(AgentError::InvalidConfig(format!(
+            _ => Err(Error::InvalidConfig(format!(
                 "Provider {:?} not enabled. Enable the corresponding feature.",
                 model_id.provider
             ))),
@@ -209,22 +204,22 @@ impl AsAgent for CompletionAgent {
     }
 }
 
-impl CompletionAgent {
+impl CompletionModule {
     #[cfg(feature = "openai")]
     #[allow(clippy::too_many_arguments)]
     async fn process_openai(
         &mut self,
-        ctx: AgentContext,
+        ctx: ModuleContext,
         prompt: &str,
         model_name: &str,
-        config_options: AgentValueMap<String, AgentValue>,
+        config_options: ValueMap<String, Value>,
         config_system: String,
         max_tokens: i64,
         model_max_tokens: Option<u32>,
         temperature: f64,
         top_p: f64,
         retry: RetryPolicy,
-    ) -> Result<(), AgentError> {
+    ) -> Result<()> {
         let client = self.openai_manager.get_client(self.ma())?;
 
         // Build the prompt with system message if provided
@@ -258,7 +253,7 @@ impl CompletionAgent {
         self.output(ctx.clone(), PORT_MESSAGE.to_string(), message.into())
             .await?;
 
-        let out_response = AgentValue::from_serialize(&res)?;
+        let out_response = Value::from_serialize(&res)?;
         self.output(ctx, PORT_RESPONSE.to_string(), out_response)
             .await?;
 
@@ -269,17 +264,17 @@ impl CompletionAgent {
     #[allow(clippy::too_many_arguments)]
     async fn process_ollama(
         &mut self,
-        ctx: AgentContext,
+        ctx: ModuleContext,
         prompt: &str,
         model_name: &str,
-        config_options: AgentValueMap<String, AgentValue>,
+        config_options: ValueMap<String, Value>,
         config_system: String,
         max_tokens: i64,
         model_max_tokens: Option<u32>,
         temperature: f64,
         top_p: f64,
         retry: RetryPolicy,
-    ) -> Result<(), AgentError> {
+    ) -> Result<()> {
         let client = self.ollama_manager.get_client(self.ma())?;
 
         // Best-effort: probe /api/show once per model to cache its context
@@ -332,7 +327,7 @@ impl CompletionAgent {
         self.output(ctx.clone(), PORT_MESSAGE.to_string(), message.into())
             .await?;
 
-        let out_response = AgentValue::from_serialize(&res)?;
+        let out_response = Value::from_serialize(&res)?;
         self.output(ctx, PORT_RESPONSE.to_string(), out_response)
             .await?;
 

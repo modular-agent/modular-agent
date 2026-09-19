@@ -7,7 +7,6 @@
 
   import { goto } from "$app/navigation";
 
-  import { importPatch, newPatchWithName } from "$lib/agent";
   import PatchActionDialog from "$lib/components/patch-action-dialog.svelte";
   import PatchDeleteDialog from "$lib/components/patch-delete-dialog.svelte";
   import * as PatchFileList from "$lib/components/patch-file-list/index.js";
@@ -24,6 +23,7 @@
     renameFolder,
     renamePatch,
   } from "$lib/modular_agent";
+  import { importPatch, newPatchWithName } from "$lib/module";
   import { patchTreeStore } from "$lib/patch-tree-store.svelte";
   import { tabStore } from "$lib/tab-store.svelte";
 

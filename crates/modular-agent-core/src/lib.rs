@@ -1,34 +1,34 @@
 #![recursion_limit = "256"]
 //! # Modular Agent Core
 //!
-//! A Rust framework for building modular multi-agent orchestration systems.
+//! A Rust framework that composes modules into an agent with stream-based message orchestration.
 //!
-//! This crate provides tools and abstractions to create, configure, and run agents
-//! in a stream-based architecture. It supports defining agent behaviors, managing
-//! agent flows, and handling agent input/output through a channel-based messaging system.
+//! This crate provides tools and abstractions to create, configure, and run modules
+//! in a stream-based architecture. It supports defining module behaviors, managing
+//! module flows, and handling module input/output through a channel-based messaging system.
 //!
 //! ## Core Concepts
 //!
 //! ### ModularAgent
 //!
-//! [`ModularAgent`] is the central orchestrator that manages agent lifecycle, connections,
-//! and message routing. It maintains agent instances, connection maps, and handles events.
+//! [`ModularAgent`] is the central orchestrator that manages module lifecycle, connections,
+//! and message routing. It maintains module instances, connection maps, and handles events.
 //!
-//! ### Agents
+//! ### Modules
 //!
-//! Agents are processing units that receive messages via channels and process them
-//! asynchronously. Implement the [`AsAgent`] trait to create custom agents, or use the
-//! `#[modular_agent]` macro for declarative agent definitions.
+//! Modules are processing units that receive messages via channels and process them
+//! asynchronously. Implement the [`AsModule`] trait to create custom modules, or use the
+//! `#[modular_agent]` macro for declarative module definitions.
 //!
 //! ### Patches
 //!
-//! Patches are collections of agents and their connections, defined in JSON format.
+//! Patches are collections of modules and their connections, defined in JSON format.
 //! They can be loaded from files and managed via [`ModularAgent`] methods.
 //!
 //! ## Quick Start
 //!
 //! See the [CLI example](https://github.com/modular-agent/modular-agent/blob/main/crates/modular-agent-core/examples/cli.rs)
-//! for a complete working example of loading a patch and running agents from the command line.
+//! for a complete working example of loading a patch and running modules from the command line.
 //!
 //! ## Feature Flags
 //!
@@ -37,17 +37,17 @@
 //! - `llm` - LLM integration with Message/ToolCall types (enabled by default)
 //! - `mcp` - Model Context Protocol integration (enabled by default)
 //! - `mcp-server` - Built-in MCP server exposing flow-editing tools over streamable HTTP
-//! - `test-utils` - Testing utilities including TestProbeAgent
+//! - `test-utils` - Testing utilities including TestProbeModule
 
-mod agent;
 mod config;
 mod context;
 mod definition;
 mod error;
-mod external_agent;
+mod external_module;
 mod id;
 mod message;
 mod modular_agent;
+mod module;
 mod output;
 mod patch;
 mod registry;
@@ -80,7 +80,7 @@ pub use photon_rs::{self, PhotonImage};
 // re-export im
 pub use im;
 
-// re-export CancellationToken (used by AgentContext and ModularAgent cancellation APIs)
+// re-export CancellationToken (used by ModuleContext and ModularAgent cancellation APIs)
 pub use tokio_util::sync::CancellationToken;
 
 // re-export inventory
@@ -98,24 +98,24 @@ pub extern crate self as modular_agent_core;
 // Re-exports modular_agent_macros
 pub use modular_agent_macros::modular_agent;
 
-pub use agent::{Agent, AgentData, AgentStatus, AsAgent, HasAgentData, new_agent_boxed};
-pub use config::{AgentConfigs, AgentConfigsMap};
-pub use context::AgentContext;
-pub use definition::{AgentConfigSpec, AgentConfigSpecs, AgentDefinition, AgentDefinitions};
-pub use error::AgentError;
+pub use config::{ModuleConfigs, ModuleConfigsMap};
+pub use context::ModuleContext;
+pub use definition::{ModuleConfigSpec, ModuleConfigSpecs, ModuleDefinition, ModuleDefinitions};
+pub use error::{Error, Result};
 #[cfg(feature = "llm")]
 pub use llm::{
     ContentBlock, Message, MessageContent, MessageEvent, ToolCall, ToolCallFunction, Usage,
     estimate_context_tokens, estimate_message_tokens,
 };
-pub use modular_agent::{EventEnvelope, ModularAgent, ModularAgentEvent, SharedAgent};
-pub use output::AgentOutput;
+pub use modular_agent::{EventEnvelope, ModularAgent, ModularAgentEvent, SharedModule};
+pub use module::{AsModule, HasModuleData, Module, ModuleData, ModuleStatus, new_module_boxed};
+pub use output::ModuleOutput;
 pub use patch::{Patch, PatchInfo};
-pub use registry::AgentRegistration;
+pub use registry::ModuleRegistration;
 #[cfg(feature = "llm")]
 pub use session::{
     InMemorySessionStore, JsonlSessionStore, SessionEntry, SessionMeta, SessionStore,
     build_context, build_context_with_ids,
 };
-pub use spec::{AgentSpec, ConnectionSpec, PatchSpec, PatchSpecs};
-pub use value::{AgentValue, AgentValueMap, parse_index};
+pub use spec::{ConnectionSpec, ModuleSpec, PatchSpec, PatchSpecs};
+pub use value::{Value, ValueMap, parse_index};

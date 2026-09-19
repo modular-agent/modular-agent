@@ -1,8 +1,8 @@
 {
-  "agents": [
+  "modules": [
     {
       "id": "301",
-      "def_name": "modular_agent_std::data::GetValueAgent",
+      "def_name": "modular_agent_std::data::GetValueModule",
       "inputs": ["value"],
       "outputs": ["value"],
       "configs": {
@@ -19,7 +19,7 @@
     },
     {
       "id": "302",
-      "def_name": "modular_agent_core::external_agent::LocalInputAgent",
+      "def_name": "modular_agent_core::external_module::LocalInputModule",
       "outputs": ["value"],
       "configs": {
         "name": "get_in"
@@ -35,7 +35,7 @@
     },
     {
       "id": "303",
-      "def_name": "modular_agent_core::external_agent::LocalInputAgent",
+      "def_name": "modular_agent_core::external_module::LocalInputModule",
       "outputs": ["value"],
       "configs": {
         "name": "get_key"
@@ -51,7 +51,7 @@
     },
     {
       "id": "304",
-      "def_name": "modular_agent_core::external_agent::LocalOutputAgent",
+      "def_name": "modular_agent_core::external_module::LocalOutputModule",
       "inputs": ["value"],
       "configs": {
         "name": "get_out"

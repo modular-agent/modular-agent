@@ -4,10 +4,10 @@
 
   import { invalidateAll } from "$app/navigation";
 
-  import { getCoreSettings, setCoreSettings } from "$lib/agent";
   import RunSwitch from "$lib/components/run-switch.svelte";
   import { Button } from "$lib/components/ui/button";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
+  import { getCoreSettings, setCoreSettings } from "$lib/module";
 
   type Props = {
     id: string;
