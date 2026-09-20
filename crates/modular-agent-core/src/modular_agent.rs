@@ -1247,16 +1247,44 @@ impl ModularAgent {
         self.patch_tokens.lock().swap_remove(patch_id);
     }
 
-    /// Creates and tracks a fresh cancellation token for a module as a child
-    /// of its patch's parent token. The returned generation identifies the
-    /// module-loop incarnation that owns the slot.
-    fn create_module_token(&self, patch_id: &str, module_id: &str) -> (u64, CancellationToken) {
+    /// Installs a module loop's inbox and a fresh cancellation token (a
+    /// child of its patch's parent token). The returned generation
+    /// identifies the module-loop incarnation that owns the slot.
+    ///
+    /// Both entries go in under one critical section so that
+    /// [`release_module_slot`](Self::release_module_slot) never sees an inbox
+    /// from one incarnation next to a token from another. Lock order is
+    /// module_txs -> module_tokens; nothing else nests these two.
+    fn create_module_slot(
+        &self,
+        patch_id: &str,
+        module_id: &str,
+        inbox: ModuleInbox,
+    ) -> (u64, CancellationToken) {
         let generation = MODULE_TOKEN_GENERATION.fetch_add(1, Ordering::Relaxed);
         let token = self.patch_token(patch_id).child_token();
-        self.module_tokens
-            .lock()
-            .insert(module_id.to_string(), (generation, token.clone()));
+        let mut module_txs = self.module_txs.lock();
+        let mut tokens = self.module_tokens.lock();
+        module_txs.insert(module_id.to_string(), inbox);
+        tokens.insert(module_id.to_string(), (generation, token.clone()));
         (generation, token)
+    }
+
+    /// Releases the inbox and token slot of a module loop whose start()
+    /// failed.
+    ///
+    /// Both entries are removed under one critical section and only while
+    /// the token slot still belongs to `generation`: stop_module may already
+    /// have removed them, and a restarted module's new loop must keep its
+    /// own. Lock order is module_txs -> module_tokens, same as
+    /// [`create_module_slot`](Self::create_module_slot).
+    fn release_module_slot(&self, module_id: &str, generation: u64) {
+        let mut module_txs = self.module_txs.lock();
+        let mut tokens = self.module_tokens.lock();
+        if matches!(tokens.get(module_id), Some((g, _)) if *g == generation) {
+            tokens.swap_remove(module_id);
+            module_txs.swap_remove(module_id);
+        }
     }
 
     /// Replaces a fired module token with a fresh child of the patch token.
@@ -1341,7 +1369,9 @@ impl ModularAgent {
     ///
     /// Creates a message channel for the module and spawns its event loop.
     /// The module's [`start()`](crate::AsModule::start) method is called, then
-    /// the module begins processing incoming messages.
+    /// the module begins processing incoming messages. A module whose
+    /// `start()` fails goes back to `Init` and its channel is removed, so
+    /// later config edits are written to it directly.
     pub async fn start_module(&self, module_id: &str) -> Result<()> {
         let module = {
             let modules = self.modules.lock();
@@ -1369,18 +1399,13 @@ impl ModularAgent {
             let inbox = ModuleInbox::new(tx);
             let inbox_depth = inbox.depth.clone();
 
-            {
-                let mut module_txs = self.module_txs.lock();
-                module_txs.insert(module_id.to_string(), inbox);
-            };
-
             let module_clone = module.clone();
             let module_id_clone = module_id.to_string();
             // base(): the module loop outlives this call, so it must not
             // stamp runtime events with the caller's origin.
             let ma = self.base();
-            // Created before spawning so stop_module can cancel it immediately.
-            let (generation, mut token) = self.create_module_token(&patch_id, module_id);
+            // Installed before spawning so stop_module can cancel it immediately.
+            let (generation, mut token) = self.create_module_slot(&patch_id, module_id, inbox);
 
             let module_loop = async move {
                 // Race start() against the token too: a start() stuck on
@@ -1391,6 +1416,7 @@ impl ModularAgent {
                     let mut module_guard = module_clone.lock().await;
                     module_guard.start().await
                 };
+                let mut started = true;
                 tokio::select! {
                     biased;
                     _ = token.cancelled() => {
@@ -1400,7 +1426,16 @@ impl ModularAgent {
                     r = start => {
                         if let Err(e) = r {
                             log::error!("Failed to start module {}: {}", module_id_clone, e);
-                            return;
+                            // Status is already back to Init (Module::start
+                            // resets it), so configs drained below cannot
+                            // re-register runtime resources in
+                            // configs_changed. Keep that ordering.
+                            ma.release_module_slot(&module_id_clone, generation);
+                            // Close first so later sends fail loudly; recv()
+                            // still yields everything queued before the
+                            // close, then returns None.
+                            rx.close();
+                            started = false;
                         }
                     }
                 }
@@ -1408,6 +1443,12 @@ impl ModularAgent {
                 while let Some(message) = rx.recv().await {
                     inbox_depth.fetch_sub(1, Ordering::Relaxed);
                     match message {
+                        ModuleMessage::Input { .. } if !started => {
+                            log::warn!(
+                                "Dropping input queued before failed start: {}",
+                                module_id_clone
+                            );
+                        }
                         ModuleMessage::Input { ctx, port, value } => {
                             // Attach the flow's cancellation token so
                             // downstream awaits (tool result waits, LLM

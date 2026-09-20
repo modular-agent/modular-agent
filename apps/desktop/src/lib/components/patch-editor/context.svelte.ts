@@ -994,7 +994,10 @@ export class EditorState {
     // emitted for display (configUpdated events); pushing the whole object
     // would write those back into the backend spec and leak them into the
     // saved patch.
-    await setModuleConfigs(nodeId, { [key]: newValue });
+    await withErrorToast(
+      () => setModuleConfigs(nodeId, { [key]: newValue }),
+      "Failed to update config",
+    );
 
     const cmd = new UpdateConfigCommand(nodeId, key, oldValue, newValue, oldConfigs, newConfigs);
     this.history.pushCoalescing(cmd);
