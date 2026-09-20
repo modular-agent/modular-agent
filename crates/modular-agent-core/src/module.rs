@@ -221,6 +221,10 @@ pub trait AsModule: HasModuleData + Send + Sync + 'static {
     /// Called when the module starts.
     ///
     /// Override for initialization logic or to emit initial values.
+    ///
+    /// A `start()` that returns `Err` must release whatever it acquired
+    /// before failing: the module goes back to `Init` and `stop()` is not
+    /// called for a failed start.
     async fn start(&mut self) -> Result<()> {
         Ok(())
     }
@@ -330,6 +334,10 @@ impl<T: AsModule> Module for T {
         self.mut_data().status = ModuleStatus::Start;
 
         if let Err(e) = <T as AsModule>::start(self).await {
+            // A failed start leaves no running module behind; report it as
+            // never started so stop_module skips stop() and configs are
+            // written directly.
+            self.mut_data().status = ModuleStatus::Init;
             self.ma()
                 .emit_module_error(self.id().to_string(), e.to_string());
             return Err(e);

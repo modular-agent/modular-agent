@@ -11,13 +11,14 @@ fn test_init() {
     let ma = ModularAgent::init().unwrap();
 
     let defs = ma.get_module_definitions();
-    assert_eq!(defs.len(), 16);
+    assert_eq!(defs.len(), 17);
     let mut keys: Vec<_> = defs.keys().cloned().collect();
     keys.sort();
     let expected = vec![
         "main_test::common::modules::CancelWaitModule",
         "main_test::common::modules::CounterModule",
         "main_test::common::modules::DynSpecModule",
+        "main_test::common::modules::FailStartModule",
         "main_test::common::modules::NumberedConfigModule",
         "main_test::common::modules::PendingStopModule",
         "main_test::common::modules::StuckSleepModule",

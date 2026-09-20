@@ -14,6 +14,7 @@ const GLOBAL_STRING: &str = "global_string";
 pub const CONFIG_DYN: &str = "dyn";
 pub const PORT_DYN_OUT: &str = "dyn_out";
 pub const CONFIG_N: &str = "n";
+pub const CONFIG_VALUE: &str = "value";
 const CONFIG_C0: &str = "c0";
 const CONFIG_C1: &str = "c1";
 const PORT_0: &str = "0";
@@ -59,6 +60,38 @@ impl AsModule for StuckSleepModule {
             .await?;
         tokio::time::sleep(std::time::Duration::from_secs(30)).await;
         self.output(ctx, PORT_OUT, Value::string("done")).await
+    }
+}
+
+/// Fails in start(). stop() fails too, so a stop_module that returns Ok
+/// proves the engine skipped stop() for the never-started module.
+#[modular_agent(
+    title = "Fail Start",
+    category = CATEGORY,
+    inputs = [PORT_IN],
+    outputs = [PORT_OUT],
+    string_config(name = CONFIG_VALUE),
+)]
+pub struct FailStartModule {
+    data: ModuleData,
+}
+
+#[async_trait]
+impl AsModule for FailStartModule {
+    fn new(ma: ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
+        Ok(Self {
+            data: ModuleData::new(ma, id, spec),
+        })
+    }
+
+    async fn start(&mut self) -> Result<()> {
+        Err(Error::Other("start failed on purpose".into()))
+    }
+
+    async fn stop(&mut self) -> Result<()> {
+        Err(Error::Other(
+            "stop() must not run for a failed start".into(),
+        ))
     }
 }
 
