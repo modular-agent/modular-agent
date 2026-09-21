@@ -7,6 +7,7 @@ import type { useSvelteFlow } from "@xyflow/svelte";
 import { toast } from "svelte-sonner";
 import {
   getModuleSpec,
+  getModuleStatuses,
   getPatchInfo,
   getPatchSpec,
   setModuleConfigs,
@@ -34,7 +35,7 @@ import {
   resolveColorCss,
   KIND_COLOR_DEFAULTS,
 } from "$lib/module";
-import { sharedPatchEvents } from "$lib/shared.svelte";
+import { sharedModuleStatuses, sharedPatchEvents } from "$lib/shared.svelte";
 import { tabStore } from "$lib/tab-store.svelte";
 import { titlebarState } from "$lib/titlebar-state.svelte";
 import type { PatchFlow, PatchNode, PatchEdge } from "$lib/types";
@@ -232,6 +233,14 @@ export class EditorState {
         this.lastRunningSeq = entry.seq;
         this.running = entry.running;
       });
+    });
+
+    // Pull module statuses whenever the patch is (or becomes) running: the
+    // status events only cover transitions made while this window listened,
+    // so a patch started before the tab opened would otherwise show nothing.
+    $effect(() => {
+      if (!this.running) return;
+      untrack(() => this.pullModuleStatuses());
     });
 
     // Subscribe to runtime settings changes
@@ -459,6 +468,17 @@ export class EditorState {
       await stopPatchAPI(this.patch_id);
       this.running = false;
     }, "Failed to stop patch");
+  }
+
+  private async pullModuleStatuses() {
+    // Forget the previous run's statuses first, or its "init" entries would
+    // flag every node until the new Start events arrive.
+    for (const node of this.nodes) delete sharedModuleStatuses[node.id];
+    const statuses = await withErrorLog(
+      () => getModuleStatuses(this.patch_id),
+      "Failed to fetch module statuses",
+    );
+    if (statuses) Object.assign(sharedModuleStatuses, statuses);
   }
 
   private downloadJson(data: unknown, filename: string) {

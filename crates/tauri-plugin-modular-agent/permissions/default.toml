@@ -25,6 +25,7 @@ permissions = [
     "allow-add-modules-and-connections",
     "allow-start-module",
     "allow-stop-module",
+    "allow-get-module-statuses",
     "allow-set-module-configs",
     "allow-get-global-configs",
     "allow-get-global-configs-map",

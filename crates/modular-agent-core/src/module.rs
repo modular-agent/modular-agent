@@ -2,6 +2,7 @@ use std::any::Any;
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 
 use crate::config::ModuleConfigs;
@@ -13,7 +14,8 @@ use crate::spec::ModuleSpec;
 use crate::value::Value;
 
 /// The lifecycle status of a module.
-#[derive(Debug, Default, Clone, PartialEq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum ModuleStatus {
     #[default]
     Init,
@@ -251,6 +253,15 @@ pub trait AsModule: HasModuleData + Send + Sync + 'static {
     }
 }
 
+/// Records a lifecycle transition and announces it, so hosts can mirror the
+/// status without locking the module.
+fn set_status<T: AsModule>(module: &mut T, status: ModuleStatus) {
+    module.mut_data().status = status;
+    module
+        .ma()
+        .emit_module_status_changed(module.id().to_string(), status);
+}
+
 #[async_trait]
 impl<T: AsModule> Module for T {
     fn new(ma: ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
@@ -331,13 +342,13 @@ impl<T: AsModule> Module for T {
     }
 
     async fn start(&mut self) -> Result<()> {
-        self.mut_data().status = ModuleStatus::Start;
+        set_status(self, ModuleStatus::Start);
 
         if let Err(e) = <T as AsModule>::start(self).await {
             // A failed start leaves no running module behind; report it as
             // never started so stop_module skips stop() and configs are
             // written directly.
-            self.mut_data().status = ModuleStatus::Init;
+            set_status(self, ModuleStatus::Init);
             self.ma()
                 .emit_module_error(self.id().to_string(), e.to_string());
             return Err(e);
@@ -347,9 +358,9 @@ impl<T: AsModule> Module for T {
     }
 
     async fn stop(&mut self) -> Result<()> {
-        self.mut_data().status = ModuleStatus::Stop;
+        set_status(self, ModuleStatus::Stop);
         <T as AsModule>::stop(self).await?;
-        self.mut_data().status = ModuleStatus::Init;
+        set_status(self, ModuleStatus::Init);
         Ok(())
     }
 

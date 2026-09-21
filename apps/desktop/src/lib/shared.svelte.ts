@@ -1,5 +1,7 @@
 import { listen } from "@tauri-apps/api/event";
 
+import type { ModuleStatus } from "tauri-plugin-modular-agent-api";
+
 import { closeTabAndNavigate, tabStore } from "$lib/tab-store.svelte";
 
 import type {
@@ -7,6 +9,7 @@ import type {
   ModuleErrorMessage,
   ModuleInMessage,
   ModuleSpecUpdatedMessage,
+  ModuleStatusChangedMessage,
   PatchRemovedMessage,
   PatchRunningChangedMessage,
   PatchStructureChangedMessage,
@@ -55,6 +58,14 @@ class SharedModuleEvents {
 
 export const sharedModuleEvents = new SharedModuleEvents();
 
+// moduleId → last lifecycle status reported by the backend. Kept regardless
+// of whether the node is mounted, unlike `sharedModuleEvents`: the status is
+// state, not a one-shot event, and a node mounted later must see it. Entries
+// are never removed (a stale id only holds a short string). The editor pulls
+// the current statuses when a patch is running, since transitions made before
+// this window listened (auto start, background launch) never arrive here.
+export const sharedModuleStatuses = $state<Record<string, ModuleStatus>>({});
+
 class SharedPatchEvents {
   // patchId → latest seq of an externally-originated structure change
   structureChanged = $state<Record<string, number>>({});
@@ -100,6 +111,12 @@ $effect.root(() => {
     const module = sharedModuleEvents.modules[module_id];
     if (!module) return;
     module.specUpdated = ++eventSeq;
+  });
+
+  // Not origin-filtered: runtime state, never an echo of a local edit.
+  listen<ModuleStatusChangedMessage>("ma:module_status_changed", (event) => {
+    const { module_id, status } = event.payload;
+    sharedModuleStatuses[module_id] = status;
   });
 
   listen<PatchStructureChangedMessage>("ma:patch_structure_changed", (event) => {

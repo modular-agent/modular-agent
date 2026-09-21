@@ -6,6 +6,8 @@ export type PatchInfo = {
   running: boolean;
 };
 
+export type ModuleStatus = "init" | "start" | "stop";
+
 export type ModuleDefinitions = Record<string, ModuleDefinition>;
 
 export type ModuleDefinition = {
@@ -215,6 +217,10 @@ export async function startModule(moduleId: string): Promise<void> {
 
 export async function stopModule(moduleId: string): Promise<void> {
   await invoke<void>("plugin:modular-agent|stop_module", { moduleId });
+}
+
+export async function getModuleStatuses(patchId: string): Promise<Record<string, ModuleStatus>> {
+  return await invoke<any>("plugin:modular-agent|get_module_statuses", { patchId });
 }
 
 // external input

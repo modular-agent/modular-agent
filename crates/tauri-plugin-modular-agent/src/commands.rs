@@ -1,6 +1,8 @@
+use std::collections::HashMap;
+
 use modular_agent_core::{
     ConnectionSpec, ModuleConfigs, ModuleConfigsMap, ModuleDefinition, ModuleDefinitions,
-    ModuleSpec, PatchSpec, Value,
+    ModuleSpec, ModuleStatus, PatchSpec, Value,
 };
 use serde_json::Value as JsonValue;
 use tauri::{AppHandle, Runtime};
@@ -212,6 +214,17 @@ pub async fn start_module<R: Runtime>(app: AppHandle<R>, module_id: String) -> R
 #[tauri::command]
 pub async fn stop_module<R: Runtime>(app: AppHandle<R>, module_id: String) -> Result<()> {
     app.ma().stop_module(&module_id).await.map_err(Into::into)
+}
+
+#[tauri::command]
+pub async fn get_module_statuses<R: Runtime>(
+    app: AppHandle<R>,
+    patch_id: String,
+) -> Result<HashMap<String, ModuleStatus>> {
+    app.ma()
+        .get_module_statuses(&patch_id)
+        .await
+        .map_err(Into::into)
 }
 
 // config

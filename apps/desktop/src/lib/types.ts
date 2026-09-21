@@ -1,5 +1,5 @@
 import type { Edge, Node } from "@xyflow/svelte";
-import type { ModuleSpec, PatchInfo, Viewport } from "tauri-plugin-modular-agent-api";
+import type { ModuleSpec, ModuleStatus, PatchInfo, Viewport } from "tauri-plugin-modular-agent-api";
 
 // Messages
 
@@ -25,6 +25,12 @@ export type ModuleInMessage = {
 export type ModuleSpecUpdatedMessage = {
   origin: string | null;
   module_id: string;
+};
+
+export type ModuleStatusChangedMessage = {
+  origin: string | null;
+  module_id: string;
+  status: ModuleStatus;
 };
 
 export type PatchStructureChangedMessage = {

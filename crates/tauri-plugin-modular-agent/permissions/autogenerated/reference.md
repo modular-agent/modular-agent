@@ -28,6 +28,7 @@ Default permissions for the plugin
 - `allow-add-modules-and-connections`
 - `allow-start-module`
 - `allow-stop-module`
+- `allow-get-module-statuses`
 - `allow-set-module-configs`
 - `allow-get-global-configs`
 - `allow-get-global-configs-map`
@@ -300,6 +301,32 @@ Enables the get_module_spec command without any pre-configured scope.
 <td>
 
 Denies the get_module_spec command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`modular-agent:allow-get-module-statuses`
+
+</td>
+<td>
+
+Enables the get_module_statuses command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`modular-agent:deny-get-module-statuses`
+
+</td>
+<td>
+
+Denies the get_module_statuses command without any pre-configured scope.
 
 </td>
 </tr>
