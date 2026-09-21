@@ -199,7 +199,7 @@ Frontend calls Rust via Tauri's `invoke()`. Commands are defined in `lib.rs` wit
 
 Backend emits events to frontend via two mechanisms:
 
-1. **Module events** (`observer.rs`): Core engine events (`ModularAgentEvent`) relayed via broadcast channel. Events: `ma:module_config_updated`, `ma:module_error`, `ma:module_in`, `ma:module_spec_updated`. Listened globally in `shared.svelte.ts` via `$effect.root()`.
+1. **Module events** (`observer.rs`): Core engine events (`ModularAgentEvent`) relayed via broadcast channel. Events: `ma:module_config_updated`, `ma:module_error`, `ma:module_in`, `ma:module_spec_updated`, `ma:module_status_changed`. Listened globally in `shared.svelte.ts` via `$effect.root()`.
 2. **Patch list events** (`app.rs`): Desktop app emits `ma:patch_list_changed` directly from Tauri commands via `app.emit()`. Payload: `{ path: String }` (the parent directory that changed). Listened globally in `patch-tree-store.svelte.ts` via `$effect.root()`.
 
 ## Patch List Events

@@ -14,7 +14,7 @@
   import * as HoverCard from "$lib/components/ui/hover-card/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
   import { getModuleDefinitions, resolveNodeColor } from "$lib/module";
-  import { sharedModuleEvents } from "$lib/shared.svelte";
+  import { sharedModuleEvents, sharedModuleStatuses } from "$lib/shared.svelte";
 
   import { useEditor } from "./context.svelte";
   import { getNodeView } from "./custom-ui/registry";
@@ -116,6 +116,14 @@
   let editTitle = $state(false);
   let titleColor = $derived(resolveNodeColor(data, moduleDef));
   let titleColorStyle = $derived(`color: ${titleColor}`);
+
+  const status = $derived(sharedModuleStatuses[nodeId]);
+  // The patch is playing but this module's loop is not: its start() failed,
+  // or a later stop_module left it in Init. An unknown status (not pulled
+  // yet) is neutral.
+  const halted = $derived(
+    editor.running && !!moduleDef && !data.disabled && status !== undefined && status !== "start",
+  );
 </script>
 
 {#snippet title()}
@@ -215,6 +223,7 @@
   {data}
   {moduleDef}
   {inputCount}
+  {halted}
   portColors={data.port_colors}
   {title}
   {contents}

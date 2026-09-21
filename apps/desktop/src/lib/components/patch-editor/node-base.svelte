@@ -42,12 +42,24 @@
     moduleDef: ModuleDefinition | null;
     inputCount: number;
     portColors?: Record<string, number | string> | null;
+    // The patch is running but this module is not (see module-node).
+    halted?: boolean;
     title: Snippet;
     contents: Snippet;
   };
 
-  let { data, moduleDef, selected, width, height, inputCount, portColors, title, contents }: Props =
-    $props();
+  let {
+    data,
+    moduleDef,
+    selected,
+    width,
+    height,
+    inputCount,
+    portColors,
+    halted = false,
+    title,
+    contents,
+  }: Props = $props();
 
   function resolveHandleColor(portName: string): string | null {
     if (portName === "err") return getEdgeColor("err");
@@ -202,6 +214,8 @@
 >
   <div
     class="{bgCustom ? 'custom-bg' : bgColor} flex flex-col grow min-h-0 p-0 border-none rounded-xl"
+    class:ring-2={halted}
+    class:ring-destructive={halted}
     style:background-color={bgCustom
       ? (nodeStyle?.bodyBackground?.(bgCustom) ?? bgCustom)
       : undefined}

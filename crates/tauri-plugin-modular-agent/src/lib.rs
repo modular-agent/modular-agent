@@ -53,6 +53,7 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             commands::add_modules_and_connections,
             commands::start_module,
             commands::stop_module,
+            commands::get_module_statuses,
             commands::set_module_configs,
             commands::get_global_configs,
             commands::get_global_configs_map,

@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Weak};
 use std::time::Duration;
@@ -176,6 +177,14 @@ pub struct ModularAgent {
     // module id -> (loop generation, current cancellation token of that loop)
     pub(crate) module_tokens: Arc<Mutex<FnvIndexMap<String, (u64, CancellationToken)>>>,
 
+    /// module id -> last status assigned by the module lifecycle wrappers.
+    ///
+    /// A mirror for hosts: the authoritative status lives in `ModuleData`
+    /// behind the module's async mutex, which `process()` holds for its
+    /// whole duration, so a UI cannot poll it without stalling on a busy
+    /// module.
+    pub(crate) module_statuses: Arc<Mutex<FnvIndexMap<String, ModuleStatus>>>,
+
     // context id -> cancellation token (weak: dies with the flow's contexts)
     pub(crate) context_tokens: Arc<Mutex<FnvIndexMap<usize, Weak<CancellationToken>>>>,
 
@@ -223,6 +232,7 @@ impl ModularAgent {
             global_configs_map: Default::default(),
             patch_tokens: Default::default(),
             module_tokens: Default::default(),
+            module_statuses: Default::default(),
             context_tokens: Default::default(),
             tx: Arc::new(Mutex::new(None)),
             observers: tx,
@@ -725,6 +735,32 @@ impl ModularAgent {
         patch_infos
     }
 
+    /// Returns the lifecycle status of every module in a patch's spec.
+    ///
+    /// A module with no recorded status (never started, or its definition
+    /// is not registered) reports `Init`. Reads the status mirror, so a
+    /// module busy in `process()` does not block the call.
+    pub async fn get_module_statuses(
+        &self,
+        patch_id: &str,
+    ) -> Result<HashMap<String, ModuleStatus>> {
+        let patch = self
+            .get_patch(patch_id)
+            .ok_or_else(|| Error::PatchNotFound(patch_id.to_string()))?;
+        let module_ids: Vec<String> = {
+            let patch = patch.lock().await;
+            patch.spec().modules.iter().map(|m| m.id.clone()).collect()
+        };
+        let statuses = self.module_statuses.lock();
+        Ok(module_ids
+            .into_iter()
+            .map(|id| {
+                let status = statuses.get(&id).copied().unwrap_or_default();
+                (id, status)
+            })
+            .collect())
+    }
+
     // Modules
 
     /// Register a module definition.
@@ -1167,6 +1203,7 @@ impl ModularAgent {
             let mut modules = self.modules.lock();
             modules.swap_remove(module_id);
         }
+        self.module_statuses.lock().swap_remove(module_id);
 
         Ok(())
     }
@@ -1390,7 +1427,7 @@ impl ModularAgent {
         let module_status = {
             // This will not block since the module is not started yet.
             let module = module.lock().await;
-            module.status().clone()
+            *module.status()
         };
         if module_status == ModuleStatus::Init {
             log::info!("Starting module {}", module_id);
@@ -1930,6 +1967,13 @@ impl ModularAgent {
         self.notify_observers(ModularAgentEvent::ModuleError(module_id, message));
     }
 
+    pub(crate) fn emit_module_status_changed(&self, module_id: String, status: ModuleStatus) {
+        self.module_statuses
+            .lock()
+            .insert(module_id.clone(), status);
+        self.notify_observers(ModularAgentEvent::ModuleStatusChanged { module_id, status });
+    }
+
     pub(crate) fn emit_module_input(&self, module_id: String, port: String) {
         self.notify_observers(ModularAgentEvent::ModuleIn(module_id, port));
     }
@@ -2049,6 +2093,19 @@ pub enum ModularAgentEvent {
     ///
     /// Fields: `(module_id, error_message)`
     ModuleError(String, String),
+
+    /// A module's lifecycle status changed.
+    ///
+    /// Emitted on every transition made by the module lifecycle wrappers:
+    /// `Start` when `start()` begins, `Init` when it fails, `Stop` when
+    /// `stop()` begins and `Init` when it completes. The current value for
+    /// every module in a patch is available from
+    /// [`ModularAgent::get_module_statuses`], so hosts that subscribe late
+    /// (a UI opened after the patch started) can catch up.
+    ModuleStatusChanged {
+        module_id: String,
+        status: ModuleStatus,
+    },
 
     /// A module received input on a port.
     ///

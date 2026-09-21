@@ -23,6 +23,7 @@ const COMMANDS: &[&str] = &[
     "add_modules_and_connections",
     "start_module",
     "stop_module",
+    "get_module_statuses",
     "set_module_configs",
     "get_global_configs",
     "get_global_configs_map",

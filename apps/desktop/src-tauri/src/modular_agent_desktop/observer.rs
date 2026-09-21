@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use anyhow::{Context as _, Result};
-use modular_agent_core::{EventEnvelope, ModularAgent, ModularAgentEvent, Value};
+use modular_agent_core::{EventEnvelope, ModularAgent, ModularAgentEvent, ModuleStatus, Value};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 use tokio::sync::broadcast::error::RecvError;
@@ -15,6 +15,7 @@ const EMIT_MODULE_CONFIG_UPDATED: &str = "ma:module_config_updated";
 const EMIT_MODULE_ERROR: &str = "ma:module_error";
 const EMIT_MODULE_IN: &str = "ma:module_in";
 const EMIT_MODULE_SPEC_UPDATED: &str = "ma:module_spec_updated";
+const EMIT_MODULE_STATUS_CHANGED: &str = "ma:module_status_changed";
 const EMIT_PATCH_STRUCTURE_CHANGED: &str = "ma:patch_structure_changed";
 const EMIT_PATCH_LIST_CHANGED: &str = "ma:patch_list_changed";
 const EMIT_PATCH_REMOVED: &str = "ma:patch_removed";
@@ -84,6 +85,9 @@ fn handle_event(
         }
         ModularAgentEvent::ModuleSpecUpdated(module_id) => {
             emit_module_spec_updated(app, origin, module_id)?;
+        }
+        ModularAgentEvent::ModuleStatusChanged { module_id, status } => {
+            emit_module_status_changed(app, origin, module_id, status)?;
         }
         ModularAgentEvent::PatchStructureChanged { patch_id } => {
             emit_patch_structure_changed(app, origin, patch_id)?;
@@ -260,6 +264,30 @@ fn emit_module_error(
         },
     )
     .context("Failed to emit module error message")
+}
+
+fn emit_module_status_changed(
+    app: &AppHandle,
+    origin: Option<String>,
+    module_id: String,
+    status: ModuleStatus,
+) -> Result<()> {
+    #[derive(Clone, Serialize)]
+    struct ModuleStatusChangedMessage {
+        origin: Option<String>,
+        module_id: String,
+        status: ModuleStatus,
+    }
+
+    app.emit(
+        EMIT_MODULE_STATUS_CHANGED,
+        ModuleStatusChangedMessage {
+            origin,
+            module_id,
+            status,
+        },
+    )
+    .context("Failed to emit module status changed message")
 }
 
 fn emit_module_in(
