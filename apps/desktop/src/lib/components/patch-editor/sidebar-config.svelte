@@ -35,6 +35,7 @@
     string: inputString,
     password: inputPassword,
     text: inputText,
+    array: inputObject,
     object: inputObject,
     markdown: inputMarkdown,
     default: inputDefault,
