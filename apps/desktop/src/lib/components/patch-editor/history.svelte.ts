@@ -916,6 +916,7 @@ export class ToggleDisabledCommand implements Command {
   async execute(editor: EditorState) {
     for (const d of this.deltas) {
       editor.props.svelteFlow.updateNodeData(d.id, { disabled: this.setDisabled });
+      await updateModuleSpec(d.id, { disabled: this.setDisabled });
       if (editor.running) {
         if (this.setDisabled) {
           await stopModule(d.id).catch(() => {});
@@ -929,6 +930,7 @@ export class ToggleDisabledCommand implements Command {
   async undo(editor: EditorState) {
     for (const d of this.deltas) {
       editor.props.svelteFlow.updateNodeData(d.id, { disabled: d.wasDisabled });
+      await updateModuleSpec(d.id, { disabled: d.wasDisabled });
       if (editor.running) {
         if (d.wasDisabled) {
           await stopModule(d.id).catch(() => {});
