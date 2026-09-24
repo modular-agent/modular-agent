@@ -177,7 +177,7 @@ Module packages can replace the default node rendering with their own Svelte 5 c
 - **ConfigWidget** — a custom input for a config value type
 - **NodeStyle** — presentation overrides for the node frame
 
-UI packages ship as a `ui/` npm package inside the module repository and are picked up at build time from the ma-config selection — no dynamic loading or registry access.
+UI packages ship as a `ui/` npm package inside the module repository and are picked up at build time from the ma-config selection — no dynamic loading or registry access. A UI package's own npm dependencies are installed into its `ui/node_modules` automatically the first time the app is built or run in dev mode.
 
 ## Related
 

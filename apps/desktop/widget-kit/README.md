@@ -64,8 +64,12 @@ all — to `custom_modules/<name>/ui`, all relative to the workspace root. No
 dynamic loading, no npm registry access: the UI ships with the build the same
 way the Rust crate does.
 
-Run `npm install` once inside `ui/` so package-local dependencies land in
-`ui/node_modules` (the only manual step).
+Package-local dependencies live in `ui/node_modules`. When a UI package declares
+`dependencies` and that directory is missing, `vite-plugin-module-ui` runs
+`npm ci` (or `npm install` when there is no lockfile) inside `ui/` the next time
+the desktop app is built or started in dev mode — there is no manual step, and a
+committed lockfile is never rewritten. Running `npm install` in `ui/` yourself
+is fine too (e.g. to update the lockfile).
 
 ## UI package conventions
 

@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -10,7 +11,9 @@ import { searchForWorkspaceRoot } from "vite";
 // Workspace, Path, or a registry module with no source at all — statically
 // imports <path>/ui/src/index.ts when it exists, exposed as the virtual module
 // "virtual:module-ui" which registers all NodeViews / ConfigWidgets /
-// NodeStyles into the desktop registry.
+// NodeStyles into the desktop registry. A UI package's own npm dependencies
+// (d3, three, ...) resolve from its ui/node_modules, so the plugin installs
+// them on discovery when they are missing — no manual npm install per package.
 
 const VIRTUAL_ID = "virtual:module-ui";
 const RESOLVED_ID = "\0" + VIRTUAL_ID;
@@ -24,6 +27,43 @@ const widgetKitDir = path.join(desktopRoot, "widget-kit");
 /** @param {string} p */
 function toPosix(p) {
   return p.replace(/\\/g, "/");
+}
+
+// Bare imports inside a UI package resolve from the package's own directory,
+// not from the desktop's node_modules, so a package with dependencies needs
+// its own ui/node_modules. Installed once, when absent; a failure is thrown
+// rather than skipped, since a silently missing dependency surfaces later as
+// an opaque "failed to resolve import" in the webview.
+/** @param {string} name @param {string} dir */
+function ensureInstalled(name, dir) {
+  if (existsSync(path.join(dir, "node_modules"))) return;
+  let pkg;
+  try {
+    pkg = JSON.parse(readFileSync(path.join(dir, "package.json"), "utf-8"));
+  } catch (e) {
+    throw new Error(`[module-ui] failed to read ${path.join(dir, "package.json")}: ${e}`);
+  }
+  if (Object.keys(pkg.dependencies ?? {}).length === 0) return;
+
+  console.log(`[module-ui] installing dependencies for ${name} (${dir})`);
+  // `npm ci` never rewrites a committed lockfile (`npm install` re-annotates
+  // it whenever the npm version differs, leaving a dirty tracked file).
+  const hasLockfile = existsSync(path.join(dir, "package-lock.json"));
+  const args = [hasLockfile ? "ci" : "install", "--no-audit", "--no-fund"];
+  // Under `npm run`, reuse the npm that launched us (matters with fnm/nvm,
+  // where a bare "npm" may be a different version or not on PATH at all).
+  // Otherwise go through the shell so Windows finds npm.cmd.
+  const npmCli = process.env.npm_execpath;
+  const result = npmCli
+    ? spawnSync(process.execPath, [npmCli, ...args], { cwd: dir, stdio: "inherit" })
+    : spawnSync(`npm ${args.join(" ")}`, { cwd: dir, stdio: "inherit", shell: true });
+  if (result.error || result.status !== 0) {
+    const reason = result.error ? String(result.error) : `exit code ${result.status}`;
+    throw new Error(
+      `[module-ui] npm ${args[0]} failed for ${name} (${reason}). ` +
+        `Run \`npm install\` manually in ${dir} and restart.`,
+    );
+  }
 }
 
 // ma-config.toml is gitignored and may be absent (fresh clone) — degrade to
@@ -58,6 +98,7 @@ function discoverUiPackages() {
       continue;
     }
     if (!existsSync(path.join(dir, "package.json"))) continue;
+    ensureInstalled(module.name, dir);
     packages.push({ name: module.name, dir, dirPosix: toPosix(dir) });
   }
   return packages;
