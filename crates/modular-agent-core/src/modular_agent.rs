@@ -68,10 +68,16 @@ impl ModuleInbox {
     /// side — a receiver-side check would stay silent exactly when it
     /// matters, while the loop is stuck inside a slow `process()`.
     fn send(&self, module_id: &str, message: ModuleMessage) -> Result<()> {
-        self.tx
-            .send(message)
-            .map_err(|_| Error::SendMessageFailed("Failed to send input message".to_string()))?;
+        // Count before sending: once the message is in the channel the loop may
+        // dequeue it and decrement at any moment, and a decrement that beats the
+        // increment would wrap the counter below zero.
         let depth = self.depth.fetch_add(1, Ordering::Relaxed) + 1;
+        if self.tx.send(message).is_err() {
+            self.depth.fetch_sub(1, Ordering::Relaxed);
+            return Err(Error::SendMessageFailed(
+                "Failed to send input message".to_string(),
+            ));
+        }
         // Depth races with concurrent sends and dequeues; the worst case is
         // a duplicated or skipped log line, so Relaxed everywhere is fine.
         let warn_at = self.warn_at.load(Ordering::Relaxed);
@@ -2219,5 +2225,24 @@ mod tests {
             tokio::task::yield_now().await;
         }
         assert_eq!(ma.tasks.len(), before);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn inbox_depth_does_not_underflow_when_receiver_wins_the_race() {
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        let inbox = ModuleInbox::new(tx);
+        let depth = inbox.depth.clone();
+        let receiver = tokio::spawn(async move {
+            while rx.recv().await.is_some() {
+                let prev = depth.fetch_sub(1, Ordering::Relaxed);
+                assert!(prev > 0, "inbox depth underflowed");
+            }
+        });
+        for _ in 0..100_000 {
+            inbox.send("m", ModuleMessage::Stop).unwrap();
+            tokio::task::yield_now().await;
+        }
+        drop(inbox);
+        receiver.await.unwrap();
     }
 }
