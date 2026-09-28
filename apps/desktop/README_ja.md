@@ -64,6 +64,8 @@ Modular Agent Desktop は [Modular Agent](../../README_ja.md) パッチのビジ
 - [Rust](https://www.rust-lang.org/tools/install) とプラットフォーム固有の依存関係 — [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) を参照
 - [Node.js](https://nodejs.org/)
 
+Windows で何も入っていない状態から環境を作る手順は [Windows でのビルド](doc/build-windows_ja.md) にまとめています。
+
 ### ビルド
 
 monorepo のチェックアウト内の `apps/desktop` で:

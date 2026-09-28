@@ -64,6 +64,8 @@ Modular Agent Desktop is the visual editor for [Modular Agent](../../README.md) 
 - [Rust](https://www.rust-lang.org/tools/install) and platform-specific dependencies — see [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/)
 - [Node.js](https://nodejs.org/)
 
+For a step-by-step setup on a fresh Windows machine, see [Building on Windows](doc/build-windows.md).
+
 ### Build
 
 From `apps/desktop` in a checkout of the monorepo:
