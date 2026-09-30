@@ -11,6 +11,13 @@ const host = process.env.TAURI_DEV_HOST;
 export default defineConfig(async () => ({
   plugins: [moduleUi(), tailwindcss(), sveltekit()],
 
+  resolve: {
+    // tauri-plugin-modular-agent-api is aliased to the in-tree plugin's
+    // guest-js/ source (svelte.config.js), which has no node_modules of its
+    // own — resolve its @tauri-apps/api imports from the desktop's copy.
+    dedupe: ["@tauri-apps/api"],
+  },
+
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //
   // 1. prevent vite from obscuring rust errors

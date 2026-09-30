@@ -91,7 +91,7 @@ src-tauri/src/          # Rust backend
 - **Patches**: Module workflow configurations stored as JSON in `~/.modular_agent/patches/`
 - **ModularAgent**: Core runtime from `modular-agent-core` that manages module lifecycle
 - **ModularAgentApp**: Tauri state wrapper managing patches and the ModularAgent instance
-- **tauri-plugin-modular-agent**: Plugin providing `ModularAgentExt` trait for accessing ModularAgent from Tauri
+- **tauri-plugin-modular-agent**: Plugin providing `ModularAgentExt` trait for accessing ModularAgent from Tauri. Its JS bindings (`tauri-plugin-modular-agent-api`) are aliased in `svelte.config.js` to the crate's `guest-js/index.ts` source, so the gitignored `dist-js/` is never built for the app (it matters only for npm publish); `@tauri-apps/api` imports from there resolve to the desktop's copy (`resolve.dedupe` in `vite.config.js`, `kit.typescript.config` paths for svelte-check).
 
 ## Patch Editor Architecture
 
