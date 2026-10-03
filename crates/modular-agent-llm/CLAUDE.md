@@ -205,7 +205,7 @@ All three providers (OpenAI, Ollama, Claude) now use direct `reqwest` HTTP calls
 
 ## Key Dependencies
 
-- `reqwest` (0.12) - HTTP client for all three providers (OpenAI, Ollama, Claude)
+- `reqwest` (0.13) - HTTP client for all three providers (OpenAI, Ollama, Claude)
 - `eventsource-stream` (0.2) - SSE streaming (openai, claude features)
 - `futures` - Stream combinators, NDJSON streaming (ollama, openai, claude features)
 - `tokenizers` (0.23) - Hugging Face tokenizers
