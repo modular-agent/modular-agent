@@ -831,6 +831,7 @@ impl ModularAgent {
     /// (whose definition is not registered in this build), which have no
     /// live instance. For a live module it returns the stored entry, not the
     /// instance spec.
+    #[cfg(feature = "mcp-server")]
     pub(crate) async fn find_stored_module_spec(&self, module_id: &str) -> Option<ModuleSpec> {
         let patches = {
             let patches = self.patches.lock();
