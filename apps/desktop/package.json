@@ -48,7 +48,7 @@
     "bits-ui": "^2.18.1",
     "clsx": "^2.1.1",
     "prettier": "^3.9.4",
-    "prettier-plugin-svelte": "^4.1.1",
+    "prettier-plugin-svelte": "^3.5.2",
     "smol-toml": "^1.4.2",
     "svelte": "^5.56.4",
     "svelte-check": "^4.7.2",
