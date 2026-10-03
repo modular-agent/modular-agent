@@ -13,7 +13,7 @@ async-trait = { workspace = true }
 axum = { version = "0.8", optional = true }
 # image only: fallible base64 decoding for image strings (photon's own
 # base64 entry points panic on malformed input).
-base64 = { version = "0.22", optional = true }
+base64 = { version = "0.23", optional = true }
 # default-features = false + clock: only Utc::now() is needed for RFC3339
 # session timestamps.
 chrono = { version = "0.4", optional = true, default-features = false, features = ["clock"] }
@@ -29,7 +29,7 @@ indexmap = { version = "2", features = ["serde"] }
 inventory = "0.3"
 # default-features = false: default features pull schema-resolving backends
 # (file/http via reqwest) that are unneeded for validating local tool schemas.
-jsonschema = { version = "0.48.1", optional = true, default-features = false }
+jsonschema = { version = "0.58.5", optional = true, default-features = false }
 log = { workspace = true }
 parking_lot = { workspace = true }
 photon-rs = { version = "0.3.3", optional = true }
