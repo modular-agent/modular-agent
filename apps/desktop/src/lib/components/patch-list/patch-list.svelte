@@ -1,18 +1,17 @@
 <script lang="ts" module>
   import {
-    type ColumnDef,
-    type ColumnFiltersState,
-    type VisibilityState,
-    getCoreRowModel,
-    getFilteredRowModel,
-  } from "@tanstack/table-core";
-
-  import PatchStatus from "$lib/components/patch-status.svelte";
-  import {
-    createSvelteTable,
+    columnFilteringFeature,
+    columnVisibilityFeature,
+    createColumnHelper,
+    createFilteredRowModel,
+    createTable,
+    filterFn_includesString,
     FlexRender,
     renderComponent,
-  } from "$lib/components/ui/data-table/index.js";
+    tableFeatures,
+  } from "@tanstack/svelte-table";
+
+  import PatchStatus from "$lib/components/patch-status.svelte";
   import { Input } from "$lib/components/ui/input/index.js";
   import * as Table from "$lib/components/ui/table/index.js";
   import type { PatchInfoExt } from "$lib/types";
@@ -23,6 +22,17 @@
   const STATUS_COL_WIDTH = "w-[220px]";
   const ACTIONS_COL_WIDTH = "w-[140px]";
 
+  // v9 tree-shakes filter functions: a filterFn named by string silently
+  // no-ops unless it is registered here.
+  const features = tableFeatures({
+    columnFilteringFeature,
+    columnVisibilityFeature,
+    filteredRowModel: createFilteredRowModel(),
+    filterFns: { includesString: filterFn_includesString },
+  });
+
+  const columnHelper = createColumnHelper<typeof features, PatchInfoExt>();
+
   type Props = {
     patches: PatchInfoExt[];
   };
@@ -31,14 +41,10 @@
 <script lang="ts">
   let { patches }: Props = $props();
 
-  let columnFilters = $state<ColumnFiltersState>([]);
-  let columnVisibility = $state<VisibilityState>({});
-
-  const columns: ColumnDef<PatchInfoExt>[] = [
-    {
+  const columns = columnHelper.columns([
+    columnHelper.accessor((row) => row.name, {
       id: "name",
       header: "Name",
-      accessorFn: (row) => row.name,
       filterFn: "includesString",
       cell: ({ row }) => {
         return renderComponent(PatchListName, {
@@ -50,8 +56,8 @@
         headerClass: "w-full px-2",
         cellClass: "w-full px-2",
       },
-    },
-    {
+    }),
+    columnHelper.display({
       id: "status",
       header: "Status",
       cell: ({ row }) => {
@@ -65,8 +71,8 @@
         headerClass: `${STATUS_COL_WIDTH} pl-4`,
         cellClass: `${STATUS_COL_WIDTH} pl-4`,
       },
-    },
-    {
+    }),
+    columnHelper.display({
       id: "actions",
       header: "Actions",
       cell: ({ row }) => {
@@ -81,38 +87,15 @@
         headerClass: `${ACTIONS_COL_WIDTH} pl-4`,
         cellClass: `${ACTIONS_COL_WIDTH} pl-4`,
       },
-    },
-  ];
+    }),
+  ]);
 
-  const table = createSvelteTable({
+  const table = createTable({
+    features,
     get data() {
       return patches;
     },
     columns,
-    getCoreRowModel: getCoreRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
-    onColumnFiltersChange: (updater) => {
-      if (typeof updater === "function") {
-        columnFilters = updater(columnFilters);
-      } else {
-        columnFilters = updater;
-      }
-    },
-    onColumnVisibilityChange: (updater) => {
-      if (typeof updater === "function") {
-        columnVisibility = updater(columnVisibility);
-      } else {
-        columnVisibility = updater;
-      }
-    },
-    state: {
-      get columnFilters() {
-        return columnFilters;
-      },
-      get columnVisibility() {
-        return columnVisibility;
-      },
-    },
   });
 </script>
 
@@ -141,10 +124,7 @@
                 class={header.column.columnDef.meta?.headerClass}
               >
                 {#if !header.isPlaceholder}
-                  <FlexRender
-                    content={header.column.columnDef.header}
-                    context={header.getContext()}
-                  />
+                  <FlexRender {header} />
                 {/if}
               </Table.Head>
             {/each}
@@ -153,10 +133,10 @@
       </Table.Header>
       <Table.Body>
         {#each table.getRowModel().rows as row (row.id)}
-          <Table.Row data-state={row.getIsSelected() && "selected"}>
+          <Table.Row>
             {#each row.getVisibleCells() as cell (cell.id)}
               <Table.Cell class={cell.column.columnDef.meta?.cellClass}>
-                <FlexRender content={cell.column.columnDef.cell} context={cell.getContext()} />
+                <FlexRender {cell} />
               </Table.Cell>
             {/each}
           </Table.Row>
