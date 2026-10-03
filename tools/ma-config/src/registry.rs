@@ -93,7 +93,7 @@ pub fn load_all(central_path: &Path, root: &Path) -> Result<Registry, String> {
 pub fn load(path: &Path) -> Result<Registry, String> {
     let content = std::fs::read_to_string(path)
         .map_err(|e| format!("Failed to read registry file {}: {}", path.display(), e))?;
-    let registry: Registry = serde_yaml::from_str(&content)
+    let registry: Registry = serde_yaml_ng::from_str(&content)
         .map_err(|e| format!("Failed to parse registry file {}: {}", path.display(), e))?;
 
     for module in &registry.modules {
@@ -134,7 +134,7 @@ pub fn scan_custom_modules(root: &Path) -> Result<Vec<KnownModule>, String> {
         let module = if repo_file.is_file() {
             let content = std::fs::read_to_string(&repo_file)
                 .map_err(|e| format!("Failed to read {}: {e}", repo_file.display()))?;
-            let entry: RepoEntry = serde_yaml::from_str(&content)
+            let entry: RepoEntry = serde_yaml_ng::from_str(&content)
                 .map_err(|e| format!("Failed to parse {}: {e}", repo_file.display()))?;
             check_name(&entry.name, &dir_name, &repo_file)?;
             entry.into_known_module()
