@@ -23,10 +23,12 @@ cozodb, lancedb, slack, mattermost, lifelog, monty. Also separate:
 
 - **One workspace, one `Cargo.lock`.** Both apps and every `custom_modules/` clone are
   workspace members, so the whole build resolves once.
-- **Versions are per crate.** core and macros are bumped together; std / llm /
-  the plugin keep their own semver lines. `[workspace.dependencies]` carries
-  `version` + `path` for each in-tree crate, so in-tree builds use the path and a
-  published crate records the version.
+- **One version for every in-tree crate.** All crates and both apps take
+  `version.workspace = true` from `[workspace.package]`, and the npm packages that
+  track them (the plugin's `tauri-plugin-modular-agent-api`, the desktop app's
+  `package.json` and `tauri.conf.json`) carry the same number. `[workspace.dependencies]`
+  carries `version` + `path` for each in-tree crate, so in-tree builds use the path and
+  a published crate records the version — bump those alongside `workspace.package`.
 - **Out-of-tree modules live in `custom_modules/`** (gitignored, cloned by hand). Cargo
   makes a path dependency inside the workspace directory a member automatically, so
   selecting one in ma-config needs no `members` entry and no `[patch]`. Each clone
@@ -43,6 +45,12 @@ cozodb, lancedb, slack, mattermost, lifelog, monty. Also separate:
 # Whole workspace
 cargo check --workspace --all-targets
 cargo test --workspace --all-features
+# On Windows, tauri-build statically links the VC runtime by dropping an empty
+# msvcrt.lib into the desktop's OUT_DIR, and cargo hands every build script's link
+# search path to doctests — so other crates' doctests fail to link. Test the desktop
+# app separately there:
+cargo test --workspace --all-features --exclude modular-agent-desktop
+cargo test -p modular-agent-desktop
 
 # One package — always use -p for release artifacts. The v2 resolver unifies
 # features across packages built together, so --workspace release builds can
@@ -109,11 +117,10 @@ noise the next time the file is opened in an editor with format-on-save.
 
 ## Tags
 
-Component tags carry a prefix, since one repository now holds several release lines:
-`core-v0.27.0`, `std-v0.17.0`, `llm-v0.15.0`, `plugin-v0.18.0`, `desktop-v0.19.0`,
-`cli-v0.4.1`. Tags from before the merge were rewritten with the same prefixes.
-Historical `web-v*` tags remain from when `modular-agent-web` was in-tree; it now
-lives in its own repository again.
+Since 0.32.0 every crate shares one version, so a release gets a single `vX.Y.Z` tag.
+Earlier releases carry per-component prefixed tags (`core-v0.31.0`, `std-v0.21.0`,
+`llm-v0.19.0`, `plugin-v0.22.0`, `desktop-v0.23.0`, `cli-v0.8.0`, …), and historical
+`web-v*` tags remain from when `modular-agent-web` was in-tree.
 
 ## See Also
 

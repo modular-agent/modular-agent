@@ -1,6 +1,6 @@
 [package]
 name = "modular-agent-macros"
-version = "0.31.0"
+version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true

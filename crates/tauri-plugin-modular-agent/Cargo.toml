@@ -1,6 +1,6 @@
 [package]
 name = "tauri-plugin-modular-agent"
-version = "0.22.0"
+version.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true

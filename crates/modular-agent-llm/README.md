@@ -15,7 +15,7 @@ LLM integration library providing chat, completion, embeddings, and responses mo
 
 ```toml
 [dependencies]
-modular-agent-llm = "0.15.0"
+modular-agent-llm = "0.32"
 ```
 
 ## Model Prefix

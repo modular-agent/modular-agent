@@ -24,9 +24,9 @@ wide and cover every modular-agent repository at once. Issues are for bug report
 feature requests.
 
 When you open an issue, pick the component the report is about from the dropdown in the
-template. Because several release lines share this repository, tags and versions carry a
-component prefix — `core-v0.26.0`, `std-v0.16.0`, `desktop-v0.18.0`, `cli-v0.4.0`, and so
-on. Quote the one you are running.
+template. Every crate and app in this repository shares one version, tagged `vX.Y.Z`
+(releases before 0.32.0 used per-component tags such as `core-v0.31.0` or
+`desktop-v0.23.0`). Quote the one you are running.
 
 ## Development
 

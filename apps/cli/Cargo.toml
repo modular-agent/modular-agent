@@ -1,6 +1,6 @@
 [package]
 name = "modular-agent-cli"
-version = "0.8.0"
+version.workspace = true
 description = "CLI runner for Modular Agent"
 authors.workspace = true
 edition.workspace = true

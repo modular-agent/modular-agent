@@ -1,6 +1,6 @@
 [package]
 name = "modular-agent-core"
-version = "0.31.0"
+version.workspace = true
 description = "Modular Agent Core"
 edition.workspace = true
 authors.workspace = true
