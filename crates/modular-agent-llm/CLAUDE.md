@@ -208,5 +208,5 @@ All three providers (OpenAI, Ollama, Claude) now use direct `reqwest` HTTP calls
 - `reqwest` (0.12) - HTTP client for all three providers (OpenAI, Ollama, Claude)
 - `eventsource-stream` (0.2) - SSE streaming (openai, claude features)
 - `futures` - Stream combinators, NDJSON streaming (ollama, openai, claude features)
-- `tokenizers` (0.22.2) - Hugging Face tokenizers
-- `text-splitter` (0.29.3) - Text chunking
+- `tokenizers` (0.23) - Hugging Face tokenizers
+- `text-splitter` (0.33) - Text chunking

@@ -18,8 +18,8 @@ photon-rs = { version = "0.3.3", optional = true }
 reqwest = { version = "0.12.5", default-features = false, features = ["rustls-tls", "json", "stream"], optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-text-splitter = { version = "0.29.3", features = ["tokenizers"] }
-tokenizers = { version = "0.22.2", features = ["http"] }
+text-splitter = { version = "0.33.0", features = ["tokenizers"] }
+tokenizers = { version = "0.23.2", features = ["http"] }
 tokio = { version = "1.48.0", features = ["macros", "rt-multi-thread", "time"] }
 tokio-stream = "0.1"
 uuid = { version = "1.18.1", features = ["v4"] }

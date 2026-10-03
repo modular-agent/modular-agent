@@ -215,7 +215,12 @@ impl SplitTextByTokensModule {
         tokenizer_model: &str,
     ) -> Result<Vec<(usize, String)>> {
         if self.splitter.is_none() {
-            let tokenizer = Tokenizer::from_pretrained(tokenizer_model, None)
+            let mut tokenizer = Tokenizer::from_pretrained(tokenizer_model, None)
+                .map_err(|e| Error::InvalidConfig(format!("Failed to load tokenizer: {}", e)))?;
+            // A tokenizer that ships with truncation reports the truncated size,
+            // which would let chunks grow past max_tokens.
+            tokenizer
+                .with_truncation(None)
                 .map_err(|e| Error::InvalidConfig(format!("Failed to load tokenizer: {}", e)))?;
             let splitter = TextSplitter::new(ChunkConfig::new(max_tokens).with_sizer(tokenizer));
             self.splitter = Some(splitter);
