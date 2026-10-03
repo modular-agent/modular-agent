@@ -22,10 +22,10 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 anyhow = "1"
 ctrlc = "3.4.5"
-dirs = "6.0"
+dirs = "7.0"
 log = { workspace = true }
 parking_lot = { workspace = true }
-rand = "0.9"
+rand = "0.10"
 serde = { workspace = true }
 serde_json = { workspace = true }
 tauri = { version = "2", features = ["tray-icon"] }

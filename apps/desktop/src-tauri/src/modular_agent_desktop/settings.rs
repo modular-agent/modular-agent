@@ -2,7 +2,7 @@ use anyhow::{Context as _, Result};
 use modular_agent_core::mcp_server::{McpServerConfig, McpServerHandle, start_mcp_server};
 use modular_agent_core::{ModuleConfigs, Value};
 use parking_lot::Mutex;
-use rand::Rng as _;
+use rand::RngExt as _;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use std::{collections::HashMap, ops::Not, sync::LazyLock};
