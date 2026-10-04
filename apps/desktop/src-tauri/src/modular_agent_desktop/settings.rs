@@ -149,6 +149,10 @@ fn init_core_settings(app: &AppHandle) -> Result<()> {
 fn init_workspace(app: &AppHandle) -> Result<()> {
     let dir = crate::modular_agent_desktop::app::modular_agent_dir()?;
     std::fs::create_dir_all(&dir).with_context(|| format!("Failed to create {}", dir.display()))?;
+    // Relative paths in patches (e.g. data/...) resolve against the workspace,
+    // as they do under `ma serve`, whatever directory the app was launched from.
+    std::env::set_current_dir(&dir)
+        .with_context(|| format!("Failed to enter workspace {}", dir.display()))?;
     let workspace = Workspace::open(&dir)
         .with_context(|| format!("Failed to open workspace {}", dir.display()))?;
     app.manage(Mutex::new(workspace));

@@ -73,6 +73,9 @@ impl Host {
 
         let workspace = workspace
             .map(|dir| -> Result<Workspace> {
+                // Absolute first: the working directory moves into it below.
+                let dir = std::path::absolute(&dir)
+                    .with_context(|| format!("Invalid workspace path {}", dir.display()))?;
                 let workspace = Workspace::open(&dir)
                     .with_context(|| format!("Failed to open workspace {}", dir.display()))?;
                 let warnings = workspace.apply_global_configs(&ma);
@@ -86,6 +89,10 @@ impl Host {
                         dir.join("settings.json").display()
                     );
                 }
+                // Relative paths in patches (e.g. data/...) resolve against the
+                // workspace, as they do in the desktop app.
+                std::env::set_current_dir(&dir)
+                    .with_context(|| format!("Failed to enter workspace {}", dir.display()))?;
                 Ok(workspace)
             })
             .transpose()?;
