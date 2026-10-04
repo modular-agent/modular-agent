@@ -70,6 +70,9 @@ pub mod mcp_server;
 #[cfg(feature = "test-utils")]
 pub mod test_utils;
 
+#[cfg(feature = "workspace")]
+pub mod workspace;
+
 // re-export async_trait
 pub use async_trait::async_trait;
 
@@ -112,7 +115,7 @@ pub use module::{
     AsModule, HasModuleData, Module, ModuleData, ModuleLogLevel, ModuleStatus, new_module_boxed,
 };
 pub use output::ModuleOutput;
-pub use patch::{Patch, PatchInfo};
+pub use patch::{Patch, PatchInfo, validate_patch_name};
 pub use registry::ModuleRegistration;
 #[cfg(feature = "llm")]
 pub use session::{

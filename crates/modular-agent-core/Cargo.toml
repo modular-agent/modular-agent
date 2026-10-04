@@ -89,11 +89,14 @@ mcp-server = [
     "tokio/net",
 ]
 test-utils = []
+# Workspace directory (settings.json + patches/) shared by the desktop app and
+# the ma CLI.
+workspace = ["file"]
 
 [[test]]
 name = "main_test"
 path = "tests/main_test.rs"
-required-features = ["test-utils"]
+required-features = ["test-utils", "workspace"]
 
 # harness = false: the binary re-executes itself as a mock MCP stdio server
 # (see tests/mcp_lifecycle_test.rs), which needs control over main().

@@ -94,6 +94,7 @@ ma.shutdown(Duration::from_secs(5)).await?;
 - `llm`: LLM integration with Message/ToolCall types
 - `mcp`: Model Context Protocol integration
 - `test-utils`: Testing utilities
+- `workspace`: Workspace directory (`settings.json` + `patches/`) shared by the desktop app and `ma` (implies `file`)
 
 Default features: `["file", "image", "llm", "mcp"]`
 

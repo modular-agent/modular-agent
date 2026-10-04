@@ -204,3 +204,59 @@ impl From<&Patch> for PatchInfo {
         }
     }
 }
+
+/// Checks that `name` is usable as a patch name that maps onto a file path.
+///
+/// `/` separates folders. Rejects names that would escape the patches
+/// directory or that are not valid file names on every platform.
+pub fn validate_patch_name(name: &str) -> Result<()> {
+    let invalid = |reason: &str| Err(Error::InvalidPatchName(format!("\"{name}\": {reason}")));
+    if name.trim().is_empty() {
+        return invalid("must not be empty");
+    }
+    if name.contains('\\') {
+        return invalid("must use '/' as the folder separator");
+    }
+    // Path::components() normalizes "." away, so check the raw segments.
+    if name
+        .split('/')
+        .any(|s| s.is_empty() || s == "." || s == "..")
+    {
+        return invalid("must be a relative path without empty, \".\" or \"..\" components");
+    }
+    if let Some(c) = name
+        .chars()
+        .find(|c| matches!(c, ':' | '*' | '?' | '"' | '<' | '>' | '|'))
+    {
+        return invalid(&format!("must not contain '{c}'"));
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn patch_name_validation() {
+        for ok in ["MyPatch", "Folder/MyPatch", "v1.2", "a b/c d"] {
+            assert!(validate_patch_name(ok).is_ok(), "{ok}");
+        }
+        for bad in [
+            "",
+            " ",
+            "../escape",
+            "/absolute",
+            "trailing/",
+            "a//b",
+            "a\\b",
+            "a/./b",
+            "C:/x",
+            "a*b",
+            "a?b",
+            "a|b",
+        ] {
+            assert!(validate_patch_name(bad).is_err(), "{bad}");
+        }
+    }
+}

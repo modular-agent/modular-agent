@@ -18,4 +18,5 @@ mod suites {
     mod unbounded_queue_test;
     mod var_disabled_test;
     mod var_test;
+    mod workspace_test;
 }

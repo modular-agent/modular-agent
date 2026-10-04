@@ -70,6 +70,7 @@ use crate::config::ModuleConfigs;
 use crate::definition::ModuleDefinition;
 use crate::error::{Error, Result};
 use crate::modular_agent::{ModularAgent, ModularAgentEvent};
+use crate::patch::validate_patch_name;
 use crate::spec::{ConnectionSpec, ModuleSpec, PatchSpec};
 use crate::value::Value;
 
@@ -593,27 +594,6 @@ fn definition_line(def: &ModuleDefinition) -> String {
     )
 }
 
-/// Validates a patch name used as a relative path under the patches
-/// directory. Names come from an external agent, so this is a boundary check.
-fn validate_patch_name(name: &str) -> Result<(), String> {
-    if name.is_empty() {
-        return Err("Patch name must not be empty".into());
-    }
-    if name.contains('\\') {
-        return Err("Patch name must use '/' as the folder separator".into());
-    }
-    // Path::components() normalizes "." away, so check the raw segments.
-    let segments_ok = name
-        .split('/')
-        .all(|s| !s.is_empty() && s != "." && s != ".." && !s.ends_with(':'));
-    if !segments_ok {
-        return Err(format!(
-            "Invalid patch name \"{name}\": must be a relative path without empty, \".\" or \"..\" components"
-        ));
-    }
-    Ok(())
-}
-
 /// Rejects global config keys: secrets live in the application settings and
 /// must never be written onto a module instance. Global configs belong to the
 /// definition, so this check never needs a live spec.
@@ -949,7 +929,7 @@ impl McpServer {
         Parameters(p): Parameters<CreatePatchParams>,
     ) -> Result<Json<CreatePatchResponse>, CallToolResult> {
         if let Err(e) = validate_patch_name(&p.name) {
-            return Err(err(e));
+            return Err(err(e.to_string()));
         }
         match self.ma.new_patch_with_name(p.name) {
             Ok(id) => Ok(Json(CreatePatchResponse { patch_id: id })),
@@ -1274,7 +1254,7 @@ impl McpServer {
             return err_text("Patch has no name; pass the \"name\" parameter to save it.");
         };
         if let Err(e) = validate_patch_name(&name) {
-            return err_text(e);
+            return err_text(e.to_string());
         }
         let renamed_from = match &current_name {
             Some(old) if old != &name => Some(old.clone()),
@@ -1428,17 +1408,6 @@ impl ServerHandler for McpServer {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn patch_name_validation() {
-        assert!(validate_patch_name("MyPatch").is_ok());
-        assert!(validate_patch_name("Folder/MyPatch").is_ok());
-        assert!(validate_patch_name("").is_err());
-        assert!(validate_patch_name("../escape").is_err());
-        assert!(validate_patch_name("/absolute").is_err());
-        assert!(validate_patch_name("a\\b").is_err());
-        assert!(validate_patch_name("a/./b").is_err());
-    }
 
     #[test]
     fn config_key_validation_rejects_global_and_unknown_keys() {
