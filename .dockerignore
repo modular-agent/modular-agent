@@ -1,0 +1,22 @@
+# Build context for apps/cli/Dockerfile (docker build -f apps/cli/Dockerfile .)
+
+# Build output
+/target
+/tools/ma-config/target
+
+# Out-of-tree module clones: the Dockerfile clones the ones it needs
+/custom_modules/*
+!/custom_modules/README.md
+
+# Machine-local module selections
+/apps/*/ma-config.toml
+
+# Frontend dependencies and build output (only the desktop's Cargo.toml is
+# needed, to resolve the workspace)
+**/node_modules
+/apps/desktop/build
+/apps/desktop/.svelte-kit
+/apps/desktop/src-tauri/gen
+
+/worktrees
+.git
