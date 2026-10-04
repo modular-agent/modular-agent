@@ -122,6 +122,32 @@ fn undefined_variable_refuses_to_start() {
     assert!(text(&out.stderr).contains("MA_TEST_UNDEFINED_VAR"));
 }
 
+/// Settings for a module this build does not link (e.g. a desktop-only one)
+/// are skipped with a warning; an unknown key on a linked module still fails.
+#[test]
+fn unknown_module_is_only_a_warning() {
+    let ws = example_workspace();
+    let settings = ws.path().join("settings.json");
+    std::fs::write(
+        &settings,
+        r#"{ "modules": { "modular_agent_not_linked::Module": { "key": "value" } } }"#,
+    )
+    .unwrap();
+    let out = run(ws.path(), &["echo"], "hi\n");
+    assert!(out.status.success(), "{}", text(&out.stderr));
+    assert_eq!(text(&out.stdout), "echo: hi\n");
+    assert!(text(&out.stderr).contains("modular_agent_not_linked::Module"));
+
+    std::fs::write(
+        &settings,
+        r#"{ "modules": { "modular_agent_llm::chat::ChatModule": { "no_such_key": "value" } } }"#,
+    )
+    .unwrap();
+    let out = run(ws.path(), &["echo"], "hi\n");
+    assert_eq!(out.status.code(), Some(1));
+    assert!(text(&out.stderr).contains("no_such_key"));
+}
+
 /// Kills the server if a test fails before stopping it.
 struct Server(Child);
 

@@ -10,7 +10,7 @@ use anyhow::{Context as _, Result, bail};
 use axum::http::StatusCode;
 use axum::routing::get;
 use modular_agent_core::mcp_server::{McpServerConfig, McpServerHandle, mcp_router};
-use modular_agent_core::workspace::Workspace;
+use modular_agent_core::workspace::{Workspace, WorkspaceWarning};
 use modular_agent_core::{CancellationToken, ModularAgent};
 use tokio::task::JoinHandle;
 
@@ -78,14 +78,23 @@ impl Host {
                     .with_context(|| format!("Invalid workspace path {}", dir.display()))?;
                 let workspace = Workspace::open(&dir)
                     .with_context(|| format!("Failed to open workspace {}", dir.display()))?;
-                let warnings = workspace.apply_global_configs(&ma);
-                if !warnings.is_empty() {
-                    for warning in &warnings {
-                        log::error!("Workspace settings: {warning}");
+                // A module this build does not link is expected: builds select
+                // different modules (the desktop app's settings carry desktop-only
+                // ones). Anything else is a setting that silently would not work.
+                let (unknown_modules, errors): (Vec<_>, Vec<_>) = workspace
+                    .apply_global_configs(&ma)
+                    .into_iter()
+                    .partition(|w| matches!(w, WorkspaceWarning::UnknownModule { .. }));
+                for warning in &unknown_modules {
+                    log::warn!("Workspace settings: {warning} (not in this build; skipped)");
+                }
+                if !errors.is_empty() {
+                    for error in &errors {
+                        log::error!("Workspace settings: {error}");
                     }
                     bail!(
                         "{} setting(s) in {} cannot be applied",
-                        warnings.len(),
+                        errors.len(),
                         dir.join("settings.json").display()
                     );
                 }
