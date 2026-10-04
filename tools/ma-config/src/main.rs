@@ -33,6 +33,17 @@ struct Args {
     /// Path to the in-tree module registry YAML file
     #[arg(long, default_value = "registry.yaml")]
     registry: String,
+
+    /// Use this file as the app's selection instead of apps/<app>/ma-config.toml,
+    /// e.g. a build profile committed for cloud images (relative to the current
+    /// directory)
+    #[arg(long, value_name = "PATH")]
+    config: Option<PathBuf>,
+
+    /// Skip the final `cargo update`, keeping the committed Cargo.lock apart from
+    /// what the new selection adds
+    #[arg(long)]
+    no_update: bool,
 }
 
 fn main() {
@@ -57,9 +68,21 @@ fn run(args: Args) -> Result<(), String> {
     };
     let registry = registry::load_all(&registry_path, &root)?;
 
+    let config_path = match &args.config {
+        Some(path) => std::path::absolute(path)
+            .map_err(|e| format!("Invalid config path {}: {e}", path.display()))?,
+        None => app.config_path(&root),
+    };
+
     // Every app's selection is loaded: dependency resolution is workspace-wide,
     // so the conflict check cannot be decided from one app alone.
     let mut configs = load_all_configs(&root)?;
+    if args.config.is_some() {
+        configs.remove(&app);
+        if config_path.exists() {
+            configs.insert(app, BuildConfig::load(app, &config_path)?);
+        }
+    }
     let existing = configs.get(&app).cloned();
 
     let build_config = match &existing {
@@ -67,7 +90,7 @@ fn run(args: Args) -> Result<(), String> {
             return Err(format!(
                 "--defaults would overwrite the existing {}; re-run with --apply to keep \
                  the saved selection, or delete the file to start from the defaults",
-                rel(&app.config_path(&root), &root)
+                rel(&config_path, &root)
             ));
         }
         None if args.defaults => default_config(app, &registry)?,
@@ -94,7 +117,7 @@ fn run(args: Args) -> Result<(), String> {
         None if args.apply => {
             return Err(format!(
                 "--apply needs an existing {}; run the wizard first",
-                rel(&app.config_path(&root), &root)
+                rel(&config_path, &root)
             ));
         }
         None => tui::run_wizard(app, None, &registry)?,
@@ -106,10 +129,12 @@ fn run(args: Args) -> Result<(), String> {
     tui::check_conflicts(&configs, &registry, !non_interactive)?;
 
     // Saved before validation so a missing clone does not throw away the
-    // selection: clone what the error names, then re-run with --apply.
-    let config_path = app.config_path(&root);
-    build_config.save(&config_path)?;
-    println!("Config saved to {}", config_path.display());
+    // selection: clone what the error names, then re-run with --apply. --apply
+    // reuses the saved file as is, so rewriting it would only drop its comments.
+    if !args.apply {
+        build_config.save(&config_path)?;
+        println!("Config saved to {}", config_path.display());
+    }
 
     codegen::validate_paths(&build_config, &root)?;
 
@@ -123,12 +148,13 @@ fn run(args: Args) -> Result<(), String> {
         codegen::ensure_mod_modules(app, &root)?;
     }
 
-    let should_update = non_interactive
-        || Confirm::new()
-            .with_prompt("Run cargo update?")
-            .default(true)
-            .interact()
-            .map_err(|e| e.to_string())?;
+    let should_update = !args.no_update
+        && (non_interactive
+            || Confirm::new()
+                .with_prompt("Run cargo update?")
+                .default(true)
+                .interact()
+                .map_err(|e| e.to_string())?);
     if should_update {
         run_cargo_update(&root)?;
     }

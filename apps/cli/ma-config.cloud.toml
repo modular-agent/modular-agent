@@ -1,0 +1,22 @@
+# Module selection for the container image (apps/cli/Dockerfile), applied with
+#   ma-config cli --apply --no-update --config apps/cli/ma-config.cloud.toml
+# Out-of-tree modules are cloned into custom_modules/ by the Dockerfile first.
+# Desktop-only modules (screen capture, GUI automation, avatars) are left out.
+
+[[modules]]
+name = "modular-agent-std"
+
+[modules.source]
+type = "Workspace"
+
+[[modules]]
+name = "modular-agent-llm"
+
+[modules.source]
+type = "Workspace"
+
+[[modules]]
+name = "modular-agent-slack"
+
+[[modules]]
+name = "modular-agent-web"
