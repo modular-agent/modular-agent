@@ -344,7 +344,7 @@ mod tests {
         assert!(out.contains("modular-agent-std = { workspace = true }"));
         assert!(out.contains(
             "modular-agent-core = { workspace = true, \
-             features = [\"mcp-server\", \"mcp-http-client\"] }"
+             features = [\"mcp-server\", \"mcp-http-client\", \"workspace\"] }"
         ));
         assert!(out.contains("tauri-plugin-modular-agent = { workspace = true }"));
         // Modules dropped from the selection lose their dependency line.
