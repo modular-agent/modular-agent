@@ -25,7 +25,7 @@ RUN for repo in $MODULE_REPOS; do \
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/src/tools/ma-config/target \
     cargo run --manifest-path tools/ma-config/Cargo.toml -- \
-        cli --apply --no-update --config apps/cli/ma-config.cloud.toml
+        cli --apply --config apps/cli/ma-config.cloud.toml
 
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/src/target \

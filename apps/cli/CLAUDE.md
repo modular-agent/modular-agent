@@ -66,7 +66,7 @@ Module crates are managed by the `ma-config` TUI wizard at the workspace root (`
 
 Configuration is saved to `apps/cli/ma-config.toml` (gitignored), with local paths relative to the workspace root. Configs written before the monorepo are rejected rather than reinterpreted.
 
-- `--config <path>` replaces that file for loading, saving and the conflict check (relative to the cwd); `apps/cli/ma-config.cloud.toml` is the committed container profile. `--apply` never rewrites the file it read (that only dropped comments). `--no-update` skips the closing `cargo update`, so the Docker build keeps the committed `Cargo.lock` apart from what the selection adds.
+- `--config <path>` replaces that file for loading, saving and the conflict check (relative to the cwd); `apps/cli/ma-config.cloud.toml` is the committed container profile. `--apply` never rewrites the file it read (that only dropped comments). `cargo update` runs only with `--update`; by default `Cargo.lock` keeps its entries and the next build adds only what the selection needs, which is how the Docker build keeps the committed lock.
 - Codegen always emits core with `mcp-server`, `mcp-http-client` and `workspace` (`AppKind::core_features`); both apps need all three.
 
 - `crate_features` in `ma-config.toml` is `Option<Vec<String>>`: `None` (or omitted) = use crate defaults, `Some([])` = disable all features, `Some([...])` = explicit override with `default-features = false`.

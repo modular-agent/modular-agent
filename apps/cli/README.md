@@ -22,11 +22,13 @@ cargo run --manifest-path tools/ma-config/Cargo.toml -- cli
 
 The wizard generates `apps/cli/Cargo.toml` dependencies and `apps/cli/src/modules.rs` based on your selections. Configuration is saved to `apps/cli/ma-config.toml` for subsequent runs.
 
-`--config <path>` applies a different selection file instead, such as the committed profile for the container image, and `--no-update` keeps `Cargo.lock` as it is apart from what the selection adds:
+`--config <path>` applies a different selection file instead, such as the committed profile for the container image:
 
 ```bash
-cargo run --manifest-path tools/ma-config/Cargo.toml -- cli --apply --no-update --config apps/cli/ma-config.cloud.toml
+cargo run --manifest-path tools/ma-config/Cargo.toml -- cli --apply --config apps/cli/ma-config.cloud.toml
 ```
+
+`Cargo.lock` is left as it is apart from what the selection adds on the next build; pass `--update` to run `cargo update` afterwards.
 
 ## Workspaces
 

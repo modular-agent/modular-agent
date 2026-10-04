@@ -9,7 +9,6 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use clap::Parser;
-use dialoguer::Confirm;
 
 use app::{ALL_APPS, AppKind};
 use config::BuildConfig;
@@ -40,10 +39,10 @@ struct Args {
     #[arg(long, value_name = "PATH")]
     config: Option<PathBuf>,
 
-    /// Skip the final `cargo update`, keeping the committed Cargo.lock apart from
-    /// what the new selection adds
+    /// Run `cargo update` after regenerating; without it Cargo.lock is left as is
+    /// apart from what the new selection adds on the next build
     #[arg(long)]
-    no_update: bool,
+    update: bool,
 }
 
 fn main() {
@@ -148,14 +147,7 @@ fn run(args: Args) -> Result<(), String> {
         codegen::ensure_mod_modules(app, &root)?;
     }
 
-    let should_update = !args.no_update
-        && (non_interactive
-            || Confirm::new()
-                .with_prompt("Run cargo update?")
-                .default(true)
-                .interact()
-                .map_err(|e| e.to_string())?);
-    if should_update {
+    if args.update {
         run_cargo_update(&root)?;
     }
 
