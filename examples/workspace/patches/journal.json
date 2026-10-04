@@ -1,0 +1,59 @@
+{
+  "modules": [
+    {
+      "id": "1",
+      "def_name": "modular_agent_core::external_module::ExternalInputModule",
+      "outputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "journal"
+      },
+      "x": 0,
+      "y": 0
+    },
+    {
+      "id": "2",
+      "def_name": "modular_agent_std::file::AppendJsonlFileModule",
+      "inputs": [
+        "value",
+        "doc"
+      ],
+      "outputs": [
+        "unit"
+      ],
+      "configs": {
+        "path": "data/journal.jsonl"
+      },
+      "x": 240,
+      "y": 0
+    },
+    {
+      "id": "3",
+      "def_name": "modular_agent_std::log::LogModule",
+      "inputs": [
+        "value"
+      ],
+      "configs": {
+        "level": "info",
+        "message": "journal appended"
+      },
+      "x": 480,
+      "y": 0
+    }
+  ],
+  "connections": [
+    {
+      "source": "1",
+      "source_handle": "value",
+      "target": "2",
+      "target_handle": "value"
+    },
+    {
+      "source": "2",
+      "source_handle": "unit",
+      "target": "3",
+      "target_handle": "value"
+    }
+  ]
+}

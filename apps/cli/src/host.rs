@@ -156,6 +156,8 @@ async fn listen(
     let listener = tokio::net::TcpListener::bind(addr)
         .await
         .with_context(|| format!("Failed to listen on {addr}"))?;
+    // The bound address, which differs from `addr` for port 0.
+    let local_addr = listener.local_addr()?;
     let (mcp_router, mcp) = mcp_router(
         ma.clone(),
         McpServerConfig {
@@ -182,7 +184,7 @@ async fn listen(
             .with_graceful_shutdown(shutdown.clone().cancelled_owned())
             .into_future(),
     );
-    log::info!(target: "modular_agent::events", "listening on http://{addr} (/healthz, /mcp)");
+    log::info!(target: "modular_agent::events", "listening on http://{local_addr} (/healthz, /mcp)");
     Ok(Http {
         mcp,
         shutdown,

@@ -1,0 +1,76 @@
+{
+  "modules": [
+    {
+      "id": "1",
+      "def_name": "modular_agent_core::external_module::ExternalInputModule",
+      "outputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "input"
+      },
+      "x": 0,
+      "y": 0
+    },
+    {
+      "id": "2",
+      "def_name": "modular_agent_std::string::TemplateStringModule",
+      "inputs": [
+        "value"
+      ],
+      "outputs": [
+        "string"
+      ],
+      "configs": {
+        "template": "echo: {{value}}"
+      },
+      "x": 240,
+      "y": 0
+    },
+    {
+      "id": "3",
+      "def_name": "modular_agent_core::external_module::ExternalOutputModule",
+      "inputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "output"
+      },
+      "x": 480,
+      "y": 0
+    },
+    {
+      "id": "4",
+      "def_name": "modular_agent_std::log::LogModule",
+      "inputs": [
+        "value"
+      ],
+      "configs": {
+        "level": "debug",
+        "message": "echo received {{to_json value}}"
+      },
+      "x": 240,
+      "y": 0
+    }
+  ],
+  "connections": [
+    {
+      "source": "1",
+      "source_handle": "value",
+      "target": "2",
+      "target_handle": "value"
+    },
+    {
+      "source": "2",
+      "source_handle": "string",
+      "target": "3",
+      "target_handle": "value"
+    },
+    {
+      "source": "1",
+      "source_handle": "value",
+      "target": "4",
+      "target_handle": "value"
+    }
+  ]
+}

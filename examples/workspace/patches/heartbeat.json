@@ -1,0 +1,57 @@
+{
+  "modules": [
+    {
+      "id": "1",
+      "def_name": "modular_agent_std::time::IntervalTimerModule",
+      "outputs": [
+        "unit"
+      ],
+      "configs": {
+        "interval": "5s"
+      },
+      "x": 0,
+      "y": 0
+    },
+    {
+      "id": "2",
+      "def_name": "modular_agent_std::utils::CounterModule",
+      "inputs": [
+        "value",
+        "reset"
+      ],
+      "outputs": [
+        "count"
+      ],
+      "configs": {},
+      "x": 240,
+      "y": 0
+    },
+    {
+      "id": "3",
+      "def_name": "modular_agent_std::log::LogModule",
+      "inputs": [
+        "value"
+      ],
+      "configs": {
+        "level": "info",
+        "message": "heartbeat {{value}}"
+      },
+      "x": 480,
+      "y": 0
+    }
+  ],
+  "connections": [
+    {
+      "source": "1",
+      "source_handle": "unit",
+      "target": "2",
+      "target_handle": "value"
+    },
+    {
+      "source": "2",
+      "source_handle": "count",
+      "target": "3",
+      "target_handle": "value"
+    }
+  ]
+}

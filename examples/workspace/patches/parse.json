@@ -1,0 +1,73 @@
+{
+  "modules": [
+    {
+      "id": "1",
+      "def_name": "modular_agent_core::external_module::ExternalInputModule",
+      "outputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "parse"
+      },
+      "x": 0,
+      "y": 0
+    },
+    {
+      "id": "2",
+      "def_name": "modular_agent_std::data::FromJsonModule",
+      "inputs": [
+        "json"
+      ],
+      "outputs": [
+        "value"
+      ],
+      "x": 240,
+      "y": 0
+    },
+    {
+      "id": "3",
+      "def_name": "modular_agent_core::external_module::ExternalOutputModule",
+      "inputs": [
+        "value"
+      ],
+      "configs": {
+        "name": "parsed"
+      },
+      "x": 480,
+      "y": 0
+    },
+    {
+      "id": "4",
+      "def_name": "modular_agent_std::log::LogModule",
+      "inputs": [
+        "value"
+      ],
+      "configs": {
+        "level": "error",
+        "message": "bad input: {{value}}"
+      },
+      "x": 480,
+      "y": 0
+    }
+  ],
+  "connections": [
+    {
+      "source": "1",
+      "source_handle": "value",
+      "target": "2",
+      "target_handle": "json"
+    },
+    {
+      "source": "2",
+      "source_handle": "value",
+      "target": "3",
+      "target_handle": "value"
+    },
+    {
+      "source": "2",
+      "source_handle": "err",
+      "target": "4",
+      "target_handle": "value"
+    }
+  ]
+}

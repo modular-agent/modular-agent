@@ -1,0 +1,9 @@
+{
+  "auto_start_patches": [
+    "heartbeat",
+    "echo",
+    "parse",
+    "journal",
+    "tick"
+  ]
+}

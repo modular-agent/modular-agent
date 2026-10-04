@@ -27,3 +27,6 @@ tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros", "io-util
 modular-agent-core = { workspace = true, features = ["mcp-server", "mcp-http-client", "workspace"] }
 modular-agent-llm = { workspace = true }
 modular-agent-std = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"
