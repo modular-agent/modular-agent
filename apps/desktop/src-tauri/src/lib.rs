@@ -27,6 +27,8 @@ pub fn run() {
                         log::LevelFilter::Info
                     },
                 )
+                // Log node records (ModuleLog events), debug level included.
+                .level_for("modular_agent::patch", log::LevelFilter::Debug)
                 // Suppress known harmless tao warning on Windows:
                 // "RedrawEventsCleared emitted without explicit MainEventsCleared"
                 // See: https://github.com/tauri-apps/tao/issues/872
@@ -71,11 +73,7 @@ pub fn run() {
                     log::error!("Failed to initialize module: {}", e);
                     app_handle.exit(1);
                 });
-                modular_agent_desktop::settings::load_module_global_configs(&app_handle)
-                    .unwrap_or_else(|e| {
-                        log::error!("Failed to load module global configs: {}", e);
-                        app_handle.exit(1);
-                    });
+                modular_agent_desktop::settings::apply_workspace_global_configs(&app_handle);
                 modular_agent_desktop::autostart::init(&app_handle).unwrap_or_else(|e| {
                     log::error!("Failed to initialize autostart: {}", e);
                 });
@@ -111,9 +109,12 @@ pub fn run() {
             modular_agent_desktop::app::stop_patch_cmd,
             modular_agent_desktop::app::get_dir_entries_cmd,
             modular_agent_desktop::app::open_patch_cmd,
+            modular_agent_desktop::app::get_auto_start_patches_cmd,
+            modular_agent_desktop::app::set_patch_auto_start_cmd,
             modular_agent_desktop::settings::get_core_settings_cmd,
             modular_agent_desktop::settings::set_core_settings_cmd,
             modular_agent_desktop::settings::regenerate_mcp_server_token_cmd,
+            modular_agent_desktop::settings::get_global_configs_cmd,
             modular_agent_desktop::settings::set_global_configs_cmd,
         ])
         .on_window_event(|window, event| {

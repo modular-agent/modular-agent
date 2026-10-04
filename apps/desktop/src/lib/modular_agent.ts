@@ -24,8 +24,26 @@ export async function setCoreSettings(newSettings: Partial<CoreSettings>): Promi
   await invoke("set_core_settings_cmd", { newSettings });
 }
 
+/**
+ * Global configs as written in the workspace's settings.json (`${VAR}` references unexpanded),
+ * over each module definition's defaults.
+ */
+export async function getGlobalConfigs(): Promise<Record<string, ModuleConfigs>> {
+  return await invoke("get_global_configs_cmd");
+}
+
 export async function setGlobalConfigs(defName: string, configs: ModuleConfigs): Promise<void> {
   await invoke("set_global_configs_cmd", { defName, configs });
+}
+
+// workspace
+
+export async function getAutoStartPatches(): Promise<string[]> {
+  return await invoke("get_auto_start_patches_cmd");
+}
+
+export async function setPatchAutoStart(name: string, enabled: boolean): Promise<void> {
+  await invoke("set_patch_auto_start_cmd", { name, enabled });
 }
 
 /** Generate a fresh MCP server token and restart the server with it. Returns the new token. */

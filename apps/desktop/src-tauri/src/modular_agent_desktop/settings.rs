@@ -1,6 +1,8 @@
 use anyhow::{Context as _, Result};
+use modular_agent_core::CancellationToken;
+use modular_agent_core::indexmap::IndexMap;
 use modular_agent_core::mcp_server::{McpServerConfig, McpServerHandle, mcp_router};
-use modular_agent_core::{CancellationToken, ModuleConfigs, Value};
+use modular_agent_core::workspace::Workspace;
 use parking_lot::Mutex;
 use rand::RngExt as _;
 use serde::{Deserialize, Serialize};
@@ -14,10 +16,13 @@ const SETTINGS_JSON: &str = "settings.json";
 
 pub fn init(app: &AppHandle) -> Result<()> {
     init_core_settings(app)?;
+    init_workspace(app)?;
     app.manage(McpServerState::default());
     Ok(())
 }
 
+/// Saves the UI settings to the Tauri store. Settings that affect how patches
+/// run live in the workspace; see [`save_workspace`].
 pub fn save(app: &AppHandle) -> Result<()> {
     let store = app.store(SETTINGS_JSON)?;
 
@@ -28,10 +33,6 @@ pub fn save(app: &AppHandle) -> Result<()> {
         settings_json = serde_json::to_value(&*core_settings)?;
     }
     store.set("core", settings_json);
-
-    let module_settings = app.ma().get_global_configs_map();
-    let module_settings_json = serde_json::to_value(module_settings)?;
-    store.set("modules", module_settings_json);
 
     Ok(())
 }
@@ -46,9 +47,6 @@ pub fn quit(_app: &AppHandle) {
 pub struct CoreSettings {
     #[serde(default, skip_serializing_if = "<&bool>::not")]
     pub autostart: bool,
-
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub auto_start_patches: Vec<String>,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub color_mode: Option<String>,
@@ -106,7 +104,6 @@ impl Default for CoreSettings {
 
         CoreSettings {
             autostart: false,
-            auto_start_patches: Vec::new(),
             color_mode: None,
             run_in_background: false,
             shortcut_keys: Some(SHORTCUT_KEYS.clone()),
@@ -144,26 +141,36 @@ fn init_core_settings(app: &AppHandle) -> Result<()> {
     Ok(())
 }
 
-pub fn load_module_global_configs(app: &AppHandle) -> Result<()> {
-    let store = app.store(SETTINGS_JSON)?;
+// Workspace
 
-    if let Some(store_value) = store.get("modules") {
-        let mut global_configs_map = app.ma().get_global_configs_map();
-        for (module_name, configs) in store_value.as_object().unwrap_or(&Default::default()) {
-            if let Some(module_configs) = global_configs_map.get_mut(module_name) {
-                for (key, value) in configs.as_object().unwrap_or(&Default::default()) {
-                    if module_configs.contains_key(key) {
-                        if let Ok(value) = Value::from_json(value.clone()) {
-                            module_configs.set(key.clone(), value);
-                        }
-                    }
-                }
-            }
-        }
-        app.ma().set_global_configs_map(global_configs_map);
-    }
-
+/// Opens `~/.modular_agent` as the workspace. A settings.json that cannot be
+/// read is an error rather than a reset to defaults: the next save would
+/// overwrite the hand-written file.
+fn init_workspace(app: &AppHandle) -> Result<()> {
+    let dir = crate::modular_agent_desktop::app::modular_agent_dir()?;
+    std::fs::create_dir_all(&dir).with_context(|| format!("Failed to create {}", dir.display()))?;
+    let workspace = Workspace::open(&dir)
+        .with_context(|| format!("Failed to open workspace {}", dir.display()))?;
+    app.manage(Mutex::new(workspace));
     Ok(())
+}
+
+/// Writes the workspace settings (auto-start patches, global configs).
+pub fn save_workspace(app: &AppHandle) {
+    let workspace = app.state::<Mutex<Workspace>>();
+    if let Err(e) = workspace.lock().save() {
+        log::error!("Failed to save workspace settings: {}", e);
+    }
+}
+
+/// Applies the workspace's global configs. Entries that cannot be applied
+/// (unknown module or key, unset variable) are logged and skipped: settings
+/// written from the UI can keep stale keys after a module is renamed.
+pub fn apply_workspace_global_configs(app: &AppHandle) {
+    let workspace = app.state::<Mutex<Workspace>>();
+    for warning in workspace.lock().apply_global_configs(app.ma()) {
+        log::warn!("Workspace settings: {}", warning);
+    }
 }
 
 // MCP Server
@@ -386,15 +393,47 @@ pub async fn regenerate_mcp_server_token_cmd(
 
 // Global Module Configs
 
+type RawConfigs = IndexMap<String, JsonValue>;
+
+/// Global configs as the settings page edits them: each definition's
+/// defaults overlaid with the workspace values as written, so `${VAR}`
+/// references show instead of the secrets they expand to.
+#[tauri::command]
+pub(crate) fn get_global_configs_cmd(
+    app: AppHandle,
+) -> Result<IndexMap<String, RawConfigs>, String> {
+    let mut map = IndexMap::new();
+    for (def_name, configs) in app.ma().get_global_configs_map() {
+        let json = serde_json::to_value(configs).map_err(|e| e.to_string())?;
+        let configs: RawConfigs = serde_json::from_value(json).map_err(|e| e.to_string())?;
+        map.insert(def_name, configs);
+    }
+    let workspace = app.state::<Mutex<Workspace>>();
+    for (def_name, raw) in &workspace.lock().settings.modules {
+        if let Some(configs) = map.get_mut(def_name) {
+            for (key, value) in raw {
+                if configs.contains_key(key) {
+                    configs.insert(key.clone(), value.clone());
+                }
+            }
+        }
+    }
+    Ok(map)
+}
+
+/// Stores the configs as written (unexpanded) and re-applies the workspace.
 #[tauri::command]
 pub(crate) fn set_global_configs_cmd(
     app: AppHandle,
     def_name: String,
-    configs: ModuleConfigs,
+    configs: RawConfigs,
 ) -> Result<(), String> {
-    app.ma().set_global_configs(def_name, configs);
-
-    save(&app).map_err(|e| e.to_string())?;
-
+    {
+        let workspace = app.state::<Mutex<Workspace>>();
+        let mut workspace = workspace.lock();
+        workspace.settings.modules.insert(def_name, configs);
+        workspace.save().map_err(|e| e.to_string())?;
+    }
+    apply_workspace_global_configs(&app);
     Ok(())
 }

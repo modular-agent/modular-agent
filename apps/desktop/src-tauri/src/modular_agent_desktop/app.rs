@@ -7,12 +7,13 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
 
 use modular_agent_core::mcp::register_tools_from_mcp_json;
-use modular_agent_core::{ModularAgent, PatchSpec};
+use modular_agent_core::workspace::{Workspace, patch_file};
+use modular_agent_core::{ModularAgent, PatchSpec, validate_patch_name};
 
 use tauri_plugin_modular_agent::ModularAgentExt;
 
 use crate::modular_agent_desktop::{
-    observer::start_modular_agent_observer, settings::CoreSettings,
+    observer::start_modular_agent_observer, settings::save_workspace,
 };
 
 static MODULAR_AGENT_PATH: &str = ".modular_agent";
@@ -47,26 +48,20 @@ impl ModularAgentApp {
 
     /// Create a new patch.
     pub fn new_patch_with_name(&self, name: String) -> Result<String> {
-        if !is_valid_patch_name(&name) {
-            return Err(anyhow!("Invalid patch name: {}", name));
-        }
+        validate_patch_name(&name)?;
         let id = self.ma.new_patch_with_name(name)?;
         Ok(id)
     }
 
     /// Create a new patch with the given spec content.
     pub fn add_patch_with_name(&self, spec: PatchSpec, name: String) -> Result<String> {
-        if !is_valid_patch_name(&name) {
-            return Err(anyhow!("Invalid patch name: {}", name));
-        }
+        validate_patch_name(&name)?;
         let id = self.ma.add_patch_with_name(spec, name)?;
         Ok(id)
     }
 
     pub async fn open_patch(&self, name: String) -> Result<String> {
-        if !is_valid_patch_name(&name) {
-            return Err(anyhow!("Invalid patch name: {}", name));
-        }
+        validate_patch_name(&name)?;
 
         // Return the live instance if the patch is already loaded in core
         // (regardless of who created it).
@@ -109,12 +104,8 @@ impl ModularAgentApp {
 
     /// Rename a patch file (also used internally by move_patch).
     pub async fn rename_patch(&self, app: &AppHandle, name: &str, new_name: &str) -> Result<()> {
-        if !is_valid_patch_name(name) {
-            bail!("Invalid patch name: {}", name);
-        }
-        if !is_valid_patch_name(new_name) {
-            bail!("Invalid patch name: {}", new_name);
-        }
+        validate_patch_name(name)?;
+        validate_patch_name(new_name)?;
 
         if name == new_name {
             return Ok(());
@@ -395,9 +386,7 @@ impl ModularAgentApp {
         };
 
         // Validate before any file I/O (prevents path traversal via target_dir)
-        if !is_valid_patch_name(&base_name) {
-            return Err(anyhow!("Invalid patch name: {}", base_name));
-        }
+        validate_patch_name(&base_name)?;
 
         let name = unique_patch_name(&base_name);
 
@@ -488,32 +477,16 @@ async fn start_mcp_services() -> Result<()> {
 }
 
 async fn run_auto_start_patches(app: &AppHandle) {
-    let auto_start_patches = {
-        let core_settings = app.state::<Mutex<CoreSettings>>();
-        let guard = core_settings.lock();
-        guard.auto_start_patches.clone()
-    };
-
-    let asapp = app.state::<ModularAgentApp>();
-    for name in auto_start_patches {
-        log::info!("Auto-starting patch: {}", name);
-        match asapp.open_patch(name.clone()).await {
-            Ok(id) => {
-                if let Err(e) = asapp.start_patch(&id).await {
-                    log::error!("Failed to start patch {}: {}", name, e);
-                }
-            }
-            Err(e) => {
-                log::error!("Failed to open patch {}: {}", name, e);
-                continue;
-            }
-        }
+    // Cloned out of the lock: the guard cannot be held across awaits.
+    let workspace = app.state::<Mutex<Workspace>>().lock().clone();
+    for (name, e) in workspace.auto_start(app.ma()).await {
+        log::error!("Failed to auto-start patch {}: {}", name, e);
     }
 }
 
 pub fn quit(_app: &AppHandle) {}
 
-fn modular_agent_dir() -> Result<PathBuf> {
+pub(crate) fn modular_agent_dir() -> Result<PathBuf> {
     let home_dir = dirs::home_dir().with_context(|| "Failed to get home directory")?;
     let modular_agent_dir = home_dir.join(MODULAR_AGENT_PATH);
     Ok(modular_agent_dir)
@@ -528,16 +501,7 @@ pub(crate) fn patches_dir() -> Result<PathBuf> {
 // Get the file path for an patch based on its name.
 // '/' in the name indicates subdirectories.
 fn patch_path(patch_name: &str) -> Result<PathBuf> {
-    let mut patch_path = patches_dir()?;
-
-    let path_components: Vec<&str> = patch_name.split('/').collect();
-    for &component in &path_components[..path_components.len()] {
-        patch_path = patch_path.join(component);
-    }
-
-    patch_path = patch_path.with_extension("json");
-
-    Ok(patch_path)
+    Ok(patch_file(&patches_dir()?, patch_name)?)
 }
 
 fn patch_path_exists(name: &str) -> bool {
@@ -598,38 +562,6 @@ fn get_dir_entries(path: &str) -> Result<Vec<String>> {
     Ok(entries)
 }
 
-fn is_valid_patch_name(new_name: &str) -> bool {
-    // Check if the name is empty
-    if new_name.trim().is_empty() {
-        return false;
-    }
-
-    // Checks for path-like names:
-    if new_name.contains('/') {
-        // Disallow leading, trailing, or consecutive slashes
-        if new_name.starts_with('/') || new_name.ends_with('/') || new_name.contains("//") {
-            return false;
-        }
-        // Disallow segments that are "." or ".."
-        if new_name
-            .split('/')
-            .any(|segment| segment == "." || segment == "..")
-        {
-            return false;
-        }
-    }
-
-    // Check if the name contains invalid characters
-    let invalid_chars = ['\\', ':', '*', '?', '"', '<', '>', '|'];
-    for c in invalid_chars {
-        if new_name.contains(c) {
-            return false;
-        }
-    }
-
-    true
-}
-
 /// Remove empty directories walking up from `start_dir` toward `patches_root`.
 fn cleanup_empty_ancestors(
     app: &AppHandle,
@@ -669,48 +601,51 @@ fn cleanup_empty_ancestors(
 
 /// Update auto_start_patches: replace exact match of old_name with new_name.
 fn update_auto_start_patches(app: &AppHandle, old_name: &str, new_name: &str) {
-    let core_settings = app.state::<Mutex<CoreSettings>>();
-    let mut settings = core_settings.lock();
+    let workspace = app.state::<Mutex<Workspace>>();
+    let mut workspace = workspace.lock();
     let mut changed = false;
-    for entry in settings.auto_start_patches.iter_mut() {
+    for entry in workspace.settings.auto_start_patches.iter_mut() {
         if entry == old_name {
             *entry = new_name.to_string();
             changed = true;
         }
     }
-    drop(settings);
+    drop(workspace);
     if changed {
-        let _ = crate::modular_agent_desktop::settings::save(app);
+        save_workspace(app);
     }
 }
 
 /// Update auto_start_patches: replace old prefix with new prefix for folder moves.
 fn update_auto_start_patches_prefix(app: &AppHandle, old_prefix: &str, new_prefix: &str) {
-    let core_settings = app.state::<Mutex<CoreSettings>>();
-    let mut settings = core_settings.lock();
+    let workspace = app.state::<Mutex<Workspace>>();
+    let mut workspace = workspace.lock();
     let mut changed = false;
-    for entry in settings.auto_start_patches.iter_mut() {
+    for entry in workspace.settings.auto_start_patches.iter_mut() {
         if entry.starts_with(old_prefix) {
             *entry = format!("{}{}", new_prefix, &entry[old_prefix.len()..]);
             changed = true;
         }
     }
-    drop(settings);
+    drop(workspace);
     if changed {
-        let _ = crate::modular_agent_desktop::settings::save(app);
+        save_workspace(app);
     }
 }
 
 /// Drop auto_start_patches entries matching `is_removed`.
 fn remove_auto_start_patches(app: &AppHandle, is_removed: impl Fn(&str) -> bool) {
-    let core_settings = app.state::<Mutex<CoreSettings>>();
-    let mut settings = core_settings.lock();
-    let before = settings.auto_start_patches.len();
-    settings.auto_start_patches.retain(|e| !is_removed(e));
-    let changed = settings.auto_start_patches.len() != before;
-    drop(settings);
+    let workspace = app.state::<Mutex<Workspace>>();
+    let mut workspace = workspace.lock();
+    let before = workspace.settings.auto_start_patches.len();
+    workspace
+        .settings
+        .auto_start_patches
+        .retain(|e| !is_removed(e));
+    let changed = workspace.settings.auto_start_patches.len() != before;
+    drop(workspace);
     if changed {
-        let _ = crate::modular_agent_desktop::settings::save(app);
+        save_workspace(app);
     }
 }
 
@@ -953,4 +888,26 @@ pub async fn open_patch_cmd(
     name: String,
 ) -> Result<String, String> {
     asapp.open_patch(name).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_auto_start_patches_cmd(app: AppHandle) -> Vec<String> {
+    let workspace = app.state::<Mutex<Workspace>>();
+    workspace.lock().settings.auto_start_patches.clone()
+}
+
+#[tauri::command]
+pub fn set_patch_auto_start_cmd(app: AppHandle, name: String, enabled: bool) -> Result<(), String> {
+    let workspace = app.state::<Mutex<Workspace>>();
+    let mut workspace = workspace.lock();
+    let entries = &mut workspace.settings.auto_start_patches;
+    let listed = entries.contains(&name);
+    if enabled && !listed {
+        entries.push(name);
+    } else if !enabled && listed {
+        entries.retain(|entry| entry != &name);
+    } else {
+        return Ok(());
+    }
+    workspace.save().map_err(|e| e.to_string())
 }

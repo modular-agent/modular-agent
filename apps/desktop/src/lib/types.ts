@@ -85,7 +85,6 @@ export type PatchEdge = Edge;
 
 export type CoreSettings = {
   autostart?: boolean;
-  auto_start_patches: string[];
   color_mode?: string | null;
   run_in_background: boolean;
   shortcut_keys?: Record<string, string> | null;

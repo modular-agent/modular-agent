@@ -2,15 +2,17 @@
   import { onMount } from "svelte";
 
   import { ScrollArea } from "$lib/components/ui/scroll-area/index.js";
-  import { getModuleDefinitions, getCoreSettings, getGlobalConfigsMap } from "$lib/module";
+  import { getModuleDefinitions, getCoreSettings } from "$lib/module";
   import { titlebarState } from "$lib/titlebar-state.svelte";
 
+  import type { PageProps } from "./$types";
   import Core from "./Core.svelte";
   import Module from "./Module.svelte";
 
+  const { data }: PageProps = $props();
+
   const coreSettings = getCoreSettings();
   const moduleDefs = getModuleDefinitions();
-  const globalConfigsMap = getGlobalConfigsMap();
 
   onMount(() => {
     titlebarState.reset();
@@ -28,7 +30,7 @@
 
       <div class="flex flex-col mt-8 gap-6">
         <div class="flex-none text-xl font-semibold">Modules</div>
-        {#each Object.entries(globalConfigsMap) as [moduleName, moduleConfigs]}
+        {#each Object.entries(data.globalConfigs) as [moduleName, moduleConfigs]}
           <Module {moduleName} {moduleConfigs} moduleDef={moduleDefs[moduleName]} />
         {/each}
       </div>

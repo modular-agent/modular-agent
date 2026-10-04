@@ -2,7 +2,6 @@ import { invoke } from "@tauri-apps/api/core";
 
 import {
   type ModuleConfigSpec,
-  type ModuleConfigsMap,
   type ModuleDefinition,
   type ModuleDefinitions,
   type ModuleSpec,
@@ -10,12 +9,12 @@ import {
   type PatchSpec,
   type ConnectionSpec,
   getModuleDefinitions as getModuleDefinitionsAPI,
-  getGlobalConfigsMap as getGlobalConfigsMapAPI,
   getPatchInfos,
 } from "tauri-plugin-modular-agent-api";
 
 import { coreSettingsStore } from "./core-settings-store.svelte";
 import {
+  getAutoStartPatches,
   getCoreSettings as getCoreSettingsUtils,
   setCoreSettings as setCoreSettingsUtils,
 } from "./modular_agent";
@@ -323,7 +322,6 @@ export function inferTypeForDisplay(spec: ModuleConfigSpec | undefined, value: a
 
 let _coreSettings: CoreSettings | null = null;
 let _moduleDefinitions: ModuleDefinitions | null = null;
-let _globalConfigsMap: ModuleConfigsMap | null = null;
 
 export function getCoreSettings(): CoreSettings {
   if (!_coreSettings) {
@@ -345,17 +343,9 @@ export function getModuleDefinitions(): ModuleDefinitions {
   return _moduleDefinitions;
 }
 
-export function getGlobalConfigsMap(): ModuleConfigsMap {
-  if (!_globalConfigsMap) {
-    throw new Error("getGlobalConfigsMap() called before initGlobals()");
-  }
-  return _globalConfigsMap;
-}
-
 export async function loadPatchInfos(): Promise<PatchInfoExt[]> {
   const patchInfos = (await getPatchInfos()) as PatchInfoExt[];
-  const coreSettings = getCoreSettings();
-  const auto_start_patches = coreSettings.auto_start_patches || [];
+  const auto_start_patches = await getAutoStartPatches();
   return patchInfos.map((s) =>
     auto_start_patches.includes(s.name) ? { ...s, run_on_start: true } : s,
   );
@@ -364,6 +354,5 @@ export async function loadPatchInfos(): Promise<PatchInfoExt[]> {
 export async function initGlobals() {
   _coreSettings = await getCoreSettingsUtils();
   _moduleDefinitions = await getModuleDefinitionsAPI();
-  _globalConfigsMap = await getGlobalConfigsMapAPI();
   coreSettingsStore.update(_coreSettings);
 }

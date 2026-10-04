@@ -7,7 +7,7 @@
   import RunSwitch from "$lib/components/run-switch.svelte";
   import { Button } from "$lib/components/ui/button";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
-  import { getCoreSettings, setCoreSettings } from "$lib/module";
+  import { setPatchAutoStart } from "$lib/modular_agent";
 
   type Props = {
     id: string;
@@ -31,12 +31,8 @@
   }
 
   async function handleRunOnStart() {
-    const current = getCoreSettings().auto_start_patches || [];
-    const auto_start_patches = run_on_start
-      ? current.filter((n) => n !== name)
-      : [...current, name];
-    await setCoreSettings({ auto_start_patches });
-    // run_on_start is derived from core settings at load time, so re-run load
+    await setPatchAutoStart(name, !run_on_start);
+    // run_on_start is derived from the workspace at load time, so re-run load
     await invalidateAll();
   }
 </script>

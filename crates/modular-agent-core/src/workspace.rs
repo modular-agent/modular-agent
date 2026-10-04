@@ -133,14 +133,9 @@ impl Workspace {
         self.dir.join(PATCHES_DIR)
     }
 
-    /// The file a patch name maps to: `/` separates folders, and `.json` is
-    /// appended (not substituted, so `v1.2` maps to `v1.2.json`).
+    /// The file a patch name maps to; see [`patch_file`].
     pub fn patch_path(&self, name: &str) -> Result<PathBuf> {
-        validate_patch_name(name)?;
-        let mut path = self.patches_dir();
-        path.extend(name.split('/'));
-        path.as_mut_os_string().push(".json");
-        Ok(path)
+        patch_file(&self.patches_dir(), name)
     }
 
     /// Opens the named patch, or returns its id if a patch with that name is
@@ -223,6 +218,16 @@ impl Workspace {
         }
         failures
     }
+}
+
+/// The file a patch name maps to under `patches_dir`: `/` separates folders,
+/// and `.json` is appended (not substituted, so `v1.2` maps to `v1.2.json`).
+pub fn patch_file(patches_dir: &Path, name: &str) -> Result<PathBuf> {
+    validate_patch_name(name)?;
+    let mut path = patches_dir.to_path_buf();
+    path.extend(name.split('/'));
+    path.as_mut_os_string().push(".json");
+    Ok(path)
 }
 
 /// Expands `${VAR}` in every string inside `value`. Returns the name of the

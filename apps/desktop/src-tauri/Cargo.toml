@@ -35,7 +35,7 @@ tauri-plugin-dialog = "2"
 tauri-plugin-log = "2"
 tauri-plugin-store = "2"
 tokio = { version = "1", features = ["full"] }
-modular-agent-core = { workspace = true, features = ["mcp-server", "mcp-http-client"] }
+modular-agent-core = { workspace = true, features = ["mcp-server", "mcp-http-client", "workspace"] }
 tauri-plugin-modular-agent = { workspace = true }
 modular-agent-llm = { workspace = true }
 modular-agent-std = { workspace = true }

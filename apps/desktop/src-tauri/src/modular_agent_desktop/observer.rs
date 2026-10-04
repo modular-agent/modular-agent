@@ -4,7 +4,9 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use anyhow::{Context as _, Result};
-use modular_agent_core::{EventEnvelope, ModularAgent, ModularAgentEvent, ModuleStatus, Value};
+use modular_agent_core::{
+    EventEnvelope, ModularAgent, ModularAgentEvent, ModuleLogLevel, ModuleStatus, Value,
+};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 use tokio::sync::broadcast::error::RecvError;
@@ -79,6 +81,20 @@ fn handle_event(
         }
         ModularAgentEvent::ModuleError(module_id, message) => {
             emit_module_error(app, origin, module_id, message)?;
+        }
+        ModularAgentEvent::ModuleLog {
+            module_id,
+            level,
+            message,
+        } => {
+            // Same target as the ma CLI, so RUST_LOG-style filters carry over.
+            let level = match level {
+                ModuleLogLevel::Error => log::Level::Error,
+                ModuleLogLevel::Warn => log::Level::Warn,
+                ModuleLogLevel::Info => log::Level::Info,
+                ModuleLogLevel::Debug => log::Level::Debug,
+            };
+            log::log!(target: "modular_agent::patch", level, "{module_id}: {message}");
         }
         ModularAgentEvent::ModuleIn(module_id, connection) => {
             emit_module_in(app, origin, module_id, connection)?;
