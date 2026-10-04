@@ -13,9 +13,9 @@ extern crate modular_agent_core as ma;
 use std::net::Ipv4Addr;
 
 use ma::mcp::{register_tools_from_mcp_json, shutdown_all_mcp_connections};
-use ma::mcp_server::{McpServerConfig, start_mcp_server};
+use ma::mcp_server::{McpServerConfig, mcp_router};
 use ma::tool::get_tool;
-use ma::{ModularAgent, ModuleContext, Value};
+use ma::{CancellationToken, ModularAgent, ModuleContext, Value};
 use serde_json::json;
 
 const TOKEN: &str = "loopback-test-token";
@@ -25,25 +25,23 @@ async fn http_loopback_lists_tools_and_returns_structured_content() {
     let ma = ModularAgent::init().unwrap();
     ma.ready().await.unwrap();
 
-    // Reserve a free port; the window between drop and rebind is acceptable
-    // for a test.
-    let port = {
-        let listener = tokio::net::TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
-            .await
-            .unwrap();
-        listener.local_addr().unwrap().port()
-    };
-
-    let handle = start_mcp_server(
+    let listener = tokio::net::TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
+        .await
+        .unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let (router, handle) = mcp_router(
         ma.clone(),
         McpServerConfig {
-            port,
-            patches_dir: None,
             token: Some(TOKEN.into()),
+            ..Default::default()
         },
-    )
-    .await
-    .unwrap();
+    );
+    let shutdown = CancellationToken::new();
+    let server = tokio::spawn(
+        axum::serve(listener, router)
+            .with_graceful_shutdown(shutdown.clone().cancelled_owned())
+            .into_future(),
+    );
 
     let scratch = tempfile::tempdir().unwrap();
     let config_path = scratch.path().join("mcp.json");
@@ -105,5 +103,7 @@ async fn http_loopback_lists_tools_and_returns_structured_content() {
 
     shutdown_all_mcp_connections().await.unwrap();
     handle.stop().await;
+    shutdown.cancel();
+    server.await.unwrap().unwrap();
     ma.quit();
 }

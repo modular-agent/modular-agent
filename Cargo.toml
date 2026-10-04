@@ -34,6 +34,9 @@ tauri-plugin-modular-agent = { version = "0.32.0", path = "crates/tauri-plugin-m
 # Shared external dependencies. Crates whose feature sets diverge (tokio,
 # reqwest) keep their own entries.
 async-trait = "0.1"
+# The MCP server hands hosts an axum Router, so core and the hosts that serve
+# it must agree on the axum version.
+axum = "0.8"
 im = { version = "15.1.0", features = ["serde"] }
 log = "0.4"
 parking_lot = "0.12"

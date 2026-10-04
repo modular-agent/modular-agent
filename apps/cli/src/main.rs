@@ -3,8 +3,10 @@
 #![recursion_limit = "256"]
 
 use clap::Parser;
-use modular_agent_core::mcp_server::{McpServerConfig, start_mcp_server};
-use modular_agent_core::{Error, ModularAgent, ModularAgentEvent, Result, Value};
+use modular_agent_core::mcp_server::{McpServerConfig, mcp_router};
+use modular_agent_core::{
+    CancellationToken, Error, ModularAgent, ModularAgentEvent, Result, Value,
+};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 use tokio::io::{AsyncBufReadExt, BufReader};
@@ -91,15 +93,25 @@ async fn main() -> Result<()> {
                 _ => PathBuf::from("."),
             };
             let config = McpServerConfig {
-                port,
                 patches_dir: Some(patches_dir),
                 token: args.mcp_token.clone(),
+                ..Default::default()
             };
-            let handle = start_mcp_server(ma.clone(), config).await?;
+            let addr = (std::net::Ipv4Addr::LOCALHOST, port);
+            let listener = tokio::net::TcpListener::bind(addr).await.map_err(|e| {
+                Error::IoError(format!("Failed to bind MCP server to port {port}: {e}"))
+            })?;
+            let (router, handle) = mcp_router(ma.clone(), config);
+            let shutdown = CancellationToken::new();
+            let server = tokio::spawn(
+                axum::serve(listener, router)
+                    .with_graceful_shutdown(shutdown.clone().cancelled_owned())
+                    .into_future(),
+            );
             if args.verbose {
                 eprintln!("MCP server listening on http://127.0.0.1:{}/mcp", port);
             }
-            Some(handle)
+            Some((handle, shutdown, server))
         }
         None => None,
     };
@@ -151,8 +163,12 @@ async fn main() -> Result<()> {
 
     // Graceful shutdown: stop the MCP server first so no external edits
     // arrive while the patch is being torn down.
-    if let Some(server) = mcp_server {
-        server.stop().await;
+    if let Some((handle, shutdown, server)) = mcp_server {
+        handle.stop().await;
+        shutdown.cancel();
+        if let Ok(Err(e)) = server.await {
+            log::error!("MCP server error: {}", e);
+        }
     }
     // Stops the patch, waits for module loops, and reaps MCP child processes.
     if let Err(e) = ma.shutdown(Duration::from_secs(5)).await {

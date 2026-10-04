@@ -252,29 +252,38 @@ echo "Hello" | ma ./patch.json
 
 ## 外部エージェントによる編集（MCP サーバー）
 
-`mcp-server` feature を有効にすると、ホストアプリケーションは実行中の `ModularAgent` を localhost の MCP エンドポイントとして公開でき、Claude Code などの外部 AI エージェントが自然言語からモジュール定義の参照、パッチの構築・編集、実行中フローの動作確認を行えるようになります。
+`mcp-server` feature を有効にすると、ホストアプリケーションは実行中の `ModularAgent` を MCP エンドポイントとして公開でき、Claude Code などの外部 AI エージェントが自然言語からモジュール定義の参照、パッチの構築・編集、実行中フローの動作確認を行えるようになります。
 
 ```toml
 modular-agent-core = { version = "0.32", features = ["mcp-server"] }
 ```
 
 ```rust
-use modular_agent_core::mcp_server::{McpServerConfig, start_mcp_server};
+use modular_agent_core::mcp_server::{McpServerConfig, mcp_router};
 
-// http://127.0.0.1:8765/mcp で streamable HTTP を提供（localhost のみ）。
-let handle = start_mcp_server(
+// /mcp で streamable HTTP を提供する Router。listener はホストが持つ。
+let (router, handle) = mcp_router(
     ma.clone(),
     McpServerConfig {
-        port: 8765,
         // save_patch ツールの保存先ルート。None なら保存不可。
         patches_dir: Some("/path/to/patches".into()),
         // 必須の Bearer トークン。None なら認証なし。
         token: Some("secret".into()),
+        // loopback 以外で待ち受けるときに受け付ける Host ヘッダ。
+        allowed_hosts: vec![],
     },
-)
-.await?;
-// ...
+);
+let listener = tokio::net::TcpListener::bind("127.0.0.1:8765").await?;
+let shutdown = CancellationToken::new();
+let server = tokio::spawn(
+    axum::serve(listener, router)
+        .with_graceful_shutdown(shutdown.clone().cancelled_owned())
+        .into_future(),
+);
+// ... MCP のセッションを先に止めてから HTTP サーバを止める:
 handle.stop().await;
+shutdown.cancel();
+server.await??;
 ```
 
 Claude Code からの接続:

@@ -10,7 +10,7 @@ repository.workspace = true
 [dependencies]
 async-trait = { workspace = true }
 # mcp-server only: serves the rmcp streamable-http tower service.
-axum = { version = "0.8", optional = true }
+axum = { workspace = true, optional = true }
 # image only: fallible base64 decoding for image strings (photon's own
 # base64 entry points panic on malformed input).
 base64 = { version = "0.23", optional = true }

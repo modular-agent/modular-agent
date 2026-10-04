@@ -21,6 +21,7 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 anyhow = "1"
+axum = { workspace = true }
 ctrlc = "3.4.5"
 dirs = "7.0"
 log = { workspace = true }

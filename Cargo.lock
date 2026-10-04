@@ -3443,6 +3443,7 @@ dependencies = [
 name = "modular-agent-cli"
 version = "0.32.0"
 dependencies = [
+ "axum",
  "clap",
  "env_logger",
  "log",
@@ -3492,6 +3493,7 @@ name = "modular-agent-desktop"
 version = "0.32.0"
 dependencies = [
  "anyhow",
+ "axum",
  "ctrlc",
  "dirs 7.0.0",
  "log",

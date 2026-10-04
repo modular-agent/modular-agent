@@ -252,29 +252,38 @@ echo "Hello" | ma ./patch.json
 
 ## External Agent Editing (MCP Server)
 
-With the `mcp-server` feature, a host application can expose its running `ModularAgent` over a localhost MCP endpoint, so external AI agents such as Claude Code can inspect module definitions, build and edit patches, and verify running flows through natural language.
+With the `mcp-server` feature, a host application can expose its running `ModularAgent` over an MCP endpoint, so external AI agents such as Claude Code can inspect module definitions, build and edit patches, and verify running flows through natural language.
 
 ```toml
 modular-agent-core = { version = "0.32", features = ["mcp-server"] }
 ```
 
 ```rust
-use modular_agent_core::mcp_server::{McpServerConfig, start_mcp_server};
+use modular_agent_core::mcp_server::{McpServerConfig, mcp_router};
 
-// Serves streamable HTTP at http://127.0.0.1:8765/mcp (localhost only).
-let handle = start_mcp_server(
+// A Router serving streamable HTTP at /mcp; the host owns the listener.
+let (router, handle) = mcp_router(
     ma.clone(),
     McpServerConfig {
-        port: 8765,
         // Root directory for the save_patch tool; None disables saving.
         patches_dir: Some("/path/to/patches".into()),
         // Required Bearer token; None disables authentication.
         token: Some("secret".into()),
+        // Host headers accepted besides loopback, when listening beyond it.
+        allowed_hosts: vec![],
     },
-)
-.await?;
-// ...
+);
+let listener = tokio::net::TcpListener::bind("127.0.0.1:8765").await?;
+let shutdown = CancellationToken::new();
+let server = tokio::spawn(
+    axum::serve(listener, router)
+        .with_graceful_shutdown(shutdown.clone().cancelled_owned())
+        .into_future(),
+);
+// ... stop the MCP sessions first, then the HTTP server:
 handle.stop().await;
+shutdown.cancel();
+server.await??;
 ```
 
 Connect from Claude Code:

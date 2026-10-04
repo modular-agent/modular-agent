@@ -1,11 +1,11 @@
 use anyhow::{Context as _, Result};
-use modular_agent_core::mcp_server::{McpServerConfig, McpServerHandle, start_mcp_server};
-use modular_agent_core::{ModuleConfigs, Value};
+use modular_agent_core::mcp_server::{McpServerConfig, McpServerHandle, mcp_router};
+use modular_agent_core::{CancellationToken, ModuleConfigs, Value};
 use parking_lot::Mutex;
 use rand::RngExt as _;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
-use std::{collections::HashMap, ops::Not, sync::LazyLock};
+use std::{collections::HashMap, net::Ipv4Addr, ops::Not, sync::LazyLock};
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_modular_agent::ModularAgentExt;
 use tauri_plugin_store::StoreExt;
@@ -168,12 +168,31 @@ pub fn load_module_global_configs(app: &AppHandle) -> Result<()> {
 
 // MCP Server
 
-/// Handle of the running built-in MCP server, if any. The async Mutex is held
-/// across the whole stop/start sequence so concurrent settings changes cannot
-/// interleave and orphan a running server (McpServerHandle does not stop on
-/// drop).
+/// The running built-in MCP server, if any. The async Mutex is held across the
+/// whole stop/start sequence so concurrent settings changes cannot interleave
+/// and orphan a running server (neither part stops on drop).
 #[derive(Default)]
-pub struct McpServerState(tokio::sync::Mutex<Option<McpServerHandle>>);
+pub struct McpServerState(tokio::sync::Mutex<Option<RunningMcpServer>>);
+
+struct RunningMcpServer {
+    handle: McpServerHandle,
+    shutdown: CancellationToken,
+    server: tokio::task::JoinHandle<std::io::Result<()>>,
+}
+
+impl RunningMcpServer {
+    async fn stop(self) {
+        // End the MCP sessions first: an open SSE stream would otherwise keep
+        // the graceful shutdown waiting.
+        self.handle.stop().await;
+        self.shutdown.cancel();
+        match self.server.await {
+            Ok(Err(e)) => log::error!("MCP server error: {}", e),
+            Err(e) => log::warn!("MCP server task join error: {}", e),
+            Ok(Ok(())) => {}
+        }
+    }
+}
 
 fn generate_token() -> String {
     let bytes: [u8; 32] = rand::rng().random();
@@ -196,8 +215,8 @@ pub async fn apply_mcp_server(app: &AppHandle) -> Result<()> {
     let state = app.state::<McpServerState>();
     let mut guard = state.0.lock().await;
 
-    if let Some(handle) = guard.take() {
-        handle.stop().await;
+    if let Some(server) = guard.take() {
+        server.stop().await;
         log::info!("MCP server stopped");
     }
 
@@ -225,12 +244,25 @@ pub async fn apply_mcp_server(app: &AppHandle) -> Result<()> {
     if enabled {
         let patches_dir = crate::modular_agent_desktop::app::patches_dir().ok();
         let config = McpServerConfig {
-            port,
             patches_dir,
             token,
+            ..Default::default()
         };
-        let handle = start_mcp_server(app.ma().clone(), config).await?;
-        *guard = Some(handle);
+        let listener = tokio::net::TcpListener::bind((Ipv4Addr::LOCALHOST, port))
+            .await
+            .with_context(|| format!("Failed to bind MCP server to port {port}"))?;
+        let (router, handle) = mcp_router(app.ma().clone(), config);
+        let shutdown = CancellationToken::new();
+        let server = tokio::spawn(
+            axum::serve(listener, router)
+                .with_graceful_shutdown(shutdown.clone().cancelled_owned())
+                .into_future(),
+        );
+        *guard = Some(RunningMcpServer {
+            handle,
+            shutdown,
+            server,
+        });
         log::info!("MCP server started on http://127.0.0.1:{}/mcp", port);
     }
 

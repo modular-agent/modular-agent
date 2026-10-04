@@ -1,42 +1,54 @@
 //! Built-in MCP server exposing flow-editing tools over streamable HTTP.
 //!
-//! External agents (e.g. Claude Code) connect to `http://127.0.0.1:<port>/mcp`
-//! and use fine-grained tools (`add_module`, `add_connection`, `start_patch`,
-//! ...) to build and run workflows. All tools are thin wrappers over
-//! [`ModularAgent`] methods plus pre-validation that turns mistakes (wrong
-//! definition names, wrong port names) into self-correctable error messages.
+//! External agents (e.g. Claude Code) connect to `<host>/mcp` and use
+//! fine-grained tools (`add_module`, `add_connection`, `start_patch`, ...) to
+//! build and run workflows. All tools are thin wrappers over [`ModularAgent`]
+//! methods plus pre-validation that turns mistakes (wrong definition names,
+//! wrong port names) into self-correctable error messages.
 //!
-//! The server binds to 127.0.0.1 only. When [`McpServerConfig::token`] is
-//! set, every request must carry an `Authorization: Bearer <token>` header;
-//! without a token the server is unauthenticated and should stay opt-in on
-//! the host side.
+//! [`mcp_router`] returns an axum Router serving `/mcp`; the host owns the
+//! listener, so it can serve other routes (e.g. a health check) on the same
+//! port. When [`McpServerConfig::token`] is set, every request must carry an
+//! `Authorization: Bearer <token>` header; without a token the server is
+//! unauthenticated, so a host should bind it to loopback only. Requests whose
+//! `Host` is not loopback or listed in [`McpServerConfig::allowed_hosts`] are
+//! rejected (DNS rebinding protection).
 //!
 //! # Example
 //!
 //! ```rust,no_run
 //! use modular_agent_core::ModularAgent;
-//! use modular_agent_core::mcp_server::{McpServerConfig, start_mcp_server};
+//! use modular_agent_core::mcp_server::{McpServerConfig, mcp_router};
+//! use tokio_util::sync::CancellationToken;
 //!
 //! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 //! let ma = ModularAgent::init()?;
 //! ma.ready().await?;
-//! let handle = start_mcp_server(
+//! let (router, handle) = mcp_router(
 //!     ma,
 //!     McpServerConfig {
-//!         port: 8765,
 //!         patches_dir: Some("/path/to/patches".into()),
 //!         token: Some("secret".into()),
+//!         ..Default::default()
 //!     },
-//! )
-//! .await?;
-//! // ... later ...
+//! );
+//! let listener = tokio::net::TcpListener::bind("127.0.0.1:8765").await?;
+//! let shutdown = CancellationToken::new();
+//! let server = tokio::spawn(
+//!     axum::serve(listener, router)
+//!         .with_graceful_shutdown(shutdown.clone().cancelled_owned())
+//!         .into_future(),
+//! );
+//! // ... later: end the MCP sessions first, or open SSE streams keep the
+//! // graceful shutdown waiting.
 //! handle.stop().await;
+//! shutdown.cancel();
+//! server.await??;
 //! # Ok(())
 //! # }
 //! ```
 
 use std::collections::VecDeque;
-use std::net::{Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -140,53 +152,50 @@ Connections:
   C.message -> D.message
 Slack tokens and the LLM API key are global configs set by the user."#;
 
-/// Configuration for [`start_mcp_server`].
-#[derive(Clone)]
+/// Configuration for [`mcp_router`].
+#[derive(Clone, Default)]
 pub struct McpServerConfig {
-    /// TCP port to bind on 127.0.0.1 (endpoint path is `/mcp`).
-    pub port: u16,
     /// Root directory where the `save_patch` tool writes patch JSON files
     /// (`<patches_dir>/<name>.json`). When `None`, saving is unavailable.
     pub patches_dir: Option<PathBuf>,
     /// Bearer token required on every request. `None` disables
     /// authentication.
     pub token: Option<String>,
+    /// Hosts accepted in the `Host` header on top of the loopback ones
+    /// (`localhost`, `127.0.0.1`, `::1`): the names clients use to reach a
+    /// server listening beyond loopback. Entries are `host` or `host:port`.
+    pub allowed_hosts: Vec<String>,
 }
 
-/// Handle to a running MCP server. Dropping it does NOT stop the server;
-/// call [`stop`](Self::stop).
+/// Handle to the MCP sessions and event collector behind a router returned
+/// by [`mcp_router`]. Dropping it does NOT stop them; call
+/// [`stop`](Self::stop).
 pub struct McpServerHandle {
     cancel: CancellationToken,
-    server: tokio::task::JoinHandle<()>,
     collector: tokio::task::JoinHandle<()>,
 }
 
 impl McpServerHandle {
-    /// Stop the server: terminates active sessions and waits for the
-    /// listener and event-collector tasks to finish.
+    /// Terminates active MCP sessions and waits for the event collector to
+    /// finish. Call this before shutting down the HTTP server: an open
+    /// session's SSE stream otherwise keeps a graceful shutdown waiting.
     pub async fn stop(self) {
         self.cancel.cancel();
-        for task in [self.server, self.collector] {
-            if let Err(e) = task.await {
-                log::warn!("MCP server task join error: {}", e);
-            }
+        if let Err(e) = self.collector.await {
+            log::warn!("MCP event collector join error: {}", e);
         }
     }
 }
 
-/// Start the built-in MCP server on `127.0.0.1:<port>` (endpoint `/mcp`).
-pub async fn start_mcp_server(
-    ma: ModularAgent,
-    config: McpServerConfig,
-) -> Result<McpServerHandle> {
+/// Build the built-in MCP server as an axum Router serving `/mcp`.
+///
+/// The host binds the listener and serves the router, alone or merged with
+/// its own routes. Must be called within a Tokio runtime: it spawns the task
+/// that collects runtime events for the polling tools.
+pub fn mcp_router(ma: ModularAgent, config: McpServerConfig) -> (axum::Router, McpServerHandle) {
     // Stamp here so every change made through MCP tools carries the "mcp"
     // origin even if the host passes a plain handle.
     let ma = ma.with_origin("mcp");
-
-    let addr = SocketAddr::from((Ipv4Addr::LOCALHOST, config.port));
-    let listener = tokio::net::TcpListener::bind(addr)
-        .await
-        .map_err(|e| Error::IoError(format!("Failed to bind MCP server to {addr}: {e}")))?;
 
     let cancel = CancellationToken::new();
 
@@ -199,6 +208,16 @@ pub async fn start_mcp_server(
         ring.clone(),
         cancel.child_token(),
     ));
+
+    let http_config =
+        StreamableHttpServerConfig::default().with_cancellation_token(cancel.child_token());
+    let allowed_hosts = http_config
+        .allowed_hosts
+        .iter()
+        .cloned()
+        .chain(config.allowed_hosts)
+        .collect::<Vec<_>>();
+    let http_config = http_config.with_allowed_hosts(allowed_hosts);
 
     let patches_dir = config.patches_dir;
     let service = StreamableHttpService::new(
@@ -214,7 +233,7 @@ pub async fn start_mcp_server(
             }
         },
         LocalSessionManager::default().into(),
-        StreamableHttpServerConfig::default().with_cancellation_token(cancel.child_token()),
+        http_config,
     );
     let mut router = axum::Router::new().nest_service("/mcp", service);
     if let Some(token) = config.token {
@@ -225,23 +244,7 @@ pub async fn start_mcp_server(
         }));
     }
 
-    let shutdown = cancel.clone();
-    let server = tokio::spawn(async move {
-        let result = axum::serve(listener, router)
-            .with_graceful_shutdown(async move { shutdown.cancelled().await })
-            .await;
-        if let Err(e) = result {
-            log::error!("MCP server error: {}", e);
-        }
-        log::info!("MCP server stopped");
-    });
-    log::info!("MCP server listening on http://{addr}/mcp");
-
-    Ok(McpServerHandle {
-        cancel,
-        server,
-        collector,
-    })
+    (router, McpServerHandle { cancel, collector })
 }
 
 // --- Bearer authentication ---
@@ -1523,10 +1526,10 @@ mod tests {
 
     /// Sends a raw HTTP/1.1 initialize POST to /mcp and returns the status
     /// line and headers. Raw TCP keeps the test free of HTTP client deps.
-    async fn initialize_request(port: u16, auth: Option<&str>) -> RawResponse {
+    async fn initialize_request(port: u16, host: &str, auth: Option<&str>) -> RawResponse {
         use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-        let mut stream = tokio::net::TcpStream::connect((Ipv4Addr::LOCALHOST, port))
+        let mut stream = tokio::net::TcpStream::connect((std::net::Ipv4Addr::LOCALHOST, port))
             .await
             .unwrap();
         let body = r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"test","version":"0.0.0"}}}"#;
@@ -1535,7 +1538,7 @@ mod tests {
             .unwrap_or_default();
         let request = format!(
             "POST /mcp HTTP/1.1\r\n\
-             Host: 127.0.0.1:{port}\r\n\
+             Host: {host}\r\n\
              Content-Type: application/json\r\n\
              Accept: application/json, text/event-stream\r\n\
              {auth_line}Content-Length: {}\r\n\
@@ -1568,32 +1571,41 @@ mod tests {
         RawResponse { status, head }
     }
 
+    /// Serves `router` on an ephemeral loopback port.
+    async fn serve(router: axum::Router) -> (u16, CancellationToken, tokio::task::JoinHandle<()>) {
+        let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
+            .await
+            .unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let shutdown = CancellationToken::new();
+        let server = tokio::spawn({
+            let shutdown = shutdown.clone();
+            async move {
+                axum::serve(listener, router)
+                    .with_graceful_shutdown(shutdown.cancelled_owned())
+                    .await
+                    .unwrap();
+            }
+        });
+        (port, shutdown, server)
+    }
+
     #[tokio::test]
     async fn bearer_middleware_guards_the_endpoint() {
         let ma = ModularAgent::init().unwrap();
         ma.ready().await.unwrap();
 
-        // Reserve a free port; the window between drop and rebind is
-        // acceptable for a test.
-        let port = {
-            let listener = tokio::net::TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
-                .await
-                .unwrap();
-            listener.local_addr().unwrap().port()
-        };
-
-        let handle = start_mcp_server(
+        let (router, handle) = mcp_router(
             ma.clone(),
             McpServerConfig {
-                port,
-                patches_dir: None,
                 token: Some("test-token".into()),
+                ..Default::default()
             },
-        )
-        .await
-        .unwrap();
+        );
+        let (port, shutdown, server) = serve(router).await;
+        let host = format!("127.0.0.1:{port}");
 
-        let response = initialize_request(port, None).await;
+        let response = initialize_request(port, &host, None).await;
         assert_eq!(response.status, 401, "missing token must be rejected");
         assert!(
             response.head.contains("www-authenticate: bearer"),
@@ -1601,10 +1613,10 @@ mod tests {
             response.head
         );
 
-        let response = initialize_request(port, Some("Bearer wrong-token")).await;
+        let response = initialize_request(port, &host, Some("Bearer wrong-token")).await;
         assert_eq!(response.status, 401, "wrong token must be rejected");
 
-        let response = initialize_request(port, Some("Bearer test-token")).await;
+        let response = initialize_request(port, &host, Some("Bearer test-token")).await;
         assert_eq!(
             response.status, 200,
             "correct token must pass: {}",
@@ -1612,6 +1624,39 @@ mod tests {
         );
 
         handle.stop().await;
+        shutdown.cancel();
+        server.await.unwrap();
+        ma.quit();
+    }
+
+    #[tokio::test]
+    async fn allowed_hosts_extend_the_loopback_defaults() {
+        let ma = ModularAgent::init().unwrap();
+        ma.ready().await.unwrap();
+
+        let (router, handle) = mcp_router(
+            ma.clone(),
+            McpServerConfig {
+                allowed_hosts: vec!["ma.example.com".into()],
+                ..Default::default()
+            },
+        );
+        let (port, shutdown, server) = serve(router).await;
+
+        for host in ["ma.example.com".to_string(), format!("localhost:{port}")] {
+            let response = initialize_request(port, &host, None).await;
+            assert_eq!(response.status, 200, "{host} must pass: {}", response.head);
+        }
+        let response = initialize_request(port, "other.example.com", None).await;
+        assert_ne!(
+            response.status, 200,
+            "unlisted host must be rejected: {}",
+            response.head
+        );
+
+        handle.stop().await;
+        shutdown.cancel();
+        server.await.unwrap();
         ma.quit();
     }
 
