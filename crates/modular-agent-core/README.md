@@ -235,7 +235,28 @@ cargo run --example cli -- examples/patches/echo.json -i input -o output
 For real use, the [`ma` CLI](https://github.com/modular-agent/modular-agent/tree/main/apps/cli) is a full patch runner built on this crate:
 
 ```bash
-echo "Hello" | ma ./patch.json
+echo "Hello" | ma run ./patch.json
+ma serve --workspace ./my-workspace --listen 127.0.0.1:8080
+```
+
+## Workspaces
+
+With the `workspace` feature, a host runs patches from a directory holding `settings.json` (global configs and the patches to start automatically) and `patches/`. The desktop app and `ma serve` both use it, so a workspace built in the editor runs unchanged as a server.
+
+```rust
+use modular_agent_core::workspace::Workspace;
+
+let ws = Workspace::open("./my-workspace")?;
+// `${VAR}` in global config values expands from the environment here; entries
+// that cannot be applied (unknown module or key, unset variable) come back as
+// warnings for the host to judge.
+for warning in ws.apply_global_configs(&ma) {
+    eprintln!("{warning}");
+}
+// Failures are returned per patch; the rest still start.
+for (name, err) in ws.auto_start(&ma).await {
+    eprintln!("{name}: {err}");
+}
 ```
 
 ## Feature Flags
@@ -248,6 +269,7 @@ echo "Hello" | ma ./patch.json
 | `mcp`             | Yes     | Model Context Protocol integration                       |
 | `mcp-http-client` | No      | Streamable HTTP client transport for remote MCP servers  |
 | `mcp-server`      | No      | Built-in MCP server (implies `file`)                     |
+| `workspace`       | No      | Workspace directory: settings.json and patches/ (implies `file`) |
 | `test-utils`      | No      | Testing utilities                                        |
 
 ## External Agent Editing (MCP Server)
@@ -306,7 +328,7 @@ The server exposes 17 tools:
 
 A typical session: `list_module_definitions` to discover the catalog, then `create_patch` → `add_module` ×4 (Slack Listener, Slack To Message, Chat, Slack Post) → `add_connection` ×3 → `save_patch`. The flow can then be verified end to end: `start_patch`, feed a test value with `write_external_input`, and poll `get_external_outputs` / `get_module_errors`. Both polling tools return `latest_seq` — the seq of the last record returned — which the client passes back as `since_seq` on the next call to receive only new records; `dropped > 0` means the event collector fell behind the broadcast stream and some events were never captured. Separately, the capture buffer keeps only the most recent 200 records per kind, so records not polled in time can age out without affecting `dropped`. Structure changes emit `ModularAgentEvent::PatchStructureChanged` so hosts (e.g. modular-agent-desktop) can refresh their UI live.
 
-The server binds `127.0.0.1` only. When `token` is set, every request must carry an `Authorization: Bearer <token>` header and is rejected with 401 otherwise; without a token the server is unauthenticated, so enable it deliberately. `modular-agent-desktop` exposes it via Settings → Core (with an auto-generated token); `modular-agent-cli` via the `--mcp-port <PORT>` and `--mcp-token <TOKEN>` flags.
+`mcp_router` only builds the router; the host owns the listener and decides where it binds. When `token` is set, every request must carry an `Authorization: Bearer <token>` header and is rejected with 401 otherwise; without a token the server is unauthenticated, so keep it on loopback. Requests whose `Host` is neither loopback nor in `allowed_hosts` are rejected (DNS rebinding protection). `modular-agent-desktop` serves it on `127.0.0.1` via Settings → Core (with an auto-generated token); `ma` via `--listen`, taking the token from `MA_TOKEN`, which it requires beyond loopback.
 
 ## Documentation
 

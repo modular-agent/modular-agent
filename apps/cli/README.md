@@ -1,6 +1,6 @@
 # modular-agent-cli
 
-CLI runner for [Modular Agent](https://github.com/modular-agent) patches. Loads a patch JSON file and provides stdin/stdout communication with the module network.
+CLI runner for [Modular Agent](https://github.com/modular-agent) patches. `ma serve` keeps a workspace's patches running as a server process (logs, health check, signals, MCP); `ma run` wires one patch to stdin/stdout.
 
 ## Build
 
@@ -22,42 +22,95 @@ cargo run --manifest-path tools/ma-config/Cargo.toml -- cli
 
 The wizard generates `apps/cli/Cargo.toml` dependencies and `apps/cli/src/modules.rs` based on your selections. Configuration is saved to `apps/cli/ma-config.toml` for subsequent runs.
 
+`--config <path>` applies a different selection file instead, such as the committed profile for the container image, and `--no-update` keeps `Cargo.lock` as it is apart from what the selection adds:
+
+```bash
+cargo run --manifest-path tools/ma-config/Cargo.toml -- cli --apply --no-update --config apps/cli/ma-config.cloud.toml
+```
+
+## Workspaces
+
+A workspace is a directory that `ma serve` runs from and the desktop app edits (`~/.modular_agent` there):
+
+```text
+settings.json   # global configs and the patches to start automatically
+patches/        # patch JSON files; a "/" in a patch name is a subfolder
+data/           # conventional place for files patches write
+```
+
+```json
+{
+  "modules": { "modular_agent_llm::chat::ChatModule": { "openai_api_key": "${OPENAI_API_KEY}" } },
+  "auto_start_patches": ["bugs/triage", "digest"]
+}
+```
+
+- `${VAR}` in a global config value is replaced from the environment, so secrets stay out of the file. An unset variable or an unknown key stops `ma` from starting. Settings for a module this build does not include (a desktop-only one, say) are skipped with a warning, since builds select different modules.
+- Relative paths in patches (for example `data/journal.jsonl`) resolve against the workspace.
+
+[examples/workspace](../../examples/workspace) is a small workspace to try both commands with.
+
 ## Usage
 
 ```bash
-ma <patch> [-i <input>] [-o <output>] [-v]
+ma [--log-format text|json] serve --workspace <dir> [server options]
+ma [--log-format text|json] run <patch> [--workspace <dir>] [-i <input>] [-o <output>] [--json] [--drain <duration>] [server options]
 ```
+
+### ma serve
+
+Applies the workspace's global configs, starts its `auto_start_patches`, and runs until SIGTERM or SIGINT, then stops the patches gracefully. It exits with an error if a setting cannot be applied or a patch fails to start, leaving restarts to the orchestrator.
+
+### ma run
+
+Runs one patch with stdin/stdout wired to its external channels, until stdin ends.
 
 | Argument | Default | Description |
 | --- | --- | --- |
-| `patch` | (required) | Path to patch JSON file |
-| `-i, --input` | `input` | External input channel name |
-| `-o, --output` | `output` | External output channel name |
-| `-v, --verbose` | off | Enable logging |
-
-## Examples
+| `patch` | (required) | Patch name in the workspace with `--workspace`, otherwise a patch file path |
+| `--workspace` | none | Apply this workspace's global configs and resolve relative paths against it (its auto-start list is not used) |
+| `-i, --input` | `input` | External input channel fed one value per stdin line |
+| `-o, --output` | `output` | External output channel written to stdout |
+| `--json` | off | Read and write one JSON value per line, so values keep their types; otherwise lines are strings and non-string outputs print as JSON |
+| `--drain` | none | Keep writing outputs this long after stdin ends (e.g. `2s`), for patches that answer asynchronously |
 
 ```bash
-# Interactive mode
-ma ./patch.json
-
-# Single input via pipe
-echo "Hello" | ma ./patch.json
-
-# Input from file
-ma ./patch.json < input.txt
-
-# Output to file
-echo "Hello" | ma ./patch.json > output.txt
-
-# Custom input/output channels
-echo "Hello" | ma ./patch.json -i "query" -o "result"
-
-# Chain with other tools
-cat data.txt | ma ./patch.json | jq '.result'
+echo "Hello" | ma run ./patch.json
+cat data.txt | ma run ./patch.json -i query -o result --drain 2s > out.txt
+echo '"{\"a\": 1}"' | ma run --workspace examples/workspace --json --drain 1s -i parse -o parsed parse | jq .a
 ```
 
-Input is read line-by-line from stdin. String output is printed as-is; other types are printed as JSON.
+### Server options
+
+| Option | Default | Description |
+| --- | --- | --- |
+| `--listen` | off | Serve `/healthz` and `/mcp` on this address (e.g. `127.0.0.1:8080`) |
+| `--allowed-host` | none | Extra `Host` header accepted by `/mcp` when clients reach it by a name other than loopback (repeatable) |
+| `--shutdown-timeout` | `5s` | Time allowed for patches to stop on shutdown |
+
+- `/healthz` answers 200 once the patches are running and 503 before that.
+- `/mcp` is the built-in MCP server, for agents such as Claude Code. Listening beyond loopback requires the `MA_TOKEN` environment variable, and `/mcp` then requires `Authorization: Bearer <MA_TOKEN>`. The token is read from the environment so it never appears in a process listing.
+
+### Logs
+
+Logs go to stderr; stdout carries only `ma run`'s output. `--log-format json` writes one object per line in a shape cloud log pipelines read without configuration:
+
+```json
+{"timestamp":"2026-10-04T03:52:57.365Z","severity":"INFO","message":"heartbeat 1","target":"modular_agent::patch","patch":"heartbeat","module":"3"}
+```
+
+`RUST_LOG` sets the filter; the default is `warn,modular_agent::=info`. Patch and module lifecycle, errors and outputs are logged under `modular_agent::events` (outputs at debug level), and the records of Log nodes placed in a patch under `modular_agent::patch`.
+
+## Container
+
+[Dockerfile](Dockerfile) builds an image running `ma serve` on `/workspace` (a volume) and `0.0.0.0:8080`, with JSON logs. Build it from the repository root; it clones the out-of-tree module crates selected by `ma-config.cloud.toml`:
+
+```bash
+docker build -f apps/cli/Dockerfile -t modular-agent .
+docker run -e MA_TOKEN=... -e OPENAI_API_KEY=... -p 8080:8080 -v ./my-workspace:/workspace modular-agent
+```
+
+`docker stop` sends SIGTERM, which stops the patches gracefully.
 
 ## Module Plugins
 

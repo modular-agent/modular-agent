@@ -235,7 +235,27 @@ cargo run --example cli -- examples/patches/echo.json -i input -o output
 実用には、このクレートの上に構築されたパッチランナー [`ma` CLI](https://github.com/modular-agent/modular-agent/tree/main/apps/cli) があります:
 
 ```bash
-echo "Hello" | ma ./patch.json
+echo "Hello" | ma run ./patch.json
+ma serve --workspace ./my-workspace --listen 127.0.0.1:8080
+```
+
+## ワークスペース
+
+`workspace` feature を有効にすると、ホストは `settings.json`（グローバル config と自動起動するパッチ）と `patches/` を持つディレクトリからパッチを動かせます。デスクトップアプリと `ma serve` の両方がこれを使うので、エディタで組んだワークスペースをそのままサーバーとして動かせます。
+
+```rust
+use modular_agent_core::workspace::Workspace;
+
+let ws = Workspace::open("./my-workspace")?;
+// グローバル config の値の `${VAR}` はここで環境変数から展開される。適用できない
+// 項目（未知のモジュールやキー、未定義の変数）は警告として返り、扱いはホストが決める。
+for warning in ws.apply_global_configs(&ma) {
+    eprintln!("{warning}");
+}
+// 失敗はパッチごとに返り、残りのパッチは起動を続ける。
+for (name, err) in ws.auto_start(&ma).await {
+    eprintln!("{name}: {err}");
+}
 ```
 
 ## Feature Flags
@@ -248,6 +268,7 @@ echo "Hello" | ma ./patch.json
 | `mcp`             | 有効       | Model Context Protocol 連携                           |
 | `mcp-http-client` | 無効       | リモート MCP サーバー用 streamable HTTP クライアント  |
 | `mcp-server`      | 無効       | 内蔵 MCP サーバー（`file` を含む）                    |
+| `workspace`       | 無効       | ワークスペースのディレクトリ: settings.json と patches/（`file` を含む） |
 | `test-utils`      | 無効       | テストユーティリティ                                  |
 
 ## 外部エージェントによる編集（MCP サーバー）
@@ -306,7 +327,7 @@ claude mcp add --transport http modular-agent http://127.0.0.1:8765/mcp \
 
 典型的なセッション: `list_module_definitions` でカタログを取得し、`create_patch` → `add_module` ×4（Slack Listener / Slack To Message / Chat / Slack Post）→ `add_connection` ×3 → `save_patch`。さらに `start_patch` で実行し、`write_external_input` でテスト値を投入して `get_external_outputs` / `get_module_errors` をポーリングすれば、フローをエンドツーエンドで動作確認できます。両ポーリングツールは `latest_seq`（そのレスポンスで返した最後のレコードの seq）を返し、次の呼び出しで `since_seq` として渡すと新しいレコードだけを受け取れます。`dropped > 0` はイベントコレクタが broadcast ストリームに追いつけず、一部のイベントをキャプチャできなかったことを示します。なお、キャプチャバッファ自体は種別ごとに最新 200 レコードのみ保持するため、ポーリングが間に合わなかったレコードは `dropped` に反映されずに押し出されることがあります。構造変更は `ModularAgentEvent::PatchStructureChanged` を emit するため、ホスト（modular-agent-desktop など）は UI をライブ更新できます。
 
-サーバーは `127.0.0.1` のみにバインドします。`token` を設定した場合、すべてのリクエストに `Authorization: Bearer <token>` ヘッダーが必須で、ない場合は 401 で拒否されます。トークンなしでは認証がないため、有効化は明示的に行ってください。`modular-agent-desktop` では Settings → Core から（トークンは自動生成）、`modular-agent-cli` では `--mcp-port <PORT>` と `--mcp-token <TOKEN>` フラグで有効化します。
+`mcp_router` は Router を作るだけで、listener はホストが持ち、どこで待ち受けるかもホストが決めます。`token` を設定した場合、すべてのリクエストに `Authorization: Bearer <token>` ヘッダーが必須で、ない場合は 401 で拒否されます。トークンなしでは認証がないため、loopback での待ち受けに留めてください。`Host` が loopback でも `allowed_hosts` にも無いリクエストは拒否されます（DNS rebinding 対策）。`modular-agent-desktop` では Settings → Core から `127.0.0.1` で公開し（トークンは自動生成）、`ma` では `--listen` で公開します。`ma` はトークンを `MA_TOKEN` から読み、loopback 以外での待ち受けにはこれを必須とします。
 
 ## ドキュメント
 

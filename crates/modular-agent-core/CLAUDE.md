@@ -35,7 +35,11 @@ cargo run --example cli -- <patch.json> [-i input] [-o output] # Run CLI example
    - `ModuleData::new()` auto-strips `_`-prefixed keys after `AsModule::new()` has had a chance to read them.
    - `///` doc comments on the struct are extracted as `ModuleDefinition::description` (explicit `description = "..."` takes priority).
 
-6. **Patches** (`patch.rs`, `spec.rs`): Collections of modules and their connections defined in JSON format.
+6. **Patches** (`patch.rs`, `spec.rs`): Collections of modules and their connections defined in JSON format. `validate_patch_name` (`patch.rs`) is the one rule for patch names used as paths; the MCP server, the workspace and the desktop app all call it.
+
+7. **Workspace** (`workspace.rs`, feature `workspace`): the directory a host runs patches from — `settings.json` (`modules` global configs, `auto_start_patches`; unknown top-level keys are an error) and `patches/`. `patch_file` maps a name to `patches/<a>/<b>.json` (`.json` appended, never substituted). `${VAR}` is expanded only in `apply_global_configs`, never on `save`, so secrets are not written back; anything that cannot be applied comes back as a `WorkspaceWarning` and the host decides (`ma` refuses to start except on `UnknownModule`, which it only logs; the desktop logs and continues). Hosts make the workspace their working directory, so relative paths in patches resolve against it.
+
+8. **Log records** (`ModularAgentEvent::ModuleLog`): modules emit them with `ModuleOutput::emit_log(ModuleLogLevel, message)` (the std Log node does); each host writes them to its own logger under the `modular_agent::patch` target. `ModuleLogLevel` is core's own type so core stays independent of `log` / `tracing`.
 
 ## Message Flow
 
@@ -108,6 +112,8 @@ Default features: `["file", "image", "llm", "mcp"]`
 | `definition.rs` | Module metadata and configuration specs |
 | `tool.rs` | Tool trait and registry for LLM tool calling |
 | `mcp.rs` | MCP server connections with pooling |
+| `mcp_server.rs` | Built-in MCP server: `mcp_router` returns an axum Router for `/mcp`; the host binds and serves it, and must call `McpServerHandle::stop` before its graceful shutdown (open SSE streams otherwise keep it waiting) |
+| `workspace.rs` | `Workspace`: settings.json, patch paths, global configs, auto-start |
 | `modular-agent-macros/src/lib.rs` | `#[modular_agent]` procedural macro |
 | `examples/cli.rs` | CLI example for running patches with stdin/stdout |
 

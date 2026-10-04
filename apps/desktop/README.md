@@ -156,6 +156,7 @@ Patches are JSON files under `~/.modular_agent/patches/`. The folder hierarchy b
 - **Core settings auto-save** on change. The one exception is the global "Show App Window" shortcut, which has a manual Save button because it only takes effect on app restart.
 - **Keyboard shortcuts** — every editor hotkey is rebindable; Quick Add slots (`mod+1`–`mod+5`) bind both a key and a module type.
 - **Auto-start** — mark patches to run on app launch.
+- **Workspace settings** — the auto-start list and module settings (API keys, server URLs) are saved in `~/.modular_agent/settings.json`, next to `patches/`, so the same directory runs unchanged under `ma serve --workspace ~/.modular_agent`. A module setting can reference an environment variable as `${VAR}`; it is stored as written and replaced with the variable's value when applied. Relative file paths in patches resolve against `~/.modular_agent`.
 - **System tray** — closing the window keeps the app and running patches alive in the tray.
 
 ## MCP Server
