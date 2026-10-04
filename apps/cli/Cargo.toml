@@ -12,12 +12,18 @@ name = "ma"
 path = "src/main.rs"
 
 [dependencies]
+anyhow = "1"
 axum = { workspace = true }
 clap = { version = "4", features = ["derive"] }
-env_logger = "0.11"
-log = { workspace = true }
+# kv: structured fields (patch, module, ...) on log records, printed by the
+# text format and flattened into the JSON format.
+env_logger = { version = "0.11", features = ["kv"] }
+# Duration arguments (--drain 2s, --shutdown-timeout 5s); already in the graph
+# through env_logger.
+jiff = "0.2"
+log = { workspace = true, features = ["kv"] }
 serde_json = { workspace = true }
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros", "io-util", "io-std", "net", "signal", "sync"] }
-modular-agent-core = { workspace = true, features = ["mcp-server", "mcp-http-client"] }
+modular-agent-core = { workspace = true, features = ["mcp-server", "mcp-http-client", "workspace"] }
 modular-agent-llm = { workspace = true }
 modular-agent-std = { workspace = true }

@@ -3443,9 +3443,11 @@ dependencies = [
 name = "modular-agent-cli"
 version = "0.32.0"
 dependencies = [
+ "anyhow",
  "axum",
  "clap",
  "env_logger",
+ "jiff",
  "log",
  "modular-agent-core",
  "modular-agent-llm",
