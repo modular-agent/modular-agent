@@ -23,6 +23,37 @@ pub enum ModuleStatus {
     Stop,
 }
 
+/// The severity of a record a module emits as [`ModularAgentEvent::ModuleLog`].
+///
+/// Kept independent of any logging crate so each host maps it onto its own
+/// logger.
+///
+/// [`ModularAgentEvent::ModuleLog`]: crate::ModularAgentEvent::ModuleLog
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ModuleLogLevel {
+    Error,
+    Warn,
+    Info,
+    Debug,
+}
+
+impl std::str::FromStr for ModuleLogLevel {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self> {
+        match s {
+            "error" => Ok(Self::Error),
+            "warn" => Ok(Self::Warn),
+            "info" => Ok(Self::Info),
+            "debug" => Ok(Self::Debug),
+            _ => Err(Error::InvalidConfig(format!(
+                "log level must be one of error, warn, info, debug: {s}"
+            ))),
+        }
+    }
+}
+
 /// Internal messages sent to modules.
 pub(crate) enum ModuleMessage {
     /// Input value received on a port.

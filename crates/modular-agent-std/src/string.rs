@@ -704,7 +704,7 @@ fn load_regex_config(spec: &ModuleSpec) -> Result<Option<Regex>> {
 /// Build the template root: an object's entries are exposed at the top level so
 /// `{{color}}` works, and `value` always holds the whole input (winning on collision)
 /// so `{{value}}` / `{{value.color}}` keep their meaning.
-fn template_data(value: &Value) -> serde_json::Value {
+pub(crate) fn template_data(value: &Value) -> serde_json::Value {
     let v = serde_json::to_value(value).unwrap_or(serde_json::Value::Null);
     let mut map = match &v {
         serde_json::Value::Object(obj) => obj.clone(),
@@ -714,7 +714,7 @@ fn template_data(value: &Value) -> serde_json::Value {
     serde_json::Value::Object(map)
 }
 
-fn handlebars_new<'a>() -> Handlebars<'a> {
+pub(crate) fn handlebars_new<'a>() -> Handlebars<'a> {
     let mut reg = Handlebars::new();
     reg.register_escape_fn(handlebars::no_escape);
     reg.register_helper("to_json", Box::new(to_json_helper));

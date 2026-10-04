@@ -16,7 +16,7 @@ use crate::definition::{ModuleConfigSpecs, ModuleDefinition, ModuleDefinitions};
 use crate::error::{Error, Result};
 use crate::id::{new_id, update_ids};
 use crate::message::{self, ModuleEventMessage};
-use crate::module::{Module, ModuleMessage, ModuleStatus, module_new};
+use crate::module::{Module, ModuleLogLevel, ModuleMessage, ModuleStatus, module_new};
 use crate::patch::{Patch, PatchInfo};
 use crate::registry;
 use crate::spec::{ConnectionSpec, ModuleSpec, PatchSpec};
@@ -1974,6 +1974,19 @@ impl ModularAgent {
         self.notify_observers(ModularAgentEvent::ModuleError(module_id, message));
     }
 
+    pub(crate) fn emit_module_log(
+        &self,
+        module_id: String,
+        level: ModuleLogLevel,
+        message: String,
+    ) {
+        self.notify_observers(ModularAgentEvent::ModuleLog {
+            module_id,
+            level,
+            message,
+        });
+    }
+
     pub(crate) fn emit_module_status_changed(&self, module_id: String, status: ModuleStatus) {
         self.module_statuses
             .lock()
@@ -2100,6 +2113,16 @@ pub enum ModularAgentEvent {
     ///
     /// Fields: `(module_id, error_message)`
     ModuleError(String, String),
+
+    /// A module emitted a record meant for the host's log.
+    ///
+    /// The only way a patch's values reach the log: a module (the std Log
+    /// node) emits it explicitly, and each host writes it with its own logger.
+    ModuleLog {
+        module_id: String,
+        level: ModuleLogLevel,
+        message: String,
+    },
 
     /// A module's lifecycle status changed.
     ///

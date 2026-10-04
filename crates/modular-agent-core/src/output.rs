@@ -1,6 +1,6 @@
 use crate::context::ModuleContext;
 use crate::error::Result;
-use crate::module::Module;
+use crate::module::{Module, ModuleLogLevel};
 use crate::value::Value;
 use std::future::Future;
 use std::pin::Pin;
@@ -76,6 +76,16 @@ pub trait ModuleOutput {
     fn emit_error<S: Into<String>>(&self, message: S) {
         self.emit_error_raw(message.into());
     }
+
+    /// Emits a log record event (raw version with String message).
+    fn emit_log_raw(&self, level: ModuleLogLevel, message: String);
+
+    /// Emits a log record event.
+    ///
+    /// Hosts write the record to their log, tagged with this module.
+    fn emit_log<S: Into<String>>(&self, level: ModuleLogLevel, message: S) {
+        self.emit_log_raw(level, message.into());
+    }
 }
 
 impl<T: Module> ModuleOutput for T {
@@ -108,5 +118,10 @@ impl<T: Module> ModuleOutput for T {
 
     fn emit_error_raw(&self, message: String) {
         self.ma().emit_module_error(self.id().to_string(), message);
+    }
+
+    fn emit_log_raw(&self, level: ModuleLogLevel, message: String) {
+        self.ma()
+            .emit_module_log(self.id().to_string(), level, message);
     }
 }

@@ -8,6 +8,7 @@ pub mod example;
 pub mod file;
 pub mod filter;
 pub mod input;
+pub mod log;
 pub mod sequence;
 pub mod string;
 pub mod time;

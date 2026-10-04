@@ -108,7 +108,9 @@ pub use llm::{
     estimate_context_tokens, estimate_message_tokens,
 };
 pub use modular_agent::{EventEnvelope, ModularAgent, ModularAgentEvent, SharedModule};
-pub use module::{AsModule, HasModuleData, Module, ModuleData, ModuleStatus, new_module_boxed};
+pub use module::{
+    AsModule, HasModuleData, Module, ModuleData, ModuleLogLevel, ModuleStatus, new_module_boxed,
+};
 pub use output::ModuleOutput;
 pub use patch::{Patch, PatchInfo};
 pub use registry::ModuleRegistration;

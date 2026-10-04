@@ -1,0 +1,45 @@
+{
+  "modules": [
+    {
+      "id": "1",
+      "def_name": "modular_agent_core::external_module::LocalInputModule",
+      "outputs": ["value"],
+      "configs": { "name": "log_default_in" }
+    },
+    {
+      "id": "2",
+      "def_name": "modular_agent_std::log::LogModule",
+      "inputs": ["value"],
+      "configs": { "level": "info", "message": "{{value}}" }
+    },
+    {
+      "id": "3",
+      "def_name": "modular_agent_core::external_module::LocalInputModule",
+      "outputs": ["value"],
+      "configs": { "name": "log_warn_in" }
+    },
+    {
+      "id": "4",
+      "def_name": "modular_agent_std::log::LogModule",
+      "inputs": ["value"],
+      "configs": { "level": "warn", "message": "replied to {{value.thread_ts}}" }
+    },
+    {
+      "id": "5",
+      "def_name": "modular_agent_core::external_module::LocalInputModule",
+      "outputs": ["value"],
+      "configs": { "name": "log_bad_level_in" }
+    },
+    {
+      "id": "6",
+      "def_name": "modular_agent_std::log::LogModule",
+      "inputs": ["value"],
+      "configs": { "level": "trace", "message": "{{value}}" }
+    }
+  ],
+  "connections": [
+    { "source": "1", "source_handle": "value", "target": "2", "target_handle": "value" },
+    { "source": "3", "source_handle": "value", "target": "4", "target_handle": "value" },
+    { "source": "5", "source_handle": "value", "target": "6", "target_handle": "value" }
+  ]
+}

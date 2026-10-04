@@ -14,6 +14,7 @@ Standard utility modules library with 50+ modules for data manipulation, file I/
 | Std/Data | Object operations | Get Value, Set Value, To JSON, From JSON, ZipToObject |
 | Std/File | File I/O | Read/Write Text, JSON, JSONL, Glob, List Files, Watch Directory |
 | Std/Input | UI inputs | String/Integer/Boolean/Number/Text/Object Input |
+| Std/Log | Operational logging (`ModuleLog` event) | Log |
 | Std/String | Text operations | Template String, String Join, String Length Split |
 | Std/Time | Timing | Delay, Interval Timer, Schedule Timer, Throttle, On Start |
 | Std/Filter | Conditional routing | If, Switch, Match |

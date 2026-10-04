@@ -7,6 +7,7 @@ mod suites {
     mod data_test;
     mod filter_test;
     mod input_test;
+    mod log_test;
     mod sequence_test;
     mod string_test;
     mod time_test;
