@@ -29,7 +29,7 @@ indexmap = { version = "2", features = ["serde"] }
 inventory = "0.3"
 # default-features = false: default features pull schema-resolving backends
 # (file/http via reqwest) that are unneeded for validating local tool schemas.
-jsonschema = { version = "0.58.5", optional = true, default-features = false }
+jsonschema = { version = "0.61.2", optional = true, default-features = false }
 log = { workspace = true }
 parking_lot = { workspace = true }
 photon-rs = { version = "0.3.3", optional = true }
