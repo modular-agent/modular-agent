@@ -120,6 +120,9 @@ export class EditorState {
   running = $state(false);
   nodes = $state.raw<PatchNode[]>([]);
   edges = $state.raw<PatchEdge[]>([]);
+  errSources = $derived(
+    new Set(this.edges.filter((e) => e.sourceHandle === "err").map((e) => e.source)),
+  );
   openNodeContextMenu = $state(false);
   nodeContextMenuX = $state(0);
   nodeContextMenuY = $state(0);

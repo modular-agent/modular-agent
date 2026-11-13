@@ -49,6 +49,7 @@
   };
 
   let {
+    id,
     data,
     moduleDef,
     selected,
@@ -74,7 +75,9 @@
 
   const inputs = $derived(data.inputs ?? []);
   const outputs = $derived(data.outputs ?? []);
-  const showErr = $derived(data.show_err ?? false);
+  // show_err is not saved in the spec, so a loaded patch needs the handle shown
+  // wherever an err connection exists, or Svelte Flow drops that edge.
+  const showErr = $derived((data.show_err ?? false) || editor.errSources.has(id));
 
   let hideTitle = $derived(moduleDef?.hide_title ?? false);
   const freeSize = $derived(moduleDef?.hints?.free_size === true);
