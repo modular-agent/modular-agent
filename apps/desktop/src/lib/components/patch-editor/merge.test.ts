@@ -210,3 +210,24 @@ describe("reconcileFlow", () => {
     expect(result.nodes.map((n) => n.id)).toEqual(["a", "b", "x"]);
   });
 });
+
+describe("patchToFlow show_err", () => {
+  it("turns on show_err for the source of an err connection", () => {
+    const result = flow(
+      [module("a"), module("b"), module("c")],
+      [conn("a", "b", { source_handle: "err" }), conn("b", "c")],
+    );
+
+    const showErr = Object.fromEntries(result.nodes.map((n) => [n.id, n.data.show_err]));
+    expect(showErr).toEqual({ a: true, b: undefined, c: undefined });
+  });
+
+  it("lets a merge that adds an err connection show the source's handle", () => {
+    const cur = flow([module("a"), module("b")]);
+    const target = flow([module("a"), module("b")], [conn("a", "b", { source_handle: "err" })]);
+
+    const result = reconcileFlow(cur.nodes, cur.edges, target);
+
+    expect(result.nodes.find((n) => n.id === "a")?.data.show_err).toBe(true);
+  });
+});

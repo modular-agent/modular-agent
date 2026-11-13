@@ -78,6 +78,15 @@ export function patchToFlow(info: PatchInfo, spec: PatchSpec): PatchFlow {
     return isSourceValid && isTargetValid;
   });
 
+  // Patches saved before show_err was persisted lack it; without the handle,
+  // Svelte Flow drops the err edge.
+  const errSources = new Set(
+    validConnections.filter((c) => c.source_handle === "err").map((c) => c.source),
+  );
+  for (const node of nodes) {
+    if (errSources.has(node.id)) node.data.show_err = true;
+  }
+
   const nodeDataMap = new Map(nodes.map((n) => [n.id, n.data]));
 
   return {

@@ -120,9 +120,6 @@ export class EditorState {
   running = $state(false);
   nodes = $state.raw<PatchNode[]>([]);
   edges = $state.raw<PatchEdge[]>([]);
-  errSources = $derived(
-    new Set(this.edges.filter((e) => e.sourceHandle === "err").map((e) => e.source)),
-  );
   openNodeContextMenu = $state(false);
   nodeContextMenuX = $state(0);
   nodeContextMenuY = $state(0);
@@ -829,7 +826,7 @@ export class EditorState {
     );
   }
 
-  toggleErr() {
+  async toggleErr() {
     const [selectedNodes] = this.selectedNodesAndEdges();
     if (selectedNodes.length === 0) return;
 
@@ -838,9 +835,10 @@ export class EditorState {
       wasShowErr: n.data.show_err ?? false,
     }));
     const cmd = new ToggleShowErrCommand(deltas);
-    // ToggleShowErr is synchronous (no backend call), so execute directly
-    cmd.execute(this);
-    this.history.push(cmd);
+    await withErrorToast(
+      () => this.history.executeAndPush(this, cmd),
+      "Failed to toggle error display",
+    );
   }
 
   // --- Batch color operations (context menu) ---

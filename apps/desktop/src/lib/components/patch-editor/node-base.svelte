@@ -22,7 +22,7 @@
   import type { Snippet } from "svelte";
   import { Spring } from "svelte/motion";
 
-  import { Handle, NodeResizer, Position } from "@xyflow/svelte";
+  import { Handle, NodeResizer, Position, useUpdateNodeInternals } from "@xyflow/svelte";
   import type { NodeProps, ResizeDragEvent, ResizeParams } from "@xyflow/svelte";
   import { type ModuleDefinition, type ModuleSpec } from "tauri-plugin-modular-agent-api";
 
@@ -75,9 +75,16 @@
 
   const inputs = $derived(data.inputs ?? []);
   const outputs = $derived(data.outputs ?? []);
-  // show_err is not saved in the spec, so a loaded patch needs the handle shown
-  // wherever an err connection exists, or Svelte Flow drops that edge.
-  const showErr = $derived((data.show_err ?? false) || editor.errSources.has(id));
+  const showErr = $derived(data.show_err ?? false);
+
+  // Svelte Flow re-measures handles only on resize or type/position change, so an
+  // err handle that appears on a mounted node would stay unknown and its edge undrawn.
+  const updateNodeInternals = useUpdateNodeInternals();
+  let measuredShowErr: boolean | undefined;
+  $effect(() => {
+    if (measuredShowErr !== undefined && showErr !== measuredShowErr) updateNodeInternals(id);
+    measuredShowErr = showErr;
+  });
 
   let hideTitle = $derived(moduleDef?.hide_title ?? false);
   const freeSize = $derived(moduleDef?.hints?.free_size === true);

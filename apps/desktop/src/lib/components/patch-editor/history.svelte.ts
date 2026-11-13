@@ -955,6 +955,12 @@ export class ToggleDisabledCommand implements Command {
 
 type ShowErrDelta = { id: string; wasShowErr: boolean };
 
+async function setShowErr(editor: EditorState, id: string, showErr: boolean) {
+  editor.props.svelteFlow.updateNodeData(id, { show_err: showErr });
+  // null removes the key, so specs only carry show_err where it is on
+  await updateModuleSpec(id, { show_err: showErr || null });
+}
+
 export class ToggleShowErrCommand implements Command {
   readonly label = "Toggle Error Display";
 
@@ -962,13 +968,13 @@ export class ToggleShowErrCommand implements Command {
 
   async execute(editor: EditorState) {
     for (const d of this.deltas) {
-      editor.props.svelteFlow.updateNodeData(d.id, { show_err: !d.wasShowErr });
+      await setShowErr(editor, d.id, !d.wasShowErr);
     }
   }
 
   async undo(editor: EditorState) {
     for (const d of this.deltas) {
-      editor.props.svelteFlow.updateNodeData(d.id, { show_err: d.wasShowErr });
+      await setShowErr(editor, d.id, d.wasShowErr);
     }
   }
 
