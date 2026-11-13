@@ -624,13 +624,12 @@ mod tests {
         set_nested_value(&mut root, &keys, value).unwrap();
 
         // Verify: root["users"]["admin"]["name"] == "Alice"
-        if let Some(users) = root.get_mut("users") {
-            if let Some(admin) = users.get_mut("admin") {
-                if let Some(name) = admin.get_mut("name") {
-                    assert_eq!(*name, Value::string("Alice"));
-                    return;
-                }
-            }
+        if let Some(users) = root.get_mut("users")
+            && let Some(admin) = users.get_mut("admin")
+            && let Some(name) = admin.get_mut("name")
+        {
+            assert_eq!(*name, Value::string("Alice"));
+            return;
         }
         panic!("Nested structure was not created correctly: {:?}", root);
     }

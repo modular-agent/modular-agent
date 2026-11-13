@@ -281,17 +281,17 @@ pub async fn apply_mcp_server(app: &AppHandle) -> Result<()> {
 }
 
 fn json_merge(a: &mut JsonValue, b: JsonValue) {
-    if let JsonValue::Object(a) = a {
-        if let JsonValue::Object(b) = b {
-            for (k, v) in b {
-                if v.is_null() {
-                    a.remove(&k);
-                } else {
-                    json_merge(a.entry(k).or_insert(JsonValue::Null), v);
-                }
+    if let JsonValue::Object(a) = a
+        && let JsonValue::Object(b) = b
+    {
+        for (k, v) in b {
+            if v.is_null() {
+                a.remove(&k);
+            } else {
+                json_merge(a.entry(k).or_insert(JsonValue::Null), v);
             }
-            return;
         }
+        return;
     }
     *a = b;
 }

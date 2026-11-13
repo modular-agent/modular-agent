@@ -50,7 +50,7 @@ async fn test_number_input() {
     test_utils::write_and_expect_local_value(&ma, &patch_id, "number_trig", Value::unit())
         .await
         .unwrap();
-    test_utils::expect_local_value(&patch_id, "number_out", &Value::number(3.14))
+    test_utils::expect_local_value(&patch_id, "number_out", &Value::number(2.5))
         .await
         .unwrap();
 

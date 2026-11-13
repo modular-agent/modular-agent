@@ -108,10 +108,10 @@ impl IntervalTimerModule {
                 tokio::time::sleep(tokio::time::Duration::from_millis(interval_ms)).await;
 
                 // Check if we've been stopped
-                if let Ok(handle) = timer_handle.lock() {
-                    if handle.is_none() {
-                        break;
-                    }
+                if let Ok(handle) = timer_handle.lock()
+                    && handle.is_none()
+                {
+                    break;
                 }
 
                 // Create a unit output
@@ -136,10 +136,10 @@ impl IntervalTimerModule {
 
     fn stop_timer(&mut self) -> Result<()> {
         // Cancel the timer
-        if let Ok(mut timer_handle) = self.timer_handle.lock() {
-            if let Some(handle) = timer_handle.take() {
-                handle.abort();
-            }
+        if let Ok(mut timer_handle) = self.timer_handle.lock()
+            && let Some(handle) = timer_handle.take()
+        {
+            handle.abort();
         }
         Ok(())
     }
@@ -290,10 +290,10 @@ impl ScheduleTimerModule {
                 tokio::time::sleep(duration).await;
 
                 // Check if we've been stopped
-                if let Ok(handle) = timer_handle.lock() {
-                    if handle.is_none() {
-                        break;
-                    }
+                if let Ok(handle) = timer_handle.lock()
+                    && handle.is_none()
+                {
+                    break;
                 }
 
                 // Get the current local timestamp (in seconds)
@@ -321,10 +321,10 @@ impl ScheduleTimerModule {
 
     fn stop_timer(&mut self) -> Result<()> {
         // Cancel the timer
-        if let Ok(mut timer_handle) = self.timer_handle.lock() {
-            if let Some(handle) = timer_handle.take() {
-                handle.abort();
-            }
+        if let Ok(mut timer_handle) = self.timer_handle.lock()
+            && let Some(handle) = timer_handle.take()
+        {
+            handle.abort();
         }
         Ok(())
     }
@@ -358,10 +358,10 @@ impl AsModule for ScheduleTimerModule {
             timer_handle: Default::default(),
         };
 
-        if let Some(schedule_str) = schedule_str {
-            if !schedule_str.is_empty() {
-                module.parse_schedule(&schedule_str)?;
-            }
+        if let Some(schedule_str) = schedule_str
+            && !schedule_str.is_empty()
+        {
+            module.parse_schedule(&schedule_str)?;
         }
 
         Ok(module)
@@ -434,7 +434,7 @@ impl ThrottleTimeModule {
 
                 // process the waiting data
                 let mut wd = waiting_data.lock().unwrap();
-                if wd.len() > 0 {
+                if !wd.is_empty() {
                     // If there are data waiting, output the first one
                     let (ctx, port, data) = wd.remove(0);
                     ma.try_send_module_out(module_id.clone(), ctx, port, data)
@@ -444,7 +444,7 @@ impl ThrottleTimeModule {
                 }
 
                 // If there are no data waiting, we stop the timer
-                if wd.len() == 0 {
+                if wd.is_empty() {
                     handle.take();
                     break;
                 }
@@ -461,10 +461,10 @@ impl ThrottleTimeModule {
 
     fn stop_timer(&mut self) -> Result<()> {
         // Cancel the timer
-        if let Ok(mut timer_handle) = self.timer_handle.lock() {
-            if let Some(handle) = timer_handle.take() {
-                handle.abort();
-            }
+        if let Ok(mut timer_handle) = self.timer_handle.lock()
+            && let Some(handle) = timer_handle.take()
+        {
+            handle.abort();
         }
         Ok(())
     }

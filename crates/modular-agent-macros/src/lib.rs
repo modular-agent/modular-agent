@@ -189,7 +189,7 @@ enum ConfigSpec {
     Text(CommonConfig),
     Array(CommonConfig),
     Object(CommonConfig),
-    Custom(CustomConfig),
+    Custom(Box<CustomConfig>),
 }
 
 fn expand_modular_agent(
@@ -297,7 +297,7 @@ fn expand_modular_agent(
             Meta::List(ml) if ml.path.is_ident("custom_config") => {
                 parsed
                     .configs
-                    .push(ConfigSpec::Custom(parse_custom_config(ml)?));
+                    .push(ConfigSpec::Custom(Box::new(parse_custom_config(ml)?)));
             }
             Meta::List(ml) if ml.path.is_ident("unit_config") => {
                 parsed
@@ -342,7 +342,7 @@ fn expand_modular_agent(
             Meta::List(ml) if ml.path.is_ident("custom_global_config") => {
                 parsed
                     .global_configs
-                    .push(ConfigSpec::Custom(parse_custom_config(ml)?));
+                    .push(ConfigSpec::Custom(Box::new(parse_custom_config(ml)?)));
             }
             Meta::List(ml) if ml.path.is_ident("unit_global_config") => {
                 parsed
@@ -761,7 +761,7 @@ fn expand_modular_agent(
                     })
                 })
             }
-            ConfigSpec::Custom(c) => custom_config_call("custom_config_with", c),
+            ConfigSpec::Custom(c) => custom_config_call("custom_config_with", *c),
         })
         .collect::<syn::Result<Vec<_>>>()?;
 
@@ -1108,7 +1108,7 @@ fn expand_modular_agent(
                     })
                 })
             }
-            ConfigSpec::Custom(c) => custom_config_call("custom_global_config_with", c),
+            ConfigSpec::Custom(c) => custom_config_call("custom_global_config_with", *c),
         })
         .collect::<syn::Result<Vec<_>>>()?;
 

@@ -228,12 +228,12 @@ impl AsModule for WriteTextFileModule {
         let path = Path::new(&path);
 
         // Ensure parent directories exist
-        if let Some(parent) = path.parent() {
-            if !parent.exists() {
-                fs::create_dir_all(parent).map_err(|e| {
-                    Error::InvalidValue(format!("Failed to create parent directories: {}", e))
-                })?
-            }
+        if let Some(parent) = path.parent()
+            && !parent.exists()
+        {
+            fs::create_dir_all(parent).map_err(|e| {
+                Error::InvalidValue(format!("Failed to create parent directories: {}", e))
+            })?
         }
 
         fs::write(path, text).map_err(|e| {
@@ -347,12 +347,12 @@ impl AsModule for WriteJsonFileModule {
         let path = Path::new(&path);
 
         // Ensure parent directories exist
-        if let Some(parent) = path.parent() {
-            if !parent.exists() {
-                fs::create_dir_all(parent).map_err(|e| {
-                    Error::InvalidValue(format!("Failed to create parent directories: {}", e))
-                })?
-            }
+        if let Some(parent) = path.parent()
+            && !parent.exists()
+        {
+            fs::create_dir_all(parent).map_err(|e| {
+                Error::InvalidValue(format!("Failed to create parent directories: {}", e))
+            })?
         }
 
         fs::write(path, value.to_json().to_string()).map_err(|e| {
@@ -468,12 +468,12 @@ impl AsModule for WriteJsonlFileModule {
         let path = Path::new(&path);
 
         // Ensure parent directories exist
-        if let Some(parent) = path.parent() {
-            if !parent.exists() {
-                fs::create_dir_all(parent).map_err(|e| {
-                    Error::InvalidValue(format!("Failed to create parent directories: {}", e))
-                })?
-            }
+        if let Some(parent) = path.parent()
+            && !parent.exists()
+        {
+            fs::create_dir_all(parent).map_err(|e| {
+                Error::InvalidValue(format!("Failed to create parent directories: {}", e))
+            })?
         }
 
         let mut json_lines = Vec::new();
@@ -488,6 +488,7 @@ impl AsModule for WriteJsonlFileModule {
         let mut f = fs::File::options()
             .write(true)
             .create(true)
+            .truncate(true)
             .open(path)
             .map_err(|e| {
                 Error::InvalidValue(format!("Failed to open file {}: {}", path.display(), e))
@@ -543,12 +544,12 @@ impl AsModule for AppendJsonlFileModule {
         let path = Path::new(&path);
 
         // Ensure parent directories exist
-        if let Some(parent) = path.parent() {
-            if !parent.exists() {
-                fs::create_dir_all(parent).map_err(|e| {
-                    Error::InvalidValue(format!("Failed to create parent directories: {}", e))
-                })?
-            }
+        if let Some(parent) = path.parent()
+            && !parent.exists()
+        {
+            fs::create_dir_all(parent).map_err(|e| {
+                Error::InvalidValue(format!("Failed to create parent directories: {}", e))
+            })?
         }
 
         let mut json_lines = Vec::new();

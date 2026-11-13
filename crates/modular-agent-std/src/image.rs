@@ -77,7 +77,7 @@ impl AsModule for IsBlankImageModule {
                 config.get_integer_or_default(CONFIG_ALMOST_BLACK_THRESHOLD) as u8;
             let blank_threshold = config.get_integer_or_default(CONFIG_BLANK_THRESHOLD) as u32;
 
-            let is_blank = self.is_blank(&image, almost_black_threshold, blank_threshold);
+            let is_blank = self.is_blank(image, almost_black_threshold, blank_threshold);
             if is_blank {
                 self.output(ctx, PORT_T, value).await
             } else {
@@ -122,7 +122,7 @@ impl AsModule for ResampleImageModule {
             let width = config.get_integer_or_default(CONFIG_WIDTH) as usize;
             let height = config.get_integer_or_default(CONFIG_HEIGHT) as usize;
 
-            let resampled_image = photon_rs::transform::resample(&*image, width, height);
+            let resampled_image = photon_rs::transform::resample(image, width, height);
 
             self.output(ctx, PORT_IMAGE, Value::image(resampled_image))
                 .await
@@ -167,7 +167,7 @@ impl AsModule for ResizeImageModule {
             let height = config.get_integer_or_default(CONFIG_HEIGHT) as u32;
 
             let resized_image = photon_rs::transform::resize(
-                &*image,
+                image,
                 width,
                 height,
                 photon_rs::transform::SamplingFilter::Nearest,
@@ -229,7 +229,7 @@ impl AsModule for ScaleImageModule {
                 let height = ((image.get_height() as f64) * scale) as u32;
 
                 let resized_image = photon_rs::transform::resize(
-                    &*image,
+                    image,
                     width,
                     height,
                     photon_rs::transform::SamplingFilter::Nearest,
@@ -240,7 +240,7 @@ impl AsModule for ScaleImageModule {
                 // scale > 1.0
                 let width = ((image.get_width() as f64) * scale) as usize;
                 let height = ((image.get_height() as f64) * scale) as usize;
-                let resampled_image = photon_rs::transform::resample(&*image, width, height);
+                let resampled_image = photon_rs::transform::resample(image, width, height);
                 self.output(ctx, PORT_IMAGE, Value::image(resampled_image))
                     .await
             }
@@ -308,7 +308,7 @@ impl AsModule for IsChangedImageModule {
             let threshold = config.get_number_or_default(CONFIG_THRESHOLD) as f32;
 
             let is_changed = if let Some(last_image) = &self.last_image {
-                self.images_are_different(&last_image, &image, threshold)
+                self.images_are_different(last_image, image, threshold)
             } else {
                 true
             };

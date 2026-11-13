@@ -3626,7 +3626,6 @@ dependencies = [
 name = "modular-agent-macros"
 version = "0.33.1"
 dependencies = [
- "im",
  "proc-macro2",
  "quote",
  "syn 3.0.10",

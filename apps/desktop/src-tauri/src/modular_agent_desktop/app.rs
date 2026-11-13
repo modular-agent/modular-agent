@@ -141,24 +141,24 @@ impl ModularAgentApp {
         // let open/delete by the old name spawn a duplicate or orphan the live
         // instance).
         let fs_result = (|| -> Result<()> {
-            if let Some(parent) = new_path.parent() {
-                if !parent.exists() {
-                    std::fs::create_dir_all(parent)?;
-                }
+            if let Some(parent) = new_path.parent()
+                && !parent.exists()
+            {
+                std::fs::create_dir_all(parent)?;
             }
             // Source and target are always under ~/.modular_agent/patches/
             std::fs::rename(&old_path, &new_path)
                 .with_context(|| format!("Failed to rename patch: {} -> {}", name, new_name))
         })();
         if let Err(e) = fs_result {
-            if let Some(id) = &live_id {
-                if let Err(re) = self.ma.rename_patch(id, name.to_string()).await {
-                    log::error!(
-                        "Failed to roll back core rename of patch {}: {}",
-                        new_name,
-                        re
-                    );
-                }
+            if let Some(id) = &live_id
+                && let Err(re) = self.ma.rename_patch(id, name.to_string()).await
+            {
+                log::error!(
+                    "Failed to roll back core rename of patch {}: {}",
+                    new_name,
+                    re
+                );
             }
             return Err(e);
         }
@@ -183,10 +183,10 @@ impl ModularAgentApp {
         }
 
         // Clean up empty ancestor directories
-        if let Some(parent) = old_path.parent() {
-            if let Ok(root) = patches_dir() {
-                cleanup_empty_ancestors(app, parent, &root);
-            }
+        if let Some(parent) = old_path.parent()
+            && let Ok(root) = patches_dir()
+        {
+            cleanup_empty_ancestors(app, parent, &root);
         }
 
         Ok(())
@@ -261,10 +261,10 @@ impl ModularAgentApp {
         }
 
         // Ensure target parent directory exists
-        if let Some(parent) = new_dir.parent() {
-            if !parent.exists() {
-                std::fs::create_dir_all(parent)?;
-            }
+        if let Some(parent) = new_dir.parent()
+            && !parent.exists()
+        {
+            std::fs::create_dir_all(parent)?;
         }
 
         // Rename directory

@@ -416,11 +416,11 @@ impl AsModule for CollectModule {
         // Detect context switch and flush processing
         // If a new context ID arrives while the previous context hasn't finished processing
         let ctx_id = ctx.id();
-        if let Some(last_id) = &self.current_ctx_id {
-            if last_id != &ctx_id {
-                log::warn!("Context changed before collection completed. Dropping partial data.");
-                self.reset_state();
-            }
+        if let Some(last_id) = &self.current_ctx_id
+            && last_id != &ctx_id
+        {
+            log::warn!("Context changed before collection completed. Dropping partial data.");
+            self.reset_state();
         }
 
         // Initialize state (when the first item of this context arrives)

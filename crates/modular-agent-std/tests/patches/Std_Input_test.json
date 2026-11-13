@@ -429,7 +429,7 @@
         "number"
       ],
       "configs": {
-        "number": 3.14
+        "number": 2.5
       },
       "config_specs": {
         "number": {
