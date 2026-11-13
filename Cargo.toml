@@ -15,7 +15,7 @@ members = [
 exclude = ["tools/ma-config"]
 
 [workspace.package]
-version = "0.33.0"
+version = "0.33.1"
 edition = "2024"
 authors = ["Akira Ishino <akira@lumilab.jp>"]
 license = "Apache-2.0"
@@ -25,11 +25,11 @@ repository = "https://github.com/modular-agent/modular-agent"
 # In-tree crates: `path` is what the workspace builds against, `version` is what
 # a published crate records for its dependents. All in-tree crates share
 # `workspace.package.version`; keep these in step with it.
-modular-agent-macros = { version = "0.33.0", path = "crates/modular-agent-macros" }
-modular-agent-core = { version = "0.33.0", path = "crates/modular-agent-core" }
-modular-agent-std = { version = "0.33.0", path = "crates/modular-agent-std" }
-modular-agent-llm = { version = "0.33.0", path = "crates/modular-agent-llm" }
-tauri-plugin-modular-agent = { version = "0.33.0", path = "crates/tauri-plugin-modular-agent" }
+modular-agent-macros = { version = "0.33.1", path = "crates/modular-agent-macros" }
+modular-agent-core = { version = "0.33.1", path = "crates/modular-agent-core" }
+modular-agent-std = { version = "0.33.1", path = "crates/modular-agent-std" }
+modular-agent-llm = { version = "0.33.1", path = "crates/modular-agent-llm" }
+tauri-plugin-modular-agent = { version = "0.33.1", path = "crates/tauri-plugin-modular-agent" }
 
 # Shared external dependencies. Crates whose feature sets diverge (tokio,
 # reqwest) keep their own entries.
