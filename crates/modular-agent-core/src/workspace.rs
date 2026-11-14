@@ -237,7 +237,7 @@ fn expand_json(
     lookup: &impl Fn(&str) -> Option<String>,
 ) -> std::result::Result<JsonValue, String> {
     Ok(match value {
-        JsonValue::String(s) => JsonValue::String(expand_str(s, lookup)?),
+        JsonValue::String(s) => JsonValue::String(crate::env::expand_vars(s, lookup)?),
         JsonValue::Array(items) => JsonValue::Array(
             items
                 .iter()
@@ -251,45 +251,6 @@ fn expand_json(
         ),
         other => other.clone(),
     })
-}
-
-/// Replaces `${NAME}` (NAME = `[A-Za-z_][A-Za-z0-9_]*`) with its value; `$${`
-/// yields a literal `${`. Anything else, such as `${}` or an unclosed `${`,
-/// is kept as written.
-fn expand_str(
-    s: &str,
-    lookup: &impl Fn(&str) -> Option<String>,
-) -> std::result::Result<String, String> {
-    let mut out = String::with_capacity(s.len());
-    let mut rest = s;
-    while let Some(i) = rest.find('$') {
-        out.push_str(&rest[..i]);
-        let tail = &rest[i..];
-        if let Some(after) = tail.strip_prefix("$${") {
-            out.push_str("${");
-            rest = after;
-        } else if let Some((name, after)) = tail
-            .strip_prefix("${")
-            .and_then(|t| t.split_once('}'))
-            .filter(|(name, _)| is_var_name(name))
-        {
-            out.push_str(&lookup(name).ok_or_else(|| name.to_string())?);
-            rest = after;
-        } else {
-            out.push('$');
-            rest = &tail[1..];
-        }
-    }
-    out.push_str(rest);
-    Ok(out)
-}
-
-fn is_var_name(name: &str) -> bool {
-    let mut chars = name.chars();
-    chars
-        .next()
-        .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
-        && chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
 }
 
 #[cfg(test)]
@@ -307,18 +268,7 @@ mod tests {
     }
 
     #[test]
-    fn expands_variables() {
-        assert_eq!(expand_str("${TOKEN}", &lookup), Ok("secret".into()));
-        assert_eq!(
-            expand_str("a-${TOKEN}-${EMPTY}b", &lookup),
-            Ok("a-secret-b".into())
-        );
-        assert_eq!(expand_str("$${TOKEN}", &lookup), Ok("${TOKEN}".into()));
-        assert_eq!(
-            expand_str("$5 ${} ${1X} ${open", &lookup),
-            Ok("$5 ${} ${1X} ${open".into())
-        );
-        assert_eq!(expand_str("${MISSING}", &lookup), Err("MISSING".into()));
+    fn expands_variables_in_nested_json() {
         assert_eq!(
             expand_json(&json!({"a": ["${TOKEN}", 1], "b": null}), &lookup),
             Ok(json!({"a": ["secret", 1], "b": null}))

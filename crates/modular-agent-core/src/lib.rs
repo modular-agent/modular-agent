@@ -42,6 +42,7 @@
 mod config;
 mod context;
 mod definition;
+mod env;
 mod error;
 mod external_module;
 mod id;
@@ -104,6 +105,7 @@ pub use modular_agent_macros::modular_agent;
 pub use config::{ModuleConfigs, ModuleConfigsMap};
 pub use context::ModuleContext;
 pub use definition::{ModuleConfigSpec, ModuleConfigSpecs, ModuleDefinition, ModuleDefinitions};
+pub use env::expand_vars;
 pub use error::{Error, Result};
 #[cfg(feature = "llm")]
 pub use llm::{
