@@ -111,7 +111,6 @@ src/                          # Svelte フロントエンド
   routes/
     patch_editor/             # エディタページシェル
     open_patches/             # パッチファイルブラウザ
-    settings/                 # アプリ設定
     logs/                     # ログビューア
   lib/
     hotkeys.ts                # キーボードショートカットの定義とマッチング
@@ -124,6 +123,7 @@ src/                          # Svelte フロントエンド
         history.svelte.ts     # Command パターンの undo/redo
         editor-canvas.svelte  # Svelte Flow キャンバス、キーボードディスパッチ
         module-node.svelte     # モジュールノードの描画
+      settings/               # 設定ダイアログ
       module-list/             # モジュールカテゴリツリーのポップアップ
       ui/                     # shadcn-svelte コンポーネント（生成物）
 src-tauri/src/                # Rust バックエンド
@@ -153,7 +153,7 @@ src-tauri/src/                # Rust バックエンド
 
 ## 設定
 
-- **Core 設定は変更時に自動保存**されます。唯一の例外はグローバルな「Show App Window」ショートカットで、アプリ再起動時にしか反映されないため手動の Save ボタンを持ちます。
+- **設定は変更時に自動保存**されます。グローバルな「Show App Window」ショートカットも同様に保存されますが、反映されるのはアプリの再起動後です。
 - **キーボードショートカット** — エディタの全ホットキーを変更可能。Quick Add スロット（`mod+1`〜`mod+5`）はキーとモジュール種別の両方を割り当てられます。
 - **自動起動** — アプリ起動時に実行するパッチを指定できます。
 - **ワークスペースの設定** — 自動起動の一覧とモジュールの設定は、`patches/` と並ぶ `~/.modular_agent/settings.json` に保存されます。同じディレクトリを `ma serve --workspace ~/.modular_agent` でそのまま動かせます。モジュールの設定には環境変数を `${VAR}` の形で書くことができ、ファイルには書いたまま保存され、適用時に変数の値に置き換わります。パッチ内のファイルの相対パスは `~/.modular_agent` を基準に解決されます。
@@ -162,7 +162,7 @@ src-tauri/src/                # Rust バックエンド
 
 ## MCP サーバー
 
-コアエンジンは内蔵 MCP サーバーを備えています（Settings → Core → MCP Server）。外部 AI エージェントはモジュール定義の参照、パッチの構築・編集、実行中フローの動作確認を行えます。有効化すると Bearer トークンが自動生成されます。Claude Code からの接続:
+コアエンジンは内蔵 MCP サーバーを備えています（Settings → MCP Server）。外部 AI エージェントはモジュール定義の参照、パッチの構築・編集、実行中フローの動作確認を行えます。有効化すると Bearer トークンが自動生成されます。Claude Code からの接続:
 
 ```bash
 claude mcp add --transport http modular-agent http://127.0.0.1:8765/mcp \

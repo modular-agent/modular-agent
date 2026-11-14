@@ -18,6 +18,7 @@
   import { setMode } from "mode-watcher";
 
   import AppSidebar from "$lib/components/app-sidebar.svelte";
+  import SettingsDialog from "$lib/components/settings/settings-dialog.svelte";
   import Titlebar from "$lib/components/titlebar.svelte";
   import * as Sidebar from "$lib/components/ui/sidebar/index.js";
   import { Toaster } from "$lib/components/ui/sonner";
@@ -91,6 +92,7 @@
 
 <ModeWatcher />
 <Toaster />
+<SettingsDialog />
 <div class="flex flex-col h-screen overflow-hidden">
   <Titlebar />
   <Sidebar.Provider>

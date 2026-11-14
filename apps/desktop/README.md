@@ -111,7 +111,6 @@ src/                          # Svelte frontend
   routes/
     patch_editor/             # editor page shell
     open_patches/             # patch file browser
-    settings/                 # app settings
     logs/                     # log viewer
   lib/
     hotkeys.ts                # keyboard shortcut definitions and matching
@@ -124,6 +123,7 @@ src/                          # Svelte frontend
         history.svelte.ts     # command-pattern undo/redo
         editor-canvas.svelte  # Svelte Flow canvas, keyboard dispatch
         module-node.svelte     # module node rendering
+      settings/               # settings dialog
       module-list/             # module category tree popup
       ui/                     # shadcn-svelte components (generated)
 src-tauri/src/                # Rust backend
@@ -153,7 +153,7 @@ Patches are JSON files under `~/.modular_agent/patches/`. The folder hierarchy b
 
 ## Settings
 
-- **Core settings auto-save** on change. The one exception is the global "Show App Window" shortcut, which has a manual Save button because it only takes effect on app restart.
+- **Settings auto-save** on change. The global "Show App Window" shortcut is saved the same way but only takes effect after an app restart.
 - **Keyboard shortcuts** — every editor hotkey is rebindable; Quick Add slots (`mod+1`–`mod+5`) bind both a key and a module type.
 - **Auto-start** — mark patches to run on app launch.
 - **Workspace settings** — the auto-start list and module settings are saved in `~/.modular_agent/settings.json`, next to `patches/`, so the same directory runs unchanged under `ma serve --workspace ~/.modular_agent`. A module setting can reference an environment variable as `${VAR}`; it is stored as written and replaced with the variable's value when applied. Relative file paths in patches resolve against `~/.modular_agent`.
@@ -162,7 +162,7 @@ Patches are JSON files under `~/.modular_agent/patches/`. The folder hierarchy b
 
 ## MCP Server
 
-The core engine ships a built-in MCP server (Settings → Core → MCP Server) so external AI agents can inspect module definitions, build and edit patches, and verify running flows. Enabling it auto-generates a Bearer token; connect from Claude Code with:
+The core engine ships a built-in MCP server (Settings → MCP Server) so external AI agents can inspect module definitions, build and edit patches, and verify running flows. Enabling it auto-generates a Bearer token; connect from Claude Code with:
 
 ```bash
 claude mcp add --transport http modular-agent http://127.0.0.1:8765/mcp \

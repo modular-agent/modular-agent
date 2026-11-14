@@ -1,0 +1,196 @@
+<script lang="ts">
+  import { toast } from "svelte-sonner";
+  import type { ModuleConfigs, ModuleDefinition } from "tauri-plugin-modular-agent-api";
+
+  import { Input } from "$lib/components/ui/input/index.js";
+  import { Switch } from "$lib/components/ui/switch/index.js";
+  import { setGlobalConfigs } from "$lib/modular_agent";
+  import { renderMarkdown } from "$lib/sanitize";
+
+  import { blurOnEnter } from "./helpers";
+  import SettingsGroup from "./settings-group.svelte";
+  import SettingsNote from "./settings-note.svelte";
+  import SettingsRow from "./settings-row.svelte";
+
+  interface Props {
+    moduleName: string;
+    moduleConfigs: ModuleConfigs;
+    moduleDef: ModuleDefinition | undefined;
+  }
+
+  const { moduleName, moduleConfigs, moduleDef }: Props = $props();
+
+  // Keep configs state-backed so bind targets are reactive and auto-save reads current values.
+  let configs = $state<ModuleConfigs>({});
+  $effect(() => {
+    configs = moduleConfigs;
+  });
+
+  let configsModified = $state(false);
+
+  async function autoSaveConfig() {
+    try {
+      await setGlobalConfigs(moduleName, configs);
+      configsModified = true;
+    } catch (e) {
+      toast.error("Failed to save module settings");
+      console.error("Failed to save module settings:", e);
+    }
+  }
+</script>
+
+<div class="space-y-6">
+  {#if moduleDef?.category?.trim() || moduleDef?.description?.trim()}
+    <div class="space-y-2 px-1">
+      {#if moduleDef.category?.trim()}
+        <div class="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+          {moduleDef.category}
+        </div>
+      {/if}
+      {#if moduleDef.description?.trim()}
+        <div class="module-desc-md text-sm">
+          {@html renderMarkdown(moduleDef.description)}
+        </div>
+      {/if}
+    </div>
+  {/if}
+
+  {#if moduleDef?.global_configs}
+    <div>
+      <SettingsGroup>
+        {#each Object.entries(moduleDef.global_configs) as [key, globalConfig] (key)}
+          <SettingsRow label={globalConfig?.title || key} description={globalConfig?.description}>
+            {#snippet children(labelId)}
+              {@const ty = globalConfig.type}
+              {#if ty === "boolean"}
+                <Switch
+                  aria-labelledby={labelId}
+                  bind:checked={configs[key]}
+                  onCheckedChange={() => autoSaveConfig()}
+                />
+              {:else if ty === "number"}
+                <Input
+                  aria-labelledby={labelId}
+                  type="number"
+                  bind:value={configs[key]}
+                  onchange={() => autoSaveConfig()}
+                  onkeydown={blurOnEnter}
+                  class="w-64"
+                />
+              {:else if ty === "string"}
+                <Input
+                  aria-labelledby={labelId}
+                  type="text"
+                  bind:value={configs[key]}
+                  onchange={() => autoSaveConfig()}
+                  onkeydown={blurOnEnter}
+                  class="w-64"
+                />
+              {:else if ty === "password"}
+                <Input
+                  aria-labelledby={labelId}
+                  type="password"
+                  bind:value={configs[key]}
+                  onchange={() => autoSaveConfig()}
+                  onkeydown={blurOnEnter}
+                  class="w-64"
+                />
+              {:else if ty === "integer" || ty === "text" || ty === "object"}
+                <Input
+                  aria-labelledby={labelId}
+                  bind:value={configs[key]}
+                  onchange={() => autoSaveConfig()}
+                  onkeydown={blurOnEnter}
+                  class="w-64"
+                />
+              {:else}
+                <Input
+                  aria-labelledby={labelId}
+                  type="text"
+                  value={JSON.stringify(configs[key], null, 2)}
+                  disabled
+                  class="w-64"
+                />
+              {/if}
+            {/snippet}
+          </SettingsRow>
+        {/each}
+      </SettingsGroup>
+      {#if configsModified}
+        <SettingsNote>Changes may require restarting running patches to take effect.</SettingsNote>
+      {/if}
+    </div>
+  {/if}
+</div>
+
+<style>
+  .module-desc-md :global(p) {
+    margin-bottom: 0.4rem;
+  }
+  .module-desc-md :global(p:last-child) {
+    margin-bottom: 0;
+  }
+  .module-desc-md :global(code) {
+    background-color: var(--muted);
+    padding: 0.1rem 0.3rem;
+    border-radius: 0.2rem;
+    font-size: 0.85em;
+  }
+  .module-desc-md :global(pre) {
+    background-color: var(--muted);
+    padding: 0.5rem;
+    border-radius: 0.3rem;
+    overflow-x: auto;
+    margin-bottom: 0.4rem;
+  }
+  .module-desc-md :global(pre code) {
+    background-color: transparent;
+    padding: 0;
+  }
+  .module-desc-md :global(a) {
+    color: var(--link-color);
+    text-decoration: underline;
+  }
+  .module-desc-md :global(a:hover) {
+    opacity: 0.8;
+  }
+  .module-desc-md :global(blockquote) {
+    border-left: 3px solid var(--border);
+    padding-left: 0.75rem;
+    margin-left: 0;
+    margin-bottom: 0.4rem;
+    color: var(--muted-foreground);
+  }
+  .module-desc-md :global(ul),
+  .module-desc-md :global(ol) {
+    padding-left: 1.5rem;
+    margin-bottom: 0.4rem;
+  }
+  .module-desc-md :global(li) {
+    margin-bottom: 0.1rem;
+  }
+  .module-desc-md :global(table) {
+    border-collapse: separate;
+    border-spacing: 0;
+  }
+  .module-desc-md :global(th) {
+    text-align: left;
+    font-weight: 700;
+    border-bottom: 1.5px solid var(--border);
+    padding-bottom: 0.35rem;
+  }
+  .module-desc-md :global(td) {
+    text-align: left;
+  }
+  .module-desc-md :global(th),
+  .module-desc-md :global(td) {
+    padding: 0;
+  }
+  .module-desc-md :global(th:not(:first-child)),
+  .module-desc-md :global(td:not(:first-child)) {
+    padding-left: 1rem;
+  }
+  .module-desc-md :global(tbody td) {
+    padding-top: 0.35rem;
+  }
+</style>

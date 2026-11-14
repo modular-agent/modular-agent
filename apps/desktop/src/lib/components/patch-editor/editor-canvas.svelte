@@ -25,6 +25,7 @@
   import CustomConnectionLine from "$lib/components/connection/custom-connection-line.svelte";
   import { ModuleList } from "$lib/components/module-list/index.js";
   import PatchActionDialog from "$lib/components/patch-action-dialog.svelte";
+  import { settingsDialog } from "$lib/components/settings/state.svelte";
   import { Button } from "$lib/components/ui/button/index.js";
   import * as Dialog from "$lib/components/ui/dialog/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
@@ -250,6 +251,10 @@
       event.preventDefault();
       return;
     }
+
+    // This handler listens on the window, so keys pressed in the settings
+    // dialog would otherwise act on the canvas behind it.
+    if (settingsDialog.open) return;
 
     const editable = isEditableElement(event.target);
 

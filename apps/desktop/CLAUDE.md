@@ -41,11 +41,10 @@ src/                    # Svelte frontend
   routes/               # SvelteKit pages
     patch_editor/      # Visual module workflow editor (thin page shell)
     open_patches/       # Patch file browser
-    settings/           # App settings
     logs/               # Log viewer (production debug)
   lib/
     module.ts            # Tauri command wrappers, patch conversion utilities, setCoreSettings (partial merge + store update)
-    core-settings-store.svelte.ts # Reactive CoreSettings singleton ($state fields, $derived hotkeys), CORE_DEFAULTS constant — consumed by EditorState, editor-canvas, +layout, Core.svelte
+    core-settings-store.svelte.ts # Reactive CoreSettings singleton ($state fields, $derived hotkeys), CORE_DEFAULTS constant — consumed by EditorState, editor-canvas, +layout, the settings sections
     hotkeys.ts          # Keyboard shortcut definitions, matching, resolving, formatting
     log-store.svelte.ts # Global log store + console capture (attachLogger, monkey-patch)
     sanitize.ts         # HTML sanitization utilities (sanitizeHtml, renderMarkdown, escapeHtml, isSafeImageSrc)
@@ -69,6 +68,7 @@ src/                    # Svelte frontend
         menubar.svelte        # File menu (New/Save/Import/Export)
         patch-name.svelte    # Breadcrumb path display
         messages.svelte       # Message display
+      settings/           # Settings dialog (see "Settings Dialog")
       run-switch.svelte   # Run toggle (titlebar + patch list)
       module-list/       # Module category tree (popup, click to add)
       ui/               # shadcn-svelte UI components
@@ -120,7 +120,7 @@ The patch editor keeps per-tab instances alive using CSS visibility toggling. Ta
 
 ## Keyboard Shortcuts
 
-All keyboard shortcuts are defined in `src/lib/hotkeys.ts` and customizable via Settings → Core.
+All keyboard shortcuts are defined in `src/lib/hotkeys.ts` and customizable via Settings → Shortcuts.
 
 - **`hotkeys.ts`**: Central module — `DEFAULT_HOTKEYS` definitions, `matchHotkey()` matcher, `resolveHotkeys()` / `resolveQuickAddModules()` resolvers, `formatHotkey()` display formatter.
 - **`editor-canvas.svelte`**: Table-driven `handleKeydown` dispatches via action table + `matchHotkey()`. Hardcoded: Escape (popup close), Alt (snap modifier), Ctrl+R (block refresh).
@@ -130,15 +130,24 @@ All keyboard shortcuts are defined in `src/lib/hotkeys.ts` and customizable via 
 - **Key format**: `mod+s` (mod = Cmd on macOS, Ctrl on Win/Linux), `shift+a`, `f11`. Sequences: `"a 1"` (space-separated chords, 500ms timeout).
 - **Quick Add**: `mod+1`–`mod+5` place modules at mouse position. Both key binding and module type are user-customizable.
 
+## Settings Dialog
+
+Settings is a modal dialog (`components/settings/settings-dialog.svelte`), mounted once in `+layout.svelte` and opened from the sidebar through `settingsDialog.open` (`state.svelte.ts`). There is no `/settings` route.
+
+- **Layout**: grouped nav on the left (bits-ui `Tabs`, `orientation="vertical"`), one section per tab on the right. A section is a stack of `SettingsGroup` (titled surface) holding `SettingsRow`s (label + description left, control right; the row passes its label id to the control for `aria-labelledby`). `SettingsNote` is the amber line under a group for restart notices.
+- **Modules nav group**: one tab per module definition returned by `get_global_configs_cmd`; the group is omitted when there are none.
+- **Lifetime**: the sections mount when the dialog opens and read their initial values from the `getCoreSettings()` cache. Inactive tabs stay mounted (`Tabs.Content` only sets `hidden`), so don't put a display class on `Tabs.Content`.
+- **Editor hotkeys**: `editor-canvas.svelte` listens for keys on the window, so its `handleKeydown` returns early while `settingsDialog.open`.
+
 ## Core Settings (Auto-Save)
 
-- **`CORE_DEFAULTS`** (`core-settings-store.svelte.ts`): Exported `as const` object with all numeric/boolean setting defaults. `CoreSettingsStore` and `Core.svelte` use it as fallback; `EditorState` reads from `coreSettingsStore` (runtime SSoT) for field initializers.
+- **`CORE_DEFAULTS`** (`core-settings-store.svelte.ts`): Exported `as const` object with all numeric/boolean setting defaults. `CoreSettingsStore` and the settings sections use it as fallback; `EditorState` reads from `coreSettingsStore` (runtime SSoT) for field initializers.
 - **`coreSettingsStore`** (`core-settings-store.svelte.ts`): Reactive singleton — `EditorState` field initializers read from it (guaranteed initialized by `initGlobals()`), and subscribes via `$effect` + `untrack()` for runtime changes.
-- **Auto-save pattern** (`Core.svelte`): All settings auto-save on change (`onCheckedChange`/`onchange`/`onValueChange`) except `global_shortcut` which has a manual Save button because it requires app restart (`tauri-plugin-global-shortcut` only reads on startup).
+- **Auto-save pattern** (`components/settings/*-section.svelte`, `saveCoreSettings` in `helpers.ts`): All settings auto-save on change (`onCheckedChange`/`onchange`/`onValueChange`). `global_shortcut` saves the same way but shows a restart notice, because `tauri-plugin-global-shortcut` only reads it on startup.
 - **`setCoreSettings(Partial<CoreSettings>)`** (`module.ts`): Merges into `_coreSettings` cache + updates `coreSettingsStore` optimistically before the backend IPC call; backend `autostart::apply()` runs outside Mutex lock to prevent deadlock.
 - **UI settings vs workspace settings**: `CoreSettings` (Tauri store key `core`) holds UI and app settings only. Settings that change how patches run live in the workspace's `settings.json` (`Mutex<Workspace>` managed state, `save_workspace`):
   - Auto-start: `get_auto_start_patches_cmd` / `set_patch_auto_start_cmd`; `loadPatchInfos` fetches the list each time. Rename/move/delete keep it in step (`update_auto_start_patches*`, `remove_auto_start_patches`).
-  - Global configs: the settings page loads `get_global_configs_cmd` in `routes/settings/+page.ts` — each definition's defaults overlaid with the values **as written** — and `set_global_configs_cmd` stores the raw JSON, saves, then re-runs `apply_workspace_global_configs`. `${VAR}` references therefore stay unexpanded in the file and the UI; only the running configs see the environment's values. Entries that cannot be applied (unknown module/key, unset variable) are logged as warnings and skipped.
+  - Global configs: the settings dialog loads `get_global_configs_cmd` each time it opens — each definition's defaults overlaid with the values **as written** — and `set_global_configs_cmd` stores the raw JSON, saves, then re-runs `apply_workspace_global_configs`. `${VAR}` references therefore stay unexpanded in the file and the UI; only the running configs see the environment's values. Entries that cannot be applied (unknown module/key, unset variable) are logged as warnings and skipped.
   - The store's old `modules` key is no longer read and is left in place (it is the source for a manual migration).
 
 ## Undo/Redo (Command Pattern)
@@ -232,8 +241,8 @@ When the filesystem under `~/.modular_agent/patches/` changes, the backend emits
 
 `modular-agent-core`'s built-in MCP server (feature `mcp-server`) lets external AI agents (Claude Code, Codex) read and edit patches. Disabled by default.
 
-- **Enabling**: Settings → Core → "MCP Server" section — auto-saving toggle + port input (`CoreSettings.mcp_server_enabled` default `false`, `mcp_server_port` default `8765`). `apply_mcp_server()` in `settings.rs` stops/starts the server on change; `init_mcp_server()` starts it on launch from `RunEvent::Ready`. The desktop binds `127.0.0.1:<port>` itself and serves core's `mcp_router`; `RunningMcpServer` keeps the `McpServerHandle`, the shutdown token and the serve task, and stops them in that order (sessions first, or open SSE streams keep the graceful shutdown waiting). It lives in managed `McpServerState` (`tokio::sync::Mutex` held across the whole stop/start sequence — concurrent settings changes serialize, and enabled/port/token are re-read from `CoreSettings` inside the lock so the last caller applies the freshest state).
-- **Token (backend-only)**: `mcp_server_token` is auto-generated (32 random bytes, hex) by `apply_mcp_server()` on first enable and persisted; the server requires `Authorization: Bearer <token>` on every request (constant-time compare, 401 + `WWW-Authenticate: Bearer` otherwise). `set_core_settings_cmd` strips `mcp_server_token` from incoming JSON — the frontend only ever reads it; the sole other writer is `regenerate_mcp_server_token_cmd`, which persists a fresh token, restarts the server with it, and returns it (old token dies immediately). Core.svelte shows the token and a ready-to-copy connect command: `claude mcp add --transport http modular-agent http://127.0.0.1:<port>/mcp --header "Authorization: Bearer <token>"` (streamable HTTP, binds 127.0.0.1 only).
+- **Enabling**: Settings → MCP Server — auto-saving toggle + port input (`CoreSettings.mcp_server_enabled` default `false`, `mcp_server_port` default `8765`). `apply_mcp_server()` in `settings.rs` stops/starts the server on change; `init_mcp_server()` starts it on launch from `RunEvent::Ready`. The desktop binds `127.0.0.1:<port>` itself and serves core's `mcp_router`; `RunningMcpServer` keeps the `McpServerHandle`, the shutdown token and the serve task, and stops them in that order (sessions first, or open SSE streams keep the graceful shutdown waiting). It lives in managed `McpServerState` (`tokio::sync::Mutex` held across the whole stop/start sequence — concurrent settings changes serialize, and enabled/port/token are re-read from `CoreSettings` inside the lock so the last caller applies the freshest state).
+- **Token (backend-only)**: `mcp_server_token` is auto-generated (32 random bytes, hex) by `apply_mcp_server()` on first enable and persisted; the server requires `Authorization: Bearer <token>` on every request (constant-time compare, 401 + `WWW-Authenticate: Bearer` otherwise). `set_core_settings_cmd` strips `mcp_server_token` from incoming JSON — the frontend only ever reads it; the sole other writer is `regenerate_mcp_server_token_cmd`, which persists a fresh token, restarts the server with it, and returns it (old token dies immediately). `mcp-section.svelte` re-reads the token from the backend on mount (the cached settings never see it change) and shows it with a ready-to-copy connect command: `claude mcp add --transport http modular-agent http://127.0.0.1:<port>/mcp --header "Authorization: Bearer <token>"` (streamable HTTP, binds 127.0.0.1 only).
 - **Tools** (17, defined in core `src/mcp_server.rs`): `list_module_definitions`, `get_module_definition`, `list_patches`, `create_patch`, `get_patch_spec`, `add_module`, `update_module_spec`, `set_module_configs`, `remove_module`, `add_connection`, `remove_connection`, `save_patch`, `start_patch`, `stop_patch`, `write_external_input`, `get_module_errors`, `get_external_outputs`. Failures a module can fix itself return `is_error` tool results with corrective hints (valid handle lists, `PatchNameExists` guidance), not protocol errors. The two polling tools read a shared 200-entry ring of `Error`/`ExternalOutput` events; `latest_seq` is the seq of the last _returned_ record (echoes `since_seq` on an empty page) — cursor semantics, not a global counter — plus a `dropped` count for broadcast-lag losses.
 - **Origin convention**: every core mutation entry point stamps `EventEnvelope.origin` via `ModularAgent::with_origin` — `"desktop"` (tauri-plugin handle), `"mcp"` (MCP server handles), `None` (module runtime internal). `shared.svelte.ts` defines `isExternalOrigin(origin)`: anything but `"desktop"` is external (null counts as external). Self-echo filtering is purely origin-based — there are no frontend suppression wrappers around the plugin APIs.
 - **Event relay** (`observer.rs`): subscribes to `EventEnvelope`s and forwards `origin` in every Tauri payload. Besides the four module events, it relays `PatchStructureChanged` → `ma:patch_structure_changed { origin, patch_id }`, `PatchRemoved` → `ma:patch_removed { origin, patch_id, name }`, `PatchRenamed` → `ma:patch_renamed` plus `ma:patch_list_changed` for old/new parent folders, and `PatchAdded` (named) / `PatchSaved` → `ma:patch_list_changed { path }` via `parent_patch_path` — so MCP-side create/save/rename refresh the sidebar. `ma:patch_removed` for an open tab calls `closeTabAndNavigate(patch_id)`; editor-host cleanup then unloads the already-removed patch idempotently. Like `ma:patch_renamed`, it is deliberately **not** origin-filtered — a sidebar delete arrives as our own `"desktop"` echo, and this is the only path that closes the tab. The only other desktop-origin removal is `close_patch` (fired _after_ the tab is gone), so it no-ops.

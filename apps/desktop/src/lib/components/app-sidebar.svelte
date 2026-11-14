@@ -10,6 +10,7 @@
   import Attribution from "./attribution.svelte";
   import NavPatches from "./nav-patches.svelte";
   import NavSecondary from "./nav-secondary.svelte";
+  import { settingsDialog } from "./settings/state.svelte";
 
   const data = {
     navSecondary: [
@@ -20,7 +21,7 @@
       },
       {
         title: "Settings",
-        url: "/settings",
+        onclick: () => (settingsDialog.open = true),
         icon: SettingsIcon,
       },
     ],
