@@ -1,0 +1,58 @@
+// Template for models.json, the LLM provider settings of Modular Agent.
+//
+// Copy it to ~/.modular_agent/models.json (or models.json in a workspace),
+// uncomment the providers you use and fill in the values. Comments and
+// trailing commas are allowed. The file is read once, so restart the app
+// (or `ma`) after editing it.
+//
+// - "${VAR}" in apiKey is replaced from the environment; nothing else reads
+//   environment variables. Without apiKey, requests are unauthenticated.
+// - A module's model config names "<provider id>/<model id>", e.g.
+//   "openai/gpt-5-mini" or "lmstudio/qwen3-30b-a3b".
+// - Field reference: crates/modular-agent-llm/README.md, section models.json.
+{
+  "providers": {
+    // OpenAI. Built in: only the API key is needed.
+    // "openai": {
+    //   "apiKey": "${OPENAI_API_KEY}",
+    //   // "baseUrl": "https://api.openai.com/v1",
+    //   // "models": [{ "id": "gpt-5", "cost": { "input": 1.25, "output": 10 } }],
+    // },
+
+    // Claude (Anthropic). Built in: only the API key is needed.
+    // "claude": {
+    //   "apiKey": "${ANTHROPIC_API_KEY}",
+    //   // "baseUrl": "https://api.anthropic.com",
+    // },
+
+    // Ollama. Built in, on the local server by default. Vision and thinking
+    // support are read from the server, so model entries are only needed to
+    // override them.
+    // "ollama": {
+    //   // "baseUrl": "http://localhost:11434",
+    //   // "apiKey": "${OLLAMA_API_KEY}",
+    //   "models": [
+    //     // { "id": "<model name, e.g. qwen3:8b>", "reasoning": false },
+    //   ],
+    // },
+
+    // LM Studio, as a custom provider on its OpenAI-compatible endpoint.
+    // Nothing is read from the server, so list the models you load.
+    // "lmstudio": {
+    //   "baseUrl": "http://localhost:1234/v1",
+    //   "api": "openai-completions",
+    //   "models": [
+    //     {
+    //       "id": "<model identifier shown in LM Studio>",
+    //       "reasoning": true, // enables thinking_level; drop for non-reasoning models
+    //       "input": ["text", "image"], // ["text"] for text-only models
+    //       "cost": { "input": 0, "output": 0 },
+    //       // Metadata only: these do not change what LM Studio loads. If set,
+    //       // match the context length the model is loaded with.
+    //       // "contextWindow": 32768,
+    //       // "maxTokens": 8192,
+    //     },
+    //   ],
+    // },
+  },
+}

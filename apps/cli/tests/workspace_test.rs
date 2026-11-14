@@ -103,33 +103,13 @@ fn run_journal_writes_under_the_workspace() {
     assert_eq!(journal, "\"one\"\n\"two\"\n");
 }
 
-#[test]
-fn undefined_variable_refuses_to_start() {
-    let ws = tempfile::tempdir().unwrap();
-    std::fs::create_dir(ws.path().join("patches")).unwrap();
-    std::fs::write(
-        ws.path().join("settings.json"),
-        r#"{ "modules": { "modular_agent_llm::chat::ChatModule": { "openai_api_key": "${MA_TEST_UNDEFINED_VAR}" } } }"#,
-    )
-    .unwrap();
-    let out = Command::new(MA)
-        .args(["serve", "--workspace"])
-        .arg(ws.path())
-        .env_remove("MA_TEST_UNDEFINED_VAR")
-        .output()
-        .unwrap();
-    assert_eq!(out.status.code(), Some(1));
-    assert!(text(&out.stderr).contains("MA_TEST_UNDEFINED_VAR"));
-}
-
 /// Settings for a module this build does not link (e.g. a desktop-only one)
-/// are skipped with a warning; an unknown key on a linked module still fails.
+/// are skipped with a warning.
 #[test]
 fn unknown_module_is_only_a_warning() {
     let ws = example_workspace();
-    let settings = ws.path().join("settings.json");
     std::fs::write(
-        &settings,
+        ws.path().join("settings.json"),
         r#"{ "modules": { "modular_agent_not_linked::Module": { "key": "value" } } }"#,
     )
     .unwrap();
@@ -137,15 +117,6 @@ fn unknown_module_is_only_a_warning() {
     assert!(out.status.success(), "{}", text(&out.stderr));
     assert_eq!(text(&out.stdout), "echo: hi\n");
     assert!(text(&out.stderr).contains("modular_agent_not_linked::Module"));
-
-    std::fs::write(
-        &settings,
-        r#"{ "modules": { "modular_agent_llm::chat::ChatModule": { "no_such_key": "value" } } }"#,
-    )
-    .unwrap();
-    let out = run(ws.path(), &["echo"], "hi\n");
-    assert_eq!(out.status.code(), Some(1));
-    assert!(text(&out.stderr).contains("no_such_key"));
 }
 
 /// Kills the server if a test fails before stopping it.

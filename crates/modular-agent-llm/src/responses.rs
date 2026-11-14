@@ -96,6 +96,8 @@ pub struct ResponsesModule {
     data: ModuleData,
     openai_manager: openai_client::OpenAIManager,
     last_response_id: Option<String>,
+    /// Provider that issued `last_response_id`.
+    last_response_provider: Option<String>,
 }
 
 #[async_trait]
@@ -105,6 +107,7 @@ impl AsModule for ResponsesModule {
             data: ModuleData::new(ma, id, spec),
             openai_manager: openai_client::OpenAIManager::new(),
             last_response_id: None,
+            last_response_provider: None,
         })
     }
 
@@ -199,7 +202,7 @@ impl AsModule for ResponsesModule {
         self.process_response(
             ctx,
             messages,
-            &model_id.model_name,
+            &model_id,
             config_options,
             config_tools,
             use_stream,
@@ -215,12 +218,22 @@ impl AsModule for ResponsesModule {
 }
 
 impl ResponsesModule {
+    /// A response ID resolves only on the server that issued it, so after the
+    /// model config moves to another provider the conversation restarts
+    /// instead of failing on an unknown `previous_response_id`.
+    fn scope_state_to_provider(&mut self, provider_id: &str) {
+        if self.last_response_provider.as_deref() != Some(provider_id) {
+            self.last_response_id = None;
+            self.last_response_provider = Some(provider_id.to_string());
+        }
+    }
+
     #[allow(clippy::too_many_arguments)]
     async fn process_response(
         &mut self,
         ctx: ModuleContext,
         messages: im::Vector<Value>,
-        model_name: &str,
+        model_id: &ModelIdentifier,
         config_options: ValueMap<String, Value>,
         config_tools: String,
         use_stream: bool,
@@ -233,7 +246,9 @@ impl ResponsesModule {
     ) -> Result<()> {
         use modular_agent_core::tool::list_tool_infos_patterns;
 
-        let client = self.openai_manager.get_client(self.ma())?;
+        let client = self.openai_manager.get_client(&model_id.config)?;
+        let model_name = model_id.model_name.as_str();
+        self.scope_state_to_provider(&model_id.config.id);
 
         // Build input from messages
         let input = openai_client::messages_to_response_input(&messages)?;
@@ -744,6 +759,25 @@ mod tests {
         let probe_rx = probe_receiver(&ma, &probe_id).await.unwrap();
 
         (ma, responses_id, probe_rx)
+    }
+
+    #[tokio::test]
+    async fn response_state_resets_when_the_provider_changes() {
+        let (ma, responses_id, _probe_rx) = setup_responses_with_probe(PORT_MESSAGE).await;
+        {
+            let module = ma.get_module(&responses_id).unwrap();
+            let mut guard = module.lock().await;
+            let responses = guard.as_module_mut::<ResponsesModule>().unwrap();
+
+            responses.scope_state_to_provider("openai");
+            responses.last_response_id = Some("resp_1".to_string());
+            responses.scope_state_to_provider("openai");
+            assert_eq!(responses.last_response_id.as_deref(), Some("resp_1"));
+
+            responses.scope_state_to_provider("lmstudio");
+            assert_eq!(responses.last_response_id, None);
+        }
+        ma.quit();
     }
 
     #[tokio::test]

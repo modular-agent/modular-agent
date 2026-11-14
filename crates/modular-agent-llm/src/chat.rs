@@ -4,11 +4,7 @@ use modular_agent_core::{
     async_trait, modular_agent,
 };
 
-use crate::provider::{
-    CONFIG_CLAUDE_API_BASE, CONFIG_CLAUDE_API_KEY, CONFIG_OLLAMA_API_KEY, CONFIG_OLLAMA_URL,
-    CONFIG_OPENAI_API_BASE, CONFIG_OPENAI_API_KEY, CacheRetention, DEFAULT_CLAUDE_API_BASE,
-    DEFAULT_OLLAMA_URL, DEFAULT_OPENAI_API_BASE, ModelIdentifier, ProviderKind,
-};
+use crate::provider::{CacheRetention, ModelIdentifier, ProviderKind};
 use crate::retry::RetryPolicy;
 
 #[cfg(feature = "openai")]
@@ -50,7 +46,11 @@ const DEFAULT_CONFIG_MODEL: &str = "openai/gpt-5-nano";
 /// - `openai/gpt-5-mini` - Uses OpenAI API
 /// - `ollama/llama3.2:1b` - Uses Ollama
 /// - `claude/claude-sonnet-4-5-20250514` - Uses Claude API
+/// - `lmstudio/qwen3-30b-a3b` - Uses a provider defined in `models.json`
 /// - `openai/qwen/qwen3-vl-8b` - Slashes after the prefix are preserved in model name
+///
+/// Endpoints, API keys and per-model limits come from `models.json`
+/// (`~/.modular_agent/models.json`, then the workspace's).
 ///
 /// # Ports
 /// - Input `message`: User/tool message (or message array) to send to the model
@@ -88,7 +88,8 @@ const DEFAULT_CONFIG_MODEL: &str = "openai/gpt-5-nano";
 /// - `temperature`: Sampling temperature (-1: use API default)
 /// - `top_p`: Nucleus sampling parameter (-1: use API default)
 /// - `thinking_level`: Reasoning intensity: "off", "minimal", "low",
-///   "medium", or "high" (default: "off"; unrecognized values act as "off").
+///   "medium", "high", "xhigh", or "max" (default: "off"; unrecognized values
+///   act as "off").
 ///   Clamped to the nearest level the model supports according to the
 ///   capability registry; models without thinking support silently run with
 ///   thinking off, so one patch works across models. Provider mapping:
@@ -131,18 +132,12 @@ const DEFAULT_CONFIG_MODEL: &str = "openai/gpt-5-nano";
     integer_config(name = CONFIG_MAX_TOKENS, title = "Max Tokens", default = 0, description = "0: use API default", detail),
     number_config(name = CONFIG_TEMPERATURE, title = "Temperature", default = -1.0, description = "-1: use API default (0.0-2.0)", detail),
     number_config(name = CONFIG_TOP_P, title = "Top P", default = -1.0, description = "-1: use API default (0.0-1.0)", detail),
-    string_config(name = CONFIG_THINKING_LEVEL, title = "Thinking Level", default = "off", description = "Reasoning intensity: off / minimal / low / medium / high", detail),
+    string_config(name = CONFIG_THINKING_LEVEL, title = "Thinking Level", default = "off", description = "Reasoning intensity: off / minimal / low / medium / high / xhigh / max", detail),
     object_config(name = CONFIG_OPTIONS, title = "Options", description = "Additional request options as JSON", detail),
     integer_config(name = CONFIG_MAX_RETRIES, title = "Max Retries", default = 2, description = "Automatic retries for retryable errors", detail),
     integer_config(name = CONFIG_RETRY_BASE_DELAY_MS, title = "Retry Base Delay (ms)", default = 1000, description = "Base delay for exponential backoff", detail),
     integer_config(name = CONFIG_TIMEOUT_SECS, title = "Timeout (secs)", default = 300, description = "Per-attempt deadline; 0: disabled", detail),
     string_config(name = CONFIG_CACHE_RETENTION, title = "Cache Retention", default = "short", description = "Prompt cache retention: none / short / long", detail),
-    custom_global_config(name = CONFIG_CLAUDE_API_KEY, type_ = "password", default = Value::string(""), title = "Claude API Key"),
-    string_global_config(name = CONFIG_CLAUDE_API_BASE, title = "Claude API Base URL", default = DEFAULT_CLAUDE_API_BASE),
-    custom_global_config(name = CONFIG_OPENAI_API_KEY, type_ = "password", default = Value::string(""), title = "OpenAI API Key"),
-    string_global_config(name = CONFIG_OPENAI_API_BASE, title = "OpenAI API Base URL", default = DEFAULT_OPENAI_API_BASE),
-    custom_global_config(name = CONFIG_OLLAMA_API_KEY, type_ = "password", default = Value::string(""), title = "Ollama API Key"),
-    string_global_config(name = CONFIG_OLLAMA_URL, title = "Ollama URL", default = DEFAULT_OLLAMA_URL),
     hint(width = 2, height = 2),
 )]
 pub struct ChatModule {
@@ -270,7 +265,7 @@ impl AsModule for ChatModule {
                 self.process_claude(
                     ctx,
                     messages,
-                    &model_id.model_name,
+                    &model_id,
                     config_options,
                     config_tools,
                     use_stream,
@@ -289,7 +284,7 @@ impl AsModule for ChatModule {
                 self.process_openai(
                     ctx,
                     messages,
-                    &model_id.model_name,
+                    &model_id,
                     config_options,
                     config_tools,
                     use_stream,
@@ -308,7 +303,7 @@ impl AsModule for ChatModule {
                 self.process_ollama(
                     ctx,
                     messages,
-                    &model_id.model_name,
+                    &model_id,
                     config_options,
                     config_tools,
                     use_stream,
@@ -338,7 +333,7 @@ impl ChatModule {
         &mut self,
         ctx: ModuleContext,
         messages: im::Vector<Value>,
-        model_name: &str,
+        model_id: &ModelIdentifier,
         config_options: ValueMap<String, Value>,
         config_tools: String,
         use_stream: bool,
@@ -357,7 +352,8 @@ impl ChatModule {
         let prompt_cache_key = (cache_retention != CacheRetention::None)
             .then(|| openai_client::prompt_cache_key(self.patch_id(), self.id()));
 
-        let client = self.openai_manager.get_client(self.ma())?;
+        let client = self.openai_manager.get_client(&model_id.config)?;
+        let model_name = model_id.model_name.as_str();
 
         let tools_json: Vec<serde_json::Value> = if config_tools.is_empty() {
             vec![]
@@ -722,7 +718,7 @@ impl ChatModule {
         &mut self,
         ctx: ModuleContext,
         messages: im::Vector<Value>,
-        model_name: &str,
+        model_id: &ModelIdentifier,
         config_options: ValueMap<String, Value>,
         config_tools: String,
         use_stream: bool,
@@ -736,7 +732,8 @@ impl ChatModule {
     ) -> Result<()> {
         use modular_agent_core::tool::list_tool_infos_patterns;
 
-        let client = self.claude_manager.get_client(self.ma())?;
+        let client = self.claude_manager.get_client(&model_id.config)?;
+        let model_name = model_id.model_name.as_str();
 
         // Convert messages (separate system)
         let (system, claude_messages) = claude_client::messages_to_claude(&messages);
@@ -1177,7 +1174,7 @@ impl ChatModule {
         &mut self,
         ctx: ModuleContext,
         messages: im::Vector<Value>,
-        model_name: &str,
+        model_id: &ModelIdentifier,
         config_options: ValueMap<String, Value>,
         config_tools: String,
         use_stream: bool,
@@ -1192,12 +1189,13 @@ impl ChatModule {
     ) -> Result<()> {
         use modular_agent_core::tool::list_tool_infos_patterns;
 
-        let client = self.ollama_manager.get_client(self.ma())?;
+        let client = self.ollama_manager.get_client(&model_id.config)?;
+        let model_name = model_id.model_name.as_str();
 
         // Best-effort: probe /api/show once per model to cache its context
         // length and vision/thinking capabilities for later capability
         // lookups. Never fails the request.
-        crate::capabilities::warm_ollama_context(&client, model_name).await;
+        crate::capabilities::warm_ollama_context(&client, model_id).await;
 
         let tools: Vec<ollama_client::OllamaToolInfo> = if config_tools.is_empty() {
             vec![]

@@ -36,18 +36,29 @@ A workspace is a directory that `ma serve` runs from and the desktop app edits (
 
 ```text
 settings.json   # global configs and the patches to start automatically
+models.json     # LLM providers: endpoints, API keys, model limits (optional)
 patches/        # patch JSON files; a "/" in a patch name is a subfolder
 data/           # conventional place for files patches write
 ```
 
 ```json
 {
-  "modules": { "modular_agent_llm::chat::ChatModule": { "openai_api_key": "${OPENAI_API_KEY}" } },
+  "modules": {},
   "auto_start_patches": ["bugs/triage", "digest"]
 }
 ```
 
-- `${VAR}` in a global config value is replaced from the environment, so secrets stay out of the file. An unset variable or an unknown key stops `ma` from starting. Settings for a module this build does not include (a desktop-only one, say) are skipped with a warning, since builds select different modules.
+```json
+{
+  "providers": {
+    "openai": { "apiKey": "${OPENAI_API_KEY}" },
+    "lmstudio": { "baseUrl": "http://localhost:1234/v1", "api": "openai-completions" }
+  }
+}
+```
+
+- `modules` maps a module's definition name to its global configs. `${VAR}` in a value is replaced from the environment, so secrets stay out of the file. An unset variable or an unknown key stops `ma` from starting. Settings for a module this build does not include (a desktop-only one, say) are skipped with a warning, since builds select different modules.
+- `models.json` configures the LLM modules ([format](../../crates/modular-agent-llm/README.md#modelsjson)). `~/.modular_agent/models.json` is read as well; a provider defined in the workspace's file replaces the one with the same ID there. `${VAR}` in `apiKey` is the only way the environment reaches it — `OPENAI_API_KEY` and the like are not read on their own.
 - Relative paths in patches (for example `data/journal.jsonl`) resolve against the workspace.
 
 [examples/workspace](../../examples/workspace) is a small workspace to try both commands with.
@@ -111,6 +122,8 @@ Logs go to stderr; stdout carries only `ma run`'s output. `--log-format json` wr
 docker build -f apps/cli/Dockerfile -t modular-agent .
 docker run -e MA_TOKEN=... -e OPENAI_API_KEY=... -p 8080:8080 -v ./my-workspace:/workspace modular-agent
 ```
+
+`OPENAI_API_KEY` reaches the LLM modules only through a `"apiKey": "${OPENAI_API_KEY}"` in the workspace's `models.json`.
 
 `docker stop` sends SIGTERM, which stops the patches gracefully.
 

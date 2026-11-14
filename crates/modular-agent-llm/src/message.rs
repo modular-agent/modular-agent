@@ -837,10 +837,9 @@ async fn summarize_and_prune<A: SessionMessages>(
     let retry = RetryPolicy::from_configs(0, SUMMARY_RETRY_BASE_DELAY_MS, SUMMARY_TIMEOUT_SECS);
     let cap =
         (summary_max_tokens > 0).then(|| u32::try_from(summary_max_tokens).unwrap_or(u32::MAX));
-    let ma = module.ma().clone();
     let summary = match module
         .summarizer()
-        .summarize(&ma, ctx, model_id, prompt, retry, cap)
+        .summarize(ctx, model_id, prompt, retry, cap)
         .await
     {
         Ok(summary) => summary,
@@ -1088,10 +1087,9 @@ fn ceil_char_boundary(s: &str, mut index: usize) -> usize {
 /// - `session_id`: Session to resume on start. Empty: a new session is
 ///   created and its id is written back to this config (default: "")
 ///
-/// # Global Configuration
-/// With `summarize_model` set, uses the same provider credentials as the
-/// `Chat` module (`claude_api_key`, `openai_api_key`, `ollama_url`, and the
-/// corresponding base URLs).
+/// # Provider Configuration
+/// With `summarize_model` set, the summary request uses the same `models.json`
+/// providers (endpoints and API keys) as the `Chat` module.
 #[modular_agent(
     title="Messages",
     category=CATEGORY,
@@ -1350,10 +1348,9 @@ impl AsModule for MessagesModule {
 /// - `session_id`: Session to resume on start. Empty: a new session is
 ///   created and its id is written back to this config (default: "")
 ///
-/// # Global Configuration
-/// With `summarize_model` set, uses the same provider credentials as the
-/// `Chat` module (`claude_api_key`, `openai_api_key`, `ollama_url`, and the
-/// corresponding base URLs).
+/// # Provider Configuration
+/// With `summarize_model` set, the summary request uses the same `models.json`
+/// providers (endpoints and API keys) as the `Chat` module.
 #[modular_agent(
     title="File Messages",
     category=CATEGORY,
@@ -2550,11 +2547,18 @@ mod tests {
         (url, rx)
     }
 
+    /// Registers a provider for the mock server and returns a model string
+    /// routed to it. The ID carries the port, so concurrent tests do not
+    /// share a provider.
     #[cfg(feature = "ollama")]
-    fn point_ollama_at(ma: &ModularAgent, url: &str) {
-        let mut configs = modular_agent_core::ModuleConfigs::new();
-        configs.set("ollama_url".into(), Value::string(url));
-        ma.set_global_configs(crate::chat::ChatModule::DEF_NAME.to_string(), configs);
+    fn mock_ollama_model(url: &str) -> String {
+        let port = url.rsplit(':').next().unwrap();
+        let id = format!("mock-ollama-{port}");
+        crate::models_config::test_support::register_test_provider(
+            &id,
+            &format!(r#"{{ "baseUrl": "{url}", "api": "ollama" }}"#),
+        );
+        format!("{id}/test")
     }
 
     /// The summarization prompt sent in a mock request body.
@@ -2591,11 +2595,13 @@ mod tests {
         let (url, mut request_rx) = spawn_mock_ollama(vec![Ok("SUM"), Ok("SUM2")]).await;
         let (ma, _patch_id, module_id, probe_rx, _session_rx) = setup_messages_module(vec![
             (CONFIG_MAX_CONTEXT_TOKENS, Value::integer(15)),
-            (CONFIG_SUMMARIZE_MODEL, Value::string("ollama/test")),
+            (
+                CONFIG_SUMMARIZE_MODEL,
+                Value::string(mock_ollama_model(&url)),
+            ),
             (CONFIG_SUMMARY_MAX_TOKENS, Value::integer(5)),
         ])
         .await;
-        point_ollama_at(&ma, &url);
 
         send(
             &ma,
@@ -2685,10 +2691,12 @@ mod tests {
         let (url, _request_rx) = spawn_mock_ollama(vec![Err(()), Ok("SUM")]).await;
         let (ma, _patch_id, module_id, probe_rx, _session_rx) = setup_messages_module(vec![
             (CONFIG_MAX_CONTEXT_TOKENS, Value::integer(15)),
-            (CONFIG_SUMMARIZE_MODEL, Value::string("ollama/test")),
+            (
+                CONFIG_SUMMARIZE_MODEL,
+                Value::string(mock_ollama_model(&url)),
+            ),
         ])
         .await;
-        point_ollama_at(&ma, &url);
 
         send(
             &ma,
@@ -2790,11 +2798,13 @@ mod tests {
                 Value::string(dir.path().to_string_lossy()),
             ),
             (CONFIG_MAX_CONTEXT_TOKENS, Value::integer(15)),
-            (CONFIG_SUMMARIZE_MODEL, Value::string("ollama/test")),
+            (
+                CONFIG_SUMMARIZE_MODEL,
+                Value::string(mock_ollama_model(&url)),
+            ),
             (CONFIG_PRUNE_FILE, Value::boolean(false)),
         ])
         .await;
-        point_ollama_at(&ma, &url);
 
         send_file(
             &ma,

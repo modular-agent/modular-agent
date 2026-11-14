@@ -1,9 +1,18 @@
 use modular_agent_core::{
-    AsModule, ModularAgent, Module, ModuleContext, ModuleData, ModuleOutput, ModuleSpec, Result,
-    Value, async_trait, modular_agent,
+    AsModule, ModularAgent, ModuleContext, ModuleData, ModuleOutput, ModuleSpec, Result, Value,
+    async_trait, modular_agent,
 };
 
+use crate::models_config::Provider;
 use crate::ollama_client::OllamaManager;
+use crate::provider::ProviderKind;
+
+/// The built-in `ollama` provider as `models.json` currently configures it.
+fn builtin_ollama() -> Result<std::sync::Arc<Provider>> {
+    Ok(crate::models_config::current()?
+        .builtin(ProviderKind::Ollama)
+        .clone())
+}
 
 const CATEGORY: &str = "LLM/Ollama";
 
@@ -35,7 +44,8 @@ impl AsModule for OllamaListLocalModelsModule {
     }
 
     async fn process(&mut self, ctx: ModuleContext, _port: String, _value: Value) -> Result<()> {
-        let client = self.manager.get_client(self.ma())?;
+        let provider = builtin_ollama()?;
+        let client = self.manager.get_client(&provider)?;
         let model_list = client.list_local_models().await?;
         let model_list = Value::from_serialize(&model_list)?;
 
@@ -73,7 +83,8 @@ impl AsModule for OllamaShowModelInfoModule {
             return Ok(());
         }
 
-        let client = self.manager.get_client(self.ma())?;
+        let provider = builtin_ollama()?;
+        let client = self.manager.get_client(&provider)?;
         let model_info = client.show_model_info(model_name).await?;
         let model_info = Value::from_serialize(&model_info)?;
 

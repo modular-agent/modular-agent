@@ -1,15 +1,10 @@
-use std::sync::{Arc, Mutex};
-
 use modular_agent_core::tool;
 use modular_agent_core::{
-    ContentBlock, Error, Message, MessageContent, ModularAgent, Result, ToolCall, ToolCallFunction,
-    Usage, Value,
+    ContentBlock, Error, Message, MessageContent, Result, ToolCall, ToolCallFunction, Usage, Value,
 };
 
-use crate::chat::ChatModule;
-use crate::provider::{
-    CONFIG_CLAUDE_API_BASE, CONFIG_CLAUDE_API_KEY, CacheRetention, DEFAULT_CLAUDE_API_BASE,
-};
+use crate::models_config::Provider;
+use crate::provider::{CacheRetention, ClientCache};
 const ANTHROPIC_VERSION: &str = "2023-06-01";
 
 // ============================================================================
@@ -19,77 +14,37 @@ const ANTHROPIC_VERSION: &str = "2023-06-01";
 #[derive(Clone)]
 pub(crate) struct ClaudeClient {
     http: reqwest::Client,
-    api_key: String,
+    /// `None`: requests carry no `x-api-key` header.
+    api_key: Option<String>,
     api_base: String,
 }
 
 pub(crate) struct ClaudeManager {
-    client: Arc<Mutex<Option<ClaudeClient>>>,
+    clients: ClientCache<ClaudeClient>,
 }
 
 impl ClaudeManager {
     pub(crate) fn new() -> Self {
         Self {
-            client: Arc::new(Mutex::new(None)),
+            clients: ClientCache::new(),
         }
     }
 
-    pub(crate) fn get_client(&self, ma: &ModularAgent) -> Result<ClaudeClient> {
-        let mut client_guard = self.client.lock().unwrap();
-
-        if let Some(client) = client_guard.as_ref() {
-            return Ok(client.clone());
-        }
-
-        // Resolve API key: config → CLAUDE_API_KEY → ANTHROPIC_API_KEY
-        let api_key = ma
-            .get_global_configs(ChatModule::DEF_NAME)
-            .and_then(|cfg| cfg.get_string(CONFIG_CLAUDE_API_KEY).ok())
-            .filter(|key| !key.is_empty())
-            .or_else(|| {
-                std::env::var("CLAUDE_API_KEY")
-                    .ok()
-                    .filter(|k| !k.is_empty())
+    pub(crate) fn get_client(&self, provider: &Provider) -> Result<ClaudeClient> {
+        self.clients.get_or_build(provider, |provider| {
+            // Timeouts keep a hung server from blocking process() forever;
+            // read_timeout is idle time between reads, so streaming is safe.
+            let http = reqwest::Client::builder()
+                .connect_timeout(std::time::Duration::from_secs(10))
+                .read_timeout(std::time::Duration::from_secs(120))
+                .build()
+                .map_err(|e| Error::IoError(format!("Claude client build error: {}", e)))?;
+            Ok(ClaudeClient {
+                http,
+                api_key: provider.api_key()?,
+                api_base: provider.base_url().to_string(),
             })
-            .or_else(|| {
-                std::env::var("ANTHROPIC_API_KEY")
-                    .ok()
-                    .filter(|k| !k.is_empty())
-            })
-            .unwrap_or_default();
-
-        // Resolve API base: config → CLAUDE_API_BASE → ANTHROPIC_API_BASE → default
-        let api_base = ma
-            .get_global_configs(ChatModule::DEF_NAME)
-            .and_then(|cfg| cfg.get_string(CONFIG_CLAUDE_API_BASE).ok())
-            .filter(|url| !url.is_empty())
-            .or_else(|| {
-                std::env::var("CLAUDE_API_BASE")
-                    .ok()
-                    .filter(|u| !u.is_empty())
-            })
-            .or_else(|| {
-                std::env::var("ANTHROPIC_API_BASE")
-                    .ok()
-                    .filter(|u| !u.is_empty())
-            })
-            .unwrap_or_else(|| DEFAULT_CLAUDE_API_BASE.to_string());
-
-        // Timeouts keep a hung server from blocking process() forever;
-        // read_timeout is idle time between reads, so streaming is safe.
-        let http = reqwest::Client::builder()
-            .connect_timeout(std::time::Duration::from_secs(10))
-            .read_timeout(std::time::Duration::from_secs(120))
-            .build()
-            .map_err(|e| Error::IoError(format!("Claude client build error: {}", e)))?;
-        let new_client = ClaudeClient {
-            http,
-            api_key,
-            api_base,
-        };
-        *client_guard = Some(new_client.clone());
-
-        Ok(new_client)
+        })
     }
 }
 
@@ -108,11 +63,16 @@ impl ClaudeClient {
         format!("{}/v1/messages", self.api_base.trim_end_matches('/'))
     }
 
+    fn authorized(&self, builder: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
+        match &self.api_key {
+            Some(key) => builder.header("x-api-key", key),
+            None => builder,
+        }
+    }
+
     pub(crate) async fn create_message(&self, request: &ClaudeRequest) -> Result<ClaudeResponse> {
         let resp = self
-            .http
-            .post(self.messages_url())
-            .header("x-api-key", &self.api_key)
+            .authorized(self.http.post(self.messages_url()))
             .header("anthropic-version", ANTHROPIC_VERSION)
             .header("content-type", "application/json")
             .json(request)
@@ -143,9 +103,7 @@ impl ClaudeClient {
         use futures::StreamExt;
 
         let resp = self
-            .http
-            .post(self.messages_url())
-            .header("x-api-key", &self.api_key)
+            .authorized(self.http.post(self.messages_url()))
             .header("anthropic-version", ANTHROPIC_VERSION)
             .header("content-type", "application/json")
             .json(request)
@@ -357,6 +315,11 @@ pub(crate) fn thinking_budget_tokens(level: crate::capabilities::ThinkingLevel) 
         Low => 2048,
         Medium => 8192,
         High => 16384,
+        // Budget models default to minimal..high and any level mapped in
+        // models.json carries an effort string (the adaptive path), so these
+        // only keep the scale doubling.
+        XHigh => 32768,
+        Max => 65536,
     }
 }
 

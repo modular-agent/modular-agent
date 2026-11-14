@@ -1,13 +1,11 @@
-use std::sync::{Arc, Mutex};
-
 use modular_agent_core::tool;
 use modular_agent_core::{
-    ContentBlock, Error, Message, MessageContent, ModularAgent, Result, ToolCall, ToolCallFunction,
-    Usage, Value, ValueMap,
+    ContentBlock, Error, Message, MessageContent, Result, ToolCall, ToolCallFunction, Usage, Value,
+    ValueMap,
 };
 
-use crate::chat::ChatModule;
-use crate::provider::{CONFIG_OPENAI_API_BASE, CONFIG_OPENAI_API_KEY, DEFAULT_OPENAI_API_BASE};
+use crate::models_config::Provider;
+use crate::provider::ClientCache;
 
 // ============================================================================
 // Client management
@@ -16,67 +14,37 @@ use crate::provider::{CONFIG_OPENAI_API_BASE, CONFIG_OPENAI_API_KEY, DEFAULT_OPE
 #[derive(Clone)]
 pub(crate) struct OpenAIClient {
     http: reqwest::Client,
-    api_key: String,
+    /// `None`: requests carry no Authorization header.
+    api_key: Option<String>,
     api_base: String,
 }
 
 pub struct OpenAIManager {
-    client: Arc<Mutex<Option<OpenAIClient>>>,
+    clients: ClientCache<OpenAIClient>,
 }
 
 impl OpenAIManager {
     pub fn new() -> Self {
         Self {
-            client: Arc::new(Mutex::new(None)),
+            clients: ClientCache::new(),
         }
     }
 
-    pub fn get_client(&self, ma: &ModularAgent) -> Result<OpenAIClient> {
-        let mut client_guard = self.client.lock().unwrap();
-
-        if let Some(client) = client_guard.as_ref() {
-            return Ok(client.clone());
-        }
-
-        // API key: config → OPENAI_API_KEY env var → empty
-        let api_key = ma
-            .get_global_configs(ChatModule::DEF_NAME)
-            .and_then(|cfg| cfg.get_string(CONFIG_OPENAI_API_KEY).ok())
-            .filter(|key| !key.is_empty())
-            .or_else(|| {
-                std::env::var("OPENAI_API_KEY")
-                    .ok()
-                    .filter(|k| !k.is_empty())
+    pub(crate) fn get_client(&self, provider: &Provider) -> Result<OpenAIClient> {
+        self.clients.get_or_build(provider, |provider| {
+            // Timeouts keep a hung server from blocking process() forever;
+            // read_timeout is idle time between reads, so streaming is safe.
+            let http = reqwest::Client::builder()
+                .connect_timeout(std::time::Duration::from_secs(10))
+                .read_timeout(std::time::Duration::from_secs(120))
+                .build()
+                .map_err(|e| Error::IoError(format!("OpenAI client build error: {}", e)))?;
+            Ok(OpenAIClient {
+                http,
+                api_key: provider.api_key()?,
+                api_base: provider.base_url().to_string(),
             })
-            .unwrap_or_default();
-
-        // API base: config → OPENAI_API_BASE env var → default
-        let api_base = ma
-            .get_global_configs(ChatModule::DEF_NAME)
-            .and_then(|cfg| cfg.get_string(CONFIG_OPENAI_API_BASE).ok())
-            .filter(|url| !url.is_empty())
-            .or_else(|| {
-                std::env::var("OPENAI_API_BASE")
-                    .ok()
-                    .filter(|u| !u.is_empty())
-            })
-            .unwrap_or_else(|| DEFAULT_OPENAI_API_BASE.to_string());
-
-        // Timeouts keep a hung server from blocking process() forever;
-        // read_timeout is idle time between reads, so streaming is safe.
-        let http = reqwest::Client::builder()
-            .connect_timeout(std::time::Duration::from_secs(10))
-            .read_timeout(std::time::Duration::from_secs(120))
-            .build()
-            .map_err(|e| Error::IoError(format!("OpenAI client build error: {}", e)))?;
-        let new_client = OpenAIClient {
-            http,
-            api_key,
-            api_base,
-        };
-        *client_guard = Some(new_client.clone());
-
-        Ok(new_client)
+        })
     }
 }
 
@@ -107,6 +75,13 @@ impl OpenAIClient {
         format!("{}/responses", self.api_base.trim_end_matches('/'))
     }
 
+    fn authorized(&self, builder: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
+        match &self.api_key {
+            Some(key) => builder.bearer_auth(key),
+            None => builder,
+        }
+    }
+
     /// POST JSON and parse typed response.
     pub(crate) async fn post_json<T: serde::de::DeserializeOwned>(
         &self,
@@ -114,9 +89,7 @@ impl OpenAIClient {
         body: &serde_json::Value,
     ) -> Result<T> {
         let resp = self
-            .http
-            .post(url)
-            .header("Authorization", format!("Bearer {}", self.api_key))
+            .authorized(self.http.post(url))
             .header("content-type", "application/json")
             .json(body)
             .send()
@@ -148,9 +121,7 @@ impl OpenAIClient {
         use futures::StreamExt;
 
         let resp = self
-            .http
-            .post(url)
-            .header("Authorization", format!("Bearer {}", self.api_key))
+            .authorized(self.http.post(url))
             .header("content-type", "application/json")
             .json(body)
             .send()

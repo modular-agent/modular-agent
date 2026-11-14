@@ -2,6 +2,13 @@
 
 pub mod doc;
 pub mod message;
+// Like capabilities: the connection settings are only read by the provider
+// clients, which a build without provider features does not have.
+#[cfg_attr(
+    not(any(feature = "openai", feature = "claude", feature = "ollama")),
+    allow(dead_code)
+)]
+pub(crate) mod models_config;
 pub mod provider;
 
 // The registry itself is feature-independent, but its pub(crate) helpers

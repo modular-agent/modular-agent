@@ -12,13 +12,14 @@ LLM integration library providing completion, chat, and embeddings modules for O
 | ------ | ------- |
 | doc.rs | Text processing (NFKC normalization, chunking by chars/tokens) |
 | message.rs | Message accumulation and formatting |
-| capabilities.rs | Model capability registry (context window / max tokens / cost; built-in table + models.json overlay) |
+| capabilities.rs | Model capability registry (context window / max tokens / thinking levels / cost; models.json > built-in table > Ollama probe > defaults) |
+| models_config.rs | `models.json` (Pi format): providers, endpoints, API keys, per-model entries; two files, read once per process |
 | chat.rs | Chat modules (OpenAI, Ollama, Claude) |
 | claude_client.rs | Claude (Anthropic) Messages API client |
 | completion.rs | Text completion modules |
 | embeddings.rs | Embeddings modules |
 | responses.rs | OpenAI Responses API integration |
-| provider.rs | Model prefix routing (`openai/`, `ollama/`, `claude/`) |
+| provider.rs | Model prefix routing (`openai/`, `ollama/`, `claude/`, custom providers), per-module client cache |
 | openai_client.rs | OpenAI API client wrapper |
 | ollama_client.rs | Ollama API client (direct HTTP/NDJSON) |
 | ollama.rs | Ollama-specific modules (list models, show info) |
@@ -51,34 +52,50 @@ LLM integration library providing completion, chat, and embeddings modules for O
 | FileMessagesModule | LLM/Message | Same, persisted as JSONL session files (`session_dir`); `prune_file` controls whether trimmed history is also deleted from the file |
 | MessagesForPromptModule | LLM/Message | Trim a session-less message stream to a max_tokens/max_size budget |
 
+## models.json (connection settings)
+
+All provider connection settings live in `models.json` (user-facing format in
+README.md). There are no global configs and no implicit environment
+variables: the environment is read only where `apiKey` says `${VAR}`
+(expanded by core's `expand_vars`, the same syntax as workspace settings).
+
+- **Loading** (`models_config.rs`): `~/.modular_agent/models.json`, then
+  `models.json` in the working directory (hosts make the workspace their cwd;
+  llm is ma-config-selectable, so app code cannot call into it). Provider-level
+  replacement, local wins. JSONC: `strip_jsonc` blanks comments and trailing
+  commas in place (byte positions kept, so serde_json errors point into the
+  file); `models.json.sample` is the commented template, and a test loads it
+  both as shipped and uncommented. Read once on first use (`LazyLock`) and kept for
+  the process; edits need a restart. Any invalid file makes `current()` an error, and
+  `ModelIdentifier::parse` fails for *every* provider — never fall back to the
+  default endpoints, a broken edit would silently reroute requests.
+- **Routing**: `ModelIdentifier { provider: ProviderKind, model_name, config:
+  Arc<Provider> }`. `ProviderKind` is the API spoken; custom providers pick it
+  with `api` (`openai-completions` / `anthropic-messages` / `ollama`).
+- **Clients**: managers take `&Provider` and cache one client per provider ID
+  in `ClientCache` (a module's `model` can move between providers). An absent
+  key sends no auth header. ResponsesModule drops `previous_response_id` when
+  the provider changes, since response IDs are server-local.
+- **Tests** never read the user's files: under `cfg(test)` `current()` returns
+  the built-ins plus `test_support::register_test_provider` entries (unique ID
+  per test; the registry is process-global). Capability tests build
+  `ModelIdentifier` directly from `test_support::config_from_json` (bypassing
+  `parse`'s feature check, so they run in every feature combination); routing
+  tests use `ModelIdentifier::parse_with`.
+
 ## Model Capabilities
 
-`capabilities.rs` resolves per-model metadata (context window, max output
-tokens, cost, reasoning) from four layers: `models.json` > built-in static
-table > measured Ollama `/api/show` > conservative defaults (8192). The chat /
-responses / completion modules use it to pick each model's `max_tokens` default
-and to clamp user-configured values to the model limit — this is why Claude's
-output is no longer capped at a hardcoded 8192. Loading `models.json` is the
-caller's responsibility: CLI and desktop call `load_model_capabilities_json`
-once at startup (counterpart of core's `register_tools_from_mcp_json`); without
-it only the built-in table and defaults apply.
+`capabilities.rs` resolves per-model metadata from four layers: the model's
+`models.json` entry (exact ID, within its provider) > built-in static table
+(prefix match; built-in providers only) > measured Ollama `/api/show` (keyed by
+`provider/model`) > conservative defaults (8192). The chat / responses /
+completion modules use it to pick each model's `max_tokens` default and to
+clamp user-configured values to the model limit.
 
-## Environment Variables
-
-| Variable | Purpose |
-| -------- | ------- |
-| `OPENAI_API_KEY` | OpenAI API key |
-| `OPENAI_API_BASE` | Custom OpenAI endpoint |
-| `OLLAMA_API_KEY` | Ollama API key (Bearer token) |
-| `OLLAMA_API_BASE_URL` | Ollama server URL |
-| `OLLAMA_HOST` | Alternative Ollama host |
-| `CLAUDE_API_KEY` | Claude (Anthropic) API key |
-| `ANTHROPIC_API_KEY` | Claude API key (fallback) |
-| `CLAUDE_API_BASE` | Custom Claude API endpoint |
-| `ANTHROPIC_API_BASE` | Claude API endpoint (fallback) |
-
-Default Ollama URL: `http://localhost:11434`
-Default Claude API Base: `https://api.anthropic.com`
+Thinking levels follow Pi's vocabulary minus "off" (`minimal` … `max`).
+`reasoning: true` adds the API's defaults (minimal–high; OpenAI with the level
+name as `reasoning_effort`, Claude/Ollama with no parameter), then
+`thinkingLevelMap` sets (string) or removes (`null`) individual levels.
 
 ## Build Commands
 
@@ -155,6 +172,7 @@ All LLM modules use a `provider/model-name` prefix to route to the correct provi
 | `openai/` | OpenAI | `openai/gpt-5-mini` |
 | `ollama/` | Ollama | `ollama/llama3.2:1b` |
 | `claude/` | Claude (Anthropic) | `claude/claude-sonnet-4-5-20250514` |
+| `<id>/` | Custom provider from `models.json` | `lmstudio/qwen3-30b-a3b` |
 
 Provider prefix is mandatory. Model names without a prefix will produce an error.
 
@@ -181,23 +199,9 @@ ChatModule supports Claude (Anthropic) Messages API via the `claude` feature fla
 - Default `max_tokens`: registry-resolved model cap for streaming requests; 8192 for non-streaming requests and registry-unknown models (overridable via `max_tokens` config — clamped to the known model limit — or options)
 - CompletionModule and EmbeddingsModule return errors for Claude (unsupported by Anthropic API)
 
-### Global Configs (Claude)
-
-| Config | Purpose |
-| ------ | ------- |
-| `claude_api_key` | Claude API key (overrides env var) |
-| `claude_api_base` | Custom API base URL |
-
 ## Ollama Integration
 
 All three providers (OpenAI, Ollama, Claude) now use direct `reqwest` HTTP calls — no provider-specific SDK crates.
-
-### Global Configs (Ollama)
-
-| Config | Purpose |
-| ------ | ------- |
-| `ollama_api_key` | Ollama API key / Bearer token (overrides env var) |
-| `ollama_url` | Ollama server URL (overrides env var) |
 
 - Ollama uses NDJSON streaming (not SSE); `ollama_client::post_ndjson_stream` handles line-buffered parsing via `futures::stream::unfold`
 - Ollama `options` (temperature, top_p, etc.) must be nested under the `"options"` key in requests, unlike OpenAI's flat merge — use `ollama_client::merge_options`

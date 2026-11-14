@@ -1,13 +1,11 @@
-use std::sync::{Arc, Mutex};
-
 use modular_agent_core::tool;
 use modular_agent_core::{
-    ContentBlock, Error, Message, MessageContent, ModularAgent, Result, ToolCall, ToolCallFunction,
-    Usage, Value, ValueMap,
+    ContentBlock, Error, Message, MessageContent, Result, ToolCall, ToolCallFunction, Usage, Value,
+    ValueMap,
 };
 
-use crate::chat::ChatModule;
-use crate::provider::{CONFIG_OLLAMA_API_KEY, CONFIG_OLLAMA_URL, DEFAULT_OLLAMA_URL};
+use crate::models_config::Provider;
+use crate::provider::ClientCache;
 
 use im::vector;
 
@@ -19,72 +17,36 @@ use im::vector;
 pub(crate) struct OllamaClient {
     http: reqwest::Client,
     api_base: String,
-    api_key: String,
+    /// `None`: requests carry no Authorization header.
+    api_key: Option<String>,
 }
 
 pub struct OllamaManager {
-    client: Arc<Mutex<Option<OllamaClient>>>,
+    clients: ClientCache<OllamaClient>,
 }
 
 impl OllamaManager {
     pub fn new() -> Self {
         Self {
-            client: Arc::new(Mutex::new(None)),
+            clients: ClientCache::new(),
         }
     }
 
-    pub fn get_ollama_url(ma: &ModularAgent) -> String {
-        if let Some(ollama_url) = ma
-            .get_global_configs(ChatModule::DEF_NAME)
-            .and_then(|cfg| cfg.get_string(CONFIG_OLLAMA_URL).ok())
-            .filter(|url| !url.is_empty())
-        {
-            return ollama_url;
-        }
-        if let Ok(ollama_api_base_url) = std::env::var("OLLAMA_API_BASE_URL") {
-            return ollama_api_base_url;
-        } else if let Ok(ollama_host) = std::env::var("OLLAMA_HOST") {
-            return format!("http://{}:11434", ollama_host);
-        }
-        DEFAULT_OLLAMA_URL.to_string()
-    }
-
-    pub fn get_ollama_api_key(ma: &ModularAgent) -> String {
-        ma.get_global_configs(ChatModule::DEF_NAME)
-            .and_then(|cfg| cfg.get_string(CONFIG_OLLAMA_API_KEY).ok())
-            .filter(|key| !key.is_empty())
-            .or_else(|| {
-                std::env::var("OLLAMA_API_KEY")
-                    .ok()
-                    .filter(|k| !k.is_empty())
+    pub(crate) fn get_client(&self, provider: &Provider) -> Result<OllamaClient> {
+        self.clients.get_or_build(provider, |provider| {
+            // Timeouts keep a hung server from blocking process() forever;
+            // read_timeout is idle time between reads, so streaming is safe.
+            let http = reqwest::Client::builder()
+                .connect_timeout(std::time::Duration::from_secs(10))
+                .read_timeout(std::time::Duration::from_secs(120))
+                .build()
+                .map_err(|e| Error::IoError(format!("Ollama client build error: {}", e)))?;
+            Ok(OllamaClient {
+                http,
+                api_base: provider.base_url().to_string(),
+                api_key: provider.api_key()?,
             })
-            .unwrap_or_default()
-    }
-
-    pub fn get_client(&self, ma: &ModularAgent) -> Result<OllamaClient> {
-        let mut client_guard = self.client.lock().unwrap();
-
-        if let Some(client) = client_guard.as_ref() {
-            return Ok(client.clone());
-        }
-
-        let api_base = Self::get_ollama_url(ma);
-        let api_key = Self::get_ollama_api_key(ma);
-        // Timeouts keep a hung server from blocking process() forever;
-        // read_timeout is idle time between reads, so streaming is safe.
-        let http = reqwest::Client::builder()
-            .connect_timeout(std::time::Duration::from_secs(10))
-            .read_timeout(std::time::Duration::from_secs(120))
-            .build()
-            .map_err(|e| Error::IoError(format!("Ollama client build error: {}", e)))?;
-        let new_client = OllamaClient {
-            http,
-            api_base,
-            api_key,
-        };
-        *client_guard = Some(new_client.clone());
-
-        Ok(new_client)
+        })
     }
 }
 
@@ -120,10 +82,9 @@ impl OllamaClient {
     }
 
     fn apply_auth(&self, builder: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
-        if !self.api_key.is_empty() {
-            builder.header("Authorization", format!("Bearer {}", self.api_key))
-        } else {
-            builder
+        match &self.api_key {
+            Some(key) => builder.bearer_auth(key),
+            None => builder,
         }
     }
 

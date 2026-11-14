@@ -2,7 +2,7 @@
 //! rolling summary of evicted history: the prompt builder, the transcript
 //! renderer, and a provider-routed single-request summarizer.
 
-use modular_agent_core::{Error, Message, ModularAgent, ModuleContext, Result};
+use modular_agent_core::{Error, Message, ModuleContext, Result};
 
 use crate::provider::ModelIdentifier;
 use crate::retry::RetryPolicy;
@@ -59,7 +59,6 @@ impl ProviderManagers {
     )]
     pub(crate) async fn summarize(
         &self,
-        ma: &ModularAgent,
         ctx: &ModuleContext,
         model_id: &ModelIdentifier,
         prompt: String,
@@ -71,7 +70,7 @@ impl ProviderManagers {
         let message: Message = match model_id.provider {
             #[cfg(feature = "openai")]
             crate::provider::ProviderKind::OpenAI => {
-                let client = self.openai.get_client(ma)?;
+                let client = self.openai.get_client(&model_id.config)?;
                 let mut request = serde_json::json!({
                     "model": model_id.model_name,
                     "messages": [openai_client::message_to_chat_json(&Message::user(prompt))],
@@ -93,7 +92,7 @@ impl ProviderManagers {
             }
             #[cfg(feature = "claude")]
             crate::provider::ProviderKind::Claude => {
-                let client = self.claude.get_client(ma)?;
+                let client = self.claude.get_client(&model_id.config)?;
                 // Same non-streaming default as ChatModule: cap at 8192 so a
                 // runaway generation cannot outlive the per-attempt timeout.
                 let default_cap = crate::capabilities::resolve_entry(model_id)
@@ -128,7 +127,7 @@ impl ProviderManagers {
             }
             #[cfg(feature = "ollama")]
             crate::provider::ProviderKind::Ollama => {
-                let client = self.ollama.get_client(ma)?;
+                let client = self.ollama.get_client(&model_id.config)?;
                 let mut request = serde_json::json!({
                     "model": model_id.model_name,
                     "messages": [

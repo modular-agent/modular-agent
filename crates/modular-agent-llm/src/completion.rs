@@ -168,7 +168,7 @@ impl AsModule for CompletionModule {
                 self.process_openai(
                     ctx,
                     prompt,
-                    &model_id.model_name,
+                    &model_id,
                     config_options,
                     config_system,
                     max_tokens,
@@ -184,7 +184,7 @@ impl AsModule for CompletionModule {
                 self.process_ollama(
                     ctx,
                     prompt,
-                    &model_id.model_name,
+                    &model_id,
                     config_options,
                     config_system,
                     max_tokens,
@@ -211,7 +211,7 @@ impl CompletionModule {
         &mut self,
         ctx: ModuleContext,
         prompt: &str,
-        model_name: &str,
+        model_id: &ModelIdentifier,
         config_options: ValueMap<String, Value>,
         config_system: String,
         max_tokens: i64,
@@ -220,7 +220,8 @@ impl CompletionModule {
         top_p: f64,
         retry: RetryPolicy,
     ) -> Result<()> {
-        let client = self.openai_manager.get_client(self.ma())?;
+        let client = self.openai_manager.get_client(&model_id.config)?;
+        let model_name = model_id.model_name.as_str();
 
         // Build the prompt with system message if provided
         let full_prompt = if !config_system.is_empty() {
@@ -266,7 +267,7 @@ impl CompletionModule {
         &mut self,
         ctx: ModuleContext,
         prompt: &str,
-        model_name: &str,
+        model_id: &ModelIdentifier,
         config_options: ValueMap<String, Value>,
         config_system: String,
         max_tokens: i64,
@@ -275,11 +276,12 @@ impl CompletionModule {
         top_p: f64,
         retry: RetryPolicy,
     ) -> Result<()> {
-        let client = self.ollama_manager.get_client(self.ma())?;
+        let client = self.ollama_manager.get_client(&model_id.config)?;
+        let model_name = model_id.model_name.as_str();
 
         // Best-effort: probe /api/show once per model to cache its context
         // length for later capability lookups. Never fails the request.
-        crate::capabilities::warm_ollama_context(&client, model_name).await;
+        crate::capabilities::warm_ollama_context(&client, model_id).await;
 
         let use_context = self.configs()?.get_bool_or_default(CONFIG_USE_CONTEXT);
 

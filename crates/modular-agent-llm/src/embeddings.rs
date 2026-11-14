@@ -86,12 +86,12 @@ impl AsModule for EmbeddingsModule {
             )),
             #[cfg(feature = "openai")]
             ProviderKind::OpenAI => {
-                self.process_openai(ctx, port, value, &model_id.model_name, config_options)
+                self.process_openai(ctx, port, value, &model_id, config_options)
                     .await
             }
             #[cfg(feature = "ollama")]
             ProviderKind::Ollama => {
-                self.process_ollama(ctx, port, value, &model_id.model_name, config_options)
+                self.process_ollama(ctx, port, value, &model_id, config_options)
                     .await
             }
             #[allow(unreachable_patterns)]
@@ -110,10 +110,11 @@ impl EmbeddingsModule {
         ctx: ModuleContext,
         port: String,
         value: Value,
-        model_name: &str,
+        model_id: &ModelIdentifier,
         config_options: ValueMap<String, Value>,
     ) -> Result<()> {
-        let client = self.openai_manager.get_client(self.ma())?;
+        let client = self.openai_manager.get_client(&model_id.config)?;
+        let model_name = model_id.model_name.as_str();
 
         if port == PORT_STRING {
             let text = value.as_str().unwrap_or_default();
@@ -195,10 +196,11 @@ impl EmbeddingsModule {
         ctx: ModuleContext,
         port: String,
         value: Value,
-        model_name: &str,
+        model_id: &ModelIdentifier,
         config_options: ValueMap<String, Value>,
     ) -> Result<()> {
-        let client = self.ollama_manager.get_client(self.ma())?;
+        let client = self.ollama_manager.get_client(&model_id.config)?;
+        let model_name = model_id.model_name.as_str();
 
         let options_json = if config_options.is_empty() {
             serde_json::Value::Null
