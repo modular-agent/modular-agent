@@ -34,11 +34,34 @@
   // external update replaces what was typed.
   let draft = $state<string>();
 
-  // Set when Escape discards the draft, cleared by the next edit. Putting
-  // the config value back changes the field, so the browser may still fire
-  // `change` on blur; sending then would turn a cancel into an update, and
-  // could overwrite a config that changed since with the value shown at Escape.
-  let discarded = false;
+  // True once the field has been typed in since it got focus or since the edit
+  // was cancelled. Escape has something to cancel only then, and `change` sends
+  // only then: putting the config value back changes the field, so the browser
+  // may still fire `change` on blur, and sending at that point would turn a
+  // cancel into an update, or overwrite a config that changed since with the
+  // value shown at Escape.
+  let edited = false;
+
+  // Escape drops what was typed since the last send, and a rejected draft, and
+  // shows the config value (`text`) again. During IME composition Escape only
+  // cancels the conversion.
+  function cancelEdit(
+    evt: KeyboardEvent & { currentTarget: HTMLInputElement | HTMLTextAreaElement },
+    text: string,
+  ) {
+    if (evt.isComposing || !(edited || draft !== undefined)) return;
+    evt.preventDefault();
+    draft = undefined;
+    frozen = value;
+    // Written to the element too: when `frozen` already holds this value the
+    // bound expression does not change and the typed text would stay. The
+    // input event tells the field's own binding, which otherwise keeps the
+    // typed text and ignores a later config update that happens to equal it.
+    const field = evt.currentTarget;
+    field.value = text;
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+    edited = false;
+  }
 
   // The number typed into `input`. A rejected entry is reported and the field
   // goes back to the config value.
@@ -102,16 +125,23 @@
       frozen = v;
       focused = true;
     }}
-    onblur={() => (focused = false)}
+    onblur={() => {
+      focused = false;
+      edited = false;
+    }}
+    oninput={() => (edited = true)}
     onkeydown={(evt) => {
       if (evt.key === "Enter") {
         let intValue = readNumber("integer", evt.currentTarget, v);
         if (intValue !== undefined) {
           updateConfig(key, intValue);
         }
+      } else if (evt.key === "Escape") {
+        cancelEdit(evt, String(v ?? ""));
       }
     }}
     onchange={(evt) => {
+      if (!edited) return;
       let intValue = readNumber("integer", evt.currentTarget, v);
       if (intValue !== undefined) {
         if (intValue !== v) {
@@ -131,16 +161,23 @@
       frozen = v;
       focused = true;
     }}
-    onblur={() => (focused = false)}
+    onblur={() => {
+      focused = false;
+      edited = false;
+    }}
+    oninput={() => (edited = true)}
     onkeydown={(evt) => {
       if (evt.key === "Enter") {
         let numValue = readNumber("number", evt.currentTarget, v);
         if (numValue !== undefined) {
           updateConfig(key, numValue);
         }
+      } else if (evt.key === "Escape") {
+        cancelEdit(evt, String(v ?? ""));
       }
     }}
     onchange={(evt) => {
+      if (!edited) return;
       let numValue = readNumber("number", evt.currentTarget, v);
       if (numValue !== undefined) {
         if (numValue !== v) {
@@ -161,14 +198,20 @@
       frozen = v;
       focused = true;
     }}
-    onblur={() => (focused = false)}
+    onblur={() => {
+      focused = false;
+      edited = false;
+    }}
+    oninput={() => (edited = true)}
     onkeydown={(evt) => {
       if (evt.key === "Enter") {
         updateConfig(key, evt.currentTarget.value);
+      } else if (evt.key === "Escape") {
+        cancelEdit(evt, String(v ?? ""));
       }
     }}
     onchange={(evt) => {
-      if (evt.currentTarget.value !== v) {
+      if (edited && evt.currentTarget.value !== v) {
         updateConfig(key, evt.currentTarget.value);
       }
     }}
@@ -184,14 +227,20 @@
       frozen = v;
       focused = true;
     }}
-    onblur={() => (focused = false)}
+    onblur={() => {
+      focused = false;
+      edited = false;
+    }}
+    oninput={() => (edited = true)}
     onkeydown={(evt) => {
       if (evt.key === "Enter") {
         updateConfig(key, evt.currentTarget.value);
+      } else if (evt.key === "Escape") {
+        cancelEdit(evt, String(v ?? ""));
       }
     }}
     onchange={(evt) => {
-      if (evt.currentTarget.value !== v) {
+      if (edited && evt.currentTarget.value !== v) {
         updateConfig(key, evt.currentTarget.value);
       }
     }}
@@ -207,15 +256,21 @@
       frozen = v;
       focused = true;
     }}
-    onblur={() => (focused = false)}
+    onblur={() => {
+      focused = false;
+      edited = false;
+    }}
+    oninput={() => (edited = true)}
     onkeydown={(evt) => {
       if (evt.ctrlKey && evt.key === "Enter") {
         evt.preventDefault();
         updateConfig(key, evt.currentTarget.value);
+      } else if (evt.key === "Escape") {
+        cancelEdit(evt, String(v ?? ""));
       }
     }}
     onchange={(evt) => {
-      if (evt.currentTarget.value !== v) {
+      if (edited && evt.currentTarget.value !== v) {
         updateConfig(key, evt.currentTarget.value);
       }
     }}
@@ -236,21 +291,21 @@
       frozen = v;
       focused = true;
     }}
-    onblur={() => (focused = false)}
+    onblur={() => {
+      focused = false;
+      edited = false;
+    }}
+    oninput={() => (edited = true)}
     onkeydown={(evt) => {
       if (evt.ctrlKey && evt.key === "Enter") {
         evt.preventDefault();
         commitJson(key, evt.currentTarget.value);
-      } else if (evt.key === "Escape" && draft !== undefined) {
-        evt.preventDefault();
-        draft = undefined;
-        frozen = v;
-        discarded = true;
+      } else if (evt.key === "Escape") {
+        cancelEdit(evt, JSON.stringify(v, null, 2) ?? "");
       }
     }}
-    oninput={() => (discarded = false)}
     onchange={(evt) => {
-      if (!discarded) {
+      if (edited) {
         commitJson(key, evt.currentTarget.value);
       }
     }}

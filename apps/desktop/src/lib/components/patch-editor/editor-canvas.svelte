@@ -233,6 +233,8 @@
 
     // Escape: close popups (hardcoded)
     if (event.key === "Escape") {
+      // During IME composition Escape only cancels the conversion.
+      if (event.isComposing) return;
       if (editor.openModuleList) {
         editor.hideModuleList();
         return;
