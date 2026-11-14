@@ -25,12 +25,15 @@ function lossyNumber(value: unknown): string | null {
 }
 
 /**
- * Converts the text of a settings field to the value stored for a config of
+ * Converts the text of a config field to the value stored for a config of
  * `type`. Anything that would be stored as a different value than the one
  * typed is rejected instead of being saved.
+ *
+ * `"json"` takes any JSON value. The patch editor uses it for object and array
+ * configs, which modules such as Object Input read as arbitrary JSON.
  */
 export function parseConfigInput(
-  type: "integer" | "number" | "object" | "array",
+  type: "integer" | "number" | "object" | "array" | "json",
   text: string,
 ): ParsedConfigInput {
   const trimmed = text.trim();
@@ -60,11 +63,13 @@ export function parseConfigInput(
   } catch (e) {
     return { ok: false, message: `Invalid JSON: ${e instanceof Error ? e.message : e}` };
   }
-  const isArray = Array.isArray(value);
-  if (type === "array" ? !isArray : isArray || value === null || typeof value !== "object") {
-    return { ok: false, message: `Enter a JSON ${type}` };
+  if (type !== "json") {
+    const isArray = Array.isArray(value);
+    if (type === "array" ? !isArray : isArray || value === null || typeof value !== "object") {
+      return { ok: false, message: `Enter a JSON ${type}` };
+    }
   }
   const reason = lossyNumber(value);
-  if (reason) return { ok: false, message: `The ${type} ${reason}` };
+  if (reason) return { ok: false, message: `The ${type === "json" ? "value" : type} ${reason}` };
   return { ok: true, value };
 }

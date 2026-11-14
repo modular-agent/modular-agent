@@ -182,7 +182,9 @@
           <Tabs.Content value="configs" class="flex flex-col gap-3 pt-3">
             {#if Object.keys(inspector.configs).length > 0}
               <form class="flex flex-col gap-4">
-                {#each Object.entries(inspector.configs) as [key, value]}
+                <!-- Keyed by node so a rejected draft never carries over to the
+                     same config of the next selected node. -->
+                {#each Object.entries(inspector.configs) as [key, value] (`${inspector.nodeId}:${key}`)}
                   <SidebarConfig
                     name={key}
                     {value}

@@ -100,3 +100,40 @@ describe("parseConfigInput: object / array", () => {
     }
   });
 });
+
+describe("parseConfigInput: json", () => {
+  it("accepts a JSON value of any shape", () => {
+    expect(parseConfigInput("json", '{"a": 1}')).toEqual(ok({ a: 1 }));
+    expect(parseConfigInput("json", "[1, 2]")).toEqual(ok([1, 2]));
+    expect(parseConfigInput("json", '"text"')).toEqual(ok("text"));
+    expect(parseConfigInput("json", "5")).toEqual(ok(5));
+    expect(parseConfigInput("json", "1.5")).toEqual(ok(1.5));
+    expect(parseConfigInput("json", "true")).toEqual(ok(true));
+    expect(parseConfigInput("json", "null")).toEqual(ok(null));
+  });
+
+  it("keeps valid nested values as written", () => {
+    const nested = [{ a: { b: [1, 2.5, { c: 9007199254740991, d: null }] } }, "x"];
+    expect(parseConfigInput("json", JSON.stringify(nested, null, 2))).toEqual(ok(nested));
+  });
+
+  it("rejects invalid JSON", () => {
+    for (const text of ["", '{"a": 1', "[1,]", "abc"]) {
+      expect(parseConfigInput("json", text), text).toEqual(rejected);
+    }
+  });
+
+  it("rejects numbers that would be stored as a different value", () => {
+    for (const text of [
+      "1e400",
+      "-1e400",
+      "9007199254740993",
+      '{"x": 1e400}',
+      '{"a": {"b": [1, {"c": 1e400}]}}',
+      "[[1, [2, 1e400]]]",
+      '{"a": [{"b": 9007199254740993}]}',
+    ]) {
+      expect(parseConfigInput("json", text), text).toEqual(rejected);
+    }
+  });
+});

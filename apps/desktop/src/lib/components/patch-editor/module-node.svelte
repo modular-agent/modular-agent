@@ -211,7 +211,7 @@
     />
   {:else if data.configs}
     <form class="grow flex flex-col gap-1 pl-7 pr-7 pb-4">
-      {#each Object.entries(data.configs) as [key, value]}
+      {#each Object.entries(data.configs) as [key, value] (key)}
         <ModuleConfig name={key} {value} configSpec={data.config_specs?.[key]} {updateConfig} />
       {/each}
     </form>

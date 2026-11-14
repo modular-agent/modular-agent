@@ -5,10 +5,10 @@
   import { Input } from "$lib/components/ui/input/index.js";
   import { Switch } from "$lib/components/ui/switch/index.js";
   import { Textarea } from "$lib/components/ui/textarea/index.js";
+  import { parseConfigInput } from "$lib/config-input";
   import { setGlobalConfigs } from "$lib/modular_agent";
   import { renderMarkdown } from "$lib/sanitize";
 
-  import { parseConfigInput } from "./config-input";
   import { blurOnEnter } from "./helpers";
   import SettingsGroup from "./settings-group.svelte";
   import SettingsNote from "./settings-note.svelte";
