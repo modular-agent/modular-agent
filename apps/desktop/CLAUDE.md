@@ -135,7 +135,7 @@ All keyboard shortcuts are defined in `src/lib/hotkeys.ts` and customizable via 
 Settings is a modal dialog (`components/settings/settings-dialog.svelte`), mounted once in `+layout.svelte` and opened from the sidebar through `settingsDialog.open` (`state.svelte.ts`). There is no `/settings` route.
 
 - **Layout**: grouped nav on the left (bits-ui `Tabs`, `orientation="vertical"`), one section per tab on the right. A section is a stack of `SettingsGroup` (titled surface) holding `SettingsRow`s (label + description left, control right; the row passes its label id to the control for `aria-labelledby`). `SettingsNote` is the amber line under a group for restart notices.
-- **Modules nav group**: one tab per module definition returned by `get_global_configs_cmd`; the group is omitted when there are none.
+- **Modules nav group**: one tab per module definition returned by `get_global_configs_cmd` that has a global config to show; the group is omitted when there are none. `module-section.svelte` skips `hidden` configs, disables `readonly` ones, and converts typed text with `parseConfigInput` (`config-input.ts`), which rejects input that would be stored as a different value (non-integers, integers beyond ±(2^53 − 1), non-finite numbers inside JSON).
 - **Lifetime**: the sections mount when the dialog opens and read their initial values from the `getCoreSettings()` cache. Inactive tabs stay mounted (`Tabs.Content` only sets `hidden`), so don't put a display class on `Tabs.Content`.
 - **Editor hotkeys**: `editor-canvas.svelte` listens for keys on the window, so its `handleKeydown` returns early while `settingsDialog.open`.
 

@@ -46,8 +46,17 @@
 
   const moduleValue = (moduleName: string) => `module:${moduleName}`;
 
+  // A definition whose global configs are all hidden has nothing to show.
+  const moduleSections = $derived(
+    Object.entries(globalConfigs).filter(([moduleName]) =>
+      Object.values(moduleDefs[moduleName]?.global_configs ?? {}).some(
+        (spec) => spec.hidden !== true,
+      ),
+    ),
+  );
+
   const nav = $derived.by(() => {
-    const items = Object.keys(globalConfigs).map((moduleName) => ({
+    const items = moduleSections.map(([moduleName]) => ({
       value: moduleValue(moduleName),
       label: moduleDefs[moduleName]?.title ?? moduleName,
       icon: PackageIcon,
@@ -115,7 +124,7 @@
           <Tabs.Content value="canvas"><CanvasSection /></Tabs.Content>
           <Tabs.Content value="shortcuts"><ShortcutsSection /></Tabs.Content>
           <Tabs.Content value="mcp"><McpSection /></Tabs.Content>
-          {#each Object.entries(globalConfigs) as [moduleName, moduleConfigs] (moduleName)}
+          {#each moduleSections as [moduleName, moduleConfigs] (moduleName)}
             <Tabs.Content value={moduleValue(moduleName)}>
               <ModuleSection {moduleName} {moduleConfigs} moduleDef={moduleDefs[moduleName]} />
             </Tabs.Content>

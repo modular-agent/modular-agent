@@ -4,9 +4,11 @@
 
   import { Input } from "$lib/components/ui/input/index.js";
   import { Switch } from "$lib/components/ui/switch/index.js";
+  import { Textarea } from "$lib/components/ui/textarea/index.js";
   import { setGlobalConfigs } from "$lib/modular_agent";
   import { renderMarkdown } from "$lib/sanitize";
 
+  import { parseConfigInput } from "./config-input";
   import { blurOnEnter } from "./helpers";
   import SettingsGroup from "./settings-group.svelte";
   import SettingsNote from "./settings-note.svelte";
@@ -27,6 +29,38 @@
   });
 
   let configsModified = $state(false);
+
+  // Keys whose JSON field holds text that was rejected and so is not saved.
+  let invalid = $state<Record<string, boolean>>({});
+
+  function updateConfig(key: string, value: unknown) {
+    configs[key] = value;
+    autoSaveConfig();
+  }
+
+  // A rejected number is dropped: the field goes back to the saved value.
+  function commitNumber(key: string, type: "integer" | "number", input: HTMLInputElement) {
+    const parsed = parseConfigInput(type, input.value);
+    if (parsed.ok) {
+      input.value = String(parsed.value);
+      updateConfig(key, parsed.value);
+    } else {
+      toast.error(parsed.message);
+      input.value = String(configs[key] ?? "");
+    }
+  }
+
+  // Rejected JSON stays in the field, marked invalid, so it can be corrected
+  // instead of retyped.
+  function commitJson(key: string, type: "object" | "array", text: string) {
+    const parsed = parseConfigInput(type, text);
+    invalid[key] = !parsed.ok;
+    if (parsed.ok) {
+      updateConfig(key, parsed.value);
+    } else {
+      toast.error(parsed.message);
+    }
+  }
 
   async function autoSaveConfig() {
     try {
@@ -59,61 +93,70 @@
     <div>
       <SettingsGroup>
         {#each Object.entries(moduleDef.global_configs) as [key, globalConfig] (key)}
-          <SettingsRow label={globalConfig?.title || key} description={globalConfig?.description}>
-            {#snippet children(labelId)}
-              {@const ty = globalConfig.type}
-              {#if ty === "boolean"}
-                <Switch
-                  aria-labelledby={labelId}
-                  bind:checked={configs[key]}
-                  onCheckedChange={() => autoSaveConfig()}
-                />
-              {:else if ty === "number"}
-                <Input
-                  aria-labelledby={labelId}
-                  type="number"
-                  bind:value={configs[key]}
-                  onchange={() => autoSaveConfig()}
-                  onkeydown={blurOnEnter}
-                  class="w-64"
-                />
-              {:else if ty === "string"}
-                <Input
-                  aria-labelledby={labelId}
-                  type="text"
-                  bind:value={configs[key]}
-                  onchange={() => autoSaveConfig()}
-                  onkeydown={blurOnEnter}
-                  class="w-64"
-                />
-              {:else if ty === "password"}
-                <Input
-                  aria-labelledby={labelId}
-                  type="password"
-                  bind:value={configs[key]}
-                  onchange={() => autoSaveConfig()}
-                  onkeydown={blurOnEnter}
-                  class="w-64"
-                />
-              {:else if ty === "integer" || ty === "text" || ty === "object"}
-                <Input
-                  aria-labelledby={labelId}
-                  bind:value={configs[key]}
-                  onchange={() => autoSaveConfig()}
-                  onkeydown={blurOnEnter}
-                  class="w-64"
-                />
-              {:else}
-                <Input
-                  aria-labelledby={labelId}
-                  type="text"
-                  value={JSON.stringify(configs[key], null, 2)}
-                  disabled
-                  class="w-64"
-                />
-              {/if}
-            {/snippet}
-          </SettingsRow>
+          {#if globalConfig.hidden !== true}
+            <SettingsRow label={globalConfig.title || key} description={globalConfig.description}>
+              {#snippet children(labelId)}
+                {@const ty = globalConfig.type}
+                {@const disabled = globalConfig.readonly === true}
+                {#if ty === "boolean"}
+                  <Switch
+                    aria-labelledby={labelId}
+                    checked={configs[key] === true}
+                    onCheckedChange={(checked) => updateConfig(key, checked)}
+                    {disabled}
+                  />
+                {:else if ty === "integer" || ty === "number"}
+                  <Input
+                    aria-labelledby={labelId}
+                    type="number"
+                    step={ty === "integer" ? 1 : "any"}
+                    value={configs[key]}
+                    onchange={(e) => commitNumber(key, ty, e.currentTarget)}
+                    onkeydown={blurOnEnter}
+                    {disabled}
+                    class="w-64"
+                  />
+                {:else if ty === "string" || ty === "password"}
+                  <Input
+                    aria-labelledby={labelId}
+                    type={ty === "password" ? "password" : "text"}
+                    value={configs[key]}
+                    onchange={(e) => updateConfig(key, e.currentTarget.value)}
+                    onkeydown={blurOnEnter}
+                    {disabled}
+                    class="w-64"
+                  />
+                {:else if ty === "text"}
+                  <Textarea
+                    aria-labelledby={labelId}
+                    spellcheck="false"
+                    value={configs[key]}
+                    onchange={(e) => updateConfig(key, e.currentTarget.value)}
+                    {disabled}
+                    class="max-h-60 w-80"
+                  />
+                {:else if ty === "object" || ty === "array"}
+                  <Textarea
+                    aria-labelledby={labelId}
+                    aria-invalid={invalid[key] === true}
+                    spellcheck="false"
+                    value={JSON.stringify(configs[key], null, 2)}
+                    onchange={(e) => commitJson(key, ty, e.currentTarget.value)}
+                    {disabled}
+                    class="max-h-60 w-80 font-mono text-xs md:text-xs"
+                  />
+                {:else}
+                  <Input
+                    aria-labelledby={labelId}
+                    type="text"
+                    value={JSON.stringify(configs[key], null, 2)}
+                    disabled
+                    class="w-64"
+                  />
+                {/if}
+              {/snippet}
+            </SettingsRow>
+          {/if}
         {/each}
       </SettingsGroup>
       {#if configsModified}
