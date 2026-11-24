@@ -4,8 +4,9 @@
 # Clones the repository and builds the desktop app or the `ma` CLI from
 # source, with the recommended module packages unless a minimal build is
 # chosen. What to build is asked interactively; passing any option skips
-# the questions. Assumes the Tauri prerequisites (git, Rust, Node.js, the
-# platform toolchain) are installed: https://v2.tauri.app/start/prerequisites/
+# the questions, and without a terminal the defaults are used. Assumes the
+# Tauri prerequisites (git, Rust, Node.js, the platform toolchain) are
+# installed: https://v2.tauri.app/start/prerequisites/
 #
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/modular-agent/modular-agent/main/scripts/install.sh | sh
@@ -78,7 +79,21 @@ done
 
 # --- What to build -----------------------------------------------------------
 
-if [ "$WIZARD" = 1 ] && [ -r /dev/tty ]; then
+# `[ -r /dev/tty ]` is not enough: without a controlling terminal (CI, an
+# agent's shell, `ssh host 'curl ... | sh'`) the node exists and passes the
+# permission test, but opening it fails with ENXIO ("Device not configured").
+# Probe by really opening it, in a subshell so a failed redirection cannot
+# end this `set -e` script.
+has_tty() {
+    (exec </dev/tty >/dev/tty) 2>/dev/null
+}
+
+if [ "$WIZARD" = 1 ] && ! has_tty; then
+    info "No terminal to ask on; building the desktop app with the recommended module packages (pass --cli or --minimal to choose)"
+    WIZARD=0
+fi
+
+if [ "$WIZARD" = 1 ]; then
     {
         printf 'Modular Agent is built from source. A first desktop build typically takes\n'
         printf '20-40 minutes and ~10 GB of disk; the minimal CLI build is the fastest.\n\n'
@@ -134,16 +149,14 @@ if [ "$TARGET" = cli ]; then
 else
     info "Building the desktop app (typically 20-40 minutes and ~10 GB of disk on a first build)"
     (cd "$DIR/apps/desktop" && npm install && npm run tauri build)
-    info "Done. Launch the app, or use the installer to install it:"
+    # The bundle targets come from apps/desktop/src-tauri/tauri.conf.json
+    # (deb, nsis, dmg). There is no "app" target, so on macOS the .app is
+    # removed once the .dmg is made: the .dmg is the only bundle left.
+    info "Done. Launch the executable, or use the installer to install it:"
+    printf '  Executable: %s/target/release/modular-agent-desktop\n' "$DIR"
     case "$OS" in
-    Darwin)
-        printf '  App:       %s/target/release/bundle/macos/*.app\n' "$DIR"
-        printf '  Installer: %s/target/release/bundle/dmg/*.dmg\n' "$DIR"
-        ;;
-    *)
-        printf '  Executable: %s/target/release/modular-agent-desktop\n' "$DIR"
-        printf '  Packages:   %s/target/release/bundle/ (deb, rpm, AppImage)\n' "$DIR"
-        ;;
+    Darwin) printf '  Installer:  %s/target/release/bundle/dmg/*.dmg\n' "$DIR" ;;
+    *) printf '  Installer:  %s/target/release/bundle/deb/*.deb\n' "$DIR" ;;
     esac
 fi
 
