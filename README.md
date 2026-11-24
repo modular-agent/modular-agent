@@ -52,13 +52,15 @@ and whether to include the
 [recommended module packages](custom_modules/README.md#recommended-module-repositories).
 A first desktop build typically takes 20-40 minutes and ~10 GB of disk:
 
+macOS / Linux:
+
 ```bash
-# macOS / Linux
 curl -fsSL https://raw.githubusercontent.com/modular-agent/modular-agent/main/scripts/install.sh | sh
 ```
 
+Windows (PowerShell):
+
 ```powershell
-# Windows (PowerShell)
 irm https://raw.githubusercontent.com/modular-agent/modular-agent/main/scripts/install.ps1 | iex
 ```
 
